@@ -16,7 +16,6 @@ import {
   sourceInputError,
   type AttestationKey,
   type Environment,
-  type SourceKind,
   type SupplyJourneyContinuation,
   type SupplyNativeStartProps,
   type SupplyPublicationInvalidField,
@@ -41,19 +40,10 @@ export function useSupplyNativeStartState({
   onPublish,
 }: SupplyNativeStartProps) {
   const initialCandidate = initial?.preview?.candidates.find(({ candidateRef }) => candidateRef === initial.candidateRef)
-  const [sourceKind, setSourceKind] = useState<SourceKind>(initial?.source.kind ?? 'x402')
-  const [environment, setEnvironment] = useState<Environment>(initial?.source.environment ?? 'sandbox')
-  const [definitionUrl, setDefinitionUrl] = useState(initial?.source.kind === 'openapi' ? initial.source.definitionUrl : '')
-  const [mcpLocator, setMcpLocator] = useState<'url' | 'registry'>(initial?.source.kind === 'mcp' && initial.source.registryName !== undefined ? 'registry' : 'url')
-  const [serverUrl, setServerUrl] = useState(initial?.source.kind === 'mcp' ? initial.source.serverUrl ?? '' : '')
-  const [registryName, setRegistryName] = useState(initial?.source.kind === 'mcp' ? initial.source.registryName ?? '' : '')
-  const [pluginJson, setPluginJson] = useState(initial?.source.kind === 'agent_plugin' ? JSON.stringify(initial.source.pluginJson, null, 2) : '')
-  const [mcpJson, setMcpJson] = useState(initial?.source.kind === 'agent_plugin' ? JSON.stringify(initial.source.mcpJson, null, 2) : '')
-  const [selectedRemoteRef, setSelectedRemoteRef] = useState(initial?.source.kind === 'mcp' || initial?.source.kind === 'agent_plugin' ? initial.source.remoteRef ?? '' : '')
+  const [environment, setEnvironment] = useState<Environment>(initial?.source.environment)
   const [resourceUrl, setResourceUrl] = useState(initial?.source.kind === 'x402' ? initial.source.resourceUrl : '')
-  const [x402Method, setX402Method] = useState<'GET' | 'POST'>(initial?.source.kind === 'x402' ? initial.source.method : 'POST')
+  const [x402Method, setX402Method] = useState<'GET' | 'POST' | undefined>(initial?.source.method)
   const [preview, setPreview] = useState<Extract<SupplySourcePreview, { kind: 'ready' }> | undefined>(initial?.preview)
-  const [remoteSelection, setRemoteSelection] = useState<Extract<SupplySourcePreview, { kind: 'remote_selection_required' }>>()
   const [selectedRef, setSelectedRef] = useState(initial?.candidateRef ?? '')
   const [name, setName] = useState(initial?.terms?.name ?? initialCandidate?.title ?? '')
   const [description, setDescription] = useState(initial?.terms?.description ?? initialCandidate?.description ?? '')
@@ -103,20 +93,8 @@ export function useSupplyNativeStartState({
   const previewIdempotencyKey = useRef(`owner-supply-preview:${crypto.randomUUID()}`)
   const connectionIdempotencyKey = useRef(`owner-supply-connection:${crypto.randomUUID()}`)
   const selected = preview?.candidates.find(({ candidateRef }) => candidateRef === selectedRef)
-  const source = sourceInput({
-    sourceKind,
-    environment,
-    definitionUrl,
-    mcpLocator,
-    serverUrl,
-    registryName,
-    pluginJson,
-    mcpJson,
-    remoteRef: selectedRemoteRef,
-    resourceUrl,
-    x402Method,
-  })
-  const requiredAdapterId = requiredAdapterIdForSourceKind(sourceKind)
+  const source = sourceInput({ resourceUrl, x402Method, ...(environment === undefined ? {} : { environment }) })
+  const requiredAdapterId = requiredAdapterIdForSourceKind('x402')
   const eligibleConnections = eligibleSupplyConnections({
     requiredAdapterId,
     hasSelectedCandidate: selected !== undefined,
@@ -144,28 +122,9 @@ export function useSupplyNativeStartState({
     })
   }
 
-  function resetDiscoveryOnSourceEdit() {
-    setRemoteSelection(undefined)
-    setSelectedRemoteRef('')
-  }
-
-  function changeSourceKind(next: string) {
-    if (operationInFlight.current || publicationCommandLocked.current) return
-    setSourceKind(next as SourceKind)
-    setPreview(undefined)
-    resetDiscoveryOnSourceEdit()
-    setSelectedRef('')
-    clearFieldError()
-    setRequiredAction(undefined)
-    setSuccess(undefined)
-    setReviewing(false)
-  }
-
   function editSource() {
     if (operationInFlight.current || publicationCommandLocked.current) return
     setPreview(undefined)
-    setRemoteSelection(undefined)
-    setSelectedRemoteRef('')
     setSelectedRef('')
     setRequiredAction(undefined)
     setSuccess(undefined)
@@ -192,42 +151,28 @@ export function useSupplyNativeStartState({
     clearAttestation()
   }
 
-  async function findTools(remoteRefOverride?: string) {
-    const currentSource = remoteRefOverride === undefined
-      ? source
-      : sourceInput({
-          sourceKind, environment, definitionUrl, mcpLocator, serverUrl, registryName,
-          pluginJson, mcpJson, remoteRef: remoteRefOverride, resourceUrl, x402Method,
-        })
-    if (currentSource === undefined) {
+  async function findTools() {
+    if (source === undefined) {
       clearFieldError()
-      setError(sourceInputError(sourceKind, mcpLocator, {
-        sourceKind, environment, definitionUrl, mcpLocator, serverUrl, registryName,
-        pluginJson, mcpJson, remoteRef: remoteRefOverride ?? selectedRemoteRef, resourceUrl, x402Method,
-      }))
+      setError(sourceInputError({ resourceUrl }))
       return
     }
     if (!beginOperation('preview')) return
     clearFieldError()
     setSuccess(undefined)
     try {
-      const result = await onPreview(currentSource, previewIdempotencyKey.current)
+      const result = await onPreview(source, previewIdempotencyKey.current)
       if (result.kind === 'action_required') {
         setPreview(undefined)
-        setRemoteSelection(undefined)
         setRequiredAction(result.requiredAction)
         return
       }
-      if (result.kind === 'remote_selection_required') {
-        setPreview(undefined)
-        setRequiredAction(undefined)
-        setRemoteSelection(result)
-        setSelectedRemoteRef('')
-        return
-      }
       setRequiredAction(undefined)
-      setRemoteSelection(undefined)
       setPreview(result)
+      const derived = result.candidates.find((candidate) => candidate.disposition.kind === 'supported')?.x402
+      if (derived !== undefined) setEnvironment(derived.environment)
+      const derivedMethod = result.candidates[0]?.sourceSelector.method
+      if (derivedMethod === 'GET' || derivedMethod === 'POST') setX402Method(derivedMethod)
       setSelectedRef('')
       if (result.candidates.length === 0) setError('No Tools were found in this source. Find Tools again.')
     } catch (cause) {
@@ -268,7 +213,7 @@ export function useSupplyNativeStartState({
         && connection.adapterId === requiredAdapterId
       )) ? connectionRef : ''
       setConnectionRef(nextConnectionRef)
-      const nextPricingKind = candidate.x402 === undefined ? 'free' : 'source_x402'
+      const nextPricingKind = 'source_x402' as const
       setSavedTermsKey(supplyTermsKey({
         name: candidate.title,
         description: candidate.description,
@@ -354,9 +299,13 @@ export function useSupplyNativeStartState({
       setFieldError('Select one supported Tool before submitting it.')
       return
     }
-    const pricing = pricingInput(pricingKind, price)
+    if (selected.x402 === undefined) {
+      setFieldError('The payment challenge did not include a payee.')
+      return
+    }
+    const pricing = { kind: 'source_x402' as const }
     const publishAuthorityRequired = selected.authentication.kind !== 'public'
-      || preview.provenance.authority === 'verified_registry'
+      
     const validationMessage = publicationValidationMessage({
       category,
       pricing,
@@ -367,10 +316,6 @@ export function useSupplyNativeStartState({
     })
     if (validationMessage !== undefined) {
       setFieldError(validationMessage)
-      return
-    }
-    if (attestation.informationAccurate !== true || attestation.publishAfterSuccessfulValidation !== true) {
-      setFieldError('Confirm the information is accurate, and that publication can follow validation, before submitting.')
       return
     }
     const input = buildPublishInput({
@@ -389,12 +334,12 @@ export function useSupplyNativeStartState({
       financialExposure,
       dataClassification,
       pricing: pricing as NonNullable<typeof pricing>,
-      environment,
+      environment: selected.x402.environment,
       idempotencyKey: idempotencyKey.current,
       attestation: {
         authorisedToPublish: attestation.authorisedToPublish,
-        informationAccurate: attestation.informationAccurate,
-        publishAfterSuccessfulValidation: attestation.publishAfterSuccessfulValidation,
+        informationAccurate: true,
+        publishAfterSuccessfulValidation: true,
       },
     })
     if (!beginOperation('publish')) return
@@ -412,7 +357,9 @@ export function useSupplyNativeStartState({
         return
       }
       setTermsSaveOutcome('saved')
-      setSuccess('Tool submitted for validation. Agentic Economy will publish it after the required checks pass.')
+      setSuccess(result.state === 'Submitted'
+        ? 'The Tool is recorded. It is not callable yet: readiness has not been observed.'
+        : 'This Tool is listed and callable.')
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setTermsSaveOutcome('outcome_unknown')
@@ -447,18 +394,16 @@ export function useSupplyNativeStartState({
   }
 
   return {
-    sourceKind, environment, definitionUrl, mcpLocator, serverUrl, registryName, pluginJson, mcpJson,
-    resourceUrl, x402Method, preview, remoteSelection, selectedRemoteRef, selectedRef,
+    resourceUrl, x402Method, preview, selectedRef,
     name, description, category, serviceArea, availability,
     pricingKind, price, connectionRef, externalEffect, dataRelease, financialExposure, dataClassification, attestation,
     pending, error, invalidField, requiredAction, success, continuation, reviewing, publicationLocked,
     source, selected, eligibleConnections,
-    setEnvironment, setDefinitionUrl, setMcpLocator, setServerUrl, setRegistryName, setPluginJson, setMcpJson,
-    setResourceUrl, setX402Method, setSelectedRemoteRef,
+    setResourceUrl, setX402Method,
     setName, setDescription, setCategory, setServiceArea, setAvailability,
     setPricingKind, setPrice, setConnectionRef, setExternalEffect, setDataRelease, setFinancialExposure, setDataClassification,
     setAttestation, setError,
-    resetDiscoveryOnSourceEdit, changeSourceKind, editSource, editTool, editTerms, continueToReview,
+    editSource, editTool, editTerms, continueToReview,
     findTools, selectCandidate, submit, connectSelectedSource,
     termsDirty, termsSaveOutcome,
   }

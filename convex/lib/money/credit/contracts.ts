@@ -40,11 +40,6 @@ export const creditAccountResultValue = v.union(
       state: v.union(v.literal('pending'), v.literal('outcome_unknown')),
       externalRef: v.optional(v.string()),
     })),
-    autoRecharge: v.object({
-      enabled: v.boolean(),
-      threshold: exactAmount,
-      rechargeAmount: exactAmount,
-    }),
     evidence: v.literal('source'),
   }),
   creditRefusalValue,

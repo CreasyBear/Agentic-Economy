@@ -1,63 +1,28 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { isRecord } from '@/modules/common/is-record'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 
-import { dereferenceOpenApiSchema } from './internal/schema-deref'
 import {
-  discoverMcpSource,
-  type McpSourceDiscovery,
-} from './internal/mcp-source-discovery'
-
-export { discoverMcpSource, type McpSourceDiscovery }
-import { resolveOpenApiCredential } from './internal/openapi-import/credentials'
-import { resolveOpenApiRecord } from './internal/openapi-import/document'
-import {
-  analyzeOpenApiOperation,
-  defaultOpenApiParameterExclusions,
-} from './internal/openapi-import/operation'
-import {
-  validateOpenApiDocument,
-  type ValidOpenApiDocument,
-} from './internal/openapi-import/validation'
-import {
-  inspectSource,
   validHttpsUrl,
   type CapabilityPublicationImportRefusal,
 } from './internal/publication-importer-types'
+import {
+  BASE_MAINNET_NETWORK,
+  BASE_SEPOLIA_NETWORK,
+} from './internal/x402-payment-profile'
 import {
   inspectX402SellerEndpoint,
   type X402SellerEndpointInspection,
 } from './internal/x402-seller-endpoint-inspector'
 
-export type SupplySourceInput =
-  | Readonly<{
-      kind: 'openapi'
-      definitionUrl: string
-      environment: 'sandbox' | 'production'
-    }>
-  | Readonly<{
-      kind: 'mcp'
-      serverUrl?: string | undefined
-      registryName?: string | undefined
-      remoteRef?: string | undefined
-      environment: 'sandbox' | 'production'
-    }>
-  | Readonly<{
-      kind: 'agent_plugin'
-      pluginJson: Readonly<Record<string, JsonValue>>
-      mcpJson: Readonly<Record<string, JsonValue>>
-      remoteRef?: string | undefined
-      environment: 'sandbox' | 'production'
-    }>
-  | Readonly<{
-      kind: 'x402'
-      resourceUrl: string
-      method: 'GET' | 'POST'
-      environment: 'sandbox' | 'production'
-    }>
+export type SupplySourceInput = Readonly<{
+  kind: 'x402'
+  resourceUrl: string
+  method?: 'GET' | 'POST'
+  environment?: 'sandbox' | 'production'
+}>
 
 export type SourceAuthenticationRequirement =
   | Readonly<{ kind: 'public' }>
@@ -69,11 +34,7 @@ export type SourceAuthenticationRequirement =
 
 export type SupplyToolCandidate = Readonly<{
   candidateRef: string
-  sourceSelector:
-    | Readonly<{ serverUrl: string; path: string; method: string }>
-    | Readonly<{ serverUrl: string; toolName: string; protocolVersion: string }>
-    | Readonly<{ serverName: string; serverUrl: string; toolName: string; protocolVersion: string }>
-    | Readonly<{ resourceUrl: string; method: 'GET' | 'POST' }>
+  sourceSelector: Readonly<{ resourceUrl: string; method: 'GET' | 'POST' }>
   title: string
   description: string
   inputSchema?: Readonly<Record<string, JsonValue>> | undefined
@@ -86,6 +47,7 @@ export type SupplyToolCandidate = Readonly<{
     amount: string
     asset: string
     payTo: string
+    environment: 'sandbox' | 'production'
   }> | undefined
   disposition:
     | Readonly<{ kind: 'supported' }>
@@ -98,20 +60,12 @@ export type SupplySourcePreview =
       sourceDigest: string
       sourceRevision: string
       provenance: Readonly<{
-        sourceKind: 'openapi' | 'mcp' | 'agent_plugin' | 'x402'
+        sourceKind: 'x402'
         sourceUrl: string
-        authority: 'unverified_public' | 'verified_registry' | 'observed_external'
+        authority: 'observed_external'
       }>
       authentication: readonly SourceAuthenticationRequirement[]
       candidates: readonly SupplyToolCandidate[]
-    }>
-  | Readonly<{
-      kind: 'remote_selection_required'
-      sourceKind: 'mcp' | 'agent_plugin'
-      sourceDigest: string
-      sourceRevision: string
-      registryName?: string | undefined
-      remotes: readonly SupplyMcpRemote[]
     }>
   | Readonly<{
       kind: 'action_required'
@@ -127,116 +81,21 @@ export type SupplySourcePreview =
       }>
     }>
 
-export type SupplyMcpRemote = Readonly<{
-  remoteRef: string
-  name: string
-  serverUrl: string
-}>
-
-export const PUBLIC_OPENAPI_LOAD_REFUSALS = [
-  'source_unavailable',
-  'source_unreadable',
-  'source_invalid',
-  'source_too_large',
-  'source_too_deep',
-  'source_version_unsupported',
-  'schema_missing',
-] as const
-
-export type PublicOpenApiLoadRefusal = Readonly<{
-  kind: 'refused'
-  reason: (typeof PUBLIC_OPENAPI_LOAD_REFUSALS)[number]
-}>
-
-export type PublicOpenApiLoad = ValidOpenApiDocument | PublicOpenApiLoadRefusal
-
-export function isPublicOpenApiLoadRefusal(value: unknown): value is PublicOpenApiLoadRefusal {
-  return isRecord(value)
-    && value.kind === 'refused'
-    && typeof value.reason === 'string'
-    && (PUBLIC_OPENAPI_LOAD_REFUSALS as readonly string[]).includes(value.reason)
-    && !('openapi' in value)
-}
-
 export type SupplySourcePreviewDependencies = Readonly<{
-  loadOpenApi?: (definitionUrl: string) => Promise<PublicOpenApiLoad>
   inspectX402?: (input: Readonly<{
     endpointUrl: string
     method: 'GET' | 'POST'
-    aeEnvironment: 'sandbox' | 'production'
+    deriveAeEnvironment: true
   }>) => Promise<X402SellerEndpointInspection>
-  discoverMcp?: (input: Readonly<{
-    serverUrl?: string
-    registryName?: string
-    remoteRef?: string
-    environment: 'sandbox' | 'production'
-  }>) => Promise<McpSourceDiscovery>
-  mcpAuthentication?: Extract<SourceAuthenticationRequirement, { kind: 'public' | 'mcp_oauth' }>
 }>
 
-const transportJsonObjectSchema = z.record(z.string(), z.unknown()) as z.ZodType<Readonly<Record<string, JsonValue>>>
-
 const supplySourceTransportSchema = z.strictObject({
-  kind: z.enum(['openapi', 'mcp', 'agent_plugin', 'x402']),
-  definitionUrl: z.string().url().max(2_048).optional(),
-  serverUrl: z.string().url().max(2_048).optional(),
-  registryName: z.string().trim().min(1).max(255).optional(),
-  remoteRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u).optional(),
-  pluginJson: transportJsonObjectSchema.optional(),
-  mcpJson: transportJsonObjectSchema.optional(),
-  resourceUrl: z.string().url().max(2_048).optional(),
+  kind: z.literal('x402'),
+  resourceUrl: z.string().url().max(2_048),
   method: z.enum(['GET', 'POST']).optional(),
-  environment: z.enum(['sandbox', 'production']),
-}).superRefine((value, context) => {
-  const present = (field: keyof typeof value): boolean => value[field] !== undefined
-  const requireOnly = (
-    required: readonly (keyof typeof value)[],
-    forbidden: readonly (keyof typeof value)[],
-  ): void => {
-    for (const field of required) {
-      if (!present(field)) {
-        context.addIssue({ code: 'custom', path: [field], message: `${field} is required for ${value.kind}.` })
-      }
-    }
-    for (const field of forbidden) {
-      if (present(field)) {
-        context.addIssue({ code: 'custom', path: [field], message: `${field} is not accepted for ${value.kind}.` })
-      }
-    }
-  }
-
-  if (value.kind === 'openapi') {
-    requireOnly(['definitionUrl'], ['serverUrl', 'registryName', 'remoteRef', 'pluginJson', 'mcpJson', 'resourceUrl', 'method'])
-    return
-  }
-  if (value.kind === 'agent_plugin') {
-    requireOnly(['pluginJson', 'mcpJson'], ['definitionUrl', 'serverUrl', 'registryName', 'resourceUrl', 'method'])
-    return
-  }
-  if (value.kind === 'x402') {
-    requireOnly(['resourceUrl', 'method'], ['definitionUrl', 'serverUrl', 'registryName', 'remoteRef', 'pluginJson', 'mcpJson'])
-    return
-  }
-  requireOnly([], ['definitionUrl', 'pluginJson', 'mcpJson', 'resourceUrl', 'method'])
-  if (present('serverUrl') === present('registryName')) {
-    context.addIssue({
-      code: 'custom',
-      path: ['serverUrl'],
-      message: 'Provide exactly one of serverUrl or registryName.',
-    })
-  }
-  if (present('serverUrl') && present('remoteRef')) {
-    context.addIssue({
-      code: 'custom',
-      path: ['remoteRef'],
-      message: 'remoteRef is accepted only with a Registry source.',
-    })
-  }
+  environment: z.enum(['sandbox', 'production']).optional(),
 })
 
-// The official MCP SDK only advertises object-shaped tool inputs. Keep the
-// transport schema object-shaped while the refinement preserves the exact
-// source-specific union accepted by every action surface.
 export const supplySourceInputSchema = supplySourceTransportSchema as z.ZodType<SupplySourceInput>
 
 const authenticationSchema: z.ZodType<SourceAuthenticationRequirement> = z.union([
@@ -255,21 +114,7 @@ const jsonObjectSchema = z.record(z.string(), jsonValueSchema)
 const refusalReasonSchema = z.string() as z.ZodType<CapabilityPublicationImportRefusal>
 const candidateSchema: z.ZodType<SupplyToolCandidate> = z.strictObject({
   candidateRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-  sourceSelector: z.union([
-    z.strictObject({ serverUrl: z.string().url(), path: z.string(), method: z.string() }),
-    z.strictObject({
-      serverUrl: z.string().url(),
-      toolName: z.string(),
-      protocolVersion: z.string(),
-    }),
-    z.strictObject({
-      serverName: z.string(),
-      serverUrl: z.string().url(),
-      toolName: z.string(),
-      protocolVersion: z.string(),
-    }),
-    z.strictObject({ resourceUrl: z.string().url(), method: z.enum(['GET', 'POST']) }),
-  ]),
+  sourceSelector: z.strictObject({ resourceUrl: z.string().url(), method: z.enum(['GET', 'POST']) }),
   title: z.string(),
   description: z.string(),
   inputSchema: jsonObjectSchema.optional(),
@@ -282,6 +127,7 @@ const candidateSchema: z.ZodType<SupplyToolCandidate> = z.strictObject({
     amount: z.string(),
     asset: z.string(),
     payTo: z.string(),
+    environment: z.enum(['sandbox', 'production']),
   }).optional(),
   disposition: z.union([
     z.strictObject({ kind: z.literal('supported') }),
@@ -294,24 +140,12 @@ export const supplySourcePreviewSchema: z.ZodType<SupplySourcePreview> = z.union
     sourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
     sourceRevision: z.string(),
     provenance: z.strictObject({
-      sourceKind: z.enum(['openapi', 'mcp', 'agent_plugin', 'x402']),
+      sourceKind: z.literal('x402'),
       sourceUrl: z.string().url(),
-      authority: z.enum(['unverified_public', 'verified_registry', 'observed_external']),
+      authority: z.literal('observed_external'),
     }),
     authentication: z.array(authenticationSchema),
     candidates: z.array(candidateSchema).max(128),
-  }),
-  z.strictObject({
-    kind: z.literal('remote_selection_required'),
-    sourceKind: z.enum(['mcp', 'agent_plugin']),
-    sourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-    sourceRevision: z.string(),
-    registryName: z.string().optional(),
-    remotes: z.array(z.strictObject({
-      remoteRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-      name: z.string().trim().min(1),
-      serverUrl: z.string().url(),
-    })).min(1).max(8),
   }),
   z.strictObject({
     kind: z.literal('action_required'),
@@ -328,311 +162,109 @@ export const supplySourcePreviewSchema: z.ZodType<SupplySourcePreview> = z.union
   }),
 ])
 
-const OPENAPI_METHODS = [
-  'get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace',
-] as const
-
 export async function previewSupplySource(
   input: SupplySourceInput,
   dependencies: SupplySourcePreviewDependencies = {},
 ): Promise<SupplySourcePreview> {
-  if (input.kind === 'agent_plugin') return await previewAgentPluginSource(input, dependencies)
-  if (input.kind === 'mcp') return await previewMcpSource(input, dependencies)
-  if (input.kind === 'x402') return await previewX402Source(input, dependencies)
-  const definitionUrl = validHttpsUrl(input.definitionUrl)
-  if (definitionUrl === undefined) return sourceCorrection('OpenAPI URL invalid', 'Enter the public HTTPS URL of an OpenAPI 3.0 or 3.1 document, then preview it again.')
-
-  let loaded: PublicOpenApiLoad
-  try {
-    loaded = await (dependencies.loadOpenApi ?? loadPublicOpenApi)(definitionUrl)
-  } catch (cause) {
-    return degradeBackend(cause, openApiCorrection('OpenAPI source unavailable'), {
-      site: 'previewSupplySource',
-      reason: 'source_unavailable',
-    })
-  }
-  if (isPublicOpenApiLoadRefusal(loaded)) return openApiLoadCorrection(loaded.reason)
-  const bounded = inspectSource(loaded)
-  if (bounded.kind === 'refused') return openApiInputCorrection(bounded.reason)
-  const validated = await validateOpenApiDocument(loaded)
-  if (validated.kind === 'refused') return openApiInputCorrection(validated.reason)
-
-  const candidates = await openApiCandidates(validated.document, bounded.digest, definitionUrl)
-  const authentication = uniqueAuthentication(candidates)
-  return {
-    kind: 'ready',
-    sourceDigest: bounded.digest,
-    sourceRevision: `openapi:${bounded.digest}`,
-    provenance: {
-      sourceKind: 'openapi',
-      sourceUrl: definitionUrl,
-      authority: 'unverified_public',
-    },
-    authentication,
-    candidates,
-  }
-}
-
-async function previewAgentPluginSource(
-  input: Extract<SupplySourceInput, { kind: 'agent_plugin' }>,
-  dependencies: SupplySourcePreviewDependencies,
-): Promise<SupplySourcePreview> {
-  const authentication = dependencies.mcpAuthentication ?? { kind: 'public' as const }
-  const bounded = inspectSource({ pluginJson: input.pluginJson, mcpJson: input.mcpJson })
-  if (bounded.kind === 'refused') {
+  const resourceUrl = validHttpsUrl(input.resourceUrl)
+  if (resourceUrl === undefined) {
     return sourceCorrection(
-      'Agent Plugin bundle invalid',
-      'Correct plugin.json and mcp.json against Agent Plugins 1.0, then preview them again.',
+      'x402 URL invalid',
+      'Enter the public HTTPS URL of the x402 endpoint, then preview it again.',
     )
   }
-  const { validateAgentPluginSource } = await import('./internal/agent-plugin-source')
-  const validated = validateAgentPluginSource(input.pluginJson, input.mcpJson)
-  if (validated.kind === 'refused') {
-    return sourceCorrection(
-      'Agent Plugin bundle needs attention',
-      'Use matching Agent Plugins 1.0 plugin.json and mcp.json files with a remote streamable-http server and no embedded headers, then preview them again.',
-    )
-  }
-
-  const remotes = validated.servers.map((server): SupplyMcpRemote => ({
-    remoteRef: canonicalDigest({
-      format: 'agent-plugin-mcp-remote:v1',
-      name: server.name,
-      transport: 'streamable-http',
-      serverUrl: server.url,
-    }),
-    name: server.name,
-    serverUrl: server.url,
-  }))
-  if (input.remoteRef === undefined) {
-    return {
-      kind: 'remote_selection_required',
-      sourceKind: 'agent_plugin',
-      sourceDigest: bounded.digest,
-      sourceRevision: `agent-plugin-1.0:${bounded.digest}`,
-      remotes,
-    }
-  }
-  const selectedRemote = remotes.find(({ remoteRef }) => remoteRef === input.remoteRef)
-  if (selectedRemote === undefined) {
-    return sourceCorrection(
-      'Agent Plugin server changed',
-      'Select one current remote MCP server from the Agent Plugin files, then continue.',
-    )
-  }
-
-  const discover = dependencies.discoverMcp
-    ?? (await import('./internal/mcp-source-discovery')).discoverMcpSource
-  let discovery: McpSourceDiscovery
-  try {
-    discovery = await discover({ serverUrl: selectedRemote.serverUrl, environment: input.environment })
-  } catch (cause) {
-    return degradeBackend(
-      cause,
-      sourceCorrection(
-        'Agent Plugin server unavailable',
-        'Make the selected MCP server available at the same public HTTPS URL, then preview the bundle again.',
-      ),
-      { site: 'previewAgentPluginSource', reason: 'source_unavailable' },
-    )
-  }
-  if (discovery.kind === 'authentication_required') {
-    return sourceCorrection(
-      'Connect MCP server',
-      `Connect ${selectedRemote.name}, then return to continue previewing its tools.`,
-      discovery.authenticationUrl,
-      'Connect server',
-    )
-  }
-  if (discovery.kind === 'remote_selection_required') {
-    return sourceCorrection('Agent Plugin server changed', 'Select the current MCP server again, then continue.')
-  }
-  if (discovery.kind === 'refused') {
-    return sourceCorrection(
-      'Agent Plugin server needs attention',
-      `Correct ${selectedRemote.name} at its source, then preview the bundle again.`,
-    )
-  }
-
-  const sourceDigest = canonicalDigest({
-    bundleDigest: bounded.digest,
-    selectedRemoteRef: selectedRemote.remoteRef,
-    remoteDigest: discovery.sourceDigest,
-  })
-  const candidates: SupplyToolCandidate[] = []
-  for (const tool of discovery.tools) {
-    if (candidates.length >= 128) break
-    const selector = {
-      serverName: selectedRemote.name,
-      serverUrl: discovery.serverUrl,
-      toolName: tool.name,
-      protocolVersion: discovery.protocolVersion,
-    }
-    candidates.push({
-      candidateRef: canonicalDigest({ sourceDigest, selector }),
-      sourceSelector: selector,
-      title: boundedText(tool.title) ?? tool.name,
-      description: boundedText(tool.description) ?? tool.name,
-      inputSchema: tool.inputSchema,
-      ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
-      authentication,
-      validationExampleAvailable: false,
-      disposition: tool.outputSchema === undefined
-        ? { kind: 'unsupported', reason: 'schema_missing' }
-        : { kind: 'supported' },
-    })
-  }
-  return {
-    kind: 'ready',
-    sourceDigest,
-    sourceRevision: `agent-plugin-1.0:${sourceDigest}`,
-    provenance: {
-      sourceKind: 'agent_plugin',
-      sourceUrl: selectedRemote.serverUrl,
-      authority: 'unverified_public',
-    },
-    authentication: [authentication],
-    candidates,
-  }
-}
-
-async function previewMcpSource(
-  input: Extract<SupplySourceInput, { kind: 'mcp' }>,
-  dependencies: SupplySourcePreviewDependencies,
-): Promise<SupplySourcePreview> {
-  const authentication = dependencies.mcpAuthentication ?? { kind: 'public' as const }
-  let discovery: McpSourceDiscovery
-  try {
-    const discover = dependencies.discoverMcp
-      ?? (await import('./internal/mcp-source-discovery')).discoverMcpSource
-    discovery = await discover({
-      ...(input.serverUrl === undefined ? {} : { serverUrl: input.serverUrl }),
-      ...(input.registryName === undefined ? {} : { registryName: input.registryName }),
-      ...(input.remoteRef === undefined ? {} : { remoteRef: input.remoteRef }),
-      environment: input.environment,
-    })
-  } catch (cause) {
-    return degradeBackend(
-      cause,
-      sourceCorrection(
-        'MCP server unavailable',
-        'Make the MCP server available at the same public HTTPS URL, then preview it again.',
-      ),
-      { site: 'previewMcpSource', reason: 'source_unavailable' },
-    )
-  }
-  if (discovery.kind === 'authentication_required') {
-    return sourceCorrection(
-      'Connect MCP server',
-      'Connect the MCP server, then return to continue previewing its tools.',
-      discovery.authenticationUrl,
-      'Connect server',
-    )
-  }
-  if (discovery.kind === 'remote_selection_required') {
-    return {
-      kind: 'remote_selection_required',
-      sourceKind: 'mcp',
-      sourceDigest: discovery.sourceDigest,
-      sourceRevision: discovery.sourceRevision,
-      registryName: discovery.registryName,
-      remotes: discovery.remotes,
-    }
-  }
-  if (discovery.kind === 'refused') {
-    return sourceCorrection(
-      'MCP source needs attention',
-      'Correct the MCP server at its source, then preview it again.',
-    )
-  }
-
-  const candidates = discovery.tools.slice(0, 128).map((tool): SupplyToolCandidate => {
-    const selector = {
-      serverUrl: discovery.serverUrl,
-      toolName: tool.name,
-      protocolVersion: discovery.protocolVersion,
-    }
-    const hasOutputSchema = tool.outputSchema !== undefined
-    return {
-      candidateRef: canonicalDigest({ sourceDigest: discovery.sourceDigest, selector }),
-      sourceSelector: selector,
-      title: boundedText(tool.title) ?? tool.name,
-      description: boundedText(tool.description) ?? tool.name,
-      inputSchema: tool.inputSchema,
-      ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
-      authentication,
-      validationExampleAvailable: false,
-      disposition: hasOutputSchema
-        ? { kind: 'supported' }
-        : { kind: 'unsupported', reason: 'schema_missing' },
-    }
-  })
-  return {
-    kind: 'ready',
-    sourceDigest: discovery.sourceDigest,
-    sourceRevision: `mcp:${discovery.sourceDigest}`,
-    provenance: {
-      sourceKind: 'mcp',
-      sourceUrl: discovery.serverUrl,
-      authority: discovery.verifiedNamespace === true ? 'verified_registry' : 'unverified_public',
-    },
-    authentication: [authentication],
-    candidates,
-  }
+  return await previewX402Source({ ...input, resourceUrl }, dependencies)
 }
 
 async function previewX402Source(
-  input: Extract<SupplySourceInput, { kind: 'x402' }>,
+  input: SupplySourceInput & Readonly<{ resourceUrl: string }>,
   dependencies: SupplySourcePreviewDependencies,
 ): Promise<SupplySourcePreview> {
-  let inspection: X402SellerEndpointInspection
-  try {
-    inspection = await (dependencies.inspectX402 ?? inspectX402SellerEndpoint)({
-      endpointUrl: input.resourceUrl,
-      method: input.method,
-      aeEnvironment: input.environment,
-    })
-  } catch (cause) {
-    return degradeBackend(
-      cause,
-      sourceCorrection('x402 source unavailable', 'Make the x402 resource available at the same public HTTPS URL, then preview it again.'),
-      { site: 'previewX402Source', reason: 'source_unavailable' },
-    )
-  }
-  if (inspection.kind === 'refused') {
-    return sourceCorrection('x402 source needs attention', inspection.action)
+  const methods: readonly ('GET' | 'POST')[] = input.method === undefined ? ['GET', 'POST'] : [input.method]
+  const inspected: Array<Readonly<{ method: 'GET' | 'POST'; inspection: X402SellerEndpointInspection }>> = []
+  for (const method of methods) {
+    try {
+      inspected.push({
+        method,
+        inspection: await (dependencies.inspectX402 ?? inspectX402SellerEndpoint)({
+          endpointUrl: input.resourceUrl,
+          method,
+          deriveAeEnvironment: true,
+        }),
+      })
+    } catch (cause) {
+      return degradeBackend(
+        cause,
+        sourceCorrection('x402 source unavailable', 'Make the x402 resource available at the same public HTTPS URL, then preview it again.'),
+        { site: 'previewX402Source', reason: 'source_unavailable' },
+      )
+    }
   }
 
+  const payable = inspected.filter((entry) => (
+    entry.inspection.kind === 'observed' && entry.inspection.payment.selection.kind === 'selected'
+  ))
+  if (input.method === undefined && payable.length > 1) {
+    return sourceCorrection(
+      'Choose the request method',
+      'Both GET and POST returned an x402 payment challenge. Choose one method, then preview again.',
+    )
+  }
+  const chosen = payable[0] ?? inspected.find((entry) => entry.inspection.kind === 'refused') ?? inspected[0]
+  if (chosen === undefined) {
+    return sourceCorrection('x402 source unavailable', 'Make the x402 resource available at the same public HTTPS URL, then preview it again.')
+  }
+  if (chosen.inspection.kind === 'refused') {
+    return sourceCorrection('x402 source needs attention', chosen.inspection.action)
+  }
+  return x402CandidatePreview(chosen.inspection, chosen.method, input.environment)
+}
+
+function x402CandidatePreview(
+  inspection: Extract<X402SellerEndpointInspection, { kind: 'observed' }>,
+  method: 'GET' | 'POST',
+  declaredEnvironment: SupplySourceInput['environment'],
+): SupplySourcePreview {
   const selection = inspection.payment.selection
   const selected = selection.kind === 'selected'
     ? inspection.payment.accepts.find(({ alternativeId }) => alternativeId === selection.alternativeId)
     : undefined
+  const environment = selected === undefined ? undefined : environmentForNetwork(selected.network)
+  if (declaredEnvironment !== undefined && environment !== undefined && declaredEnvironment !== environment) {
+    return sourceCorrection(
+      'Payment network mismatch',
+      `This endpoint's payment challenge is ${environment === 'sandbox' ? 'Base Sepolia sandbox' : 'Base mainnet production'}. The network in the challenge decides the environment.`,
+    )
+  }
   const discovery = inspection.discovery
-  const supported = selected !== undefined && discovery.kind === 'admitted'
-  const refusalReason: CapabilityPublicationImportRefusal = selected === undefined
+  const supported = selected !== undefined && environment !== undefined && discovery.kind === 'admitted'
+  const refusalReason: CapabilityPublicationImportRefusal = selected === undefined || environment === undefined
     ? 'payment_execution_unsupported'
     : discovery.kind === 'refused'
       ? discovery.reason
       : 'schema_missing'
-  const selector = { resourceUrl: inspection.endpoint.url, method: input.method }
-  const title = `x402 ${input.method} ${new URL(inspection.endpoint.url).hostname}`
+  const selector = { resourceUrl: inspection.endpoint.url, method }
+  const title = discovery.kind === 'admitted'
+    ? `x402 ${method} ${new URL(inspection.endpoint.url).hostname}`
+    : `x402 ${method} ${new URL(inspection.endpoint.url).hostname}`
   const candidate: SupplyToolCandidate = {
     candidateRef: canonicalDigest({ sourceDigest: inspection.digest, selector }),
     sourceSelector: selector,
     title,
-    description: `Paid ${input.method} Tool discovered from the live x402 payment challenge.`,
+    description: `Paid ${method} Tool discovered from the live x402 payment challenge.`,
     ...(discovery.kind === 'admitted'
       ? { inputSchema: discovery.inputSchema, outputSchema: discovery.outputSchema }
       : {}),
     authentication: { kind: 'x402_wallet' },
     validationExampleAvailable: discovery.kind === 'admitted',
-    ...(selected === undefined ? {} : {
+    ...(selected === undefined || environment === undefined ? {} : {
       x402: {
         scheme: selected.scheme,
         network: selected.network,
         amount: selected.amount,
         asset: selected.asset,
         payTo: selected.payTo,
+        environment,
       },
     }),
     disposition: supported
@@ -653,182 +285,10 @@ async function previewX402Source(
   }
 }
 
-export async function loadPublicOpenApi(definitionUrl: string): Promise<PublicOpenApiLoad> {
-  const target = new URL(definitionUrl)
-  const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
-  if (!await isPublicHttpTarget(target, defaultDnsResolver)) {
-    return { kind: 'refused', reason: 'source_unavailable' }
-  }
-  const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
-  const response = await sendGuardedHttpRequest(new Request(target, {
-    method: 'GET',
-    headers: { Accept: 'application/json, application/yaml, text/yaml, text/plain' },
-    redirect: 'manual',
-    signal: AbortSignal.timeout(10_000),
-  }), 262_144)
-  if (response.status === 413 || response.headers.get('x-ae-probe-outcome') === 'response_too_large') {
-    return { kind: 'refused', reason: 'source_too_large' }
-  }
-  if (!response.ok || response.status >= 300) return { kind: 'refused', reason: 'source_unavailable' }
-  let text: string
-  try {
-    text = await response.text()
-  } catch (cause) {
-    return degradeBackend(cause, { kind: 'refused', reason: 'source_unreadable' } as const, {
-      site: 'loadPublicOpenApi',
-      reason: 'invalid_response',
-    })
-  }
-  const parsed = await validateOpenApiDocument(text)
-  if (parsed.kind === 'refused') return parsed
-  return parsed.document
-}
-
-async function openApiCandidates(
-  document: Readonly<Record<string, unknown>> & Readonly<{ paths: Readonly<Record<string, unknown>> }>,
-  sourceDigest: string,
-  definitionUrl: string,
-): Promise<readonly SupplyToolCandidate[]> {
-  const candidates: SupplyToolCandidate[] = []
-  const serverUrl = openApiServerUrl(document.servers) ?? definitionUrl
-  const executableServer = openApiServerUrl(document.servers) !== undefined
-  for (const [path, rawPathItem] of Object.entries(document.paths)) {
-    const pathItemResult = await resolveOpenApiRecord(rawPathItem, document, dereferenceOpenApiSchema)
-    const pathItem = pathItemResult.kind === 'resolved' ? pathItemResult.value : undefined
-    if (pathItem === undefined) continue
-    for (const method of OPENAPI_METHODS) {
-      const rawOperation = pathItem[method]
-      if (!isRecord(rawOperation)) continue
-      const operationResult = await resolveOpenApiRecord(rawOperation, document, dereferenceOpenApiSchema)
-      const operation = operationResult.kind === 'resolved' ? operationResult.value : undefined
-      if (operation === undefined) continue
-      candidates.push(await openApiCandidate({ document, pathItem, operation, path, method, sourceDigest, serverUrl, executableServer }))
-      if (candidates.length >= 128) return candidates
-    }
-  }
-  return candidates
-}
-
-async function openApiCandidate(input: Readonly<{
-  document: Readonly<Record<string, unknown>>
-  pathItem: Readonly<Record<string, unknown>>
-  operation: Readonly<Record<string, unknown>>
-  path: string
-  method: string
-  sourceDigest: string
-  serverUrl: string
-  executableServer: boolean
-}>): Promise<SupplyToolCandidate> {
-  const selector = { serverUrl: input.serverUrl, path: input.path, method: input.method }
-  const credential = resolveOpenApiCredential(input.document, input.operation)
-  const authentication = credential.kind === 'resolved'
-    ? authenticationRequirement(credential.spec)
-    : { kind: 'unsupported' as const }
-  const analysis = credential.kind === 'resolved' && input.executableServer
-    ? await analyzeOpenApiOperation(
-        input.operation,
-        input.pathItem.parameters,
-        input.path,
-        input.method,
-        defaultOpenApiParameterExclusions(credential),
-        input.document,
-        dereferenceOpenApiSchema,
-      )
-    : { kind: 'refused' as const, reason: 'transport_unsupported' as const }
-  const title = boundedText(input.operation.summary)
-    ?? boundedText(input.operation.operationId)
-    ?? `${input.method.toUpperCase()} ${input.path}`
-  const description = boundedText(input.operation.description)
-    ?? boundedText(input.operation.summary)
-    ?? title
-
-  return {
-    candidateRef: canonicalDigest({ sourceDigest: input.sourceDigest, selector }),
-    sourceSelector: selector,
-    title,
-    description,
-    ...(analysis.kind === 'analyzed'
-      ? {
-          inputSchema: analysis.analysis.inputSchema,
-          outputSchema: analysis.analysis.outputContent.schema,
-        }
-      : {}),
-    authentication,
-    validationExampleAvailable: requestExampleAvailable(input.operation),
-    disposition: analysis.kind === 'analyzed'
-      ? { kind: 'supported' }
-      : { kind: 'unsupported', reason: analysis.reason },
-  }
-}
-
-function openApiServerUrl(value: unknown): string | undefined {
-  if (!Array.isArray(value) || value.length !== 1 || !isRecord(value[0]) || typeof value[0].url !== 'string') {
-    return undefined
-  }
-  return validHttpsUrl(value[0].url)
-}
-
-function authenticationRequirement(
-  credential: ReturnType<typeof resolveOpenApiCredential> extends infer Result
-    ? Result extends { kind: 'resolved'; spec: infer Spec } ? Spec : never
-    : never,
-): SourceAuthenticationRequirement {
-  if (credential.kind === 'public_upstream') return { kind: 'public' }
-  if (credential.kind === 'http_bearer') return { kind: 'http_bearer' }
-  return { kind: 'api_key', location: credential.location, name: credential.name }
-}
-
-function uniqueAuthentication(candidates: readonly SupplyToolCandidate[]): readonly SourceAuthenticationRequirement[] {
-  const unique = new Map<string, SourceAuthenticationRequirement>()
-  for (const candidate of candidates) {
-    unique.set(JSON.stringify(candidate.authentication), candidate.authentication)
-  }
-  return [...unique.values()]
-}
-
-function requestExampleAvailable(operation: Readonly<Record<string, unknown>>): boolean {
-  if (!isRecord(operation.requestBody) || !isRecord(operation.requestBody.content)) return false
-  return Object.values(operation.requestBody.content).some((media) =>
-    isRecord(media) && (media.example !== undefined || isRecord(media.examples)))
-}
-
-function boundedText(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed.slice(0, 1_000) : undefined
-}
-
-function openApiLoadCorrection(reason: PublicOpenApiLoadRefusal['reason']): SupplySourcePreview {
-  if (reason === 'source_unavailable') return openApiCorrection('OpenAPI source unavailable')
-  if (reason === 'source_unreadable') {
-    return sourceCorrection(
-      'OpenAPI document could not be read',
-      'The response could not be read. Confirm the URL returns the OpenAPI document, then preview it again.',
-    )
-  }
-  return openApiInputCorrection(reason)
-}
-
-function openApiInputCorrection(reason: 'source_invalid' | 'source_too_large' | 'source_too_deep' | 'source_version_unsupported' | 'schema_missing'): SupplySourcePreview {
-  switch (reason) {
-    case 'source_version_unsupported':
-      return sourceCorrection('OpenAPI version unsupported', 'Use an OpenAPI 3.0 or 3.1 document at the same URL, then preview it again.')
-    case 'source_too_large':
-      return sourceCorrection('OpenAPI document too large', 'Remove unused definitions from the document, then preview it again.')
-    case 'source_too_deep':
-      return sourceCorrection('OpenAPI document too deep', 'Simplify nested definitions in the document, then preview it again.')
-    case 'schema_missing':
-      return sourceCorrection('OpenAPI paths missing', 'Declare at least one operation under paths in the OpenAPI document, then preview it again.')
-    case 'source_invalid':
-      return sourceCorrection('OpenAPI document invalid', 'Correct the OpenAPI document at this URL, then preview it again.')
-  }
-}
-
-function openApiCorrection(title: string): SupplySourcePreview {
-  return sourceCorrection(
-    title,
-    'Make the OpenAPI document available at the same public HTTPS URL, then preview it again.',
-  )
+function environmentForNetwork(network: string): 'sandbox' | 'production' | undefined {
+  if (network === BASE_SEPOLIA_NETWORK) return 'sandbox'
+  if (network === BASE_MAINNET_NETWORK) return 'production'
+  return undefined
 }
 
 function sourceCorrection(

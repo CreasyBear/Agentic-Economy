@@ -5,7 +5,7 @@ import {
   readX402DirectoryCatalogueResourceServer,
   readX402DirectoryCatalogueServer,
 } from '@/modules/market/x402-directory-index.functions'
-import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue } from '@/modules/market/x402-directory-catalogue'
+import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue, type X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 import { directoryBooleanSearchKeys, directoryCatalogueSearchKeys, directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
 import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace-home.functions'
 import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
@@ -241,14 +241,23 @@ async function resolveMarketCompareEntry(resource: string): Promise<MarketCompar
   return { resource, missing: true }
 }
 
+
+/** Discover paints collection cards, not facet shelves or unopened catalogue pages. */
+function paintedOverview(overview: X402DirectoryCatalogueOverview, view: MarketView): X402DirectoryCatalogueOverview {
+  if (overview.kind !== 'ok' || view !== 'discover') return overview
+  return { kind: 'ok', coverage: overview.coverage, categories: [], providers: [], networks: [], popular: [], recentlyUpdated: [] }
+}
+
 export async function loadMarketRouteData(deps: MarketSearch) {
   const parsedCatalogue = x402DirectoryCatalogueInputSchema.safeParse(catalogueSearchFromUrl({ ...directoryCatalogueSearchValues(deps) }))
   const catalogueInput = parsedCatalogue.success ? parsedCatalogue.data : x402DirectoryCatalogueInputSchema.parse({})
   const view = resolveMarketView(deps)
   const showHome = view === 'discover'
   const compareRefs = parseMarketCompareRefs(deps.compare) ?? []
-  const [catalogue, home, overview, compareEntries] = await Promise.all([
-    catalogueInput.query === undefined || catalogueInput.alternativeTo !== undefined
+  const [loadedCatalogue, home, loadedOverview, compareEntries] = await Promise.all([
+    showHome
+      ? Promise.resolve(undefined)
+      : catalogueInput.query === undefined || catalogueInput.alternativeTo !== undefined
       ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } }).catch((cause: unknown) => {
           console.error('[market] directory catalogue unavailable', { cause })
           return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
@@ -261,6 +270,15 @@ export async function loadMarketRouteData(deps: MarketSearch) {
     }),
     Promise.all(compareRefs.map(resolveMarketCompareEntry)),
   ])
+  const overview = paintedOverview(loadedOverview, view)
+  const catalogue = loadedCatalogue ?? {
+    kind: 'ok' as const,
+    source: 'index' as const,
+    searchMethod: 'native_index' as const,
+    isDone: true,
+    ...(overview.kind === 'ok' ? { coverage: overview.coverage } : {}),
+    page: { kind: 'ok' as const, items: [], offset: 0, limit: 0, mode: 'browse' as const, appliedFilters: {} },
+  }
   const page = catalogue?.kind === 'ok'
     ? catalogue.page
     : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }

@@ -8,12 +8,7 @@ import { publicationMaterialContainsCredential } from './internal/publication/so
 import type { SupplySourceInput } from './source-preview'
 
 const SHA256_REF = /^sha256:[0-9a-f]{64}$/u
-const SOURCE_REVISION_PREFIX: Record<SupplySourceInput['kind'], string> = {
-  openapi: 'openapi:',
-  mcp: 'mcp:',
-  agent_plugin: 'agent-plugin-1.0:',
-  x402: 'x402:',
-}
+const SOURCE_REVISION_PREFIX = { x402: 'x402:' } as const
 
 /** Private owner-entered draft material. Publication attestations are intentionally excluded. */
 export type SupplyIntegrationDraftTerms = Readonly<{
@@ -31,7 +26,7 @@ export type SupplyIntegrationDraftTerms = Readonly<{
 }>
 
 export type SupplyIntegrationDraft = Readonly<{
-  sourceKind: SupplySourceInput['kind']
+  sourceKind: 'openapi' | 'mcp' | 'agent_plugin' | 'x402'
   sourceDescriptorJson: string
   sourceDigest: string
   sourceRevision: string
@@ -44,7 +39,7 @@ export type SupplyIntegrationDraft = Readonly<{
 }>
 
 export type NormalizeSupplyIntegrationDraftInput = Readonly<{
-  sourceKind: SupplySourceInput['kind']
+  sourceKind: 'openapi' | 'mcp' | 'agent_plugin' | 'x402'
   sourceDescriptorJson: string
   sourceDigest: string
   sourceRevision: string
@@ -70,10 +65,11 @@ export type SupplyIntegrationDraftNormalization =
 export function normalizeSupplyIntegrationDraft(
   input: NormalizeSupplyIntegrationDraftInput,
 ): SupplyIntegrationDraftNormalization {
+  if (input.sourceKind !== 'x402') return { kind: 'refused', reason: 'draft_invalid' }
   if (!SHA256_REF.test(input.sourceDigest) || !SHA256_REF.test(input.candidateRef)) {
     return { kind: 'refused', reason: 'draft_invalid' }
   }
-  if (!input.sourceRevision.startsWith(SOURCE_REVISION_PREFIX[input.sourceKind])) {
+  if (!input.sourceRevision.startsWith(SOURCE_REVISION_PREFIX.x402)) {
     return { kind: 'refused', reason: 'draft_invalid' }
   }
   if (!Number.isSafeInteger(input.updatedAt) || input.updatedAt <= 0) {
@@ -149,48 +145,16 @@ export function normalizeSupplyIntegrationDraft(
 }
 
 export function normalizeSupplySourceDescriptor(value: unknown): SupplySourceInput | undefined {
-  if (!isRecord(value) || (value.environment !== 'sandbox' && value.environment !== 'production')) return undefined
-  switch (value.kind) {
-    case 'openapi':
-      return exactKeys(value, ['kind', 'definitionUrl', 'environment']) && validUrl(value.definitionUrl)
-        ? { kind: 'openapi', definitionUrl: value.definitionUrl, environment: value.environment }
-        : undefined
-    case 'mcp': {
-      if (!exactKeys(value, ['kind', 'serverUrl', 'registryName', 'remoteRef', 'environment'], true)) return undefined
-      const serverUrl = validUrl(value.serverUrl) ? value.serverUrl : undefined
-      const registryName = boundedTextValue(value.registryName, 255)
-      const remoteRef = sha256Ref(value.remoteRef)
-      if ((serverUrl === undefined) === (registryName === undefined)) return undefined
-      if (serverUrl !== undefined && value.remoteRef !== undefined) return undefined
-      if (value.remoteRef !== undefined && remoteRef === undefined) return undefined
-      return {
-        kind: 'mcp',
-        ...(serverUrl === undefined ? {} : { serverUrl }),
-        ...(registryName === undefined ? {} : { registryName }),
-        ...(remoteRef === undefined ? {} : { remoteRef }),
-        environment: value.environment,
-      }
-    }
-    case 'agent_plugin':
-      return exactKeys(value, ['kind', 'pluginJson', 'mcpJson', 'remoteRef', 'environment'], true)
-        && Object.hasOwn(value, 'pluginJson') && Object.hasOwn(value, 'mcpJson')
-        && isRecord(value.pluginJson) && isRecord(value.mcpJson)
-        && (value.remoteRef === undefined || sha256Ref(value.remoteRef) !== undefined)
-        ? {
-            kind: 'agent_plugin',
-            pluginJson: value.pluginJson as never,
-            mcpJson: value.mcpJson as never,
-            ...(typeof value.remoteRef === 'string' ? { remoteRef: value.remoteRef } : {}),
-            environment: value.environment,
-          }
-        : undefined
-    case 'x402':
-      return exactKeys(value, ['kind', 'resourceUrl', 'method', 'environment'])
-        && validUrl(value.resourceUrl) && (value.method === 'GET' || value.method === 'POST')
-        ? { kind: 'x402', resourceUrl: value.resourceUrl, method: value.method, environment: value.environment }
-        : undefined
-    default:
-      return undefined
+  if (!isRecord(value) || value.kind !== 'x402') return undefined
+  if (value.environment !== undefined && value.environment !== 'sandbox' && value.environment !== 'production') return undefined
+  if (!exactKeys(value, ['kind', 'resourceUrl', 'method', 'environment'], true)) return undefined
+  if (!validUrl(value.resourceUrl)) return undefined
+  if (value.method !== undefined && value.method !== 'GET' && value.method !== 'POST') return undefined
+  return {
+    kind: 'x402',
+    resourceUrl: value.resourceUrl,
+    ...(value.method === 'GET' || value.method === 'POST' ? { method: value.method } : {}),
+    ...(value.environment === 'sandbox' || value.environment === 'production' ? { environment: value.environment } : {}),
   }
 }
 
@@ -238,24 +202,12 @@ function sourceTarget(
   source: SupplySourceInput,
   selector: Readonly<Record<string, unknown>>,
 ): Readonly<{ url: string; method?: string }> | undefined {
-  const selectorUrl = typeof selector.serverUrl === 'string'
-    ? selector.serverUrl
-    : typeof selector.resourceUrl === 'string'
-      ? selector.resourceUrl
-      : undefined
-  const value = source.kind === 'openapi'
-    ? selectorUrl ?? source.definitionUrl
-    : source.kind === 'x402'
-      ? source.resourceUrl
-      : selectorUrl ?? (source.kind === 'mcp' ? source.serverUrl : undefined)
-  if (value === undefined) return undefined
+  const value = typeof selector.resourceUrl === 'string' ? selector.resourceUrl : source.resourceUrl
   let url: string
   try {
     const parsed = new URL(value)
     if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') return undefined
-    url = source.kind === 'openapi' && typeof selector.path === 'string'
-      ? new URL(selector.path.replace(/^\/+/, ''), parsed.href.endsWith('/') ? parsed.href : `${parsed.href}/`).toString()
-      : parsed.toString()
+    url = parsed.toString()
   } catch (cause) {
     return degradeBackend(cause, undefined, { site: 'sourceTarget', reason: 'invalid_response' })
   }

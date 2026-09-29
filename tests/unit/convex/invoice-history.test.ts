@@ -121,8 +121,8 @@ async function insertFundingCommand(
       exponent: 6,
       principalUnits: '5000000',
       serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
+      taxUnits: '530000',
+      totalUnits: '5780000',
       commercialPolicyDigest: canonicalDigest({ kind: 'policy', commandRef: input.commandRef }),
       commercialPolicyRefs: ['commercial-policy:sandbox'],
       idempotencyKey: input.commandRef,
@@ -261,7 +261,7 @@ async function insertIssuedTaxInvoice(
       accountRef: ACCOUNT_REF,
       kind: 'tax_invoice',
       sourceTransactionRefs: [sourceTransactionRef],
-      amountUnits: '5280000',
+      amountUnits: '5780000',
       residualUnits: '0',
       policyRefs: ['commercial-policy:sandbox'],
       policyDigest: canonicalDigest({ kind: 'policy', documentRef }),
@@ -320,8 +320,8 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
     expect(result.page[0]).toMatchObject({
       principalUnits: '5000000',
       serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
+      taxUnits: '530000',
+      totalUnits: '5780000',
     })
   })
 

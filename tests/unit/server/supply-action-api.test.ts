@@ -69,13 +69,13 @@ describe('Provider action HTTP adapter', () => {
     const sourcePreview = vi.fn().mockResolvedValue({
       kind: 'ready',
       sourceDigest: `sha256:${'1'.repeat(64)}`,
-      sourceRevision: `openapi:sha256:${'1'.repeat(64)}`,
+      sourceRevision: `x402:sha256:${'1'.repeat(64)}`,
       provenance: {
-        sourceKind: 'openapi',
-        sourceUrl: 'https://provider.example/openapi.yaml',
-        authority: 'unverified_public',
+        sourceKind: 'x402',
+        sourceUrl: 'https://provider.example/paid',
+        authority: 'observed_external',
       },
-      authentication: [{ kind: 'public' }],
+      authentication: [{ kind: 'x402_wallet' }],
       candidates: [],
     })
     const response = await handleSupplyActionPost(
@@ -83,9 +83,9 @@ describe('Provider action HTTP adapter', () => {
         method: 'POST',
         headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify({
-          kind: 'openapi',
-          definitionUrl: 'https://provider.example/openapi.yaml',
-          environment: 'sandbox',
+          kind: 'x402',
+          resourceUrl: 'https://provider.example/paid',
+          method: 'POST',
         }),
       }),
       'sourcePreview',
@@ -96,7 +96,7 @@ describe('Provider action HTTP adapter', () => {
     expect(response.headers.get('cache-control')).toBe('no-store')
     await expect(response.json()).resolves.toMatchObject({
       kind: 'ready',
-      provenance: { sourceKind: 'openapi' },
+      provenance: { sourceKind: 'x402' },
     })
     expect(sourcePreview).toHaveBeenCalledOnce()
   })
@@ -222,15 +222,15 @@ describe('Provider action HTTP adapter', () => {
 
     const sourcePreview = vi.fn().mockResolvedValue({
       kind: 'ready', sourceDigest: `sha256:${'1'.repeat(64)}`,
-      sourceRevision: `openapi:sha256:${'1'.repeat(64)}`,
-      provenance: { sourceKind: 'openapi', sourceUrl: 'https://provider.example/openapi.yaml', authority: 'unverified_public' },
-      authentication: [{ kind: 'public' }], candidates: [],
+      sourceRevision: `x402:sha256:${'1'.repeat(64)}`,
+      provenance: { sourceKind: 'x402', sourceUrl: 'https://provider.example/paid', authority: 'observed_external' },
+      authentication: [{ kind: 'x402_wallet' }], candidates: [],
     })
     const previewResponse = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/sources/preview', {
         method: 'POST',
         headers: { Authorization: 'Bearer hidden-provider-secret' },
-        body: JSON.stringify({ kind: 'openapi', definitionUrl: 'https://provider.example/openapi.yaml', environment: 'production' }),
+        body: JSON.stringify({ kind: 'x402', resourceUrl: 'https://provider.example/paid', method: 'POST' }),
       }),
       'sourcePreview',
       { authenticate, resolvePrincipal, supplyManagementService: service({ sourcePreview }), rolloutEnvironment },

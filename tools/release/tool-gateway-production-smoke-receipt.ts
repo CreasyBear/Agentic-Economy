@@ -34,7 +34,7 @@ export const operationRefSchema = z
   .regex(/^operation:v1:[0-9a-f]{64}$/u);
 export const APPROVED_EXTERNAL_MOVEMENT_CAP: ExactAmount = Object.freeze({
   currency: "AUD",
-  units: "6000000",
+  units: "6500000",
   exponent: AUD_EXPONENT,
 });
 
@@ -492,22 +492,13 @@ export const GatewayProductionSmokeReceiptSchema =
     )
       issue(
         ["money"],
-        "total external money movement exceeds approved USD 6.00",
+        "total external money movement exceeds approved A$6.50",
       );
     const baselineBuyer = receipt.usage.buyer.baseline;
     const baselineUsage = receipt.usage.baseline;
     if (
       !sameAmount(baselineBuyer.balance, zeroAmount(baselineBuyer.balance)) ||
-      baselineBuyer.pendingTopup !== undefined ||
-      baselineBuyer.autoRecharge.enabled ||
-      !sameAmount(
-        baselineBuyer.autoRecharge.threshold,
-        zeroAmount(baselineBuyer.autoRecharge.threshold),
-      ) ||
-      !sameAmount(
-        baselineBuyer.autoRecharge.rechargeAmount,
-        zeroAmount(baselineBuyer.autoRecharge.rechargeAmount),
-      )
+      baselineBuyer.pendingTopup !== undefined
     )
       issue(
         ["usage", "buyer", "baseline"],

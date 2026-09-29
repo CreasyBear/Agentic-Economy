@@ -29,7 +29,7 @@ export async function readX402MarketplaceHome(): Promise<X402MarketplaceHome> {
       if (count >= 2) return false
       providerCounts.set(entry.provider, count + 1)
       return true
-    })
+    }).slice(0, 8)
     return {
       ...collection,
       search: { query: collection.query },

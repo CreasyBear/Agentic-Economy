@@ -141,18 +141,18 @@ describe('market-terminal CLI error contracts', () => {
 
   it('accepts --input for supply preview instead of rejecting it as an unsupported option', async () => {
     const result = await runCliInProcess([
-      'supply', 'preview', '--input', '{"kind":"openapi","environment":"sandbox"}', '--json',
+      'supply', 'preview', '--input', '{"kind":"x402","environment":"sandbox"}', '--json',
     ])
 
     expect(result.status).toBe(1)
     expect(result.stderr).toBe('')
     // Never option-not-supported for --input: it must clear COMMAND_OPTIONS validation
-    // and fail only on the source-specific schema (missing definitionUrl for kind openapi),
+    // and fail only on the source-specific schema (missing resourceUrl for kind x402),
     // proving 'supply preview' is registered alongside the other supply subcommands.
     expect(JSON.parse(result.stdout)).toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'supply-input-invalid',
-      message: 'Input does not match supply.source.preview:v1. Missing or invalid field: definitionUrl.',
+      message: 'Input does not match supply.source.preview:v1. Missing or invalid field: resourceUrl.',
       exitCode: 1,
     })
   }, 15_000)
@@ -445,24 +445,24 @@ describe('market-terminal CLI error contracts', () => {
     const previewHelp = await runCliInProcess(['help', 'supply', 'preview', '--json'])
     expect(previewHelp.status).toBe(0)
     const previewBody = JSON.parse(previewHelp.stdout) as { guidance?: string[] }
-    expect(previewBody.guidance?.[0]).toBe('Required input fields: kind, environment.')
-    expect(previewBody.guidance?.[1]).toMatch(/^Example: --input '\{.*"kind":"openapi".*"environment":"sandbox".*\}'$/)
+    expect(previewBody.guidance?.[0]).toBe('Required input fields: kind, resourceUrl.')
+    expect(previewBody.guidance?.[1]).toMatch(/^Example: --input '\{.*"kind":"x402".*"resourceUrl":"https:\/\/example.com\/pay".*\}'$/)
 
     const previewText = await runCliInProcess(['help', 'supply', 'preview'])
     expect(previewText.status).toBe(0)
-    expect(previewText.stdout).toContain('Required input fields: kind, environment.')
+    expect(previewText.stdout).toContain('Required input fields: kind, resourceUrl.')
 
     const publishHelp = await runCliInProcess(['help', 'supply', 'publish', '--json'])
     expect(publishHelp.status).toBe(0)
     const publishBody = JSON.parse(publishHelp.stdout) as { guidance?: string[] }
     expect(publishBody.guidance?.[0]).toBe(
-      'Required input fields: businessRef, source (kind, environment), candidateRef, expectedSourceDigest, '
+      'Required input fields: businessRef, source (kind, resourceUrl), candidateRef, expectedSourceDigest, '
       + 'presentation (name, description, category), consequences (effects, dataUse, evidence), pricing (kind), '
       + 'environment, idempotencyKey, attestation (authorisedToPublish, informationAccurate, publishAfterSuccessfulValidation).',
     )
     expect(JSON.parse(String(publishBody.guidance?.[1]?.slice('Example: --input \''.length, -1)))).toMatchObject({
       businessRef: expect.any(String),
-      source: { kind: 'openapi', environment: 'sandbox' },
+      source: { kind: 'x402', resourceUrl: 'https://example.com/pay' },
       attestation: { authorisedToPublish: true, informationAccurate: true, publishAfterSuccessfulValidation: true },
     })
   }, 15_000)

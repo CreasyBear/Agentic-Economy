@@ -8,7 +8,6 @@ import { renameProviderDisplayNameServer } from '@/lib/server/owner-workspace.fu
 import { parseOwnerToolsCompatibilitySearch, parseOwnerToolsX402ConnectionSearch } from '@/lib/operator/supply-compatibility'
 import { readOwnerProviderEarningsServer } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
-import { readOwnerConnectReadinessServer } from '@/modules/money/money.functions'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 type UseProviderWorkspaceSheetsInput = Readonly<{
@@ -20,7 +19,6 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
   const router = useRouter()
   const readIdentityDetail = useServerFn(readProviderWorkspaceIdentityDetailServer)
   const readEarnings = useServerFn(readOwnerProviderEarningsServer)
-  const readConnect = useServerFn(readOwnerConnectReadinessServer)
   const renameProvider = useServerFn(renameProviderDisplayNameServer)
 
   const [identityOpen, setIdentityOpen] = useState(false)
@@ -101,7 +99,6 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     compatibilityCursor,
     compatibilityRebind,
     x402Handoff,
-    readConnect,
     identityOpen,
     identityPending,
     identityDetail,

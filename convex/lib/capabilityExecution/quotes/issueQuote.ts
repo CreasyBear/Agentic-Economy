@@ -9,7 +9,6 @@ import {
   normalizeStoredAgentAccessGrant,
   projectAgentAccessGrant,
 } from '@/modules/agent-access/policy'
-import { splitInclusiveAudTax } from '@/modules/money/public'
 import { materializeRuntimePublishedTool } from '@/modules/capability-supply/public'
 import { jsonObject } from '@/modules/capability-execution/convex'
 
@@ -152,10 +151,8 @@ export async function issueQuoteHandler(
         reason: 'AUD reference rate is missing or older than 24 hours. Retry after the next rate refresh.',
       })
     : refuse(args, 'tool_unsupported', false, { reason: 'Invalid upstream USDC amount.' })
-  const buyerSale = pricing.price.units === '0'
-    ? { revenueUnits: '0', taxUnits: '0' }
-    : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
-  if (buyerSale === undefined) return refuse(args, 'pricing_setup_required', false)
+  if (!/^(?:0|[1-9]\d*)$/u.test(pricing.price.units)) return refuse(args, 'pricing_setup_required', false)
+  const buyerSale = { revenueUnits: pricing.price.units, taxUnits: '0' }
   const paid = pricing.price.units !== '0'
   const organizationMonthlyAdmission = quoteOrganizationMonthlySpendAdmission(
     args,

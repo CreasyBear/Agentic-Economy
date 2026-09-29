@@ -96,7 +96,7 @@ async function sellerCanaryHasNoEffectEvidence(
   ctx: MutationCtx | QueryCtx,
   callRef: string,
 ): Promise<boolean> {
-  const [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals] = await Promise.all([
+  const [control, attempts, paymentAttempts, usage, providerJournals] = await Promise.all([
     ctx.db.query('actionExecutionControls')
       .withIndex('by_executionRef', (query) => query.eq('executionRef', callRef))
       .take(1),
@@ -112,14 +112,11 @@ async function sellerCanaryHasNoEffectEvidence(
     ctx.db.query('moneyUsageEvents')
       .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
       .take(1),
-    ctx.db.query('qualifiedUseReceipts')
-      .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
-      .take(1),
     ctx.db.query('providerConsequenceJournal')
       .filter((query) => query.eq(query.field('callRef'), callRef))
       .take(1),
   ])
-  return [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals]
+  return [control, attempts, paymentAttempts, usage, providerJournals]
     .every((rows) => rows.length === 0)
 }
 

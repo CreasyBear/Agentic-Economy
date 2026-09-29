@@ -64,12 +64,9 @@ export async function projectIdentity(
         now,
       })
   const windowStartAt = now - EVIDENCE_WINDOW_MS
-  const [calls, qualifiedUses] = includeEvidence
-    ? await Promise.all([
-        ctx.db.query('capabilityCallProjections').withIndex('by_toolRef_and_createdAt', (query) => query.eq('toolRef', identity.toolRef).gte('createdAt', windowStartAt)).take(EVIDENCE_READ_LIMIT + 1),
-        ctx.db.query('qualifiedUseReceipts').withIndex('by_toolRef_and_qualifiedAt', (query) => query.eq('toolRef', identity.toolRef).gte('qualifiedAt', windowStartAt)).take(EVIDENCE_READ_LIMIT + 1),
-      ])
-    : [[], []]
+  const calls = includeEvidence
+    ? await ctx.db.query('capabilityCallProjections').withIndex('by_toolRef_and_createdAt', (query) => query.eq('toolRef', identity.toolRef).gte('createdAt', windowStartAt)).take(EVIDENCE_READ_LIMIT + 1)
+    : []
   const blockers = new Set<string>(admissionCase?.blockerRefs ?? [])
   for (const reason of qualification?.reasons ?? []) blockers.add(reason)
   if (publication?.sourceAuthorityState === 'review_required') blockers.add('provider_authority_unverified')
@@ -79,9 +76,7 @@ export async function projectIdentity(
   const routeable = qualification?.status === 'eligible' && !routeabilityFrozen
   const setupComplete = publication !== null || draft !== undefined
   const callsOverflow = calls.length > EVIDENCE_READ_LIMIT
-  const usesOverflow = qualifiedUses.length > EVIDENCE_READ_LIMIT
   const boundedCalls = calls.slice(0, EVIDENCE_READ_LIMIT)
-  const boundedUses = qualifiedUses.slice(0, EVIDENCE_READ_LIMIT)
   const status = projectProviderToolStatus({
     schemaVersion: 'provider_tools:v1',
     businessRef: String(identity.businessId),
@@ -118,11 +113,7 @@ export async function projectIdentity(
         : boundedCalls.length === 0
           ? { kind: 'unobserved', provenance: 'canonical_call_receipts' }
           : { kind: 'observed', deliveredCount: boundedCalls.filter((row) => row.deliveryState === 'delivered').length, notDeliveredCount: boundedCalls.filter((row) => row.deliveryState === 'not_delivered').length, unknownCount: boundedCalls.filter((row) => row.deliveryState === 'unknown').length, sampleSize: boundedCalls.length, lastObservedAt: Math.max(...boundedCalls.map((row) => row.updatedAt)), windowStartAt, windowEndAt: now, provenance: 'canonical_call_receipts' },
-      usefulOutcome: usesOverflow
-        ? { kind: 'unavailable', reason: 'window_too_large', provenance: 'qualified_use_receipts' }
-        : boundedUses.length === 0
-          ? { kind: 'unobserved', provenance: 'qualified_use_receipts' }
-          : { kind: 'observed', qualifiedUseCount: boundedUses.length, lastObservedAt: Math.max(...boundedUses.map((row) => row.qualifiedAt)), windowStartAt, windowEndAt: now, provenance: 'qualified_use_receipts' },
+      usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' },
       operationalConditions: [...blockers],
     },
   })

@@ -64,22 +64,14 @@ const durableTables = [
   'moneyFundingCommands',
   'moneyLegalCustomerBindings',
   'moneyCustomerTaxFacts',
-  'moneyAutoRechargeSettings',
   'moneyReferenceRates',
   'moneyMonthlySpendBudgets',
-  'moneySupplierPreferences',
-  'moneyStripeCustomerBindings',
   'moneyTreasuryObservations',
   'moneyProviderObligations',
-  'moneyConnectAccountCommands',
   'moneyUsageEvents',
   'moneyX402PaymentAttempts',
   'moneyStripeWebhookInbox',
   'moneyStripeEvents',
-  'moneyPayoutAccounts',
-  'moneyPayouts',
-  'moneyPayoutAllocations',
-  'qualifiedUseReceipts',
   'capabilityContractDocuments',
   'capabilityOfferings',
   'capabilityCallProjections',
@@ -225,16 +217,10 @@ const requiredIndexes = {
   moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
   moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
   moneyCustomerTaxFacts: ['by_accountRef'],
-  moneyAutoRechargeSettings: ['by_accountRef'],
   moneyMonthlySpendBudgets: ['by_accountRef'],
-  moneySupplierPreferences: ['by_businessId_and_currency'],
-  moneyStripeCustomerBindings: ['by_accountRef', 'by_stripeCustomerId'],
   moneyProviderObligations: ['by_obligationRef', 'by_callRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
   moneyStripeWebhookInbox: ['by_stripeEventId', 'by_state_and_receivedAt'],
   moneyStripeEvents: ['by_stripeEventId'],
-  moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
-  moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
-  moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
   businesses: [
     'by_slug',
     'by_owningAccountRef_and_updatedAt',
@@ -448,9 +434,7 @@ describe('Convex schema', () => {
     )
 
     for (const [tableName, indexes] of Object.entries(requiredIndexes)) {
-      if (tableName === 'moneyPayoutAllocations')
-        expect(tableIndexes[tableName]).toEqual(indexes)
-      else expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
+      expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
   })
 
@@ -475,8 +459,6 @@ describe('Convex schema', () => {
     expectIndexFields('sellerOnboardingCanaryRearmAudits', 'by_callRef', ['callRef'])
     expectIndexFields('moneyProviderObligations', 'by_callRef', ['callRef'])
     expectIndexFields('moneyUsageEvents', 'by_callRef', ['callRef'])
-    expectIndexFields('qualifiedUseReceipts', 'by_callRef', ['callRef'])
-    expectIndexFields('qualifiedUseReceipts', 'by_toolRef_and_qualifiedAt', ['toolRef', 'qualifiedAt'])
     expectIndexFields('businesses', 'by_owningAccountRef_and_publicStatus', ['owningAccountRef', 'publicStatus'])
     expectIndexFields('offeringAccessPaths', 'by_businessId_and_offeringRef', ['businessId', 'offeringRef'])
   })
@@ -635,22 +617,6 @@ describe('Convex schema', () => {
 
     expect(result.proof).toMatchObject({ proofPreset: 'strict', activeAccountRef: 'acc_owner' })
     expect(result.audit).toMatchObject({ sourceSystem: 'ae_recorded', authorityGeneration: 2 })
-  })
-  it('pins the retained payout index field order', () => {
-    const index = (tableName: string, indexDescriptor: string) =>
-      exported.tables
-        .find((table) => table.tableName === tableName)
-        ?.indexes.find((item) => item.indexDescriptor === indexDescriptor)
-
-    expect(
-      index(
-        'moneyPayouts',
-        'by_businessId_and_currency_and_cadence_and_updatedAt',
-      ),
-    ).toEqual({
-      indexDescriptor: 'by_businessId_and_currency_and_cadence_and_updatedAt',
-      fields: ['businessId', 'currency', 'cadence', 'updatedAt'],
-    })
   })
   it('defines the public registry search-document index used by Convex search', () => {
     const registrySearchDocuments = exported.tables.find(

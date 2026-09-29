@@ -4,12 +4,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { inspectHttpsUrl, inspectJsonPayload } from '../../supply-source-native-start-presentation'
+import { inspectHttpsUrl } from '../../supply-source-native-start-presentation'
 import {
   SUPPLY_SOURCE_TYPE_COPY,
   type HttpsUrlPreflightBadgeProps,
-  type JsonFileFieldProps,
-  type JsonPreflightBadgeProps,
   type PreflightRule4AlertProps,
   type PreflightSlotProps,
   type UrlFieldWithPreflightProps,
@@ -43,54 +41,6 @@ export function UrlFieldWithPreflight({
   )
 }
 
-export function JsonFileField({
-  id,
-  label,
-  loaded,
-  jsonValue,
-  requiredKeys,
-  disabled,
-  discoverDiagnostic,
-  onChange,
-  onError,
-  onClearError,
-}: JsonFileFieldProps) {
-  const preflight = inspectJsonPayload(jsonValue, requiredKeys)
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label} <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
-      <Input
-        id={id}
-        aria-label={label}
-        type="file"
-        accept=".json,application/json"
-        required
-        disabled={disabled}
-        onChange={(event) => {
-          const file = event.currentTarget.files?.[0]
-          if (file === undefined) return
-          if (file.size > 262_144) {
-            onError(`${label} must be 256 KB or smaller.`)
-            return
-          }
-          void file.text().then((contents) => {
-            onClearError()
-            onChange(contents)
-          }).catch(() => onError(`${label} could not be read.`))
-        }}
-      />
-      <FieldDescription>{loaded ? `${label} loaded. Choose another file to replace it.` : `Choose the official Agent Plugins 1.0 ${label} file.`}</FieldDescription>
-      <PreflightSlot>
-        {discoverDiagnostic !== undefined ? (
-          <PreflightRule4Alert diagnostic={discoverDiagnostic} />
-        ) : (
-          <JsonPreflightBadge status={preflight} requiredKeys={requiredKeys} />
-        )}
-      </PreflightSlot>
-    </Field>
-  )
-}
-
 function PreflightSlot({ children }: PreflightSlotProps) {
   return (
     <div className="flex min-h-[2.5rem] items-center" aria-live="polite">
@@ -111,24 +61,6 @@ function HttpsUrlPreflightBadge({ status, example }: HttpsUrlPreflightBadgeProps
     <Badge variant="success" className="gap-1.5">
       <CheckCircle2Icon className="size-3" />
       {SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.valid}
-    </Badge>
-  )
-}
-
-function JsonPreflightBadge({ status, requiredKeys }: JsonPreflightBadgeProps) {
-  if (status === 'empty') return null
-  if (status === 'invalid') {
-    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.invalid}</Badge>
-  }
-  if (status === 'not_object') {
-    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.notObject}</Badge>
-  }
-  if (status === 'missing_fields') {
-    return <Badge variant="warning">JSON object requires {requiredKeys.join(' and ')}.</Badge>
-  }
-  return (
-    <Badge variant="secondary">
-      JSON object parsed; {requiredKeys.join(' and ')} present
     </Badge>
   )
 }

@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { validatePaymentRequired } from "@x402/core/schemas";
 
 import { admitFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
+import timezonePaymentRequired20260819Fixture from "../../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json";
+const timezoneFixture = timezonePaymentRequired20260819Fixture
 import {
-  timezonePaymentRequired20260819Fixture as timezoneFixture,
   type SchemaDereferencer,
 } from "@/modules/capability-supply/public";
 

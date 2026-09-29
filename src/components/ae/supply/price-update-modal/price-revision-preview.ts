@@ -1,6 +1,5 @@
 import {
   AUD_EXPONENT,
-  calculateAudGstSplit,
   compareExactAmounts,
   formatExactAmount,
   parseDecimalExactAmount,
@@ -76,15 +75,10 @@ export function computeGstPresentation(
   if (grossMicroUnits === undefined) {
     return { baseText: '—', gstText: '—', totalText: '—' }
   }
-  const split = calculateAudGstSplit(grossMicroUnits, 1_000)
-  if (split === undefined) {
-    return { baseText: '—', gstText: '—', totalText: '—' }
-  }
-  const baseText = `A$${(Number(split.netUnits) / 1_000_000).toFixed(4)}`
-  const gstText = `A$${(Number(split.gstUnits) / 1_000_000).toFixed(4)}`
+  const baseText = `A$${(Number(grossMicroUnits) / 1_000_000).toFixed(4)}`
   const totalFormatted = formatExactAmount(parsedNew)
   const totalText = totalFormatted === undefined ? '—' : `A$${totalFormatted}`
-  return { baseText, gstText, totalText }
+  return { baseText, gstText: 'A$0.0000', totalText }
 }
 
 export function computePercentageAdjustedPrice(

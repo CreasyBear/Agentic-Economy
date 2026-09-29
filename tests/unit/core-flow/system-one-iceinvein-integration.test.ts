@@ -1,21 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { calculateAudGstSplit, parseDecimalExactAmount } from '@/modules/money/public'
+import { quoteAudAccountFunding, SANDBOX_COMMERCIAL_POLICY_CONTROLS, audFundingPolicyFromCommercialControls } from '@/modules/money/public'
 import { executeDecisionGateway } from '@/modules/decision-engine/public'
 
 describe('System One and AUD money invariants', () => {
-  it('calculates deterministic 10% Australian GST splits with exact BigInt units', () => {
-    const parsed = parseDecimalExactAmount('AUD', '0.0550', 6)
-    expect(parsed).toBeDefined()
-    if (!parsed) return
-
-    const gstSplit = calculateAudGstSplit(parsed.units, 1000)
-    expect(gstSplit).toBeDefined()
-    if (!gstSplit) return
-
-    expect(parsed.units).toBe('55000')
-    expect(gstSplit.netUnits).toBe('50000')
-    expect(gstSplit.gstUnits).toBe('5000')
-    expect(BigInt(gstSplit.netUnits) + BigInt(gstSplit.gstUnits)).toBe(BigInt(parsed.units))
+  it('calculates top-up GST as 10% of the loaded amount plus fee in exact units', () => {
+    const quote = quoteAudAccountFunding(5_000_000n, audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS))
+    expect(quote?.principalUnits).toBe(5_000_000n)
+    expect(quote?.serviceFeeUnits).toBe(250_000n)
+    expect(quote?.taxUnits).toBe(530_000n)
+    expect(quote?.totalUnits).toBe(5_780_000n)
   })
 
   it('Tier 3 fallback reliably routes without external API keys', async () => {

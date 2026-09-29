@@ -10,8 +10,6 @@ import { stripeWebhookWorkResultValue } from './moneyStripeWebhookValues'
 import {
   AUD_EXPONENT,
   isMoneyRefusal,
-  connectWebhookCommand,
-  connectWebhookAppliedStatus,
 } from '../src/modules/money/public'
 import {
   createStripeMoneyProvider,
@@ -56,29 +54,7 @@ export const process = internalAction({
     const event = work.event
 
     if (event.kind === 'account') {
-      const bindings = await ctx.runQuery(internal.moneyLedger.readPayoutAccountByStripeIdForWorker, {
-        stripeAccountId: event.stripeAccountId,
-      })
-      if (bindings.length !== 1 || bindings[0] === undefined) {
-        throw new Error('stripe_webhook_retryable:payout_not_ready')
-      }
-      const binding = bindings[0]
-      const evidence = await provider.readConnectAccount({
-        businessId: binding.businessId,
-        currency: binding.currency,
-        stripeAccountId: binding.stripeAccountId,
-      })
-      if (isMoneyRefusal(evidence)) return retryOrReconcile(evidence)
-      const result = await ctx.runMutation(
-        internal.moneyLedger.recordConnectAccountEventFromInbox,
-        connectWebhookCommand(binding, event, evidence),
-      )
-      if (result.kind === 'refused') return retryOrReconcile(result)
-      return {
-        kind: 'accepted',
-        status: connectWebhookAppliedStatus(binding, event),
-        appliedRef: `stripe:account:${event.stripeAccountId}`,
-      }
+      return { kind: 'accepted', status: 'ignored' }
     }
 
     if (event.kind === 'refund') {

@@ -24,7 +24,6 @@ export {
 } from './internal/commercial-policy'
 export {
   admitTaxInvoiceIssuance,
-  calculateAudGstSplit,
   formatAbnDisplay,
   isValidAbn,
   normalizeAbn,
@@ -62,7 +61,6 @@ export {
   createExecutableRatePort,
   quoteExecutableAudToUsdc,
   quoteManagedX402BuyerAud,
-  splitInclusiveAudTax,
   validateExecutableRateEvidence,
   validateExecutableRateEvidenceIntegrity,
   validReferenceRate,
@@ -138,9 +136,6 @@ export type {
   RakeSplit,
 } from './internal/money-types'
 export { isMoneyRefusal } from './internal/money-types'
-export { connectAccountViewValue, connectAccountCommandValue, connectAccountFinalizeOutcomeArg } from './internal/connect-contracts'
-export type { ConnectAccountView, ConnectAccountCommandView, ConnectAccountOutcome } from './internal/connect-contracts'
-
 export type CreditAccountQuery = Readonly<{
   principalId: string;
   currency: string;
@@ -175,11 +170,6 @@ export type CreditAccountView = Readonly<{
     state: "pending" | "outcome_unknown"
     externalRef?: string | undefined
   }> | undefined
-  autoRecharge: Readonly<{
-    enabled: boolean;
-    threshold: ExactAmount;
-    rechargeAmount: ExactAmount;
-  }>;
   evidence: "source" | "labelled_local_dev";
 }>;
 export type CreditActivityView = Readonly<{
@@ -230,11 +220,6 @@ export const CreditAccountViewSchema = z.strictObject({
       externalRef: moneyRefSchema.optional(),
     })
     .optional(),
-  autoRecharge: z.strictObject({
-    enabled: z.boolean(),
-    threshold: exactAmountSchema,
-    rechargeAmount: exactAmountSchema,
-  }),
   evidence: z.literal("source"),
 });
 
@@ -350,24 +335,6 @@ export {
   resolveCallPrice,
 } from "./internal/pricing-config";
 export {
-  transitionPayoutAccount,
-  transitionPayout,
-  payoutReviewWindow,
-  STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
-  STRIPE_CONNECT_RECOVERY_WINDOW_MS,
-  STRIPE_CONNECT_RECOVERY_LEASE_MS,
-} from "./internal/payout-policy";
-export type {
-  PayoutPolicyResult,
-  PayoutAccountTransitionInput,
-  PayoutTransitionInput,
-} from "./internal/payout-policy";
-export { payoutTransferCommand } from "./internal/payout-transfer-command";
-export type {
-  PayoutTransferCommand,
-  PayoutTransferCommandInput,
-} from "./internal/payout-transfer-command";
-export {
   paymentBindingSchema,
   validatePaymentBinding,
 } from "./internal/payment-binding";
@@ -381,13 +348,6 @@ export type {
   CreditPaymentReadRequest,
   CreditPaymentEvidence,
   CreditPaymentSession,
-  ConnectAccountPort,
-  ConnectAccountRequest,
-  OnboardingLinkRequest,
-  ConnectAccountEvidence,
-  PayoutTransferPort,
-  PayoutTransferRequest,
-  PayoutTransferEvidence,
 } from "./internal/ports";
 export type {
   StripeAccountUpdatedWebhookEvent,
@@ -413,31 +373,6 @@ export type {
   FundingQuoteInput,
 } from "./internal/funding-quote";
 export {
-  buildQualifiedUseReceipt,
-  decideQualifiedUseWrite,
-  qualifiedUseEligibility,
-  qualifiedUseMaterialDigest,
-  qualifiedUseRef,
-  sameQualifiedUseIdentity,
-  QUALIFIED_USE_EXCLUSIONS,
-  QUALIFIED_USE_PRINCIPAL_CLASSES,
-} from "./internal/delivery";
-export type {
-  QualifiedUseEligibility,
-  QualifiedUseExclusion,
-  QualifiedUseIdentity,
-  QualifiedUseMaterial,
-  QualifiedUsePrincipalClass,
-  QualifiedUseReceipt,
-  QualifiedUseWriteDecision,
-} from "./internal/delivery";
-
-export {
-  evaluateAutoRechargeDecision,
-  type AutoRechargeDecisionInput,
-  type AutoRechargeDecisionResult,
-} from './internal/auto-recharge-decision'
-export {
   evaluateOrganizationMonthlySpendFence,
   type OrganizationMonthlySpendFenceInput,
   type OrganizationMonthlySpendFenceResult,
@@ -455,5 +390,4 @@ export type {
   SpendingPeriods,
   SpendingPeriodAdjustment,
 } from './internal/spending-period-values'
-export { connectWebhookCommand, connectWebhookAppliedStatus } from './internal/connect-webhook-command'
 

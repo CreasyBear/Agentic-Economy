@@ -11,7 +11,7 @@ import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 import { api, internal } from '../../../convex/_generated/api'
 import { ACTIVE_CHAT_GENERATION_MS } from '../../../convex/chatThreads'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { splitInclusiveAudTax, PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
+import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,
@@ -463,8 +463,7 @@ describe('direct Quote handlers', () => {
     })
     expect(stored.commercialPolicyDigest).toBe(subjects.policyDigest)
 
-    const sale = splitInclusiveAudTax(stored.decisionAudUnits, subjects.buyerTaxBps)
-    if (sale === undefined) throw new Error('quote_tax_split_missing')
+    const sale = { revenueUnits: stored.decisionAudUnits, taxUnits: '0' }
     const evidenceMaterial = {
       format: 'ae.operation-commitment:v1',
       principalId: agent.principal.principalId,

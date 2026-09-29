@@ -36,7 +36,7 @@ export function createTestCheckoutEvent(options: TestCheckoutEventOptions = {}) 
     checkoutSessionDigest: `sha256:${'c'.repeat(64)}`,
     paymentIntentDigest: `sha256:${'d'.repeat(64)}`,
     status: options.status ?? ('paid' as const),
-    amount: options.amount ?? { currency: 'AUD', units: '5280000', exponent: 6 },
+    amount: options.amount ?? { currency: 'AUD', units: '5780000', exponent: 6 },
     metadataDigest,
     payloadDigest,
     observedAt: options.observedAt ?? 1_800_000_000_000,
@@ -64,7 +64,7 @@ export function createTestChargeRefundedEvent(options: TestChargeRefundedEventOp
     eventType: 'charge.refunded' as const,
     chargeId,
     paymentIntentId,
-    amountRefunded: options.amountRefunded ?? { currency: 'AUD', units: '5280000', exponent: 6 },
+    amountRefunded: options.amountRefunded ?? { currency: 'AUD', units: '5780000', exponent: 6 },
     payloadDigest,
     observedAt: options.observedAt ?? 1_800_000_000_000,
   }

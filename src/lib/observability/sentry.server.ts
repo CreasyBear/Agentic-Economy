@@ -80,7 +80,7 @@ export function captureServerException(
       Sentry.captureException(safeError)
     })
   } catch {
-    // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
+    // Intentional bare catch: the reporting path must never throw or recurse.
     // Diagnostics are fail-open and cannot alter the domain response.
   }
 }
@@ -117,7 +117,7 @@ export function captureClientError(input: ClientErrorCapture): boolean {
     })
     return true
   } catch {
-    // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
+    // Intentional bare catch: the reporting path must never throw or recurse.
     return false
   }
 }

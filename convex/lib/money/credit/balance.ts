@@ -8,11 +8,6 @@ export const creditAccountMoneyFactsArgs = { accountRef: identifier }
 
 
 export const creditAccountMoneyFactsValue = v.object({
-  autoRecharge: v.object({
-    enabled: v.boolean(),
-    threshold: exactAmount,
-    rechargeAmount: exactAmount,
-  }),
   pendingTopup: v.optional(v.object({
     commandRef: v.string(),
     amount: exactAmount,
@@ -24,27 +19,6 @@ export const creditAccountMoneyFactsValue = v.object({
 type CreditAccountMoneyFacts = Infer<typeof creditAccountMoneyFactsValue>
 
 export async function readCreditAccountMoneyFactsHandler(ctx: QueryCtx, args: { accountRef: string }): Promise<CreditAccountMoneyFacts> {
-    const zero = { currency: 'AUD' as const, units: '0', exponent: 6 as const }
-    const settings = await ctx.db
-      .query('moneyAutoRechargeSettings')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', args.accountRef))
-      .unique()
-    const autoRecharge = settings === null
-      ? { enabled: false, threshold: zero, rechargeAmount: zero }
-      : {
-          enabled: settings.enabled,
-          threshold: {
-            currency: 'AUD' as const,
-            units: settings.thresholdUnits,
-            exponent: 6 as const,
-          },
-          rechargeAmount: {
-            currency: 'AUD' as const,
-            units: settings.rechargeAmountUnits,
-            exponent: 6 as const,
-          },
-        }
-
     const fundingCommands = await ctx.db
       .query('moneyFundingCommands')
       .withIndex('by_accountRef_and_createdAt', (query) => query.eq('accountRef', args.accountRef))
@@ -68,7 +42,7 @@ export async function readCreditAccountMoneyFactsHandler(ctx: QueryCtx, args: { 
             : { externalRef: pendingCommand.externalRef }),
         }
 
-    return { autoRecharge, ...(pendingTopup === undefined ? {} : { pendingTopup }) }
+    return { ...(pendingTopup === undefined ? {} : { pendingTopup }) }
 }
 
 export async function readCreditAccountHandler(ctx: ActionCtx, args: { principalId: string; currency: string }): Promise<Infer<typeof creditAccountResultValue>> {
@@ -91,7 +65,6 @@ export async function readCreditAccountHandler(ctx: ActionCtx, args: { principal
       principalId: actor.canonicalAccountRef,
       accountId: actor.canonicalAccountRef,
       balance: { currency: balance.currency, units: balance.units, exponent: balance.exponent },
-      autoRecharge: moneyFacts.autoRecharge,
       ...(moneyFacts.pendingTopup === undefined ? {} : { pendingTopup: moneyFacts.pendingTopup }),
       evidence: 'source' as const,
     }

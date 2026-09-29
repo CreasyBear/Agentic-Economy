@@ -368,7 +368,6 @@ export const moneyTables = {
     initiationKind: v.optional(v.union(
       v.literal('owner_top_up'),
       v.literal('agent_handoff'),
-      v.literal('auto_recharge'),
     )),
     checkoutMode: v.optional(v.literal('hosted_page')),
     checkoutExpiresAt: v.optional(v.number()),
@@ -456,24 +455,6 @@ export const moneyTables = {
     updatedAt: v.number(),
   })
     .index('by_accountRef', ['accountRef']),
-  moneyAutoRechargeSettings: defineTable({
-    accountRef: identifier,
-    enabled: v.boolean(),
-    currency: v.literal('AUD'),
-    exponent: v.literal(6),
-    thresholdUnits: units,
-    rechargeAmountUnits: units,
-    revision: v.number(),
-    lastTriggeredAt: v.optional(v.number()),
-    inFlightCommandRef: v.optional(identifier),
-    chargesUtcDate: v.optional(v.string()),
-    chargesOnUtcDate: v.optional(v.number()),
-    lastFailureCode: v.optional(identifier),
-    lastCorrelationRef: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index('by_accountRef', ['accountRef']),
-
   moneyMonthlySpendBudgets: defineTable({
     accountRef: identifier,
     enabled: v.boolean(),
@@ -486,34 +467,6 @@ export const moneyTables = {
     updatedAt: v.number(),
   }).index('by_accountRef', ['accountRef']),
 
-  moneySupplierPreferences: defineTable({
-    businessId: identifier,
-    currency: v.string(),
-    minimumPayoutUnits: units,
-    schedule: v.union(v.literal('monthly'), v.literal('weekly'), v.literal('manual')),
-    revision: v.number(),
-    lastCorrelationRef: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index('by_businessId_and_currency', ['businessId', 'currency']),
-
-  moneyStripeCustomerBindings: defineTable({
-    accountRef: identifier,
-    legalCustomerRef: identifier,
-    stripeCustomerId: identifier,
-    mandateState: v.union(
-      v.literal('missing'),
-      v.literal('ready'),
-      v.literal('authentication_required'),
-      v.literal('failed'),
-    ),
-    setupExternalRef: v.optional(identifier),
-    revision: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_accountRef', ['accountRef'])
-    .index('by_stripeCustomerId', ['stripeCustomerId']),
   moneyTreasuryObservations: defineTable({
     observationRef: identifier,
     environment: v.union(v.literal('sandbox'), v.literal('production')),
@@ -677,66 +630,6 @@ export const moneyTables = {
     .index('by_authorizationDigest', ['authorizationDigest'])
     .index('by_paymentIdentifier', ['paymentIdentifier'])
     .index('by_state_and_paymentAuthorizationExpiresAt', ['state', 'paymentAuthorizationExpiresAt']),
-  /**
-   * ADR-034 delivery evidence. Insert-once and never updated: the money ledger
-   * remains the economic authority and Action Invocation the lifecycle
-   * authority, so corrections append facts elsewhere.
-   */
-  qualifiedUseReceipts: defineTable({
-    qualifiedUseRef: identifier,
-    materialDigest: identifier,
-    callRef: identifier,
-    attemptRef: identifier,
-    effectGeneration: v.number(),
-    businessId: identifier,
-    /** Canonical Phase-1 authority pinned when the receipt is admitted. */
-    owningAccountRef: v.optional(identifier),
-    authorityPrincipalRef: v.optional(identifier),
-    authorityGrantRef: v.optional(identifier),
-    authorityGrantGeneration: v.optional(v.number()),
-    authorityResourceRef: v.optional(identifier),
-    toolRef: identifier,
-    publicationRef: identifier,
-    publicationRevision: v.number(),
-    contractDigest: identifier,
-    bindingDigest: identifier,
-    principalClass: v.union(v.literal('agent_key'), v.literal('human_owner'), v.literal('service')),
-    requestDigest: identifier,
-    responseDigest: identifier,
-    evidenceRefs,
-    environment: v.literal('production'),
-    qualifiedAt: v.number(),
-    usageRef: v.optional(identifier),
-    transactionRef: v.optional(identifier),
-  })
-    .index('by_qualifiedUseRef', ['qualifiedUseRef'])
-    .index('by_businessId_and_qualifiedAt', ['businessId', 'qualifiedAt'])
-    .index('by_callRef', ['callRef'])
-    .index('by_toolRef_and_qualifiedAt', ['toolRef', 'qualifiedAt']),
-  moneyConnectAccountCommands: defineTable({
-    commandRef: identifier,
-    businessId: identifier,
-    currency,
-    exponent,
-    idempotencyKey: identifier,
-    inputDigest: identifier,
-    providerRequestDigest: identifier,
-    providerRecoveryDeadlineAt: v.number(),
-    recoveryLeaseGeneration: v.number(),
-    recoveryLeaseOwner: v.optional(identifier),
-    recoveryLeaseExpiresAt: v.optional(v.number()),
-    state: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed'), v.literal('outcome_unknown')),
-    stripeAccountId: v.optional(identifier),
-    providerEvidenceRef: v.optional(identifier),
-    failureCode: v.optional(identifier),
-    failureRetryable: v.optional(v.boolean()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_commandRef', ['commandRef'])
-    .index('by_businessId_and_currency', ['businessId', 'currency'])
-    .index('by_businessId_and_currency_and_idempotencyKey', ['businessId', 'currency', 'idempotencyKey'])
-    .index('by_idempotencyKey', ['idempotencyKey']),
   moneyStripeEvents: defineTable({
     stripeEventId: identifier,
     eventType: identifier,
@@ -765,97 +658,4 @@ export const moneyTables = {
     receivedAt: v.number(),
     appliedAt: v.optional(v.number()),
   }).index('by_stripeEventId', ['stripeEventId']),
-  moneyPayoutAccounts: defineTable({
-    businessId: identifier,
-    currency,
-    exponent,
-    stripeAccountId: identifier,
-    state: v.union(v.literal('not_started'), v.literal('onboarding_started'), v.literal('submitted'), v.literal('restricted'), v.literal('ready')),
-    detailsSubmitted: v.boolean(),
-    recipientCapabilityActive: v.boolean(),
-    requirementsDigest: identifier,
-    lastStripeEventId: v.optional(identifier),
-    lastStripePayloadDigest: v.optional(identifier),
-    providerObjectDigest: v.optional(identifier),
-    providerObjectVersion: v.optional(v.number()),
-    lastStripeObservedAt: v.optional(v.number()),
-    version: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index('by_businessId_and_currency', ['businessId', 'currency']).index('by_stripeAccountId', ['stripeAccountId']),
-  moneyPayouts: defineTable({
-    payoutRef: identifier,
-    businessId: identifier,
-    owningAccountRef: identifier,
-    authorityPrincipalRef: identifier,
-    authorityGrantRef: identifier,
-    authorityGrantGeneration: v.number(),
-    authorityResourceRefs: v.array(identifier),
-    currency,
-    exponent,
-    grossAccrualUnits: units,
-    rakeUnits: units,
-    providerNetUnits: units,
-    minimumPayoutUnits: units,
-    cadence: v.literal('daily'),
-    state: v.union(v.literal('review'), v.literal('held_kyc'), v.literal('held_threshold'), v.literal('transfer_pending'), v.literal('paid'), v.literal('reversed'), v.literal('failed'), v.literal('outcome_unknown')),
-    periodStart: identifier,
-    periodEnd: identifier,
-    providerAccountRef: v.optional(identifier),
-    destinationAccountId: v.optional(identifier),
-    stripeTransferId: v.optional(identifier),
-    payoutCommandId: v.optional(identifier),
-    inputDigest: v.optional(identifier),
-    transferRequestDigest: v.optional(identifier),
-    transferEvidenceDigest: v.optional(identifier),
-    transferReversalEvidenceDigest: v.optional(identifier),
-    transferObservedAt: v.optional(v.number()),
-    providerRecoveryDeadlineAt: v.optional(v.number()),
-    transferStatus: v.optional(v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed'), v.literal('reversed'), v.literal('outcome_unknown'))),
-    providerHeldBeforeUnits: v.optional(units),
-    providerHeldAfterUnits: v.optional(units),
-    providerPaidBeforeUnits: v.optional(units),
-    providerPaidAfterUnits: v.optional(units),
-    idempotencyKey: identifier,
-    failureCode: v.optional(identifier),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_businessId_and_currency_and_state', ['businessId', 'currency', 'state'])
-    .index('by_businessId_and_currency_and_state_and_updatedAt', ['businessId', 'currency', 'state', 'updatedAt'])
-    .index('by_periodStart_and_state', ['periodStart', 'state'])
-    .index('by_stripeTransferId', ['stripeTransferId'])
-    .index('by_payoutRef', ['payoutRef'])
-    .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt'])
-    .index('by_businessId_and_currency_and_updatedAt', ['businessId', 'currency', 'updatedAt'])
-    .index('by_businessId_and_currency_and_cadence_and_updatedAt', ['businessId', 'currency', 'cadence', 'updatedAt']),
-  moneyPayoutAllocations: defineTable({
-    allocationRef: identifier,
-    payoutRef: identifier,
-    qualifiedUseRef: identifier,
-    transactionRef: identifier,
-    usageRef: identifier,
-    businessId: identifier,
-    owningAccountRef: identifier,
-    authorityPrincipalRef: identifier,
-    authorityGrantRef: identifier,
-    authorityGrantGeneration: v.number(),
-    authorityResourceRef: identifier,
-    currency,
-    exponent,
-    grossAccrualUnits: units,
-    rakeUnits: units,
-    providerNetUnits: units,
-    qualifiedAt: v.number(),
-    sourceDigest: identifier,
-    materialDigest: identifier,
-    createdAt: v.number(),
-  })
-    .index('by_allocationRef', ['allocationRef'])
-    .index('by_qualifiedUseRef', ['qualifiedUseRef'])
-    .index('by_transactionRef', ['transactionRef'])
-    .index('by_payoutRef_and_qualifiedAt', ['payoutRef', 'qualifiedAt'])
-    .index('by_businessId_and_currency_and_qualifiedAt', [
-      'businessId', 'currency', 'qualifiedAt',
-    ]),
 } as const

@@ -31,8 +31,8 @@ function command(overrides: Record<string, unknown> = {}) {
     exponent: 6 as const,
     principalUnits: '5000000',
     serviceFeeUnits: '250000',
-    taxUnits: '30000',
-    totalUnits: '5280000',
+    taxUnits: '530000',
+    totalUnits: '5780000',
     commercialPolicyDigest: `sha256:${'1'.repeat(64)}`,
     commercialPolicyRefs: ['sandbox:managed_x402_deterministic_v1'],
     idempotencyKey: input.idempotencyKey,
@@ -167,7 +167,7 @@ describe('Account AUD funding HTTP boundary', () => {
       evidence: {
         provider: 'stripe' as const,
         externalRef: 'cs_account_funding_one',
-        amount: { currency: 'AUD', units: '5280000', exponent: 6 },
+        amount: { currency: 'AUD', units: '5780000', exponent: 6 },
         status: 'pending' as const,
         checkoutStatus: 'open' as const,
         paymentStatus: 'unpaid' as const,
@@ -214,7 +214,7 @@ describe('Account AUD funding HTTP boundary', () => {
       commandRef: durable.commandRef,
       principalId: durable.actorPrincipalRef,
       accountRef: durable.accountRef,
-      amount: { currency: 'AUD', units: '5280000', exponent: 6 },
+      amount: { currency: 'AUD', units: '5780000', exponent: 6 },
     }))
   })
 
@@ -418,7 +418,7 @@ describe('Account AUD funding HTTP boundary', () => {
     const evidence = {
       provider: 'stripe' as const,
       externalRef: 'cs_account_funding_webhook',
-      amount: { currency: 'AUD', units: '528', exponent: 2 },
+      amount: { currency: 'AUD', units: '578', exponent: 2 },
       status: 'succeeded' as const,
       checkoutStatus: 'complete' as const,
       paymentStatus: 'paid' as const,

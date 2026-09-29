@@ -9,7 +9,6 @@ import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, source
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { deserializeToolSearchResult } from '@/modules/capability-supply/public'
 import {
-  calculateAudGstSplit,
   compareExactAmounts,
   formatDisplayAmount,
   parseDecimalExactAmount,
@@ -106,13 +105,11 @@ function procurePriceBreakdownFromUnits(totalUnits: string): Readonly<{
   netAud: string
   gstAud: string
 }> {
-  const gstSplit = calculateAudGstSplit(totalUnits, 1000)
-  const netUnits = gstSplit?.netUnits ?? totalUnits
-  const gstUnits = gstSplit?.gstUnits ?? '0'
+  const totalAud = formatDisplayAmount({ currency: 'AUD', exponent: 6, units: totalUnits })
   return {
-    totalAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: totalUnits }),
-    netAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: netUnits }),
-    gstAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: gstUnits }),
+    totalAud,
+    netAud: totalAud,
+    gstAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: '0' }),
   }
 }
 

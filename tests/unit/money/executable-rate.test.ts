@@ -4,7 +4,6 @@ import {
   createExecutableRatePort,
   quoteExecutableAudToUsdc,
   quoteManagedX402BuyerAud,
-  splitInclusiveAudTax,
   validateExecutableRateEvidence,
   validateExecutableRateEvidenceIntegrity,
 } from '../../../src/modules/money/public'
@@ -63,16 +62,6 @@ describe('executable AUD to USDC pricing evidence', () => {
     expect(validateExecutableRateEvidence(quoted.evidence, quoted.evidence.expiresAt)).toBe(false)
   })
 
-
-  it('splits inclusive GST without losing or creating an AUD unit', () => {
-    for (let totalUnits = 1n; totalUnits <= 10_000n; totalUnits += 1n) {
-      const split = splitInclusiveAudTax(totalUnits.toString(), 1_000)
-      const expectedTaxUnits = (2n * totalUnits * 1_000n + 11_000n) / 22_000n
-      if (split === undefined) throw new Error(`GST split missing for ${totalUnits}`)
-      expect(BigInt(split.taxUnits)).toBe(expectedTaxUnits)
-      expect(BigInt(split.revenueUnits) + BigInt(split.taxUnits)).toBe(totalUnits)
-    }
-  })
 })
 
 
@@ -95,9 +84,5 @@ describe('managed reference prices', () => {
     for (const rate of ['0', '-1', 'NaN', 'Infinity', '1e3', '01', '']) {
       expect(quoteManagedX402BuyerAud({ ...args, referenceRate: { ...referenceRate, rate } }).kind).toBe('refused')
     }
-  })
-  it('allows zero and rounded-zero tax without losing buyer units', () => {
-    expect(splitInclusiveAudTax('100000000', 0)).toEqual({ revenueUnits: '100000000', taxUnits: '0' })
-    expect(splitInclusiveAudTax('1', 1000)).toEqual({ revenueUnits: '1', taxUnits: '0' })
   })
 })

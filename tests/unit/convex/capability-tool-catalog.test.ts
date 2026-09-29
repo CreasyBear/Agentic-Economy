@@ -6,7 +6,7 @@ vi.mock('@coinbase/cdp-sdk', async (original) => ({ ...await original<typeof imp
 import { fetchCatalogPage, search } from '../../../convex/capabilityToolCatalog'
 
 import type { ToolSearchWireResult } from '@/modules/capability-supply/public'
-import { timezonePaymentRequired20260819Fixture } from '@/modules/capability-supply/public'
+import timezonePaymentRequired20260819Fixture from '../../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json'
 
 const searchHandler = (search as unknown as { _handler: (ctx: unknown, args: { source: 'coinbase'; query: string }) => Promise<ToolSearchWireResult> })._handler
 

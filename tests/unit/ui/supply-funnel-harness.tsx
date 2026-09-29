@@ -25,15 +25,6 @@ import {
   type PricingConfig,
 } from "@/modules/money/public";
 
-export const moneyServerMocks = {
-  beginOwnerPayoutTransferServer: vi.fn(),
-  createOwnerConnectAccountServer: vi.fn(),
-  createOwnerExpressLoginLinkServer: vi.fn(),
-  createOwnerOnboardingLinkServer: vi.fn(),
-  readOwnerPayoutTransferServer: vi.fn(),
-};
-
-vi.mock("@/modules/money/money.functions", () => moneyServerMocks);
 vi.mock("@clerk/tanstack-react-start", () => ({
   useReverification: <T extends (...args: never[]) => unknown>(callback: T) => callback,
 }));

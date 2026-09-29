@@ -55,9 +55,7 @@ export async function readOwnerSupplyFunnelProjection(
       providerConnectionByPublicationRef,
       bindingByPublicationRef,
       providerCallsOverflow,
-      qualifiedUsesOverflow,
       boundedProviderCalls,
-      boundedQualifiedUses,
     } = rows
     const offerings: OwnerSupplyAvailable['offerings'] = await Promise.all(
       offeringRows.map(async (offering): Promise<OwnerSupplyOffering> => {
@@ -216,9 +214,7 @@ export async function readOwnerSupplyFunnelProjection(
             windowStartAt: evidenceWindowStartAt,
             windowEndAt: now,
             callsOverflow: providerCallsOverflow,
-            qualifiedUsesOverflow,
             calls: boundedProviderCalls,
-            qualifiedUses: boundedQualifiedUses,
           }),
         }
       }),

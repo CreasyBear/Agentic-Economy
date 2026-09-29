@@ -245,8 +245,8 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
   const rake = { currency: "AUD", units: "150000", exponent: 6 };
   const topupAmount = { currency: "AUD", units: "5000000", exponent: 6 };
   const fee = { currency: "AUD", units: "250000", exponent: 6 };
-  const tax = { currency: "AUD", units: "30000", exponent: 6 };
-  const topupCharge = { currency: "AUD", units: "5280000", exponent: 6 };
+  const tax = { currency: "AUD", units: "530000", exponent: 6 };
+  const topupCharge = { currency: "AUD", units: "5780000", exponent: 6 };
   const sourceRevision = "a".repeat(40);
   const runId = `ae-release-smoke:${sourceRevision}:run-1`;
   const controlRefCandidate = `operation:v1:${"c".repeat(64)}`;
@@ -295,7 +295,6 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
   const account = (balance: typeof amount) => ({
     principalId,
     balance,
-    autoRecharge: { enabled: false, threshold: zero, rechargeAmount: zero },
     evidence: "source" as const,
   });
   const usage = (

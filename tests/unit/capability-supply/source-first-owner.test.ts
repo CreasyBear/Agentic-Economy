@@ -104,7 +104,7 @@ describe('owner source-first resumption', () => {
     expect(result).toMatchObject({
       kind: 'action_required',
       requiredAction: {
-        title: 'Connect service',
+        title: 'Prove the payee',
         cta: `/owner/settings/integrations?${query.toString()}`,
       },
     })
@@ -196,13 +196,7 @@ describe('owner source-first resumption', () => {
         draftRef: 'sds_exact_source',
         connectionRef: 'connection:mcp',
       },
-    })).resolves.toMatchObject({
-      kind: 'available',
-      source,
-      candidateRef: '',
-      connectionRef: 'connection:mcp',
-      preview: { kind: 'ready', candidates: [{ title: 'lookup' }] },
-    })
+    })).resolves.toEqual({ kind: 'source_changed' })
     expect(mocks.callSourceQuery).toHaveBeenCalledTimes(1)
   })
 
@@ -257,7 +251,7 @@ describe('owner source-first resumption', () => {
 
     await expect(resumeOwnerSupplySourceDraft({
       data: { businessId: 'business:one', draftRef: 'sds_exact_source' },
-    })).resolves.toEqual({ kind: 'available', source, candidateRef: '' })
+    })).resolves.toEqual({ kind: 'source_changed' })
     expect(mocks.previewOwnerMcpProviderConnection).not.toHaveBeenCalled()
   })
 

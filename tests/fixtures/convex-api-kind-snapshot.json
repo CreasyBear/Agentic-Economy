@@ -2353,18 +2353,6 @@
   },
   {
     "visibility": "public",
-    "module": "moneyAutoRecharge",
-    "method": "configureAutoRecharge",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyAutoRecharge",
-    "method": "readAutoRechargeSettings",
-    "kind": "query"
-  },
-  {
-    "visibility": "public",
     "module": "moneyCommercialPolicy",
     "method": "change",
     "kind": "mutation"
@@ -2600,18 +2588,6 @@
   {
     "visibility": "public",
     "module": "moneyLedger",
-    "method": "authorizeConnectOnboarding",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyLedger",
-    "method": "finalizeConnectAccount",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyLedger",
     "method": "listCreditActivity",
     "kind": "action"
   },
@@ -2642,44 +2618,8 @@
   {
     "visibility": "public",
     "module": "moneyLedger",
-    "method": "readOwnerPayoutAccount",
-    "kind": "query"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyLedger",
     "method": "readOwnerProviderEarnings",
     "kind": "query"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyLedger",
-    "method": "readPayoutAccountByStripeId",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyLedger",
-    "method": "readPayoutAccountByStripeIdForWorker",
-    "kind": "query"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyLedger",
-    "method": "recordConnectAccountEvent",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyLedger",
-    "method": "recordConnectAccountEventFromInbox",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyLedger",
-    "method": "reserveConnectAccount",
-    "kind": "mutation"
   },
   {
     "visibility": "internal",
@@ -2814,18 +2754,6 @@
     "kind": "action"
   },
   {
-    "visibility": "public",
-    "module": "moneyPayoutPolicy",
-    "method": "configurePayoutPreferences",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyPayoutPolicy",
-    "method": "readPayoutPreferences",
-    "kind": "query"
-  },
-  {
     "visibility": "internal",
     "module": "moneyProviderObligations",
     "method": "finalizeOwnerReversal",
@@ -2871,30 +2799,6 @@
     "visibility": "public",
     "module": "moneyReconciliationCases",
     "method": "resolveOwnerCase",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyStripeCustomer",
-    "method": "observeStripePaymentMandate",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyStripeCustomer",
-    "method": "readStripeCustomerBinding",
-    "kind": "query"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyStripeCustomer",
-    "method": "recordBillingPortalStarted",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyStripeCustomer",
-    "method": "upsertStripeCustomerBinding",
     "kind": "mutation"
   },
   {
@@ -3105,12 +3009,6 @@
     "visibility": "public",
     "module": "personalAccount",
     "method": "retirePersonalAccountForServer",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "qualifiedUse",
-    "method": "recordQualifiedUse",
     "kind": "mutation"
   },
   {

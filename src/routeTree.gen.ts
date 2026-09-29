@@ -127,7 +127,6 @@ import { Route as ApiV1BusinessesBusinessIdRouteImport } from './routes/api.v1.b
 import { Route as ApiV1AccountFundingSessionsRouteImport } from './routes/api.v1.account.funding-sessions'
 import { Route as ApiV1AccountBalanceRouteImport } from './routes/api.v1.account.balance'
 import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.account.activity'
-import { Route as ApiStripeWebhookAccountsV2RouteImport } from './routes/api.stripe.webhook.accounts-v2'
 import { Route as OperatorOwnerSettingsWorkspaceRouteImport } from './routes/_operator/owner.settings.workspace'
 import { Route as OperatorOwnerSettingsTeamRouteImport } from './routes/_operator/owner.settings.team'
 import { Route as OperatorOwnerSettingsTaxRouteImport } from './routes/_operator/owner.settings.tax'
@@ -135,7 +134,6 @@ import { Route as OperatorOwnerSettingsSpendingRouteImport } from './routes/_ope
 import { Route as OperatorOwnerSettingsSecurityActivityRouteImport } from './routes/_operator/owner.settings.security-activity'
 import { Route as OperatorOwnerSettingsReceiptsRouteImport } from './routes/_operator/owner.settings.receipts'
 import { Route as OperatorOwnerSettingsPrivacyRouteImport } from './routes/_operator/owner.settings.privacy'
-import { Route as OperatorOwnerSettingsPaymentMethodsRouteImport } from './routes/_operator/owner.settings.payment-methods'
 import { Route as OperatorOwnerSettingsNotificationsRouteImport } from './routes/_operator/owner.settings.notifications'
 import { Route as OperatorOwnerSettingsIntegrationsRouteImport } from './routes/_operator/owner.settings.integrations'
 import { Route as OperatorOwnerSettingsAgentKeysRouteImport } from './routes/_operator/owner.settings.agent-keys'
@@ -770,12 +768,6 @@ const ApiV1AccountActivityRoute = ApiV1AccountActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => ApiV1AccountRoute,
 } as any)
-const ApiStripeWebhookAccountsV2Route =
-  ApiStripeWebhookAccountsV2RouteImport.update({
-    id: '/accounts-v2',
-    path: '/accounts-v2',
-    getParentRoute: () => ApiStripeWebhookRoute,
-  } as any)
 const OperatorOwnerSettingsWorkspaceRoute =
   OperatorOwnerSettingsWorkspaceRouteImport.update({
     id: '/workspace',
@@ -816,12 +808,6 @@ const OperatorOwnerSettingsPrivacyRoute =
   OperatorOwnerSettingsPrivacyRouteImport.update({
     id: '/privacy',
     path: '/privacy',
-    getParentRoute: () => OperatorOwnerSettingsRoute,
-  } as any)
-const OperatorOwnerSettingsPaymentMethodsRoute =
-  OperatorOwnerSettingsPaymentMethodsRouteImport.update({
-    id: '/payment-methods',
-    path: '/payment-methods',
     getParentRoute: () => OperatorOwnerSettingsRoute,
   } as any)
 const OperatorOwnerSettingsNotificationsRoute =
@@ -1063,7 +1049,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
-  '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
@@ -1087,7 +1073,6 @@ export interface FileRoutesByFullPath {
   '/owner/settings/agent-keys': typeof OperatorOwnerSettingsAgentKeysRoute
   '/owner/settings/integrations': typeof OperatorOwnerSettingsIntegrationsRoute
   '/owner/settings/notifications': typeof OperatorOwnerSettingsNotificationsRoute
-  '/owner/settings/payment-methods': typeof OperatorOwnerSettingsPaymentMethodsRoute
   '/owner/settings/privacy': typeof OperatorOwnerSettingsPrivacyRoute
   '/owner/settings/receipts': typeof OperatorOwnerSettingsReceiptsRoute
   '/owner/settings/security-activity': typeof OperatorOwnerSettingsSecurityActivityRoute
@@ -1095,7 +1080,6 @@ export interface FileRoutesByFullPath {
   '/owner/settings/tax': typeof OperatorOwnerSettingsTaxRoute
   '/owner/settings/team': typeof OperatorOwnerSettingsTeamRoute
   '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
-  '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
   '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
@@ -1219,7 +1203,7 @@ export interface FileRoutesByTo {
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
-  '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
@@ -1243,7 +1227,6 @@ export interface FileRoutesByTo {
   '/owner/settings/agent-keys': typeof OperatorOwnerSettingsAgentKeysRoute
   '/owner/settings/integrations': typeof OperatorOwnerSettingsIntegrationsRoute
   '/owner/settings/notifications': typeof OperatorOwnerSettingsNotificationsRoute
-  '/owner/settings/payment-methods': typeof OperatorOwnerSettingsPaymentMethodsRoute
   '/owner/settings/privacy': typeof OperatorOwnerSettingsPrivacyRoute
   '/owner/settings/receipts': typeof OperatorOwnerSettingsReceiptsRoute
   '/owner/settings/security-activity': typeof OperatorOwnerSettingsSecurityActivityRoute
@@ -1251,7 +1234,6 @@ export interface FileRoutesByTo {
   '/owner/settings/tax': typeof OperatorOwnerSettingsTaxRoute
   '/owner/settings/team': typeof OperatorOwnerSettingsTeamRoute
   '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
-  '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
   '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
@@ -1377,7 +1359,7 @@ export interface FileRoutesById {
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
-  '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
@@ -1401,7 +1383,6 @@ export interface FileRoutesById {
   '/_operator/owner/settings/agent-keys': typeof OperatorOwnerSettingsAgentKeysRoute
   '/_operator/owner/settings/integrations': typeof OperatorOwnerSettingsIntegrationsRoute
   '/_operator/owner/settings/notifications': typeof OperatorOwnerSettingsNotificationsRoute
-  '/_operator/owner/settings/payment-methods': typeof OperatorOwnerSettingsPaymentMethodsRoute
   '/_operator/owner/settings/privacy': typeof OperatorOwnerSettingsPrivacyRoute
   '/_operator/owner/settings/receipts': typeof OperatorOwnerSettingsReceiptsRoute
   '/_operator/owner/settings/security-activity': typeof OperatorOwnerSettingsSecurityActivityRoute
@@ -1409,7 +1390,6 @@ export interface FileRoutesById {
   '/_operator/owner/settings/tax': typeof OperatorOwnerSettingsTaxRoute
   '/_operator/owner/settings/team': typeof OperatorOwnerSettingsTeamRoute
   '/_operator/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
-  '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
   '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
@@ -1559,7 +1539,6 @@ export interface FileRouteTypes {
     | '/owner/settings/agent-keys'
     | '/owner/settings/integrations'
     | '/owner/settings/notifications'
-    | '/owner/settings/payment-methods'
     | '/owner/settings/privacy'
     | '/owner/settings/receipts'
     | '/owner/settings/security-activity'
@@ -1567,7 +1546,6 @@ export interface FileRouteTypes {
     | '/owner/settings/tax'
     | '/owner/settings/team'
     | '/owner/settings/workspace'
-    | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
     | '/api/v1/account/funding-sessions'
@@ -1715,7 +1693,6 @@ export interface FileRouteTypes {
     | '/owner/settings/agent-keys'
     | '/owner/settings/integrations'
     | '/owner/settings/notifications'
-    | '/owner/settings/payment-methods'
     | '/owner/settings/privacy'
     | '/owner/settings/receipts'
     | '/owner/settings/security-activity'
@@ -1723,7 +1700,6 @@ export interface FileRouteTypes {
     | '/owner/settings/tax'
     | '/owner/settings/team'
     | '/owner/settings/workspace'
-    | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
     | '/api/v1/account/funding-sessions'
@@ -1872,7 +1848,6 @@ export interface FileRouteTypes {
     | '/_operator/owner/settings/agent-keys'
     | '/_operator/owner/settings/integrations'
     | '/_operator/owner/settings/notifications'
-    | '/_operator/owner/settings/payment-methods'
     | '/_operator/owner/settings/privacy'
     | '/_operator/owner/settings/receipts'
     | '/_operator/owner/settings/security-activity'
@@ -1880,7 +1855,6 @@ export interface FileRouteTypes {
     | '/_operator/owner/settings/tax'
     | '/_operator/owner/settings/team'
     | '/_operator/owner/settings/workspace'
-    | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
     | '/api/v1/account/funding-sessions'
@@ -1988,7 +1962,7 @@ export interface RootRouteChildren {
   ApiInternalSecretLifecycleRoute: typeof ApiInternalSecretLifecycleRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
   ApiOwnerDataExportRoute: typeof ApiOwnerDataExportRoute
-  ApiStripeWebhookRoute: typeof ApiStripeWebhookRouteWithChildren
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
   ApiV1BusinessesRoute: typeof ApiV1BusinessesRouteWithChildren
   ApiV1CallsRoute: typeof ApiV1CallsRouteWithChildren
@@ -2858,13 +2832,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AccountActivityRouteImport
       parentRoute: typeof ApiV1AccountRoute
     }
-    '/api/stripe/webhook/accounts-v2': {
-      id: '/api/stripe/webhook/accounts-v2'
-      path: '/accounts-v2'
-      fullPath: '/api/stripe/webhook/accounts-v2'
-      preLoaderRoute: typeof ApiStripeWebhookAccountsV2RouteImport
-      parentRoute: typeof ApiStripeWebhookRoute
-    }
     '/_operator/owner/settings/workspace': {
       id: '/_operator/owner/settings/workspace'
       path: '/workspace'
@@ -2912,13 +2879,6 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/owner/settings/privacy'
       preLoaderRoute: typeof OperatorOwnerSettingsPrivacyRouteImport
-      parentRoute: typeof OperatorOwnerSettingsRoute
-    }
-    '/_operator/owner/settings/payment-methods': {
-      id: '/_operator/owner/settings/payment-methods'
-      path: '/payment-methods'
-      fullPath: '/owner/settings/payment-methods'
-      preLoaderRoute: typeof OperatorOwnerSettingsPaymentMethodsRouteImport
       parentRoute: typeof OperatorOwnerSettingsRoute
     }
     '/_operator/owner/settings/notifications': {
@@ -3161,7 +3121,6 @@ interface OperatorOwnerSettingsRouteChildren {
   OperatorOwnerSettingsAgentKeysRoute: typeof OperatorOwnerSettingsAgentKeysRoute
   OperatorOwnerSettingsIntegrationsRoute: typeof OperatorOwnerSettingsIntegrationsRoute
   OperatorOwnerSettingsNotificationsRoute: typeof OperatorOwnerSettingsNotificationsRoute
-  OperatorOwnerSettingsPaymentMethodsRoute: typeof OperatorOwnerSettingsPaymentMethodsRoute
   OperatorOwnerSettingsPrivacyRoute: typeof OperatorOwnerSettingsPrivacyRoute
   OperatorOwnerSettingsReceiptsRoute: typeof OperatorOwnerSettingsReceiptsRoute
   OperatorOwnerSettingsSecurityActivityRoute: typeof OperatorOwnerSettingsSecurityActivityRoute
@@ -3178,8 +3137,6 @@ const OperatorOwnerSettingsRouteChildren: OperatorOwnerSettingsRouteChildren = {
     OperatorOwnerSettingsIntegrationsRoute,
   OperatorOwnerSettingsNotificationsRoute:
     OperatorOwnerSettingsNotificationsRoute,
-  OperatorOwnerSettingsPaymentMethodsRoute:
-    OperatorOwnerSettingsPaymentMethodsRoute,
   OperatorOwnerSettingsPrivacyRoute: OperatorOwnerSettingsPrivacyRoute,
   OperatorOwnerSettingsReceiptsRoute: OperatorOwnerSettingsReceiptsRoute,
   OperatorOwnerSettingsSecurityActivityRoute:
@@ -3282,17 +3239,6 @@ const ApiBusinessesRouteChildren: ApiBusinessesRouteChildren = {
 const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
-
-interface ApiStripeWebhookRouteChildren {
-  ApiStripeWebhookAccountsV2Route: typeof ApiStripeWebhookAccountsV2Route
-}
-
-const ApiStripeWebhookRouteChildren: ApiStripeWebhookRouteChildren = {
-  ApiStripeWebhookAccountsV2Route: ApiStripeWebhookAccountsV2Route,
-}
-
-const ApiStripeWebhookRouteWithChildren =
-  ApiStripeWebhookRoute._addFileChildren(ApiStripeWebhookRouteChildren)
 
 interface ApiV1AccountFundingSessionsRouteChildren {
   ApiV1AccountFundingSessionsFundingSessionIdRoute: typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
@@ -3469,7 +3415,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalSecretLifecycleRoute: ApiInternalSecretLifecycleRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
   ApiOwnerDataExportRoute: ApiOwnerDataExportRoute,
-  ApiStripeWebhookRoute: ApiStripeWebhookRouteWithChildren,
+  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
   ApiV1BusinessesRoute: ApiV1BusinessesRouteWithChildren,
   ApiV1CallsRoute: ApiV1CallsRouteWithChildren,

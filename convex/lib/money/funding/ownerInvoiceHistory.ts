@@ -112,8 +112,7 @@ async function requireOwnerAccountContextForInvoiceHistory(
 }
 
 function fundingCommandInvoiceDescription(command: Doc<'moneyFundingCommands'>): string {
-  const initiationKind = command.initiationKind as string | undefined
-  return initiationKind === 'auto_recharge' ? 'Auto-recharge' : 'Account top-up'
+  return 'Account top-up'
 }
 
 function isTerminalFundingState(state: Doc<'moneyFundingCommands'>['state']): boolean {

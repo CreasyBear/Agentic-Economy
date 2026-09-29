@@ -273,13 +273,13 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getAllByText('A$0.01').length).toBeGreaterThan(1)
     fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
     const csv = vi.mocked(downloadCsv).mock.calls[0]?.[1]
-    expect(csv).toContain('call:1,Australian Tax Calculator,Agentic Economy Seller,agent:alpha,0.000006,0.000001,0.000005,')
+    expect(csv).toContain('call:1,Australian Tax Calculator,Agentic Economy Seller,agent:alpha,0.000006,0.000000,0.000006,')
 
     fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
     const document = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
       records: readonly { costAud: string; gstAud: string; netAud: string }[]
     }
-    expect(document.records[0]).toMatchObject({ costAud: '0.000006', gstAud: '0.000001', netAud: '0.000005' })
+    expect(document.records[0]).toMatchObject({ costAud: '0.000006', gstAud: '0.000000', netAud: '0.000006' })
   })
 
   it('exports only booked AUD amounts; refunded and unknown Calls do not become charges', () => {

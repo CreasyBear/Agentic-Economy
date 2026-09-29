@@ -2,13 +2,18 @@ import { listMessages, saveMessages } from '@convex-dev/agent'
 import { components } from '../../../_generated/api'
 import type { ModelMessage } from 'ai'
 import type { JSONValue, LanguageModelV4 } from '@ai-sdk/provider'
+import type { Value } from 'convex/values'
 import type { ActionCtx } from '../../../_generated/server'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { createChatAgent } from '../tools/agent'
+import { catalogueFact, explanationUsable, immediateSearchToolName, retrieveImmediateTools } from '../tools/immediate'
+import { quoteThenCallFromCard } from '../tools/purchase'
+import { parseOwnerQuoteRequest } from '../tools/quoteRequest'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 import { completedChatFacts } from './completedFacts'
+import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 
 export async function streamDurableChatResponse(
   ctx: ActionCtx,
@@ -156,6 +161,113 @@ export async function streamDurableChatResponse(
     },
     )
     return { result, steps: await result.steps }
+  }
+  if (args.continuation === undefined) {
+    const history = await listMessages(ctx, components.agent, {
+      threadId: args.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    })
+    const promptText = history.page.find(row => row._id === args.promptMessageId)?.text ?? ''
+    const quoteRequest = parseOwnerQuoteRequest(promptText)
+    if (quoteRequest !== null && args.trustedChatAuthority?.kind === 'agent_key') {
+      let purchased: Awaited<ReturnType<typeof quoteThenCallFromCard>> = null
+      try {
+        purchased = await quoteThenCallFromCard(
+          ctx, args.trustedChatAuthority, quoteRequest.toolRef, quoteRequest.input as Record<string, Value>,
+        )
+      } catch {
+        await saveMessages(ctx, components.agent, {
+          threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+          messages: [{ role: 'assistant', content: 'The Quote could not be completed. Open the Tool card and try the Quote again.' }],
+          agentName: 'Agentic Economy Operation Market',
+        })
+        return false
+      }
+      const quoteName = CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']
+      const callName = CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call']
+      if (purchased === null) {
+        await saveMessages(ctx, components.agent, {
+          threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+          messages: [{ role: 'assistant', content: 'That Tool is not available to Quote from this chat.' }],
+          agentName: 'Agentic Economy Operation Market',
+        })
+        return false
+      }
+      const toolResults = [
+        { toolName: quoteName, output: purchased.quote },
+        ...(purchased.call === undefined ? [] : [{ toolName: callName, output: purchased.call }]),
+      ]
+      completedSteps.push({ toolResults })
+      await saveMessages(ctx, components.agent, {
+        threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+        messages: [
+          { role: 'assistant', content: toolResults.map((result, index) => ({
+            type: 'tool-call' as const, toolCallId: `card-purchase-${index}`, toolName: result.toolName,
+            input: index === 0 ? { toolRef: quoteRequest.toolRef, input: quoteRequest.input } : { quoteRef: purchased.quote.kind === 'committed' ? purchased.quote.quoteRef : '' },
+          })) },
+          { role: 'tool', content: toolResults.map((result, index) => ({
+            type: 'tool-result' as const, toolCallId: `card-purchase-${index}`, toolName: result.toolName,
+            output: { type: 'json' as const, value: result.output as JSONValue },
+          })) },
+          { role: 'assistant', content: completedChatFacts(completedSteps) ?? 'Review the Quote before approving the Call.' },
+        ],
+        agentName: 'Agentic Economy Operation Market',
+      })
+      return purchased.call?.kind === 'needs_authority'
+    }
+    let catalogue: Awaited<ReturnType<typeof retrieveImmediateTools>> = null
+    if (promptText.trim().length > 0) {
+      try { catalogue = await retrieveImmediateTools(ctx, promptText, args.searchTurn) } catch { catalogue = null }
+    }
+    if (catalogue !== null) {
+      const toolName = immediateSearchToolName()
+      completedSteps.push({ toolResults: [{ toolName, output: catalogue }] })
+      await saveMessages(ctx, components.agent, {
+        threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+        messages: [
+          { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'immediate-search', toolName, input: { query: promptText, limit: 8 } }] },
+          { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'immediate-search', toolName, output: { type: 'json', value: catalogue as JSONValue } }] },
+          { role: 'assistant', content: catalogueFact(catalogue) },
+        ],
+        agentName: 'Agentic Economy Operation Market',
+      })
+      try {
+        const explanation = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
+          promptMessageId: args.promptMessageId,
+          tools: {},
+          timeout: { totalMs: 8_000 },
+          maxRetries: 0,
+          instructions: `${agent.options.instructions} Tool cards are already shown. Explain only those cards. Never invent an operation id.`,
+        }, {
+          storageOptions: { saveMessages: 'promptAndOutput' },
+          saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
+        })
+        const text = (await explanation.text).trim()
+        if (!explanationUsable(text, catalogue)) {
+          const saved = explanation.savedMessages?.findLast(message => message.message?.role === 'assistant')
+          const fact = catalogueFact(catalogue)
+          if (saved === undefined) {
+            await saveMessages(ctx, components.agent, {
+              threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+              messages: [{ role: 'assistant', content: fact }],
+              agentName: 'Agentic Economy Operation Market',
+            })
+          } else {
+            await agent.updateMessage(ctx, {
+              messageId: saved._id,
+              patch: { message: { role: 'assistant', content: fact }, status: 'success' },
+            })
+          }
+        }
+      } catch {
+        await saveMessages(ctx, components.agent, {
+          threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+          messages: [{ role: 'assistant', content: catalogueFact(catalogue) }],
+          agentName: 'Agentic Economy Operation Market',
+        })
+      }
+      await preserveSearchCard()
+      return false
+    }
   }
   let initial
   try {

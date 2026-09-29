@@ -10,9 +10,11 @@ import {
   isAllowlistedFacilitatorDiscoveryUrl,
   parseFacilitatorDiscoveryPage,
   paymentRequiredFromDiscoveryItem,
-  syntheticPostPaymentRequiredFixture as syntheticPost,
-  timezonePaymentRequired20260819Fixture as timezonePin,
 } from "@/modules/capability-supply/public";
+import syntheticPostPaymentRequiredFixture from "../../fixtures/x402-bazaar/synthetic-post-payment-required.json";
+const syntheticPost = syntheticPostPaymentRequiredFixture
+import timezonePaymentRequired20260819Fixture from "../../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json";
+const timezonePin = timezonePaymentRequired20260819Fixture
 import { admitBazaarDiscoveryInfo } from "@/modules/capability-supply/server";
 import { isRecord } from "@/modules/common/is-record";
 

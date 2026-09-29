@@ -1,4 +1,5 @@
 import { createTool, type ToolCtx } from '@convex-dev/agent'
+import type { ActionCtx } from '../../../_generated/server'
 import { makeFunctionReference } from 'convex/server'
 import type { Value } from 'convex/values'
 import { z } from 'zod'
@@ -86,4 +87,41 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
         },
       }),
   }
+}
+
+/** Card Quote then Call. Call stops at the existing owner approval; it does not settle. */
+export async function quoteThenCallFromCard(
+  ctx: ActionCtx,
+  authority: TrustedChatAuthority & { kind: 'agent_key' },
+  toolRef: string,
+  input: Record<string, Value>,
+): Promise<{ quote: QuoteResult; call?: CallResult } | null> {
+  if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef })) return null
+  const commandDigest = canonicalDigest({
+    turnRef: authority.turnRef,
+    credentialId: authority.credentialLocator,
+    operationRef: toolRef,
+    input,
+  } as StableHashValue)
+  const quote = await ctx.runAction(quoteRef, {
+    authority,
+    operationKey: commandDigest,
+    correlationId: `chat-inspect-corr:${commandDigest}`,
+    toolRef,
+    input: structuredClone(input),
+  })
+  if (quote.kind !== 'committed') return { quote }
+  const callDigest = canonicalDigest({
+    turnRef: authority.turnRef,
+    credentialId: authority.credentialLocator,
+    commitmentRef: quote.quoteRef,
+  } as StableHashValue)
+  const call = await ctx.runAction(callRef, {
+    authority,
+    operationKey: quote.quoteRef,
+    correlationId: `chat-invoke-corr:${callDigest}`,
+    quoteRef: quote.quoteRef,
+    idempotencyKey: `chat-invoke:${callDigest}`,
+  })
+  return { quote, call }
 }

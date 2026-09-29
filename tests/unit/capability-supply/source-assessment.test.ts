@@ -4,9 +4,9 @@ import type { SupplySourcePreview } from '@/modules/capability-supply/source-pre
 
 const preview: Extract<SupplySourcePreview, { kind: 'ready' }> = {
   kind: 'ready', sourceDigest: `sha256:${'1'.repeat(64)}`, sourceRevision: 'revision:one',
-  provenance: { sourceKind: 'openapi', sourceUrl: 'https://private.example/source', authority: 'unverified_public' },
+  provenance: { sourceKind: 'x402', sourceUrl: 'https://private.example/source', authority: 'observed_external' },
   authentication: [{ kind: 'public' }], candidates: [{
-    candidateRef: `sha256:${'2'.repeat(64)}`, sourceSelector: { serverUrl: 'https://private.example', path: '/lookup', method: 'post' },
+    candidateRef: `sha256:${'2'.repeat(64)}`, sourceSelector: { resourceUrl: 'https://private.example/lookup', method: 'POST' },
     title: 'Reference lookup', description: 'Looks up public references. Returns matching titles.',
     inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'The reference to find.', examples: ['private-example'], default: 'private-default' } } },
     outputSchema: { type: 'object', properties: { result: { type: 'string', description: 'A matching title.' } } },

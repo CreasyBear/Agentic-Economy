@@ -357,7 +357,7 @@ describe('Formance-sourced money documents', () => {
           accountRef: input.accountRef,
           kind: input.kind,
           sourceTransactionRefs: ['formance:tx:am11-source'],
-          amountUnits: '5280000',
+          amountUnits: '5780000',
           residualUnits: '0',
           policyRefs: ['commercial-policy:sandbox'],
           policyDigest: `sha256:${'a'.repeat(64)}`,

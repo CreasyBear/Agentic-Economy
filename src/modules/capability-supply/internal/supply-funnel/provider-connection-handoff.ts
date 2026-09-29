@@ -25,7 +25,7 @@ import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write
 import type {
   ProviderConnectionSourceAuthentication,
 } from '../../provider-connection'
-import type { McpSourceDiscovery } from '../../source-preview'
+import type { McpSourceDiscovery } from '../mcp-source-discovery'
 import type { ValidOpenApiDocument } from '../openapi-import/validation'
 import { validateOpenApiDocument } from '../openapi-import/validation'
 import {

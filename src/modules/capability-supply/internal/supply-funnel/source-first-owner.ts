@@ -241,69 +241,7 @@ export async function previewOwnerSupplySource({
 }): Promise<SupplySourcePreview> {
   const readback = await callSourceQuery(readOwnerSupplyQuery, { businessId: data.businessId })
   if (readback.kind !== 'available') return unavailablePreview()
-  if (data.connectionRef !== undefined) {
-    const connectionRef = data.connectionRef
-    if (data.source.kind === 'mcp' || data.source.kind === 'agent_plugin') {
-      const source = data.source
-      return await previewSupplySource(source, {
-        mcpAuthentication: { kind: 'mcp_oauth' },
-        discoverMcp: async (discoveryInput) => {
-          const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
-          return await previewOwnerMcpProviderConnection({
-            connectionRef,
-            businessRef: data.businessId,
-            ...(discoveryInput.serverUrl === undefined ? {} : { serverUrl: discoveryInput.serverUrl }),
-            ...(discoveryInput.registryName === undefined ? {} : { registryName: discoveryInput.registryName }),
-            ...(discoveryInput.remoteRef === undefined ? {} : { remoteRef: discoveryInput.remoteRef }),
-            environment: discoveryInput.environment,
-          })
-        },
-      })
-    }
-    if (data.source.kind === 'openapi') {
-      const source = data.source
-      return await previewSupplySource(source, {
-        loadOpenApi: async () => {
-          const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
-          return await loadOwnerConnectedOpenApi({
-            connectionRef,
-            businessRef: data.businessId,
-            definitionUrl: source.definitionUrl,
-            environment: source.environment,
-          })
-        },
-      })
-    }
-    return unavailablePreview()
-  }
-  let challengedServerUrl: string | undefined
-  const preview = data.source.kind === 'mcp' || data.source.kind === 'agent_plugin'
-    ? await previewSupplySource(data.source, {
-        discoverMcp: async (input) => {
-          const { discoverMcpSource } = await import('../mcp-source-discovery')
-          const discovery = await discoverMcpSource(input)
-          if (discovery.kind === 'authentication_required') challengedServerUrl = discovery.serverUrl
-          return discovery
-        },
-      })
-    : await previewSupplySource(data.source)
-  if (preview.kind !== 'action_required'
-    || (data.source.kind !== 'mcp' && data.source.kind !== 'agent_plugin')
-    || challengedServerUrl === undefined) return preview
-  if (!package5RolloutDecision('mcpOAuth').enabled) return unavailablePreview()
-  return await reserveOwnerSourceConnection({
-    businessId: data.businessId,
-    sourceKind: 'mcp_oauth',
-    sourceUrl: challengedServerUrl,
-    sourceDescriptorJson: stableStringify(data.source as never),
-    authentication: { kind: 'mcp_oauth' },
-    environment: data.source.environment,
-    idempotencyKey: data.idempotencyKey,
-    context,
-    title: 'Connect MCP server',
-    description: 'Sign in to the MCP server, then AE will return to this source and continue finding Tools.',
-    ctaLabel: 'Connect server',
-  })
+  return await previewSupplySource(data.source)
 }
 
 export async function startOwnerSupplySourceConnection({
@@ -319,47 +257,30 @@ export async function startOwnerSupplySourceConnection({
   if (preview.kind !== 'ready' || preview.sourceDigest !== data.expectedSourceDigest) return unavailablePreview()
   const candidate = preview.candidates.find(({ candidateRef }) => candidateRef === data.candidateRef)
   if (candidate === undefined) return unavailablePreview()
-  if (data.source.kind === 'x402') {
-    if (!isSupportedX402Candidate(candidate, data.source)) return unavailablePreview()
-    return {
-      kind: 'action_required',
-      requiredAction: {
-        action: 'supply.source.preview',
-        blockedCapabilities: ['supply.publish'],
-        cta: x402ConnectionCta({
-          candidateRef: data.candidateRef,
-          resourceUrl: data.source.resourceUrl,
-          method: data.source.method,
-          environment: data.source.environment,
-        }),
-        ctaLabel: 'Connect service',
-        description: 'Inspect the exact x402 payment lane, prove payee control with your wallet, then AE will return to this Tool.',
-        iconUrl: null,
-        status: 'required',
-        title: 'Connect service',
-      },
-    }
+  const environment = candidate.x402?.environment ?? data.source.environment
+  if (environment === undefined || !isSupportedX402Candidate(candidate, {
+    ...data.source,
+    method: candidate.sourceSelector.method,
+    environment,
+  })) return unavailablePreview()
+  return {
+    kind: 'action_required',
+    requiredAction: {
+      action: 'supply.source.preview',
+      blockedCapabilities: ['supply.publish'],
+      cta: x402ConnectionCta({
+        candidateRef: data.candidateRef,
+        resourceUrl: data.source.resourceUrl,
+        method: candidate.sourceSelector.method,
+        environment,
+      }),
+      ctaLabel: 'Prove payTo',
+      description: 'Sign one wallet message for this endpoint payee. The signature proves control of payTo and does not reveal a private key.',
+      iconUrl: null,
+      status: 'required',
+      title: 'Prove the payee',
+    },
   }
-  if (data.source.kind !== 'openapi'
-    || candidate.disposition.kind !== 'supported'
-    || (candidate.authentication.kind !== 'api_key' && candidate.authentication.kind !== 'http_bearer')) {
-    return unavailablePreview()
-  }
-  return await reserveOwnerSourceConnection({
-    businessId: data.businessId,
-    sourceKind: 'http_credential',
-    sourceUrl: data.source.definitionUrl,
-    sourceDescriptorJson: stableStringify(data.source as never),
-    authentication: candidate.authentication,
-    environment: data.source.environment,
-    idempotencyKey: data.idempotencyKey,
-    candidateDraftRef: data.candidateRef,
-    candidateSourceDigest: data.expectedSourceDigest,
-    context,
-    title: 'Connect service',
-    description: 'Enter the service credential securely, then AE will return to this Tool.',
-    ctaLabel: 'Connect service',
-  })
 }
 
 async function reserveOwnerSourceConnection(input: Readonly<{
@@ -484,9 +405,7 @@ export async function resumeOwnerSupplySourceDraft({
       })
     }
     const parsed = supplySourceInputSchema.safeParse(rawSource)
-    if (!parsed.success || (parsed.data.kind !== 'mcp' && parsed.data.kind !== 'agent_plugin')) {
-      return { kind: 'source_changed' }
-    }
+    if (!parsed.success) return { kind: 'source_changed' }
     if (selectedSource.draft.state !== 'connected') {
       return data.connectionRef === undefined
         ? { kind: 'available', source: parsed.data, candidateRef: '' }
@@ -494,11 +413,7 @@ export async function resumeOwnerSupplySourceDraft({
     }
     const connectionRef = selectedSource.draft.connectionRef
     if (connectionRef === undefined) return { kind: 'not_found' }
-    const preview = await previewSupplySource(parsed.data, connectedSourceDependencies({
-      source: parsed.data,
-      businessRef: data.businessId,
-      environment: parsed.data.environment,
-    }, connectionRef))
+    const preview = await previewSupplySource(parsed.data)
     if (preview.kind !== 'ready') return { kind: 'source_changed' }
     return {
       kind: 'available',
@@ -536,35 +451,7 @@ export async function resumeOwnerSupplySourceDraft({
     if (!isMatchingX402Connection(connection, parsed.data)) return { kind: 'not_found' }
   }
   const connectionRef = data.connectionRef
-  const preview = parsed.data.kind === 'x402' || connectionRef === undefined
-    ? await previewSupplySource(parsed.data)
-    : parsed.data.kind === 'openapi'
-      ? await previewSupplySource(parsed.data, {
-          loadOpenApi: async () => {
-            const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
-            return await loadOwnerConnectedOpenApi({
-              connectionRef,
-              businessRef: data.businessId,
-              definitionUrl: parsed.data.kind === 'openapi' ? parsed.data.definitionUrl : '',
-              environment: parsed.data.environment,
-            })
-          },
-        })
-      : parsed.data.kind === 'mcp' && parsed.data.serverUrl !== undefined
-        ? await previewSupplySource(parsed.data, {
-            mcpAuthentication: { kind: 'mcp_oauth' },
-            discoverMcp: async () => {
-              const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
-              return await previewOwnerMcpProviderConnection({
-                connectionRef,
-                businessRef: data.businessId,
-                serverUrl: parsed.data.kind === 'mcp' ? parsed.data.serverUrl! : '',
-                environment: parsed.data.environment,
-              })
-            },
-          })
-        : undefined
-  if (preview === undefined) return { kind: 'source_changed' }
+  const preview = await previewSupplySource(parsed.data)
   if (preview.kind !== 'ready'
     || preview.sourceDigest !== saved.draft.sourceDigest
     || !preview.candidates.some(({ candidateRef }) => candidateRef === saved.draft.candidateRef)) {
@@ -698,38 +585,9 @@ export async function publishOwnerSupplySource({
 }
 
 function connectedSourceDependencies(
-  input: Pick<PublishSupplyToolV2Input, 'source' | 'businessRef' | 'environment'>,
-  connectionRef: string,
+  _input: Pick<PublishSupplyToolV2Input, 'source' | 'businessRef' | 'environment'>,
+  _connectionRef: string,
 ): SupplySourcePreviewDependencies {
-  if (input.source.kind === 'openapi') {
-    return {
-      loadOpenApi: async () => {
-        const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
-        return await loadOwnerConnectedOpenApi({
-          connectionRef,
-          businessRef: input.businessRef,
-          definitionUrl: input.source.kind === 'openapi' ? input.source.definitionUrl : '',
-          environment: input.environment,
-        })
-      },
-    }
-  }
-  if (input.source.kind === 'mcp' || input.source.kind === 'agent_plugin') {
-    return {
-      mcpAuthentication: { kind: 'mcp_oauth' },
-      discoverMcp: async ({ serverUrl, registryName, remoteRef, environment }) => {
-        const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
-        return await previewOwnerMcpProviderConnection({
-            connectionRef,
-            businessRef: input.businessRef,
-            ...(serverUrl === undefined ? {} : { serverUrl }),
-            ...(registryName === undefined ? {} : { registryName }),
-            ...(remoteRef === undefined ? {} : { remoteRef }),
-            environment,
-          })
-      },
-    }
-  }
   return {}
 }
 

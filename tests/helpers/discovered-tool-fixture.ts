@@ -2,7 +2,8 @@ import type { ConvexFixtureBackend } from './convex-fixtures'
 import { internal } from '../../convex/_generated/api'
 import { reconcileReadyItems } from '../../convex/lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
-import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
+import timezonePaymentRequired20260819Fixture from '../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json'
+const timezoneFixture = timezonePaymentRequired20260819Fixture
 
 /** A real captured Bazaar declaration, admitted without any readiness observation. */
 export async function admitDiscoveredToolFixture(backend: ConvexFixtureBackend, options: { withoutExample?: boolean } = {}) {

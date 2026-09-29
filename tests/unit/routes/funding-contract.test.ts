@@ -86,8 +86,8 @@ describe('public funding preflight', () => {
       generatedAt: 10_000,
       principalAmount: { currency: 'AUD', units: '10000000', exponent: 6 },
       serviceFee: { currency: 'AUD', units: '500000', exponent: 6 },
-      taxOnServiceFee: { currency: 'AUD', units: '50000', exponent: 6 },
-      totalPayment: { currency: 'AUD', units: '10550000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '1050000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '11550000', exponent: 6 },
     })
   })
 
@@ -142,8 +142,8 @@ describe('public funding preflight', () => {
       kind: 'funding_quote',
       serviceFeeBps: LIVE_SERVICE_FEE_BPS,
       serviceFee: { currency: 'AUD', units: '250000', exponent: 6 },
-      taxOnServiceFee: { currency: 'AUD', units: '30000', exponent: 6 },
-      totalPayment: { currency: 'AUD', units: '10280000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '1030000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '11280000', exponent: 6 },
     })
 
     const handoff = createFundingHandoffService(

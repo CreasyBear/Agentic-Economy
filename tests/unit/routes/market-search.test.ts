@@ -208,12 +208,12 @@ describe('indexed directory route', () => {
     expect(reads.home).not.toHaveBeenCalled();
   });
 
-  it('loads guided discovery and an adoption-ranked Tool preview by default', async () => {
+  it('loads guided discovery without the unpainted catalogue page', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: {} } as never);
-    expect(data).toMatchObject({ view: 'discover', catalogue: { coverage: { indexedTotal: 4000 } } });
-    expect(reads.catalogue).toHaveBeenCalledWith({ data: { sort: 'adoption' } });
+    expect(data).toMatchObject({ view: 'discover', home: { rails: [] }, page: { items: [] } });
+    expect(reads.catalogue).not.toHaveBeenCalled();
     expect(reads.home).toHaveBeenCalledOnce();
   });
 

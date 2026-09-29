@@ -1,19 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
-import { calculateAudGstSplit, parseDecimalExactAmount } from '@/modules/money/public'
+import { parseDecimalExactAmount, quoteAudAccountFunding, SANDBOX_COMMERCIAL_POLICY_CONTROLS, audFundingPolicyFromCommercialControls } from '@/modules/money/public'
 import { executeDecisionGateway, callDeterministicRuleEngine } from '@/modules/decision-engine/public'
 import { toolProcureResultSchema } from '@/modules/capability-execution/procure'
 
 describe('Procurement boundaries and decision invariants', () => {
-  it('preserves Net + GST = Total across AUD prices', () => {
-    for (const price of ['0.0022', '0.0330', '1.0000', '12.4567', '99.9999']) {
-      const total = parseDecimalExactAmount('AUD', price, 6)
-      expect(total).toBeDefined()
-      if (!total) continue
-      const split = calculateAudGstSplit(total.units, 1000)
-      expect(split).toBeDefined()
-      if (!split) continue
-      expect(BigInt(split.netUnits) + BigInt(split.gstUnits)).toBe(BigInt(total.units))
-    }
+  it('adds top-up GST to the loaded amount and fee without taxing the Call price', () => {
+    const policy = audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS)
+    const quote = quoteAudAccountFunding(5_000_000n, policy)
+    expect(quote).toEqual({
+      principalUnits: 5_000_000n,
+      serviceFeeUnits: 250_000n,
+      taxUnits: 530_000n,
+      totalUnits: 5_780_000n,
+    })
+    const callPrice = parseDecimalExactAmount('AUD', '1.0000', 6)
+    expect(callPrice?.units).toBe('1000000')
   })
 
   it('rejects a remedy claiming a nonzero buyer charge', () => {

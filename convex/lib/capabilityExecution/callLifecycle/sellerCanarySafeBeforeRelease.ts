@@ -142,7 +142,7 @@ export async function safeBeforeReleaseSellerCanaryRefusal(
 ): Promise<SafeBeforeReleaseSellerCanaryProof | undefined> {
   if (!isGenericSafeBeforeReleaseRefusal(row)) return undefined
 
-  const [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals] = await Promise.all([
+  const [control, attempts, paymentAttempts, usage, providerJournals] = await Promise.all([
     ctx.db.query('actionExecutionControls')
       .withIndex('by_executionRef', (query) => query.eq('executionRef', row.callRef))
       .unique(),
@@ -155,9 +155,6 @@ export async function safeBeforeReleaseSellerCanaryRefusal(
     ctx.db.query('moneyUsageEvents')
       .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
       .take(1),
-    ctx.db.query('qualifiedUseReceipts')
-      .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
-      .take(1),
     ctx.db.query('providerConsequenceJournal')
       .filter((query) => query.eq(query.field('callRef'), row.callRef))
       .take(1),
@@ -166,7 +163,7 @@ export async function safeBeforeReleaseSellerCanaryRefusal(
   if (!safeBeforeReleaseCanonicalControlMatches(row, control)) return undefined
   const attempt = currentSafeBeforeReleaseAttempt(row, control, attempts)
   if (attempt === undefined) return undefined
-  if ([paymentAttempts, usage, qualifiedUse, providerJournals].some((rows) => rows.length > 0)) {
+  if ([paymentAttempts, usage, providerJournals].some((rows) => rows.length > 0)) {
     return undefined
   }
   return {

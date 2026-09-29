@@ -55,11 +55,6 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
               : { externalRef: result.pendingTopup.externalRef }),
           },
         }),
-        autoRecharge: {
-          enabled: result.autoRecharge.enabled,
-          threshold: result.autoRecharge.threshold,
-          rechargeAmount: result.autoRecharge.rechargeAmount,
-        },
         evidence: result.evidence,
       }
     },

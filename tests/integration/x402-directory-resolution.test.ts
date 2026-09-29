@@ -4,7 +4,8 @@ import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { prepareIndexedDirectorySource } from '../../convex/x402DirectoryIndexSource'
 import { convexModules, convexTestWithMarketComponents } from '../helpers/convex-fixtures'
-import { timezonePaymentRequired20260819Fixture as fixture } from '@/modules/capability-supply/public'
+import timezonePaymentRequired20260819Fixture from '../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json'
+const fixture = timezonePaymentRequired20260819Fixture
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', () => ({ listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))

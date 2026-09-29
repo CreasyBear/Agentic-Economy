@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
 import { SupplySourceSuggestion } from './SupplySourceSuggestion'
 import { SupplyPublicationFlow } from './SupplyPublicationFlow'
-import { SupplyRemoteSelectionSection } from './SupplyRemoteSelectionSection'
 import { SupplySourceTypeSection } from './SupplySourceTypeSection'
 import {
   SUPPLY_PUBLICATION_ERROR_ID,
@@ -51,71 +50,19 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
 
       {stage === 'source' ? (
         <SupplySourceTypeSection
-          sourceKind={vm.sourceKind}
-          environment={vm.environment}
-          definitionUrl={vm.definitionUrl}
-          mcpLocator={vm.mcpLocator}
-          serverUrl={vm.serverUrl}
-          registryName={vm.registryName}
-          pluginJson={vm.pluginJson}
-          mcpJson={vm.mcpJson}
           resourceUrl={vm.resourceUrl}
           x402Method={vm.x402Method}
+          askMethod={vm.requiredAction?.title === 'Choose the request method'}
           disabled={vm.pending !== undefined}
           discovering={vm.pending === 'preview'}
-          onSourceKindChange={vm.changeSourceKind}
-          onEnvironmentChange={(next) => {
-            vm.setEnvironment(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
-          onDefinitionUrlChange={(next) => {
-            vm.setDefinitionUrl(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
-          onMcpLocatorChange={(next) => {
-            vm.setMcpLocator(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
-          onServerUrlChange={(next) => {
-            vm.setServerUrl(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
-          onRegistryNameChange={(next) => {
-            vm.setRegistryName(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
-          onPluginJsonChange={(next) => {
-            vm.setPluginJson(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
-          onMcpJsonChange={(next) => {
-            vm.setMcpJson(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
           onResourceUrlChange={(next) => {
             vm.setResourceUrl(next)
-            vm.resetDiscoveryOnSourceEdit()
+            vm.setX402Method(undefined)
           }}
-          onX402MethodChange={(next) => {
-            vm.setX402Method(next)
-            vm.resetDiscoveryOnSourceEdit()
-          }}
-          onFieldError={vm.setError}
-          onFieldClear={() => vm.setError(undefined)}
+          onX402MethodChange={vm.setX402Method}
           onDiscover={() => void vm.findTools()}
         />
       ) : null}
-
-      {stage !== 'source' || vm.remoteSelection === undefined ? null : (
-        <SupplyRemoteSelectionSection
-          remotes={vm.remoteSelection.remotes}
-          value={vm.selectedRemoteRef}
-          disabled={vm.pending !== undefined}
-          headingRef={stageHeadingRef}
-          onChange={vm.setSelectedRemoteRef}
-          onContinue={() => void vm.findTools(vm.selectedRemoteRef)}
-        />
-      )}
 
       {stage !== 'tool' || vm.preview === undefined ? null : (
         <div className="grid gap-related">

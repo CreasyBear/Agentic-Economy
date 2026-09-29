@@ -116,7 +116,7 @@ function ownerCheckoutBindEvidence(
   const [request, checkout, payment, evidence] = input.digestChars ?? ['b', 'c', 'd', 'e']
   return {
     externalRef: input.externalRef,
-    amount: { currency: 'AUD' as const, units: '5280000', exponent: 6 as const },
+    amount: { currency: 'AUD' as const, units: '5780000', exponent: 6 as const },
     status: 'succeeded' as const,
     evidenceRef: `stripe:checkout:${input.externalRef}`,
     requestDigest: sha256(request),
@@ -216,7 +216,7 @@ describe('Account AUD funding through Formance', () => {
     const first = await fixture.owner.mutation(reserve, await withSourceWrite('billing', base))
     expect(first).toMatchObject({ kind: 'accepted', command: {
       accountRef: fixture.canonicalAccountRef, principalUnits: '10000000',
-      serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: '10550000', state: 'pending',
+      serviceFeeUnits: '500000', taxUnits: '1050000', totalUnits: '11550000', state: 'pending',
     } })
     if (first.kind !== 'accepted') throw new Error('funding fixture not reserved')
     const storedBeforeConflict = await backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())
@@ -361,7 +361,7 @@ describe('Account AUD funding through Formance', () => {
     const reserved = await ownerReserve(fixture, commandRef, { inputDigest: sha256('a') })
     expect(reserved).toMatchObject({ kind: 'accepted', command: {
       accountRef: fixture.canonicalAccountRef, principalUnits: '5000000', serviceFeeUnits: '250000',
-      taxUnits: '30000', totalUnits: '5280000', state: 'pending',
+      taxUnits: '530000', totalUnits: '5780000', state: 'pending',
     } })
     if (reserved.kind !== 'accepted' || reserved.command.metadataDigest === undefined) {
       throw new Error('funding fixture not reserved')
@@ -385,7 +385,7 @@ describe('Account AUD funding through Formance', () => {
     const prepared = await fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEvent, actionArgs)
     expect(prepared).toMatchObject({ kind: 'prepared', booking: {
       commandRef, accountRef: fixture.canonicalAccountRef,
-      principalUnits: '5000000', serviceFeeUnits: '250000', taxUnits: '30000', totalUnits: '5280000',
+      principalUnits: '5000000', serviceFeeUnits: '250000', taxUnits: '530000', totalUnits: '5780000',
     } })
     const formanceTransactionRef = 'formance:tx:funding-formance-one'
     await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
@@ -542,8 +542,8 @@ describe('Account AUD funding through Formance', () => {
         accountRef: fixture.canonicalAccountRef,
         principalUnits: '5000000',
         serviceFeeUnits: '250000',
-        taxUnits: '30000',
-        totalUnits: '5280000',
+        taxUnits: '530000',
+        totalUnits: '5780000',
       },
     })
 
@@ -592,7 +592,7 @@ describe('Account AUD funding through Formance', () => {
     expect(rows.adjustment).toMatchObject({
       kind: 'adjustment',
       sourceTransactionRefs: [reversalRef],
-      amountUnits: '5280000',
+      amountUnits: '5780000',
     })
   })
 
@@ -783,7 +783,7 @@ describe('Account AUD funding through Formance', () => {
       if (command === null) throw new Error('settled_funding_missing')
       await ctx.db.patch(command._id, { metadataDigest })
     })
-    const amount = { currency: 'AUD' as const, units: '5280000', exponent: 6 as const }
+    const amount = { currency: 'AUD' as const, units: '5780000', exponent: 6 as const }
     const readback = {
       externalRef: `cs_${paymentId}`,
       amount,
@@ -1227,7 +1227,7 @@ describe('Account AUD funding through Formance', () => {
         kind: 'adjustment',
         state: 'rendering',
         sourceTransactionRefs: [reversalRef],
-        amountUnits: '5280000',
+        amountUnits: '5780000',
         workId: expect.any(String),
       }),
     ])

@@ -39,6 +39,8 @@ export const persist = internalMutation({
 
 /** Failed refresh never modifies the last-good observation. */
 export const run = internalAction({
+  args: {},
+  returns: v.null(),
   handler: async (ctx: ActionCtx): Promise<null> => {
     const rate = await fetchCoinbaseReferenceRate()
     if (rate !== undefined) await ctx.runMutation(internal.referenceRateRefresh.persist, { rate })

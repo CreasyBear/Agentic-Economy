@@ -23,8 +23,9 @@ import {
   type StripeWebhookIngester,
   type StripeWebhookVerifier,
 } from './internal/stripe-webhook'
-import type { Environment } from './internal/payout-http-runtime'
 import { readFormanceConfiguration } from './internal/formance-config'
+
+type Environment = Readonly<Record<string, string | undefined>>
 
 export type FormancePresence = 'configured' | 'not_configured'
 
@@ -66,19 +67,11 @@ export type {
 } from './internal/payment-binding'
 
 export type {
-  ConnectAccountEvidence,
-  ConnectAccountPort,
-  ConnectAccountRequest,
   CreditPaymentEvidence,
   CreditPaymentPort,
   CreditPaymentReadRequest,
   CreditPaymentRequest,
   CreditPaymentSession,
-  OnboardingLinkRequest,
-  PayoutTransferEvidence,
-  PayoutTransferNotReleasedEvidence,
-  PayoutTransferPort,
-  PayoutTransferRequest,
 } from './internal/ports'
 export type {
   StripeAccountUpdatedWebhookEvent,
@@ -90,39 +83,6 @@ export type {
   StripeWebhookIngester,
   StripeWebhookVerifier,
 } from './internal/stripe-webhook'
-export type { OwnerMoneyServerRuntime } from './internal/payout-http-runtime'
-export {
-  createOwnerConnectAccountServer,
-  createOwnerConnectAccountThroughSource,
-  createOwnerExpressLoginLinkServer,
-  createOwnerExpressLoginLinkThroughSource,
-  createOwnerOnboardingLinkServer,
-  createOwnerOnboardingLinkThroughSource,
-  readOwnerConnectReadinessThroughSource,
-  updateOwnerPayoutAuthorityThroughSource,
-} from './internal/payout-connect-http'
-export type {
-  OwnerConnectAccountInput,
-  OwnerConnectAccountResult,
-  OwnerConnectReadinessReadback,
-  OwnerExpressLoginLinkInput,
-  OwnerExpressLoginLinkResult,
-  OwnerOnboardingLinkInput,
-  OwnerOnboardingLinkResult,
-  OwnerPayoutAuthorityUpdateInput,
-} from './internal/payout-connect-http'
-export {
-  beginOwnerPayoutTransferServer,
-  readOwnerPayoutTransferServer,
-  readOwnerPayoutTransferThroughSource,
-  recoverOwnerPayoutTransferServer,
-  runOwnerPayoutTransferThroughSource,
-} from './internal/payout-transfer-http'
-export type {
-  OwnerPayoutTransferInput,
-  OwnerPayoutTransferReadInput,
-  OwnerPayoutTransferResult,
-} from './internal/payout-transfer-http'
 
 type SourceWriteBoundArgs = Readonly<{
   sourceWrite: SourceWriteAdmission

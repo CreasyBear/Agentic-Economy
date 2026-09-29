@@ -180,6 +180,8 @@ export const searchCompactReturns = v.union(
       title: v.string(), summary: v.string(), provider: v.string(),
       actionClass: actionClassValue, objectClass: objectClassValue, category: v.optional(v.string()),
       completedAt: v.number(), minimumUsdPrice: v.optional(v.string()),
+      resource: v.optional(v.string()), slug: v.optional(v.string()),
+      calls30d: v.optional(v.number()), payers30d: v.optional(v.number()),
     })),
     continueCursor: v.string(), isDone: v.boolean(),
   }),
@@ -267,6 +269,10 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
       ...(row.category === 'uncategorized' ? {} : { category: row.category }),
       completedAt: generation.completedAt ?? generation.startedAt,
       ...(row.minimumUsdPrice === undefined ? {} : { minimumUsdPrice: row.minimumUsdPrice }),
+      resource: row.resource,
+      ...(row.slug === undefined ? {} : { slug: row.slug }),
+      ...(row.popularOrder < 0 ? {} : { calls30d: row.popularOrder }),
+      ...(row.payersOrder === undefined || row.payersOrder < 0 ? {} : { payers30d: row.payersOrder }),
     }
   }))
   return {

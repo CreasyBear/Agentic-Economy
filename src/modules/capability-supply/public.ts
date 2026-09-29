@@ -312,10 +312,6 @@ export type {
   CdpX402PaymentSigningIntent,
   CdpX402RequestFingerprintContext,
 } from './internal/cdp-x402-payment-signer'
-export { default as timezonePaymentRequired20260819Fixture } from './internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
-export { default as syntheticPostPaymentRequiredFixture } from './internal/x402-bazaar-fixtures/synthetic-post-payment-required.json'
-export { default as onesourcePathRequest20260908Fixture } from './internal/x402-bazaar-fixtures/onesource-path-request-2026-09-08.json'
-export { default as onesourceUnionRequest20260908Fixture } from './internal/x402-bazaar-fixtures/onesource-union-request-2026-09-08.json'
 export {
   decideFacilitatorDiscoveryItem,
   FACILITATOR_DISCOVERY_URLS,

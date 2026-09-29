@@ -161,7 +161,7 @@ export const REASON_COPY: Record<string, string> = {
   payment_required_invalid: 'Correct the malformed x402 payment challenge at the source.',
   bazaar_discovery_invalid: 'Correct the malformed Bazaar discovery metadata at the source.',
   consequences_invalid: 'Review the Tool effects and data declarations, then submit again.',
-  pricing_invalid: 'Choose Free or enter a valid AUD price, then submit again.',
+  pricing_invalid: 'The price is the amount in the payment challenge. Read the endpoint again, then submit.',
   catalog_offering_origin_changed: 'This saved Tool changed during submission. Open Tools, resume its draft and submit again.',
   authorization_denied: 'This Business account cannot publish the selected Tool. Check Provider access before retrying.',
   operation_key_conflict: 'A different submission already used this command. Open Tools to check the current Tool before retrying.',
@@ -211,10 +211,7 @@ export const REASON_COPY: Record<string, string> = {
   ...TYPED_REASON_COPY,
 }
 
-/** One sentence per Add Tool source-type tab (`AeSupplySourceNativeStart`'s `SourceKind`). */
-export const SUPPLY_SOURCE_TYPE_COPY: Record<'openapi' | 'mcp' | 'agent_plugin' | 'x402', string> = {
-  openapi: 'Connect an existing REST API described by an OpenAPI 3.0 or 3.1 document; Agentic Economy reads its operations as Tools.',
-  mcp: 'Connect a remote MCP server; Agentic Economy reads its tools directly over JSON-RPC.',
-  agent_plugin: 'Connect a Tool published with an Agent Plugins 1.0 manifest and its paired MCP file.',
-  x402: 'Connect an endpoint that already prices itself using the x402 payment protocol.',
+/** Add Tool accepts one public HTTPS x402 URL. */
+export const SUPPLY_SOURCE_TYPE_COPY: Record<'x402', string> = {
+  x402: 'Paste one public HTTPS x402 URL. The payment challenge supplies the network, price, schema, and payTo.',
 }

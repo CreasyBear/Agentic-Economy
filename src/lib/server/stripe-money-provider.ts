@@ -1,9 +1,7 @@
 import {
   isMoneyRefusal,
-  type ConnectAccountPort,
   type CreditPaymentPort,
   type MoneyRefusal,
-  type PayoutTransferPort,
 } from "@/modules/money/public";
 import {
   createOrRecoverCreditPayment,
@@ -12,15 +10,7 @@ import {
   stripeCreditRequestDigest,
 } from "./stripe-checkout-evidence";
 import {
-  createExpressLoginLink,
-  createOnboardingLink,
-  createOrRecoverConnectAccount,
-  readConnectAccount,
-} from "./stripe-connect-evidence";
-import {
-  stripeConnectIdempotencyKey,
   stripeCreditIdempotencyKey,
-  stripePayoutIdempotencyKey,
 } from "./stripe-idempotency";
 import { resolveStripeMoneyProviderContext } from "./stripe-money-client";
 import {
@@ -39,14 +29,6 @@ import {
   mapStripeFundingRefundEvidence,
   readStripeFundingRefund,
 } from "./stripe-refund-evidence";
-import {
-  createOrRecoverTransfer,
-  mapStripeTransferEvidence,
-  readStripeTransfersByGroup,
-  readStripeTransfersByIdentity,
-  readTransfer,
-  type StripeTransferGroupReadback,
-} from "./stripe-transfer-evidence";
 
 export type {
   StripeMoneyClient,
@@ -58,25 +40,19 @@ export {
   mapStripeCheckoutSessionEvidence,
   mapStripeMoneyWebhookEvent,
   mapStripeFundingRefundEvidence,
-  mapStripeTransferEvidence,
   readStripeMoneyProviderConfig,
   readStripeMoneyReadbackProviderConfig,
   resolveStripeMoneyProviderContext,
-  readStripeTransfersByGroup,
-  readStripeTransfersByIdentity,
-  stripeConnectIdempotencyKey,
   stripeCreditIdempotencyKey,
   stripeCreditRequestDigest,
-  stripePayoutIdempotencyKey,
   verifyStripeMoneyWebhook,
   readStripeFundingRefund,
 };
 export type { StripeFundingRefundEvidence } from "./stripe-refund-evidence";
-export type { StripeTransferGroupReadback };
 
 export function createStripeMoneyProvider(
   input: StripeMoneyProviderInput = {},
-): CreditPaymentPort & ConnectAccountPort & PayoutTransferPort {
+): CreditPaymentPort {
   const context = resolveStripeMoneyProviderContext(input);
   if (isMoneyRefusal(context)) return unavailableProvider(context);
   return {
@@ -84,38 +60,12 @@ export function createStripeMoneyProvider(
       createOrRecoverCreditPayment(context.client, context.config, request),
     readCreditPayment: async (request) =>
       readCreditPayment(context.client, context.config, request),
-    createOrRecoverConnectAccount: async (request) =>
-      createOrRecoverConnectAccount(context.client, context.config, request),
-    createOnboardingLink: async (request) =>
-      createOnboardingLink(context.client, context.config, request),
-    createExpressLoginLink: async (request) =>
-      createExpressLoginLink(context.client, request),
-    readConnectAccount: async (request) =>
-      readConnectAccount(context.client, context.config, request),
-    createOrRecoverTransfer: async (request) =>
-      createOrRecoverTransfer(context.client, context.config, request),
-    readTransfer: async (request) =>
-      readTransfer(context.client, context.config, request),
-    readTransfersByIdentity: async (request) =>
-      readStripeTransfersByIdentity({
-        config: context.config,
-        client: context.client,
-        request,
-      }),
   };
 }
 
-function unavailableProvider(
-  refusalValue: MoneyRefusal,
-): CreditPaymentPort & ConnectAccountPort & PayoutTransferPort {
+function unavailableProvider(refusalValue: MoneyRefusal): CreditPaymentPort {
   return {
     createOrRecoverCreditPayment: async () => refusalValue,
     readCreditPayment: async () => refusalValue,
-    createOrRecoverConnectAccount: async () => refusalValue,
-    createOnboardingLink: async () => refusalValue,
-    readConnectAccount: async () => refusalValue,
-    createOrRecoverTransfer: async () => refusalValue,
-    readTransfer: async () => refusalValue,
-    readTransfersByIdentity: async () => refusalValue,
   };
 }

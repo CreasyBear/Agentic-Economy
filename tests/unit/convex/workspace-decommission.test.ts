@@ -41,7 +41,6 @@ const staleMfaFva = [1, 999]
 
 type WorkspaceFenceReason =
   | 'unsettled_provider_obligations'
-  | 'unwithdrawn_earnings'
   | 'open_calls'
   | 'unreleased_call_holds'
   | 'in_flight_funding'
@@ -397,37 +396,6 @@ async function seedSupplierPayableObligation(backend: InteractiveAuthorityBacken
   return providerRef
 }
 
-async function seedPayout(
-  backend: InteractiveAuthorityBackend,
-  state: 'held_threshold' | 'transfer_pending' | 'paid',
-  businessId: string,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('moneyPayouts', {
-      payoutRef: `payout:w14:${state}`,
-      businessId,
-      owningAccountRef: ACCOUNT_REF,
-      authorityPrincipalRef: PRINCIPAL_REF,
-      authorityGrantRef: 'grant:w14',
-      authorityGrantGeneration: 1,
-      authorityResourceRefs: ['resource:w14'],
-      currency: 'AUD',
-      exponent: 6,
-      grossAccrualUnits: '1000000',
-      rakeUnits: '100000',
-      providerNetUnits: '900000',
-      minimumPayoutUnits: '500000',
-      cadence: 'daily',
-      state,
-      periodStart: '2026-09-01',
-      periodEnd: '2026-09-02',
-      idempotencyKey: `payout:w14:${state}`,
-      createdAt: NOW,
-      updatedAt: NOW,
-    })
-  })
-}
-
 async function seedCall(
   backend: InteractiveAuthorityBackend,
   input: Readonly<{
@@ -478,8 +446,8 @@ async function seedFunding(
       exponent: 6,
       principalUnits: '5000000',
       serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
+      taxUnits: '530000',
+      totalUnits: '5780000',
       commercialPolicyDigest: canonicalDigest({ kind: 'policy' }),
       commercialPolicyRefs: ['commercial-policy:sandbox'],
       idempotencyKey: `funding:w14:${state}`,
@@ -734,33 +702,6 @@ describe('workspaceAccounts readWorkspaceDecommissionEligibility (W-14)', () => 
     await expect(readEligibility(backend)).resolves.toMatchObject({
       canClose: false,
       fences: ['unsettled_provider_obligations'],
-    })
-  })
-
-  it.each(['held_threshold', 'transfer_pending'] as const)(
-    'E7: payout %s fences unwithdrawn_earnings',
-    async (state) => {
-      const backend = createBackend()
-      await seedAuthority(backend)
-      const businessId = await seedSupplierBusiness(backend)
-      await seedPayout(backend, state, businessId)
-
-      await expect(readEligibility(backend)).resolves.toMatchObject({
-        canClose: false,
-        fences: expect.arrayContaining(['unwithdrawn_earnings']),
-      })
-    },
-  )
-
-  it('E8: payout paid does not add earnings fence', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    const businessId = await seedSupplierBusiness(backend)
-    await seedPayout(backend, 'paid', businessId)
-
-    await expect(readEligibility(backend)).resolves.toMatchObject({
-      canClose: true,
-      fences: [],
     })
   })
 

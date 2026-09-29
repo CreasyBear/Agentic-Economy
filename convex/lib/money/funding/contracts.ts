@@ -64,7 +64,7 @@ export const fundingCommandValue = v.object({
   inputDigest: v.string(),
   successReturnRef: v.string(),
   providerRecoveryDeadlineAt: v.number(),
-  initiationKind: v.optional(v.union(v.literal('owner_top_up'), v.literal('agent_handoff'), v.literal('auto_recharge'))),
+  initiationKind: v.optional(v.union(v.literal('owner_top_up'), v.literal('agent_handoff'))),
   checkoutMode: v.optional(v.literal('hosted_page')),
   checkoutExpiresAt: v.optional(v.number()),
   cancelReturnRef: v.optional(v.string()),

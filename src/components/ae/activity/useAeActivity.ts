@@ -6,7 +6,7 @@ import {
   type BuyerCallSummaryFacts,
 } from '@/modules/capability-execution/call-receipt-view'
 import { readOwnerCallsServer } from '@/lib/server/call-history.functions'
-import { calculateAudGstSplit, formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
@@ -32,8 +32,6 @@ import type {
   CallPaginationState,
   CallRow,
 } from './activity.contracts'
-
-const AUD_INCLUSIVE_GST_BPS = 1_000
 
 function formatAudExportUnits(units: string): string {
   const exact = formatExactAmount({ currency: 'AUD', exponent: 6, units })
@@ -142,8 +140,9 @@ function buildActivityExportRows(items: readonly CallRow[]) {
     const notCharged = item.paymentState === 'released'
       || (item.paymentState === 'not_applicable' && purchase.kind !== 'uncertain')
     const grossUnits = charged ? item.audAmountUnits : notCharged ? '0' : undefined
-    const split = grossUnits === undefined ? undefined : calculateAudGstSplit(grossUnits, AUD_INCLUSIVE_GST_BPS)
-    if (grossUnits !== undefined && split === undefined) throw new RangeError('Activity export requires valid booked AUD units')
+    if (grossUnits !== undefined && !/^(?:0|[1-9]\d*)$/u.test(grossUnits)) {
+      throw new RangeError('Activity export requires valid booked AUD units')
+    }
     return {
       date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
       callRef: item.callRef,
@@ -153,8 +152,8 @@ function buildActivityExportRows(items: readonly CallRow[]) {
       costAud: grossUnits === undefined
         ? item.paymentState === 'settled' ? 'Amount unknown' : 'Not confirmed'
         : formatAudExportUnits(grossUnits),
-      gstAud: split === undefined ? '' : formatAudExportUnits(split.gstUnits),
-      netAud: split === undefined ? '' : formatAudExportUnits(split.netUnits),
+      gstAud: grossUnits === undefined ? '' : formatAudExportUnits('0'),
+      netAud: grossUnits === undefined ? '' : formatAudExportUnits(grossUnits),
       status: purchase.label,
     }
   })

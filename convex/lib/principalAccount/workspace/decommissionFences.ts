@@ -5,7 +5,6 @@ import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 
 export type WorkspaceFenceReason =
   | 'unsettled_provider_obligations'
-  | 'unwithdrawn_earnings'
   | 'open_calls'
   | 'unreleased_call_holds'
   | 'in_flight_funding'
@@ -19,15 +18,6 @@ const UNSETTLED_OBLIGATION_STATES = new Set([
   'payable',
   'disputed',
 ])
-
-const UNWITHDRAWN_PAYOUT_STATES = [
-  'review',
-  'held_kyc',
-  'held_threshold',
-  'transfer_pending',
-  'failed',
-  'outcome_unknown',
-] as const
 
 const OPEN_CALL_STATES = ['pending', 'reconciliation_required'] as const
 
@@ -70,24 +60,6 @@ export async function checkWorkspaceFences(
       reasons.add('unsettled_provider_obligations')
       break
     }
-  }
-
-  for (const business of businesses) {
-    const businessId = String(business._id)
-    for (const state of UNWITHDRAWN_PAYOUT_STATES) {
-      const payout = await db
-        .query('moneyPayouts')
-        .withIndex('by_businessId_and_currency_and_state', (query) => query
-          .eq('businessId', businessId)
-          .eq('currency', 'AUD')
-          .eq('state', state))
-        .first()
-      if (payout !== null) {
-        reasons.add('unwithdrawn_earnings')
-        break
-      }
-    }
-    if (reasons.has('unwithdrawn_earnings')) break
   }
 
   for (const state of OPEN_CALL_STATES) {

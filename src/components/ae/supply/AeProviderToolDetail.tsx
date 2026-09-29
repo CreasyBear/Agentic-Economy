@@ -271,7 +271,7 @@ function stateDescription(status: ProviderToolStatus): string {
     case 'Draft': return 'The source and Tool are saved. Continue setup when you are ready to submit.'
     case 'Needs setup': return 'Complete the source or connection requirement before submitting this Tool.'
     case 'Submitted': return 'Agentic Economy accepted this Tool and is preparing validation.'
-    case 'Under review': return 'Agentic Economy is validating the exact source, authority and contract. No separate promotion step is required.'
+    case 'Under review': return 'Agentic Economy is checking the exact source, authority, and contract.'
     case 'Published': return 'This Tool is current and available for buyer inspection.'
     case 'Paused': return 'This Tool is not accepting new work. Existing evidence remains available.'
     case 'Action required': return 'Agentic Economy stopped new work because one current requirement needs attention.'

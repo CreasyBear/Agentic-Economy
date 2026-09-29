@@ -29,7 +29,7 @@ export function formatAustralianGstPercentLabel(taxOnServiceFeeBps: number): str
 }
 
 export function formatAudGstNote(taxUnits: bigint, taxOnServiceFeeBps: number): string {
-  return `Includes ${formatAudUnits(taxUnits)} ${formatAustralianGstPercentLabel(taxOnServiceFeeBps)} on the platform fee.`
+  return `Adds ${formatAudUnits(taxUnits)} ${formatAustralianGstPercentLabel(taxOnServiceFeeBps)} on the loaded amount and platform fee.`
 }
 
 export function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResult): string {

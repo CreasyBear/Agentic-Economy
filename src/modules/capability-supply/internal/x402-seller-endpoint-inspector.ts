@@ -12,6 +12,8 @@ import {
 import {
   isX402PaymentRequirementForProfile,
   normalizeX402PaymentRequirement,
+  PRODUCTION_PAYMENT_PROFILE,
+  SANDBOX_PAYMENT_PROFILE,
   x402PaymentProfileForEnvironment,
   type X402AeEnvironment,
   type X402PaymentProfile,
@@ -138,15 +140,16 @@ export async function inspectX402SellerEndpoint(
     postBody?: JsonValue
     queryMapped?: boolean
     aeEnvironment?: X402AeEnvironment
+    deriveAeEnvironment?: boolean
   }>,
   dependencies: X402SellerEndpointInspectorDependencies = {},
 ): Promise<X402SellerEndpointInspection> {
   const now = dependencies.now ?? Date.now
   const observedAt = now()
-  const profile = x402PaymentProfileForEnvironment(
-    input.aeEnvironment ?? 'production',
-  )
-  if (profile === undefined) {
+  const explicitProfile = input.deriveAeEnvironment === true
+    ? undefined
+    : x402PaymentProfileForEnvironment(input.aeEnvironment ?? 'production')
+  if (input.deriveAeEnvironment !== true && explicitProfile === undefined) {
     return refused('request_invalid', observedAt, undefined,
       'Choose either the sandbox or production payment environment.')
   }
@@ -230,6 +233,13 @@ export async function inspectX402SellerEndpoint(
       'Make the PaymentRequired resource URL exactly match the endpoint being onboarded.')
   }
 
+  const profile = input.deriveAeEnvironment === true
+    ? derivedPaymentProfile(challenge.value.accepts)
+    : explicitProfile
+  if (profile === undefined) {
+    return refused('challenge_conflict', observedAt, response.status,
+      'The payment challenge must contain exactly one Base USDC exact EIP-3009 lane. Base Sepolia is sandbox and Base mainnet is production.')
+  }
   const accepts = normalizedAlternatives(challenge.value.accepts, profile)
   if (accepts === undefined) {
     return refused('challenge_malformed', observedAt, response.status,
@@ -442,6 +452,17 @@ function validV2Challenge(value: unknown): ValidV2PaymentRequired | undefined {
   return value as ValidV2PaymentRequired
 }
 
+
+function derivedPaymentProfile(
+  accepts: readonly unknown[],
+): X402PaymentProfile | undefined {
+  const matched = [SANDBOX_PAYMENT_PROFILE, PRODUCTION_PAYMENT_PROFILE].filter((profile) => {
+    const alternatives = normalizedAlternatives(accepts, profile)
+    return alternatives !== undefined && paymentSelection(alternatives, profile).kind === 'selected'
+  })
+  return matched.length === 1 ? matched[0] : undefined
+}
+
 function normalizedAlternatives(
   values: readonly unknown[],
   profile: X402PaymentProfile,
@@ -509,8 +530,8 @@ function paymentSelection(
       kind: 'ambiguous',
       alternativeIds: supported.map(({ alternativeId }) => alternativeId),
       action: profile.aeEnvironment === 'sandbox'
-        ? 'Choose and pin exactly one Base-Sepolia USDC exact EIP-3009 payment lane before canary verification.'
-        : 'Choose and pin exactly one Base-mainnet USDC exact EIP-3009 payment lane before canary verification.',
+        ? 'Choose and pin exactly one Base-Sepolia USDC exact EIP-3009 payment lane.'
+        : 'Choose and pin exactly one Base-mainnet USDC exact EIP-3009 payment lane.',
     }
   }
   return accepts.length === 0

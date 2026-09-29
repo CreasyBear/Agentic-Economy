@@ -109,7 +109,6 @@ export function CreditFundPanel({
         />
       </div>
       <div className="flex flex-wrap gap-4 text-sm">
-        <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/payment-methods">Manage payment methods</Link>
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/spending">Configure spending defaults</Link>
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/receipts">View receipts &amp; invoices</Link>
       </div>

@@ -200,7 +200,7 @@ export async function prepareFinancialSubjectsCore(
     legalExposureUnits: fundingPolicy.legalCustomerMaximumAccessibleUnits.toString(),
     policyDigest: policy.policyDigest,
     policyGeneration: 1,
-    buyerTaxBps: policy.controls.tax.callTaxBps ?? 0,
+    buyerTaxBps: 0,
     financialMode,
     authorityDigest: authority.policyDigest,
     dailyLimitUnits: daily.units,

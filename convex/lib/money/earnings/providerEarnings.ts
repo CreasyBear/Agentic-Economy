@@ -71,29 +71,12 @@ export async function readOwnerProviderEarningsHandler(ctx: QueryCtx) {
   const rows = await ctx.db.query('moneyProviderObligations')
     .withIndex('by_providerRef_and_createdAt', (query) => query.eq('providerRef', business._id))
     .order('desc').take(101)
-  const transfers = await ctx.db.query('moneyPayouts')
-    .withIndex('by_businessId_and_updatedAt', (query) => query.eq('businessId', business._id))
-    .order('desc').take(101)
-  if (transfers.some((row) => row.owningAccountRef !== actor.canonicalAccountRef)) {
-    return { kind: 'conflict' as const, code: 'payout_owner_mismatch' as const }
-  }
   return {
     kind: 'available' as const,
     businessId: business._id,
     truncated: rows.length > 100,
-    transfersTruncated: transfers.length > 100,
-    transfers: transfers.slice(0, 100).map((row) => ({
-      payoutRef: row.payoutRef,
-      currency: row.currency,
-      exponent: row.exponent,
-      amountUnits: row.providerNetUnits,
-      state: row.state,
-      ...(row.transferStatus === undefined ? {} : { transferStatus: row.transferStatus }),
-      ...(row.stripeTransferId === undefined ? {} : { stripeTransferId: row.stripeTransferId }),
-      ...(row.transferEvidenceDigest === undefined ? {} : { transferEvidenceDigest: row.transferEvidenceDigest }),
-      ...(row.transferObservedAt === undefined ? {} : { transferObservedAt: row.transferObservedAt }),
-      createdAt: row.createdAt,
-    })),
+    transfersTruncated: false,
+    transfers: [],
     obligations: rows.slice(0, 100).map((row) => ({
       obligationRef: row.obligationRef,
       callRef: row.callRef,

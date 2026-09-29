@@ -221,7 +221,7 @@ export function SupplyPublicationFlow({
         </div>
         <div role="status" aria-live="polite">{saving ? <AeInlineState state="saving" description="Submitting the exact source revision for validation." /> : null}</div>
         <Button type="button" className="min-h-touch justify-self-start" disabled={disabled} aria-busy={saving || undefined} onClick={onSubmit}>
-          {saving ? 'Submitting…' : 'Submit for validation'}
+          {saving ? 'Listing…' : 'List this endpoint'}
         </Button>
       </div>
     </AeSection>
@@ -244,7 +244,7 @@ function PricingField({ kind, price, x402, disabled, invalid = false, describedB
         onValueChange={(next) => onKindChange(next as typeof kind)}
       >
         {x402 ? (
-          <Label className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value="source_x402" />Use source payment</Label>
+          <p className="text-sm text-muted-foreground">Price is the amount in the payment challenge.</p>
         ) : (
           <>
             <Label className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value="free" />Free</Label>
@@ -288,7 +288,7 @@ function ConnectionField({ value, options, connecting, disabled, invalid = false
               aria-describedby={invalid && describedBy !== undefined ? describedBy : undefined}
               onClick={onConnect}
             >
-              {connecting ? 'Opening connection…' : 'Connect service'}
+              {connecting ? 'Opening payee proof…' : 'Prove payTo'}
             </Button>
           </AlertDescription>
         </Alert>
@@ -358,13 +358,7 @@ function AttestationField({ values, requireAuthority, disabled, invalid = false,
       aria-describedby={invalid && describedBy !== undefined ? describedBy : undefined}
     >
       <legend className="text-sm font-medium">Publication statements</legend>
-      {requireAuthority ? (
-        <CheckRow id={SUPPLY_PUBLICATION_FIELD_IDS.attestation} label="I am authorised to publish this service" checked={values.authorisedToPublish} disabled={disabled} onChange={(checked) => onChange('authorisedToPublish', checked)} />
-      ) : (
-        <p className="text-sm text-muted-foreground">Publication stays under review until Provider authority is established. Validation does not need that claim.</p>
-      )}
-      <CheckRow id="supply-attest-accurate" label="The information is accurate" checked={values.informationAccurate} disabled={disabled} onChange={(checked) => onChange('informationAccurate', checked)} />
-      <CheckRow id="supply-attest-validation" label="Publish after validation succeeds" checked={values.publishAfterSuccessfulValidation} disabled={disabled} onChange={(checked) => onChange('publishAfterSuccessfulValidation', checked)} />
+      <CheckRow id={SUPPLY_PUBLICATION_FIELD_IDS.attestation} label="I am authorised to list this endpoint for this business" checked={values.authorisedToPublish} disabled={disabled} onChange={(checked) => onChange('authorisedToPublish', checked)} />
     </fieldset>
   )
 }

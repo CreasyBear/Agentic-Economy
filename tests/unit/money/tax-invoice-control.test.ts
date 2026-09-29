@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   admitTaxInvoiceIssuance,
-  calculateAudGstSplit,
   isValidAbn,
   normalizeAbn,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
@@ -86,22 +85,6 @@ describe('tax invoice issuance control', () => {
         taxControl: enabledTaxControl,
         customerTaxFacts: validFacts,
       })).toEqual({ kind: 'admitted' })
-    })
-  })
-
-  it('splits inclusive GST without penny drops', () => {
-    const cases = ['1000000', '1000001', '5280000', '9999999', '1']
-    for (const grossUnits of cases) {
-      const split = calculateAudGstSplit(grossUnits, 1_000)
-      expect(split).toBeDefined()
-      if (split === undefined) continue
-      expect(BigInt(split.netUnits) + BigInt(split.gstUnits)).toBe(BigInt(split.grossUnits))
-      expect(split.grossUnits).toBe(grossUnits)
-    }
-    expect(calculateAudGstSplit('1000000', 0)).toEqual({
-      grossUnits: '1000000',
-      netUnits: '1000000',
-      gstUnits: '0',
     })
   })
 })

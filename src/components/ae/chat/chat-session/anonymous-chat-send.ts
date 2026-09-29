@@ -49,6 +49,8 @@ export async function sendAnonymousChatTurn(input: Readonly<{
   const controller = new AbortController()
   input.abortPrevious()
   input.adoptController(controller)
+  let assistant: UIMessage | undefined
+  const assistantMessageId = messageId('anonymous-assistant')
   try {
     const stream = await transport.sendMessages({
       trigger: 'submit-message',
@@ -57,15 +59,15 @@ export async function sendAnonymousChatTurn(input: Readonly<{
       messages: toTransportMessages(requestMessages),
       abortSignal: controller.signal,
     })
-    let assistant: UIMessage | undefined
-    const assistantMessageId = messageId('anonymous-assistant')
     for await (const message of readUIMessageStream({ stream, terminateOnError: true })) {
       assistant = message
       input.setAnonymousMessages([...requestMessages, { id: assistantMessageId, role: 'assistant', parts: message.parts }])
     }
     if (assistant === undefined) throw new Error('chat_unavailable')
   } catch (caught) {
-    if (!(caught instanceof Error) || caught.name !== 'AbortError') input.setAnonymousMessages([...input.anonymousMessages])
+    const aborted = caught instanceof Error && caught.name === 'AbortError'
+    if (!aborted && assistant === undefined) input.setAnonymousMessages([...input.anonymousMessages])
+    if (!aborted && assistant !== undefined) return
     throw caught
   }
 }

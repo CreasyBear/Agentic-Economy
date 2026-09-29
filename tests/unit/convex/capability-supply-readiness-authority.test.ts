@@ -6,6 +6,12 @@ import {
   recordCapabilityProbeResultHandler,
   readCurrentCapabilityProbeAuthority,
 } from '../../../convex/capabilitySupplyProbes'
+import {
+  DEV_SEED_CATALOG_ACCOUNT_REF,
+  DEV_SEED_CATALOG_MEMBERSHIP_REF,
+  DEV_SEED_CATALOG_PRINCIPAL_REF,
+  DEV_SEED_CATALOG_PUBLISHER_REF,
+} from '../../../convex/lib/dev/seed/authority'
 import schema from '../../../convex/schema'
 import {
   convexModules as modules,
@@ -311,5 +317,126 @@ describe('capability supply readiness authority', () => {
         evidenceRefs: ['test:readiness-agent-authority'],
         resourceAuthority: pinned,
       }))).resolves.toEqual({ kind: 'refused', reason: 'target_changed' })
+  })
+
+  it('derives curated seed readiness authority from the seed workload membership', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId } = await publishedBusinessOwner(backend, 'readiness-seed-authority')
+    const now = Date.now()
+    await backend.run(async (ctx) => {
+      const ownershipRef = 'own_d2000000000000000000000000000001'
+      await ctx.db.insert('principals', {
+        principalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        kind: 'workload',
+        displayName: 'Agentic Economy development catalog seed workload',
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+      await ctx.db.insert('accounts', {
+        accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        displayName: 'Agentic Economy development catalog seed account',
+        lifecycle: 'active',
+        recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+        creationActorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        creationIdempotencyRef: 'dev-seed-account:create',
+        initialOwnershipRef: ownershipRef,
+        currentOwnershipRef: ownershipRef,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+        lastAction: {
+          actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+          activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+          correlationRef: 'dev-seed-account:create',
+          idempotencyRef: 'dev-seed-account:create',
+        },
+      })
+      await ctx.db.insert('accountOwnerships', {
+        ownershipRef,
+        accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        ownerPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        lifecycle: 'active',
+        changeKind: 'creation',
+        revision: 1,
+        createdAt: now,
+        createdBy: {
+          actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+          activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+          correlationRef: 'dev-seed-ownership:create',
+          idempotencyRef: 'dev-seed-ownership:create',
+        },
+      })
+      await ctx.db.insert('memberships', {
+        membershipRef: DEV_SEED_CATALOG_MEMBERSHIP_REF,
+        accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        memberPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: now,
+        createdBy: {
+          actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+          activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+          correlationRef: 'dev-seed-membership:create',
+          idempotencyRef: 'dev-seed-membership:create',
+        },
+      })
+      await ctx.db.patch(businessId, { owningAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF })
+      await ctx.db.insert('capabilityPublications', {
+        publicationRef: 'publication:readiness-seed-authority',
+        toolRef: 'operation:readiness-seed-authority',
+        revision: 1,
+        businessId,
+        networkId: 'ae:public',
+        runtimeEnvironment: 'sandbox',
+        capabilityId: 'sandbox.aecon-testnet-reference',
+        version: 1,
+        contractDigest: `sha256:${'1'.repeat(64)}`,
+        sourceKind: 'x402',
+        sourceRevision: '1',
+        sourceDigest: `sha256:${'2'.repeat(64)}`,
+        publisherRef: DEV_SEED_CATALOG_PUBLISHER_REF,
+        authorityMode: 'ae_curated_external',
+        provenanceDigest: `sha256:${'3'.repeat(64)}`,
+        offeringId: 'offering:readiness-seed-authority',
+        bindingId: 'binding:readiness-seed-authority',
+        disposition: 'current',
+        credentialState: 'unobserved',
+        healthState: 'unobserved',
+        readinessEvidenceRefs: [],
+        registrationEvidenceRefs: ['test:readiness-seed-authority'],
+        createdAt: 1,
+        updatedAt: 1,
+      })
+    })
+
+    const current = await backend.run(async (ctx) =>
+      await readCurrentCapabilityProbeAuthority(ctx, {
+        publicationRef: 'publication:readiness-seed-authority',
+        expectedRevision: 1,
+        now,
+      }))
+    expect(current).toMatchObject({
+      mode: 'system_workload',
+      publisherPrincipalRef: DEV_SEED_CATALOG_PUBLISHER_REF,
+      ownerPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      owningAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      membershipRef: DEV_SEED_CATALOG_MEMBERSHIP_REF,
+    })
+
+    await backend.run(async (ctx) => {
+      const membership = await ctx.db.query('memberships')
+        .withIndex('by_membershipRef', (query) => query.eq('membershipRef', DEV_SEED_CATALOG_MEMBERSHIP_REF))
+        .unique()
+      if (membership === null) throw new Error('seed membership missing')
+      await ctx.db.patch(membership._id, { lifecycle: 'ended' })
+    })
+    await expect(backend.run(async (ctx) =>
+      await readCurrentCapabilityProbeAuthority(ctx, {
+        publicationRef: 'publication:readiness-seed-authority',
+        expectedRevision: 1,
+        now,
+      }))).resolves.toBeNull()
   })
 })

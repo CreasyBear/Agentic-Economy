@@ -141,11 +141,11 @@ async function reserveAttempt(
       || draft.candidateRef !== args.candidateDraftRef
       || draft.sourceDigest !== args.candidateSourceDigest
       || draft.sourceDescriptorJson !== args.sourceDescriptorJson
-      || draft.sourceKind !== 'openapi'
+      || draft.sourceKind !== 'x402'
       || draft.connectionRef !== undefined
-      || draftSource?.kind !== 'openapi'
-      || canonicalSource(draftSource.definitionUrl)?.href !== source.href
-      || draftSource.environment !== args.environment) {
+      || draftSource?.kind !== 'x402'
+      || canonicalSource(draftSource.resourceUrl)?.href !== source.href
+      || (draftSource.environment !== undefined && draftSource.environment !== args.environment)) {
       return { kind: 'refused' as const, code: 'invalid_source' as const }
     }
   }

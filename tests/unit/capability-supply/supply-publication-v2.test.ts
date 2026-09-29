@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { declareDiscoveryExtension, bazaarResourceServerExtension, type DiscoveryExtension } from '@x402/extensions/bazaar'
+import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -6,149 +8,86 @@ import {
   selectSupplyProviderAuthority,
   type PublishSupplyToolV2Input,
 } from '@/modules/capability-supply/supply-publication-v2'
+import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  inspectX402SellerEndpoint,
+} from '@/modules/capability-supply/server'
+import { encodeX402PaymentRequiredHeader, type X402PaymentRequired } from '@/modules/capability-supply/server'
 
-const JSON_SCHEMA = 'https://json-schema.org/draft/2020-12/schema'
+const endpointUrl = 'https://provider.example/paid'
 
-function sourceDocument() {
-  return {
-    openapi: '3.0.3',
-    info: { title: 'Reference Provider', version: '1.0.0' },
-    servers: [{ url: 'https://provider.example/api/' }],
-    paths: {
-      '/lookup': {
-        post: {
-          operationId: 'lookup',
-          summary: 'Reference lookup',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  $schema: JSON_SCHEMA,
-                  type: 'object',
-                  properties: { query: { type: 'string', description: 'Reference query' } },
-                  required: ['query'],
-                  additionalProperties: false,
-                },
-                example: { query: 'example' },
-              },
-            },
-          },
-          responses: {
-            '200': {
-              description: 'Lookup result',
-              content: {
-                'application/json': {
-                  schema: {
-                    $schema: JSON_SCHEMA,
-                    type: 'object',
-                    properties: { result: { type: 'string' } },
-                    required: ['result'],
-                    additionalProperties: false,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+function bazaarExtension() {
+  const declared = declareDiscoveryExtension({
+    bodyType: 'json',
+    input: { query: 'example' },
+    inputSchema: z.toJSONSchema(z.object({ query: z.string() })),
+    output: {
+      example: { value: 'example' },
+      schema: z.toJSONSchema(z.object({ value: z.string() })),
     },
-  }
+  })
+  const enriched = bazaarResourceServerExtension.enrichDeclaration?.(declared.bazaar, {
+    method: 'POST',
+    routePattern: '/paid',
+    adapter: { getPath: () => '/paid' },
+  } as never) as DiscoveryExtension | undefined
+  if (enriched === undefined) throw new Error('expected Bazaar enrichment')
+  return { bazaar: enriched }
 }
 
-function publicationInput(document = sourceDocument()): PublishSupplyToolV2Input {
-  const sourceDigest = canonicalDigest(document)
-  const selector = {
-    serverUrl: 'https://provider.example/api/',
-    path: '/lookup',
-    method: 'post',
-  }
+function challenge(): X402PaymentRequired {
+  return {
+    x402Version: 2,
+    resource: { url: endpointUrl },
+    accepts: [{
+      scheme: 'exact',
+      network: BASE_MAINNET_NETWORK,
+      amount: '1000',
+      asset: BASE_MAINNET_USDC_ADDRESS,
+      payTo: '0x0000000000000000000000000000000000000002',
+      maxTimeoutSeconds: 60,
+      extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '2' },
+    }] as X402PaymentRequired['accepts'],
+    extensions: bazaarExtension(),
+  } as X402PaymentRequired
+}
+
+async function inspect() {
+  return inspectX402SellerEndpoint({
+    endpointUrl,
+    method: 'POST',
+    deriveAeEnvironment: true,
+  }, {
+    now: () => 1_000,
+    validatePublicTarget: async () => true,
+    send: async () => new Response(null, {
+      status: 402,
+      headers: { 'payment-required': encodeX402PaymentRequiredHeader(challenge()) },
+    }),
+  })
+}
+
+function publishInput(preview: Awaited<ReturnType<typeof import('@/modules/capability-supply/source-preview').previewSupplySource>>): PublishSupplyToolV2Input {
+  if (preview.kind !== 'ready') throw new Error('preview_not_ready')
+  const candidate = preview.candidates[0]
+  if (candidate === undefined || candidate.x402 === undefined) throw new Error('candidate_missing')
   return {
     businessRef: 'business:reference',
-    source: {
-      kind: 'openapi',
-      definitionUrl: 'https://provider.example/openapi.yaml',
-      environment: 'sandbox',
-    },
-    candidateRef: canonicalDigest({ sourceDigest, selector }),
-    expectedSourceDigest: sourceDigest,
-    presentation: {
-      name: 'Reference lookup',
-      description: 'Looks up one reference through the Provider API.',
-      category: 'Research',
-      serviceArea: 'Australia',
-    },
-    consequences: {
-      effects: [{ class: 'data_release', authority: 'explicit', reversibility: 'irreversible' }],
-      dataUse: [{ inputPointer: '/query', classification: 'public', phase: 'execution', purposes: ['reference_lookup'] }],
-      evidence: [{ outputPointer: '/result', purpose: 'completion' }],
-    },
-    pricing: { kind: 'fixed_aud', amount: { currency: 'AUD', units: '2500000', exponent: 6 } },
-    validationInput: { query: 'example' },
-    environment: 'sandbox',
-    idempotencyKey: 'publish-reference-v2',
-    attestation: {
-      authorisedToPublish: true,
-      informationAccurate: true,
-      publishAfterSuccessfulValidation: true,
-    },
+    source: { kind: 'x402', resourceUrl: endpointUrl, method: 'POST', environment: candidate.x402.environment },
+    candidateRef: candidate.candidateRef,
+    expectedSourceDigest: preview.sourceDigest,
+    connectionRef: 'connection:one',
+    presentation: { name: 'Paid lookup', description: 'Reads one paid value.', category: 'x402' },
+    consequences: { effects: [], dataUse: [], evidence: [{ outputPointer: '', purpose: 'completion' }] },
+    pricing: { kind: 'source_x402' },
+    environment: candidate.x402.environment,
+    idempotencyKey: 'publish-x402',
+    attestation: { authorisedToPublish: true, informationAccurate: true, publishAfterSuccessfulValidation: true },
   }
 }
 
-describe('supply.publish:v2 preparation', () => {
-  it('admits native OpenAPI schemas without dialect declarations and preserves their constraints', async () => {
-    const document = sourceDocument()
-    const inputSchema = document.paths['/lookup'].post.requestBody.content['application/json'].schema
-    const outputSchema = document.paths['/lookup'].post.responses['200'].content['application/json'].schema
-    Reflect.deleteProperty(inputSchema, '$schema')
-    Reflect.deleteProperty(outputSchema, '$schema')
-
-    const input = publicationInput(document)
-    delete input.validationInput
-    const result = await prepareSupplyPublicationV2(input, {
-      loadOpenApi: async () => document,
-    })
-    expect(result.kind).toBe('prepared')
-    if (result.kind !== 'prepared') throw new Error(result.reason)
-    const contract = JSON.parse(result.prepared.documentJson)
-    expect(contract.inputSchema).toEqual({ ...inputSchema, $schema: JSON_SCHEMA })
-    expect(contract.outputSchema).toEqual({ ...outputSchema, $schema: JSON_SCHEMA })
-    expect(inputSchema).not.toHaveProperty('$schema')
-    expect(outputSchema).not.toHaveProperty('$schema')
-    expect(result.validationInputJson).toBe(JSON.stringify({ query: 'example' }))
-    expect(contract.inputExamples).toEqual([{ label: 'Validation input', input: { query: 'example' } }])
-  })
-
-  it('starts validation for an unverified public source without an authority claim', async () => {
-    const document = sourceDocument()
-    const input = publicationInput(document)
-    input.attestation = { ...input.attestation, authorisedToPublish: false }
-    const result = await prepareSupplyPublicationV2(input, { loadOpenApi: async () => document })
-    expect(result).toMatchObject({ kind: 'prepared', sourceAuthorityState: 'review_required' })
-  })
-
-  it('refuses publication when Provider authority is established but the authority claim is missing', async () => {
-    const document = sourceDocument()
-    const input = publicationInput(document)
-    input.attestation = { ...input.attestation, authorisedToPublish: false }
-    await expect(prepareSupplyPublicationV2(input, {
-      loadOpenApi: async () => document,
-      providerAuthority: {
-        kind: 'provider_connection',
-        connectionRef: 'pca_reference',
-        providerRef: 'business:reference',
-      },
-    })).resolves.toEqual({ kind: 'refused', reason: 'attestation_required' })
-  })
-
-  it('does not relabel an explicitly incompatible schema dialect', async () => {
-    const document = sourceDocument()
-    document.paths['/lookup'].post.requestBody.content['application/json'].schema.$schema = 'http://json-schema.org/draft-07/schema#'
-    await expect(prepareSupplyPublicationV2(publicationInput(document), {
-      loadOpenApi: async () => document,
-    })).resolves.toMatchObject({ kind: 'refused' })
-  })
-
+describe('prepareSupplyPublicationV2', () => {
   it('uses only the selected active connection owned by the same Business', () => {
     const available = {
       connectionRef: 'connection:one',
@@ -157,100 +96,75 @@ describe('supply.publish:v2 preparation', () => {
       lifecycle: 'active' as const,
       available: true,
     }
-    expect(selectSupplyProviderAuthority(
-      'business:reference',
-      'connection:one',
-      [available],
-    )).toEqual({
+    expect(selectSupplyProviderAuthority('business:reference', 'connection:one', [available])).toEqual({
       kind: 'provider_connection',
       connectionRef: 'connection:one',
       providerRef: 'provider:reference',
     })
-    expect(selectSupplyProviderAuthority(
-      'business:other',
-      'connection:one',
-      [available],
-    )).toBeUndefined()
-    expect(selectSupplyProviderAuthority(
-      'business:reference',
-      'connection:one',
-      [{ ...available, lifecycle: 'revoked' as const, available: false }],
-    )).toBeUndefined()
+    expect(selectSupplyProviderAuthority('business:other', 'connection:one', [available])).toBeUndefined()
   })
 
-  it('re-fetches the selected native source and derives exact publication material without manual protocol JSON', async () => {
-    const document = sourceDocument()
-    const loadOpenApi = vi.fn().mockResolvedValue(document)
-
-    const result = await prepareSupplyPublicationV2(publicationInput(document), { loadOpenApi })
-
-    expect(result).toMatchObject({
-      kind: 'prepared',
-      sourceRevision: expect.stringMatching(/^openapi:sha256:/u),
-      sourceAuthorityState: 'review_required',
-      candidate: {
-        title: 'Reference lookup',
-        sourceSelector: {
-          serverUrl: 'https://provider.example/api/',
-          path: '/lookup',
-          method: 'post',
-        },
-      },
-      prepared: {
-        sourceKind: 'openapi_http',
-        sourceRouteRef: expect.stringMatching(/^sha256:/u),
-        binding: { endpointUrl: 'https://provider.example/api/lookup' },
-        offering: {
-          presentation: {
-            label: 'Reference lookup',
-          },
-        },
-      },
+  it('prices the Tool from the challenge and refuses a declared environment that disagrees', async () => {
+    const observation = await inspect()
+    if (observation.kind !== 'observed') throw new Error(observation.reason)
+    const { previewSupplySource } = await import('@/modules/capability-supply/source-preview')
+    const preview = await previewSupplySource({ kind: 'x402', resourceUrl: endpointUrl, method: 'POST' }, {
+      inspectX402: async () => observation,
     })
-    if (result.kind !== 'prepared') throw new Error(result.reason)
-    expect(result.prepared.offering.presentation).not.toHaveProperty('price')
-    expect(loadOpenApi).toHaveBeenCalledOnce()
-    expect(JSON.stringify(result)).not.toContain('Bearer ')
-    expect(JSON.stringify(result)).not.toContain('apiKeyValue')
+    const input = publishInput(preview)
+    const prepared = await prepareSupplyPublicationV2(input, {
+      inspectX402: async () => observation,
+      providerAuthority: { kind: 'provider_connection', connectionRef: 'connection:one', providerRef: 'provider:reference' },
+    })
+    expect(prepared.kind).toBe('prepared')
+    if (prepared.kind !== 'prepared') return
+    expect(JSON.parse(prepared.prepared.prepared.pricingConfigJson)).toMatchObject({
+      kind: 'managed_x402',
+      sourceRequirement: { atomicUnits: '1000', network: BASE_MAINNET_NETWORK },
+    })
+
+    const mismatched = await prepareSupplyPublicationV2({
+      ...input,
+      environment: input.environment === 'production' ? 'sandbox' : 'production',
+    }, {
+      inspectX402: async () => observation,
+      providerAuthority: { kind: 'provider_connection', connectionRef: 'connection:one', providerRef: 'provider:reference' },
+    })
+    expect(mismatched).toMatchObject({ kind: 'refused', reason: 'environment_mismatch' })
   })
 
-  it('fails before durable publication when the source digest changes after preview', async () => {
-    const original = sourceDocument()
-    const changed = { ...original, info: { ...original.info, version: '2.0.0' } }
-
-    await expect(prepareSupplyPublicationV2(publicationInput(original), {
-      loadOpenApi: vi.fn().mockResolvedValue(changed),
-    })).resolves.toEqual({ kind: 'refused', reason: 'source_changed' })
+  it('names the missing payee connection and authority statement', async () => {
+    const observation = await inspect()
+    const { previewSupplySource } = await import('@/modules/capability-supply/source-preview')
+    const preview = await previewSupplySource({ kind: 'x402', resourceUrl: endpointUrl, method: 'POST' }, {
+      inspectX402: async () => observation,
+    })
+    const input = publishInput(preview)
+    const { connectionRef: _connection, ...withoutConnection } = input
+    expect(await prepareSupplyPublicationV2(withoutConnection, { inspectX402: async () => observation }))
+      .toMatchObject({ kind: 'refused', reason: 'connection_required' })
+    expect(await prepareSupplyPublicationV2({
+      ...input,
+      attestation: { ...input.attestation, authorisedToPublish: false },
+    }, {
+      inspectX402: async () => observation,
+      providerAuthority: { kind: 'provider_connection', connectionRef: 'connection:one', providerRef: 'provider:reference' },
+    })).toMatchObject({ kind: 'refused', reason: 'attestation_required' })
   })
 
-  it('preserves the canonical Offering identity when the same source route is revised', async () => {
-    const firstDocument = sourceDocument()
-    const revisedDocument = {
-      ...sourceDocument(),
-      info: { title: 'Reference Provider', version: '2.0.0' },
-      paths: {
-        '/lookup': {
-          ...sourceDocument().paths['/lookup'],
-          post: {
-            ...sourceDocument().paths['/lookup'].post,
-            summary: 'Revised reference lookup',
-          },
-        },
-      },
-    }
-    const first = await prepareSupplyPublicationV2(publicationInput(firstDocument), {
-      loadOpenApi: vi.fn().mockResolvedValue(firstDocument),
+  it('refuses when the source digest changes after preview', async () => {
+    const observation = await inspect()
+    const { previewSupplySource } = await import('@/modules/capability-supply/source-preview')
+    const preview = await previewSupplySource({ kind: 'x402', resourceUrl: endpointUrl, method: 'POST' }, {
+      inspectX402: async () => observation,
     })
-    const revisedInput = publicationInput(revisedDocument)
-    const revised = await prepareSupplyPublicationV2(revisedInput, {
-      loadOpenApi: vi.fn().mockResolvedValue(revisedDocument),
-    })
-
-    expect(first.kind).toBe('prepared')
-    expect(revised.kind).toBe('prepared')
-    if (first.kind !== 'prepared' || revised.kind !== 'prepared') return
-    expect(revised.prepared.offering.offeringId).toBe(first.prepared.offering.offeringId)
-    expect(revised.prepared.binding.bindingId).toBe(first.prepared.binding.bindingId)
-    expect(revised.sourceDigest).not.toBe(first.sourceDigest)
+    const input = publishInput(preview)
+    expect(await prepareSupplyPublicationV2({
+      ...input,
+      expectedSourceDigest: canonicalDigest({ changed: true }),
+    }, {
+      inspectX402: async () => observation,
+      providerAuthority: { kind: 'provider_connection', connectionRef: 'connection:one', providerRef: 'provider:reference' },
+    })).toMatchObject({ kind: 'refused', reason: 'source_changed' })
   })
 })

@@ -2,7 +2,6 @@ import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 
 export type WorkspaceDecommissionFence =
   | 'unsettled_provider_obligations'
-  | 'unwithdrawn_earnings'
   | 'open_calls'
   | 'unreleased_call_holds'
   | 'in_flight_funding'
@@ -81,7 +80,6 @@ export type WorkspaceDangerDiagnostic = Rule4Diagnostic
 
 export const FENCE_MESSAGES: Record<WorkspaceDecommissionFence, string> = {
   unsettled_provider_obligations: 'Provider obligations are still unsettled. Settle them before close.',
-  unwithdrawn_earnings: 'Provider earnings have not been withdrawn. Withdraw them before close.',
   open_calls: 'One or more Calls are still open. Wait until they finish before close.',
   unreleased_call_holds: 'Call holds have not been released. Release them before close.',
   in_flight_funding: 'A funding command is still in flight. Wait until it finishes before close.',

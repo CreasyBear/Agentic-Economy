@@ -5,6 +5,7 @@ import {
   DEV_SEED_CATALOG_ACCOUNT_NAME,
   DEV_SEED_CATALOG_ACCOUNT_REF,
   DEV_SEED_CATALOG_GRANT_REF,
+  DEV_SEED_CATALOG_MEMBERSHIP_REF,
   DEV_SEED_CATALOG_PRINCIPAL_NAME,
   DEV_SEED_CATALOG_PRINCIPAL_REF,
   DEV_SEED_CATALOG_RESOURCE,
@@ -18,7 +19,7 @@ const DEV_SEED_CATALOG_OWNERSHIP_REF = 'own_d2000000000000000000000000000001'
 const DEV_SEED_CATALOG_GRANT_TTL_MS = 60 * 60 * 1000
 
 // Self-healing bootstrap for the dev-catalog seed's fixed machine identity
-// (prn_d200…/acc_d200…/own_d200…/grt_d200…). admitDevSeedCatalogAuthority
+// (prn_d200…/acc_d200…/own_d200…/mem_d200…/grt_d200…). admitDevSeedCatalogAuthority
 // remains the sole authority sink: this only inserts the canonical rows it
 // consumes (same shapes as tests/integration/dev-seed-public-catalog-facts.test.ts)
 // when absent, so it is safe to run on every stack bring-up.
@@ -119,6 +120,38 @@ export async function provisionDevSeedCatalogIdentityRows(ctx: MutationCtx): Pro
       revision: grant.revision + 1,
     })
     created.push('grant')
+  }
+  const membership = await ctx.db.query('memberships')
+    .withIndex('by_membershipRef', (query) => query.eq('membershipRef', DEV_SEED_CATALOG_MEMBERSHIP_REF))
+    .unique()
+  if (membership === null) {
+    await ctx.db.insert('memberships', {
+      membershipRef: DEV_SEED_CATALOG_MEMBERSHIP_REF,
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      memberPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-membership:create',
+        idempotencyRef: 'dev-seed-membership:create',
+      },
+    })
+    created.push('membership')
+  } else if (
+    membership.lifecycle !== 'active'
+    || membership.accountRef !== DEV_SEED_CATALOG_ACCOUNT_REF
+    || membership.memberPrincipalRef !== DEV_SEED_CATALOG_PRINCIPAL_REF
+  ) {
+    await ctx.db.patch(membership._id, {
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      memberPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      lifecycle: 'active',
+      revision: membership.revision + 1,
+    })
+    created.push('membership')
   }
   return created
 }

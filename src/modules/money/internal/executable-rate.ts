@@ -141,32 +141,6 @@ export function quoteManagedX402BuyerAud(input: Readonly<{
   return quoteReferenceBuyerAud(input)
 }
 
-/**
- * Split an inclusive buyer price at the explicit commercial-policy boundary.
- * Money remains integer units; Decimal is used only for the documented
- * half-up rounding decision.
- */
-export function splitInclusiveAudTax(
-  totalUnits: string,
-  taxBps: number,
-): Readonly<{ revenueUnits: string; taxUnits: string }> | undefined {
-  if (!/^[1-9]\d*$/u.test(totalUnits)
-    || !Number.isSafeInteger(taxBps)
-    || taxBps < 0
-    || taxBps > 10_000) return undefined
-  const total = BigInt(totalUnits)
-  const tax = BigInt(new (Decimal.clone({ precision: totalUnits.length + 20 }))(totalUnits)
-    .mul(taxBps)
-    .div(10_000 + taxBps)
-    .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
-    .toFixed(0))
-  if (tax < 0n || tax >= total) return undefined
-  return Object.freeze({
-    revenueUnits: (total - tax).toString(),
-    taxUnits: tax.toString(),
-  })
-}
-
 /** Validates canonical rate input without treating it as an executed exchange. */
 export function validReferenceRate(rate: ReferenceRate): boolean {
   return rate !== null && typeof rate === 'object'

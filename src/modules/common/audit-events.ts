@@ -149,7 +149,6 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_failed',
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
-  'billing.auto_recharge_configured',
   'billing.monthly_spend_ceiling_configured',
   ...Package3AuditEventTypeValues,
 ] as const
@@ -283,7 +282,6 @@ const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
   'billing.reconciliation_failed': true,
   'billing.reconciliation_repaired': true,
   'billing.no_repair_marked': true,
-  'billing.auto_recharge_configured': true,
   'billing.monthly_spend_ceiling_configured': true,
 }
 

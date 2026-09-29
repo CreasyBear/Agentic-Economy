@@ -18,6 +18,7 @@ import {
   type SupplyCommandActor,
 } from '@/modules/capability-supply/public'
 import type { Id } from '../../../_generated/dataModel'
+import { DEV_SEED_CATALOG_PUBLISHER_REF } from '../../dev/seed/authority'
 import type { MutationCtx } from '../../../_generated/server'
 import { rebuildCapabilityOriginSupplyProjection } from '../projection/rebuild'
 import {
@@ -269,7 +270,7 @@ export async function publishCapabilityForSeed(
 ) {
   return publishBootstrapCapability(ctx, input, {
     kind: 'system',
-    ref: 'system:dev-seed',
+    ref: DEV_SEED_CATALOG_PUBLISHER_REF,
   })
 }
 

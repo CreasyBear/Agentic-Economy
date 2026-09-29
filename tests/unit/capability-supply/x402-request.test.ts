@@ -4,7 +4,8 @@ import { admitBazaarDiscoveryInfo } from '@/modules/capability-supply/server'
 import { admitOfficialBazaarFromPaymentRequired, admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 
 
-import { syntheticPostPaymentRequiredFixture as syntheticPost } from '@/modules/capability-supply/public'
+import syntheticPostPaymentRequiredFixture from '../../fixtures/x402-bazaar/synthetic-post-payment-required.json'
+const syntheticPost = syntheticPostPaymentRequiredFixture
 
 describe('managed request serialization', () => {
   const endpoint = new URL('https://example.com/tool?fixed=yes')
