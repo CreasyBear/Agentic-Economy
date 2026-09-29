@@ -15,12 +15,44 @@ import {
   type ToolChoiceSearchOutput,
 } from '@/modules/registry/tool-choice-contracts'
 import { isProductionToolChoice } from '@/modules/registry/public'
+import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/registry/tool-selection-score'
 import { registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
 import { projectedModelFacingOutput } from './output'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution } from './step'
-import { callableFirst, suitableListing } from './suitability'
+import { suitableListing } from './suitability'
 
 type SearchTurn = Readonly<{ turnRef: string; threadId: string; promptMessageId: string }>
+
+function selectionEvidenceFor(
+  candidate: SearchResult,
+  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore'>>,
+): ToolSelectionEvidence {
+  const projection = candidate as SearchResult & { payers30d?: number; minimumUsdPrice?: number }
+  const aeEvidence = candidate.toolRef === undefined ? undefined : evidenceByToolRef.get(candidate.toolRef)
+  return {
+    ...(typeof projection.payers30d === 'number' && Number.isFinite(projection.payers30d)
+      ? { payers30d: projection.payers30d } : {}),
+    aeCompleted: aeEvidence?.aeCompleted ?? 0,
+    aeFailed: aeEvidence?.aeFailed ?? 0,
+    ...(typeof projection.minimumUsdPrice === 'number' && Number.isFinite(projection.minimumUsdPrice)
+      ? { minimumUsdPrice: projection.minimumUsdPrice } : {}),
+    usedBefore: aeEvidence?.usedBefore ?? false,
+  }
+}
+
+function evidenceOrderedResults(
+  results: readonly SearchResult[],
+  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore'>>,
+): SearchResult[] {
+  return [
+    ...rankToolsForSelection(results.filter(result => result.access === 'ae_callable'),
+      candidate => selectionEvidenceFor(candidate, evidenceByToolRef), 'balanced')
+      .map(({ candidate }) => candidate),
+    ...rankToolsForSelection(results.filter(result => result.access !== 'ae_callable'),
+      candidate => selectionEvidenceFor(candidate, evidenceByToolRef), 'balanced')
+      .map(({ candidate }) => candidate),
+  ]
+}
 
 function emptyResult(query: string): ToolSearchResult {
   return {
@@ -34,6 +66,7 @@ export async function retrieveImmediateTools(
   ctx: ActionCtx,
   query: string,
   searchTurn?: SearchTurn,
+  accountRef?: string,
 ): Promise<ToolChoiceSearchOutput | null> {
   const trimmed = query.trim().slice(0, SEARCH_QUERY_MAX_LENGTH)
   if (trimmed.length === 0) return null
@@ -75,6 +108,14 @@ export async function retrieveImmediateTools(
       }]
     })
     const admittedNext = narrowed.kind === 'ok' && narrowed.pagination.hasMore ? narrowed.pagination.nextCursor : undefined
+    const toolRefs = admittedItems.map(tool => tool.toolRef)
+    const evidenceRows = toolRefs.length === 0 ? [] : await ctx.runQuery(
+      internal.marketListingEvidence.selectionEvidenceInternal,
+      { toolRefs, ...(accountRef === undefined ? {} : { accountRef }) },
+    ).catch(cause => degradeBackend(cause, [], {
+      site: 'chatImmediateSelectionEvidence', reason: 'source_unavailable',
+    }))
+    const evidenceByToolRef = new Map(evidenceRows.map(row => [row.toolRef, row] as const))
     const pagination = admittedNext !== undefined
       ? { limit: 8, nextCursor: admittedNext, hasMore: true }
       : directory.kind !== 'unavailable' && !directory.isDone
@@ -94,7 +135,7 @@ export async function retrieveImmediateTools(
         ? { ...choices, kind: 'scoped' as const, reason: 'External listings require inspection before choosing a Tool.' }
         : choices
       if (output.kind !== 'match' && output.kind !== 'scoped') return output
-      return { ...output, results: callableFirst(output.results) }
+      return { ...output, results: evidenceOrderedResults(output.results, evidenceByToolRef) }
     })
     if (typeof projected !== 'object' || projected === null || !('kind' in projected) || projected.kind === 'chat_tool_refused') {
       throw new Error(`catalogue_projection_${JSON.stringify(projected).slice(0, 180)}`)

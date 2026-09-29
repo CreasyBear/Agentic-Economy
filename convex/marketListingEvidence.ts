@@ -5,9 +5,11 @@ import { isMarketCategoryId } from '../src/modules/market/listing-evidence'
 import { isPublicToolRef } from '../src/modules/common/tool-ref'
 import { components } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
-import { assertBuyerCompletedCall } from './lib/market/listing/buyerCompletedCall'
+import { assertBuyerCompletedCall, authorizeSelectionEvidence, readSelectionEvidence } from './lib/market/listing/buyerCompletedCall'
+import { serviceAssertion } from './serviceAssertion'
+
 const MAX_TOOL_REFS = 20
 const MAX_LATENCY_SAMPLES = 48
 
@@ -41,6 +43,16 @@ const listingEvidenceValue = v.object({
   qualifiedUses: v.number(),
   latencySamplesMs: v.array(v.number()),
 })
+const selectionEvidenceArgs = {
+  toolRefs: v.array(v.string()),
+  accountRef: v.optional(v.string()),
+}
+const selectionEvidenceValue = v.object({
+  toolRef: v.string(),
+  aeCompleted: v.number(),
+  aeFailed: v.number(),
+  usedBefore: v.boolean(),
+})
 
 export const read = query({
   args: {
@@ -57,6 +69,26 @@ export const read = query({
       toolRefs.map((toolRef) => readToolEvidence(ctx, toolRef, args.since)),
     )
   },
+})
+
+export const selectionEvidence = query({
+  args: { ...selectionEvidenceArgs, serviceAuth: serviceAssertion },
+  returns: v.array(selectionEvidenceValue),
+  handler: async (ctx, args) => {
+    if (!await authorizeSelectionEvidence(args)) {
+      throw new Error('market_selection_evidence_authentication_required')
+    }
+    return await readSelectionEvidence(ctx, {
+      toolRefs: args.toolRefs,
+      ...(args.accountRef === undefined ? {} : { accountRef: args.accountRef }),
+    })
+  },
+})
+
+export const selectionEvidenceInternal = internalQuery({
+  args: selectionEvidenceArgs,
+  returns: v.array(selectionEvidenceValue),
+  handler: async (ctx, args) => await readSelectionEvidence(ctx, args),
 })
 
 export const rate = mutation({

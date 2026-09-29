@@ -215,7 +215,7 @@ export async function streamDurableChatResponse(
     }
     let catalogue: Awaited<ReturnType<typeof retrieveImmediateTools>> = null
     if (promptText.trim().length > 0) {
-      try { catalogue = await retrieveImmediateTools(ctx, promptText, args.searchTurn) } catch { catalogue = null }
+      try { catalogue = await retrieveImmediateTools(ctx, promptText, args.searchTurn, args.ownerId) } catch { catalogue = null }
     }
     if (catalogue !== null) {
       const toolName = immediateSearchToolName()

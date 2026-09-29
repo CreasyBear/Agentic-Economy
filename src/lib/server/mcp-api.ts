@@ -275,7 +275,25 @@ function mcpSearchActionLine(next: unknown, origin: string): string | undefined 
 function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): string {
   if (!isRecord(result)) return `${action.name} completed.`
   if (action.id === 'tool.procure' && result.status === 'needs_input') {
-    return `Selected ${result.toolName} (${result.toolRef}). Required input: ${JSON.stringify(result.requiredFields)}. Input JSON Schema: ${JSON.stringify(result.inputJsonSchema)}. Next: ${JSON.stringify(result.next)}; supply caller-owned input, maxSpendAud and a new idempotencyKey. No Quote or Call has occurred.`
+    const reasons = Array.isArray(result.reasons)
+      ? result.reasons.filter((reason): reason is string => typeof reason === 'string')
+      : []
+    const alternates = Array.isArray(result.alternates)
+      ? result.alternates.filter(isRecord).map((alternate) => {
+        const title = typeof alternate.title === 'string' ? alternate.title : 'Tool'
+        const alternateReasons = Array.isArray(alternate.reasons)
+          ? alternate.reasons.filter((reason): reason is string => typeof reason === 'string')
+          : []
+        return `- ${title} (${alternateReasons.join(' · ')})`
+      })
+      : []
+    return [
+      `Selected ${result.toolName} (${result.toolRef})${reasons.length === 0 ? '' : ` · ${reasons.join(' · ')}`}.`,
+      'Alternates:',
+      ...alternates,
+      `Required input: ${JSON.stringify(result.requiredFields)}. Input JSON Schema: ${JSON.stringify(result.inputJsonSchema)}.`,
+      `Next: ${JSON.stringify(result.next)}; supply caller-owned input, maxSpendAud and a new idempotencyKey. No Quote or Call has occurred.`,
+    ].join('\n')
   }
   if (action.id !== 'registry.tools.search') {
     return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.`

@@ -10,6 +10,7 @@ import { projectToolListChoices, projectToolSearchChoices, type SearchResult, ty
 import { lexicalToolMatch } from '@/modules/registry/tool-reranker'
 import { isProductionToolChoice, suitableRankedToolRefs } from '@/modules/registry/public'
 import { registryToolsListContract, registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
+import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/registry/tool-selection-score'
 import { api, internal } from '../../../_generated/api'
 import { descriptionFor, failure, type ReserveChatSearch, type ReserveChatTool } from './contracts'
 import { projectedModelFacingOutput } from './output'
@@ -29,6 +30,37 @@ function operationSourceFilters(filters: z.infer<typeof registryToolsSearchContr
 }
 
 type SearchInput = z.infer<typeof registryToolsSearchContract.schema>
+
+function selectionEvidenceFor(
+  candidate: SearchResult,
+  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore'>>,
+): ToolSelectionEvidence {
+  const projection = candidate as SearchResult & { payers30d?: number; minimumUsdPrice?: number }
+  const aeEvidence = candidate.toolRef === undefined ? undefined : evidenceByToolRef.get(candidate.toolRef)
+  return {
+    ...(typeof projection.payers30d === 'number' && Number.isFinite(projection.payers30d)
+      ? { payers30d: projection.payers30d } : {}),
+    aeCompleted: aeEvidence?.aeCompleted ?? 0,
+    aeFailed: aeEvidence?.aeFailed ?? 0,
+    ...(typeof projection.minimumUsdPrice === 'number' && Number.isFinite(projection.minimumUsdPrice)
+      ? { minimumUsdPrice: projection.minimumUsdPrice } : {}),
+    usedBefore: aeEvidence?.usedBefore ?? false,
+  }
+}
+
+function evidenceOrderedResults(
+  results: readonly SearchResult[],
+  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore'>>,
+): SearchResult[] {
+  return [
+    ...rankToolsForSelection(results.filter(result => result.access === 'ae_callable'),
+      candidate => selectionEvidenceFor(candidate, evidenceByToolRef), 'balanced')
+      .map(({ candidate }) => candidate),
+    ...rankToolsForSelection(results.filter(result => result.access !== 'ae_callable'),
+      candidate => selectionEvidenceFor(candidate, evidenceByToolRef), 'balanced')
+      .map(({ candidate }) => candidate),
+  ]
+}
 
 /** Chat and Market must start from the same native indexed, query-scoped read. */
 async function admittedCandidates(ctx: ToolCtx, data: SearchInput, filters: CapabilitySearchFilters | undefined): Promise<{
@@ -198,10 +230,22 @@ export function createSearchTools(
             const eligible = (tool: PublicToolDescriptor) =>
               explicitNonProduction || isProductionToolChoice(tool)
             const suitable = new Set(ranked && presented.kind === 'ok' ? suitableRankedToolRefs(presented.ranking) : [])
+            const presentedRefs = new Set(presented?.kind === 'ok'
+              ? presented.items.map(tool => tool.toolRef) : [])
+            const sourceItems = source.kind === 'ok' ? source.items : []
             const narrowed = presented?.kind === 'ok'
-              ? { ...presented, items: presented.items.filter(tool => eligible(tool)
+              ? { ...presented, items: sourceItems.filter(tool => presentedRefs.has(tool.toolRef)
+                && eligible(tool)
                 && (ranked ? suitable.has(tool.toolRef) : lexicalToolMatch(data.query, tool.listing.label, tool.summary))) }
               : presented
+            const toolRefs = narrowed?.kind === 'ok' ? narrowed.items.map(tool => tool.toolRef) : []
+            const evidenceRows = toolRefs.length === 0 ? [] : await ctx.runQuery(
+              internal.marketListingEvidence.selectionEvidenceInternal,
+              { toolRefs },
+            ).catch(cause => degradeBackend(cause, [], {
+              site: 'chatToolSearchSelectionEvidence', reason: 'source_unavailable',
+            }))
+            const evidenceByToolRef = new Map(evidenceRows.map(row => [row.toolRef, row] as const))
             const assessment = { verdict: narrowed?.kind === 'ok' && narrowed.items.length > 0
               ? 'matched' as const : 'noMatch' as const,
             nearMisses: [] }
@@ -246,9 +290,12 @@ export function createSearchTools(
             const output = choices.kind === 'match' && admittedCount === 0
               ? { ...choices, kind: 'scoped' as const, reason: 'External listings require inspection before choosing a Tool.' }
               : choices
+            const orderedOutput = output.kind === 'match' || output.kind === 'scoped'
+              ? { ...output, results: evidenceOrderedResults(output.results, evidenceByToolRef) }
+              : output
             // The model-facing sanitizer expands angle brackets to UTF-8 glyphs.
-            if (encoder.encode(JSON.stringify(output).replace(/[<>]/gu, '‹')).byteLength <= 16 * 1024) {
-              const signed = await signNextPage(ctx, output, data, searchTurn)
+            if (encoder.encode(JSON.stringify(orderedOutput).replace(/[<>]/gu, '‹')).byteLength <= 16 * 1024) {
+              const signed = await signNextPage(ctx, orderedOutput, data, searchTurn)
               const projected = projectedModelFacingOutput('registry.tools.search', searchContract.outputSchema, () => signed)
               onSearchOutput?.(options.toolCallId, projected)
               return projected

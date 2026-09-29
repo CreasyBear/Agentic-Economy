@@ -70,9 +70,14 @@ function toolCtx(input: Readonly<{
   runMutation?: ToolCtx['runMutation']
 }> = {}): ToolCtx {
   return {
-    runQuery: input.runQuery ?? vi.fn(async (reference) => getFunctionName(reference) === 'x402DirectoryIndex:searchCompactInternal'
-      ? { kind: 'ok', page: [], isDone: true, continueCursor: '', coverage: { generation: 'test', completedAt: 1 } }
-      : true),
+    runQuery: input.runQuery ?? vi.fn(async (reference) => {
+      const name = getFunctionName(reference)
+      if (name === 'marketListingEvidence:selectionEvidenceInternal') return []
+      if (name === 'x402DirectoryIndex:searchCompactInternal') {
+        return { kind: 'ok', page: [], isDone: true, continueCursor: '', coverage: { generation: 'test', completedAt: 1 } }
+      }
+      return true
+    }),
     runAction: input.runAction ?? vi.fn(),
     runMutation: input.runMutation ?? vi.fn(),
   } as unknown as ToolCtx
@@ -549,8 +554,9 @@ describe('Tool chat Agent tools', () => {
     })
     const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
       runAction: runAction as ToolCtx['runAction'],
-      runQuery: vi.fn(async () => ({ kind: 'ok', page: [], isDone: true, continueCursor: '',
-        coverage: { generation: 'test', completedAt: 1 } })) as ToolCtx['runQuery'],
+      runQuery: vi.fn(async reference => getFunctionName(reference) === 'marketListingEvidence:selectionEvidenceInternal'
+        ? [] : { kind: 'ok', page: [], isDone: true, continueCursor: '',
+          coverage: { generation: 'test', completedAt: 1 } }) as ToolCtx['runQuery'],
     }), { query })
     expect(result).toMatchObject({ kind: 'match', results: [{ id: TOOL_TIMEZONE.toolRef }] })
     expect(runAction).toHaveBeenCalledTimes(2)
@@ -632,10 +638,11 @@ describe('Tool chat Agent tools', () => {
       }
       throw new Error('Unexpected action')
     })
-    const runQuery = vi.fn(async () => ({
-      kind: 'ok', page: [], isDone: true, continueCursor: '',
-      coverage: { generation: 'bazaar-7', completedAt: 100 },
-    }))
+    const runQuery = vi.fn(async reference => getFunctionName(reference) === 'marketListingEvidence:selectionEvidenceInternal'
+      ? [] : {
+        kind: 'ok', page: [], isDone: true, continueCursor: '',
+        coverage: { generation: 'bazaar-7', completedAt: 100 },
+      })
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'], runQuery: runQuery as ToolCtx['runQuery'] })
     const firstPage = registryToolsSearchContract.outputSchema.parse(
       await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx, { query }))
@@ -676,6 +683,33 @@ describe('Tool chat Agent tools', () => {
       toolCtx({ runAction: runAction as ToolCtx['runAction'] }), { query, source: 'current' })
     expect(scoped).toMatchObject({ kind: 'scoped', assessed: { coverage: 'partial' }, results: [],
       next: [{ action: 'next-page', args: { cursor: 'admitted-next' } }] })
+  })
+
+  it('keeps admitted matches when selection evidence is unavailable', async () => {
+    const query = 'convert time between timezones'
+    const source = serializeToolSearchResult({
+      ...misorderedSearchResult(query), items: [TOOL_TIMEZONE], pagination: { limit: 8, hasMore: false },
+    })
+    const presented = serializeToolSearchResult({
+      ...misorderedSearchResult(query), items: [TOOL_TIMEZONE],
+      ranking: [{ toolRef: TOOL_TIMEZONE.toolRef, rank: 1, score: 0.9 }],
+      pagination: { limit: 8, hasMore: false },
+    })
+    const runAction = vi.fn(async reference => {
+      const name = getFunctionName(reference)
+      if (name === 'capabilityToolCatalog:searchInternal') return source
+      if (name === 'capabilityToolCatalog:presentSearch') return { result: presented, use: 'registry.tools.search' }
+      throw new Error(`Unexpected action: ${name}`)
+    })
+    const runQuery = vi.fn(async () => { throw new Error('selection evidence unavailable') })
+    const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
+      runAction: runAction as ToolCtx['runAction'], runQuery: runQuery as ToolCtx['runQuery'],
+    }), { query, source: 'current' })
+
+    expect(result).toMatchObject({ kind: 'match', results: [{ id: TOOL_TIMEZONE.toolRef }] })
+    expect(runQuery).toHaveBeenCalledWith(internal.marketListingEvidence.selectionEvidenceInternal, {
+      toolRefs: [TOOL_TIMEZONE.toolRef],
+    })
   })
 
   it('serves lexical indexed matches if Jev times out, but refuses a missing index', async () => {

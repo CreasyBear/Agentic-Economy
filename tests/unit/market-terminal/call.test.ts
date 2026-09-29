@@ -161,7 +161,9 @@ describe('market-terminal authenticated Tool Call', () => {
     const inputSchema = { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
     const send = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       schemaVersion: 'tool.procure:v1', kind: 'needs_input', status: 'needs_input',
-      toolRef, toolName: 'Search', inputJsonSchema: inputSchema, requiredFields: ['query'],
+      toolRef, toolName: 'Search', reasons: ['Matches dataset search', 'Accepts text query'],
+      alternates: [{ toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Archive Search', reasons: ['Related data'] }],
+      inputJsonSchema: inputSchema, requiredFields: ['query'],
       next: { kind: 'exact', toolRef },
     }))
     vi.stubGlobal('fetch', send)
@@ -171,6 +173,10 @@ describe('market-terminal authenticated Tool Call', () => {
     expect(request?.body).toBe(JSON.stringify({ kind: 'need', need: 'Search for a dataset' }))
     expect(output.mock.calls.map(([part]) => String(part)).join('')).toContain(`\"toolRef\":\"${toolRef}\"`)
     expect(output.mock.calls.map(([part]) => String(part)).join('')).toContain('query')
+    const humanOutput = output.mock.calls.map(([part]) => String(part)).join('')
+    expect(humanOutput).toContain('Selected Search · Matches dataset search · Accepts text query')
+    expect(humanOutput).toContain('Alternates:')
+    expect(humanOutput).toContain('- Archive Search (Related data)')
   })
 
   it('requires the native buyer connection before quoting', async () => {

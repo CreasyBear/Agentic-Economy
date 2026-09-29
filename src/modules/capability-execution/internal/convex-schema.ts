@@ -394,7 +394,9 @@ export const capabilityCallTables = {
     .index('by_principalId_and_state', ['principalId', 'state'])
     .index('by_principalId_and_toolRef_and_state', ['principalId', 'toolRef', 'state'])
     .index('by_toolRef_and_state', ['toolRef', 'state'])
+    .index('by_toolRef_and_state_and_updatedAt', ['toolRef', 'state', 'updatedAt'])
     .index('by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
+    .index('by_ownerId_and_toolRef_and_state', ['ownerId', 'toolRef', 'state'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt'])
     .index('by_state_and_reconciliation_disposition_reason_nextAttemptAt', [

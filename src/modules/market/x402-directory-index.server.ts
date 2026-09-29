@@ -61,7 +61,8 @@ const status = sourceQuery<Record<string, never>, DirectoryStatus>('x402Director
 /** Card grids paint title, glance, price, access, and activity. Schemas stay on the Tool page. */
 export function toDirectoryCardEntry(entry: X402DirectoryEntry): X402DirectoryEntry {
   const source = minimumDirectoryUsdPrice(entry)
-  const price = source === undefined ? undefined : entry.prices.find(item => item.scheme === 'exact' && item.symbol === 'USDC' && item.decimalAmount === source)
+  // minimumDirectoryUsdPrice canonicalises ("0.002000" → "0.002"), so match through it, not by string.
+  const price = source === undefined ? undefined : entry.prices.find(item => minimumDirectoryUsdPrice({ ...entry, prices: [item] }) === source)
   const description = [...entry.description].slice(0, 100).join('')
   return {
     resource: entry.resource,
