@@ -8,6 +8,7 @@ const calls = vi.hoisted(() => ({
   readPage: vi.fn(),
   revoke: vi.fn(),
   connect: vi.fn(),
+  setup: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
@@ -45,6 +46,7 @@ vi.mock('@/components/ae/agent-access/home/useAeAgentAccessHome', () => ({
   }) => ({
     canonicalBaseUrl, directory: initialDirectory, search,
     loading: false, onDirectoryRetry: vi.fn(), onConnectNewAgent: calls.connect,
+    onSetupStep: calls.setup,
     showSetup: false,
   }),
 }))
@@ -122,7 +124,7 @@ describe('Agent keys settings revocation', () => {
     const manual = screen.getByRole('link', { name: 'Issue a manual key' })
     expect(manual.getAttribute('href')).toBe('/owner/settings/agent-keys?issue=manual')
     fireEvent.click(screen.getByRole('button', { name: 'Connect with OAuth / MCP' }))
-    expect(calls.connect).toHaveBeenCalledOnce()
+    expect(calls.setup).toHaveBeenCalledWith('oauth')
     expect(document.activeElement?.getAttribute('aria-label')).toBe('OAuth and MCP connection steps')
     view.unmount()
   })

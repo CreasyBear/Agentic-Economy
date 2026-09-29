@@ -43,3 +43,19 @@ export function sanitizeAuthRedirectTarget(value: unknown): string | undefined {
 
   return trimmed
 }
+
+/** Same-origin path plus query for a sign-in return. Absolute URLs keep only that path. */
+export function signedInReturnPath(href: string, fallback = '/'): string {
+  const relative = href.startsWith('/') && !href.startsWith('//')
+    ? href
+    : (() => {
+        try {
+          const url = new URL(href)
+          return `${url.pathname}${url.search}`
+        } catch (cause) {
+          void cause
+          return undefined
+        }
+      })()
+  return sanitizeAuthRedirectTarget(relative) ?? fallback
+}

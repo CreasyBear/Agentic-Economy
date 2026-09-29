@@ -1,5 +1,8 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { redirect } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+
+import { signedInReturnPath } from '@/lib/client/auth-redirect'
 
 export type ClerkServerSessionAdmission = { userId: string }
 
@@ -20,4 +23,12 @@ export async function requireClerkServerSession({
   }
 
   return { userId }
+}
+
+const requireSignedInServer = createServerFn()
+  .validator((data: { redirectTo: string }) => data)
+  .handler(async ({ data }) => requireClerkServerSession(data))
+
+export async function requireSignedInBeforeLoad(location: { href: string }): Promise<void> {
+  await requireSignedInServer({ data: { redirectTo: signedInReturnPath(location.href, '/onboarding') } })
 }

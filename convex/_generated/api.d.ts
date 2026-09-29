@@ -217,6 +217,7 @@ import type * as lib_capabilityExecution_callLifecycle_statusQuery from "../lib/
 import type * as lib_capabilityExecution_callLifecycle_supplyCallsListing from "../lib/capabilityExecution/callLifecycle/supplyCallsListing.js";
 import type * as lib_capabilityExecution_callLifecycle_supplyCanaryAuthority from "../lib/capabilityExecution/callLifecycle/supplyCanaryAuthority.js";
 import type * as lib_capabilityExecution_callLifecycle_workComplete from "../lib/capabilityExecution/callLifecycle/workComplete.js";
+import type * as lib_capabilityExecution_callLifecycle_x402PreSignProbe from "../lib/capabilityExecution/callLifecycle/x402PreSignProbe.js";
 import type * as lib_capabilityExecution_callProjection_canary from "../lib/capabilityExecution/callProjection/canary.js";
 import type * as lib_capabilityExecution_callProjection_contracts from "../lib/capabilityExecution/callProjection/contracts.js";
 import type * as lib_capabilityExecution_callProjection_dispatch from "../lib/capabilityExecution/callProjection/dispatch.js";
@@ -470,6 +471,7 @@ import type * as lib_market_directoryIndex_rows from "../lib/market/directoryInd
 import type * as lib_market_flow_contracts from "../lib/market/flow/contracts.js";
 import type * as lib_market_flow_handlers from "../lib/market/flow/handlers.js";
 import type * as lib_market_flow_store from "../lib/market/flow/store.js";
+import type * as lib_market_listing_buyerCompletedCall from "../lib/market/listing/buyerCompletedCall.js";
 import type * as lib_market_savedTools_contracts from "../lib/market/savedTools/contracts.js";
 import type * as lib_market_savedTools_store from "../lib/market/savedTools/store.js";
 import type * as lib_money_agentReads_reads from "../lib/money/agentReads/reads.js";
@@ -514,6 +516,7 @@ import type * as lib_money_funding_balanceSubject from "../lib/money/funding/bal
 import type * as lib_money_funding_contracts from "../lib/money/funding/contracts.js";
 import type * as lib_money_funding_formanceBalance from "../lib/money/funding/formanceBalance.js";
 import type * as lib_money_funding_formanceEvent from "../lib/money/funding/formanceEvent.js";
+import type * as lib_money_funding_fundingReceiptSources from "../lib/money/funding/fundingReceiptSources.js";
 import type * as lib_money_funding_ownerBind from "../lib/money/funding/ownerBind.js";
 import type * as lib_money_funding_ownerInvoiceHistory from "../lib/money/funding/ownerInvoiceHistory.js";
 import type * as lib_money_funding_ownerMarkUnknown from "../lib/money/funding/ownerMarkUnknown.js";
@@ -942,6 +945,7 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/callLifecycle/supplyCallsListing": typeof lib_capabilityExecution_callLifecycle_supplyCallsListing;
   "lib/capabilityExecution/callLifecycle/supplyCanaryAuthority": typeof lib_capabilityExecution_callLifecycle_supplyCanaryAuthority;
   "lib/capabilityExecution/callLifecycle/workComplete": typeof lib_capabilityExecution_callLifecycle_workComplete;
+  "lib/capabilityExecution/callLifecycle/x402PreSignProbe": typeof lib_capabilityExecution_callLifecycle_x402PreSignProbe;
   "lib/capabilityExecution/callProjection/canary": typeof lib_capabilityExecution_callProjection_canary;
   "lib/capabilityExecution/callProjection/contracts": typeof lib_capabilityExecution_callProjection_contracts;
   "lib/capabilityExecution/callProjection/dispatch": typeof lib_capabilityExecution_callProjection_dispatch;
@@ -1195,6 +1199,7 @@ declare const fullApi: ApiFromModules<{
   "lib/market/flow/contracts": typeof lib_market_flow_contracts;
   "lib/market/flow/handlers": typeof lib_market_flow_handlers;
   "lib/market/flow/store": typeof lib_market_flow_store;
+  "lib/market/listing/buyerCompletedCall": typeof lib_market_listing_buyerCompletedCall;
   "lib/market/savedTools/contracts": typeof lib_market_savedTools_contracts;
   "lib/market/savedTools/store": typeof lib_market_savedTools_store;
   "lib/money/agentReads/reads": typeof lib_money_agentReads_reads;
@@ -1239,6 +1244,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/funding/contracts": typeof lib_money_funding_contracts;
   "lib/money/funding/formanceBalance": typeof lib_money_funding_formanceBalance;
   "lib/money/funding/formanceEvent": typeof lib_money_funding_formanceEvent;
+  "lib/money/funding/fundingReceiptSources": typeof lib_money_funding_fundingReceiptSources;
   "lib/money/funding/ownerBind": typeof lib_money_funding_ownerBind;
   "lib/money/funding/ownerInvoiceHistory": typeof lib_money_funding_ownerInvoiceHistory;
   "lib/money/funding/ownerMarkUnknown": typeof lib_money_funding_ownerMarkUnknown;

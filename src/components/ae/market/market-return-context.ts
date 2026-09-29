@@ -10,6 +10,8 @@ export type MarketReturnSearch = Readonly<X402DirectoryCatalogueInput & {
   layout?: 'table' | 'grid'
   resource?: string
   providerCursor?: string
+  /** 1-based catalogue page. Page 1 is omitted. Later pages are restored by walking the index cursor. */
+  page?: number
 }>
 export type IndexedDirectoryPage = Readonly<{ items: readonly X402DirectoryEntry[]; cursor: string | undefined; isDone: boolean }>
 export type IndexedPaginationState = Readonly<{

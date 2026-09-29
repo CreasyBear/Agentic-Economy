@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import { AeOwnerMcpOAuthCallback } from '@/components/ae/supply/AeOwnerMcpOAuthCallback'
+import { recoverableSearch } from '@/lib/client/recoverable-search'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   completeOwnerMcpProviderConnectionServer,
@@ -16,9 +17,13 @@ const callbackSearchSchema = z.looseObject({
   error: z.string().max(200).optional(),
 })
 
+const parseCallbackSearch = recoverableSearch(callbackSearchSchema, {
+  identifierKeys: ['attempt', 'state', 'code'],
+})
+
 export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/callback')({
   ...operatorRouteOptions,
-  validateSearch: callbackSearchSchema,
+  validateSearch: parseCallbackSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ deps, location }) => {
     if (deps.attempt === undefined) {

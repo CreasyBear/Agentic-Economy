@@ -71,6 +71,9 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
                   grantRevision={vm.grantRevision}
                   grantRef={vm.grantRef}
                   toolRefs={vm.toolRefs}
+                  flow={details.flow}
+                  {...(details.redirectDisposition === undefined ? {} : { redirectDisposition: details.redirectDisposition })}
+                  {...(details.redirectOrigin === undefined ? {} : { redirectOrigin: details.redirectOrigin })}
                 />
               </AeSection>
             </div>

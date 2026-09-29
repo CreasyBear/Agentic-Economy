@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 
 export type SettingsPageProps = Readonly<{
   title: string
   description: string
   action?: ReactNode
   children: ReactNode
+  headingRef?: Ref<HTMLHeadingElement>
 }>
 export type SettingsGroupProps = Readonly<{
   title: string

@@ -26,6 +26,8 @@ export type AgentConsentDetails = Readonly<{
   agentTargetsUnavailable: boolean
   reconnectPrincipalRef?: string
   reconnectAmbiguous?: boolean
+  redirectDisposition?: 'origin' | 'none' | 'unavailable'
+  redirectOrigin?: string
 }>
 
 function readConsentTarget(value: unknown): AgentConsentTarget | undefined {
@@ -88,6 +90,16 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
   if (targetAvailability === undefined) agentTargetsUnavailable = false
   const reconnectPrincipalRefValue = consent?.dataset.reconnectPrincipalRef
   const reconnectAmbiguous = consent?.dataset.reconnectAmbiguous === 'true'
+  const redirectDispositionValue = consent?.dataset.redirectDisposition
+  const redirectOriginValue = consent?.dataset.redirectOrigin
+  const redirectOrigin = redirectOriginValue !== undefined && redirectOriginValue.length > 0
+    ? redirectOriginValue
+    : undefined
+  const redirectDisposition = redirectDispositionValue === 'origin' && redirectOrigin === undefined
+    ? 'unavailable'
+    : redirectDispositionValue === 'origin' || redirectDispositionValue === 'none' || redirectDispositionValue === 'unavailable'
+      ? redirectDispositionValue
+      : undefined
   try {
     const parsed: unknown = JSON.parse(decodeURIComponent(consent?.dataset.agentTargets ?? '%5B%5D'))
     if (Array.isArray(parsed)) {
@@ -135,5 +147,7 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
       ? {}
       : { reconnectPrincipalRef: reconnectPrincipalRefValue }),
     ...(reconnectAmbiguous ? { reconnectAmbiguous: true } : {}),
+    ...(redirectDisposition === undefined ? {} : { redirectDisposition }),
+    ...(redirectOrigin === undefined ? {} : { redirectOrigin }),
   }
 }

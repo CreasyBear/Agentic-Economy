@@ -1,4 +1,5 @@
-import { useRef, useState, type FormEvent, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from 'react'
+import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Checkbox } from '@/components/ui/checkbox'
 
@@ -8,7 +9,7 @@ import { toast } from '@/lib/ui/toast'
 import { formatAbnDisplay, isValidAbn, normalizeAbn } from '@/modules/money/public'
 import {
   TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC,
-  TAX_PROFILE_VALIDATION_DIAGNOSTIC,
+  taxProfileValidationDiagnostic,
   type TaxProfileInitialData,
   type TaxProfileInvalidField,
   type TaxProfileSubmitPayload,
@@ -21,6 +22,28 @@ export type TaxProfileFormProps = Readonly<{
 }>
 
 const TAX_PROFILE_DIAGNOSTIC_ID = 'tax-profile-diagnostic'
+
+function taxProfileSnapshot(value: Readonly<{
+  legalName: string
+  abn: string
+  gstRegistered: boolean
+  addressLine1: string
+  addressLine2: string
+  locality: string
+  region: string
+  postalCode: string
+}>): string {
+  return JSON.stringify({
+    legalName: value.legalName.trim(),
+    abn: normalizeAbn(value.abn),
+    gstRegistered: value.gstRegistered,
+    addressLine1: value.addressLine1.trim(),
+    addressLine2: value.addressLine2.trim(),
+    locality: value.locality.trim(),
+    region: value.region.trim(),
+    postalCode: value.postalCode.trim(),
+  })
+}
 
 export function TaxProfileForm({
   initialData,
@@ -40,10 +63,28 @@ export function TaxProfileForm({
   const [internalSubmitting, setInternalSubmitting] = useState(false)
   const [submitDiagnostic, setSubmitDiagnostic] = useState<typeof TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC | null>(null)
   const [invalidField, setInvalidField] = useState<TaxProfileInvalidField | null>(null)
+  const [saveOutcome, setSaveOutcome] = useState<'idle' | 'saved' | 'failed'>('idle')
+  const [confirmedSnapshot, setConfirmedSnapshot] = useState<string | null>(null)
+  const saveRef = useRef<HTMLButtonElement>(null)
 
   const legalNameRef = useRef<HTMLInputElement>(null)
   const abnRef = useRef<HTMLInputElement>(null)
   const addressRef = useRef<HTMLInputElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+
+  const initialSnapshot = taxProfileSnapshot({
+    legalName: isAvailable ? initialData.legalName : '',
+    abn: isAvailable ? initialData.abn : '',
+    gstRegistered: isAvailable ? (initialData.gstRegistered ?? true) : true,
+    addressLine1: isAvailable ? initialData.addressLine1 : '',
+    addressLine2: isAvailable ? (initialData.addressLine2 ?? '') : '',
+    locality: isAvailable ? initialData.locality : '',
+    region: isAvailable ? (initialData.region ?? '') : '',
+    postalCode: isAvailable ? initialData.postalCode : '',
+  })
+  useEffect(() => {
+    setConfirmedSnapshot(null)
+  }, [initialSnapshot])
 
   const normalizedAbn = normalizeAbn(abn)
   const isAbnDirty = abn.trim().length > 0
@@ -64,12 +105,15 @@ export function TaxProfileForm({
 
   const submitting = isSubmitting || internalSubmitting
 
-  const showValidationDiagnostic =
-    !submitting
-    && (
-      invalidField !== null
-      || (hasStarted && (!isLegalNameValid || !isAbnValid || !isAddressValid))
-    )
+  const firstInvalidField: TaxProfileInvalidField | null = !isLegalNameValid
+    ? 'legalName'
+    : !isAbnValid
+      ? 'abn'
+      : !isAddressValid
+        ? 'address'
+        : null
+  const showValidationDiagnostic = !submitting && (invalidField !== null || (hasStarted && firstInvalidField !== null))
+  const validationField = invalidField ?? (hasStarted ? firstInvalidField : null)
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -114,9 +158,14 @@ export function TaxProfileForm({
 
     void Promise.resolve(onSubmit(payload))
       .then(() => {
+        setConfirmedSnapshot(taxProfileSnapshot({
+          legalName, abn, gstRegistered, addressLine1, addressLine2, locality, region, postalCode,
+        }))
+        setSaveOutcome('saved')
         toast.success('Billing & tax profile updated')
       })
       .catch(() => {
+        setSaveOutcome('failed')
         setSubmitDiagnostic(TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC)
         toast.error('Billing & tax profile was not saved')
       })
@@ -125,13 +174,29 @@ export function TaxProfileForm({
       })
   }
 
-  const activeDiagnostic = submitDiagnostic ?? (showValidationDiagnostic ? TAX_PROFILE_VALIDATION_DIAGNOSTIC : null)
+  const activeDiagnostic = submitDiagnostic ?? (
+    showValidationDiagnostic && validationField !== null ? taxProfileValidationDiagnostic(validationField) : null
+  )
   const describedBy = showValidationDiagnostic ? TAX_PROFILE_DIAGNOSTIC_ID : undefined
 
+  const baseline = confirmedSnapshot ?? initialSnapshot
+  const dirty = taxProfileSnapshot({
+    legalName, abn, gstRegistered, addressLine1, addressLine2, locality, region, postalCode,
+  }) !== baseline
+
   return (
+    <AeNavigationSafetyBoundary
+      state={{ dirty, pending: submitting, saveOutcome }}
+      title="Leave without saving tax details?"
+      pendingTitle="Tax details are still saving"
+      description="The tax details you typed will be discarded."
+      pendingDescription="Wait until the save finishes. Nothing has been confirmed yet."
+      saveActionRef={saveRef}
+      headingRef={headingRef}
+    >
     <form onSubmit={handleSubmit} className="min-w-0">
-      <SettingsPage title="Tax" description="Keep your Australian business and billing details current."
-        action={<Button type="submit" disabled={submitting} aria-busy={submitting || undefined} className="min-h-touch">
+      <SettingsPage title="Tax" description="Keep your Australian business and billing details current." headingRef={headingRef}
+        action={<Button ref={saveRef} type="submit" disabled={submitting} aria-busy={submitting || undefined} className="min-h-touch">
           {submitting ? 'Saving…' : 'Save'}
         </Button>}>
         <SettingsGroup title="Business details" description="These details identify your legal entity for tax purposes.">
@@ -221,5 +286,6 @@ export function TaxProfileForm({
         </div>
       </SettingsPage>
     </form>
+    </AeNavigationSafetyBoundary>
   )
 }

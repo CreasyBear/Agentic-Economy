@@ -6,6 +6,7 @@ import {
   carryMarketCompare,
   marketCompareParam,
   marketLoaderDeps,
+  retainedMarketCatalogue,
   toggleMarketCompareRef,
 } from "@/modules/market/market-route-data";
 import { resolveCanonicalBaseUrl } from "@/lib/server/canonical-url";
@@ -90,8 +91,8 @@ describe("market search validation", () => {
     expect(search).toMatchObject({ query, sort: "relevance", provider: "provider.test", network: "base", maxUsdPrice: 0.25 });
   });
 
-  it("rejects an over-limit query before loading catalogue data", () => {
-    expect(() => validateMarketSearch({ query: "x".repeat(SEARCH_QUERY_MAX_LENGTH + 1), sort: "relevance", provider: "provider.test" })).toThrow();
+  it("drops an over-limit query instead of failing the page", () => {
+    expect(validateMarketSearch({ query: "x".repeat(SEARCH_QUERY_MAX_LENGTH + 1), sort: "relevance", provider: "provider.test" })).toEqual({ sort: "relevance", provider: "provider.test" });
     expect(reads.catalogue).not.toHaveBeenCalled();
   });
 
@@ -186,11 +187,12 @@ describe("legacy compare mapping", () => {
   });
 });
 
-it('validates native filters without silently broadening an invalid search', () => {
+it('keeps valid native filters and drops malformed ones', () => {
   expect(validateMarketSearch({ network: 'eip155:8453', provider: 'EXAMPLE.COM', maxUsdPrice: 0, view: 'providers' })).toEqual({ network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0, view: 'providers' })
-  for (const search of [{ provider: 'https://example.com/path' }, { maxUsdPrice: -1 }, { network: [] }, { maxUsdPrice: 'oops' }]) {
-    expect(() => validateMarketSearch(search)).toThrow()
-  }
+  expect(validateMarketSearch({ provider: 'https://example.com/path', view: 'tools' })).toEqual({ view: 'tools' })
+  expect(validateMarketSearch({ maxUsdPrice: -1, network: 'base' })).toEqual({ network: 'base' })
+  expect(validateMarketSearch({ network: [], provider: 'example.com' })).toEqual({ provider: 'example.com' })
+  expect(validateMarketSearch({ maxUsdPrice: 'oops', provider: 'example.com' })).toEqual({ provider: 'example.com' })
 })
 
 
@@ -235,11 +237,29 @@ describe('indexed directory route', () => {
     expect(data.page.total).toBeUndefined();
   });
 
-  it('validates categories, cursor and query sorting without broadening invalid inputs', () => {
+  it('keeps a keyword search when the sort does not apply and drops other malformed catalogue values', () => {
     expect(validateMarketSearch({ query: ' image ', sort: 'relevance', directoryCategory: 'Creative' })).toMatchObject({ query: 'image', sort: 'relevance', directoryCategory: 'creative' });
-    for (const search of [{ indexCursor: 'cursor', offset: 20 }, { directoryCategory: '' }, { directoryCategory: 'x'.repeat(81) }, { indexCursor: '' }, { sort: 'cheapest' }, { query: 'image', sort: 'popular' }, { query: 'image', sort: 'updated' }]) {
-      expect(() => validateMarketSearch(search)).toThrow();
-    }
+    const keyword = { query: 'audit-weather', sort: 'popular' as const }
+    const validated = validateMarketSearch(keyword)
+    expect(validated.sort).toBeUndefined()
+    expect(Object.hasOwn(validated, 'sort')).toBe(true)
+    expect({ ...keyword, ...validated }.sort).toBeUndefined()
+    expect(marketLoaderDeps({ ...keyword, ...validated })).toEqual({ query: 'audit-weather' })
+    expect(validateMarketSearch({ query: 'audit-weather', sort: 'popular' })).toMatchObject({ query: 'audit-weather' });
+    expect(validateMarketSearch({ query: 'image', sort: 'updated' })).toEqual({ query: 'image' });
+    expect(validateMarketSearch({ indexCursor: 'cursor', offset: 20 })).toEqual({ indexCursor: 'cursor' });
+    expect(validateMarketSearch({ directoryCategory: '' })).toEqual({});
+    expect(validateMarketSearch({ directoryCategory: 'x'.repeat(81), view: 'tools' })).toEqual({ view: 'tools' });
+    expect(validateMarketSearch({ indexCursor: '' })).toEqual({});
+    expect(validateMarketSearch({ sort: 'cheapest', view: 'tools' })).toEqual({ view: 'tools' });
+    expect(validateMarketSearch({ priceBand: 'nope', query: 'audit-weather' })).toEqual({ query: 'audit-weather' });
+    expect(validateMarketSearch({ minUsdPrice: 'not-a-number', view: 'tools' })).toEqual({ view: 'tools' });
+    expect(validateMarketSearch({ providerCursor: '' })).toEqual({});
+    expect(validateMarketSearch({ providerCursor: 'next-host', view: 'providers' })).toEqual({ providerCursor: 'next-host', view: 'providers' });
+    expect(validateMarketSearch({ view: 'tools', page: '2' })).toEqual({ view: 'tools', page: 2 });
+    expect(validateMarketSearch({ page: 1 })).toEqual({});
+    expect(validateMarketSearch({ page: 'nope' })).toEqual({});
+    expect(marketLoaderDeps(validateMarketSearch({ view: 'tools', page: 2 }))).toEqual({ view: 'tools' });
   });
 
   it('requests popular for a Tools view with no sort', async () => {
@@ -257,7 +277,22 @@ describe('indexed directory route', () => {
 });
 
 describe('explorer filter validation', () => {
-  it.each([{ minUsdPrice: 0.1, maxUsdPrice: 0.01 }, { minPayers30d: 5, maxPayers30d: 4 }, { minPayers30d: 0.5 }, { priceBand: 'cheap' }, { adoptionBand: 'none' }, { tags: 'search' }, { hasInputSchema: 'false' }])('rejects invalid explorer filters: %j', search => {
-    expect(() => validateMarketSearch(search)).toThrow();
+  it.each([{ minUsdPrice: 0.1, maxUsdPrice: 0.01 }, { minPayers30d: 5, maxPayers30d: 4 }, { minPayers30d: 0.5 }, { priceBand: 'cheap' }, { adoptionBand: 'none' }, { tags: 'search' }])('drops invalid explorer filters: %j', search => {
+    expect(validateMarketSearch(search)).toEqual({});
   });
+
+  it('accepts a boolean flag written as text', () => {
+    expect(validateMarketSearch({ hasInputSchema: 'false' })).toEqual({ hasInputSchema: false });
+  });
+});
+
+it('keeps the last catalogue when the next view cannot be read', async () => {
+  reads.catalogue.mockRejectedValueOnce(new Error('aborted'));
+  const loader = Route.options.loader;
+  if (typeof loader !== 'function') throw new Error('loader_missing');
+  const failed = await loader({ deps: { view: 'providers' } } as never);
+  expect(failed.catalogue).toEqual({ kind: 'unavailable', reason: 'source_unavailable' });
+  const previous = { page: { kind: 'ok' }, catalogue: { kind: 'ok', source: 'index' } as const };
+  expect(retainedMarketCatalogue(previous, { page: failed.page, catalogue: failed.catalogue })).toEqual({ shown: previous, retainPrevious: true });
+  expect(retainedMarketCatalogue(undefined, { page: failed.page, catalogue: failed.catalogue }).retainPrevious).toBe(false);
 });

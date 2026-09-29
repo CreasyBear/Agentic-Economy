@@ -25,6 +25,7 @@ export async function openDispatchHandler(
   return {
     ...(quote?.x402PaymentRequiredJson === undefined ? {} : { committedPaymentRequiredJson: quote.x402PaymentRequiredJson }),
     ...(quote?.sourceUsdcUnits === undefined ? {} : { sourceUsdcUnits: quote.sourceUsdcUnits }),
+    ...(quote?.x402RequirementDigest === undefined ? {} : { x402RequirementDigest: quote.x402RequirementDigest }),
     ...(row.quoteRef === undefined ? {} : { quoteRef: row.quoteRef }),
     callRef: row.callRef,
     principalId: row.principalId,

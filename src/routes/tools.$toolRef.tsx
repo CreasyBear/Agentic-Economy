@@ -48,5 +48,6 @@ function ToolDetailPending() {
 }
 
 function ToolDetailError() {
-  return <PublicToolDetail result={{ kind: 'source_unavailable', toolRef: 'Requested reference' }} />
+  const { toolRef } = Route.useParams()
+  return <PublicToolDetail result={{ kind: 'source_unavailable', toolRef }} />
 }

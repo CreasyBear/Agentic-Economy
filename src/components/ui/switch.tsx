@@ -18,7 +18,7 @@ function Switch({
       nativeButton={nativeButton}
       render={render ?? <button type="button" />}
       className={cn(
-        "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-[background-color,box-shadow,transform] duration-fast ease-standard outline-none enabled:active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-muted dark:data-[unchecked]:bg-input/50 max-sm:min-h-touch max-sm:min-w-11",
+        "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-[background-color,box-shadow,transform] duration-fast ease-standard outline-none enabled:active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-muted dark:data-[unchecked]:bg-input/50 max-sm:min-h-touch max-sm:min-w-11",
         className
       )}
       {...(checked === undefined ? {} : { checked })}

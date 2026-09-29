@@ -29,6 +29,9 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
   const [readAt] = useState(() => Date.now())
   if (result.kind !== 'found') {
     const presentation = toolUnavailablePresentation(result)
+    if (result.kind === 'source_unavailable') {
+      return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<span className="flex flex-wrap gap-3"><Link to="/tools/$toolRef" params={{ toolRef: result.toolRef }} reloadDocument className={buttonVariants({ className: 'min-h-touch' })}>Try again</Link><Link to="/market" className={buttonVariants({ variant: 'outline', className: 'min-h-touch' })}>Browse Market</Link></span>} />
+    }
     return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<Link to={presentation.action.to} className={buttonVariants({ className: 'min-h-touch' })}>{presentation.action.label}</Link>} />
   }
   const tool = result.tool

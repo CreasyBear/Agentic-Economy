@@ -5,6 +5,7 @@ import { SettingsEmptyState, SettingsRow } from '@/components/ae/settings/settin
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
+import { isAbsoluteHttpsResourceUrl } from '@/lib/operator/supply-compatibility'
 import { cn } from '@/lib/utils'
 import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 
@@ -53,6 +54,7 @@ export function AeProviderConnectionForm({
   notice,
   onRefresh,
 }: AeProviderConnectionFormProps) {
+  const urlInvalid = resourceUrl.trim().length > 0 && !isAbsoluteHttpsResourceUrl(resourceUrl)
   return (
     <>
       {canConnect ? (
@@ -71,10 +73,11 @@ export function AeProviderConnectionForm({
               value={resourceUrl}
               readOnly={fieldsLocked}
               onChange={(event) => onResourceUrlChange(event.target.value)}
-              aria-describedby="provider-x402-resource-url-hint"
+              aria-invalid={urlInvalid || undefined}
+              aria-describedby={urlInvalid ? 'provider-x402-resource-url-error' : 'provider-x402-resource-url-hint'}
               required
             />
-            <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>
+            {urlInvalid ? <p id="provider-x402-resource-url-error" role="alert" className="text-sm text-destructive">Provide an absolute public HTTPS endpoint without credentials or a fragment.</p> : <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>}
           </div>
           <div className="grid max-w-40 gap-1.5">
             <label htmlFor="provider-x402-method" className="text-sm font-medium text-foreground">Request method</label>
@@ -107,7 +110,7 @@ export function AeProviderConnectionForm({
               type="button"
               variant="secondary"
               className="min-h-touch"
-              disabled={busy !== undefined || resourceUrl.trim().length === 0}
+              disabled={busy !== undefined || !isAbsoluteHttpsResourceUrl(resourceUrl)}
               onClick={onInspect}
             >
               {busy === 'inspect' ? 'Inspecting…' : 'Inspect endpoint'}

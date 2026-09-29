@@ -52,20 +52,42 @@ export const readOwnerHistoryHandler = async (
     entry.kind === 'call_spend' && entry.transactionRef && entry.sourceDigest
       ? [{ index, transactionRef: entry.transactionRef, sourceDigest: entry.sourceDigest }]
       : [])
-  if (candidates.length === 0) return history
-  const sources: (string | null)[] = await ctx.runQuery(internal.moneyManagedCallLifecycle.resolveBuyerSaleSources, {
-    accountRef: subject.accountRef,
-    sales: candidates.map(({ transactionRef, sourceDigest }) => ({ transactionRef, sourceDigest })),
-  })
+  const fundingCandidates = history.entries.flatMap((entry, index) =>
+    entry.kind === 'funding' && entry.transactionRef
+      ? [{ index, transactionRef: entry.transactionRef }]
+      : [])
+  if (candidates.length === 0 && fundingCandidates.length === 0) return history
   const entries = [...history.entries]
   let linked = 0
-  for (const [index, candidate] of candidates.entries()) {
-    const sourceRef = sources[index]
-    const entry = entries[candidate.index]
-    if (sourceRef === null || sourceRef === undefined || entry === undefined) continue
-    entries[candidate.index] = { ...entry, sourceRef }
-    linked += 1
+  if (candidates.length > 0) {
+    const sources: (string | null)[] = await ctx.runQuery(internal.moneyManagedCallLifecycle.resolveBuyerSaleSources, {
+      accountRef: subject.accountRef,
+      sales: candidates.map(({ transactionRef, sourceDigest }) => ({ transactionRef, sourceDigest })),
+    })
+    for (const [index, candidate] of candidates.entries()) {
+      const sourceRef = sources[index]
+      const entry = entries[candidate.index]
+      if (sourceRef === null || sourceRef === undefined || entry === undefined) continue
+      entries[candidate.index] = { ...entry, sourceRef }
+      linked += 1
+    }
   }
-  return { ...history, entries, sourceLinkCoverage: linked === 0 ? 'unavailable'
-    : linked === history.entries.filter((entry) => entry.kind === 'call_spend').length ? 'complete' : 'partial' }
+  if (fundingCandidates.length > 0) {
+    const commandRefs: (string | null)[] = await ctx.runQuery(internal.moneyAccountFunding.resolveFundingReceiptSources, {
+      accountRef: subject.accountRef,
+      transactionRefs: fundingCandidates.map(({ transactionRef }) => transactionRef),
+    })
+    for (const [index, candidate] of fundingCandidates.entries()) {
+      const commandRef = commandRefs[index]
+      const entry = entries[candidate.index]
+      if (commandRef === null || commandRef === undefined || entry === undefined) continue
+      entries[candidate.index] = { ...entry, sourceRef: commandRef }
+    }
+  }
+  const callSpendCount = history.entries.filter((entry) => entry.kind === 'call_spend').length
+  const sourceLinkCoverage = candidates.length === 0
+    ? history.sourceLinkCoverage
+    : linked === 0 ? 'unavailable' as const
+      : linked === callSpendCount ? 'complete' as const : 'partial' as const
+  return { ...history, entries, sourceLinkCoverage }
 }

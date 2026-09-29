@@ -111,7 +111,7 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
         </Empty>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <ChatTranscript messages={messages} />
+          <ChatTranscript messages={messages} readOnly />
           {isDone ? null : (
             <div className={`flex shrink-0 justify-center ${TRANSCRIPT_COLUMN}`}>
               <Button

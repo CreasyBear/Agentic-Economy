@@ -95,6 +95,9 @@ export type ConsentRequestFactsProps = Readonly<{
   grantRevision: number
   grantRef: string
   toolRefs: readonly string[]
+  flow: 'device_code' | 'authorization_code'
+  redirectDisposition?: 'origin' | 'none' | 'unavailable'
+  redirectOrigin?: string
 }>
 
 export type ConsentAuthorizeRecoverySearch = Readonly<{ grant_ref: string; state?: string }>

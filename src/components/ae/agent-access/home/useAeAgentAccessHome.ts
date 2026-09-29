@@ -75,7 +75,7 @@ export function useAeAgentAccessHome({
   const [approvalsError, setApprovalsError] = useState<string>()
   const [approvalDecision, setApprovalDecision] = useState<ApprovalDecision>()
   const [approvalStatus, setApprovalStatus] = useState<string>()
-  const [showSetup, setShowSetup] = useState(false)
+  const showSetup = search.setup === 'oauth'
 
   const hasConnectedAgent = directory.items.some(({ status }) => status === 'connected')
 
@@ -310,16 +310,31 @@ export function useAeAgentAccessHome({
   const clearSelectedPrincipal = useCallback(() => {
     void navigate({
       to: '/agent-access',
-      search: search.resumeTool === undefined ? {} : { resumeTool: search.resumeTool },
+      search: {
+        ...(search.resumeTool === undefined ? {} : { resumeTool: search.resumeTool }),
+        ...(search.setup === undefined ? {} : { setup: search.setup }),
+      },
       replace: true,
     })
-  }, [navigate, search.resumeTool])
+  }, [navigate, search.resumeTool, search.setup])
 
   const paginationButtonLabel = loadingMore
     ? 'Loading more Agents…'
     : currentPaginationIssue
       ? 'Try loading more Agents again'
       : 'Load more Agents'
+
+  const onSetupStep = useCallback((step: 'closed' | 'choose' | 'oauth') => {
+    void navigate({
+      to: '/agent-access',
+      search: {
+        ...(search.caller === undefined ? {} : { caller: search.caller }),
+        ...(search.resumeTool === undefined ? {} : { resumeTool: search.resumeTool }),
+        ...(step === 'closed' ? {} : { setup: step }),
+      },
+      replace: step === 'closed',
+    })
+  }, [navigate, search.caller, search.resumeTool])
 
   const addAnotherToggleLabel = showSetup ? 'Hide setup' : 'Connect an Agent'
 
@@ -366,7 +381,8 @@ export function useAeAgentAccessHome({
     onRenameAgent: rename,
     onUpdateSpendingLimits: updateSpendingLimitsHandler,
     onReadSpendingLimits: readSpendingLimitsHandler,
-    onConnectNewAgent: () => setShowSetup(true),
+    onConnectNewAgent: () => onSetupStep('choose'),
+    onSetupStep,
     accessUnavailable: directoryError !== undefined && directory.items.length === 0,
     approvals,
     approvalsLoading,
@@ -380,7 +396,7 @@ export function useAeAgentAccessHome({
     currentPaginationIssue: Boolean(currentPaginationIssue),
     paginationButtonLabel,
     showSetup,
-    onToggleShowSetup: () => setShowSetup((value) => !value),
+    onToggleShowSetup: () => onSetupStep(showSetup ? 'closed' : 'oauth'),
     addAnotherToggleLabel,
     agentHistoryPrincipalRef,
   }

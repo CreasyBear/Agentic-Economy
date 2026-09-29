@@ -2,7 +2,7 @@ import { degrade } from '@/lib/observability/degrade'
 import { authRefusalProblem, authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessAuthenticationOptions, type AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { callPublicSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { callPublicSourceMutation, callPublicSourceQuery, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
@@ -335,7 +335,7 @@ function fundingHandoffConfigInputSchemaSafe(value: unknown) {
 
 export async function readPublicFundingHandoff(fundingSessionId: string): Promise<PublicHandoffResult> {
   if (!/^cs_[A-Za-z0-9_]+$/u.test(fundingSessionId)) return { kind: 'not_found' }
-  return await callSourceQuery(readPayerSafeHandoff, { externalRef: fundingSessionId })
+  return await callPublicSourceQuery(readPayerSafeHandoff, { externalRef: fundingSessionId })
 }
 
 export function publicFundingHandoffResponse(result: PublicHandoffResult): Response {

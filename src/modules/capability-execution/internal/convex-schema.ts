@@ -454,6 +454,11 @@ export const capabilityCallTables = {
     evidenceHash: v.optional(v.string()),
     attemptRef: v.optional(v.string()),
     reconciliation: v.optional(callReconciliationValue),
+    x402UnpaidProbe: v.optional(v.union(
+      v.object({ kind: v.literal('started'), startedAt: v.number() }),
+      v.object({ kind: v.literal('matched'), requirementDigest: v.string() }),
+      v.object({ kind: v.literal('refused') }),
+    )),
     updatedAt: v.number(),
     createdAt: v.number(),
   })
@@ -478,6 +483,7 @@ export const capabilityCallTables = {
     .index('by_principalId_and_callRef', ['principalId', 'callRef'])
     .index('by_principalId_and_createdAt', ['principalId', 'createdAt'])
     .index('by_principalId_and_state', ['principalId', 'state'])
+    .index('by_principalId_and_toolRef_and_state', ['principalId', 'toolRef', 'state'])
     .index('by_toolRef_and_state', ['toolRef', 'state'])
     .index('by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])

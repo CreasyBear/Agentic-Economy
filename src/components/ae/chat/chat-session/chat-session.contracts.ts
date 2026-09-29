@@ -119,6 +119,7 @@ export type ChatTranscriptViewProps = Readonly<{
   onCompareRequest?: (prompt: string) => void
   onCopyAnswer?: (answer: string) => void
   onEditQuestion?: (prompt: string) => void
+  onRetryQuestion?: (prompt: string) => void
   onClarifyAnswer?: (answer: string) => void
   onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'next-page' }>) => void
   onRepeatSearch?: (query: string) => void
@@ -126,11 +127,14 @@ export type ChatTranscriptViewProps = Readonly<{
   ownerChatThreadId?: string
   ownerChatNow?: number
   onFreshQuote?: (toolName: string, inputSummary: string) => void
+  readOnly?: boolean
 }>
 
 export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory' | 'mobileOpen' | 'onMobileOpenChange' | 'onToggleHistory'>
 export type ChatSessionModel = Readonly<{
   showHistoryRail: boolean
+  /** Signed-out private thread: keep the URL and offer sign-in instead of a new chat. */
+  signInToThread?: Readonly<{ href: string }>
   createHistoryPanel(idPrefix: string, onNavigate?: () => void): ReactNode
   header: ChatHeaderViewProps
   composer: ChatComposerProps

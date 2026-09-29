@@ -36,6 +36,15 @@ export function ReceiptsSettings({
 }: ReceiptsSettingsProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const rows = invoiceHistoryRows ?? []
+  const receiptsStatus = invoiceHistoryLoading
+    ? 'Loading receipts.'
+    : invoiceHistoryLoadingMore
+      ? 'Loading older top-ups.'
+      : rows.length === 0 && invoiceHistoryHasMore
+        ? 'No receipts on this page. Older top-ups are still available.'
+        : rows.length === 0
+          ? 'No top-up receipts yet.'
+          : `${rows.length} top-up receipt${rows.length === 1 ? '' : 's'}.${invoiceHistoryHasMore ? ' More top-ups are available.' : ''}`
 
   const exportHistory = (format: 'CSV' | 'JSON') => {
     try {
@@ -74,8 +83,8 @@ export function ReceiptsSettings({
     </div> : undefined}
   >
     <SettingsGroup title="Top-up history" description="Paid and reversed account funding. Tax invoices depend on your tax profile and the payment policy.">
-      {invoiceHistoryLoading ? <div role="status" aria-busy="true" aria-label="Loading receipts" className="grid gap-4 py-4">
-        <span className="sr-only">Loading receipts</span>
+      <p className="sr-only" role="status" aria-live="polite">{receiptsStatus}</p>
+      {invoiceHistoryLoading ? <div aria-busy="true" className="grid gap-4 py-4">
         {[0, 1, 2].map(index => <div key={index} className="grid gap-2 border-b border-border pb-4 last:border-b-0">
           <Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-4 w-28 max-w-full" />
         </div>)}
@@ -88,7 +97,7 @@ export function ReceiptsSettings({
         const taxInvoice = row.taxInvoice
         const taxPending = pendingAction === `${row.commandRef}:tax`
         const stripePending = pendingAction === `${row.commandRef}:stripe`
-        return <SettingsRow key={row.commandRef} label={row.description} description={display.date}>
+        return <div id={`funding-receipt-${row.commandRef}`} key={row.commandRef} className="scroll-mt-24"><SettingsRow label={row.description} description={display.date}>
           <div className="flex min-w-0 flex-col gap-2 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono tabular-nums">{display.amount}</span>
@@ -103,13 +112,13 @@ export function ReceiptsSettings({
             </div>
             {taxInvoice?.kind === 'withheld' && <span className="text-xs text-muted-foreground">
               {taxInvoice.reason === 'customer_tax_facts_missing' ? <>
-                Tax details missing. <Link to="/owner/settings/tax" className="text-primary underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">Update tax details</Link> to obtain an eligible invoice.
+                Tax details missing. <Link to="/owner/settings/tax" className="text-primary underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">Update tax details</Link> to obtain an eligible invoice.
               </> : taxInvoice.reason === 'tax_invoice_not_generated' ? 'Tax invoice pending generation.'
                 : taxInvoice.reason === 'policy_disabled' ? 'Tax invoices are disabled for this environment.'
                   : 'Tax invoice unavailable.'}
             </span>}
           </div>
-        </SettingsRow>
+        </SettingsRow></div>
       })}
     </SettingsGroup>
     {(invoiceHistoryHasMore || invoiceHistoryLoadingMore) && <div className="flex justify-center pt-4">

@@ -58,8 +58,10 @@ export function AeAppHeader({
   hydrated,
   chatFrame,
 }: AeAppHeaderProps) {
-  const title = useOperatorFrameChrome()?.title
+  const frameChrome = useOperatorFrameChrome()
+  const title = frameChrome?.title
   const pageTitle = typeof title === 'string' && title !== '' ? title : null
+  const contentOwnsHeading = frameChrome?.contentOwnsHeading === true
 
   return (
     <header
@@ -92,8 +94,12 @@ export function AeAppHeader({
         >
           <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
           {chatActionSlot(chatFrame)}
-          {pageTitle === null || chatFrame ? null : (
-            <h1 className={cn('min-w-0 flex-1 truncate text-title', pageTitle === 'Settings' && 'max-[359px]:sr-only')} title={pageTitle} aria-label={pageTitle}>
+          {pageTitle === null || chatFrame ? null : contentOwnsHeading ? (
+            <p className={cn('min-w-0 flex-1 truncate text-title', pageTitle === 'Settings' && 'max-[359px]:sr-only')} title={pageTitle}>
+              {pageTitle}
+            </p>
+          ) : (
+            <h1 className={cn('min-w-0 flex-1 truncate text-title', pageTitle === 'Settings' && 'max-[359px]:sr-only')} title={pageTitle}>
               {pageTitle}
             </h1>
           )}

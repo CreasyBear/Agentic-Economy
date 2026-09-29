@@ -22,6 +22,7 @@ export type TeamInviteFormProps = Readonly<{
   pending: boolean
   message: string
   error: string
+  emailError: string
   onEmailChange: (email: string) => void
   onRoleChange: (role: 'admin' | 'member') => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void

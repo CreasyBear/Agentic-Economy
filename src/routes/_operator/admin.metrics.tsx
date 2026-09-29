@@ -6,11 +6,14 @@ import {
   ADMIN_METRICS_COPY,
   adminMetricsSearchSchema,
 } from '@/components/ae/admin/metrics/metrics.contracts'
+import { recoverableSearch } from '@/lib/client/recoverable-search'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/admin/metrics')({
   ...operatorRouteOptions,
-  validateSearch: adminMetricsSearchSchema,
+  validateSearch: recoverableSearch(adminMetricsSearchSchema, {
+    fieldLabels: { range: 'Reporting range' },
+  }),
   pendingComponent: AdminMetricsPageSkeleton,
   head: () => ({
     meta: [
@@ -28,6 +31,7 @@ function AdminMetricsRoute() {
   return (
     <AdminMetricsPage
       range={search.range ?? 'last_7'}
+      {...(search.rejected === undefined ? {} : { rejected: search.rejected })}
       onRangeChange={(range) => void navigate({ search: { range }, replace: true })}
     />
   )

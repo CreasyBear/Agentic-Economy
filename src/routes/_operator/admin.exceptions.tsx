@@ -6,12 +6,14 @@ import { AdminExceptionsPageSkeleton } from '@/components/ae/admin/exceptions/Ad
 import {
   ADMIN_EXCEPTIONS_COPY,
   adminExceptionsSearchSchema,
+  type AdminExceptionsSearch,
 } from '@/components/ae/admin/exceptions/exceptions.contracts'
 import {
   buildAdminEventProperties,
   captureAdminEvent,
 } from '@/lib/observability/admin-event-props'
 import type { AdminExceptionKind } from '@/lib/operator/admin-console/contracts'
+import { recoverableSearch } from '@/lib/client/recoverable-search'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readOperatorContextThroughSource } from '@/lib/server/operator-context.functions'
 import { principalRef } from '@/modules/principal-account/principal/public'
@@ -29,7 +31,9 @@ const captureAdminQueueViewServer = createServerFn()
 
 export const Route = createFileRoute('/_operator/admin/exceptions')({
   ...operatorRouteOptions,
-  validateSearch: adminExceptionsSearchSchema,
+  validateSearch: (search: Record<string, unknown>): AdminExceptionsSearch => recoverableSearch(adminExceptionsSearchSchema, {
+    fieldLabels: { kind: 'Kind', partition: 'State', ref: 'Reference', loaded: 'Loaded page' },
+  })(search),
   loaderDeps: ({ search }) => ({ kind: search.kind ?? null, partition: search.partition ?? null }),
   loader: ({ deps }) => captureAdminQueueViewServer({ data: deps }),
   pendingComponent: AdminExceptionsPageSkeleton,

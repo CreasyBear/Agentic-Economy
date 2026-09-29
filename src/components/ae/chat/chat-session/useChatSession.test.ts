@@ -436,4 +436,30 @@ describe('useChatSession', () => {
     unmount()
     expect(third?.aborted).toBe(true)
   })
+
+  it('keeps an over-limit draft intact and blocks sending', () => {
+    const overLimit = `a${'b'.repeat(2_000)}`
+    const { result } = renderHook(() => useChatSession(baseProps))
+    act(() => result.current.composer.onPromptChange(overLimit))
+    expect(result.current.composer.prompt).toBe(overLimit)
+    expect(result.current.composer.error).toBe('Messages can be at most 2,000 characters.')
+    expect(result.current.composer.disabled).toBe(false)
+    act(() => { void result.current.composer.onSubmit() })
+    expect(sendMessagesMock).not.toHaveBeenCalled()
+    expect(result.current.composer.prompt).toBe(overLimit)
+  })
+
+  it('keeps an unsent draft when the chat session remounts', async () => {
+    const first = renderHook(() => useChatSession(baseProps))
+    act(() => first.result.current.composer.onPromptChange('Weather draft to keep'))
+    first.unmount()
+    const reloaded = renderHook(() => useChatSession(baseProps))
+    await waitFor(() => expect(reloaded.result.current.composer.prompt).toBe('Weather draft to keep'))
+  })
+
+  it('keeps a private thread behind sign-in when signed out', () => {
+    const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'private-thread' }))
+    expect(result.current.signInToThread?.href).toBe('/sign-in?redirect=%2Ft%2Fprivate-thread')
+    expect(result.current.transcript.messages).toEqual([])
+  })
 })

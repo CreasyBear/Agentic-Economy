@@ -5,6 +5,7 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
+import { AdminSearchNotice } from '../AdminSearchNotice'
 import { AdminAuditPageSkeleton } from './AdminAuditPageSkeleton'
 import { AdminMembershipActions } from './AdminMembershipActions'
 import {
@@ -56,6 +57,7 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
 
   return page(
     <div className="grid gap-section">
+      <AdminSearchNotice rejected={props.search.rejected} />
       <AeSection title={AUDIT_COPY.filtersTitle} description={AUDIT_COPY.filtersDescription}>
         <AuditFilterChips
           chips={audit.chips}

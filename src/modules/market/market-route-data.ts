@@ -6,7 +6,7 @@ import {
   readX402DirectoryCatalogueServer,
 } from '@/modules/market/x402-directory-index.functions'
 import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue } from '@/modules/market/x402-directory-catalogue'
-import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
+import { directoryBooleanSearchKeys, directoryCatalogueSearchKeys, directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
 import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace-home.functions'
 import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 
@@ -113,19 +113,104 @@ export function carryMarketCompare<const T extends Record<string, unknown>>(
   return { ...to, compare: from.compare }
 }
 
-export function validateMarketSearch(search: Record<string, unknown>): MarketSearch {
-  const directory = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(search))
-  if (search.providerCursor !== undefined && (typeof search.providerCursor !== 'string' || search.providerCursor.length === 0 || search.providerCursor.length > 16_384)) {
-    throw new Error('Invalid Provider catalogue cursor')
+const CATALOGUE_PAGE_MAX = 50
+const NUMERIC_SEARCH_KEYS = ['minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'offset'] as const
+
+function finiteSearchNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string' || !/^-?(?:\d+|\d*\.\d+)$/u.test(value.trim())) return undefined
+  const parsed = Number(value.trim())
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function optionalSearchBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return undefined
+}
+
+/** URL values are untrusted. Keep fields the catalogue schema accepts and omit the rest. */
+function catalogueSearchFromUrl(search: Record<string, unknown>): Record<string, unknown> {
+  const candidate: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(directoryCatalogueSearchValues(search))) {
+    if (value === undefined || value === '') continue
+    candidate[key] = value
   }
+  for (const key of NUMERIC_SEARCH_KEYS) {
+    if (!(key in candidate)) continue
+    const number = finiteSearchNumber(candidate[key])
+    if (number === undefined) delete candidate[key]
+    else candidate[key] = number
+  }
+  for (const key of directoryBooleanSearchKeys) {
+    if (!(key in candidate)) continue
+    const flag = optionalSearchBoolean(candidate[key])
+    if (flag === undefined) delete candidate[key]
+    else candidate[key] = flag
+  }
+  if (typeof candidate.query === 'string' && candidate.sort !== undefined && candidate.sort !== 'relevance') delete candidate.sort
+  if (candidate.indexCursor !== undefined && candidate.offset !== undefined) delete candidate.offset
+  if (candidate.alternativeTo !== undefined && (typeof candidate.query !== 'string' || candidate.query.trim().length === 0)) delete candidate.alternativeTo
+  if (typeof candidate.minUsdPrice === 'number' && typeof candidate.maxUsdPrice === 'number' && candidate.minUsdPrice > candidate.maxUsdPrice) {
+    delete candidate.minUsdPrice
+    delete candidate.maxUsdPrice
+  }
+  if (typeof candidate.minPayers30d === 'number' && typeof candidate.maxPayers30d === 'number' && candidate.minPayers30d > candidate.maxPayers30d) {
+    delete candidate.minPayers30d
+    delete candidate.maxPayers30d
+  }
+  let remaining = candidate
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const parsed = x402DirectoryCatalogueInputSchema.safeParse(remaining)
+    if (parsed.success) return parsed.data
+    const keys = new Set(parsed.error.issues.flatMap(issue => typeof issue.path[0] === 'string' ? [issue.path[0]] : []))
+    if (keys.size === 0) {
+      if ('sort' in remaining) delete remaining.sort
+      else if ('offset' in remaining) delete remaining.offset
+      else if ('alternativeTo' in remaining) delete remaining.alternativeTo
+      else {
+        delete remaining.minUsdPrice
+        delete remaining.maxUsdPrice
+        delete remaining.minPayers30d
+        delete remaining.maxPayers30d
+      }
+    } else {
+      for (const key of keys) delete remaining[key]
+    }
+    remaining = { ...remaining }
+  }
+  return {}
+}
+
+function cataloguePage(value: unknown): number | undefined {
+  const page = finiteSearchNumber(value)
+  if (page === undefined || !Number.isInteger(page) || page < 2 || page > CATALOGUE_PAGE_MAX) return undefined
+  return page
+}
+
+const MARKET_SEARCH_KEYS = ['providerCursor', 'view', 'compare', 'resource', 'page', ...directoryCatalogueSearchKeys] as const
+
+export function validateMarketSearch(search: Record<string, unknown>): MarketSearch {
+  const directory = catalogueSearchFromUrl(search)
+  const providerCursor = typeof search.providerCursor === 'string' && search.providerCursor.length > 0 && search.providerCursor.length <= 16_384
+    ? search.providerCursor
+    : undefined
   const compareRefs = parseMarketCompareRefs(search.compare)
-  return {
+  const page = cataloguePage(search.page)
+  const accepted: Record<string, unknown> = {
     ...directory,
-    ...(typeof search.providerCursor === 'string' ? { providerCursor: search.providerCursor } : {}),
+    ...(providerCursor === undefined ? {} : { providerCursor }),
     ...(search.view === 'discover' || search.view === 'tools' || search.view === 'providers' || search.view === 'saved' ? { view: search.view } : {}),
     ...(compareRefs === undefined ? {} : { compare: compareRefs.join(',') }),
     ...(typeof search.resource === 'string' && search.resource.length > 0 && search.resource.length <= 8_192 ? { resource: search.resource } : {}),
+    ...(page === undefined ? {} : { page }),
   }
+  // The router merges this object over the raw URL. An omitted key would keep the rejected value and the loader would throw.
+  for (const key of MARKET_SEARCH_KEYS) {
+    if (search[key] !== undefined && accepted[key] === undefined) accepted[key] = undefined
+  }
+  return accepted as MarketSearch
 }
 
 export function marketLoaderDeps(search: MarketSearch) {
@@ -157,13 +242,17 @@ async function resolveMarketCompareEntry(resource: string): Promise<MarketCompar
 }
 
 export async function loadMarketRouteData(deps: MarketSearch) {
-  const catalogueInput = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(deps))
+  const parsedCatalogue = x402DirectoryCatalogueInputSchema.safeParse(catalogueSearchFromUrl({ ...directoryCatalogueSearchValues(deps) }))
+  const catalogueInput = parsedCatalogue.success ? parsedCatalogue.data : x402DirectoryCatalogueInputSchema.parse({})
   const view = resolveMarketView(deps)
   const showHome = view === 'discover'
   const compareRefs = parseMarketCompareRefs(deps.compare) ?? []
   const [catalogue, home, overview, compareEntries] = await Promise.all([
     catalogueInput.query === undefined || catalogueInput.alternativeTo !== undefined
-      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } })
+      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } }).catch((cause: unknown) => {
+          console.error('[market] directory catalogue unavailable', { cause })
+          return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
+        })
       : Promise.resolve({ kind: 'unavailable', reason: 'canonical_search' } as const satisfies X402DirectoryCatalogue),
     showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
     readX402DirectoryCatalogueOverviewServer().catch(cause => {
@@ -176,4 +265,14 @@ export async function loadMarketRouteData(deps: MarketSearch) {
     ? catalogue.page
     : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
   return { page, catalogue, overview, home, providers: undefined, compareEntries, view }
+}
+
+/** A failed catalogue read keeps the last loaded view. Keyword search is not a failure. */
+export function retainedMarketCatalogue<T extends Readonly<{ page: { kind: string }; catalogue: X402DirectoryCatalogue }>>(
+  previous: T | undefined,
+  next: T,
+): Readonly<{ shown: T; retainPrevious: boolean }> {
+  const failed = next.catalogue.kind === 'unavailable' && next.catalogue.reason === 'source_unavailable'
+  if (failed && previous !== undefined && previous.page.kind === 'ok') return { shown: previous, retainPrevious: true }
+  return { shown: next, retainPrevious: false }
 }

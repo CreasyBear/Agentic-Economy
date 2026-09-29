@@ -53,7 +53,7 @@ describe('/admin/exceptions', () => {
     expect(screen.getByText(/1 loaded \(partial\)/u)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     expect(mocks.loadMore).toHaveBeenCalledWith(50)
-    fireEvent.click(screen.getByRole('button', { name: 'Opened' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Opened (0)' }))
     expect(navigate).toHaveBeenCalledWith({ kind: 'removal_dispute', partition: 'opened' })
     const refLink = screen.getByRole('link', { name: dispute.disputeRef })
     expect(refLink.getAttribute('href')).toContain('partition=contested&ref=dispute%3Aroute-test')
@@ -87,6 +87,41 @@ describe('/admin/exceptions', () => {
     expect(screen.getByText(admission.caseRef)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open object record' }).getAttribute('href'))
       .toBe('/admin/providers/exception-provider')
+  })
+
+  it('counts the selected partition separately from the kind total', () => {
+    mocks.query.mockImplementation((query, args) => args === 'skip' ? undefined : getFunctionName(query) === 'adminConsoleExceptions:readAdminExceptionOverview'
+      ? [
+          { kind: 'source_authority_review', partition: 'review_required', observed: 0, complete: true, unavailable: false },
+          { kind: 'source_authority_review', partition: 'unset', observed: 20, complete: false, unavailable: false },
+        ]
+      : getFunctionName(query) === 'adminConsoleExceptions:listRecentPurchaseResolutions'
+        ? [
+            { callRef: `${callRef}`, terminalState: 'released', resolvedAt: Date.now() },
+            { callRef: `operation-invocation:v1:${'c'.repeat(64)}`, terminalState: 'completed', resolvedAt: Date.now() },
+            { callRef: `operation-invocation:v1:${'d'.repeat(64)}`, terminalState: 'refunded', resolvedAt: Date.now() },
+            { callRef: `operation-invocation:v1:${'e'.repeat(64)}`, terminalState: 'disputed', resolvedAt: Date.now() },
+          ]
+        : [])
+    mocks.paginated.mockReturnValue({ status: 'CanLoadMore', results: [], loadMore: mocks.loadMore })
+    const { navigate } = renderPage({ kind: 'source_authority_review', partition: 'review_required', loaded: 100 })
+    expect(screen.getByRole('button', { name: 'Source authority reviews (0)' })).toBeTruthy()
+    expect(screen.getByText('All states (≥20)')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Review required (0)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Legacy unset (≥20)' })).toBeTruthy()
+    expect(screen.getByText('Released')).toBeTruthy()
+    expect(screen.getByText('Completed')).toBeTruthy()
+    expect(screen.getByText('Refunded')).toBeTruthy()
+    expect(screen.getByText('Disputed')).toBeTruthy()
+    expect(screen.queryByText('released')).toBeNull()
+    expect(mocks.paginated).toHaveBeenCalledWith(expect.anything(), expect.anything(), { initialNumItems: 100 })
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    expect(mocks.loadMore).toHaveBeenCalledWith(50)
+    expect(navigate).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'source_authority_review',
+      partition: 'review_required',
+      loaded: 150,
+    }))
   })
 
   it('marks a source unavailable rather than presenting its unknown count as zero', () => {

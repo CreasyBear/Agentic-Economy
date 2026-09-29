@@ -69,7 +69,7 @@ export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
                   className={buttonVariants({
                     variant: 'outline',
                     size: 'lg',
-                    className: 'rounded-full border-white/30 bg-[var(--ae-overlay-scrim)] px-6 text-white backdrop-blur-md hover:bg-white/10 hover:text-white',
+                    className: 'rounded-full border-background/40 bg-foreground px-6 text-background hover:bg-foreground/90',
                   })}
                 >
                   {AE_SITE_FOOTER.closer.secondaryAction}
@@ -84,7 +84,7 @@ export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
             <a
               href={AECON_MARKETING_URL}
               aria-label="About AECON"
-              className="inline-flex min-h-touch items-center gap-2 rounded-sm text-sm font-semibold transition-opacity duration-fast hover:opacity-90 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              className="inline-flex min-h-touch items-center gap-2 rounded-sm text-sm font-semibold transition-opacity duration-fast hover:opacity-90 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <img
                 src={AECON_MARK_SRC}

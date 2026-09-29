@@ -12,17 +12,16 @@ import {
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { captureRouteException } from '@/lib/observability/capture-route-exception'
-import { parseOwnerToolsCompatibilitySearch, type OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
+import { type OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
 import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 import {
-  connectionRefFromHash,
   sameX402Handoff,
   type PendingX402Return,
   type X402HandoffIdentity,
 } from './owner-provider-connections-model'
 import { useOwnerProviderConnectionLifecycle } from './owner-provider-connection-lifecycle'
 import { useOwnerProviderConnectionFormFlow } from './owner-provider-connection-form-flow'
+import { useProviderConnectionHashFocus } from './useProviderConnectionHashFocus'
 
 export type OwnerProviderConnectionsStateProps = Readonly<{
   businessId?: string
@@ -86,34 +85,7 @@ export function useOwnerProviderConnectionsState({
     actor: 'provider',
   }).label
 
-  useEffect(() => {
-    const focusHashTarget = () => {
-      let targetId: string
-      try {
-        targetId = decodeURIComponent(window.location.hash.replace(/^#/, ''))
-      } catch (cause) {
-        captureRouteException(cause, { site: 'focusHashTarget' }, 'warning')
-        return
-      }
-      if (
-        targetId !== 'provider-connections'
-        && targetId !== 'provider-x402-resource-url'
-        && !targetId.startsWith('provider-connection-')
-      ) return
-      const target = document.getElementById(targetId)
-      if (target === null) return
-      target.scrollIntoView({ block: 'start' })
-      target.focus({ preventScroll: true })
-    }
-    window.addEventListener('hashchange', focusHashTarget)
-    focusHashTarget()
-    const requestedRebind = parseOwnerToolsCompatibilitySearch(Object.fromEntries(new URLSearchParams(window.location.search))).rebind
-    if (requestedRebind !== undefined) {
-      setRebindOfferingRef(requestedRebind)
-      setRebindConnectionRef(connectionRefFromHash())
-    }
-    return () => window.removeEventListener('hashchange', focusHashTarget)
-  }, [])
+  const { programmaticFocusId, clearProgrammaticFocus } = useProviderConnectionHashFocus(setRebindOfferingRef, setRebindConnectionRef)
 
   useEffect(() => {
     const pendingReturn = pendingX402ReturnRef.current
@@ -287,6 +259,8 @@ export function useOwnerProviderConnectionsState({
     resourceUrl, method, inspection, claimSignature, busy, refreshRequired, notice,
     rebindOfferingRef, rebindConnectionRef, refreshedForRebind, revokeTarget, revokePending,
     rebindLinkRef, resourceUrlInputRef, revokeTriggerRef,
+    programmaticFocusId,
+    clearProgrammaticFocus,
     environment, canConnect, reauthorizing, missingConnectionActionLabel,
     fieldsLocked: reauthorizing || x402Handoff !== undefined,
     beginConnection, changeResourceUrl, changeMethod,

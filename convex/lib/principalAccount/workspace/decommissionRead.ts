@@ -51,7 +51,7 @@ export async function loadTransferCandidates(
       .query('principals')
       .withIndex('by_principalRef', (query) => query.eq('principalRef', membership.memberPrincipalRef))
       .unique()
-    if (memberPrincipal === null || memberPrincipal.lifecycle !== 'active') continue
+    if (memberPrincipal === null || memberPrincipal.lifecycle !== 'active' || memberPrincipal.kind !== 'human') continue
     candidates.push({
       principalRef: membership.memberPrincipalRef,
       displayName: memberPrincipal.displayName,

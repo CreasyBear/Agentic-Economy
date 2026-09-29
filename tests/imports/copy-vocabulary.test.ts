@@ -41,7 +41,7 @@ const COPY_CEILINGS: Record<CopyRuleId, number> = {
   commitment: 0,
   'callable-operation': 0,
   'commercial-closure': 0,
-  'legacy-credential': 2,
+  'legacy-credential': 0,
   'used-recently': 1,
   'one-call-away': 1,
   'connection-online': 0,

@@ -133,8 +133,33 @@ export type SupplyMcpRemote = Readonly<{
   serverUrl: string
 }>
 
+export const PUBLIC_OPENAPI_LOAD_REFUSALS = [
+  'source_unavailable',
+  'source_unreadable',
+  'source_invalid',
+  'source_too_large',
+  'source_too_deep',
+  'source_version_unsupported',
+  'schema_missing',
+] as const
+
+export type PublicOpenApiLoadRefusal = Readonly<{
+  kind: 'refused'
+  reason: (typeof PUBLIC_OPENAPI_LOAD_REFUSALS)[number]
+}>
+
+export type PublicOpenApiLoad = ValidOpenApiDocument | PublicOpenApiLoadRefusal
+
+export function isPublicOpenApiLoadRefusal(value: unknown): value is PublicOpenApiLoadRefusal {
+  return isRecord(value)
+    && value.kind === 'refused'
+    && typeof value.reason === 'string'
+    && (PUBLIC_OPENAPI_LOAD_REFUSALS as readonly string[]).includes(value.reason)
+    && !('openapi' in value)
+}
+
 export type SupplySourcePreviewDependencies = Readonly<{
-  loadOpenApi?: (definitionUrl: string) => Promise<ValidOpenApiDocument>
+  loadOpenApi?: (definitionUrl: string) => Promise<PublicOpenApiLoad>
   inspectX402?: (input: Readonly<{
     endpointUrl: string
     method: 'GET' | 'POST'
@@ -317,7 +342,7 @@ export async function previewSupplySource(
   const definitionUrl = validHttpsUrl(input.definitionUrl)
   if (definitionUrl === undefined) return sourceCorrection('OpenAPI URL invalid', 'Enter the public HTTPS URL of an OpenAPI 3.0 or 3.1 document, then preview it again.')
 
-  let loaded: unknown
+  let loaded: PublicOpenApiLoad
   try {
     loaded = await (dependencies.loadOpenApi ?? loadPublicOpenApi)(definitionUrl)
   } catch (cause) {
@@ -326,6 +351,7 @@ export async function previewSupplySource(
       reason: 'source_unavailable',
     })
   }
+  if (isPublicOpenApiLoadRefusal(loaded)) return openApiLoadCorrection(loaded.reason)
   const bounded = inspectSource(loaded)
   if (bounded.kind === 'refused') return openApiInputCorrection(bounded.reason)
   const validated = await validateOpenApiDocument(loaded)
@@ -627,10 +653,12 @@ async function previewX402Source(
   }
 }
 
-export async function loadPublicOpenApi(definitionUrl: string): Promise<ValidOpenApiDocument> {
+export async function loadPublicOpenApi(definitionUrl: string): Promise<PublicOpenApiLoad> {
   const target = new URL(definitionUrl)
   const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
-  if (!await isPublicHttpTarget(target, defaultDnsResolver)) throw new Error('target_not_public')
+  if (!await isPublicHttpTarget(target, defaultDnsResolver)) {
+    return { kind: 'refused', reason: 'source_unavailable' }
+  }
   const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
   const response = await sendGuardedHttpRequest(new Request(target, {
     method: 'GET',
@@ -638,9 +666,21 @@ export async function loadPublicOpenApi(definitionUrl: string): Promise<ValidOpe
     redirect: 'manual',
     signal: AbortSignal.timeout(10_000),
   }), 262_144)
-  if (!response.ok || response.status >= 300) throw new Error('source_unavailable')
-  const parsed = await validateOpenApiDocument(await response.text())
-  if (parsed.kind === 'refused') throw new Error(parsed.reason)
+  if (response.status === 413 || response.headers.get('x-ae-probe-outcome') === 'response_too_large') {
+    return { kind: 'refused', reason: 'source_too_large' }
+  }
+  if (!response.ok || response.status >= 300) return { kind: 'refused', reason: 'source_unavailable' }
+  let text: string
+  try {
+    text = await response.text()
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'source_unreadable' } as const, {
+      site: 'loadPublicOpenApi',
+      reason: 'invalid_response',
+    })
+  }
+  const parsed = await validateOpenApiDocument(text)
+  if (parsed.kind === 'refused') return parsed
   return parsed.document
 }
 
@@ -756,6 +796,17 @@ function boundedText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed.slice(0, 1_000) : undefined
+}
+
+function openApiLoadCorrection(reason: PublicOpenApiLoadRefusal['reason']): SupplySourcePreview {
+  if (reason === 'source_unavailable') return openApiCorrection('OpenAPI source unavailable')
+  if (reason === 'source_unreadable') {
+    return sourceCorrection(
+      'OpenAPI document could not be read',
+      'The response could not be read. Confirm the URL returns the OpenAPI document, then preview it again.',
+    )
+  }
+  return openApiInputCorrection(reason)
 }
 
 function openApiInputCorrection(reason: 'source_invalid' | 'source_too_large' | 'source_too_deep' | 'source_version_unsupported' | 'schema_missing'): SupplySourcePreview {

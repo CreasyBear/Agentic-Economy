@@ -110,6 +110,23 @@ describe('AeAutoRechargeCard (W-21)', () => {
     )
 
     expect(screen.getByText(/top-up in progress/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /recover it on credit/i })).toHaveAttribute('href', '/owner/credit')
+    expect(screen.queryByText(/auto-recharge is waiting/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/A\$0\.00 will be charged/i)).not.toBeInTheDocument()
+  })
+
+  it('U4b: a pending funding command does not hide a missing card', () => {
+    render(
+      <AeAutoRechargeCard
+        settings={defaultSettings}
+        mandateState="missing"
+        pendingTopup={{ commandRef: 'funding:pending-one' }}
+        onSave={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('link', { name: /recover it on credit/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /add a payment method/i })).toBeInTheDocument()
   })
 
   it('U5: live trigger statement when enabled with valid default amounts', () => {
@@ -201,7 +218,7 @@ describe('AeAutoRechargeCard (W-21)', () => {
     })
   })
 
-  it('U10: pending topup shows pulsing dot and waiting copy', () => {
+  it('U10: pending funding command shows its credit recovery, not an auto-recharge charge', () => {
     const onSave = vi.fn()
     const { container } = render(
       <AeAutoRechargeCard
@@ -213,8 +230,9 @@ describe('AeAutoRechargeCard (W-21)', () => {
     )
 
     expect(container.querySelector('.animate-pulse')).toBeTruthy()
-    expect(screen.getByText(/auto-recharge is waiting/i)).toBeInTheDocument()
-    expect(screen.getByText(/a\$0\.00 will be charged for a duplicate top-up/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /recover it on credit/i })).toHaveAttribute('href', '/owner/credit')
+    expect(screen.queryByText(/auto-recharge is waiting/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/a\$0\.00 will be charged for a duplicate top-up/i)).not.toBeInTheDocument()
   })
 
   it('U11: authentication required disables switch and shows bank guidance', () => {

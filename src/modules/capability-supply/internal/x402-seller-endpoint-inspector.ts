@@ -548,3 +548,43 @@ function refused(
     },
   }
 }
+
+export function selectPinnedX402Alternative(
+  paymentRequiredJson: string,
+  profile: X402PaymentProfile,
+): Readonly<{
+  scheme: string
+  network: string
+  amount: string
+  asset: string
+  payTo: string
+  maxTimeoutSeconds: number
+  extra: Readonly<Record<string, JsonValue>>
+}> | undefined {
+  if (paymentRequiredJson.length > 65_536) return undefined
+  let parsed: unknown
+  try { parsed = JSON.parse(paymentRequiredJson) } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'selectPinnedX402Alternative', reason: 'invalid_response' })
+  }
+  let validated: ReturnType<typeof validateX402PaymentRequired>
+  try { validated = validateX402PaymentRequired(parsed) } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'selectPinnedX402Alternative', reason: 'invalid_response' })
+  }
+  const paymentRequired = validV2Challenge(validated)
+  if (paymentRequired === undefined) return undefined
+  const accepts = normalizedAlternatives(paymentRequired.accepts, profile)
+  if (accepts === undefined) return undefined
+  const selection = paymentSelection(accepts, profile)
+  if (selection.kind !== 'selected') return undefined
+  const selected = accepts.find((candidate) => candidate.alternativeId === selection.alternativeId)
+  if (selected === undefined) return undefined
+  return {
+    scheme: selected.scheme,
+    network: selected.network,
+    amount: selected.amount,
+    asset: selected.asset,
+    payTo: selected.payTo,
+    maxTimeoutSeconds: selected.maxTimeoutSeconds,
+    extra: selected.extra,
+  }
+}

@@ -542,4 +542,24 @@ describe('AeKeyRevealDialog (W-27)', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
+
+  it('keeps acknowledgement and Done outside the scrolling secret body', () => {
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+    const scroll = document.querySelector('[data-ae-key-reveal-scroll]')
+    const checkbox = screen.getByRole('checkbox', { name: /i have saved my secret key securely/i })
+    const done = screen.getByRole('button', { name: /^done$/i })
+    expect(scroll).not.toBeNull()
+    expect(scroll?.contains(checkbox)).toBe(false)
+    expect(scroll?.contains(done)).toBe(false)
+    expect(scroll?.className).toContain('overflow-y-auto')
+    expect(document.body.textContent).not.toContain(baseReveal.secret)
+  })
+
 })

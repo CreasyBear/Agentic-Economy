@@ -19,6 +19,34 @@ function backendWithAggregates() {
   return backend;
 }
 
+async function completeCall(
+  backend: ReturnType<typeof backendWithAggregates>,
+  principalId: string,
+  completedToolRef: string,
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    await ctx.db.insert("capabilityCalls", {
+      callRef: `operation-invocation:v1:${principalId}:${completedToolRef.slice(-8)}`,
+      principalId,
+      ownerId: `acc_${principalId}`,
+      credentialId: "credential:rating",
+      applicationRef: "application:rating",
+      toolRef: completedToolRef,
+      idempotencyKey: `idempotency:${principalId}:${completedToolRef}`,
+      environment: "sandbox",
+      grantRef: "grant:rating",
+      grantGeneration: 1,
+      policyDigest: "sha256:rating",
+      grantExpiresAt: 1_900_000_000_000,
+      inputDigest: "sha256:rating-input",
+      requestDigest: "sha256:rating-request",
+      state: "completed",
+      createdAt: 1_800_000_000_000,
+      updatedAt: 1_800_000_000_000,
+    });
+  });
+}
+
 describe("market listing evidence Convex seam", () => {
   it("updates one authenticated rating transactionally instead of double-counting", async () => {
     const backend = backendWithAggregates();
@@ -26,6 +54,7 @@ describe("market listing evidence Convex seam", () => {
       backend,
       "market-rating-reviewer",
     );
+    await completeCall(backend, canonicalPrincipalRef, toolRef);
 
     await reviewer.mutation(api.marketListingEvidence.rate, {
       toolRef,
@@ -111,6 +140,20 @@ describe("market listing evidence Convex seam", () => {
       toolRefs: ["operation:v1:not-a-public-tool-ref"],
       since: 0,
     })).rejects.toThrow("market_listing_evidence_tool_ref_invalid");
+  });
+
+  it("rejects a rating from an owner who has not completed that Tool", async () => {
+    const backend = backendWithAggregates();
+    const { owner: reviewer, canonicalPrincipalRef } = await publishedBusinessOwner(
+      backend,
+      "market-rating-unused",
+    );
+    const otherToolRef = `operation:v1:${"c".repeat(64)}`;
+    await completeCall(backend, canonicalPrincipalRef, otherToolRef);
+    await expect(reviewer.mutation(api.marketListingEvidence.rate, {
+      toolRef,
+      score: 5,
+    })).rejects.toThrow("market_rating_completed_call_required");
   });
 
   it("rejects anonymous ratings and invalid taxonomy assignments", async () => {

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { ADMIN_LIST_WINDOW, ADMIN_LIST_WINDOW_MAX } from '../admin-list-window'
 import type { AdminProposableAction } from '@/lib/operator/admin-console/contracts'
 import type { AdminRole } from '@/modules/security/public'
 import type { AdminAuditFilter, AdminAuditRow } from '@/lib/operator/admin-console/audit.contracts'
@@ -16,9 +17,13 @@ export const adminAuditSearchSchema = z.object({
   correlationId: optionalSearchText,
   from: z.coerce.number().finite().optional(),
   to: z.coerce.number().finite().optional(),
+  eventsLoaded: z.coerce.number().int().min(ADMIN_LIST_WINDOW).max(ADMIN_LIST_WINDOW_MAX).optional(),
+  approvalsLoaded: z.coerce.number().int().min(ADMIN_LIST_WINDOW).max(ADMIN_LIST_WINDOW_MAX).optional(),
 })
 
-export type AdminAuditSearch = z.infer<typeof adminAuditSearchSchema>
+export type AdminAuditSearch = z.infer<typeof adminAuditSearchSchema> & {
+  rejected?: string
+}
 
 export type AdminAuditFilterDraft = Readonly<{
   eventType: string

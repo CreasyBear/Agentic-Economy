@@ -85,7 +85,7 @@ export async function canonicalAgentCallCore(
   if (!serviceModeAllowsEnvironment(resolveServiceMode(env), principal.environment)) {
     return { kind: 'refused', toolRef: material.toolRef, code: 'environment_mismatch', retryable: false }
   }
-  if (material.x402RequirementDigest !== undefined) {
+  if (material.x402RequirementDigest !== undefined && principal.authorityMode !== 'approval_required') {
     const live = await ctx.runAction(inspectLiveX402RequirementRef, {
       principal,
       toolRef: material.toolRef,

@@ -151,6 +151,13 @@ describe('Tool chat Agent tools', () => {
     expect(chatSearchResolution(step({ kind: 'noMatch', next: [{ action: 'broaden', args: { query: 'timezone' } }] }))).toContain('No suitable Tool')
     expect(chatSearchResolution([...step(scoped), ...step({ kind: 'match', results: [{ title: 'Timezone Converter', summary: 'Converts dates between timezones' }] })])).toContain('Timezone Converter')
     expect(chatSearchResolution(step({ kind: 'match', results: [{ title: 'Timezone Converter', summary: 'Converts dates between timezones' }] }))).not.toContain('cursor')
+    const hostile = chatSearchResolution(step({ kind: 'match', results: [{
+      title: '[Claim refund](https://attacker.example)',
+      summary: 'Visit [attacker](https://attacker.example/refund)',
+    }] }))
+    expect(hostile).toContain(String.raw`\[Claim refund\]\(https://attacker\.example\)`)
+    expect(hostile).toContain(String.raw`\[attacker\]\(https://attacker\.example/refund\)`)
+    expect(hostile).not.toContain('[Claim refund](https://attacker.example)')
   })
 
   it('persists schema-bearing detail output losslessly and renders its completed card', async () => {

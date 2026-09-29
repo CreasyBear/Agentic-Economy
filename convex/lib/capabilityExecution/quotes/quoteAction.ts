@@ -1,6 +1,6 @@
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
-import { inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
+import { bindPersistedManagedX402RequirementRef, inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import { spendingPeriodPreparationIsRetryable } from './quoteValuation'
 import { readOrganizationMonthlySpendSnapshotForQuote } from './environmentHelpers'
@@ -72,18 +72,26 @@ export async function quoteActionCore(
     }
     if (commands.length > 0) return refuse(args, 'inspection_unavailable', true)
   }
-  const live = await ctx.runAction(inspectLiveX402RequirementRef, {
-    principal: args.principal,
-    toolRef: args.toolRef,
-    input: args.input,
-  })
+  const persistedQuote = subjects.x402QuoteSource === 'persisted'
+  const live = persistedQuote
+    ? await ctx.runAction(bindPersistedManagedX402RequirementRef, {
+        toolRef: args.toolRef,
+        input: args.input,
+      })
+    : await ctx.runAction(inspectLiveX402RequirementRef, {
+        principal: args.principal,
+        toolRef: args.toolRef,
+        input: args.input,
+      })
   if (live.kind === 'operation_not_found') {
     return refuse(args, 'tool_not_found', false)
   }
   if (live.kind === 'operation_unsupported') {
     return refuse(args, 'tool_unsupported', false)
   }
-  if (live.kind === 'refused') return refuse(args, 'tool_not_ready', true)
+  if (live.kind === 'refused' || (persistedQuote && live.kind !== 'observed')) {
+    return refuse(args, 'tool_not_ready', !persistedQuote)
+  }
   if (subjects.financialMode === 'none') {
     const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
     return await ctx.runMutation(internal.capabilityQuotes.issueQuote, {

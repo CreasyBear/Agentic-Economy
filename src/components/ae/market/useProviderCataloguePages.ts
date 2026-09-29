@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { absorbProviderEntries, DIRECTORY_LIST_PAGE_SIZE } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryCatalogue, X402DirectoryCatalogueInput } from '@/modules/market/x402-directory-catalogue'
@@ -76,12 +76,22 @@ function hostsBefore(pages: readonly ProviderPage[], index: number): Set<string>
 }
 
 /** Providers paginate by host. A page keeps reading the sorted Tool list until it has 12 hosts, or the list ends. */
-export function useProviderCataloguePages(enabled: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput) {
+export function useProviderCataloguePages(enabled: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput, requestedPage = 1) {
   const filtersRef = useRef(filters)
   const generation = useRef(0)
   const [state, setState] = useState(() => initialProviderPages(enabled, catalogue))
   useEffect(() => { filtersRef.current = filters }, [filters])
 
+  const [walkTarget, setWalkTarget] = useState(requestedPage)
+  const catalogueIdentity = useRef(catalogue)
+  useEffect(() => {
+    if (catalogueIdentity.current !== catalogue) {
+      catalogueIdentity.current = catalogue
+      setWalkTarget(1)
+      return
+    }
+    setWalkTarget(requestedPage)
+  }, [catalogue, requestedPage])
   useEffect(() => {
     const nextGeneration = generation.current + 1
     generation.current = nextGeneration
@@ -118,7 +128,7 @@ export function useProviderCataloguePages(enabled: boolean, catalogue: X402Direc
     setState(current => current.index === 0 || current.status === 'loading' ? current : { ...current, index: current.index - 1, status: 'idle' })
   }
 
-  async function loadNextPage() {
+  const loadNextPage = useCallback(async () => {
     if (state.status === 'loading') return
     const nextIndex = state.index + 1
     if (nextIndex < state.pages.length) {
@@ -163,7 +173,15 @@ export function useProviderCataloguePages(enabled: boolean, catalogue: X402Direc
       if (generation.current !== generationAtStart) return
       setState(current => current.source === source && current.index === index ? { ...current, status: 'failed' } : current)
     }
-  }
+  }, [state])
+
+  useEffect(() => {
+    if (!enabled) return
+    const target = walkTarget - 1
+    if (target < 0 || state.status === 'loading' || target < state.pages.length) return
+    if (state.status === 'failed' || state.pages.at(-1)?.isDone === true) return
+    void loadNextPage()
+  }, [enabled, walkTarget, state.pages, state.status, loadNextPage])
 
   const current = state.pages[state.index]
   return {
@@ -172,6 +190,7 @@ export function useProviderCataloguePages(enabled: boolean, catalogue: X402Direc
     status: state.status,
     hasPrevious: state.index > 0,
     pageNumber: state.pages.length === 0 ? 0 : state.index + 1,
+    loadedCount: state.pages.length,
     loadNextPage,
     showPreviousPage,
   }

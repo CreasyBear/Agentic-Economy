@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { completedChatFacts } from '../../../convex/lib/chat/generate/completedFacts'
+import { completedChatFacts, factsFromSavedTurn } from '../../../convex/lib/chat/generate/completedFacts'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 
 const callName = CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call']
@@ -40,5 +40,19 @@ describe('completed chat facts', () => {
     expect(answer).toContain('CallRef: invocation:original:2')
     expect(answer).toContain('reconciliation_required')
     expect(answer).toContain('Do not send another Call')
+  })
+
+  it('answers from a saved search when narration never arrived', () => {
+    const search = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
+    const answer = factsFromSavedTurn([{
+      role: 'tool',
+      content: [{
+        type: 'tool-result', toolName: search, toolCallId: 'search-1',
+        output: { type: 'json', value: { kind: 'match', results: [{ title: 'Weather Current', summary: 'Live city weather' }] } },
+      }],
+    }])
+    expect(answer).toContain('Weather Current')
+    expect(answer).toContain('Live city weather')
+    expect(answer).not.toMatch(/couldn't finish/i)
   })
 })

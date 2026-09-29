@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { AdminSearchNotice } from '../AdminSearchNotice'
 import { AdminProvidersListSkeleton } from './AdminProvidersListSkeleton'
 import { ProviderFilterChips } from './components/ProviderFilterChips'
 import { ProvidersTable } from './components/ProvidersTable'
@@ -27,6 +28,7 @@ export function AdminProvidersListPage(props: AdminProvidersListPageProps) {
   } else {
     content = (
       <div className="grid gap-section pb-page">
+        <AdminSearchNotice rejected={props.search.rejected} />
         <AeSection title={PROVIDERS_LIST_COPY.filterTitle} description={PROVIDERS_LIST_COPY.filterDescription}>
           <ProviderFilterChips filter={providers.filter} onChange={providers.onFilterChange} />
         </AeSection>

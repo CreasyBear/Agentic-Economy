@@ -1,7 +1,7 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeftIcon, ArrowRightIcon, CompassIcon, HeartIcon, ListFilterIcon, Loader2Icon, SearchIcon, StoreIcon, XIcon } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { degrade } from '@/lib/observability/degrade'
@@ -52,16 +52,26 @@ function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalo
 }
 
 
-function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput) {
+function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput, requestedPage: number) {
   const [state, setState] = useState(() => indexedPaginationState(indexed, catalogue))
+  const [walkTarget, setWalkTarget] = useState(requestedPage)
+  const catalogueIdentity = useRef(catalogue)
   useEffect(() => {
     setState(indexedPaginationState(indexed, catalogue))
   }, [catalogue, indexed])
+  useEffect(() => {
+    if (catalogueIdentity.current !== catalogue) {
+      catalogueIdentity.current = catalogue
+      setWalkTarget(1)
+      return
+    }
+    setWalkTarget(requestedPage)
+  }, [catalogue, requestedPage])
   const current = state.pages[state.index]
-  function showPreviousPage() {
+  const showPreviousPage = useCallback(() => {
     setState(currentState => currentState.index === 0 || currentState.status === 'loading' ? currentState : { ...currentState, index: currentState.index - 1, status: 'idle' })
-  }
-  async function loadNextPage() {
+  }, [])
+  const loadNextPage = useCallback(async () => {
     if (state.status === 'loading') return
     const nextIndex = state.index + 1
     if (nextIndex < state.pages.length) {
@@ -89,7 +99,14 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
       void cause
       setState(currentState => currentState.source === source && currentState.index === index ? { ...currentState, status: 'failed' } : currentState)
     }
-  }
+  }, [catalogue, current, filters, state])
+  useEffect(() => {
+    if (!indexed) return
+    const target = walkTarget - 1
+    if (target < 0 || state.status === 'loading' || target < state.pages.length) return
+    if (state.status === 'failed' || state.pages.at(-1)?.isDone === true) return
+    void loadNextPage()
+  }, [indexed, walkTarget, state.pages, state.status, loadNextPage])
   return {
     state: {
       items: current?.items ?? [],
@@ -97,6 +114,7 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
       status: state.status,
       hasPrevious: state.index > 0,
       pageNumber: state.pages.length === 0 ? 0 : state.index + 1,
+      loadedCount: state.pages.length,
     },
     loadNextPage,
     showPreviousPage,
@@ -233,12 +251,30 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
   const filterValues = directoryCatalogueSearchValues(search)
   const browse = !Object.entries(filterValues).some(([key, value]) => !['sort', 'indexCursor', 'offset'].includes(key) && value !== undefined && value !== false)
-  // Pages stay in component state. Convex pagination is cursor-based, and that
-  // cursor is too large for the market URL, so Previous returns to a page
-  // already fetched and Next asks for the following cursor. A new first page
-  // from the loader (filter, sort, or query) drops the stack.
-  const { state: loadMore, loadNextPage, showPreviousPage } = useIndexedPagination(indexed, catalogue, filterValues)
-  const providerPages = useProviderCataloguePages(indexed && view === 'providers', catalogue, filterValues)
+  // The page number is shareable. The index cursor stays out of the URL, and a
+  // refresh walks forward from the first page until that number or the list ends.
+  const requestedPage = search.page ?? 1
+  const { state: loadMore, loadNextPage, showPreviousPage } = useIndexedPagination(indexed, catalogue, filterValues, view === 'tools' ? requestedPage : 1)
+  const providerPages = useProviderCataloguePages(indexed && view === 'providers', catalogue, filterValues, requestedPage)
+  const publishedPage = useRef('')
+  const urlPage = search.page ?? 1
+  const visiblePageNumber = view === 'providers' ? providerPages.pageNumber : loadMore.pageNumber
+  const visiblePageStatus = view === 'providers' ? providerPages.status : loadMore.status
+  const visiblePageDone = view === 'providers' ? providerPages.isDone : loadMore.isDone
+  useEffect(() => {
+    if (!indexed || (view !== 'tools' && view !== 'providers')) return
+    if (visiblePageStatus === 'loading' || visiblePageNumber < 1 || visiblePageNumber === urlPage) return
+    if (visiblePageNumber < urlPage && !visiblePageDone) return
+    const signature = `${view}:${visiblePageNumber}`
+    if (publishedPage.current === signature) return
+    publishedPage.current = signature
+    const { indexCursor: _cursor, offset: _offset, ...filters } = filterValues
+    void navigate({
+      to: marketPath,
+      resetScroll: false,
+      search: carryMarketCompare(search, { ...filters, view, ...(visiblePageNumber > 1 ? { page: visiblePageNumber } : {}) }),
+    })
+  }, [filterValues, indexed, marketPath, navigate, search, urlPage, view, visiblePageDone, visiblePageNumber, visiblePageStatus])
   const comparisonPool = useMemo(() => [
     ...loadMore.items,
     ...(page.kind === 'ok' ? page.items : []),
@@ -390,7 +426,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             </div>
             <Badge variant="outline">{item.access === 'ae_callable' ? `AE-callable · ${item.readiness}` : item.access === 'setup_required' ? 'Connect to call' : item.access === 'unavailable' ? 'Currently unavailable · inspect' : 'External listing · not AE-callable'}</Badge>
             {authLoaded && isSignedIn
-              ? <Button variant="outline" size="sm" disabled={saved.status !== 'ready' || saved.pending(identity)} aria-busy={saved.pending(identity)} aria-pressed={saved.isSavedIdentity(identity)} onClick={() => saved.toggleIdentity(identity)}>{saved.isSavedIdentity(identity) ? 'Remove saved Tool' : 'Save Tool'}</Button>
+              ? <Button variant="outline" size="sm" disabled={saved.status !== 'ready' || saved.pending(identity)} aria-busy={saved.pending(identity)} {...(saved.status === 'failed' ? {} : { 'aria-pressed': saved.isSavedIdentity(identity) })} onClick={() => saved.toggleIdentity(identity)}>{saved.status === 'failed' ? 'Saved status unavailable' : saved.isSavedIdentity(identity) ? 'Remove saved Tool' : 'Save Tool'}</Button>
               : <Link to="/sign-in/$" params={{ _splat: '' }} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Sign in to save</Link>}
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -443,20 +479,20 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         }
       }}>
         <div className="grid grid-cols-1 items-center gap-related border-b border-border pb-related sm:grid-cols-[minmax(0,1fr)_auto]">
-          <TabsList variant="line" className="grid !h-auto w-full grid-cols-2 justify-start gap-1 sm:inline-flex sm:max-w-full sm:w-auto sm:overflow-x-auto" aria-label="Browse the marketplace">
-            <TabsTrigger value="discover" className="px-3 enabled:active:scale-100"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
-            <TabsTrigger value="providers" className="px-3 enabled:active:scale-100"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
-            <TabsTrigger value="tools" className="px-3 enabled:active:scale-100"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
-            <TabsTrigger value="saved" className="px-3 enabled:active:scale-100"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
+          <TabsList variant="line" className="grid h-auto w-full min-w-0 max-w-full grid-cols-2 justify-start gap-1 sm:inline-flex sm:w-auto sm:max-w-full sm:flex-wrap" aria-label="Browse the marketplace">
+            <TabsTrigger value="discover" className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
+            <TabsTrigger value="providers" className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
+            <TabsTrigger value="tools" className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
+            <TabsTrigger value="saved" className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-related justify-end">
             {count === undefined || view === 'saved' ? null : <p className="text-xs text-muted-foreground" role="status" aria-live="polite">{count}</p>}
             {view === 'saved' || view === 'discover' || indexed ? null : <DirectoryFilters search={search} onApply={applyFilters} />}
           </div>
         </div>
-        {saved.saveError === undefined ? null : <p role="alert" className="py-3 text-sm text-destructive">{saved.saveError}</p>}
+        {saved.status === 'failed' ? <div role="alert" className="flex flex-wrap items-center gap-3 py-3"><p className="text-sm text-destructive">{saved.saveError ?? 'Saved Tools could not be loaded. Save status is unknown.'}</p><Button type="button" variant="outline" onClick={saved.refresh}>Try again</Button></div> : saved.saveError === undefined ? null : <p role="alert" className="py-3 text-sm text-destructive">{saved.saveError}</p>}
         <TabsContent value="discover" className="pt-7">
-          {home === undefined ? <AeEmptyState title="Explore Tools" description="Browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>See all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} onCompare={toggleComparison}
+          {home === undefined ? <AeEmptyState title="Explore Tools" description="Browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>See all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} saveUnknown={authLoaded && isSignedIn && saved.status === 'failed'} onCompare={toggleComparison}
             isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
           {view === 'discover' ? comparisonTray : null}
         </TabsContent>
@@ -542,14 +578,19 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
             {tabItems.length === 0 ? <AeEmptyState title={search.alternativeTo !== undefined ? activePages.isDone ? 'No other callable Tool in the assessed catalogue' : 'No callable alternative on this page' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={search.alternativeTo !== undefined ? activePages.isDone ? 'Try a different capability or broaden the search.' : 'Continue to the next page to assess more Tools.' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
               ? <DirectoryProviderList entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: 'tools', provider }) }) }} />
-              : <DirectoryToolList items={tabItems.map(entry => ({ entry, search: sourceInput }))} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
+              : <DirectoryToolList items={tabItems.map(entry => ({ entry, search: sourceInput }))} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} saveUnknown={authLoaded && isSignedIn && saved.status === 'failed'} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
             {tab === 'tools' && view === 'tools' ? comparisonTray : null}
             {activePages.status === 'failed' && (tab === 'tools' || tab === 'providers') && indexed ? <p role="alert" className="mt-section text-right text-sm text-muted-foreground">The next page could not be loaded. This page is unchanged.</p> : null}
             <nav aria-label="Catalogue pages" className="mt-section grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-related border-t border-border pt-related">
               {(tab === 'tools' || tab === 'providers') && indexed ? <>
-                <span className="justify-self-start">{activePages.hasPrevious ? <Button type="button" variant="outline" className="h-11 active:scale-100" onClick={tab === 'providers' ? providerPages.showPreviousPage : showPreviousPage} disabled={activePages.status === 'loading'}><ArrowLeftIcon />Previous page</Button> : null}</span>
+                <span className="justify-self-start">{activePages.hasPrevious ? <Button type="button" variant="outline" className="h-11 active:scale-100" onClick={() => {
+                  const nextPage = activePages.pageNumber - 1
+                  if (tab === 'providers') providerPages.showPreviousPage()
+                  else showPreviousPage()
+                  void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, ...(nextPage > 1 ? { page: nextPage } : {}) }) })
+                }} disabled={activePages.status === 'loading'}><ArrowLeftIcon />Previous page</Button> : null}</span>
                 {activePages.pageNumber > 0 ? <p className="text-sm tabular-nums text-muted-foreground">Page {activePages.pageNumber}</p> : <span />}
-                <span className="justify-self-end">{activePages.isDone ? null : <Button type="button" variant="outline" className="h-11 active:scale-100" onClick={() => void (tab === 'providers' ? providerPages.loadNextPage() : loadNextPage())} disabled={activePages.status === 'loading'} aria-busy={activePages.status === 'loading'} aria-label={activePages.status === 'failed' ? 'Next page. Try again.' : 'Next page'}>
+                <span className="justify-self-end">{activePages.isDone ? null : <Button type="button" variant="outline" className="h-11 active:scale-100" onClick={() => { void (tab === 'providers' ? providerPages.loadNextPage() : loadNextPage()) }} disabled={activePages.status === 'loading'} aria-busy={activePages.status === 'loading'} aria-label={activePages.status === 'failed' ? 'Next page. Try again.' : 'Next page'}>
                   {activePages.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Next page<ArrowRightIcon />
                 </Button>}</span>
               </> : <>

@@ -1,6 +1,7 @@
 import type { UIMessage } from 'ai'
 import type { TranscriptMessage } from '../presentation'
 import { projectAnonymousTranscript } from '../presentation'
+import { degrade } from '@/lib/observability/degrade'
 
 const ACTIVE_SESSION_KEY = 'ae.chat.anonymous.active'
 const SESSION_PREFIX = 'ae.chat.anonymous.'
@@ -10,14 +11,34 @@ const MAX_TEXT = 8_000
 const SECRET = /\b(?:bearer\s+\S+|(?:api[_ -]?key|token|password|secret)\s*[:=]\s*\S+|sk-[A-Za-z0-9_-]{10,})/giu
 const encoder = new TextEncoder()
 
-const MAX_PROMPT_CHARACTERS = 2_000
+export const MAX_PROMPT_CHARACTERS = 2_000
+const DRAFT_KEY = 'ae.chat.draft'
 
 export function unicodeLength(value: string): number {
   return Array.from(value).length
 }
 
-export function boundPrompt(value: string): string {
-  return Array.from(value).slice(0, MAX_PROMPT_CHARACTERS).join('')
+export function promptLimitMessage(value: string): string {
+  return unicodeLength(value.trim()) > MAX_PROMPT_CHARACTERS
+    ? 'Messages can be at most 2,000 characters.' : ''
+}
+
+export function readChatDraft(storage: Storage | null): string {
+  try {
+    return storage?.getItem(DRAFT_KEY) ?? ''
+  } catch (cause) {
+    return degrade(cause, '', { site: 'readChatDraft', reason: 'source_unavailable' })
+  }
+}
+
+export function saveChatDraft(storage: Storage | null, value: string): void {
+  try {
+    if (storage === null) return
+    if (value.length === 0) storage.removeItem(DRAFT_KEY)
+    else storage.setItem(DRAFT_KEY, value)
+  } catch (cause) {
+    degrade(cause, undefined, { site: 'saveChatDraft', reason: 'source_unavailable' })
+  }
 }
 
 export function toTransportMessages(messages: readonly TranscriptMessage[]): UIMessage[] {

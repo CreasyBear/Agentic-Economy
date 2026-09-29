@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { AgentAccessKeyIssueResult, IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
+import type { AgentKeyDraft } from './agent-key-draft'
 
 import { AgentNameField } from './components/AgentNameField'
 import { AuthorityModeRadioCards } from './components/AuthorityModeRadioCards'
@@ -28,6 +29,8 @@ export interface AeConnectAgentWizardDialogProps {
   onOpenChange: (open: boolean) => void
   onIssue: (args: { data: Record<string, unknown> }) => Promise<AgentAccessKeyIssueResult>
   onSuccess?: (reveal: IssuedAgentAccessReveal) => void
+  initialDraft?: AgentKeyDraft
+  onDraftChange?: (draft: AgentKeyDraft) => void
 }
 
 export function AeConnectAgentWizardDialog({
@@ -35,16 +38,33 @@ export function AeConnectAgentWizardDialog({
   onOpenChange,
   onIssue,
   onSuccess,
+  initialDraft,
+  onDraftChange,
 }: Readonly<AeConnectAgentWizardDialogProps>) {
   const wizard = useConnectAgentWizard({
+    open,
     onOpenChange,
     onIssue,
     ...(onSuccess !== undefined ? { onSuccess } : {}),
+    ...(initialDraft === undefined ? {} : { initialDraft }),
+    ...(onDraftChange === undefined ? {} : { onDraftChange }),
   })
   const { view } = wizard
 
   return (
-    <Dialog open={open} onOpenChange={wizard.handleOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen, eventDetails) => {
+        if (!nextOpen && eventDetails.reason === 'outside-press') {
+          const target = eventDetails.event.target
+          if (target instanceof Element && target.closest('[role="alertdialog"]') !== null) {
+            eventDetails.cancel()
+            return
+          }
+        }
+        wizard.handleOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="sm:max-w-[620px]" data-slot="dialog-content">
         <form onSubmit={wizard.handleSubmit}>
           <DialogHeader>

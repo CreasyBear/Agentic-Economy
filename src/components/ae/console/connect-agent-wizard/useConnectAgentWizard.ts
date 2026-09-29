@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { degrade } from '@/lib/observability/degrade'
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
@@ -16,9 +16,13 @@ import { createRuntimeId } from '@/modules/common/runtime-id'
 import type {
   ConnectAgentAuthorityMode,
   ConnectAgentEnvironment,
+  ConnectAgentWizardDraft,
   ConnectAgentWizardPorts,
   ConnectAgentWizardViewState,
 } from './connect-agent-wizard.contracts'
+import {
+  AGENT_KEY_DRAFT_DEFAULTS,
+} from './agent-key-draft'
 import {
   mapIssueErrorDiagnostic,
   mapNetworkDiagnostic,
@@ -27,9 +31,9 @@ import {
   spendingOrderViolationMessage,
 } from './connect-agent-wizard-diagnostics'
 
-const DEFAULT_PER_CALL = '5.00'
-const DEFAULT_DAILY = '25.00'
-const DEFAULT_MONTHLY = '100.00'
+const DEFAULT_PER_CALL = AGENT_KEY_DRAFT_DEFAULTS.perCallAmount
+const DEFAULT_DAILY = AGENT_KEY_DRAFT_DEFAULTS.dailyAmount
+const DEFAULT_MONTHLY = AGENT_KEY_DRAFT_DEFAULTS.monthlyAmount
 
 export const CONNECT_AGENT_WIZARD_LIMIT_IDS = {
   perCall: 'limit-per-call',
@@ -70,18 +74,21 @@ function resetWizardFields(
 }
 
 export function useConnectAgentWizard({
+  open = true,
   onOpenChange,
   onIssue,
   onSuccess,
+  initialDraft,
+  onDraftChange,
 }: ConnectAgentWizardPorts) {
-  const [name, setName] = useState('')
-  const [environment, setEnvironment] = useState<ConnectAgentEnvironment>('sandbox')
+  const [name, setName] = useState(initialDraft?.name ?? '')
+  const [environment, setEnvironment] = useState<ConnectAgentEnvironment>(initialDraft?.environment ?? 'sandbox')
   const [authorityMode, setAuthorityMode] =
-    useState<ConnectAgentAuthorityMode>('spending_policy')
+    useState<ConnectAgentAuthorityMode>(initialDraft?.authorityMode ?? 'spending_policy')
 
-  const [perCallAmount, setPerCallAmount] = useState(DEFAULT_PER_CALL)
-  const [dailyAmount, setDailyAmount] = useState(DEFAULT_DAILY)
-  const [monthlyAmount, setMonthlyAmount] = useState(DEFAULT_MONTHLY)
+  const [perCallAmount, setPerCallAmount] = useState(initialDraft?.perCallAmount ?? DEFAULT_PER_CALL)
+  const [dailyAmount, setDailyAmount] = useState(initialDraft?.dailyAmount ?? DEFAULT_DAILY)
+  const [monthlyAmount, setMonthlyAmount] = useState(initialDraft?.monthlyAmount ?? DEFAULT_MONTHLY)
 
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -89,6 +96,35 @@ export function useConnectAgentWizard({
 
   const idempotencyKeyRef = useRef<string | undefined>(undefined)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const draftRef = useRef({
+    name,
+    environment,
+    authorityMode,
+    perCallAmount,
+    dailyAmount,
+    monthlyAmount,
+  })
+
+  const wasOpenRef = useRef(open)
+  useEffect(() => {
+    const becameOpen = open && !wasOpenRef.current
+    wasOpenRef.current = open
+    if (!becameOpen) return
+    const draft = initialDraft ?? AGENT_KEY_DRAFT_DEFAULTS
+    draftRef.current = { ...draft }
+    setName(draft.name)
+    setEnvironment(draft.environment)
+    setAuthorityMode(draft.authorityMode)
+    setPerCallAmount(draft.perCallAmount)
+    setDailyAmount(draft.dailyAmount)
+    setMonthlyAmount(draft.monthlyAmount)
+  }, [open, initialDraft])
+
+  const publishDraft = useCallback((patch: Partial<ConnectAgentWizardDraft>) => {
+    const draft = { ...draftRef.current, ...patch }
+    draftRef.current = draft
+    onDraftChange?.(draft)
+  }, [onDraftChange])
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -103,6 +139,7 @@ export function useConnectAgentWizard({
           setDiagnostic,
         })
         setNameInvalid(false)
+        draftRef.current = { ...AGENT_KEY_DRAFT_DEFAULTS }
         idempotencyKeyRef.current = undefined
       }
       if (!isSubmitting) {
@@ -116,17 +153,39 @@ export function useConnectAgentWizard({
     (value: string) => {
       setName(value)
       setNameInvalid(false)
+      publishDraft({ name: value })
       if (diagnostic !== null) {
         setDiagnostic(null)
       }
     },
-    [diagnostic],
+    [diagnostic, publishDraft],
   )
 
   const handleEnvironmentChange = useCallback((value: ConnectAgentEnvironment) => {
     setEnvironment(value)
+    publishDraft({ environment: value })
     setDiagnostic(null)
-  }, [])
+  }, [publishDraft])
+
+  const handleAuthorityChange = useCallback((value: ConnectAgentAuthorityMode) => {
+    setAuthorityMode(value)
+    publishDraft({ authorityMode: value })
+  }, [publishDraft])
+
+  const handlePerCallAmountChange = useCallback((value: string) => {
+    setPerCallAmount(value)
+    publishDraft({ perCallAmount: value })
+  }, [publishDraft])
+
+  const handleDailyAmountChange = useCallback((value: string) => {
+    setDailyAmount(value)
+    publishDraft({ dailyAmount: value })
+  }, [publishDraft])
+
+  const handleMonthlyAmountChange = useCallback((value: string) => {
+    setMonthlyAmount(value)
+    publishDraft({ monthlyAmount: value })
+  }, [publishDraft])
 
   const handleSubmit = async (e: Pick<FormEvent, 'preventDefault'>) => {
     e.preventDefault()
@@ -277,9 +336,9 @@ export function useConnectAgentWizard({
     handleSubmit,
     handleNameChange,
     handleEnvironmentChange,
-    setAuthorityMode,
-    setPerCallAmount,
-    setDailyAmount,
-    setMonthlyAmount,
+    setAuthorityMode: handleAuthorityChange,
+    setPerCallAmount: handlePerCallAmountChange,
+    setDailyAmount: handleDailyAmountChange,
+    setMonthlyAmount: handleMonthlyAmountChange,
   }
 }

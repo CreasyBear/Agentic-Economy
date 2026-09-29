@@ -16,6 +16,7 @@ type CallResultValue = Infer<typeof callResultValue>
 export type OpenDispatchValue = Readonly<{
   committedPaymentRequiredJson?: string
   sourceUsdcUnits?: string
+  x402RequirementDigest?: string
   callRef: string
   principalId: string
   ownerId: string

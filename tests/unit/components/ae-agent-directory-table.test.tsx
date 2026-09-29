@@ -172,4 +172,30 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/filter by status/i)).not.toBeInTheDocument()
   })
+
+  it('shows Direct key for a fresh key with no client connection', () => {
+    render(
+      <AeAgentDirectoryTable
+        directoryItems={[{ ...baseItem, connectionCount: 0, connectorDisplayNames: [], status: 'connected' }]}
+        loading={false}
+        onOpenAgent={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Direct key')).toBeInTheDocument()
+    expect(screen.queryByText('Legacy credential')).not.toBeInTheDocument()
+    expect(screen.queryByText(/predates durable client connections/)).not.toBeInTheDocument()
+  })
+
+  it('shows expired authority as history instead of current spend permission', () => {
+    render(
+      <AeAgentDirectoryTable
+        directoryItems={[{ ...baseItem, status: 'expired', authorityMode: 'spending_policy', connectionCount: 0, connectorDisplayNames: [] }]}
+        loading={false}
+        onOpenAgent={vi.fn()}
+      />,
+    )
+    expect(screen.getAllByText('Expired').length).toBeGreaterThan(0)
+    expect(screen.getByText('Previous authority: Work within limits')).toBeInTheDocument()
+    expect(screen.queryByText('Work within limits')).not.toBeInTheDocument()
+  })
 })

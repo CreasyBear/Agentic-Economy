@@ -24,6 +24,7 @@ export const readOwnerResult = v.union(
       // Well 8 Lane C: the canonical `/tools/<providerKey>/<slug>` slug, when
       // this Tool's current publication has one - see canonicalSlugForToolRef.
       slug: v.optional(v.string()),
+      pricingLabel: v.optional(v.string()),
     }),
     maintenance: v.optional(v.object({
       offeringRef: v.string(),

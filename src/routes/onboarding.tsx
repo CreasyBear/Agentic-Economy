@@ -2,10 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { AeOnboardingPage } from '@/components/ae/principal-account/onboarding/AeOnboardingPage'
 import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
+import { requireSignedInBeforeLoad } from '@/lib/server/require-clerk-server-session'
 import { type OnboardingSearch } from '@/modules/principal-account/onboarding.contracts'
 
 export const Route = createFileRoute('/onboarding')({
   staticData: { shellMode: 'minimal' },
+  beforeLoad: ({ location }) => requireSignedInBeforeLoad(location),
   validateSearch: (search: Record<string, unknown>): OnboardingSearch => {
     const redirect = sanitizeAuthRedirectTarget(search.redirect)
     const requestedStep = search.step === 2 || search.step === '2' ? 2 : undefined

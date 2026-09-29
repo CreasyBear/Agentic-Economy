@@ -80,6 +80,13 @@ export function useSupplyNativeStartState({
   const continuation = success === undefined ? undefined : OPEN_TOOLS_CONTINUATION
   const [reviewing, setReviewing] = useState(false)
   const [publicationLocked, setPublicationLocked] = useState(false)
+  const [termsSaveOutcome, setTermsSaveOutcome] = useState<'idle' | 'saved' | 'failed' | 'outcome_unknown'>('idle')
+  const termsKey = supplyTermsKey({
+    name, description, category, serviceArea, availability, pricingKind, price, connectionRef,
+    externalEffect, dataRelease, financialExposure, dataClassification,
+  })
+  const [savedTermsKey, setSavedTermsKey] = useState(termsKey)
+  const termsDirty = success === undefined && termsKey !== savedTermsKey
 
   function clearFieldError() {
     setError(undefined)
@@ -261,7 +268,15 @@ export function useSupplyNativeStartState({
         && connection.adapterId === requiredAdapterId
       )) ? connectionRef : ''
       setConnectionRef(nextConnectionRef)
-      setPricingKind(candidate.x402 === undefined ? 'free' : 'source_x402')
+      const nextPricingKind = candidate.x402 === undefined ? 'free' : 'source_x402'
+      setSavedTermsKey(supplyTermsKey({
+        name: candidate.title,
+        description: candidate.description,
+        category, serviceArea, availability, pricingKind: nextPricingKind, price,
+        connectionRef: nextConnectionRef,
+        externalEffect, dataRelease, financialExposure, dataClassification,
+      }))
+      setPricingKind(nextPricingKind)
       setReviewing(false)
       await onDraftSaved?.(candidate.candidateRef, nextConnectionRef === '' ? undefined : nextConnectionRef)
     } catch (cause) {
@@ -291,6 +306,7 @@ export function useSupplyNativeStartState({
       return
     }
     if (!beginOperation('terms')) return
+    setTermsSaveOutcome('idle')
     clearFieldError()
     try {
       const saved = await onSaveTerms({
@@ -310,6 +326,7 @@ export function useSupplyNativeStartState({
         },
       })
       if (saved?.kind === 'refused') {
+        setTermsSaveOutcome('failed')
         setError(saved.reason === 'authorization_denied'
           ? 'Sign in again, return to this saved Tool draft, then continue.'
           : saved.reason === 'candidate_changed'
@@ -317,9 +334,15 @@ export function useSupplyNativeStartState({
             : 'Could not save these terms. Keep editing or try Continue to review again.')
         return
       }
+      setSavedTermsKey(supplyTermsKey({
+        name, description, category, serviceArea, availability, pricingKind, price, connectionRef,
+        externalEffect, dataRelease, financialExposure, dataClassification,
+      }))
+      setTermsSaveOutcome('saved')
       setReviewing(true)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
+      setTermsSaveOutcome('failed')
       setError('Could not save these terms. Keep editing or try Continue to review again.')
     } finally {
       endOperation()
@@ -332,15 +355,22 @@ export function useSupplyNativeStartState({
       return
     }
     const pricing = pricingInput(pricingKind, price)
+    const publishAuthorityRequired = selected.authentication.kind !== 'public'
+      || preview.provenance.authority === 'verified_registry'
     const validationMessage = publicationValidationMessage({
       category,
       pricing,
       requiresConnection: selected.authentication.kind !== 'public',
       connectionRef,
       attestation,
+      publishAuthorityRequired,
     })
     if (validationMessage !== undefined) {
       setFieldError(validationMessage)
+      return
+    }
+    if (attestation.informationAccurate !== true || attestation.publishAfterSuccessfulValidation !== true) {
+      setFieldError('Confirm the information is accurate, and that publication can follow validation, before submitting.')
       return
     }
     const input = buildPublishInput({
@@ -361,6 +391,11 @@ export function useSupplyNativeStartState({
       pricing: pricing as NonNullable<typeof pricing>,
       environment,
       idempotencyKey: idempotencyKey.current,
+      attestation: {
+        authorisedToPublish: attestation.authorisedToPublish,
+        informationAccurate: attestation.informationAccurate,
+        publishAfterSuccessfulValidation: attestation.publishAfterSuccessfulValidation,
+      },
     })
     if (!beginOperation('publish')) return
     publicationCommandLocked.current = true
@@ -372,12 +407,15 @@ export function useSupplyNativeStartState({
         publicationCommandLocked.current = false
         setPublicationLocked(false)
         idempotencyKey.current = `owner-supply:${crypto.randomUUID()}`
+        setTermsSaveOutcome('failed')
         setError(publicationError(result.reason))
         return
       }
+      setTermsSaveOutcome('saved')
       setSuccess('Tool submitted for validation. Agentic Economy will publish it after the required checks pass.')
     } catch (cause) {
       captureClientExceptionOnClient(cause)
+      setTermsSaveOutcome('outcome_unknown')
       setError('Agentic Economy could not confirm submission. Reload Tools before trying again.')
     } finally {
       endOperation()
@@ -422,5 +460,23 @@ export function useSupplyNativeStartState({
     setAttestation, setError,
     resetDiscoveryOnSourceEdit, changeSourceKind, editSource, editTool, editTerms, continueToReview,
     findTools, selectCandidate, submit, connectSelectedSource,
+    termsDirty, termsSaveOutcome,
   }
+}
+
+function supplyTermsKey(terms: Readonly<{
+  name: string
+  description: string
+  category: string
+  serviceArea: string
+  availability: string
+  pricingKind: 'free' | 'fixed_aud' | 'source_x402'
+  price: string
+  connectionRef: string
+  externalEffect: boolean
+  dataRelease: boolean
+  financialExposure: boolean
+  dataClassification: 'public' | 'personal' | 'sensitive'
+}>): string {
+  return JSON.stringify(terms)
 }

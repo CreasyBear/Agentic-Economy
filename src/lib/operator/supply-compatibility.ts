@@ -73,6 +73,10 @@ function isX402ConnectionSearch(
   return search.environment === 'sandbox' || search.environment === 'production'
 }
 
+export function isAbsoluteHttpsResourceUrl(value: string): boolean {
+  return isSafeHttpsUrl(value.trim())
+}
+
 function isSafeHttpsUrl(value: string): boolean {
   if (value.length === 0 || value.length > 2_048) return false
   try {

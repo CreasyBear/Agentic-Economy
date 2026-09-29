@@ -21,6 +21,7 @@ import { readOpenUiBundle } from '@/modules/chat/openui-bundle'
 import { parseChatQuoteInput } from '@/modules/chat/tool-card'
 
 import { ChatOpenUiBundle } from './ChatOpenUiBundle'
+import { UnansweredQuestion } from './UnansweredQuestion'
 import { ChatClarifyPrompt } from './ChatClarifyPrompt'
 import { ChatTranscriptClarify, clarifyKey, clarifyPresentation } from './ChatTranscriptClarify'
 import type { ChatQuoteDraft, ChatTranscriptViewProps } from './chat-session/chat-session.contracts'
@@ -48,6 +49,7 @@ export function ChatTranscript({
   onCompareRequest,
   onCopyAnswer,
   onEditQuestion,
+  onRetryQuestion,
   onClarifyAnswer,
   onContinueSearch,
   onRepeatSearch,
@@ -59,6 +61,7 @@ export function ChatTranscript({
   generating = false,
   clarifyDisabled = false,
   pending = false,
+  readOnly = false,
 }: ChatTranscriptViewProps) {
   const [comparedByTurn, setComparedByTurn] = useState<Record<string, readonly string[]>>({})
   const [filtersByTurn, setFiltersByTurn] = useState<Record<string, FilterValue>>({})
@@ -140,7 +143,7 @@ export function ChatTranscript({
                           <SourcesInline view={view.sources} />
                           {view.options.options.length === 0 ? null : (
                             <>
-                              {onRefine === undefined || view.options.options.length < 3 ? null : (
+                              {readOnly || onRefine === undefined || view.options.options.length < 3 ? null : (
                                 <FilterChips
                                   view={{ value: filtersByTurn[turn.id] ?? { readyOnly: false }, prices: ['under 1¢'], networks: [], categories: [], count: view.options.options.length }}
                                   onChange={(filter) => {
@@ -156,16 +159,18 @@ export function ChatTranscript({
                                 />
                               )}
                               <OptionsGrid
-                                view={{ ...view.options, comparedIds: selected, ...(selectedId === undefined ? {} : { selectedId }) }}
-                                signedIn={ownerChatThreadId !== undefined}
-                                {...(onQuoteTool === undefined ? {} : { onQuoteSelect: (toolRef: string) =>
+                                view={{ ...view.options, comparedIds: readOnly ? [] : selected, ...(readOnly || selectedId === undefined ? {} : { selectedId }) }}
+                                signedIn={!readOnly && ownerChatThreadId !== undefined}
+                                {...(readOnly || onQuoteTool === undefined ? {} : { onQuoteSelect: (toolRef: string) =>
                                   setQuoteDraft({ turnId: turn.id, toolRef, input: '', invalid: false, submitting: false }) })}
-                                onSelect={(id) => {
-                                  setSelectedByTurn((current) => ({ ...current, [turn.id]: current[turn.id] === id ? undefined : id }))
-                                  const option = view.options.options.find((entry) => entry.id === id)
-                                  if (option) onSuggest?.(`Tell me more about ${option.name}`)
-                                }}
-                                onCompare={toggleCompare}
+                                {...(readOnly ? { readOnly: true } : {
+                                  onSelect: (id: string) => {
+                                    setSelectedByTurn((current) => ({ ...current, [turn.id]: current[turn.id] === id ? undefined : id }))
+                                    const option = view.options.options.find((entry) => entry.id === id)
+                                    if (option) onSuggest?.(`Tell me more about ${option.name}`)
+                                  },
+                                  onCompare: toggleCompare,
+                                })}
                               />
                               {quoteDraft?.turnId !== turn.id || onQuoteTool === undefined || ownerChatThreadId === undefined ? null : (
                                 <form aria-label="Quote input" className="grid gap-intra rounded-card border border-border bg-card p-4"
@@ -202,7 +207,7 @@ export function ChatTranscript({
                                   </div>
                                 </form>
                               )}
-                              {onCompareRequest === undefined || selected.length < 2 ? null : (
+                              {readOnly || onCompareRequest === undefined || selected.length < 2 ? null : (
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Button type="button" variant="secondary" className="min-h-touch" onClick={() => onCompareRequest(`Compare ${selected.map((id) => view.options.options.find((option) => option.id === id)?.name).filter(Boolean).join(' and ')} for my use case.`)}>
                                     Compare {selected.length} selected
@@ -230,7 +235,7 @@ export function ChatTranscript({
                               ? <ToolCard key={`${turn.id}-${card.toolId}-${cardIndex}`} projection={card} />
                               : null
                           })}
-                          {onSuggest && !writing ? <FollowUps view={view.followUps} onPick={onSuggest} /> : null}
+                          {!readOnly && onSuggest && !writing ? <FollowUps view={view.followUps} onPick={onSuggest} /> : null}
                           {writing ? null : <MessageActions view={{ canCopy: prose.trim().length > 0 && onCopyAnswer !== undefined, canEditQuestion: previousPrompt !== undefined && onEditQuestion !== undefined }}
                             onCopy={() => onCopyAnswer?.(prose)}
                             onEditQuestion={() => { if (previousPrompt) onEditQuestion?.(previousPrompt) }} />}
@@ -255,6 +260,13 @@ export function ChatTranscript({
                   onFreshQuote={onFreshQuote} />
               </ErrorBoundary>
             ) : null}
+            {readOnly || thinking || generating || onRetryQuestion === undefined || turns.at(-1)?.role !== 'user' ? null : (
+              <UnansweredQuestion
+                question={turns.findLast((turn) => turn.role === 'user')?.text ?? ''}
+                onRetry={onRetryQuestion}
+                {...(onEditQuestion === undefined ? {} : { onEdit: onEditQuestion })}
+              />
+            )}
             {thinking ? (
               <MessageScrollerItem messageId="thinking" className="col-span-12 md:col-start-3 md:col-span-8">
                 <p className="text-sm text-muted-foreground" role="status">{chatThinking}</p>
@@ -277,4 +289,5 @@ export function ChatTranscript({
       </MessageScroller>
     </MessageScrollerProvider>
   )
+
 }

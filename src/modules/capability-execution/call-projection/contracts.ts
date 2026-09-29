@@ -10,6 +10,7 @@ import type { CallResult } from '@/modules/capability-execution/call-contracts'
 export type OpenDispatch = Readonly<{
   committedPaymentRequiredJson?: string
   sourceUsdcUnits?: string
+  x402RequirementDigest?: string
   quoteRef?: string
   callRef: string
   principalId: string

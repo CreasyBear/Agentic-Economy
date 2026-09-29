@@ -28,7 +28,7 @@ import { Chat } from '@/components/ae/chat'
 import { ChatComposer } from '@/components/ae/chat/chat-session/components/ChatComposer'
 import { ChatHistory } from '@/components/ae/chat/chat-session/components/ChatHistory'
 import { SharedChat } from '@/components/ae/chat/SharedChat'
-import { chatHistory } from '@/lib/public/chat-ia'
+import { chatComposer, chatHistory } from '@/lib/public/chat-ia'
 import { useQuery } from 'convex/react'
 
 const mockedUseQuery = vi.mocked(useQuery)
@@ -307,6 +307,20 @@ describe('ChatTranscript first-page gate', () => {
     expect(screen.queryByText('Review pending Call')).toBeNull()
   })
 
+  it('offers retry and edit when a question has no answer', () => {
+    const onRetryQuestion = vi.fn()
+    const onEditQuestion = vi.fn()
+    render(<ChatTranscript
+      messages={[{ id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Find current weather' }] }]}
+      onRetryQuestion={onRetryQuestion}
+      onEditQuestion={onEditQuestion}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit question' }))
+    expect(onRetryQuestion).toHaveBeenCalledWith('Find current weather')
+    expect(onEditQuestion).toHaveBeenCalledWith('Find current weather')
+  })
+
 })
 
 describe('ChatComposer recovery evidence', () => {
@@ -349,6 +363,28 @@ describe('ChatComposer recovery evidence', () => {
         onSubmit={() => undefined}
       />,
     )
+    expect((screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('keeps an over-limit draft editable and blocks sending', () => {
+    const prompt = `a${'b'.repeat(2_000)}`
+    render(
+      <ChatComposer
+        prompt={prompt}
+        busy={false}
+        disabled={false}
+        error="Messages can be at most 2,000 characters."
+        browseMarketOnError={false}
+        status=""
+        anonymousMessageCount={0}
+        anonymousMessageLimitReached={false}
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+      />,
+    )
+    const field = screen.getByRole('textbox', { name: chatComposer.promptLabel }) as HTMLTextAreaElement
+    expect(field.disabled).toBe(false)
+    expect(field.value).toBe(prompt)
     expect((screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -447,5 +483,38 @@ describe('SharedChat shared-thread gate', () => {
     render(<SharedChat shareToken="token-1" />)
 
     expect(screen.getByRole('button', { name: 'Load earlier messages' })).toBeTruthy()
+  })
+
+  it('keeps a shared answer descriptive without selection or comparison actions', () => {
+    mockedUseQuery.mockImplementation(() => ({
+      title: 'Shared thread',
+      page: [{
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        parts: [
+          {
+            type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+            state: 'output-available',
+            output: {
+              kind: 'match',
+              results: [{
+                toolRef: `operation:v1:${'a'.repeat(64)}`,
+                title: 'Shared Weather',
+                price: { kind: 'indicative', label: 'USD 0.005' },
+              }],
+            },
+          },
+          { type: 'text' as const, text: 'Shared Weather is a Tool to inspect.' },
+        ],
+      }],
+      isDone: true,
+      continueCursor: '',
+    }) as never)
+
+    render(<SharedChat shareToken="token-1" />)
+
+    expect(screen.getByRole('link', { name: 'Shared Weather' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Compare' })).toBeNull()
   })
 })

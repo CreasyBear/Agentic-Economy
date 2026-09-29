@@ -66,7 +66,7 @@ export function ChatHeader({
             </>
           ) : (
             <p className="px-4 py-5 text-sm text-muted-foreground">
-              Sign in to keep your chats. <a href="/sign-in" className="text-brand underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-brand">Sign in</a>
+              Sign in to keep your chats. <a href="/sign-in" className="text-brand underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">Sign in</a>
             </p>
           )}
         </SheetContent>

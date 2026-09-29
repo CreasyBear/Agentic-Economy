@@ -28,10 +28,18 @@ export const SUPPLY_SOURCE_TYPE_COPY = {
     description: 'AE reads payment facts from the live signed 402 response. Example: https://api.example.com/paid-operation.',
     placeholder: 'https://api.example.com/paid-operation',
   },
+  httpsExample: {
+    openapi: 'https://api.example.com/openapi.json',
+    mcp: 'https://mcp.example.com/sse',
+    x402: 'https://api.example.com/paid-operation',
+  },
   httpsPreflight: {
     insecure: 'Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.',
-    invalid: 'Enter a valid HTTPS URL, for example https://api.example.com/openapi.json.',
+    invalid: (example: string) => `Enter a valid HTTPS URL, for example ${example}.`,
     valid: 'Valid HTTPS endpoint format',
+  },
+  x402Method: {
+    description: 'POST is selected by default.',
   },
   jsonPreflight: {
     invalid: 'JSON syntax is invalid.',
@@ -45,7 +53,7 @@ export const URL_DISCOVER_DIAGNOSTICS = {
   invalid: {
     whatHappened: 'URL syntax is invalid.',
     financialImpact: 'A$0.00 affected. Tool discovery was blocked.',
-    nextStep: 'Enter a complete public HTTPS URL, such as https://api.example.com/openapi.json.',
+    nextStep: 'Enter a complete public HTTPS URL.',
   },
   insecure: {
     whatHappened: 'The URL uses insecure HTTP.',
@@ -67,8 +75,15 @@ export const JSON_DISCOVER_DIAGNOSTICS = {
   },
 } as const
 
-export type UrlDiscoverDiagnostic =
-  (typeof URL_DISCOVER_DIAGNOSTICS)[keyof typeof URL_DISCOVER_DIAGNOSTICS]
+export function httpsDiscoverNextStep(example: string): string {
+  return `Enter a complete public HTTPS URL, such as ${example}.`
+}
+
+export type UrlDiscoverDiagnostic = Readonly<{
+  whatHappened: (typeof URL_DISCOVER_DIAGNOSTICS)[keyof typeof URL_DISCOVER_DIAGNOSTICS]['whatHappened']
+  financialImpact: (typeof URL_DISCOVER_DIAGNOSTICS)[keyof typeof URL_DISCOVER_DIAGNOSTICS]['financialImpact']
+  nextStep: string
+}>
 export type JsonDiscoverDiagnostic =
   (typeof JSON_DISCOVER_DIAGNOSTICS)[keyof typeof JSON_DISCOVER_DIAGNOSTICS]
 export type DiscoverDiagnosticState =
@@ -99,6 +114,7 @@ export type SupplySourceTypeSectionProps = Readonly<{
   onResourceUrlChange: (value: string) => void
   onX402MethodChange: (value: 'GET' | 'POST') => void
   onFieldError: (value: string) => void
+  onFieldClear: () => void
   onDiscover: () => void
 }>
 
@@ -130,6 +146,7 @@ export type SupplySourceFieldsProps = Pick<
   | 'onResourceUrlChange'
   | 'onX402MethodChange'
   | 'onFieldError'
+  | 'onFieldClear'
 > & Readonly<{ discoverDiagnostic?: DiscoverDiagnosticState | undefined }>
 
 export type EnvironmentFieldProps = Readonly<{
@@ -146,6 +163,7 @@ export type UrlFieldWithPreflightProps = Readonly<{
   placeholder: string
   disabled: boolean
   discoverDiagnostic?: UrlDiscoverDiagnostic | undefined
+  example: string
   onChange: (value: string) => void
 }>
 
@@ -169,6 +187,7 @@ export type AgentPluginFieldsProps = Readonly<{
   onPluginJsonChange: (value: string) => void
   onMcpJsonChange: (value: string) => void
   onError: (value: string) => void
+  onClearError: () => void
 }>
 
 export type JsonFileFieldProps = Readonly<{
@@ -181,6 +200,7 @@ export type JsonFileFieldProps = Readonly<{
   discoverDiagnostic?: JsonDiscoverDiagnostic | undefined
   onChange: (value: string) => void
   onError: (value: string) => void
+  onClearError: () => void
 }>
 
 export type X402SourceFieldsProps = Readonly<{

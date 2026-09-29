@@ -20,7 +20,7 @@ vi.mock('@/components/ae/website', () => ({
 }))
 import { resolveSignInRedirectTarget } from '@/components/ae/auth/sign-in/sign-in.contracts'
 import { useSignInPage } from '@/components/ae/auth/sign-in/useSignInPage'
-import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
+import { sanitizeAuthRedirectTarget, signedInReturnPath } from '@/lib/client/auth-redirect'
 import { Route as SignInRoute } from '@/routes/sign-in.$'
 import { Route as SignUpRoute } from '@/routes/sign-up.$'
 
@@ -82,5 +82,11 @@ describe('auth redirect sanitizer', () => {
     for (const [unsafe] of redirectCases.slice(1)) {
       expect(validateSearch({ redirect: unsafe })).toEqual({})
     }
+  })
+
+  it('keeps the onboarding path and query from an absolute return href', () => {
+    expect(signedInReturnPath('http://127.0.0.1:3024/onboarding?redirect=%2Fowner%2Fsettings', '/onboarding'))
+      .toBe('/onboarding?redirect=%2Fowner%2Fsettings')
+    expect(signedInReturnPath('/activity?agent=prn_invalid', '/onboarding')).toBe('/activity?agent=prn_invalid')
   })
 })

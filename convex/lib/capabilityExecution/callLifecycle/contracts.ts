@@ -94,6 +94,7 @@ export const dispatchArgs = {
 export const openDispatchValue = v.object({
   committedPaymentRequiredJson: v.optional(v.string()),
   sourceUsdcUnits: v.optional(v.string()),
+  x402RequirementDigest: v.optional(v.string()),
   quoteRef: v.optional(v.string()),
   callRef: v.string(),
   principalId: v.string(),

@@ -246,6 +246,26 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
     })
   })
 
+
+  it('U10b: saving an already disabled cap does not say it was disabled', async () => {
+    vi.mocked(toast.success).mockClear()
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(
+      <AeMonthlySpendCeilingCard
+        settings={disabledSettings}
+        monthSpend={{ kind: 'available', spendUnits: '0' }}
+        onSave={onSave}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Set limit' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: /save/i }))
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Monthly spending cap is already off')
+    })
+    expect(toast.success).not.toHaveBeenCalledWith('Monthly spending cap disabled')
+  })
+
   it('U11: Conflict during save shows Rule 4 diagnostic in dialog', async () => {
     const onSave = vi.fn().mockRejectedValue(new Error('monthly_spend_budget_revision_conflict'))
     render(

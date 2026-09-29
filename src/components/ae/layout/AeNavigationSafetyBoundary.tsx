@@ -1,4 +1,4 @@
-import { useBlocker } from '@tanstack/react-router'
+import { useBlocker, useRouter } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
@@ -29,7 +29,7 @@ type AeNavigationSafetyBoundaryProps = Readonly<{
  * Owns navigation interruption only. Dirty comparison, persistence, entered
  * values, and the truth of the latest save remain with the caller.
  */
-export function AeNavigationSafetyBoundary({
+function AeNavigationSafetyBlocker({
   children,
   state,
   title,
@@ -45,8 +45,11 @@ export function AeNavigationSafetyBoundary({
   const [dialogDismissed, setDialogDismissed] = useState(false)
   const departureTriggerRef = useRef<HTMLElement | null>(null)
   const navigationBlockedDuringSave = useRef(false)
-  const shouldBlockNavigation = useCallback(() => {
-    if (!state.dirty) return false
+  const shouldBlockNavigation = useCallback(({ current, next }: {
+    current: { pathname: string }
+    next: { pathname: string }
+  }) => {
+    if (!state.dirty || current.pathname === next.pathname) return false
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
       departureTriggerRef.current = document.activeElement
     }
@@ -54,7 +57,7 @@ export function AeNavigationSafetyBoundary({
   }, [state.dirty])
   const blocker = useBlocker({
     shouldBlockFn: shouldBlockNavigation,
-    enableBeforeUnload: shouldBlockNavigation,
+    enableBeforeUnload: () => state.dirty,
     withResolver: true,
   })
 
@@ -105,4 +108,10 @@ export function AeNavigationSafetyBoundary({
       />
     </>
   )
+}
+
+export function AeNavigationSafetyBoundary(props: AeNavigationSafetyBoundaryProps) {
+  const router = useRouter({ warn: false })
+  if (!router) return props.children
+  return <AeNavigationSafetyBlocker {...props} />
 }

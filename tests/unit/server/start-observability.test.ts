@@ -159,6 +159,10 @@ describe('machine bearer routes', () => {
       expect(() => serve({
         request: sessionChat, pathname: '/api/v1/chat/turns', context: undefined, handlerType: 'router', next: vi.fn(),
       })).toThrow(clerkSessionError)
+      const activity = new Request('https://ae.example/activity?agent=prn_invalid')
+      expect(() => serve({
+        request: activity, pathname: '/activity', context: undefined, handlerType: 'router', next: vi.fn(),
+      })).toThrow(clerkSessionError)
       const browser = new Request('https://ae.example/account')
       expect(() => serve({
         request: browser, pathname: '/account', context: undefined, handlerType: 'router',

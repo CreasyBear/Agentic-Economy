@@ -23,6 +23,7 @@ export function UrlFieldWithPreflight({
   placeholder,
   disabled,
   discoverDiagnostic,
+  example,
   onChange,
 }: UrlFieldWithPreflightProps) {
   const preflight = inspectHttpsUrl(value)
@@ -35,7 +36,7 @@ export function UrlFieldWithPreflight({
         {discoverDiagnostic !== undefined ? (
           <PreflightRule4Alert diagnostic={discoverDiagnostic} />
         ) : (
-          <HttpsUrlPreflightBadge status={preflight} />
+          <HttpsUrlPreflightBadge status={preflight} example={example} />
         )}
       </PreflightSlot>
     </Field>
@@ -52,6 +53,7 @@ export function JsonFileField({
   discoverDiagnostic,
   onChange,
   onError,
+  onClearError,
 }: JsonFileFieldProps) {
   const preflight = inspectJsonPayload(jsonValue, requiredKeys)
   return (
@@ -71,7 +73,10 @@ export function JsonFileField({
             onError(`${label} must be 256 KB or smaller.`)
             return
           }
-          void file.text().then(onChange).catch(() => onError(`${label} could not be read.`))
+          void file.text().then((contents) => {
+            onClearError()
+            onChange(contents)
+          }).catch(() => onError(`${label} could not be read.`))
         }}
       />
       <FieldDescription>{loaded ? `${label} loaded. Choose another file to replace it.` : `Choose the official Agent Plugins 1.0 ${label} file.`}</FieldDescription>
@@ -94,13 +99,13 @@ function PreflightSlot({ children }: PreflightSlotProps) {
   )
 }
 
-function HttpsUrlPreflightBadge({ status }: HttpsUrlPreflightBadgeProps) {
+function HttpsUrlPreflightBadge({ status, example }: HttpsUrlPreflightBadgeProps & Readonly<{ example: string }>) {
   if (status === 'empty') return null
   if (status === 'insecure') {
     return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.insecure}</Badge>
   }
   if (status === 'invalid') {
-    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.invalid}</Badge>
+    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.invalid(example)}</Badge>
   }
   return (
     <Badge variant="success" className="gap-1.5">

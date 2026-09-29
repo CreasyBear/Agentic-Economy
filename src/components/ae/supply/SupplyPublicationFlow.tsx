@@ -62,6 +62,7 @@ export function SupplyPublicationFlow({
   onContinueToReview,
   onEditTerms,
   onSubmit,
+  publishAuthorityRequired,
 }: Readonly<{
   reviewing: boolean
   name: string
@@ -103,6 +104,7 @@ export function SupplyPublicationFlow({
   onContinueToReview: () => void
   onEditTerms: () => void
   onSubmit: () => void
+  publishAuthorityRequired: boolean
 }>) {
   useEffect(() => {
     if (invalidField === undefined || fieldError === undefined) return
@@ -120,7 +122,7 @@ export function SupplyPublicationFlow({
         focusId = SUPPLY_PUBLICATION_FIELD_IDS.connection
         break
       case 'attestation':
-        focusId = SUPPLY_PUBLICATION_FIELD_IDS.attestation
+        focusId = publishAuthorityRequired ? SUPPLY_PUBLICATION_FIELD_IDS.attestation : 'supply-attest-accurate'
         break
       case 'candidate':
         return
@@ -131,7 +133,7 @@ export function SupplyPublicationFlow({
       }
     }
     document.getElementById(focusId)?.focus()
-  }, [invalidField, fieldError, pricingKind])
+  }, [invalidField, fieldError, pricingKind, publishAuthorityRequired])
 
   const errorDescribedBy =
     invalidField !== undefined && fieldError !== undefined
@@ -210,6 +212,7 @@ export function SupplyPublicationFlow({
         <div className="border-t border-border pt-related">
           <AttestationField
             values={attestation}
+            requireAuthority={publishAuthorityRequired}
             disabled={disabled}
             invalid={invalidField === 'attestation'}
             {...(errorDescribedBy === undefined ? {} : { describedBy: errorDescribedBy })}
@@ -346,7 +349,7 @@ function ConsequencesField({ externalEffect, dataRelease, financialExposure, dat
   )
 }
 
-function AttestationField({ values, disabled, invalid = false, describedBy, onChange }: Readonly<{ values: Record<AttestationKey, boolean>; disabled: boolean; invalid?: boolean; describedBy?: string; onChange: (key: AttestationKey, checked: boolean) => void }>) {
+function AttestationField({ values, requireAuthority, disabled, invalid = false, describedBy, onChange }: Readonly<{ values: Record<AttestationKey, boolean>; requireAuthority: boolean; disabled: boolean; invalid?: boolean; describedBy?: string; onChange: (key: AttestationKey, checked: boolean) => void }>) {
   return (
     <fieldset
       className="grid gap-3"
@@ -355,7 +358,11 @@ function AttestationField({ values, disabled, invalid = false, describedBy, onCh
       aria-describedby={invalid && describedBy !== undefined ? describedBy : undefined}
     >
       <legend className="text-sm font-medium">Publication statements</legend>
-      <CheckRow id={SUPPLY_PUBLICATION_FIELD_IDS.attestation} label="I am authorised to publish this service" checked={values.authorisedToPublish} disabled={disabled} onChange={(checked) => onChange('authorisedToPublish', checked)} />
+      {requireAuthority ? (
+        <CheckRow id={SUPPLY_PUBLICATION_FIELD_IDS.attestation} label="I am authorised to publish this service" checked={values.authorisedToPublish} disabled={disabled} onChange={(checked) => onChange('authorisedToPublish', checked)} />
+      ) : (
+        <p className="text-sm text-muted-foreground">Publication stays under review until Provider authority is established. Validation does not need that claim.</p>
+      )}
       <CheckRow id="supply-attest-accurate" label="The information is accurate" checked={values.informationAccurate} disabled={disabled} onChange={(checked) => onChange('informationAccurate', checked)} />
       <CheckRow id="supply-attest-validation" label="Publish after validation succeeds" checked={values.publishAfterSuccessfulValidation} disabled={disabled} onChange={(checked) => onChange('publishAfterSuccessfulValidation', checked)} />
     </fieldset>

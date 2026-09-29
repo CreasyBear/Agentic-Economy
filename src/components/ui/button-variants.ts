@@ -6,7 +6,7 @@ import { cva } from "class-variance-authority"
 // aecon.ai brand: Manrope, natural case, neutral controls and forest focus.
 // Re-running `shadcn add --overwrite button` reverts this theme adaptation.
 export const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-sans text-sm font-medium tracking-normal whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-fast ease-standard outline-none max-sm:min-h-touch max-sm:min-w-touch active:scale-[0.96] disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-sans text-sm font-medium tracking-normal whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-fast ease-standard outline-none max-sm:min-h-touch max-sm:min-w-touch active:scale-[0.96] disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

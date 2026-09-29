@@ -1,8 +1,12 @@
+import { useState } from "react";
+import { useRouter } from "@tanstack/react-router";
+
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
+import { Button } from "@/components/ui/button";
 import type { MarketSearch } from "@/modules/market/market.functions";
 import type { X402DirectoryPage } from "@/modules/market/x402-directory";
-import type { MarketCompareEntry } from "@/modules/market/market-route-data";
+import { retainedMarketCatalogue, type MarketCompareEntry } from "@/modules/market/market-route-data";
 import type {
   X402DirectoryCatalogue,
   X402DirectoryCatalogueOverview,
@@ -26,20 +30,34 @@ export type AeMarketPageProps = Readonly<{
 }>;
 
 export function AeMarketPage({ data, search }: AeMarketPageProps) {
+  const router = useRouter();
+  const [retained, setRetained] = useState<{ data: AeMarketPageProps["data"]; search: MarketSearch } | undefined>(
+    data.page.kind === "ok" ? { data, search } : undefined,
+  );
+  if (data.page.kind === "ok" && retained?.data !== data) setRetained({ data, search });
+  const decision = retainedMarketCatalogue(retained?.data, data);
+  const shownData = decision.shown;
+  const shownSearch = decision.retainPrevious && retained !== undefined ? retained.search : search;
   return (
     <AePublicPage>
+      {decision.retainPrevious ? (
+        <div className="ae-rail pt-section" role="alert">
+          <p className="text-sm text-destructive">This market view could not be loaded. The previous catalogue is still shown.</p>
+          <Button type="button" className="mt-3 min-h-touch" variant="outline" onClick={() => void router.invalidate()}>Try again</Button>
+        </div>
+      ) : null}
       <AeX402Directory
         marketPath="/market"
-        activeView={data.view}
-        page={data.page}
-        compareEntries={data.compareEntries}
-        search={search}
-        catalogue={data.catalogue}
-        overview={data.overview}
-        {...(data.jevRecipient === null ? {} : { jevRecipient: `${data.jevRecipient.label} (${data.jevRecipient.host})` })}
-        {...(data.chatRecipient === null ? {} : { chatRecipient: `${data.chatRecipient.label} (${data.chatRecipient.host})` })}
-        {...(data.providers === undefined ? {} : { providers: data.providers })}
-        {...(data.home === undefined ? {} : { home: data.home })}
+        activeView={shownData.view}
+        page={shownData.page}
+        compareEntries={shownData.compareEntries}
+        search={shownSearch}
+        catalogue={shownData.catalogue}
+        overview={shownData.overview}
+        {...(shownData.jevRecipient === null ? {} : { jevRecipient: `${shownData.jevRecipient.label} (${shownData.jevRecipient.host})` })}
+        {...(shownData.chatRecipient === null ? {} : { chatRecipient: `${shownData.chatRecipient.label} (${shownData.chatRecipient.host})` })}
+        {...(shownData.providers === undefined ? {} : { providers: shownData.providers })}
+        {...(shownData.home === undefined ? {} : { home: shownData.home })}
       />
     </AePublicPage>
   );

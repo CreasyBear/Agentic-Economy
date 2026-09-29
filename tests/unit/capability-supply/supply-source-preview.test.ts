@@ -169,6 +169,41 @@ describe('supply source preview', () => {
     })
   })
 
+  it('maps a classified OpenAPI refusal to its repair and keeps fetch failure unavailable', async () => {
+    const invalid = await previewSupplySource({
+      kind: 'openapi',
+      definitionUrl: 'https://provider.example/openapi.yaml',
+      environment: 'sandbox',
+    }, { loadOpenApi: async () => ({ kind: 'refused', reason: 'source_invalid' }) })
+    expect(invalid).toMatchObject({
+      kind: 'action_required',
+      requiredAction: { title: 'OpenAPI document invalid' },
+    })
+
+    const oversized = await previewSupplySource({
+      kind: 'openapi',
+      definitionUrl: 'https://provider.example/openapi.yaml',
+      environment: 'sandbox',
+    }, { loadOpenApi: async () => ({ kind: 'refused', reason: 'source_too_large' }) })
+    expect(oversized).toMatchObject({
+      kind: 'action_required',
+      requiredAction: { title: 'OpenAPI document too large' },
+    })
+
+    const unreadable = await previewSupplySource({
+      kind: 'openapi',
+      definitionUrl: 'https://provider.example/openapi.yaml',
+      environment: 'sandbox',
+    }, { loadOpenApi: async () => ({ kind: 'refused', reason: 'source_unreadable' }) })
+    expect(unreadable).toMatchObject({
+      kind: 'action_required',
+      requiredAction: {
+        title: 'OpenAPI document could not be read',
+        description: 'The response could not be read. Confirm the URL returns the OpenAPI document, then preview it again.',
+      },
+    })
+  })
+
   it('distinguishes invalid OpenAPI input from an unavailable source and gives a repair', async () => {
     const result = await previewSupplySource({
       kind: 'openapi',

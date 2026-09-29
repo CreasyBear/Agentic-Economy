@@ -87,6 +87,7 @@ export function publicationInvalidFieldForMessage(
     case 'Choose a connected source before submitting this Tool.':
       return 'connection'
     case 'Confirm all three publication statements before submitting.':
+    case 'Confirm the information is accurate, and that publication can follow validation, before submitting.':
       return 'attestation'
     case 'Select one supported Tool before submitting it.':
       return 'candidate'
@@ -131,6 +132,11 @@ export type SupplyNativeStartProps = Readonly<{
     candidate: Pick<SupplyToolCandidate, 'candidateRef' | 'sourceSelector' | 'title' | 'description'>
     terms: SupplyIntegrationDraftTerms
   }>) => Promise<Readonly<{ kind: 'saved' | 'replayed' }> | Readonly<{ kind: 'refused'; reason: string }>>
+  onNavigationSafetyChange?: (state: Readonly<{
+    dirty: boolean
+    pending: boolean
+    saveOutcome: 'idle' | 'saved' | 'failed' | 'outcome_unknown'
+  }>) => void
 }>
 
 /** The connection adapter a source of this kind requires before it can be called. */
@@ -315,10 +321,17 @@ export function publicationValidationMessage(input: Readonly<{
   requiresConnection: boolean
   connectionRef: string
   attestation: Record<AttestationKey, boolean>
+  publishAuthorityRequired: boolean
 }>): string | undefined {
   const termsMessage = publicationTermsValidationMessage(input)
   if (termsMessage !== undefined) return termsMessage
-  if (!Object.values(input.attestation).every(Boolean)) return 'Confirm all three publication statements before submitting.'
+  if (input.publishAuthorityRequired) {
+    if (!Object.values(input.attestation).every(Boolean)) return 'Confirm all three publication statements before submitting.'
+    return undefined
+  }
+  if (!input.attestation.informationAccurate || !input.attestation.publishAfterSuccessfulValidation) {
+    return 'Confirm the information is accurate, and that publication can follow validation, before submitting.'
+  }
   return undefined
 }
 
@@ -353,6 +366,11 @@ export function buildPublishInput(input: Readonly<{
   pricing: NonNullable<PublishSupplyToolV2Input['pricing']>
   environment: Environment
   idempotencyKey: string
+  attestation: Readonly<{
+    authorisedToPublish: boolean
+    informationAccurate: true
+    publishAfterSuccessfulValidation: true
+  }>
 }>): PublishSupplyToolV2Input {
   const dataEffectIndex = input.dataRelease ? 0 : -1
   const effects: PublishSupplyToolV2Input['consequences']['effects'] = [
@@ -389,9 +407,9 @@ export function buildPublishInput(input: Readonly<{
     environment: input.environment,
     idempotencyKey: input.idempotencyKey,
     attestation: {
-      authorisedToPublish: true,
-      informationAccurate: true,
-      publishAfterSuccessfulValidation: true,
+      authorisedToPublish: input.attestation.authorisedToPublish,
+      informationAccurate: input.attestation.informationAccurate,
+      publishAfterSuccessfulValidation: input.attestation.publishAfterSuccessfulValidation,
     },
   }
 }

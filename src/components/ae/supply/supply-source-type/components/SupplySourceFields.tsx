@@ -42,6 +42,7 @@ export function SupplySourceFields({
   onResourceUrlChange,
   onX402MethodChange,
   onFieldError,
+  onFieldClear,
 }: SupplySourceFieldsProps) {
   return (
     <>
@@ -53,6 +54,7 @@ export function SupplySourceFields({
           value={definitionUrl}
           description={SUPPLY_SOURCE_TYPE_COPY.openApiUrl.description}
           placeholder={SUPPLY_SOURCE_TYPE_COPY.openApiUrl.placeholder}
+        example={SUPPLY_SOURCE_TYPE_COPY.httpsExample.openapi}
           {...(discoverDiagnostic?.target === 'definitionUrl'
             ? { discoverDiagnostic: discoverDiagnostic.diagnostic }
             : {})}
@@ -88,6 +90,7 @@ export function SupplySourceFields({
           onPluginJsonChange={onPluginJsonChange}
           onMcpJsonChange={onMcpJsonChange}
           onError={onFieldError}
+          onClearError={onFieldClear}
         />
       ) : null}
       {sourceKind === 'x402' ? (
@@ -146,6 +149,7 @@ function McpSourceFields({
               value={serverUrl}
               description={SUPPLY_SOURCE_TYPE_COPY.mcpServerUrl.description}
               placeholder={SUPPLY_SOURCE_TYPE_COPY.mcpServerUrl.placeholder}
+              example={SUPPLY_SOURCE_TYPE_COPY.httpsExample.mcp}
               disabled={disabled}
               discoverDiagnostic={serverUrlDiscoverDiagnostic}
               onChange={onServerUrlChange}
@@ -171,6 +175,7 @@ function AgentPluginFields({
   onPluginJsonChange,
   onMcpJsonChange,
   onError,
+  onClearError,
 }: AgentPluginFieldsProps) {
   return (
     <>
@@ -184,6 +189,7 @@ function AgentPluginFields({
         discoverDiagnostic={pluginDiscoverDiagnostic}
         onChange={onPluginJsonChange}
         onError={onError}
+        onClearError={onClearError}
       />
       <JsonFileField
         id="supply-native-mcp-json"
@@ -195,6 +201,7 @@ function AgentPluginFields({
         discoverDiagnostic={mcpDiscoverDiagnostic}
         onChange={onMcpJsonChange}
         onError={onError}
+        onClearError={onClearError}
       />
     </>
   )
@@ -216,6 +223,7 @@ function X402SourceFields({
         value={resourceUrl}
         description={SUPPLY_SOURCE_TYPE_COPY.x402ResourceUrl.description}
         placeholder={SUPPLY_SOURCE_TYPE_COPY.x402ResourceUrl.placeholder}
+        example={SUPPLY_SOURCE_TYPE_COPY.httpsExample.x402}
         disabled={disabled}
         discoverDiagnostic={resourceUrlDiscoverDiagnostic}
         onChange={onResourceUrlChange}
@@ -226,6 +234,7 @@ function X402SourceFields({
           <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="GET" />GET</Label>
           <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="POST" />POST</Label>
         </RadioGroup>
+        <FieldDescription>{SUPPLY_SOURCE_TYPE_COPY.x402Method.description}</FieldDescription>
       </Field>
     </>
   )

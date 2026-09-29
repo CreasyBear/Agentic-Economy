@@ -36,3 +36,24 @@ export function completedChatFacts(steps: readonly CompletedStep[]): string | nu
     ?? facts.at(-1)
     ?? null
 }
+
+function unwrapToolOutput(output: unknown): unknown {
+  if (typeof output === 'object' && output !== null && 'type' in output && 'value' in output
+    && (output.type === 'json' || output.type === 'text')) return output.value
+  return output
+}
+
+/** Completed tool messages from this turn, not a model narration. */
+export function factsFromSavedTurn(messages: readonly { role?: string; content?: unknown }[]): string | null {
+  const toolResults: { toolName: string; output: unknown }[] = []
+  for (const message of messages) {
+    if (message.role !== 'tool' || !Array.isArray(message.content)) continue
+    for (const part of message.content) {
+      if (typeof part !== 'object' || part === null || !('type' in part) || part.type !== 'tool-result') continue
+      if (!('toolName' in part) || typeof part.toolName !== 'string') continue
+      toolResults.push({ toolName: part.toolName, output: 'output' in part ? unwrapToolOutput(part.output) : undefined })
+    }
+  }
+  return toolResults.length === 0 ? null : completedChatFacts([{ toolResults }])
+}
+

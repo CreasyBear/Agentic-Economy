@@ -423,7 +423,8 @@ export const moneyTables = {
     .index('by_paymentId', ['paymentId'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
     .index('by_accountRef_and_state', ['accountRef', 'state'])
-    .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state']),
+    .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state'])
+    .index('by_appliedTransactionRef', ['appliedTransactionRef']),
   moneyLegalCustomerBindings: defineTable({
     accountRef: identifier,
     legalCustomerRef: identifier,

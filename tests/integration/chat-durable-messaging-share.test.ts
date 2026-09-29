@@ -410,6 +410,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       .filter(card => card?.kind === 'choices')).toHaveLength(1)
     expect(attempts).toBe(2)
   })
+
   it('halts at clarification and reports an input-required stream outcome', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-clarify-owner')

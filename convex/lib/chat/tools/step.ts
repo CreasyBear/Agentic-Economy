@@ -7,6 +7,10 @@ export const MAX_CHAT_STEPS = 5
 export const MAX_CHAT_SEARCHES = 2
 export const CHAT_NO_RESULT_ANSWER = '**Search could not be completed.** Next: try again or browse the Market.'
 
+function markdownText(value: string): string {
+  return value.replace(/[\\`*_{}[\]()#+\-.!|]/gu, character => `\\${character}`)
+}
+
 type ChatStepEvidence = Readonly<{
   toolResults: readonly Readonly<{ toolName: string; output: unknown }>[]
 }>
@@ -47,7 +51,7 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
       typeof row === 'object' && row !== null && 'title' in row && typeof row.title === 'string'
         && 'summary' in row && typeof row.summary === 'string')
     if (rows.length > 0) {
-      return `**${rows.map(row => row.title).join(', ')} ${rows.length === 1 ? 'is a Tool to inspect' : 'are Tools to inspect'}.**\n\n${rows.slice(0, 3).map(row => `- ${row.title}: ${row.summary}`).join('\n')}\n\nNext: Open a Tool card to check its inputs and current terms.`
+      return `**${rows.map(row => markdownText(row.title)).join(', ')} ${rows.length === 1 ? 'is a Tool to inspect' : 'are Tools to inspect'}.**\n\n${rows.slice(0, 3).map(row => `- ${markdownText(row.title)}: ${markdownText(row.summary)}`).join('\n')}\n\nNext: Open a Tool card to check its inputs and current terms.`
     }
     return null
   }
@@ -55,7 +59,7 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
   const args = typeof next === 'object' && next !== null && 'args' in next ? next.args : undefined
   const query = typeof args === 'object' && args !== null && 'query' in args && typeof args.query === 'string'
     ? args.query : null
-  if (verdict.kind === 'unavailable') return `**Search is temporarily unavailable.** Next: retry${query === null ? ' the search.' : ` “${query}”.`}`
+  if (verdict.kind === 'unavailable') return `**Search is temporarily unavailable.** Next: retry${query === null ? ' the search.' : ` “${markdownText(query)}”.`}`
   if (verdict.kind === 'scoped') {
     const complete = typeof verdict.assessed === 'object' && verdict.assessed !== null
       && 'coverage' in verdict.assessed && verdict.assessed.coverage === 'complete'
@@ -66,7 +70,7 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
       ? `**These are external listings to inspect, not AE-callable Tools.**${followUp}`
       : `**Only part of the catalogue was assessed; no suitable Tool is established yet.**${followUp}`
   }
-  return `**No suitable Tool in the assessed catalogue.** Next: ${query === null ? 'try a broader search.' : `broaden “${query}”.`}`
+  return `**No suitable Tool in the assessed catalogue.** Next: ${query === null ? 'try a broader search.' : `broaden “${markdownText(query)}”.`}`
 }
 
 export function prepareChatToolStep({ stepNumber, steps }: { stepNumber: number; steps: readonly ChatStepEvidence[] }) {

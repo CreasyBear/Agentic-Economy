@@ -15,6 +15,7 @@ import {
   reserveAgentHandoffArgs, reserveAgentHandoffHandler, reserveAgentHandoffResult,
 } from './lib/money/funding/agentFundingHandoff'
 import { readBalanceSubjectArgs, readBalanceSubjectHandler, readBalanceSubjectResult } from './lib/money/funding/balanceSubject'
+import { resolveFundingReceiptSourcesArgs, resolveFundingReceiptSourcesHandler, resolveFundingReceiptSourcesResult } from './lib/money/funding/fundingReceiptSources'
 import {
   prepareVerifiedEventArgs,
   prepareVerifiedEventFromInboxArgs,
@@ -192,4 +193,7 @@ export const markFundingReversalUnknown = internalMutation({
   args: markFundingReversalUnknownArgs,
   returns: markFundingUnknownResult,
   handler: markFundingReversalUnknownHandler,
+})
+export const resolveFundingReceiptSources = internalQuery({
+  args: resolveFundingReceiptSourcesArgs, returns: resolveFundingReceiptSourcesResult, handler: resolveFundingReceiptSourcesHandler,
 })

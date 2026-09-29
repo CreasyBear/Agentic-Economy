@@ -227,7 +227,7 @@ function Item({
     props: {
       className: cn(
         focusable &&
-          "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+          "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         className
       ),
       tabIndex: focusable ? (isCurrentTabStop ? 0 : -1) : undefined,

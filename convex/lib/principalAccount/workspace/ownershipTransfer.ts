@@ -99,6 +99,9 @@ export const transferWorkspaceOwnershipHandler = async (ctx: MutationCtx, args: 
     if (successorPrincipal === null || successorPrincipal.lifecycle !== 'active') {
       throw new InteractiveAuthorityError('successor_principal_inactive')
     }
+    if (successorPrincipal.kind !== 'human') {
+      throw new InteractiveAuthorityError('successor_not_human')
+    }
 
     const stepUp = await assertStepUpForSensitiveAction(ctx.db, identity, {
       accountRef: canonicalAccountRef,

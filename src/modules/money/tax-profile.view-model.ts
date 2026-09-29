@@ -69,9 +69,25 @@ export type CustomerTaxFactsUpsertInput = Readonly<{
 }>
 
 export const TAX_PROFILE_VALIDATION_DIAGNOSTIC: TaxProfileDiagnostic = {
-  whatHappened: 'Invalid ABN or incomplete billing address.',
+  whatHappened: 'Invalid ABN.',
   financialImpact: 'A$0.00 affected — tax profile not saved.',
-  nextStep: 'Enter an 11-digit Australian Business Number and valid address.',
+  nextStep: 'Enter an 11-digit Australian Business Number.',
+}
+
+export function taxProfileValidationDiagnostic(field: TaxProfileInvalidField): TaxProfileDiagnostic {
+  if (field === 'legalName') {
+    return {
+      whatHappened: 'Legal business name is missing.',
+      financialImpact: 'A$0.00 affected — tax profile not saved.',
+      nextStep: 'Enter the registered legal name.',
+    }
+  }
+  if (field === 'abn') return TAX_PROFILE_VALIDATION_DIAGNOSTIC
+  return {
+    whatHappened: 'Billing address is incomplete.',
+    financialImpact: 'A$0.00 affected — tax profile not saved.',
+    nextStep: 'Enter a street address, locality, and four-digit postcode.',
+  }
 }
 
 export const TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC: TaxProfileDiagnostic = {
