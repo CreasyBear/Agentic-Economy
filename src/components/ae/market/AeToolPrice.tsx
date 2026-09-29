@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,7 +10,6 @@ export function AeToolPrice({
   label = "Total price",
   size = "md",
   className,
-  validUntil,
 }: {
   price: string;
   label?: string;
@@ -19,7 +17,6 @@ export function AeToolPrice({
   className?: string;
   validUntil?: number;
 }) {
-  const currentPrice = useCurrentToolPrice(price, validUntil);
   return (
     <p className={cn("grid min-w-0 content-start gap-0.5", className)}>
       <span className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
@@ -33,24 +30,13 @@ export function AeToolPrice({
           size === "lg" && "text-2xl",
         )}
       >
-        {currentPrice}
+        {price}
       </span>
     </p>
   );
 }
 
-export function useCurrentToolPrice(price: string, validUntil?: number): string {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (validUntil === undefined) return;
-    const delay = Math.max(0, validUntil - Date.now());
-    const timer = setTimeout(() => setNow(Date.now()), Math.min(delay + 1, 2_147_483_647));
-    return () => clearTimeout(timer);
-  }, [validUntil]);
-  return validUntil !== undefined && validUntil <= now
-    ? "AUD estimate temporarily unavailable" : price;
+export function ToolPriceText({ price }: { price: string; validUntil?: number }) {
+  return <>{price}</>;
 }
 
-export function ToolPriceText({ price, validUntil }: { price: string; validUntil?: number }) {
-  return <>{useCurrentToolPrice(price, validUntil)}</>;
-}

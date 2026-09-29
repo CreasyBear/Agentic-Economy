@@ -24,7 +24,7 @@ import {
   suggestNextAction,
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
-import { formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice, formatExactAmount, parseDecimalExactAmount, type ExactAmount } from '@/modules/money/public'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import type {
   OwnerMarketDemandFindResult,
@@ -210,12 +210,51 @@ function boundedString(value: unknown, maximum: number): string | undefined {
   return Array.from(value.trim()).slice(0, maximum).join('')
 }
 
-function buyerPrice(price: PublicToolPrice): string {
-  if (price.kind === 'on_request') return 'Price on request'
-  if (price.kind === 'fixed') return price.amount.currency === 'AUD'
-    ? formatDisplayAmount(price.amount) : 'AUD estimate temporarily unavailable'
-  if (price.minimum.currency !== 'AUD' || price.maximum.currency !== 'AUD') return 'AUD estimate temporarily unavailable'
-  return `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`
+function buyerAmount(amount: ExactAmount): string | undefined {
+  if (amount.currency === 'AUD') return formatDisplayAmount(amount)
+  if (amount.currency !== 'USD' && amount.currency !== 'USDC') return undefined
+  const formatted = formatExactAmount(amount)
+  if (formatted === undefined) return undefined
+  const normalized = formatted.includes('.') ? formatted.replace(/0+$/u, '').replace(/\.$/u, '') : formatted
+  return `US$${normalized}`
+}
+
+function usdPriceFromSource(source: unknown): string | undefined {
+  if (typeof source !== 'string') return undefined
+  const decimal = /^(\d+(?:\.\d+)?) USDC$/u.exec(source)?.[1]
+    ?? /^USDC (\d+(?:\.\d+)?)$/u.exec(source)?.[1]
+  const amount = decimal === undefined ? undefined : parseDecimalExactAmount('USDC', decimal, 6)
+  return amount === undefined ? undefined : buyerAmount(amount)
+}
+
+function buyerPrice(price: PublicToolPrice): string | undefined {
+  if (price.kind === 'on_request') return undefined
+  if (price.kind === 'fixed') return buyerAmount(price.amount)
+  if (price.minimum.currency !== price.maximum.currency) return undefined
+  const minimum = buyerAmount(price.minimum)
+  const maximum = buyerAmount(price.maximum)
+  return minimum === undefined || maximum === undefined ? undefined : `${minimum}–${maximum}`
+}
+
+function choicePriceFields(value: Record<string, unknown>) {
+  const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
+  const formatted = display.success && display.data.kind === 'indicative'
+    && display.data.validUntil > Date.now() ? formatDisplayPrice(display.data) : undefined
+  const listedPrice = isRecord(value.price) && value.price.kind === 'indicative' && typeof value.price.label === 'string'
+    ? value.price.label : undefined
+  const listedAudIsFresh = listedPrice?.startsWith('A$') === true
+    && isRecord(value.price) && typeof value.price.validUntil === 'number' && value.price.validUntil > Date.now()
+  const price = formatted?.startsWith('A$') ? formatted
+    : listedAudIsFresh ? stringField(listedPrice)
+      : usdPriceFromSource(value.sourcePrice) ?? usdPriceFromSource(listedPrice)
+  const priceValidUntil = price?.startsWith('A$') !== true ? undefined
+    : display.success && display.data.kind === 'indicative' ? display.data.validUntil
+      : listedAudIsFresh && isRecord(value.price) && typeof value.price.validUntil === 'number'
+        ? value.price.validUntil : undefined
+  return {
+    ...(price === undefined ? {} : { price }),
+    ...(priceValidUntil === undefined ? {} : { priceValidUntil }),
+  }
 }
 
 function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
@@ -250,6 +289,7 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
       detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(value.id)}`,
       title: stringField(value.title) ?? 'External listing',
       ...(provider === undefined ? {} : { provider }),
+      ...choicePriceFields(value),
       access: 'external_listing',
     }
   }
@@ -265,14 +305,6 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
       : isRecord(value.details) && isRecord(value.details.provider)
         ? stringField(value.details.provider.name)
         : undefined
-  const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
-  const formatted = display.success && display.data.kind === 'indicative'
-    && display.data.validUntil > Date.now() ? formatDisplayPrice(display.data) : undefined
-  const price = formatted?.startsWith('A$') ? formatted
-    : isRecord(value.price) && value.price.kind === 'indicative'
-      && typeof value.price.label === 'string' && value.price.label.startsWith('A$')
-      && typeof value.price.validUntil === 'number' && Number.isSafeInteger(value.price.validUntil)
-      && value.price.validUntil > Date.now() ? stringField(value.price.label) : undefined
   const healthStatus = stringField(value.healthStatus)
   const readiness = value.readiness === 'ready' || value.readiness === 'unverified' || value.readiness === 'unavailable'
     ? value.readiness
@@ -284,10 +316,7 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
     toolRef,
     title,
     ...(provider === undefined ? {} : { provider }),
-    ...(price === undefined ? {} : { price }),
-    ...(price !== undefined && display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil }
-      : price !== undefined && isRecord(value.price) && typeof value.price.validUntil === 'number'
-        ? { priceValidUntil: value.price.validUntil } : {}),
+    ...choicePriceFields(value),
     ...(value.access === 'ae_callable' && value.readiness === 'ready' ? { callable: true } : {}),
     ...(readiness === undefined ? {} : { readiness }),
     ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
@@ -310,7 +339,7 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
   const display = publicToolDisplayPriceSchema.safeParse(isRecord(value.commercial) ? value.commercial.displayPrice : undefined)
   const formatted = display.success && display.data.kind === 'indicative'
     && display.data.validUntil > Date.now() ? formatDisplayPrice(display.data) : undefined
-  const priceLabel = formatted?.startsWith('A$') ? formatted : price?.kind === 'on_request' ? 'Price on request' : undefined
+  const priceLabel = formatted?.startsWith('A$') ? formatted : price === undefined ? undefined : buyerPrice(price)
   const posture = readPosture(value.availability)
   const authentication = readAuthentication(value.authentication)
   return {
@@ -318,7 +347,7 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(priceLabel === undefined ? {} : { price: priceLabel }),
-    ...(priceLabel !== undefined && display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
+    ...(priceLabel?.startsWith('A$') === true && display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
     ...(posture === undefined ? {} : { readiness: posture === 'routeable' ? 'ready' : posture === 'unavailable' ? 'unavailable' : 'unverified' }),
     ...(posture === 'routeable' && Array.isArray(value.navigation)
       && value.navigation.some((item) => isRecord(item) && item.relation === 'call')
@@ -417,12 +446,12 @@ function buyerCompareContrasts(output: Record<string, unknown>, choices: readonl
       ? choices.find((choice) => choice.toolRef === cell.toolRef)?.title
       : undefined
     const label = buyerPrice(price)
+    if (label === undefined) continue
     prices.push(title === undefined ? label : `${title}: ${label}`)
-    if (prices.length >= 4) break
   }
-  return contrasts.map((fact) => fact.label === 'Price' && prices.length > 0
-    ? { ...fact, value: prices.join('; ') }
-    : fact)
+  return contrasts.flatMap(fact => fact.label !== 'Price'
+    ? [fact]
+    : prices.length > 0 ? [{ ...fact, value: prices.join('; ') }] : [])
 }
 
 const MAX_EXECUTE_OUTPUT_PREVIEW_CHARS = 8_000

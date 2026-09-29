@@ -2,24 +2,17 @@ import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
-import { formatCurrencyAmount, formatDisplayPrice } from '@/modules/money/public'
+import { formatCurrencyAmount } from '@/modules/money/public'
 
-export function AeToolEconomics({
-  tool,
-}: Readonly<{
+type AeToolEconomicsProps = Readonly<{
   tool: PublicToolDescriptor
-}>) {
+  pricing: string
+}>
+
+export function AeToolEconomics({ tool, pricing }: AeToolEconomicsProps) {
   const breakdown = tool.commercial.priceBreakdown
   const priceEvidence = tool.commercial.priceEvidence
   const managed = tool.authentication.kind === 'x402'
-  const audEstimate = formatDisplayPrice(tool.commercial.displayPrice)
-  const pricing = audEstimate === undefined
-    ? tool.commercial.price.kind === 'fixed'
-      ? 'Fixed price'
-      : tool.commercial.price.kind === 'range'
-        ? 'Price range'
-        : 'Price on request'
-    : `${audEstimate} per Call`
   const evidenceFields = tool.evidence.length
   const settlementNetwork = breakdown?.network ?? tool.payment?.network
   const facts: AeFact[] = [

@@ -90,7 +90,6 @@ function matchesRemainingConstraints(row: SearchRow, input: X402DirectoryIndexIn
   if (input.maxUsdPrice !== undefined && (row.minimumUsdPrice === undefined || new Decimal(row.minimumUsdPrice).gt(input.maxUsdPrice))) return false
   if (input.minUsdPrice !== undefined && (row.minimumUsdPrice === undefined || new Decimal(row.minimumUsdPrice).lt(input.minUsdPrice))) return false
   const payersOrder = row.payersOrder ?? -1
-  if (input.sort === 'repeat' && payersOrder < REPEAT_SORT_MIN_PAYERS) return false
   if (input.minPayers30d !== undefined && payersOrder < input.minPayers30d) return false
   if (input.maxPayers30d !== undefined && (payersOrder < 0 || payersOrder > input.maxPayers30d)) return false
   if (input.curatedOnly === true && row.curated !== true) return false
@@ -118,6 +117,7 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
       ...(input.category === undefined ? [] : [q.eq(q.field('category'), input.category)]),
       ...(input.provider === undefined ? [] : [q.eq(q.field('provider'), input.provider)]),
       ...(input.minUsdPrice === undefined ? [] : [q.gte(q.field('minimumUsdPriceOrder'), input.minUsdPrice)]),
+      ...(input.sort !== 'repeat' ? [] : [q.gte(q.field('payersOrder'), REPEAT_SORT_MIN_PAYERS)]),
       ...(input.minPayers30d === undefined ? [] : [q.gte(q.field('payersOrder'), input.minPayers30d)]),
       ...(input.maxPayers30d === undefined ? [] : [q.gte(q.field('payersOrder'), 0), q.lte(q.field('payersOrder'), input.maxPayers30d)]),
       ...(input.curatedOnly === true ? [q.eq(q.field('curated'), true)] : []),

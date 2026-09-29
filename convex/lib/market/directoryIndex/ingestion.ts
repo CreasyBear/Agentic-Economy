@@ -91,11 +91,18 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
       .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
     await writeAnalytics(ctx, generation, item.resource, entry, storedDirectoryEntry(previous), observedAt, storedRecencyBand(searchRows.find(row => row.network === '*')?.lastCalledBand))
     const universalAnalytics = searchAnalytics(entry, '*', observedAt)
-    const eligible = isDirectoryEntryEligible(universalAnalytics)
+    const eligible = isDirectoryEntryEligible({
+      hasOutputSchema: universalAnalytics.hasOutputSchema,
+      hasOutputExample: universalAnalytics.hasOutputExample,
+      minimumUsdPrice: universalAnalytics.minimumUsdPrice,
+      payersOrder: universalAnalytics.payersOrder,
+    })
     const previousEligible = searchRows.find(row => row.network === '*')?.eligible === true
     for (const row of searchRows) {
       const next = searchAnalytics(entry, row.network, observedAt)
       const changed = row.popularOrder !== popularOrder || row.updatedOrder !== updatedOrder || row.eligible !== eligible
+        || row.minimumUsdPrice !== next.minimumUsdPrice || row.minimumUsdPriceOrder !== next.minimumUsdPriceOrder
+        || row.priceOrder !== next.priceOrder || row.priceBand !== next.priceBand
         || row.payersOrder !== next.payersOrder || row.adoptionBand !== next.adoptionBand || row.depthBand !== next.depthBand
         || row.lastCalledBand !== next.lastCalledBand || row.payerDepth !== next.payerDepth || row.lastActivatedAt !== next.lastActivatedAt
         || row.actionClass !== classes.actionClass || row.objectClass !== classes.objectClass
@@ -103,6 +110,8 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
       if (changed) {
         await ctx.db.patch(row._id, {
           popularOrder, updatedOrder, eligible,
+          minimumUsdPrice: next.minimumUsdPrice, minimumUsdPriceOrder: next.minimumUsdPriceOrder,
+          priceOrder: next.priceOrder, priceBand: next.priceBand,
           payersOrder: next.payersOrder, adoptionBand: next.adoptionBand, depthBand: next.depthBand, lastCalledBand: next.lastCalledBand,
           payerDepth: next.payerDepth, lastActivatedAt: next.lastActivatedAt,
           ...classes,
@@ -124,7 +133,12 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
   // Eligibility and provider identity are resource-level (not per-network), so
   // compute once and copy onto every network-variant search row below.
   const universalAnalytics = searchAnalytics(entry, '*', observedAt)
-  const eligible = isDirectoryEntryEligible(universalAnalytics)
+  const eligible = isDirectoryEntryEligible({
+    hasOutputSchema: universalAnalytics.hasOutputSchema,
+    hasOutputExample: universalAnalytics.hasOutputExample,
+    minimumUsdPrice: universalAnalytics.minimumUsdPrice,
+    payersOrder: universalAnalytics.payersOrder,
+  })
   const providerKey = directoryProviderKey(entry.provider)
   const slug = await resolveDirectorySlug(ctx, generation, providerKey, item.resource, entry.method)
   // Computed from the same raw resource JSON that flows into

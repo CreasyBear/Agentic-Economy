@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
-import { useCurrentToolPrice } from "./AeToolPrice";
 
 import {
   Item,
@@ -25,8 +24,7 @@ export function AeCapabilityTile({
     group.providerCount > 1
       ? `${group.providerCount.toLocaleString()} listed`
       : group.tools[0]?.providerName ?? "1 listed";
-  const expiries = group.tools.flatMap((tool) => tool.priceValidUntil === undefined ? [] : [tool.priceValidUntil]);
-  const price = useCurrentToolPrice(capabilityFromPrice(group.tools), expiries.length === 0 ? undefined : Math.min(...expiries));
+  const price = capabilityFromPrice(group.tools);
 
   return (
     <Item

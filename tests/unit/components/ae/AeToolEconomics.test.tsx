@@ -77,13 +77,53 @@ afterEach(cleanup)
 describe('AeToolEconomics', () => {
 
   it('charges 0% on x402 Calls and does not show the Account loading fee', () => {
-    const view = render(<AeToolEconomics tool={economicsTool()} />)
+    const view = render(<AeToolEconomics tool={economicsTool()} pricing="US$0.25 per Call" />)
     expect(view.getByText('Call fee')).toBeTruthy()
     expect(view.getByText('0%')).toBeTruthy()
     expect(view.queryByText('No Call markup')).toBeNull()
     expect(view.queryByText('Top-up fee')).toBeNull()
     expect(view.queryByText('5% fee + GST on the fee')).toBeNull()
     expect(view.queryByText('2.5% fee + GST on the fee')).toBeNull()
+  })
+
+  it('shows the exact USDC Call price when no fresh AUD estimate is available', () => {
+    const tool = economicsTool({
+      price: { kind: 'fixed', amount: { currency: 'USDC', units: '10000', exponent: 6 } },
+    })
+    const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
+    expect(view.getByText('US$0.01 per Call')).toBeTruthy()
+  })
+
+  it('uses the fresh AUD display estimate instead of the source USDC amount', () => {
+    const now = Date.now()
+    const tool = economicsTool({
+      price: { kind: 'fixed', amount: { currency: 'USDC', units: '10000', exponent: 6 } },
+      displayPrice: {
+        kind: 'indicative',
+        amount: { currency: 'AUD', units: '12000', exponent: 6 },
+        rateObservedAt: now - 1,
+        validUntil: now + 60_000,
+      },
+    })
+    const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
+    expect(view.getByText('A$0.02 per Call')).toBeTruthy()
+    expect(view.queryByText('US$0.01 per Call')).toBeNull()
+  })
+
+  it('uses the USDC Call price when an AUD display estimate is stale', () => {
+    const now = Date.now()
+    const tool = economicsTool({
+      price: { kind: 'fixed', amount: { currency: 'USDC', units: '10000', exponent: 6 } },
+      displayPrice: {
+        kind: 'indicative',
+        amount: { currency: 'AUD', units: '12000', exponent: 6 },
+        rateObservedAt: now - 60_000,
+        validUntil: now - 1,
+      },
+    })
+    const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
+    expect(view.getByText('US$0.01 per Call')).toBeTruthy()
+    expect(view.queryByText('A$0.02 per Call')).toBeNull()
   })
 
   it('keeps AeToolDecision at 0% Call fee without a loading-fee row', () => {

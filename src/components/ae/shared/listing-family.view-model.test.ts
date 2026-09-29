@@ -20,6 +20,19 @@ describe('shared Tool view model', () => {
     expect(view.readiness.label).toBe('Readiness unknown')
   })
 
+  it('shows source USDC in USD without a fresh rate and uses a fresh rate when available', () => {
+    const listing = projectDirectoryListing({
+      resource: 'https://api.example/weather',
+      title: 'Weather',
+      description: 'Forecasts',
+      provider: 'api.example',
+      prices: [{ scheme: 'exact', decimalAmount: '0.10', symbol: 'USDC' }],
+    })
+    const rate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.239', fetchedAt: 1_000 }
+    expect(projectToolObject(listing, undefined, 1_001).price?.label).toBe('US$0.1 per Call')
+    expect(projectToolObject(listing, undefined, 1_001, rate).price?.label).toBe('A$0.13 per Call')
+  })
+
   it('does not show expired observation as currently routeable', () => {
     const base = projectDirectoryListing({ resource: 'https://api.example/weather', title: 'Weather', description: '', provider: 'api.example', prices: [] })
     const listing = { ...base, facts: { ...base.facts, readiness: {

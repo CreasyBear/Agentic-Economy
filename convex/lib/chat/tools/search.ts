@@ -10,7 +10,7 @@ import { projectToolListChoices, projectToolSearchChoices, type SearchResult, ty
 import { lexicalToolMatch } from '@/modules/registry/tool-reranker'
 import { isProductionToolChoice, suitableRankedToolRefs } from '@/modules/registry/public'
 import { registryToolsListContract, registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
-import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/registry/tool-selection-score'
+import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import { api, internal } from '../../../_generated/api'
 import { descriptionFor, failure, type ReserveChatSearch, type ReserveChatTool } from './contracts'
 import { projectedModelFacingOutput } from './output'

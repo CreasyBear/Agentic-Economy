@@ -4,6 +4,8 @@ import { mockJevFetch } from '../../helpers/tool-search-rerank-fixtures'
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', () => ({ listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
 import { readX402Directory } from '@/modules/market/x402-directory.server'
+import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
+import { minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 
 const resources = Array.from({ length: 20 }, (_, index) => ({
   resource: `https://provider.test/resource/${index}`,
@@ -51,10 +53,15 @@ describe('native x402 directory browsing', () => {
     expect(page.kind === 'ok' && page.items[0]?.prices[0]?.amount).toBe('500 atomic units (legacy-asset)')
   })
 
-  it.each(['base', 'eip155:8453'])('formats SDK-recognized assets on %s without an AE asset table', async (network) => {
-    sdk.list.mockResolvedValue({ items: [{ ...resources[0], accepts: [{ scheme: 'exact', network, amount: '3000', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }] }], pagination: { limit: 20, offset: 0, total: 1 } })
+  it.each([
+    { network: 'eip155:8453', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+    { network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+    { network: 'eip155:42161', asset: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
+    { network: 'eip155:137', asset: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' },
+  ])('formats registered USDC on $network', async ({ network, asset }) => {
+    sdk.list.mockResolvedValue({ items: [{ ...resources[0], accepts: [{ scheme: 'exact', network, amount: '3000', asset }] }], pagination: { limit: 20, offset: 0, total: 1 } })
     const page = await readX402Directory({})
-    expect(page.kind === 'ok' && page.items[0]?.prices[0]?.amount).toBe('0.003000 USDC')
+    expect(page.kind === 'ok' && page.items[0]?.prices[0]).toMatchObject({ amount: '0.003000 USDC', symbol: 'USDC', decimalAmount: '0.003000', scheme: 'exact' })
   })
 
   it('uses native semantic search and exposes partial results without paging or filtering', async () => {
@@ -212,6 +219,21 @@ describe('rich provider-declared contracts', () => {
     expect(result.prices[0]).toMatchObject({ symbol: 'USDC', decimalAmount: '9007199254740991.000001' })
     expect(result.prices[0]).not.toHaveProperty('usdPrice')
     expect(result.prices[0]).not.toHaveProperty('numericAmount')
+  })
+  it('prices a Solana USDC exact option and an upto option at its declared maximum', () => {
+    const solana = projectX402DirectoryEntry({
+      resource: 'https://provider.test/solana',
+      accepts: [{ network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', scheme: 'exact', amount: '20000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' }],
+    })
+    expect(solana.prices[0]).toMatchObject({ symbol: 'USDC', decimalAmount: '0.020000', scheme: 'exact' })
+    expect(minimumDirectoryUsdPrice(solana)).toBe('0.02')
+
+    const upto = projectX402DirectoryEntry({
+      resource: 'https://provider.test/upto',
+      accepts: [{ network: 'eip155:8453', scheme: 'upto', amount: '100', maxAmountRequired: '20000', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }],
+    })
+    expect(upto.prices[0]).toMatchObject({ scheme: 'upto', symbol: 'USDC', decimalAmount: '0.020000' })
+    expect(minimumDirectoryUsdPrice(upto)).toBe('0.02')
   })
   it('uses maintained v1 discovery extraction and preserves output schema when available', async () => {
     const outputSchema = { input: { type: 'http', method: 'GET', query_params: { city: 'Perth' } }, output: { forecast: 'sunny' } }

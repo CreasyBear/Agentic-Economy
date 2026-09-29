@@ -108,7 +108,7 @@ describe('native x402 catalogue', () => {
 })
 
 it('compares Provider-listed source prices and Coinbase activity without a sideways mobile table', () => {
-  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC` }], outputSummary: `Output ${index}`, ...(index === 0 ? { activity: { calls30d: 66 } } : {}) }))
+  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }], outputSummary: `Output ${index}`, ...(index === 0 ? { activity: { calls30d: 66 } } : {}) }))
   show(undefined, priced)
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
   expect((screen.getByRole('button', { name: 'Compare Tools' }) as HTMLButtonElement).disabled).toBe(true)
@@ -153,7 +153,7 @@ it('keeps Provider price evidence secondary and settlement networks off Tool car
   expect(row?.textContent).toContain('External listing · inspect')
   const priceCell = row?.querySelectorAll('td')[2]
   const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
-  expect(buyerPrice?.textContent).toMatch(/AUD.*unavailable/i)
+  expect(buyerPrice?.textContent).toBe('US$1')
   expect(buyerPrice?.textContent).not.toContain('USDC')
   expect(sourcePrice?.textContent).toMatch(/Provider.*1 USDC/)
   expect(screen.queryByText('Base')).toBeNull()
@@ -539,7 +539,8 @@ const searchRows = [
     id: directoryId, source: 'coinbase', access: 'external_listing',
     title: 'External Forecast', summary: 'Published weather endpoint', provider: 'example.com',
     actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
-    price: { kind: 'unavailable' }, detailRef: `/api/v1/registry/detail?id=${directoryId}`,
+    sourcePrice: '1 USDC',
+    price: { kind: 'indicative', label: 'US$1' }, detailRef: `/api/v1/registry/detail?id=${directoryId}`,
     next: [{ action: 'describe-external', args: { id: directoryId }, authority: 'public' }],
     freshness: { source: 'x402_directory', state: 'stale', completedAt: Date.UTC(2026, 8, 26), staleAfterMs: 10800000 },
   },
@@ -566,7 +567,7 @@ describe('canonical Market search', () => {
     expect(screen.getByText('AE-callable · ready')).toBeTruthy()
     expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
     expect(screen.getByText('Indicative AUD · A$0.01')).toBeTruthy()
-    expect(screen.getByText('AUD estimate unavailable')).toBeTruthy()
+    expect(screen.getByText('Provider price · US$1')).toBeTruthy()
     expect(screen.getByText(/AE supply projection · fresh/)).toBeTruthy()
     expect(screen.getByText(/Coinbase Bazaar index · stale/)).toBeTruthy()
     expect(screen.getByText(/not applied to this search/)).toBeTruthy()

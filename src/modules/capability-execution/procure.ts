@@ -2,7 +2,7 @@ import { idempotencyKeySchema } from '@/modules/common/action'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import { z } from 'zod'
-import { TOOL_SELECTION_PREFERENCES } from '@/modules/registry/tool-selection-score'
+import { TOOL_SELECTION_PREFERENCES } from '@/modules/common/tool-selection-score'
 import { callRefusalCodeSchema } from './call-contracts'
 import { toolQuoteRefusalCodeSchema } from './quote'
 

@@ -10,6 +10,8 @@ import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { join } from 'node:path'
 import type { X402DirectoryEntry } from '../../src/modules/market/x402-directory'
+import { projectX402DirectoryEntry } from '../../src/modules/market/x402-directory-projection'
+import { readX402DirectoryRawPage } from '../../src/modules/market/x402-directory-source.server'
 
 const queries = [
   ['cutout', 'Make the background of a photo transparent'],
@@ -58,7 +60,7 @@ async function main() {
   delete process.env.VITE_SENTRY_DSN
   await mkdir(directory, { recursive: true })
   if (mode === 'capture') {
-    const { readX402DirectoryRawPage, projectX402DirectoryEntry } = await import('../../src/modules/market/x402-directory.server')
+
     const samples: Sample[] = []
     for (const [id, query] of queries) {
       const start = performance.now()

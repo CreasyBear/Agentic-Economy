@@ -206,4 +206,4 @@ export {
   x402DefaultAssetFacts,
   x402LegacyDiscoveryInfo,
   x402NetworkLabel,
-} from './internal/x402-directory-protocol'
+} from './internal/x402-directory-projection-facts'

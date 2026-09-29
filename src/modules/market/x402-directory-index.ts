@@ -83,7 +83,7 @@ export function minimumDirectoryUsdPrice(entry: X402DirectoryEntry, network?: st
   let minimum: Decimal | undefined
   for (const price of entry.prices) {
     if (network !== undefined && directoryNetwork(price.network) !== directoryNetwork(network)) continue
-    if (price.scheme !== 'exact' || price.symbol !== 'USDC' || price.decimalAmount === undefined) continue
+    if ((price.scheme !== 'exact' && price.scheme !== 'upto') || price.symbol !== 'USDC' || price.decimalAmount === undefined) continue
     try {
       const amount = new Decimal(price.decimalAmount)
       if (!amount.isFinite() || amount.isNegative()) continue

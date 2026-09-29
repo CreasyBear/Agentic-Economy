@@ -166,22 +166,24 @@ export function decideFacilitatorDiscoveryItem(
     };
   }
 
-  // Directory eligibility gate (src/modules/market/x402-directory-index.ts:
-  // isDirectoryEntryEligible). Default-deny: an item with no `quality`
-  // telemetry at all is treated the same as one reporting zero payers
-  // (discoveryQualityPayersOrder's -1 sentinel) rather than skipping the
-  // check - unverifiable adoption is not eligible, so it fails the payer
-  // floor instead of being admitted on trust. Bazaar admission above already
-  // guarantees an output schema, so only the payer floor can fail here.
+  // Bazaar admission guarantees an output schema. Preserve the payer-floor
+  // refusal order before parsing payment, then check all signals once priced.
   const payersOrder = discoveryQualityPayersOrder(item) ?? -1;
-  if (!isDirectoryEntryEligible({ hasOutputSchema: true, hasOutputExample: false, payersOrder })) {
-    return { kind: "skip", reason: "resource_invalid" };
-  }
-
+  if (payersOrder < 2) return { kind: "skip", reason: "resource_invalid" };
   const accept = firstSupportedAccept(paymentRequired.accepts);
   if (accept.kind === "refused") return { kind: "skip", reason: accept.reason };
   const price = priceBreakdown(accept.amount, accept.assetExponent);
   if (price === undefined) return { kind: "skip", reason: "amount_invalid" };
+  if (!isDirectoryEntryEligible({
+    hasOutputSchema: true,
+    hasOutputExample: false,
+    minimumUsdPrice: formatCurrencyAmount(price.provider),
+    payersOrder,
+  })) {
+    return { kind: "skip", reason: "resource_invalid" };
+  }
+
+
   const identity = normalizedHttpIdentity(endpoint, bazaar.method, accept.network, accept.asset);
   const providerPrice: ExactAmount = {
     currency: "USDC",

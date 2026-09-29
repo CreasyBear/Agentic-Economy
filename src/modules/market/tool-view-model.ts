@@ -110,7 +110,11 @@ export function toToolCardViewModel(
     tool.listing.label,
     summary,
   );
+  const price = toolPrice(tool);
   const priceAmount = toolPriceAmount(tool);
+  const displayPrice = tool.commercial.displayPrice;
+  const priceValidUntil = price.startsWith("A$") && displayPrice?.kind === "indicative"
+    && displayPrice.validUntil > Date.now() ? displayPrice.validUntil : undefined;
 
   return {
     toolRef: tool.toolRef,
@@ -122,9 +126,9 @@ export function toToolCardViewModel(
     capabilityId: tool.contract.capabilityId,
     capability,
     category: evidence.category,
-    price: toolPrice(tool),
+    price,
     ...(priceAmount === undefined ? {} : { priceAmount }),
-    ...(tool.commercial.displayPrice?.kind === "indicative" ? { priceValidUntil: tool.commercial.displayPrice.validUntil } : {}),
+    ...(priceValidUntil === undefined ? {} : { priceValidUntil }),
     authentication: formatToolAuthentication(tool.authentication),
     ...(tool.payment === undefined ? {} : { paymentNetwork: formatPaymentNetwork(tool.payment.network) }),
     ...(lastVerifiedAt === undefined ? {} : { lastVerifiedAt }),
@@ -185,12 +189,11 @@ export function capabilityFromPrice(
 ): string {
   const priced = tools.filter((tool) => tool.priceAmount !== undefined
     && (tool.priceValidUntil === undefined || tool.priceValidUntil > Date.now()));
-  if (priced.length === 0) return tools.some((tool) => tool.priceValidUntil !== undefined && tool.priceValidUntil <= Date.now())
-    ? "AUD estimate temporarily unavailable" : tools[0]?.price ?? "Price on request";
+  if (priced.length === 0) return "";
   const currencies = new Set(priced.flatMap((tool) => tool.priceAmount === undefined ? [] : [tool.priceAmount.currency]));
   if (currencies.size > 1) return "Prices vary";
   const [floor] = [...priced].sort(compareToolPrices);
-  if (floor === undefined) return "Price on request";
+  if (floor === undefined) return "";
   return priced.length === tools.length && tools.every((tool) => tool.price === floor.price)
     ? floor.price : `from ${floor.price}`;
 }
@@ -201,15 +204,29 @@ const marketFallbackCategory: MarketCategory = {
   description: "Other callable capabilities.",
 };
 
+function formatUsdAmount(amount: ExactAmount): string | undefined {
+  if (amount.currency !== "USD" && amount.currency !== "USDC") return undefined;
+  const formatted = formatExactAmount(amount);
+  if (formatted === undefined) return undefined;
+  const normalized = formatted.includes(".") ? formatted.replace(/0+$/u, "").replace(/\.$/u, "") : formatted;
+  return `US$${normalized}`;
+}
+
 export function formatToolPrice(price: PublicToolPrice): string {
-  if (price.kind === "on_request") return "Price on request";
+  if (price.kind === "on_request") return "";
   if (price.kind === "fixed") {
-    if (price.amount.currency !== "AUD") return "AUD estimate temporarily unavailable";
-    return exactIsZero(price.amount) ? "Free" : formatDisplayAmount(price.amount);
+    return price.amount.currency === "AUD"
+      ? exactIsZero(price.amount) ? "Free" : formatDisplayAmount(price.amount)
+      : formatUsdAmount(price.amount) ?? "";
   }
-  if (price.minimum.currency !== "AUD" || price.maximum.currency !== "AUD") return "AUD estimate temporarily unavailable";
-  if (exactIsZero(price.minimum) && exactIsZero(price.maximum)) return "Free";
-  return `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`;
+  if (price.minimum.currency !== price.maximum.currency) return "";
+  if (price.minimum.currency === "AUD") {
+    return exactIsZero(price.minimum) && exactIsZero(price.maximum)
+      ? "Free" : `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`;
+  }
+  const minimum = formatUsdAmount(price.minimum);
+  const maximum = formatUsdAmount(price.maximum);
+  return minimum === undefined || maximum === undefined ? "" : `${minimum}–${maximum}`;
 }
 
 export function formatToolReadiness(
@@ -232,27 +249,36 @@ export function formatToolAuthentication(
 }
 
 export function toolPrice(tool: PublicToolDescriptor, now = Date.now()): string {
-  const display = formatDisplayPrice(tool.commercial.displayPrice, now);
-  if (display !== undefined) return display;
+  const displayPrice = tool.commercial.displayPrice;
+  const display = formatDisplayPrice(displayPrice, now);
+  if (display?.startsWith("A$") === true) return display;
   if (tool.commercial.priceBreakdown !== undefined) {
     const amount = tool.commercial.priceBreakdown.totalBuyerAuthorization;
-    return amount.currency !== "AUD" ? "AUD estimate temporarily unavailable"
-      : exactIsZero(amount) ? "Free" : formatDisplayAmount(amount);
+    return amount.currency === "AUD"
+      ? exactIsZero(amount) ? "Free" : formatDisplayAmount(amount)
+      : formatUsdAmount(amount) ?? "";
+  }
+  if (displayPrice?.kind === "indicative") {
+    const sourcePrice = formatUsdAmount(displayPrice.amount);
+    if (sourcePrice !== undefined) return sourcePrice;
   }
   return formatToolPrice(tool.commercial.price);
 }
 
 function toolPriceAmount(tool: PublicToolDescriptor): ExactAmount | undefined {
   const display = tool.commercial.displayPrice;
-  if (display !== undefined) return display.kind === "indicative" && display.validUntil > Date.now()
-    && display.amount.currency === "AUD" ? display.amount : undefined;
+  if (display?.kind === "indicative") {
+    if (display.amount.currency === "AUD" && display.validUntil > Date.now()) return display.amount;
+    if (display.amount.currency === "USD" || display.amount.currency === "USDC") return display.amount;
+  }
   if (tool.commercial.priceBreakdown !== undefined) {
     const amount = tool.commercial.priceBreakdown.totalBuyerAuthorization;
-    return amount.currency === "AUD" ? amount : undefined;
+    return amount.currency === "AUD" || amount.currency === "USD" || amount.currency === "USDC" ? amount : undefined;
   }
   const amount = tool.commercial.price.kind === "fixed" ? tool.commercial.price.amount
     : tool.commercial.price.kind === "range" ? tool.commercial.price.minimum : undefined;
-  return amount?.currency === "AUD" ? amount : undefined;
+  return amount !== undefined
+    && (amount.currency === "AUD" || amount.currency === "USD" || amount.currency === "USDC") ? amount : undefined;
 }
 
 /** Compare exact quantities, never their formatted labels. Unknown prices sort last. */

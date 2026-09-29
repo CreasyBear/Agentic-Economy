@@ -584,7 +584,7 @@ describe('transcript projector', () => {
       'Rain lookup',
     ])
     expect(compare?.kind === 'choices' ? compare.contrasts : undefined).toEqual([
-      { label: 'Price', value: 'Weather finder: AUD estimate temporarily unavailable; Rain lookup: AUD estimate temporarily unavailable' },
+      { label: 'Price', value: 'Weather finder: US$0.5; Rain lookup: US$0.75' },
       { label: 'Effects', value: 'Weather finder: Data release; Rain lookup: Data release, Financial exposure' },
       { label: 'Data use', value: 'Weather finder: Public; Rain lookup: Personal' },
       { label: 'Readiness', value: 'Weather finder: Ready now; Rain lookup: Setup required' },

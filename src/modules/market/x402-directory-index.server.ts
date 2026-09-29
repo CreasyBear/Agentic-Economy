@@ -61,8 +61,10 @@ const status = sourceQuery<Record<string, never>, DirectoryStatus>('x402Director
 /** Card grids paint title, glance, price, access, and activity. Schemas stay on the Tool page. */
 export function toDirectoryCardEntry(entry: X402DirectoryEntry): X402DirectoryEntry {
   const source = minimumDirectoryUsdPrice(entry)
-  // minimumDirectoryUsdPrice canonicalises ("0.002000" → "0.002"), so match through it, not by string.
-  const price = source === undefined ? undefined : entry.prices.find(item => minimumDirectoryUsdPrice({ ...entry, prices: [item] }) === source)
+  // Match through canonical amounts, preferring an exact option when amounts tie.
+  const matching = source === undefined ? [] : entry.prices.filter(item =>
+    minimumDirectoryUsdPrice({ ...entry, prices: [item] }) === source)
+  const price = matching.find(item => item.scheme === 'exact') ?? matching.find(item => item.scheme === 'upto') ?? matching[0]
   const description = [...entry.description].slice(0, 100).join('')
   return {
     resource: entry.resource,
@@ -122,7 +124,7 @@ function cardFromCompact(row: CompactCardRow): X402DirectoryEntry | undefined {
 
 /** One Coinbase observation is shared across the bounded page; no row-level HTTP calls. */
 async function withAudEstimates(entries: readonly X402DirectoryEntry[]): Promise<X402DirectoryEntry[]> {
-  const rate = entries.some(entry => entry.prices.some(price => price.scheme === 'exact' && price.symbol === 'USDC' && price.decimalAmount !== undefined))
+  const rate = entries.some(entry => minimumDirectoryUsdPrice(entry) !== undefined)
     ? await readPersistedReferenceRate() : undefined
   const now = Date.now()
   return entries.map(entry => {
@@ -131,7 +133,7 @@ async function withAudEstimates(entries: readonly X402DirectoryEntry[]): Promise
     const amount = parseDecimalExactAmount('USDC', source, 6)
     if (amount === undefined) return entry
     const audEstimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }, now)
-    return audEstimate === undefined || audEstimate === 'AUD estimate temporarily unavailable' ? entry : { ...entry, audEstimate }
+    return audEstimate?.startsWith('A$') !== true ? entry : { ...entry, audEstimate }
   })
 }
 

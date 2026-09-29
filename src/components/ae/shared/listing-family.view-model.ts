@@ -2,30 +2,42 @@ import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import type { ListingProjection, ListingPrice } from '@/modules/registry/public'
-import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayAmount, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
+import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayAmount, formatDisplayPrice, formatExactAmount, parseDecimalExactAmount, type ExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { ToolObjectView } from './object-family.contracts'
+
+function buyerUsdAmount(amount: ExactAmount): string | undefined {
+  if (amount.currency !== 'USD' && amount.currency !== 'USDC') return undefined
+  const formatted = formatExactAmount(amount)
+  if (formatted === undefined) return undefined
+  const normalized = formatted.includes('.') ? formatted.replace(/0+$/u, '').replace(/\.$/u, '') : formatted
+  return `US$${normalized}`
+}
+
+function buyerSourceAmount(amount: ExactAmount, referenceRate: ReferenceRate | undefined, nowMs: number): string | undefined {
+  if (amount.currency === 'AUD') return formatDisplayAmount(amount)
+  if (amount.currency === 'USDC') {
+    const estimate = referenceRate === undefined ? undefined
+      : formatDisplayPrice({ kind: 'indicative', amount, validUntil: referenceRate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, referenceRate }, nowMs)
+    if (estimate?.startsWith('A$') === true) return estimate
+  }
+  return buyerUsdAmount(amount)
+}
 
 function priceLabel(price: ListingPrice, referenceRate: ReferenceRate | undefined, nowMs: number, admittedDisplayPrice?: PublicToolDescriptor['commercial']['displayPrice']): string {
   if (price.kind === 'quote_required') return 'Quote required'
-  if (admittedDisplayPrice !== undefined) {
-    const label = formatDisplayPrice(admittedDisplayPrice, nowMs) ?? 'AUD estimate temporarily unavailable'
-    return label.startsWith('A$') ? `${label} per Call` : label
-  }
+  const admittedEstimate = admittedDisplayPrice === undefined ? undefined : formatDisplayPrice(admittedDisplayPrice, nowMs)
+  if (admittedEstimate?.startsWith('A$') === true) return `${admittedEstimate} per Call`
   const display = (value: string) => {
     const exact = parseDecimalExactAmount(price.currency, value, 6)
-    if (exact === undefined) return 'AUD estimate temporarily unavailable'
-    if (price.currency === 'AUD') return formatDisplayAmount(exact)
-    if (price.currency !== 'USDC') return 'AUD estimate temporarily unavailable'
-    return formatDisplayPrice(referenceRate === undefined
-      ? { kind: 'unavailable' }
-      : { kind: 'indicative', amount: exact, validUntil: referenceRate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, referenceRate }, nowMs) ?? 'AUD estimate temporarily unavailable'
+    return exact === undefined ? undefined : buyerSourceAmount(exact, referenceRate, nowMs)
   }
-  const minimum = display(price.kind === 'range' ? price.minimum : price.amount)
-  if (price.kind !== 'range') return `${minimum}${minimum.startsWith('A$') ? ' per Call' : ''}`
+  if (price.kind !== 'range') {
+    const amount = display(price.amount)
+    return amount === undefined ? '' : `${amount} per Call`
+  }
+  const minimum = display(price.minimum)
   const maximum = display(price.maximum)
-  return minimum.startsWith('A$') && maximum.startsWith('A$')
-    ? `${minimum}–${maximum} per Call`
-    : 'AUD estimate temporarily unavailable'
+  return minimum === undefined || maximum === undefined ? '' : `${minimum}–${maximum} per Call`
 }
 
 /** Market excludes only an exact ToolRef or indexed sourceRouteRef, never a similar title or URL. */
@@ -54,12 +66,16 @@ export function projectToolObject(listing: ListingProjection, href?: string, now
     : identity.hostName.kind === 'present' && listing.hostPage.kind === 'present'
       ? { kind: 'directory_host' as const, name: identity.hostName.value, href: listing.hostPage.value }
       : undefined
+  const displayedPrice = facts.price.kind === 'present'
+    ? priceLabel(facts.price.value, referenceRate, nowMs, admittedDisplayPrice) : undefined
+  const priceSource = facts.price.kind === 'present' ? source(facts.price) : undefined
   return {
     listing,
     ...(href === undefined || href.length === 0 ? {} : { href }),
     title: identity.title.kind === 'present' ? identity.title.value : 'Unnamed Tool',
     ...(identity.summary.kind === 'present' ? { outcome: identity.summary.value } : {}),
-    ...(facts.price.kind === 'present' ? { price: { label: priceLabel(facts.price.value, referenceRate, nowMs, admittedDisplayPrice), source: source(facts.price) } } : {}),
+    ...(displayedPrice === undefined || displayedPrice.length === 0 || priceSource === undefined
+      ? {} : { price: { label: displayedPrice, source: priceSource } }),
     readiness,
     ...(identityLink === undefined ? {} : { identity: identityLink }),
   }

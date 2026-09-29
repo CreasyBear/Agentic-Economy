@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { APP_NAVIGATION, type AppDestinationId } from '@/lib/navigation/app-navigation'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
-import { formatDisplayPrice } from '@/modules/money/public'
+import { formatExactAmount, parseDecimalExactAmount } from '@/modules/money/public'
 import {
   TOOL_SEARCH_RESULT_LIMIT,
   searchMarketTools,
@@ -54,6 +54,17 @@ const navigationItems: readonly CommandNavigationItem[] = APP_NAVIGATION.map((de
   icon: navigationIcons[destination.id],
 }))
 
+function usdSourcePrice(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const decimal = /^(\d+(?:\.\d+)?) USDC$/u.exec(value)?.[1]
+    ?? /^USDC (\d+(?:\.\d+)?)$/u.exec(value)?.[1]
+  const amount = decimal === undefined ? undefined : parseDecimalExactAmount('USDC', decimal, 6)
+  const formatted = amount === undefined ? undefined : formatExactAmount(amount)
+  if (formatted === undefined) return undefined
+  const normalized = formatted.includes('.') ? formatted.replace(/0+$/u, '').replace(/\.$/u, '') : formatted
+  return `US$${normalized}`
+}
+
 function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResultRowModel {
   const healthLabel = item.access === 'external_listing'
     ? 'External listing, not callable through AE'
@@ -62,14 +73,17 @@ function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResu
       : item.readiness === 'unavailable'
         ? getStatusPresentation('degraded').label
         : 'Unverified'
+  const freshAudPrice = item.price.kind === 'indicative' && item.price.label.startsWith('A$')
+    && item.price.validUntil !== undefined && item.price.validUntil > Date.now() ? item.price.label : undefined
+  const priceLabel = freshAudPrice ?? usdSourcePrice(item.sourcePrice)
+    ?? (item.price.kind === 'indicative' ? usdSourcePrice(item.price.label) : undefined) ?? ''
   return {
     toolRef: item.access === 'ae_callable' ? item.toolRef ?? item.detailRef : item.detailRef,
     title: item.title,
     providerLine: `${item.provider} · ${item.summary}`,
     healthLabel,
     sourceKind: item.access === 'ae_callable' ? 'admitted' : 'directory',
-    priceLabel: item.price.kind === 'indicative' && item.price.label.startsWith('A$')
-      ? item.price.label : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable',
+    priceLabel,
   }
 }
 

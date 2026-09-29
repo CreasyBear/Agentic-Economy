@@ -243,6 +243,19 @@ describe('generative chat leaves', () => {
     expect(card.choices[0]?.price).toBeUndefined()
     expect(projectOptionsFromCard(card).options[0]?.price).toBe('Price to be confirmed')
   })
+  it('keeps a supplied choice price after its estimate window passes', () => {
+    const card = {
+      kind: 'choices',
+      toolId: 'registry.tools.search',
+      title: 'Search',
+      state: 'complete',
+      toolRefs: ['tool:fx'],
+      count: 1,
+      choices: [{ toolRef: 'tool:fx', title: 'Currency exchange', price: 'US$0.01', priceValidUntil: 1 }],
+    } as const
+    expect(projectOptionsFromCard(card, [], 2).options)
+      .toMatchObject([{ price: 'US$0.01', priceValidUntil: 1 }])
+  })
   it('counts a Tool once when repeated searches return the same result', () => {
     const result = { kind: 'choices', toolId: 'registry.tools.search', title: 'Search', state: 'complete', toolRefs: ['tool:weather'], count: 1, choices: [{ toolRef: 'tool:weather', title: 'Weather Current' }] } as const
     expect(projectWorkFromCards([result, result]).summary).toBe('Found 1 tool')

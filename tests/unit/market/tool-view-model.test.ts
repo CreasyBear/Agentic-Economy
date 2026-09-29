@@ -12,10 +12,11 @@ import {
 } from "@/modules/market/tool-view-model";
 
 describe("Tool buyer price", () => {
-  it("uses the shared AUD display rule and does not present source currency as buyer price", () => {
+  it("uses AUD when available and otherwise shows the source USD amount", () => {
     expect(formatToolPrice({ kind: "fixed", amount: { currency: "AUD", exponent: 6, units: "1" } })).toBe("A$0.01");
     expect(formatToolPrice({ kind: "fixed", amount: { currency: "USDC", exponent: 6, units: "1" } }))
-      .toBe("AUD estimate temporarily unavailable");
+      .toBe("US$0.000001");
+    expect(formatToolPrice({ kind: "on_request" })).toBe("");
   });
 });
 
@@ -174,12 +175,12 @@ describe("exact Tool price comparison", () => {
   it("orders sub-cent and multi-dollar amounts numerically, with unknown prices last", () => {
     const tools = [
       card({ price: "About A$10.00", priceAmount: { currency: "AUD", exponent: 6, units: "10000000" } }),
-      card({ price: "Price on request" }),
+      card({ price: "" }),
       card({ price: "About A$0.000001", priceAmount: { currency: "AUD", exponent: 6, units: "1" } }),
       card({ price: "About A$2.00", priceAmount: { currency: "AUD", exponent: 2, units: "200" } }),
     ];
     expect([...tools].sort(compareToolPrices).map((tool) => tool.price)).toEqual([
-      "About A$0.000001", "About A$2.00", "About A$10.00", "Price on request",
+      "About A$0.000001", "About A$2.00", "About A$10.00", "",
     ]);
     expect(capabilityFromPrice(tools)).toBe("from About A$0.000001");
   });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
+import { ANALYTICS_VERSION } from '../../convex/lib/market/directoryIndex/analytics'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { Infer } from 'convex/values'
 import { pageValue } from '../../convex/lib/market/directoryIndex/contracts'
@@ -206,7 +207,7 @@ describe('complete external directory index', () => {
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 4, observedAt: 2, runStartedAt: 1, workload, items })
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 4, observedAt: 3, runStartedAt: 1, workload, items: [] })
     const analytics = await backend.query(api.x402DirectoryIndex.analytics, {})
-    expect(analytics).toMatchObject({ kind: 'ok', totalTools: 4, price: { totalTools: 4, knownPriceTools: 3, unknownPriceTools: 1, quantiles: { minimum: '0.01', median: '0.03', maximum: '1' } } })
+    expect(analytics).toMatchObject({ kind: 'ok', totalTools: 4, price: { totalTools: 4, knownPriceTools: 4, unknownPriceTools: 0, quantiles: { minimum: '0.001', median: '0.01', maximum: '1' } } })
     if (analytics.kind !== 'ok') throw new Error('analytics unavailable')
     expect(analytics.adoption.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(4)
     expect(analytics.metadata.find(item => item.key === 'hasOutputExample')?.count).toBe(1)
@@ -215,12 +216,12 @@ describe('complete external directory index', () => {
     // (cost fix: dropped per-network price_band/price fan-out), so the reader
     // always reports the whole-generation aggregate for price, regardless of
     // the requested network - it never silently returns zero.
-    expect(await backend.query(api.x402DirectoryIndex.analytics, { network: 'base' })).toMatchObject({ kind: 'ok', totalTools: 4, price: { scope: 'whole_generation', totalTools: 4, knownPriceTools: 3, unknownPriceTools: 1, quantiles: { minimum: '0.01', median: '0.03', maximum: '1' } } })
+    expect(await backend.query(api.x402DirectoryIndex.analytics, { network: 'base' })).toMatchObject({ kind: 'ok', totalTools: 4, price: { scope: 'whole_generation', totalTools: 4, knownPriceTools: 4, unknownPriceTools: 0, quantiles: { minimum: '0.001', median: '0.01', maximum: '1' } } })
     const browse = (filters: Record<string, unknown>) => backend.query(api.x402DirectoryIndex.browse, { ...filters, paginationOpts: { cursor: null, numItems: 12 } })
     const adoption = await browse({ sort: 'adoption', provider: 'provider.test' })
     expect(adoption.kind === 'ok' && adoption.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(1).resource, source(3).resource, source(4).resource])
     const price = await browse({ sort: 'price_asc', provider: 'provider.test' })
-    expect(price.kind === 'ok' && price.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(4).resource, source(1).resource, source(3).resource])
+    expect(price.kind === 'ok' && price.page.map(item => item.entry.resource)).toEqual([source(3).resource, source(2).resource, source(4).resource, source(1).resource])
     expect(await browse({ priceBand: '0_01_to_0_03' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(2).resource } }] })
     expect(await browse({ adoptionBand: 'missing', provider: 'provider.test' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(4).resource } }] })
     expect(await browse({ minPayers30d: 1, maxPayers30d: 1, curatedOnly: true, bundleSlugs: ['research-workflow'], tags: ['search'], provider: 'provider.test' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(1).resource } }] })
@@ -230,22 +231,64 @@ describe('complete external directory index', () => {
     expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'bundle', paginationOpts: { cursor: null, numItems: 24 } })).toMatchObject({ kind: 'ok', page: [{ key: 'research-workflow', count: 1 }] })
   })
 
+  it('excludes unpriced entries from default eligible browse', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-unpriced'
+    await seedRefresh(backend, generation)
+    const priced = source(1)
+    const unpriced = source(2, { activity: { payers30d: 20, calls30d: 40 }, prices: [] })
+    const items = [priced, unpriced]
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: items.length, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: items.length, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    const page = await backend.query(api.x402DirectoryIndex.browse, { paginationOpts: { cursor: null, numItems: 12 } })
+    if (page.kind !== 'ok') throw new Error('Directory browse unavailable')
+    expect(page.page.map(item => item.entry.resource)).toEqual([priced.resource])
+  })
+
+  it('fills repeat pages by filtering the payer floor before pagination', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-repeat'
+    await seedRefresh(backend, generation)
+    const lowPayerRows = Array.from({ length: 12 }, (_, index) => source(index, { activity: { payers30d: 2, calls30d: 50000 } }))
+    const repeatRows = Array.from({ length: 12 }, (_, index) => source(index + 12, { activity: { payers30d: 5, calls30d: 25 } }))
+    const items = [...lowPayerRows, ...repeatRows]
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: items.length, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: items.length, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    const result = await backend.query(api.x402DirectoryIndex.browse, {
+      sort: 'repeat', paginationOpts: { cursor: null, numItems: 12 },
+    })
+    if (result.kind !== 'ok') throw new Error('Repeat browse unavailable')
+    expect(result.page).toHaveLength(12)
+    expect(result.page.every(item => (item.entry.activity?.payers30d ?? -1) >= 5)).toBe(true)
+  })
+
   it('backfills retained observations atomically and idempotently without changing source evidence', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-backfill'
     await seedRefresh(backend, generation)
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, runStartedAt: 1, workload, items: [source(1, { activity: { payers30d: 10 } })] })
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 3, runStartedAt: 1, workload, items: [] })
-    const before = await backend.run(async ctx => {
-      const row = await ctx.db.query('marketExternalRegistryGenerations').withIndex('by_generation', q => q.eq('generation', generation)).unique()
-      await ctx.db.patch(row!._id, { analyticsVersion: undefined, analyticsStatus: undefined })
-      return await ctx.db.query('marketExternalRegistryEntries').collect()
+    await backend.run(async ctx => {
+      const generationRow = await ctx.db.query('marketExternalRegistryGenerations').withIndex('by_generation', q => q.eq('generation', generation)).unique()
+      if (generationRow === null) throw new Error('Generation fixture unavailable')
+      const previousPage = await ctx.db.query('marketExternalRegistryEntries')
+        .withIndex('by_generation_and_documentId', q => q.eq('generation', generation)).paginate({ numItems: 1, cursor: null })
+      await ctx.db.patch(generationRow._id, {
+        analyticsVersion: ANALYTICS_VERSION - 1, analyticsStatus: 'building',
+        analyticsCursor: previousPage.continueCursor, analyticsProcessed: 1,
+      })
     })
+    const before = await backend.run(ctx => ctx.db.query('marketExternalRegistryEntries').collect())
     expect(await backend.query(api.x402DirectoryIndex.analytics, {})).toEqual({ kind: 'unavailable', reason: 'analytics_building' })
     expect(await backend.query(api.x402DirectoryIndex.browse, { priceBand: '1_to_10', paginationOpts: { cursor: null, numItems: 12 } })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(1).resource } }] })
     expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', priceBand: '1_to_10', paginationOpts: { cursor: null, numItems: 12 } })).toMatchObject({ kind: 'ok', page: [{ id: expect.any(String) }] })
     expect(await backend.mutation(internal.x402DirectoryIndexBackfill.batch, { generation, workload })).toEqual({ kind: 'ready', processed: 1 })
     expect(await backend.mutation(internal.x402DirectoryIndexBackfill.batch, { generation, workload })).toEqual({ kind: 'ready', processed: 1 })
+    const projection = await backend.run(ctx => ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_network_and_resource', q => q.eq('generation', generation).eq('network', '*').eq('resource', source(1).resource)).unique())
+    expect(projection?.minimumUsdPrice).toBeUndefined()
+    expect(projection?.eligible).toBe(false)
+    expect(projection?.priceOrder).toBe(Number.MAX_VALUE)
     expect(await backend.run(ctx => ctx.db.query('marketExternalRegistryEntries').collect())).toEqual(before)
     expect(await backend.query(api.x402DirectoryIndex.analytics, {})).toMatchObject({ kind: 'ok', totalTools: 1, adoption: expect.arrayContaining([{ key: '10_49', label: '10–49 payers', count: 1 }]) })
   })
@@ -279,7 +322,7 @@ describe('complete external directory index', () => {
         if (row.actionClass === 'unclassified' && row.objectClass === 'unclassified') unclassifiedId = row.id
         expect(JSON.stringify(row)).not.toContain('sourceJson')
         expect(JSON.stringify(row)).not.toContain('metadataJson')
-        expect(JSON.stringify(row)).not.toContain('resource')
+        expect(row.resource).toMatch(/^https:\/\/provider\.test\/tools\/\d+$/u)
         expect(JSON.stringify(row)).not.toContain('fullSchema')
         ids.add(row.id)
       }

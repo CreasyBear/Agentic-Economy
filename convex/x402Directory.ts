@@ -3,10 +3,11 @@
 import { v } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
-import { projectX402DirectoryEntry, readX402DirectoryRawPage } from '@/modules/market/x402-directory.server'
+import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
+import { readX402DirectoryRawPage } from '@/modules/market/x402-directory-source.server'
 import { x402DirectoryResolveInputSchema, type X402DirectoryResolution, type X402DirectoryResolutionReason } from '@/modules/market/x402-directory'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
-import { directoryEntryMatchesFilters, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
+import { directoryEntryMatchesFilters, isDirectoryEntryEligible, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
 import { api, internal } from './_generated/api'
 import { action } from './_generated/server'
@@ -17,16 +18,17 @@ import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/conse
  * Ineligible resources refuse the same way a filter mismatch would:
  * eligibility is the directory's own quality bar
  * (src/modules/market/x402-directory-index.ts:isDirectoryEntryEligible).
- * The payer clause is only enforced when the source actually reported
- * activity at all (`entry.activity !== undefined`) — a resource with no
- * activity telemetry whatsoever (as opposed to reported-and-insufficient)
- * isn't a genuine discovery-catalogue observation to hold to this bar.
+ * The payer clause is only enforced when the source actually reported activity
+ * (`entry.activity !== undefined`); a resource with no activity telemetry
+ * bypasses that floor, but still needs a recognised USDC price.
  */
 function directoryResolutionEligible(entry: X402DirectoryEntry): boolean {
+  const minimumUsdPrice = minimumDirectoryUsdPrice(entry)
+  if (minimumUsdPrice === undefined) return false
   if (entry.activity === undefined) return true
   const flags = directoryMetadataFlags(entry)
   const payersOrder = entry.activity.payers30d ?? -1
-  return isDirectoryEntryEligible({ hasOutputSchema: flags.hasOutputSchema, hasOutputExample: flags.hasOutputExample, payersOrder })
+  return isDirectoryEntryEligible({ hasOutputSchema: flags.hasOutputSchema, hasOutputExample: flags.hasOutputExample, minimumUsdPrice, payersOrder })
 }
 
 function boundedResolutionReason(reason: string): X402DirectoryResolutionReason {

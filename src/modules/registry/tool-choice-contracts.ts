@@ -300,11 +300,19 @@ function priceLabel(tool: PublicToolDescriptor): string {
   if (display !== undefined) return display
   const price = tool.commercial.price
   if (price.kind === 'on_request') return 'Price confirmed at inspection'
-  if (price.kind === 'fixed') return price.amount.currency === 'AUD'
-    ? formatDisplayAmount(price.amount) : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
-  return price.minimum.currency === 'AUD' && price.maximum.currency === 'AUD'
-    ? `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`
-    : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
+  if (price.kind === 'fixed') return (price.amount.currency === 'AUD'
+    ? formatDisplayAmount(price.amount)
+    : formatDisplayPrice({ kind: 'indicative', amount: price.amount })) ?? 'Price confirmed at inspection'
+  if (price.minimum.currency !== price.maximum.currency) return 'Price confirmed at inspection'
+  const minimum = price.minimum.currency === 'AUD'
+    ? formatDisplayAmount(price.minimum)
+    : formatDisplayPrice({ kind: 'indicative', amount: price.minimum })
+  const maximum = price.maximum.currency === 'AUD'
+    ? formatDisplayAmount(price.maximum)
+    : formatDisplayPrice({ kind: 'indicative', amount: price.maximum })
+  return minimum === undefined || maximum === undefined
+    ? 'Price confirmed at inspection'
+    : `${minimum}–${maximum}`
 }
 
 function projectCompactTool(tool: PublicToolDescriptor) {

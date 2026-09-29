@@ -260,7 +260,7 @@ describe('/tools/$toolRef', () => {
     const compactDecision = compactView.getByRole('region', { name: 'Operational' })
     expect(within(compactDecision).getByRole('button', { name: 'Copy request for Agent' })).toBeTruthy()
     expect(compactView.queryByRole('region', { name: 'What you can do next' })).toBeNull()
-    for (const fact of ['AUD estimate temporarily unavailable', 'API key connection', 'Ready now', 'Per accepted extraction']) {
+    for (const fact of ['US$1.25', 'API key connection', 'Ready now', 'Per accepted extraction']) {
       expect(compactView.getAllByText(fact).length).toBeGreaterThan(0)
     }
 
@@ -288,7 +288,7 @@ describe('/tools/$toolRef', () => {
     expect(fullView.getByRole('region', { name: '30-day track record' })).toBeTruthy()
     expect(fullView.getByText(/Performance history is unavailable/)).toBeTruthy()
     expect(fullView.getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
-    for (const fact of ['AUD estimate temporarily unavailable', 'API key connection', 'Ready now']) {
+    for (const fact of ['US$1.25', 'API key connection', 'Ready now']) {
       expect(fullView.getAllByText(fact).length).toBeGreaterThan(0)
     }
     const contractTab = fullView.getByRole('tab', { name: 'Contract' })
@@ -379,7 +379,7 @@ describe('/tools/$toolRef', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, verifiedBusinessSlug: tool.business.slug })
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ledger Labs' }).getAttribute('href')).toBe('/ledger-labs')
-    expect(screen.getAllByText('AUD estimate temporarily unavailable').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('US$1.25 per Call').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Example' })).toBeTruthy()
     expect(screen.getByText(/No published output example/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
@@ -422,15 +422,15 @@ describe('/tools/$toolRef', () => {
     expect(projectToolObject(listing, undefined, 2_000, rate).price?.label).toBe('A$0.01 per Call')
     expect(projectToolObject(listing, undefined, 2_000, rate).price?.source).toContain('directory reported')
     expect(projectToolObject(listing, undefined, rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, rate).price?.label)
-      .toBe('AUD estimate temporarily unavailable')
-    expect(projectToolObject(listing, undefined, 2_000).price?.label).toBe('AUD estimate temporarily unavailable')
+      .toBe('US$0.000001 per Call')
+    expect(projectToolObject(listing, undefined, 2_000).price?.label).toBe('US$0.000001 per Call')
   })
 
   it('uses a fresh admitted AUD indication ahead of non-AUD source price without rounding the source record', () => {
     const source = projectAdmittedListing(tool)
     const displayed = { kind: 'indicative' as const, amount: { currency: 'AUD', units: '1239000', exponent: 6 }, rateObservedAt: 1_000, validUntil: 300_000 }
     expect(projectToolObject(source, undefined, 2_000, undefined, displayed).price?.label).toBe('A$1.24 per Call')
-    expect(projectToolObject(source, undefined, 300_001, undefined, displayed).price?.label).toBe('AUD estimate temporarily unavailable')
+    expect(projectToolObject(source, undefined, 300_001, undefined, displayed).price?.label).toBe('US$1.25 per Call')
     expect(source.facts.price.kind === 'present' && source.facts.price.value.kind === 'fixed' ? source.facts.price.value.amount : undefined).toBe('1.25')
   })
 

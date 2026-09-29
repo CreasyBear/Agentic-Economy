@@ -29,7 +29,7 @@ export function projectOptionsFromCard(
       const usage = listing?.facts.completedCalls
       const facts: Record<string, ComparisonCellView> = {}
       const currentPrice = price?.kind === 'present' && (price.validUntil === undefined || price.validUntil > nowMs)
-      const displayedPrice = currentPrice ? object?.price?.label ?? choice.price : price === undefined && (choice.priceValidUntil === undefined || choice.priceValidUntil > nowMs) ? choice.price : undefined
+      const displayedPrice = currentPrice ? object?.price?.label ?? choice.price : choice.price
       if (currentPrice && displayedPrice !== undefined) facts.Price = { value: displayedPrice, source: sourceLabel(price.provenance) }
       if (readiness?.kind === 'present' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)) {
         facts.Readiness = { value: ready ? 'Ready to use' : unavailable ? getStatusPresentation('unavailable').label : getStatusPresentation('setup_required').label, source: sourceLabel(readiness.provenance) }

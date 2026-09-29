@@ -29,25 +29,24 @@ it('repairs stale umbrella titles from the declared job while preserving explici
   expect(entry.title).toBe('StableEnrich')
   expect(entry.description).toBe('Search with Exa; returns matching documents.')
 })
-it('keeps exact known denominations and defers unknown atomic amounts to payment details', () => {
+it('shows recognised prices in USD without a fresh AUD estimate and omits unknown prices', () => {
   const unknown = { ...entry, prices: [{ network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', scheme: 'exact', amount: '20000 atomic units (unknown-mint)' }] }
-  expect(directoryPrice(unknown)).toBe('See payment details')
+  expect(directoryPrice(unknown)).toBe('')
   expect(directoryNetworkLabel(unknown)).toBe('Solana')
   expect(unknown.prices[0]?.amount).toBe('20000 atomic units (unknown-mint)')
   const priced = { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }] }
-  expect(directoryPrice(priced)).toMatch(/AUD.*unavailable/i)
-  expect(directoryPrice(priced)).not.toContain('USDC')
+  expect(directoryPrice(priced)).toBe('US$0.02')
   expect(directoryPriceContext(priced)).toMatch(/Provider.*0\.02 USDC/)
-  expect(directoryPrice(entry)).toBe('Price on request')
+  expect(directoryPrice(entry)).toBe('')
 })
 
 it('labels directory prices as Provider evidence before AE admission', () => {
-  expect(directoryPriceContext({ ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC' }] })).toMatch(/Provider.*0\.02 USDC/)
+  expect(directoryPriceContext({ ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' }] })).toMatch(/Provider.*0\.02 USDC/)
   expect(directoryPriceContext({
     ...entry,
     prices: [
-      { network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC' },
-      { network: 'solana:mainnet', scheme: 'exact', amount: '0.02 USDC' },
+      { network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' },
+      { network: 'solana:mainnet', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' },
     ],
   })).toMatch(/2 Provider payment options.*0\.02 USDC/)
 })
@@ -77,7 +76,7 @@ it('skips a price-only description prefix without changing explicit titles or pr
   expect(x402DirectoryFunctionalTitle({ description: 'Extract images for $0.001/page.', fallback: 'Service' })).toBe('Extract images for $0.001/page.')
 })
 
-it('shares one persisted Coinbase observation across priced rows, retaining exact source and admitted identity', async () => {
+it('shares one persisted Coinbase observation across priced rows, including upto maxima', async () => {
   const ref = `operation:v1:${'a'.repeat(64)}`
   const rows = [
     { ...entry, resource: 'https://example.com/tiny', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001', symbol: 'USDC' }], choice: { access: 'ae_callable' as const, toolRef: ref, sourceRouteRef: 'coinbase:tiny' } },
@@ -87,6 +86,7 @@ it('shares one persisted Coinbase observation across priced rows, retaining exac
       { network: 'solana:mainnet', scheme: 'exact', amount: '500 atomic units (unknown-mint)' },
       { network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001', symbol: 'USDC' },
     ], choice: { access: 'external_listing' as const } },
+    { ...entry, resource: 'https://example.com/capped', prices: [{ network: 'eip155:8453', scheme: 'upto', amount: '0.03 USDC', decimalAmount: '0.03', symbol: 'USDC' }], choice: { access: 'external_listing' as const } },
   ]
   const query = vi.fn(async (reference: unknown) => {
     if (getFunctionName(reference as never) === 'referenceRateRefresh:current') {
@@ -105,15 +105,16 @@ it('shares one persisted Coinbase observation across priced rows, retaining exac
   expect(blocked).not.toHaveBeenCalled()
   expect(query).toHaveBeenCalledTimes(2)
   expect(query.mock.calls.map(([reference]) => getFunctionName(reference as never))).toContain('referenceRateRefresh:current')
-  const [tiny, larger, zero, options] = result.page.items.map(toDirectoryToolCardModel)
+  const [tiny, larger, zero, options, capped] = result.page.items.map(toDirectoryToolCardModel)
   expect(tiny).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Indicative before Quote · Provider lists 0.001 USDC per Call', access: 'ae_callable', toolRef: ref, sourceRouteRef: 'coinbase:tiny' })
   expect(larger).toMatchObject({ priceLabel: 'A$1.24', priceContext: 'Provider-listed estimate · Provider lists 1 USDC per Call', access: 'external_listing' })
   expect(zero).toMatchObject({ priceLabel: 'A$0.00', priceContext: 'Provider-listed estimate · Provider lists 0 USDC per Call' })
   expect(options).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Provider-listed estimate · Provider lists 0.001 USDC per Call' })
+  expect(capped).toMatchObject({ priceLabel: 'up to A$0.04', priceContext: 'Provider-listed estimate · Provider lists up to 0.03 USDC per Call' })
   expect(larger?.toolRef).toBeUndefined()
 })
 
-it('keeps AUD unavailable without a persisted rate and preserves exact source USDC', async () => {
+it('shows a concrete USD price when no persisted AUD rate is available', async () => {
   const priced = { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' }] }
   const query = vi.fn(async (reference: unknown) => getFunctionName(reference as never) === 'referenceRateRefresh:current'
     ? null
@@ -124,7 +125,7 @@ it('keeps AUD unavailable without a persisted rate and preserves exact source US
   if (result.kind !== 'ok' || result.page.kind !== 'ok') return
   const [model] = result.page.items.map(toDirectoryToolCardModel)
   expect(query).toHaveBeenCalledTimes(2)
-  expect(model).toMatchObject({ priceLabel: 'AUD estimate temporarily unavailable', priceContext: 'Provider lists 0.02 USDC per Call', access: 'external_listing' })
+  expect(model).toMatchObject({ priceLabel: 'US$0.02', priceContext: 'Provider lists 0.02 USDC per Call', access: 'external_listing' })
 })
 
 it('does not turn publication identity into callability after readiness expires or the publication withdraws', async () => {

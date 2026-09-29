@@ -18,7 +18,7 @@ import {
   type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
 import { TOOL_PROCURE_PATH, toolProcureInputSchema, toolProcureResultSchema } from '@/modules/capability-execution/procure'
-import { TOOL_SELECTION_PREFERENCES, type ToolSelectionPreference } from '@/modules/registry/tool-selection-score'
+import { TOOL_SELECTION_PREFERENCES, type ToolSelectionPreference } from '@/modules/common/tool-selection-score'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT, agentAccountSelfResultSchema } from '@/modules/agent-access/account.actions'
 import type { CliOptions } from '../lib/args'

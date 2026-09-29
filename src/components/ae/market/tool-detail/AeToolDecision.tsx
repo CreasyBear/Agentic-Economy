@@ -4,13 +4,15 @@ import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { AeToolEconomics } from './AeToolEconomics'
 import type { ToolInspectorModel } from './tool-inspector-model'
 
-export function AeToolDecision({
-  tool,
-  model,
-}: Readonly<{
+type AeToolDecisionProps = Readonly<{
   tool: PublicToolDescriptor
   model: ToolInspectorModel
-}>) {
+}>
+
+export function AeToolDecision({ tool, model }: AeToolDecisionProps) {
+  const pricing = model.totalPrice === ''
+    ? tool.commercial.price.kind === 'range' ? 'Price range' : 'Pricing unavailable'
+    : `${model.totalPrice} per Call`
   return (
     <section
       aria-label={model.decisionLabel}
@@ -35,7 +37,7 @@ export function AeToolDecision({
       </div>
 
       <div className="border-t border-border">
-        <AeToolEconomics tool={tool} />
+        <AeToolEconomics tool={tool} pricing={pricing} />
       </div>
     </section>
   )

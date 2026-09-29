@@ -190,10 +190,8 @@ export async function toolRecordProjection(
     }) !== undefined
   const unavailableReason = routeable ? undefined : awaitingInspection ? 'inspection_required' as const : publicUnavailableReason(publication, qualification)
   const authorityMode = publication.authorityMode
-  // Display price is derived from the publication's pinned pricing config
-  // rather than read off the stored offering (`presentation.price` is being
-  // retired as a stored field); `priceBreakdownFor` below re-derives and
-  // digest-checks the same config for the x402/on_request breakdown.
+  // Managed x402 prices carry an exact USDC amount for one Call; revalidate
+  // the pinned source requirement against the projected amount below.
   let normalizedPricingConfig: ReturnType<typeof normalizePricingConfig> | undefined
   try {
     normalizedPricingConfig = publication.pricingConfigJson === undefined
@@ -208,7 +206,9 @@ export async function toolRecordProjection(
     || publication.priceDigest === undefined
     || pricingConfigDigest(normalizedPricingConfig.config) !== publication.priceDigest
   ) return { kind: 'dropped', reason: 'malformed_price' }
-  const sourcePrice = displayPriceFromPricingConfig(normalizedPricingConfig.config)
+  const sourcePrice = normalizedPricingConfig.config.kind === 'managed_x402'
+    ? { kind: 'fixed' as const, amount: pricingConfigSourceAmount(normalizedPricingConfig.config) }
+    : displayPriceFromPricingConfig(normalizedPricingConfig.config)
   const transport = publicToolTransportFor(binding.endpointUrl, binding.adapter.adapterId, bindingRow.configJson)
   if (transport === undefined) return { kind: 'dropped', reason: 'invalid_transport' }
   const pricingSource = qualification.sources.find(({ kind }) => kind === 'pricing')
@@ -303,14 +303,17 @@ function priceBreakdownFor(
       ? undefined
       : null
   }
-  if (displayedPrice.kind !== 'on_request') return null
-  if (publication.sourceKind !== 'x402') return null
+  if (
+    displayedPrice.kind !== 'fixed'
+    || publication.sourceKind !== 'x402'
+    || normalized.config.kind !== 'managed_x402'
+  ) return null
   const payment = parseAdmittedX402CatalogPayment(adapterId, configJson)
   const sourceAmount = pricingConfigSourceAmount(normalized.config)
   return payment !== undefined
     && payment.network === normalized.config.sourceRequirement.network
     && payment.asset.toLowerCase() === normalized.config.sourceRequirement.asset.toLowerCase()
-    && sourceAmount.units === normalized.config.sourceRequirement.atomicUnits
+    && compareExactAmounts(sourceAmount, displayedPrice.amount) === 0
     ? undefined
     : null
 }

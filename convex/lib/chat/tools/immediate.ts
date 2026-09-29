@@ -15,7 +15,7 @@ import {
   type ToolChoiceSearchOutput,
 } from '@/modules/registry/tool-choice-contracts'
 import { isProductionToolChoice } from '@/modules/registry/public'
-import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/registry/tool-selection-score'
+import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import { registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
 import { projectedModelFacingOutput } from './output'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution } from './step'

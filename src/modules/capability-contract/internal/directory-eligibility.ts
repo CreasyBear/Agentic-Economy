@@ -1,6 +1,8 @@
 export type DirectoryEligibilitySignals = Readonly<{
   hasOutputSchema: boolean
   hasOutputExample: boolean
+  /** Missing means no recognised USDC price was declared. */
+  minimumUsdPrice: string | undefined
   /** -1 (or any value under 2) means "no external-demand signal", matching the stored search row's payersOrder sentinel. */
   payersOrder: number
 }>
@@ -21,5 +23,7 @@ export type DirectoryEligibilitySignals = Readonly<{
  * to 2 is what makes the bar selective.
  */
 export function isDirectoryEntryEligible(signals: DirectoryEligibilitySignals): boolean {
-  return (signals.hasOutputSchema || signals.hasOutputExample) && signals.payersOrder >= 2
+  return signals.minimumUsdPrice !== undefined
+    && (signals.hasOutputSchema || signals.hasOutputExample)
+    && signals.payersOrder >= 2
 }

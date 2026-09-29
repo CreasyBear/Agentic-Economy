@@ -28,7 +28,8 @@ const tool = {
   readiness: 'Routeable',
   readinessLabel: 'Ready now',
   trustFact: 'Ready to run through Agentic Economy',
-  price: 'USD 1.25',
+  price: 'US$1.25',
+  priceAmount: { currency: 'USD', units: '125', exponent: 2 },
   authentication: 'API key',
   lastVerifiedAt: 1_725_000_000_000,
   callLabel: 'Use capability',
@@ -65,7 +66,7 @@ describe('catalogue-first home', () => {
     const row = screen.getByRole('listitem')
     expect(
       within(row).getByRole('link', {
-        name: 'Invoice extract, Ledger Labs, USD 1.25',
+        name: 'Invoice extract, Ledger Labs, US$1.25',
       }),
     ).toBeTruthy()
     expect(within(row).getByText('Extract line items and totals from a supplier invoice.')).toBeTruthy()
@@ -75,7 +76,7 @@ describe('catalogue-first home', () => {
     expect(screen.queryByRole('link', { name: 'Use Invoice extraction' })).toBeNull()
     expect(
       within(row).getByRole('link', {
-        name: 'Invoice extract, Ledger Labs, USD 1.25',
+        name: 'Invoice extract, Ledger Labs, US$1.25',
       }).getAttribute('href'),
     ).toContain('query=Invoice')
   })

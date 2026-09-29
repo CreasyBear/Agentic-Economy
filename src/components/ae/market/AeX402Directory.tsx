@@ -410,7 +410,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
               : <Link to="/sign-in/$" params={{ _splat: '' }} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Sign in to save</Link>}
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>{item.price.kind === 'indicative' ? `Indicative AUD · ${item.price.label}` : 'AUD estimate unavailable'}</span>
+            {item.price.kind === 'indicative' ? <span>{item.price.label.startsWith('A$') ? `Indicative AUD · ${item.price.label}` : `Provider price · ${item.price.label}`}</span> : null}
             {item.sourcePrice === undefined ? null : <span>Provider-listed source · {item.sourcePrice}</span>}
             <span>{marketSearchFreshness(item)}</span>
           </div>

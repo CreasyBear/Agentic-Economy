@@ -86,8 +86,11 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
     const access = item.choice?.access === 'ae_callable' && toolRef === undefined
       ? 'unavailable' : item.choice?.access ?? 'external_listing'
     const amount = item.minimumUsdPrice === undefined ? undefined : parseDecimalExactAmount('USDC', item.minimumUsdPrice, 6)
-    const aud = amount === undefined || rate === undefined ? undefined
-      : formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }, now)
+    const displayPrice = amount === undefined ? undefined : formatDisplayPrice({
+      kind: 'indicative',
+      amount,
+      ...(rate === undefined ? {} : { referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }),
+    }, now)
     return {
       id: item.id,
       source: 'coinbase' as const,
@@ -102,7 +105,7 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       objectClass: item.objectClass,
       ...(item.category === undefined ? {} : { category: Array.from(item.category).slice(0, 80).join('') }),
       readiness: access === 'ae_callable' ? 'ready' as const : access === 'unavailable' ? 'unavailable' as const : 'unverified' as const,
-      price: aud !== undefined && aud.startsWith('A$') ? { kind: 'indicative' as const, label: aud } : { kind: 'unavailable' as const },
+      price: displayPrice === undefined ? { kind: 'unavailable' as const } : { kind: 'indicative' as const, label: displayPrice },
       detailRef: toolRef ?? `/api/v1/registry/detail?id=${encodeURIComponent(item.id)}`,
       next: toolRef === undefined
         ? [{ action: 'describe-external' as const, args: { id: item.id }, authority: 'public' as const }]

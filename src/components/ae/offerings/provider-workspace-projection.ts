@@ -17,10 +17,11 @@ import type {
 } from '@/modules/catalog/public'
 import {
   displayPriceFromPricingConfig,
+  formatCurrencyAmount,
   formatDisplayAmount,
   normalizePricingConfig,
+  pricingConfigSourceAmount,
 } from '@/modules/money/public'
-
 export type OwnerOfferingSummary = Readonly<{
   offering: BusinessOfferingProjection
   status: BusinessOfferingStatus
@@ -130,7 +131,9 @@ export function ownerToolPricingLabel(row: Readonly<{
       if (display.kind === 'fixed') {
         return `${formatDisplayAmount(display.amount)} / call`
       }
-      if (display.kind === 'on_request') return 'Price on request'
+      if (normalized.config.kind === 'managed_x402') {
+        return `${formatCurrencyAmount(pricingConfigSourceAmount(normalized.config))} / call`
+      }
     }
   }
   return row.pricingLabel
