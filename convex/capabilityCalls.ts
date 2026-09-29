@@ -37,13 +37,15 @@ import {
   canonicalOwnerCancelHandler, canonicalOwnerReconcileHandler, canonicalOwnerStatusHandler,
   listPendingCallApprovalsArgs, listPendingCallApprovalsResult, decideCallApprovalArgs,
 } from './lib/capabilityExecution/callLifecycle/ownerCallAuthority'
-import { reconcileCallWorkloadAuthorityHandler } from './lib/capabilityExecution/callLifecycle/supplyCanaryAuthority'
+import {
+  reconcileCallWorkloadAuthorityHandler,
+  readAcceptedCallGrantAfterLimitUpdateHandler,
+} from './lib/capabilityExecution/callLifecycle/persistedCallAuthority'
 import {
   beginX402UnpaidProbeArgs, beginX402UnpaidProbeHandler, beginX402UnpaidProbeResult,
   finishX402UnpaidProbeArgs, finishX402UnpaidProbeHandler, finishX402UnpaidProbeResult,
   readX402UnpaidProbeAdmissionArgs, readX402UnpaidProbeAdmissionHandler, readX402UnpaidProbeAdmissionResult,
 } from './lib/capabilityExecution/callLifecycle/x402PreSignProbe'
-import { readAcceptedCallGrantAfterLimitUpdateHandler } from './lib/capabilityExecution/callLifecycle/persistedCallAuthority'
 import { dispatchHandler } from './lib/capabilityExecution/callLifecycle/dispatchEnqueue'
 import { openDispatchHandler, openDispatchArgs, openDispatchResult } from './lib/capabilityExecution/callLifecycle/dispatchOpen'
 import {

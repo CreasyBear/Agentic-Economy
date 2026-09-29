@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { api, internal } from '../../../convex/_generated/api'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import { createPublicToolRef } from '../../../src/modules/capability-supply/public'
 import { quoteManagedX402BuyerAud } from '../../../src/modules/money/public'

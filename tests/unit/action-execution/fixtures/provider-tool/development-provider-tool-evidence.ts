@@ -1,7 +1,7 @@
 import {
   evaluateAdr009Transfer,
   type TransferBoundaryEvent,
-} from '../../../../src/modules/action-execution/transfer-evaluator'
+} from '../../../../../src/modules/action-execution/transfer-evaluator'
 import {
   cancelDevelopmentProviderToolAction,
   executeDevelopmentProviderToolAction,

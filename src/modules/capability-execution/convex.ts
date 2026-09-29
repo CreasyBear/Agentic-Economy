@@ -4,7 +4,6 @@ export {
   jsonValue,
   callAuthorityValue,
   operationExecutionPurposeValue,
-  sellerOnboardingCanaryExecutionEnvelopeValue,
   callReceiptValue,
   callReconciliationValue,
   callResultValue,
@@ -19,7 +18,6 @@ export {
   buildCanonicalTerminalOutcomeCommand,
   x402PaymentReconciliationEvidenceValue,
 } from '@/modules/action-execution/runtime'
-export { buildSellerOnboardingCanaryReceipt } from './call-worker/sellerCanaryReceipt'
 export { X402_MANAGED_CUSTODY_REF } from './call-worker/x402ManagedCustodyRef'
 export type {
   CanonicalClaimSnapshot,

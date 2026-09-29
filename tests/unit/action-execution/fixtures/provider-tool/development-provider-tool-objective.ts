@@ -7,9 +7,9 @@ import {
   type SpendingPolicyDecision,
   type SpendingPolicy,
   type SpendingPolicySnapshot,
-} from '../../../../src/modules/action-execution'
-import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
-import type { AnyAction } from '../../../../src/modules/common/action'
+} from '../../../../../src/modules/action-execution'
+import { canonicalDigest } from '../../../../../src/modules/common/canonical-digest'
+import type { AnyAction } from '../../../../../src/modules/common/action'
 import {
   cancelDevelopmentProviderToolAction,
   executeDevelopmentProviderToolAction,

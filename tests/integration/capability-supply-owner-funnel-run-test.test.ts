@@ -16,7 +16,7 @@ describe('owner supply test', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('does not turn an exact fresh no-payment challenge into a paid canary or publication authority', async () => {
+  it('does not turn an exact fresh no-payment challenge into publication authority', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,

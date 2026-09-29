@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { listActions } from '@/modules/actions'
 import {
   buildDevelopmentPublishedToolEvidence,
-} from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+} from './fixtures/development-published-tool-evidence'
 
 describe('published Tool foundation boundary', () => {
   it('does not statically register a business-published Tool', () => {

@@ -1,11 +1,9 @@
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { activeChatTurnForMoney } from '../../chat/threads/ownership'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   parsePublishedToolSnapshot,
   publishedToolMaterialMatches,
-  type SellerOnboardingCanaryExecutionEnvelope,
 } from '@/modules/capability-supply/public'
 import type { CallIdempotencyReservation } from '@/modules/capability-execution/call-authority'
 import { recordMarketEvidenceFact } from '../../../marketEvidence'
@@ -92,42 +90,6 @@ function existingReservationMatches(existing: CallRow, args: ReserveArgs): boole
     existing.requestDigest === args.requestDigest,
     operationSnapshotMatches(existing, args),
     existing.inputJson === args.inputJson,
-    canonicalOptionalCanary(existing.sellerOnboardingCanary) === canonicalOptionalCanary(args.sellerOnboardingCanary),
-  ].every(Boolean)
-}
-
-export function canonicalOptionalCanary(
-  value: SellerOnboardingCanaryExecutionEnvelope | undefined,
-): string | undefined {
-  return value === undefined ? undefined : canonicalDigest(value as never)
-}
-
-function canaryEnvelopeMatchesReservation(args: ReserveArgs): boolean {
-  const canary = args.sellerOnboardingCanary
-  if (canary === undefined) return true
-  return [
-    (args.environment === 'sandbox' || args.environment === 'production'),
-    canary.executionPurpose === 'seller_onboarding_canary',
-    canary.callRef === args.callRef,
-    canary.toolRef === args.toolRef,
-    canary.inputDigest === args.inputDigest,
-    canary.idempotencyKey === args.idempotencyKey,
-    canary.readinessValidUntil > args.now,
-    canary.expiresAt > args.now,
-    canary.expiresAt <= canary.readinessValidUntil,
-    canary.funding.kind === 'ae_owned',
-    canary.funding.principalId === args.principalId,
-    canary.funding.ownerId === args.ownerId,
-    canary.funding.credentialId === args.credentialId,
-    canary.funding.applicationRef === args.applicationRef,
-    canary.funding.grantRef === args.grantRef,
-    canary.funding.grantGeneration === args.grantGeneration,
-    canary.funding.policyDigest === args.policyDigest,
-    canary.funding.ledgerEffects === 'external_spend_only',
-    canary.accountingPolicy.recordBuyerUsage === false,
-    canary.accountingPolicy.accrueProviderEarnings === false,
-    canary.accountingPolicy.accruePlatformRake === false,
-    canary.accountingPolicy.recordQualifiedUse === false,
   ].every(Boolean)
 }
 
@@ -151,14 +113,12 @@ async function loadReservationCommitment(
   ctx: MutationCtx,
   args: ReserveArgs,
 ): Promise<CommitmentRow | null> {
-  if (args.sellerOnboardingCanary !== undefined) return null
   return await ctx.db.query('capabilityQuotes')
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
     .unique()
 }
 
 function commitmentMatchesReservation(commitment: CommitmentRow | null, args: ReserveArgs): boolean {
-  if (args.sellerOnboardingCanary !== undefined) return commitment === null
   if (commitment === null) return false
   return [
     commitment.state === 'issued',
@@ -189,9 +149,6 @@ async function persistReservedCall(
     ...reservation,
     ...(args.toolJson === undefined ? {} : { toolJson: args.toolJson }),
     ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
-    ...(args.sellerOnboardingCanary === undefined
-      ? {}
-      : { sellerOnboardingCanary: structuredClone(args.sellerOnboardingCanary) }),
     ...(formanceFinancialState === undefined ? {} : { formanceFinancialState }),
     ownerId: args.ownerId,
     state: 'pending',
@@ -231,7 +188,6 @@ export async function reserveHandler(
     || !await activeChatTurnForMoney(ctx, turn))) {
     return missingGrant()
   }
-  if (!canaryEnvelopeMatchesReservation(args)) return { kind: 'conflict' }
   // Keyed by the stable Principal: a rotated credential replays the original
   // reservation instead of minting a second Call under the same key.
   const existing = await ctx.db.query('capabilityCalls')

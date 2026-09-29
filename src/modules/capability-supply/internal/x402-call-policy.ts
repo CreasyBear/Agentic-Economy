@@ -1,4 +1,4 @@
-import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -9,26 +9,18 @@ export type X402ExecutionContext =
       kind: 'market'
       paymentProfile: 'base-usdc-exact' | 'base-sepolia-usdc-exact'
     }>
-  | Readonly<{
-      kind: 'seller_onboarding_canary'
-      paymentProfile: 'base-usdc-exact' | 'base-sepolia-usdc-exact'
-      canaryRef: string
-      canaryCommitmentDigest: string
-      fundingBudgetRef: string
-    }>
 
 export type X402SettlementStatus = 'settled' | 'not_settled' | 'unknown'
 
 export type EconomicRail =
   | 'provider_direct_x402'
   | 'brokered_x402'
-  | 'managed_testnet_canary'
   | 'ae_internal'
 
 export type PaymentLaneAdmission =
   | Readonly<{
       kind: 'admitted'
-      lane: 'brokered' | 'provider_direct_x402' | 'managed_testnet_canary'
+      lane: 'brokered' | 'provider_direct_x402'
     }>
   | Readonly<{
     kind: 'refused'
@@ -43,9 +35,7 @@ export type PaymentLaneAdmission =
 
 export function economicRailForCall(input: Readonly<{
   isX402: boolean
-  sellerOnboardingCanary: boolean
 }>): EconomicRail {
-  if (input.sellerOnboardingCanary) return 'managed_testnet_canary'
   return input.isX402 ? 'brokered_x402' : 'ae_internal'
 }
 
@@ -55,9 +45,6 @@ export function economicRailForCall(input: Readonly<{
  * between buyer and provider outside AE's ledger and forfeits all three, so the Operation worker
  * always selects the brokered lane. Non-production keeps the lower-level direct rail admitted for
  * host-parity and provider-conformance tests; it is not a public Operation execution lane.
- * The managed exception is an explicit platform-funded seller-onboarding
- * canary, bound to the exact sandbox or production payment profile selected
- * by the staged publication.
  */
 export function paymentLaneAdmission(
   input: Readonly<{
@@ -80,13 +67,7 @@ export function paymentLaneAdmission(
     : undefined
   if (
     explicitContext !== undefined
-    && (
-      resolvedContext === undefined
-      || (resolvedContext.kind === 'seller_onboarding_canary'
-        && input.rail !== 'managed_testnet_canary')
-      || (resolvedContext.kind === 'market'
-        && input.rail === 'managed_testnet_canary')
-    )
+    && resolvedContext === undefined
   ) {
     return {
       kind: 'refused',
@@ -99,16 +80,6 @@ export function paymentLaneAdmission(
       return { kind: 'admitted', lane: 'brokered' }
     case 'brokered_x402':
       return { kind: 'admitted', lane: 'brokered' }
-    case 'managed_testnet_canary':
-      return (input.environment === 'sandbox' || input.environment === 'production')
-        && explicitContext !== undefined
-        && resolvedContext?.kind === 'seller_onboarding_canary'
-        ? { kind: 'admitted', lane: 'managed_testnet_canary' }
-        : {
-            kind: 'refused',
-            lane: 'managed_testnet_canary',
-            code: 'payment_lane_execution_context_invalid',
-          }
     case 'provider_direct_x402':
       return input.environment === 'production'
         ? {
@@ -165,39 +136,7 @@ function x402ExecutionContextForFacts(input: Readonly<{
       ? { kind: 'market', paymentProfile: expectedProfile }
       : undefined
   }
-  if (
-    context.kind !== 'seller_onboarding_canary'
-    || !hasExactKeys(context, [
-      'kind',
-      'paymentProfile',
-      'canaryRef',
-      'canaryCommitmentDigest',
-      'fundingBudgetRef',
-    ])
-    || context.paymentProfile !== (input.environment === 'production'
-      ? 'base-usdc-exact'
-      : 'base-sepolia-usdc-exact')
-    || !boundedRef(context.canaryRef)
-    || typeof context.canaryCommitmentDigest !== 'string'
-    || !isCanonicalDigest(context.canaryCommitmentDigest)
-    || !boundedRef(context.fundingBudgetRef)
-  ) return undefined
-  return {
-    kind: 'seller_onboarding_canary',
-    paymentProfile: input.environment === 'production'
-      ? 'base-usdc-exact'
-      : 'base-sepolia-usdc-exact',
-    canaryRef: context.canaryRef,
-    canaryCommitmentDigest: context.canaryCommitmentDigest,
-    fundingBudgetRef: context.fundingBudgetRef,
-  }
-}
-
-function boundedRef(value: unknown): value is string {
-  return typeof value === 'string'
-    && value === value.trim()
-    && value.length > 0
-    && value.length <= 512
+  return undefined
 }
 
 function hasExactKeys(value: Readonly<Record<string, unknown>>, expected: readonly string[]): boolean {

@@ -59,17 +59,17 @@ const TRANSFER_WITH_AUTHORIZATION_TYPES = {
 
 /**
  * CDP's policy engine is fail-secure: a request is rejected when no accept
- * rule matches. The seller canary therefore uses a payee-agnostic wallet rule
+ * rule matches. Managed x402 signing therefore uses a payee-agnostic wallet rule
  * and keeps the dynamic seller address inside AE's canonical Operation,
  * request fingerprint, reservation, and per-call/daily budget fences.
  */
-export function cdpX402SellerCanaryPolicyRules(
+export function cdpX402ManagedPolicyRules(
   payerAddress: string,
   maximumAtomic: string,
   aeEnvironment: X402AeEnvironment = 'sandbox',
 ): Readonly<{ accountRules: readonly unknown[]; projectRules: readonly unknown[] }> {
   const profile = x402PaymentProfileForEnvironment(aeEnvironment)
-  if (profile === undefined) throw new Error('x402_canary_payment_profile_invalid')
+  if (profile === undefined) throw new Error('x402_managed_payment_profile_invalid')
   return {
     accountRules: [{
       action: 'accept',
@@ -116,14 +116,14 @@ export function cdpX402SellerCanaryPolicyRules(
   }
 }
 
-export function cdpX402SellerCanaryPolicyIsExact(
+export function cdpX402ManagedPolicyIsExact(
   accountPolicy: CdpX402PolicyIdentity,
   projectPolicy: CdpX402PolicyIdentity,
   payerAddress: string,
   maximumAtomic: string,
   aeEnvironment: X402AeEnvironment = 'sandbox',
 ): boolean {
-  const expected = cdpX402SellerCanaryPolicyRules(payerAddress, maximumAtomic, aeEnvironment)
+  const expected = cdpX402ManagedPolicyRules(payerAddress, maximumAtomic, aeEnvironment)
   return canonicalDigest(accountPolicy.rules as StableHashValue)
       === canonicalDigest(expected.accountRules as StableHashValue)
     && canonicalDigest(projectPolicy.rules as StableHashValue)

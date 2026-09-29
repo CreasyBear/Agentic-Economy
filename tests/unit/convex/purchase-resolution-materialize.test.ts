@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { materializePurchaseResolutionRecord } from '../../../convex/lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))

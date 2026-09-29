@@ -89,7 +89,6 @@ async function reconcilePreSubmissionMoney(
 ): Promise<PreSubmissionMoneyResult> {
   const attempt = work.x402Attempt
   if (attempt === null) return { kind: 'not_reconciled' }
-  if (work.recovered.sellerOnboardingCanary !== undefined) return { kind: 'not_reconciled' }
   const result = await ctx.runAction(
     internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
     {
@@ -285,7 +284,6 @@ function recoveryScopeIsEligible(
 ): boolean {
   const { recovered, operation, x402Attempt, control } = work
   return work.managedReservation !== null
-    && recovered.sellerOnboardingCanary === undefined
     && operation.identity.adapterId === 'x402-fetch:v2'
     && providerRef !== undefined
     && paymentIdentityMatchesInvocation(x402Attempt, recovered)
@@ -346,7 +344,6 @@ export function managedReservationRefForAttempt(
   work: RecoveryWorkContext,
   attempt: PaymentAttempt,
 ): string | undefined {
-  if (work.recovered.sellerOnboardingCanary !== undefined) return undefined
   const reservation = work.managedReservation
   if (reservation === null || attempt.reservationRef === undefined) return undefined
   const acceptedRefs = [

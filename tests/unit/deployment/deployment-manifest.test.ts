@@ -89,7 +89,6 @@ describe('deployment manifest validator', () => {
       'convex-components',
       'agent-access',
       'formance-financial-authority',
-      'seller-onboarding-canary-funding',
       'durable-invocation-workpool',
       'durable-stripe-webhook-inbox',
       'provider-tools-rollout',

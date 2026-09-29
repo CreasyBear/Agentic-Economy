@@ -1,7 +1,6 @@
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { Infer } from 'convex/values'
 import type { ExactAmount, MoneyAcceptedCallCharge } from '@/modules/money/public'
-import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-execution'
 import type { CallPersistedAuthority } from '../internal/convex-schema'
 import { callResultValue, recoveryResultValue, usageValue } from '../internal/convex-schema'
 import type { DurableActionExecutionPort } from '@/modules/action-execution/runtime'
@@ -20,7 +19,6 @@ export type OpenDispatch = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   toolRef: string
-  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   idempotencyKey: string
   inputDigest: string
   requestDigest: string
@@ -80,7 +78,6 @@ export type RecoveryRow = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   toolRef: string
-  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   inputDigest: string
   requestDigest: string
   grantGeneration: number

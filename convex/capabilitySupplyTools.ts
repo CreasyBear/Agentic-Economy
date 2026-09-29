@@ -19,11 +19,6 @@ import {
   publishedOperationSnapshotReturns,
   readCurrentPublishedToolSnapshotHandler,
 } from './lib/capabilitySupply/currentTool/reads'
-import {
-  readExactSellerCanaryOperationSnapshotArgs,
-  readExactSellerCanaryOperationSnapshotResult,
-  readExactSellerCanaryOperationSnapshotHandler,
-} from './lib/capabilitySupply/currentTool/sellerCanary'
 
 export const search = queryGeneric({
   args: searchArgs,
@@ -69,8 +64,3 @@ export const readCurrentPublishedToolSnapshot = internalQueryGeneric({
   handler: readCurrentPublishedToolSnapshotHandler,
 })
 
-export const readExactSellerCanaryOperationSnapshot = internalQueryGeneric({
-  args: readExactSellerCanaryOperationSnapshotArgs,
-  returns: readExactSellerCanaryOperationSnapshotResult,
-  handler: readExactSellerCanaryOperationSnapshotHandler,
-})

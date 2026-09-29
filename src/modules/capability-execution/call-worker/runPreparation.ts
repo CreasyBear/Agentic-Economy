@@ -15,10 +15,8 @@ import {
   paymentLaneAdmission,
   signRouteTransportCall,
   type EconomicRail,
-  type X402ExecutionContext,
 } from '@/modules/capability-supply/server'
 import {
-  compareExactAmounts,
   normalizePricingConfig,
   pricingConfigDecisionAmount,
   pricingConfigDigest,
@@ -28,7 +26,6 @@ import {
   parsePublishedToolSnapshot,
   type RuntimePublishedToolDescriptor,
 } from '@/modules/capability-supply/public'
-import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
 import { type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import { canonicalPort, readCanonicalSnapshot } from '../../../../convex/lib/capabilityExecution/callProjection/port'
@@ -49,30 +46,14 @@ import {
   gateEnvironmentBeforeClaim,
   gateGrantValidityBeforeClaim,
   gatePrincipalIdentityBeforeClaim,
-  gateSellerCanarySnapshotBeforeClaim,
-  type SellerCanaryOperationSnapshot,
+  gatePublishedSnapshotBeforeClaim,
 } from './call-execution-gates'
 
 export {
   acceptedCallGrantAfterLimitUpdateRef,
   callPrincipalIdentityMatches,
-  exactSellerCanarySnapshotMatches,
   type CallPrincipalIdentity,
-  type SellerCanaryOperationSnapshot,
 } from './call-execution-gates'
-
-export function sellerCanaryExecutionContext(
-  envelope: SellerOnboardingCanaryExecutionEnvelope,
-  environment: 'sandbox' | 'production' = 'sandbox',
-): X402ExecutionContext {
-  return {
-    kind: 'seller_onboarding_canary',
-    paymentProfile: environment === 'production' ? 'base-usdc-exact' : 'base-sepolia-usdc-exact',
-    canaryRef: envelope.canaryRef,
-    canaryCommitmentDigest: envelope.canaryCommitmentDigest,
-    fundingBudgetRef: envelope.funding.budgetRef,
-  }
-}
 
 export async function prepareCallRun(
   ctx: ActionCtx,
@@ -122,7 +103,6 @@ export async function prepareCallRun(
   const principalIdentity = await gatePrincipalIdentityBeforeClaim(ctx, dispatch)
   if (!('principal' in principalIdentity)) return principalIdentity
   const { dispatchedCredentialId, principal } = principalIdentity
-  const sellerCanary = dispatch.sellerOnboardingCanary
 
   const grantResult = await gateGrantValidityBeforeClaim(ctx, dispatch)
   if ('kind' in grantResult) return grantResult
@@ -135,17 +115,9 @@ export async function prepareCallRun(
   const initialAttemptRef = `operation-attempt:${dispatch.callRef}:1`
   const leaseOwner = `operation-worker:${dispatch.callRef}`
 
-  const currentSnapshot = sellerCanary === undefined
-    ? await ctx.runQuery(internal.capabilitySupplyTools.readCurrentPublishedToolSnapshot, {
-        toolRef: dispatch.toolRef,
-      })
-    : await ctx.runQuery(
-        internal.capabilitySupplyCurrentTool.readExactSellerCanaryOperationSnapshot,
-        {
-          publicationRef: sellerCanary.publicationRef,
-          revision: sellerCanary.publicationRevision,
-        },
-      )
+  const currentSnapshot = await ctx.runQuery(internal.capabilitySupplyTools.readCurrentPublishedToolSnapshot, {
+    toolRef: dispatch.toolRef,
+  })
   const reservedOperation = parsePublishedToolSnapshot(dispatch.toolJson)
   const currentOperation = currentSnapshot === null
     ? undefined
@@ -159,13 +131,13 @@ export async function prepareCallRun(
     })
     if (publishedToolsEnvironmentRefusal !== null) return publishedToolsEnvironmentRefusal
   }
-  const sellerCanarySnapshotRefusal = await gateSellerCanarySnapshotBeforeClaim(ctx, {
+  const publishedSnapshotRefusal = await gatePublishedSnapshotBeforeClaim(ctx, {
     dispatch,
-    currentSnapshot: currentSnapshot as SellerCanaryOperationSnapshot | null,
+    currentSnapshot,
     reservedOperation,
     currentOperation,
   })
-  if (sellerCanarySnapshotRefusal !== null) return sellerCanarySnapshotRefusal
+  if (publishedSnapshotRefusal !== null) return publishedSnapshotRefusal
   if (currentOperation === undefined || currentOperation === null) {
     return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'The admitted operation snapshot is invalid.')
   }
@@ -193,16 +165,7 @@ export async function prepareCallRun(
   if (principalToolEnvironmentRefusal !== null) return principalToolEnvironmentRefusal
   if (!descriptor.validateInput(input)) return await refuseBeforeClaim(ctx, dispatch, 'input_invalid', false)
   const isX402 = operation.identity.adapterId === 'x402-fetch:v2'
-  if (sellerCanary !== undefined && !isX402) {
-    return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'Seller onboarding canaries require the exact x402 transport.')
-  }
-  const executionContext = sellerCanary === undefined
-    ? undefined
-    : sellerCanaryExecutionContext(sellerCanary, dispatch.environment)
-  const economicRail: EconomicRail = economicRailForCall({
-    isX402,
-    sellerOnboardingCanary: sellerCanary !== undefined,
-  })
+  const economicRail: EconomicRail = economicRailForCall({ isX402 })
   if (
     economicRail === 'brokered_x402'
     && cdpX402CustodyConfigurationFromEnvironment() === undefined
@@ -218,7 +181,6 @@ export async function prepareCallRun(
   const laneAdmission = paymentLaneAdmission({
     rail: economicRail,
     environment: dispatch.environment,
-    ...(executionContext === undefined ? {} : { executionContext }),
   })
   if (laneAdmission.kind === 'refused') {
     return await refuseBeforeClaim(ctx, dispatch, laneAdmission.code, false, 'This operation settles provider-direct; invoke a brokered operation instead.')
@@ -240,28 +202,15 @@ export async function prepareCallRun(
   }
   const pricingAmount = pricingConfig.kind === 'fixed_aud'
     ? pricingConfigDecisionAmount(pricingConfig)
-    : sellerCanary?.funding.requestedSpend
-  if (economicRail === 'brokered_x402' || economicRail === 'managed_testnet_canary') {
-    if (pricingConfig.kind !== 'managed_x402'
-      || (economicRail === 'brokered_x402' && dispatch.quoteRef === undefined)) {
+    : undefined
+  if (economicRail === 'brokered_x402') {
+    if (pricingConfig.kind !== 'managed_x402' || dispatch.quoteRef === undefined) {
       return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'Inspect this managed Operation to obtain a current Commitment before invoking it.')
     }
   } else {
     if (pricingConfig.kind !== 'fixed_aud' || pricingAmount === undefined) {
       return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The published price changed; retry discovery.')
     }
-  }
-  if (
-    sellerCanary !== undefined
-    && (
-      sellerCanary.expiresAt <= Date.now()
-      || pricingAmount === undefined
-      || compareExactAmounts(pricingAmount, sellerCanary.funding.requestedSpend) !== 0
-      || compareExactAmounts(sellerCanary.funding.requestedSpend, sellerCanary.funding.maximumSpend) === undefined
-      || compareExactAmounts(sellerCanary.funding.requestedSpend, sellerCanary.funding.maximumSpend)! > 0
-    )
-  ) {
-    return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The sealed seller canary funding or expiry no longer matches the staged call.')
   }
   const authoritySnapshot = operation.connectionAuthority ?? operation.identity.connectionAuthority
   const connectionAuthority: ConnectionAuthority | undefined = operation.binding.authority.kind === 'provider_connection'
@@ -332,7 +281,6 @@ export async function prepareCallRun(
   const priced = normalizePricingConfig(operation.pricingConfig)
   if (
     principal.authorityMode === 'approval_required'
-    && dispatch.sellerOnboardingCanary === undefined
     && dispatch.x402RequirementDigest !== undefined
     && priced.kind === 'valid'
     && priced.config.kind === 'managed_x402'
@@ -470,7 +418,6 @@ export async function prepareCallRun(
     input,
     isX402,
     economicRail,
-    executionContext,
     pricingConfig,
     connectionAuthority,
     isCredentiallessX402Connection,

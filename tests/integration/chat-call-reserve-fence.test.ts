@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import { ACTIVE_CHAT_GENERATION_MS } from '../../convex/chatThreads'
-import { buildDevelopmentPublishedToolEvidence } from '../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../unit/capability-supply/fixtures/development-published-tool-evidence'
 import { convexTestWithMarketComponents, createTestAgentPrincipal } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 

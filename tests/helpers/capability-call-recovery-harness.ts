@@ -1,6 +1,6 @@
 import { getFunctionName } from 'convex/server'
 import { expect, vi } from 'vitest'
-import { buildDevelopmentPublishedToolEvidence } from '../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../unit/capability-supply/fixtures/development-published-tool-evidence'
 import { materializeRuntimePublishedTool } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 

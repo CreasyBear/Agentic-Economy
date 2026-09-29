@@ -22,7 +22,7 @@ export const claim = internalMutation({
     const call = await readCall(ctx, args.callRef)
     if (call === null || call.state !== 'reconciliation_required'
       || call.formanceFinancialState !== 'outcome_unknown'
-      || call.sellerOnboardingCanary !== undefined || call.result?.kind !== 'reconciliation_required'
+      || call.result?.kind !== 'reconciliation_required'
       || call.result.receipt?.commercialModel !== 'account_aud'
       || call.result.evidence.attemptRef !== args.attemptRef
       || call.result.evidence.effectGeneration !== args.effectGeneration

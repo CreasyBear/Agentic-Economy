@@ -18,7 +18,7 @@ import {
   readCdpUsdcBalance,
   type CdpUsdcBalanceReader,
   type CdpUsdcNetwork,
-} from './capabilitySupplyCanaryFundingPreflight'
+} from './lib/money/cdpUsdcBalance'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 import {
   parseWorkloadCronSnapshot,

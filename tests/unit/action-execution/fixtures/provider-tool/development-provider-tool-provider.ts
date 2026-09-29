@@ -1,10 +1,10 @@
-import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
-import { signEd25519Attestation } from '../../../../src/modules/common/ed25519-attestation'
+import { canonicalDigest } from '../../../../../src/modules/common/canonical-digest'
+import { signEd25519Attestation } from '../../../../../src/modules/common/ed25519-attestation'
 import type {
   ExposureOffsetRuleIdentity,
   ExposureReleaseAttestationMaterial,
-} from '../../../../src/modules/action-execution'
-import type { ExactAmount } from '../../../../src/modules/money/public'
+} from '../../../../../src/modules/action-execution'
+import type { ExactAmount } from '../../../../../src/modules/money/public'
 import type { DevelopmentProviderToolSigningCustody } from './development-provider-tool-signing-custody'
 import type {
   DevelopmentProviderToolCancellationInput,

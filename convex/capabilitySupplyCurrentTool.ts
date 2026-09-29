@@ -1,10 +1,5 @@
 import { internalQuery, internalMutation } from './_generated/server'
 import {
-  readExactSellerCanaryOperationSnapshotArgs,
-  readExactSellerCanaryOperationSnapshotResult,
-  readExactSellerCanaryOperationSnapshotHandler,
-} from './lib/capabilitySupply/currentTool/sellerCanary'
-import {
   readManagedX402InspectionSnapshotArgs,
   readManagedX402InspectionSnapshotResult,
   readManagedX402InspectionSnapshotHandler,
@@ -12,12 +7,6 @@ import {
   recordManagedX402InspectionResult,
   recordManagedX402InspectionHandler,
 } from './lib/capabilitySupply/currentTool/inspection'
-
-export const readExactSellerCanaryOperationSnapshot = internalQuery({
-  args: readExactSellerCanaryOperationSnapshotArgs,
-  returns: readExactSellerCanaryOperationSnapshotResult,
-  handler: readExactSellerCanaryOperationSnapshotHandler,
-})
 
 export const readManagedX402InspectionSnapshot = internalQuery({
   args: readManagedX402InspectionSnapshotArgs,

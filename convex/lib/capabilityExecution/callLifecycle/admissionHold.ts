@@ -1,7 +1,6 @@
 import type { MutationCtx } from '../../../_generated/server'
 import type { AbandonArgs, AbandonResult } from './admissionReservation'
 import type { CallRow } from './contracts'
-import { canonicalOptionalCanary } from './admissionReserve'
 
 export async function abandonHandler(
   ctx: MutationCtx,
@@ -64,7 +63,6 @@ function abandonmentIdentityMatches(row: CallRow, args: AbandonArgs): boolean {
     row.inputDigest === args.inputDigest,
     row.requestDigest === args.requestDigest,
     row.callRef === args.callRef,
-    canonicalOptionalCanary(row.sellerOnboardingCanary) === canonicalOptionalCanary(args.sellerOnboardingCanary),
   ].every(Boolean)
 }
 

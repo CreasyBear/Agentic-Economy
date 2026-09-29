@@ -120,7 +120,7 @@ export async function finalizeDispatchHandler(
   await recordFinalizationEvidence(ctx, row, normalizedProjection.state)
   // Commit recovery scheduling with the stopped Call. Closing the browser cannot
   // abandon this job; it reads the original nonce and never sends a new payment.
-  if (normalizedProjection.state === 'reconciliation_required' && row.sellerOnboardingCanary === undefined) {
+  if (normalizedProjection.state === 'reconciliation_required') {
     const payment = await ctx.db.query('moneyX402PaymentAttempts')
       .withIndex('by_attemptRef_and_effectGeneration', q => q.eq('attemptRef', attempt.attemptRef)
         .eq('effectGeneration', attempt.effectGeneration)).unique()

@@ -28,8 +28,8 @@ export {
 } from './cdp-x402-payment-authorization'
 export {
   cdpX402PolicyRulesDigest,
-  cdpX402SellerCanaryPolicyIsExact,
-  cdpX402SellerCanaryPolicyRules,
+  cdpX402ManagedPolicyIsExact,
+  cdpX402ManagedPolicyRules,
 } from './cdp-x402-payment-policy'
 export { observeCdpX402Treasury } from './cdp-x402-payment-treasury'
 export {

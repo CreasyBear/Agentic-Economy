@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { exactAmountSchema } from '../../../../src/modules/money/public'
+import { exactAmountSchema } from '../../../../../src/modules/money/public'
 
-import { defineAction } from '../../../../src/modules/common/action'
+import { defineAction } from '../../../../../src/modules/common/action'
 import { developmentProviderToolDependencies } from './development-provider-tool-context'
 import {
   developmentLabel,

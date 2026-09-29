@@ -209,32 +209,22 @@ type CallReceiptFields = Readonly<{
   issuedAt: string
 }>
 
-export type CallReceipt = CallReceiptFields & (
-  | Readonly<{
-      commercialModel: 'account_aud'
-      buyerCharge: ExactAmount
-      serviceFee: ExactAmount
-      totalBuyerCharge: ExactAmount
-      providerObligation: Readonly<{
-        amount: ExactAmount
-        settlementMethod: 'managed_x402'
-        payoutEligible: false
-      }>
-      providerSettlement: CallReceiptPaymentProfile & Readonly<{
-        amount: ExactAmount
-        transactionHash?: string
-        paymentIdentifier?: string
-      }>
-    }>
-  | (Readonly<{
-      commercialModel: 'seller_canary_x402'
-      providerQuotedAmount: ExactAmount
-      agenticEconomyFee: ExactAmount
-      totalBuyerAuthorization: ExactAmount
-      settlementTransactionHash?: string
-      paymentIdentifier?: string
-    }> & CallReceiptPaymentProfile)
-)
+export type CallReceipt = CallReceiptFields & Readonly<{
+  commercialModel: 'account_aud'
+  buyerCharge: ExactAmount
+  serviceFee: ExactAmount
+  totalBuyerCharge: ExactAmount
+  providerObligation: Readonly<{
+    amount: ExactAmount
+    settlementMethod: 'managed_x402'
+    payoutEligible: false
+  }>
+  providerSettlement: CallReceiptPaymentProfile & Readonly<{
+    amount: ExactAmount
+    transactionHash?: string
+    paymentIdentifier?: string
+  }>
+}>
 
 const callReceiptFields = {
   receiptRef: z.string().min(1),
@@ -255,54 +245,30 @@ const providerSettlementFields = {
   paymentIdentifier: z.string().min(1).exactOptional(),
 } as const
 
-export const callReceiptSchema: z.ZodType<CallReceipt> = z.union([
-  z.strictObject({
-    ...callReceiptFields,
-    commercialModel: z.literal('account_aud'),
-    buyerCharge: exactAmountSchema,
-    serviceFee: exactAmountSchema,
-    totalBuyerCharge: exactAmountSchema,
-    providerObligation: z.strictObject({
-      amount: exactAmountSchema,
-      settlementMethod: z.literal('managed_x402'),
-      payoutEligible: z.literal(false),
+export const callReceiptSchema: z.ZodType<CallReceipt> = z.strictObject({
+  ...callReceiptFields,
+  commercialModel: z.literal('account_aud'),
+  buyerCharge: exactAmountSchema,
+  serviceFee: exactAmountSchema,
+  totalBuyerCharge: exactAmountSchema,
+  providerObligation: z.strictObject({
+    amount: exactAmountSchema,
+    settlementMethod: z.literal('managed_x402'),
+    payoutEligible: z.literal(false),
+  }),
+  providerSettlement: z.union([
+    z.strictObject({
+      ...providerSettlementFields,
+      network: z.literal(BASE_MAINNET_NETWORK),
+      asset: z.literal(callReceiptAsset),
     }),
-    providerSettlement: z.union([
-      z.strictObject({
-        ...providerSettlementFields,
-        network: z.literal(BASE_MAINNET_NETWORK),
-        asset: z.literal(callReceiptAsset),
-      }),
-      z.strictObject({
-        ...providerSettlementFields,
-        network: z.literal(BASE_SEPOLIA_NETWORK),
-        asset: z.literal(callReceiptBaseSepoliaAsset),
-      }),
-    ]),
-  }),
-  z.strictObject({
-    ...callReceiptFields,
-    commercialModel: z.literal('seller_canary_x402'),
-    providerQuotedAmount: exactAmountSchema,
-    agenticEconomyFee: exactAmountSchema,
-    totalBuyerAuthorization: exactAmountSchema,
-    settlementTransactionHash: z.string().min(1).exactOptional(),
-    paymentIdentifier: z.string().min(1).exactOptional(),
-    network: z.literal(BASE_MAINNET_NETWORK),
-    asset: z.literal(callReceiptAsset),
-  }),
-  z.strictObject({
-    ...callReceiptFields,
-    commercialModel: z.literal('seller_canary_x402'),
-    providerQuotedAmount: exactAmountSchema,
-    agenticEconomyFee: exactAmountSchema,
-    totalBuyerAuthorization: exactAmountSchema,
-    settlementTransactionHash: z.string().min(1).exactOptional(),
-    paymentIdentifier: z.string().min(1).exactOptional(),
-    network: z.literal(BASE_SEPOLIA_NETWORK),
-    asset: z.literal(callReceiptBaseSepoliaAsset),
-  }),
-]).meta({ id: 'CallReceipt' })
+    z.strictObject({
+      ...providerSettlementFields,
+      network: z.literal(BASE_SEPOLIA_NETWORK),
+      asset: z.literal(callReceiptBaseSepoliaAsset),
+    }),
+  ]),
+}).meta({ id: 'CallReceipt' })
 
 export const callUsageSchema: z.ZodType<CallUsageSummary> = z.strictObject({
   usageRef: z.string().min(1),

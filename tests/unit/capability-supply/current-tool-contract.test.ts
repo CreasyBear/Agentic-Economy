@@ -17,7 +17,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { pricingConfigDigest } from '@/modules/money/public'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from './fixtures/development-published-tool-evidence'
 
 function fixture(): Readonly<{ toolRef: string; tool: PublishedTool }> {
   const tool = buildDevelopmentPublishedToolEvidence().tool

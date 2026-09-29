@@ -5,8 +5,8 @@ import {
   type ActionExecutionOrigin,
   type PreparedExecution,
   type ReconciliationEvidenceMaterial,
-} from '../../../../src/modules/action-execution'
-import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+} from '../../../../../src/modules/action-execution'
+import { canonicalDigest } from '../../../../../src/modules/common/canonical-digest'
 import {
   executeDevelopmentProviderToolAction,
   type DevelopmentProviderToolInput,

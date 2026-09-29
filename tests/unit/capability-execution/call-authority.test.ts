@@ -8,7 +8,7 @@ import {
   type CallRuntime,
 } from '@/modules/capability-execution/call-authority'
 import { validateCallAuthority } from '../../../convex/capabilityCallIdentity'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import {
   createPublicToolRef,
   materializeRuntimePublishedTool,

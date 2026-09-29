@@ -6,11 +6,11 @@ import type { PaymentRequired } from '@x402/core/types'
 import {
   buildDevelopmentPublishedToolEvidence,
   verifyDevelopmentPublishedToolEvidence,
-} from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+} from './fixtures/development-published-tool-evidence'
 import {
   buildDevelopmentAlternatePublishedToolEvidence,
   verifyDevelopmentAlternatePublishedToolEvidence,
-} from '../../../tools/dev/fixtures/capability-supply/development-alternate-published-tool-evidence'
+} from './fixtures/development-alternate-published-tool-evidence'
 import {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,

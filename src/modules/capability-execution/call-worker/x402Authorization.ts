@@ -386,10 +386,6 @@ export function createX402PaymentCallbacks(
     ? undefined
     : Date.parse(input.dispatch.authority.expiresAt)
   const managedBuyer = input.useCustodySigner === true
-    && input.dispatch.sellerOnboardingCanary === undefined
-  const managedCanary = input.useCustodySigner === true
-    && (input.dispatch.environment === 'sandbox' || input.dispatch.environment === 'production')
-    && input.dispatch.sellerOnboardingCanary?.executionPurpose === 'seller_onboarding_canary'
 
   const settleManagedPreparationFailure = async (
     attempt: X402AttemptMaterial | null | undefined,
@@ -439,7 +435,7 @@ export function createX402PaymentCallbacks(
     prepared: X402PreparedAuthorization,
     byDigest: boolean,
   ): Promise<string | undefined> => {
-    if (!managedBuyer && !managedCanary) return undefined
+    if (!managedBuyer) return undefined
     const requestFingerprint = requestFingerprintFromPrepared(prepared)
     const requestFingerprintContext = input.useCustodySigner === true
       ? (() => {
@@ -618,7 +614,7 @@ export function createX402PaymentCallbacks(
         & X402PaymentAuthorizationIdentity
         & Readonly<{ authorityExpiresAt: number }>,
     ) => {
-      if (!managedBuyer && !managedCanary) return undefined
+      if (!managedBuyer) return undefined
       if (
         request.attemptRef !== input.durableAttemptRef
         || request.effectGeneration !== input.effectGeneration
@@ -703,9 +699,7 @@ export function createX402PaymentCallbacks(
               ...(requestFingerprint === undefined ? {} : { requestFingerprint }),
             }
         const prepared = await ctx.runMutation(
-          managedCanary
-            ? internal.moneyX402PaymentAttempts.prepareSellerOnboardingCanaryPaymentAuthorization
-            : internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
+          internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
           prepareArgs,
         )
         return requestFingerprint === undefined

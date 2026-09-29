@@ -77,13 +77,6 @@ function admit(onboarding: X402SellerOnboarding): X402SellerOnboarding {
   }, 130)
 }
 
-function canaryPending(onboarding: X402SellerOnboarding): X402SellerOnboarding {
-  return apply(onboarding, {
-    kind: 'request_canary', commandId: 'command:canary:request', ...expectedIdentity(onboarding),
-    canaryRef: 'canary:weather:1',
-  }, 140)
-}
-
 describe('x402 seller onboarding lifecycle', () => {
   it('creates a draft sealed to the full seller, Operation, route, payment, and contract identity', () => {
     const onboarding = created()
@@ -128,20 +121,10 @@ describe('x402 seller onboarding lifecycle', () => {
     }, 999, onboarding)).toEqual({ kind: 'refused', reason: 'operation_key_conflict' })
   })
 
-  it('publishes only through claim, admission, and a successful paid canary', () => {
-    const onboarding = canaryPending(admit(claim(created())))
-    const published = apply(onboarding, {
-      kind: 'record_canary', commandId: 'command:canary:success', ...expectedIdentity(onboarding),
-      canaryRef: 'canary:weather:1', paymentOutcome: 'settled', paid: true,
-      paymentEvidenceDigest: digest('settlement'), contractValid: true, usable: true,
-      resultEvidenceDigest: digest('usable-output'),
-    }, 150)
+  it('publishes after a verified ownership claim and admission', () => {
+    const published = admit(claim(created()))
 
     expect(published.state).toBe('published')
-    expect(published.canaryEvidence).toMatchObject({
-      canaryRef: 'canary:weather:1', paymentOutcome: 'settled', paid: true,
-      contractValid: true, usable: true,
-    })
   })
 
   it('allows a failed ownership claim to be retried but never skipped', () => {
@@ -167,50 +150,8 @@ describe('x402 seller onboarding lifecycle', () => {
     expect(skipped).toEqual({ kind: 'refused', reason: 'invalid_transition' })
   })
 
-  it.each([
-    { paymentOutcome: 'failed' as const, paid: false, contractValid: true, usable: true },
-    { paymentOutcome: 'accepted' as const, paid: false, contractValid: true, usable: true },
-    { paymentOutcome: 'accepted' as const, paid: true, contractValid: false, usable: true },
-    { paymentOutcome: 'settled' as const, paid: true, contractValid: true, usable: false },
-  ])('keeps an unusable or unproved paid canary out of the catalogue: $paymentOutcome/$paid/$contractValid/$usable', (evidence) => {
-    const onboarding = canaryPending(admit(claim(created())))
-    const result = apply(onboarding, {
-      kind: 'record_canary', commandId: `command:canary:failed:${canonicalDigest(evidence)}`,
-      ...expectedIdentity(onboarding), canaryRef: 'canary:weather:1', ...evidence,
-      paymentEvidenceDigest: digest('payment-evidence'),
-      resultEvidenceDigest: digest('result-evidence'),
-    }, 150)
-    expect(result.state).toBe('canary_failed')
-  })
-
-  it('routes ambiguous payment evidence to reconciliation and publishes only after certainty', () => {
-    const onboarding = canaryPending(admit(claim(created())))
-    const uncertain = apply(onboarding, {
-      kind: 'record_canary', commandId: 'command:canary:ambiguous', ...expectedIdentity(onboarding),
-      canaryRef: 'canary:weather:1', paymentOutcome: 'ambiguous', paid: true,
-      paymentEvidenceDigest: digest('ambiguous-payment'), contractValid: true, usable: true,
-      resultEvidenceDigest: digest('usable-output'),
-    }, 150)
-    expect(uncertain.state).toBe('reconciliation_required')
-
-    const reconciled = apply(uncertain, {
-      kind: 'record_reconciliation', commandId: 'command:canary:reconciled',
-      ...expectedIdentity(uncertain), canaryRef: 'canary:weather:1',
-      paymentOutcome: 'accepted', paid: true,
-      paymentEvidenceDigest: digest('accepted-payment'), contractValid: true, usable: true,
-      resultEvidenceDigest: digest('usable-output'),
-    }, 160)
-    expect(reconciled.state).toBe('published')
-  })
-
   it('invalidates publication on any observed tuple drift without mutating the pinned identity', () => {
-    const pending = canaryPending(admit(claim(created())))
-    const published = apply(pending, {
-      kind: 'record_canary', commandId: 'command:canary:success', ...expectedIdentity(pending),
-      canaryRef: 'canary:weather:1', paymentOutcome: 'accepted', paid: true,
-      paymentEvidenceDigest: digest('accepted-payment'), contractValid: true, usable: true,
-      resultEvidenceDigest: digest('usable-output'),
-    }, 150)
+    const published = admit(claim(created()))
     const observedIdentity = { ...identity, providerAmount: '2000' }
     const stale = apply(published, {
       kind: 'observe_identity', commandId: 'command:observe:drift',

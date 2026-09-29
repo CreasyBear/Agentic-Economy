@@ -12,14 +12,22 @@ import {
 const callRef = 'invocation:receipt-view'
 const toolRef = `operation:v1:${'b'.repeat(64)}`
 const releasedReceipt: CallReceipt = {
-  commercialModel: 'seller_canary_x402',
+  commercialModel: 'account_aud',
   receiptRef: 'receipt:released',
   state: 'refunded',
-  network: 'eip155:8453',
-  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  providerQuotedAmount: { currency: 'USDC', units: '100', exponent: 6 },
-  agenticEconomyFee: { currency: 'USDC', units: '10', exponent: 6 },
-  totalBuyerAuthorization: { currency: 'USDC', units: '110', exponent: 6 },
+  buyerCharge: { currency: 'AUD', units: '100', exponent: 6 },
+  serviceFee: { currency: 'AUD', units: '10', exponent: 6 },
+  totalBuyerCharge: { currency: 'AUD', units: '110', exponent: 6 },
+  providerObligation: {
+    amount: { currency: 'USDC', units: '100', exponent: 6 },
+    settlementMethod: 'managed_x402',
+    payoutEligible: false,
+  },
+  providerSettlement: {
+    network: 'eip155:8453',
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    amount: { currency: 'USDC', units: '100', exponent: 6 },
+  },
   priceDigest: 'sha256:released-price',
   transactionRef: 'money:released',
   accountingTransactionRefs: ['money:released'],

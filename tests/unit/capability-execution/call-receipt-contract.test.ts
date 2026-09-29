@@ -9,7 +9,7 @@ import {
 } from '@/modules/capability-execution/call-contracts'
 import { buildBrokeredX402Receipt } from '@/modules/capability-execution/call-runtime'
 import { projectPureCallStatus, reconciliationResult, type RecoveryRow } from '@/modules/capability-execution/convex'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { publishedToolIdentityDigest, type PublishedTool } from '@/modules/capability-supply/public'

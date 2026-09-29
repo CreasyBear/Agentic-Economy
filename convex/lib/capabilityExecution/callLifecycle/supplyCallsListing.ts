@@ -83,9 +83,7 @@ function projectSupplyCallSummary(row: SupplyCallRow) {
       : undefined
   const settledAmount = receipt === undefined || receipt.state !== 'settled'
     ? undefined
-    : receipt.commercialModel === 'account_aud'
-      ? receipt.providerObligation.amount
-      : receipt.providerQuotedAmount
+    : receipt.providerObligation.amount
   return {
     callRef: row.callRef,
     toolRef: row.toolRef,

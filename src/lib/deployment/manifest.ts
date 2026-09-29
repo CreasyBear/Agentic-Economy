@@ -222,11 +222,6 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
     }),
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
     Object.freeze({ id: 'formance-financial-authority', kind: 'private-formance-community-stack', declaration: 'Cloudflare Access protected Gateway; Ledger and managed PostgreSQL remain private.' }),
-    Object.freeze({
-      id: 'seller-onboarding-canary-funding',
-      kind: 'convex-agent-access-funding-authority',
-      declaration: 'Fixed AE-owned sandbox principal and exact grant; CDP development custody and Base Sepolia RPC are checked by an internal read-only readiness query.',
-    }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-call-worker', 'operation-recovery-worker']) }),
     Object.freeze({
       id: 'durable-stripe-webhook-inbox',

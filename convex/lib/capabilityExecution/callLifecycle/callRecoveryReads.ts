@@ -8,7 +8,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { OwnerCallContext } from '@/modules/capability-execution/call-recovery-contracts'
 import { callResultValue, usageValue } from '@/modules/capability-execution/convex'
-import { createPublicToolRef, parsePublishedToolSnapshot, type SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
+import { createPublicToolRef, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import { assertCallResultJson } from './callIdentity'
 import { callState, environment, ownerCallContextValue, recoveryValue } from './contracts'
 
@@ -91,7 +91,6 @@ export type RecoveryRow = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   toolRef: string
-  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   inputDigest: string
   requestDigest: string
   grantGeneration: number
@@ -127,9 +126,6 @@ function projectRecoveryRow(row: CallRow): RecoveryRow | null {
     environment: row.environment,
     state: row.state,
     toolRef: row.toolRef,
-    ...(row.sellerOnboardingCanary === undefined
-      ? {}
-      : { sellerOnboardingCanary: structuredClone(row.sellerOnboardingCanary) }),
     inputDigest: row.inputDigest,
     requestDigest: row.requestDigest,
     grantGeneration: row.grantGeneration,

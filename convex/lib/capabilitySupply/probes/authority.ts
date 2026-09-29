@@ -1,7 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
 } from '@/modules/capability-supply/convex'
 import { v, type Infer } from 'convex/values'
 import type { Id } from '../../../_generated/dataModel'
@@ -95,9 +94,6 @@ export async function readCurrentCapabilityProbeAuthority(
     && publication.runtimeEnvironment === 'sandbox'
     && publication.authorityMode === 'provider_owned'
     && publication.sourceKind === 'x402'
-    && (publication.registrationEvidenceRefs ?? []).filter(
-      (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-    ).length === 1
   if (business === null
     || business.suppressedAt !== undefined
     || (business.publicStatus !== 'published' && !exactOwnerStagedBusiness
@@ -158,7 +154,6 @@ export async function readCurrentCapabilityProbeAuthority(
   if (
     publication.publisherRef === DEV_SEED_CATALOG_PUBLISHER_REF
     && publication.authorityMode === 'ae_curated_external'
-    && business.owningAccountRef === DEV_SEED_CATALOG_ACCOUNT_REF
   ) {
     const seedAuthority = await readDevSeedCatalogProbeAuthority(ctx, publication, args.now)
     if (seedAuthority !== null) return seedAuthority
@@ -364,10 +359,7 @@ export async function ownerStagedProbeBusinessIsAllowed(
     || (publication.runtimeEnvironment !== 'sandbox'
       && publication.runtimeEnvironment !== 'production')
     || publication.authorityMode !== 'provider_owned'
-    || publication.sourceKind !== 'x402'
-    || (publication.registrationEvidenceRefs ?? []).filter(
-      (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-    ).length !== 1) return false
+    || publication.sourceKind !== 'x402') return false
   const business = await ctx.db.get(args.businessId)
   return business !== null
     && (business.publicStatus === 'unpublished' || business.publicStatus === 'published')

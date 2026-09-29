@@ -156,12 +156,11 @@ function recordX402RecoveryStage(
 }
 
 function x402EvidenceFacts(work: RecoveryWorkContext, submitted: X402Evidence) {
-  const { recovered, operation, x402Attempt } = work
+  const { operation, x402Attempt } = work
   const providerRef = recoveryProviderRef(operation)
   if (
     x402Attempt === null
     || providerRef === undefined
-    || recovered.sellerOnboardingCanary !== undefined
     || work.managedReservation === null
     || x402Attempt.reservationRef === undefined
   ) return undefined
@@ -358,7 +357,6 @@ async function persistX402Money(
   submitted: X402Evidence,
   observedAt: number,
 ): Promise<boolean> {
-  if (work.recovered.sellerOnboardingCanary !== undefined) return false
   const payment = await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, {
     dispatchRef: work.recovered.callRef,
     attemptRef: submitted.attemptRef,

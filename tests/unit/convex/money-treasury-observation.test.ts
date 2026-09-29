@@ -10,7 +10,7 @@ import {
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 
 import { observeTreasuryHandler } from '../../../convex/moneyTreasuryObservation'
-import type { CdpUsdcBalanceReader } from '../../../convex/capabilitySupplyCanaryFundingPreflight'
+import type { CdpUsdcBalanceReader } from '../../../convex/lib/money/cdpUsdcBalance'
 import schema from '../../../convex/schema'
 import type { Doc } from '../../../convex/_generated/dataModel'
 

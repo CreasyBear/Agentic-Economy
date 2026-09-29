@@ -18,9 +18,6 @@ export {
 } from './internal/x402-payment-signer'
 export { validPublicHttpsEndpoint } from './internal/transport-adapters'
 export {
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-} from './internal/x402-seller-onboarding/admission'
-export {
   bindingIntegrityIsValid,
 } from './internal/binding'
 export {

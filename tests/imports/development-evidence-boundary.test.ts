@@ -2,9 +2,10 @@ import { existsSync, globSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 /**
- * Development evidence fixtures and the file-backed x402 payment-attempt
- * fixture live under tools/dev/fixtures; production runtime authorities remain
- * in src.
+ * Capability-supply development evidence fixtures live under
+ * tests/unit/capability-supply/fixtures. The file-backed x402 payment-attempt
+ * fixture remains under tools/dev/fixtures. Production runtime authorities
+ * remain in src.
  */
 
 const deployableGlobs = [
@@ -64,20 +65,20 @@ describe('development evidence boundary', () => {
     expect(offenders).toEqual([])
   })
 
-  it('keeps development fixtures owned by tools/dev/fixtures', () => {
+  it('keeps capability-supply development fixtures in the unit fixture directory', () => {
     const expectedCapabilitySupplyFixtures = [
-      'tools/dev/fixtures/capability-supply/development-alternate-published-tool-evidence.ts',
-      'tools/dev/fixtures/capability-supply/development-evidence-continuity.ts',
-      'tools/dev/fixtures/capability-supply/development-evidence-fixture.ts',
-      'tools/dev/fixtures/capability-supply/development-evidence-executions.ts',
-      'tools/dev/fixtures/capability-supply/development-evidence-scenario.ts',
-      'tools/dev/fixtures/capability-supply/development-published-tool-evidence.ts',
+      'tests/unit/capability-supply/fixtures/development-alternate-published-tool-evidence.ts',
+      'tests/unit/capability-supply/fixtures/development-evidence-continuity.ts',
+      'tests/unit/capability-supply/fixtures/development-evidence-fixture.ts',
+      'tests/unit/capability-supply/fixtures/development-evidence-executions.ts',
+      'tests/unit/capability-supply/fixtures/development-evidence-scenario.ts',
+      'tests/unit/capability-supply/fixtures/development-published-tool-evidence.ts',
     ].sort()
 
     expect(globSync('src/modules/capability-supply/development-*.ts')).toEqual([])
     expect(existsSync('src/modules/capability-supply/btc-usd-quote-result.ts')).toBe(false)
     expect(existsSync('src/modules/action-execution/development-file-x402-payment-attempt-port.ts')).toBe(false)
-    expect(globSync('tools/dev/fixtures/capability-supply/*.ts').sort()).toEqual(
+    expect(globSync('tests/unit/capability-supply/fixtures/*.ts').sort()).toEqual(
       expectedCapabilitySupplyFixtures,
     )
     expect(globSync('tools/dev/fixtures/action-execution/*.ts')).toEqual([

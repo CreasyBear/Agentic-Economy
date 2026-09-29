@@ -35,9 +35,6 @@ export async function openDispatchHandler(
     environment: row.environment,
     state: row.state,
     toolRef: row.toolRef,
-    ...(row.sellerOnboardingCanary === undefined
-      ? {}
-      : { sellerOnboardingCanary: structuredClone(row.sellerOnboardingCanary) }),
     idempotencyKey: row.idempotencyKey,
     inputDigest: row.inputDigest,
     requestDigest: row.requestDigest,

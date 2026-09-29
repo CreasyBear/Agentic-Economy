@@ -34,7 +34,7 @@ import {
   paymentPayloadFromMaterial,
   readPersistedUnsignedMaterial,
 } from './cdp-x402-payment-material'
-import { cdpX402PolicyRulesDigest, cdpX402SellerCanaryPolicyIsExact } from './cdp-x402-payment-policy'
+import { cdpX402PolicyRulesDigest, cdpX402ManagedPolicyIsExact } from './cdp-x402-payment-policy'
 import {
   hasPolicy,
   isRecoverableUnsignedMaterial,
@@ -138,7 +138,7 @@ export async function createCdpEvmX402PaymentSignature(
       || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
     ) return undefined
     if (
-      !cdpX402SellerCanaryPolicyIsExact(
+      !cdpX402ManagedPolicyIsExact(
         accountPolicy,
         projectPolicy,
         account.address,

@@ -2,11 +2,9 @@ import { Response as UndiciResponse } from 'undici'
 import { expect, vi } from 'vitest'
 import { encodePaymentRequiredHeader } from '@x402/core/http'
 import type { PaymentRequired } from '@x402/core/types'
-import type { WorkId } from '@convex-dev/workpool'
 import { privateKeyToAccount } from 'viem/accounts'
 
 import { api, internal } from '../../convex/_generated/api'
-import type { Id } from '../../convex/_generated/dataModel'
 import {
   convexTestWithWorkers,
   createTestAgentPrincipal,
@@ -35,17 +33,6 @@ import { createFormanceContext, installPackage4FormanceSchema } from '@/modules/
 import { bookFormanceFundingSettlement, readFormanceDisplayBalance } from '@/modules/money/formance-workflows'
 import { BASE_MAINNET_NETWORK, BASE_MAINNET_USDC_ADDRESS, BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS, cdpX402CustodyConfigurationFromEnvironment,
   cdpX402CustodyBudgetRef, cdpX402PolicyRulesDigest } from '@/modules/capability-supply/server'
-import {
-  SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
-  SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
-  SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
-  SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
-  SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
-  SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
-  SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
-  SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
-} from '../../convex/capabilitySupplyCanaryFunding'
-import { marketDispatchWorkpool } from '../../convex/marketDispatchWorkpool'
 import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 
 
@@ -134,118 +121,6 @@ export type PrepareBuyerOptions = {
   buyerSetup?: (backend: ConvexFixtureBackend) => Promise<{ principal: TestPrincipal; grantRef: string }>
 }
 
-async function promotePaidBuyerFixtureAfterSellerCanary(input: Readonly<{
-  backend: ConvexFixtureBackend
-  owner: ReturnType<ConvexFixtureBackend['withIdentity']>
-  businessId: Id<'businesses'>
-  offeringRef: string
-  sourceHash: string
-  publicationRef: string
-  publicationRevision: number
-  toolRef: string
-}>): Promise<void> {
-  await input.backend.mutation(
-    internal.capabilitySupplyCanaryFunding.provisionSellerOnboardingCanaryFunding,
-    { now: Date.now() },
-  )
-  const command = await withSourceWrite('catalog_publish', {
-    businessId: input.businessId,
-    offeringRef: input.offeringRef,
-    offeringRevision: 1,
-    offeringSourceHash: input.sourceHash,
-    publicationRef: input.publicationRef,
-    publicationRevision: input.publicationRevision,
-    operationKey: 'buyer-journey:seller-canary',
-    correlationId: 'buyer-journey:seller-canary',
-  })
-  const readiness = await input.owner.action(
-    internal.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
-    command,
-  )
-  expect(readiness).toMatchObject({
-    step: 'readiness', state: 'completed', publicationRef: input.publicationRef, toolRef: input.toolRef,
-  })
-  const requested = await input.owner.action(
-    internal.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
-    command,
-  )
-  if (requested.state !== 'completed'
-    || requested.canaryRef === undefined
-    || requested.callRef === undefined) {
-    throw new Error(`buyer_seller_canary_request_failed:${JSON.stringify(requested)}`)
-  }
-  const call = await input.backend.run(async (ctx) => ctx.db.query('capabilityCalls')
-    .withIndex('by_callRef', (query) => query.eq('callRef', requested.callRef!))
-    .unique())
-  if (call?.sellerOnboardingCanary === undefined) throw new Error('buyer_seller_canary_call_missing')
-  if (call.workId === undefined) throw new Error('buyer_seller_canary_work_missing')
-  const canaryWorkId = call.workId as WorkId
-  expect(call.sellerOnboardingCanary.funding).toMatchObject({
-    budgetRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
-    principalId: SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
-    ownerId: SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
-    credentialId: SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
-    applicationRef: SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
-    grantRef: SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
-    grantGeneration: SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
-    requestedSpend: {
-      currency: 'USD',
-      units: SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
-      exponent: 6,
-    },
-  })
-  const completedAt = Date.now()
-  const output = { result: 'contract-valid canary output' }
-  const evidenceHash = canonicalDigest({ canaryRef: requested.canaryRef, output })
-  const quoted = call.sellerOnboardingCanary.funding.requestedSpend
-  const zero = { currency: quoted.currency, units: '0', exponent: quoted.exponent }
-  await input.backend.mutation(internal.capabilityCalls.record, {
-    callRef: call.callRef,
-    principalId: call.principalId,
-    state: 'completed',
-    dispatchState: 'completed',
-    result: {
-      kind: 'completed', callRef: call.callRef, toolRef: call.toolRef, output, evidenceHash,
-      receipt: {
-        commercialModel: 'seller_canary_x402',
-        receiptRef: `seller-canary-receipt:${requested.canaryRef}:controlled-worker`,
-        state: 'settled',
-        providerQuotedAmount: quoted,
-        agenticEconomyFee: zero,
-        totalBuyerAuthorization: zero,
-        priceDigest: call.sellerOnboardingCanary.priceDigest,
-        network: BASE_SEPOLIA_NETWORK,
-        asset: BASE_SEPOLIA_USDC_ADDRESS,
-        settlementTransactionHash: `0x${'1'.repeat(64)}`,
-        paymentIdentifier: `seller-canary-payment:${requested.canaryRef}`,
-        externalSettlementRef: `seller-canary-settlement:${requested.canaryRef}`,
-        refundState: 'not_applicable',
-        lossState: 'none',
-        evidenceHash,
-        issuedAt: new Date(completedAt).toISOString(),
-      },
-    },
-    evidenceHash,
-    now: completedAt,
-  })
-  expect(await input.backend.mutation(
-    internal.catalogOfferingMutations.promoteAdmittedSellerCanary,
-    { canaryRef: requested.canaryRef },
-  )).toMatchObject({ kind: 'promoted', toolRef: input.toolRef })
-  await input.backend.run(async (ctx) => await marketDispatchWorkpool.cancel(ctx, canaryWorkId))
-  await input.backend.finishAllScheduledFunctions(vi.runAllTimers)
-  expect(await input.backend.run(async (ctx) => await marketDispatchWorkpool.status(ctx, canaryWorkId)))
-    .toEqual({ state: 'finished' })
-  expect(await input.backend.mutation(
-    internal.catalogOfferingMutations.promoteAdmittedSellerCanary,
-    { canaryRef: requested.canaryRef },
-  )).toMatchObject({ kind: 'replayed', toolRef: input.toolRef })
-  const buyerLedger = await input.backend.run(async (ctx) => ({
-    usage: await ctx.db.query('moneyUsageEvents').collect(),
-    obligations: await ctx.db.query('moneyProviderObligations').collect(),
-  }))
-  expect(buyerLedger).toEqual({ usage: [], obligations: [] })
-}
 
 export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   mocks: FundedSandboxBuyerMocks
@@ -497,20 +372,7 @@ async function prepareFundedBuyer(options: PrepareBuyerOptions & {
     validUntil: Date.now() + 3_600_000, operationKey: 'buyer-journey:ready', correlationId: 'buyer-journey',
     reasonCode: 'test_readiness', evidenceRefs: ['test:buyer-journey'],
   })).toMatchObject({ kind: 'observed' })
-  if (environment === 'sandbox') {
-    await promotePaidBuyerFixtureAfterSellerCanary({
-      backend,
-      owner: provider.owner,
-      businessId: provider.businessId,
-      offeringRef,
-      sourceHash,
-      publicationRef: published.publicationRef,
-      publicationRevision: published.publicationRevision,
-      toolRef: published.toolRef,
-    })
-  } else {
-    await admitPublication(backend, published, 'buyer-journey-production')
-  }
+  await admitPublication(backend, published, `buyer-journey-${environment}`)
   const qualification = await backend.run(async (ctx) => {
     const row = await ctx.db.query('capabilityPublications').withIndex('by_publicationRef_and_revision', q => q
       .eq('publicationRef', published.publicationRef).eq('revision', published.publicationRevision)).unique()

@@ -487,11 +487,6 @@ export {
   type EvmAddress,
   type Hex,
 } from './internal/x402-evm-protocol'
-export {
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-  x402SellerCanaryAdmissionEvidenceRef,
-  x402SellerCanaryAdmissionIsSatisfied,
-} from './internal/x402-seller-onboarding/admission'
 
 export {
   buildX402AttemptObservation,
@@ -501,38 +496,17 @@ export {
 } from './internal/x402-payment-lifecycle'
 
 export {
-  SELLER_ONBOARDING_CANARY_PURPOSE,
-  createSellerOnboardingCanaryCommitment,
   createX402SellerOnboarding,
-  evaluateX402SellerPromotion,
-  projectSellerOnboardingCanaryStatus,
-  sellerCanaryCompletionEvidenceMatches,
-  sellerOnboardingCanaryExecutionEnvelope,
   transitionX402SellerOnboarding,
   validX402SellerIdentity,
   x402SellerIdentityDigest,
 } from './internal/x402-seller-onboarding'
 export type {
-  CreateSellerOnboardingCanaryInput,
   CreateX402SellerOnboardingCommand,
-  CurrentSellerCanaryQuote,
-  EvaluateX402SellerPromotionInput,
-  OperationExecutionPurpose,
-  SellerCanaryOutputEvidenceRequirement,
-  SellerOnboardingCanaryCommitment,
-  SellerOnboardingCanaryExecutionEnvelope,
-  SellerOnboardingCanaryInvocationObservation,
-  SellerOnboardingCanaryPromotionEvidence,
-  SellerOnboardingCanaryStatus,
-  X402CanaryEvidence,
-  X402CanaryPaymentOutcome,
   X402SellerIdentity,
   X402SellerOnboarding,
   X402SellerOnboardingCommand,
   X402SellerOnboardingRefusal,
   X402SellerOnboardingResult,
   X402SellerOnboardingState,
-  X402SellerPromotionAnchor,
-  X402SellerPromotionRefusal,
-  X402SellerPromotionResult,
 } from './internal/x402-seller-onboarding'

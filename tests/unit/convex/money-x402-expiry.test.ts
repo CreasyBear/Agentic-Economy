@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import schema from '../../../convex/schema'
 import { internal } from '../../../convex/_generated/api'
 import type { ActionCtx } from '../../../convex/_generated/server'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 
 const rpc = vi.hoisted(() => ({ read: vi.fn(), targets: vi.fn() }))
 vi.mock('@/modules/capability-supply/internal/x402-evm-receipt-reader', () => ({ readGuardedX402UnusedAuthorization: rpc.read }))

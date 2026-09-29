@@ -18,7 +18,6 @@ export async function persistedPaidCallConsequenceIsAdmitted(
   if (call === null || call.authority === undefined || attempt.reservationRef === undefined
     || attempt.submissionStartedAt === undefined) return false
   if (![
-    call.sellerOnboardingCanary === undefined,
     call.state === 'reconciliation_required' || call.state === 'completed',
     call.quoteRef !== undefined,
     call.toolRef === attempt.toolRef,

@@ -883,8 +883,7 @@ describe('capability Call Workpool lifecycle', () => {
     if (winner?.kind !== 'pending') throw new Error('period_race_winner_missing')
     const booking = await backend.query(internal.moneyManagedCall.readBooking, { callRef: winner.callRef })
     if (booking.kind !== 'available' || booking.booking.spendingPeriods === undefined) throw new Error('period_race_booking_missing')
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
     expect(await quote('period-race-refreshed')).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
     const key = 'period-race-cancel'
@@ -999,8 +998,7 @@ describe('capability Call Workpool lifecycle', () => {
       kind: 'refused', code: 'commercial_policy_unavailable', retryable: false,
       nextAction: 'Request a new Quote for this Tool to check current funds and spending limits. Contact AE support if the purchase remains unavailable.',
     })
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     const shortfall = await quote('funds-refresh')
     expect(shortfall).toMatchObject({ kind: 'refused', code: 'insufficient_balance', retryable: false })
     if (shortfall.kind !== 'refused' || shortfall.continuation?.action !== 'funding.handoff.create') throw new Error('funds_handoff_missing')
@@ -1091,8 +1089,7 @@ describe('capability Call Workpool lifecycle', () => {
       expect(newQuote).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
     }
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     const cancel = async (callRef: string, key: string) => await backend.action(api.capabilityCalls.cancelCall, {
       ...await recoveryActionArgs(successor, callRef, key, `cancel:${key}`), idempotencyKey: key,
     })
@@ -1148,8 +1145,7 @@ describe('capability Call Workpool lifecycle', () => {
       principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, quoteRef: stale.quoteRef,
       idempotencyKey: 'stale-policy-call', operationKey: 'stale-policy-call', correlationId: 'stale-policy-call',
     }))).toMatchObject({ kind: 'refused', code: 'operation_not_current' })
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', stale.quoteRef)).unique()))
       .toMatchObject({ state: 'issued' })
     expect(await quote('lowered')).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
@@ -1248,8 +1244,7 @@ describe('capability Call Workpool lifecycle', () => {
         expect(await readFormanceDisplayBalance(formance, { balanceKind, subjectRef, generation, now: Date.now() }))
           .toMatchObject({ kind: 'available', units })
       }
-      const rows = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-        .filter((row) => row.sellerOnboardingCanary === undefined))
+      const rows = await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())
       expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({ callRef: winner.callRef, formanceFinancialState: 'reserved' })
       expect(signedAuthorizations).toHaveLength(0)
@@ -1380,7 +1375,6 @@ describe('capability Call Workpool lifecycle', () => {
     const beforeWork = await readEvidence(backend, pending.callRef)
     expect(beforeWork.call).toMatchObject({ formanceFinancialState: 'reserved' })
     if (beforeWork.call?.workId === undefined) throw new Error('buyer_work_missing')
-    expect(beforeWork.call?.sellerOnboardingCanary).toBeUndefined()
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
     if (policyUpdatePhase === 'before_dispatch') await updatePolicyForAcceptedCall()
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
@@ -1520,8 +1514,7 @@ describe('capability Call Workpool lifecycle', () => {
       expect(await readBalance()).toMatchObject(balanceAfter)
       expect(deliveries).toHaveLength(1)
       expect(signedAuthorizations).toHaveLength(1)
-      expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-        .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+      expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     } finally {
       restoreTerminalTransport()
       await terminalServer.close()
@@ -1532,8 +1525,7 @@ describe('capability Call Workpool lifecycle', () => {
     expect(replay).toMatchObject({ kind: 'completed', callRef: pending.callRef, output: providerOutput })
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
-    const rows = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))
+    const rows = await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())
     expect(rows).toHaveLength(1)
     expect(rows[0]?.formanceReservationRefs).toEqual(reservations)
     expect(rows[0]?.formanceSettlementRefs).toEqual(settlements)
@@ -1615,9 +1607,6 @@ describe('capability Call Workpool lifecycle', () => {
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each(['before claim', 'after possible submission'] as const)(
     'resumes a paid Call from fresh installed CLI processes after acknowledgement loss %s', async (interruption) => {
       const { backend, published, buyer, resource, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer({})
-      const platformCanaries = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-        .filter((row) => row.sellerOnboardingCanary !== undefined))
-      expect(platformCanaries).toHaveLength(1)
       await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
       let paidRequests = 0
       providerFetch.mockImplementation(async (_url, init) => {
@@ -1658,8 +1647,7 @@ describe('capability Call Workpool lifecycle', () => {
         expect(first).toMatchObject({ status: 1, result: { code: 'call-transport-unknown' } })
         const recoveryRef = (first.result.detail as { recoveryRef: string }).recoveryRef
         expect(recoveryRef).toEqual(expect.any(String))
-        const calls = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-          .filter((row) => row.sellerOnboardingCanary === undefined))
+        const calls = await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())
         expect(calls).toHaveLength(1)
         const callRef = calls[0]!.callRef
         const reservationRefs = calls[0]!.formanceReservationRefs
@@ -1698,8 +1686,7 @@ describe('capability Call Workpool lifecycle', () => {
         expect(await readBalance()).toMatchObject({ kind: 'available', units: interruption === 'before claim' ? '10000000' : '9988000' })
         expect(paidRequests).toBe(interruption === 'before claim' ? 0 : 1)
         expect(signedAuthorizations).toHaveLength(paidRequests)
-        expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-          .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+        expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
         expect(await runFreshCli(['call', 'resume', recoveryRef])).toMatchObject({ status: 0, result: { callRef } })
         expect(await readBalance()).toMatchObject({ kind: 'available', units: interruption === 'before claim' ? '10000000' : '9988000' })
         expect(paidRequests).toBe(interruption === 'before claim' ? 0 : 1)
@@ -1771,8 +1758,7 @@ describe('capability Call Workpool lifecycle', () => {
           expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
           expect(paidRequests).toBe(0)
           expect(signedAuthorizations).toHaveLength(0)
-          expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-            .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+          expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
         }
         if (interruption === 'after possible submission') {
           const statusResponse = await fetch(`${served.origin}/api/v1/calls/${encodeURIComponent(callRef)}`, {
@@ -1842,8 +1828,7 @@ describe('capability Call Workpool lifecycle', () => {
           expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
           expect(paidRequests).toBe(1)
           expect(signedAuthorizations).toHaveLength(1)
-          expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-            .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+          expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
           expect(current.receipt).toMatchObject({
             state: 'reconciliation_required',
             totalBuyerCharge: { currency: 'AUD', units: '12000', exponent: 6 },
@@ -1868,8 +1853,7 @@ describe('capability Call Workpool lifecycle', () => {
           expect(reconciled, JSON.stringify(reconciled)).toMatchObject({ status: 0, result: { kind: 'found', callRef, state: 'reconciliation_required' } })
           const freshPurchase = await runFreshCli(['call', published.toolRef, '--input', JSON.stringify(INPUT)])
           expect(freshPurchase).toMatchObject({ status: 1, result: { code: 'call-recovery-required' } })
-          expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-            .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+          expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
           expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
           expect(paidRequests).toBe(1)
           expect(signedAuthorizations).toHaveLength(1)

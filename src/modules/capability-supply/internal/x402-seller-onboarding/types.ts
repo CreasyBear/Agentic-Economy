@@ -3,10 +3,6 @@ export const X402_SELLER_ONBOARDING_STATES = [
   'claim_pending',
   'claimed',
   'claim_failed',
-  'admitted',
-  'canary_pending',
-  'canary_failed',
-  'reconciliation_required',
   'published',
   'stale',
   'withdrawn',
@@ -36,18 +32,6 @@ export type X402SellerIdentity = Readonly<{
   pricingDigest: string
 }>
 
-export type X402CanaryPaymentOutcome = 'accepted' | 'settled' | 'failed' | 'ambiguous'
-
-export type X402CanaryEvidence = Readonly<{
-  canaryRef: string
-  paymentOutcome: X402CanaryPaymentOutcome
-  paid: boolean
-  paymentEvidenceDigest: string
-  contractValid: boolean
-  usable: boolean
-  resultEvidenceDigest: string
-}>
-
 export type X402SellerOnboardingCommandReceipt = Readonly<{
   commandId: string
   commandDigest: string
@@ -60,8 +44,6 @@ export type X402SellerOnboarding = Readonly<{
   state: X402SellerOnboardingState
   claimEvidenceDigest?: string
   admissionEvidenceDigest?: string
-  activeCanaryRef?: string
-  canaryEvidence?: X402CanaryEvidence
   observedDriftDigest?: string
   withdrawalEvidenceDigest?: string
   commandReceipts: readonly X402SellerOnboardingCommandReceipt[]
@@ -89,9 +71,6 @@ export type X402SellerOnboardingCommand =
       evidenceDigest: string
     }>)
   | (ExpectedIdentity & Readonly<{ kind: 'admit'; evidenceDigest: string }>)
-  | (ExpectedIdentity & Readonly<{ kind: 'request_canary'; canaryRef: string }>)
-  | (ExpectedIdentity & Readonly<{ kind: 'record_canary' } & X402CanaryEvidence>)
-  | (ExpectedIdentity & Readonly<{ kind: 'record_reconciliation' } & X402CanaryEvidence>)
   | (ExpectedIdentity & Readonly<{ kind: 'observe_identity'; observedIdentity: X402SellerIdentity }>)
   | (ExpectedIdentity & Readonly<{ kind: 'withdraw'; evidenceDigest: string }>)
 

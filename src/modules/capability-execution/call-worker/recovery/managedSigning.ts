@@ -189,7 +189,6 @@ async function reconcileManagedSigningMoney(
   replay: ManagedSigningReplay,
   prepared: ManagedSigningPreparedEvidence,
 ): Promise<boolean> {
-  if (work.recovered.sellerOnboardingCanary !== undefined) return false
   const money = await ctx.runAction(
     internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
     {

@@ -50,17 +50,9 @@ import {
   readX402PaymentAuthorizationHandler,
   readX402PaymentAuthorizationReturns,
 } from './lib/money/x402PaymentAttempt/read'
-import { prepareSellerOnboardingCanaryPaymentAuthorizationHandler } from './lib/money/x402PaymentAttempt/canary'
 import { beginResponseRecoveryHandler, responseRecoveryIsCurrentHandler } from './lib/money/x402PaymentAttempt/responseRecovery'
 import { persistedCallAuthorityIsCurrent } from './lib/money/billingAuthorization/persistedCall'
 import { persistedPaidCallConsequenceIsAdmitted } from './lib/capabilityExecution/callLifecycle/paidConsequenceAdmission'
-
-/** Platform validation uses the same durable signing attempt, without a buyer reservation. */
-export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutation({
-  args: prepareX402PaymentAuthorizationArgs,
-  returns: prepareX402PaymentAuthorizationReturns,
-  handler: prepareSellerOnboardingCanaryPaymentAuthorizationHandler,
-})
 
 export const prepareX402PaymentAuthorization = internalMutation({
   args: prepareX402PaymentAuthorizationArgs,

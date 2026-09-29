@@ -10,8 +10,8 @@ export async function assertBuyerCompletedCall(
       .eq('principalId', principalId)
       .eq('toolRef', toolRef)
       .eq('state', 'completed'))
-    .take(8)
-  if (!completedCall.some(row => row.sellerOnboardingCanary === undefined)) {
+    .take(1)
+  if (completedCall.length === 0) {
     throw new Error('market_rating_completed_call_required')
   }
 }

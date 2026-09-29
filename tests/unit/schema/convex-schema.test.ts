@@ -78,7 +78,6 @@ const durableTables = [
   'purchaseResolutionRecords',
   'capabilityQuotes',
   'capabilityCalls',
-  'sellerOnboardingCanaryRearmAudits',
   'providerConsequenceJournal',
   'capabilityPublications',
   'capabilityProviderToolProjections',
@@ -294,7 +293,6 @@ const requiredIndexes = {
     'by_state_and_expiresAt',
     'by_createdAt',
   ],
-  sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_callRef', 'by_canaryRef'],
   providerConsequenceJournal: [
     'by_ticketRef',
     'by_effectRef',
@@ -456,7 +454,6 @@ describe('Convex schema', () => {
     expectIndexFields('capabilityCalls', 'by_principalId_and_callRef', ['principalId', 'callRef'])
     expectIndexFields('capabilityCalls', 'by_toolRef_and_state', ['toolRef', 'state'])
     expectIndexFields('capabilityCalls', 'by_principalId_and_toolRef_and_state', ['principalId', 'toolRef', 'state'])
-    expectIndexFields('sellerOnboardingCanaryRearmAudits', 'by_callRef', ['callRef'])
     expectIndexFields('moneyProviderObligations', 'by_callRef', ['callRef'])
     expectIndexFields('moneyUsageEvents', 'by_callRef', ['callRef'])
     expectIndexFields('businesses', 'by_owningAccountRef_and_publicStatus', ['owningAccountRef', 'publicStatus'])

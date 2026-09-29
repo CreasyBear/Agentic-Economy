@@ -1,12 +1,4 @@
-import { createWorker, mocks } from './capability-call-worker-harness'
 import { getFunctionName } from 'convex/server'
-import { Agent } from 'undici'
-import {
-  createManagedX402PaymentCallbacks,
-  X402_MANAGED_CUSTODY_REF,
-} from '@/modules/capability-execution/call-runtime'
-import { provisionSellerOnboardingCanaryFunding } from '../../../convex/capabilitySupplyCanaryFunding'
-import { callAttemptIdentityDigest } from '../../../convex/capabilityCallIdentity'
 import {
   BASE_MAINNET_NETWORK,
   BASE_MAINNET_USDC_ADDRESS,
@@ -24,7 +16,6 @@ import {
   markX402PaymentPossiblySubmitted,
   observeX402PaymentAttempt,
   prepareX402PaymentAuthorization,
-  prepareSellerOnboardingCanaryPaymentAuthorization,
   readX402PaymentAttempt,
   readX402PaymentAuthorization,
   readX402PaymentAuthorizationByDigest,
@@ -101,164 +92,6 @@ const recoveryIsCurrent = (responseRecoveryIsCurrent as unknown as HandlerExport
 const reconcile = (reconcileX402PaymentAttempt as unknown as HandlerExport)._handler
 const listExpiredPrepared = (listExpiredPreparedX402PaymentAttempts as unknown as HandlerExport)._handler
 const queueExpired = (queueExpiredX402Authorization as unknown as HandlerExport)._handler
-
-describe('platform-funded validation payment preparation', () => {
-  async function fixture() {
-    const db = new MemoryDb()
-    await (provisionSellerOnboardingCanaryFunding as unknown as HandlerExport)._handler({ db }, { now: Date.now() })
-    const grant = db.rows('agentAccessGrants')[0]!
-    await db.patch(grant._id, { _creationTime: Date.now() })
-    const worker = createWorker('x402', { sellerCanary: true })
-    const original = worker.state.dispatch
-    const oldEnvelope = original.sellerOnboardingCanary as Record<string, unknown>
-    const requestedSpend = { currency: 'USD', units: '1', exponent: 6 }
-    const call: Record<string, unknown> = {
-      ...original, dispatchState: 'running', attemptRef: 'attempt:test',
-      ownerId: grant.ownerId, principalId: grant.principalId, credentialId: grant.credentialId,
-      applicationRef: grant.applicationRef, grantRef: grant.grantRef,
-      grantGeneration: grant.generation, policyDigest: grant.spendingPolicyDigest,
-      grantExpiresAt: grant.expiresAt,
-      sellerOnboardingCanary: {
-        ...oldEnvelope,
-        funding: {
-          kind: 'ae_owned', ownerId: grant.ownerId, principalId: grant.principalId,
-          credentialId: grant.credentialId, applicationRef: grant.applicationRef,
-          grantRef: grant.grantRef, grantGeneration: grant.generation,
-          policyDigest: grant.spendingPolicyDigest, budgetRef: grant.budgetPolicyRef,
-          requestedSpend, maximumSpend: { ...requestedSpend, units: '10000' },
-          ledgerEffects: 'external_spend_only',
-        },
-      },
-    }
-    db.seedTable('capabilityCalls', { _id: 'call:validation', ...call })
-    db.seedTable('actionExecutionControls', actionControlRow({
-      executionRef: call.callRef,
-      control: { executionRef: call.callRef, executionVersion: 2, control: {
-        state: 'leased', attemptRef: 'attempt:test', effectGeneration: 1,
-        leaseOwner: 'worker:test', leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-        release: 'not_started',
-      } },
-    }))
-    const args = prepareArgs({
-      aeEnvironment: 'sandbox',
-      dispatchRef: call.callRef, toolRef: call.toolRef, inputDigest: call.inputDigest,
-      reservationRef: undefined, credentialRef: X402_MANAGED_CUSTODY_REF, currency: 'USD', amountUnits: requestedSpend.units,
-      network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS,
-      payTo: oldEnvelope.sellerPayTo, providerEndpoint: worker.state.operation.binding.endpointUrl,
-      custodyBudgetRef: 'custody:platform-validation', custodyGeneration: 1,
-      custodyDailyMaximumUnits: '50000',
-    })
-    const identifier = callAttemptIdentityDigest({
-      callRef: String(call.callRef), toolRef: String(call.toolRef), inputDigest: String(call.inputDigest),
-      principalId: String(call.principalId), credentialId: String(call.credentialId),
-      applicationRef: String(call.applicationRef), environment: 'sandbox',
-      idempotencyKey: String(call.idempotencyKey), attemptRef: String(args.attemptRef), effectGeneration: 1,
-    })
-    args.paymentIdentifier = identifier
-    args.operationKeyDigest = identifier
-    return { db, args, call, operation: worker.state.operation }
-  }
-  const prepareCanary = (prepareSellerOnboardingCanaryPaymentAuthorization as unknown as HandlerExport)._handler
-
-  it('prepares and replays one durable payment without a buyer reservation', async () => {
-    const { db, args } = await fixture()
-    const first = await prepareCanary({ db }, args)
-    await expect(prepareCanary({ db }, args)).resolves.toEqual(first)
-    expect(db.rows('moneyX402PaymentAttempts')).toHaveLength(1)
-    expect(db.rows('moneyX402PaymentAttempts')[0]?.reservationRef).toBeUndefined()
-    expect(db.rows('moneyManagedCallReservations')).toHaveLength(0)
-  })
-
-  it('routes custody preparation through platform authorization without querying buyer funds', async () => {
-    const { db, args, call, operation } = await fixture()
-    const configured = mocks.cdpX402CustodyConfigurationFromEnvironment()
-    mocks.cdpX402CustodyConfigurationFromEnvironment.mockReturnValueOnce({
-      ...configured, dailyMaxAtomic: 50_000n,
-    } as never)
-    const paths: string[] = []
-    const ctx = {
-      runQuery: async () => { throw new Error('unexpected_buyer_reservation_query') },
-      runMutation: async (reference: Parameters<typeof getFunctionName>[0], command: Record<string, unknown>) => {
-        const path = getFunctionName(reference)
-        paths.push(path)
-        if (path !== 'moneyX402PaymentAttempts:prepareSellerOnboardingCanaryPaymentAuthorization') {
-          throw new Error(`unexpected_payment_mutation:${path}`)
-        }
-        return await prepareCanary({ db }, command)
-      },
-    }
-    const callbacks = createManagedX402PaymentCallbacks(ctx as never, {
-      dispatch: call as never, operation, connectionAuthority: operation.connectionAuthority!,
-      durableAttemptRef: String(args.attemptRef), effectGeneration: 1,
-      operationKeyDigest: String(args.operationKeyDigest), dispatcher: new Agent(),
-      isGrantStillValid: async () => true,
-    })
-    const requirement = {
-      scheme: 'exact', network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS,
-      amount: String(args.amountUnits), payTo: String(args.payTo), maxTimeoutSeconds: 60,
-      extra: { name: 'USD Coin', version: '2', assetTransferMethod: 'eip3009' },
-    }
-    const callAuthority = call.authority as { expiresAt: string }
-    const result = await callbacks.prepareX402PaymentAuthorization({
-      challenge: { x402Version: 2, resource: { url: String(args.providerEndpoint) }, accepts: [requirement] },
-      authorityExpiresAt: Date.parse(callAuthority.expiresAt),
-      credential: X402_MANAGED_CUSTODY_REF, selectedRequirement: requirement,
-      paymentIdentifier: String(args.paymentIdentifier), attemptRef: String(args.attemptRef),
-      effectGeneration: 1, challengeDigest: String(args.challengeDigest),
-      paymentAmount: { currency: 'USD', exponent: 6, units: String(args.amountUnits) },
-    })
-    expect(result).toHaveProperty('custodyRef')
-    expect(paths).toEqual(['moneyX402PaymentAttempts:prepareSellerOnboardingCanaryPaymentAuthorization'])
-    expect(db.rows('moneyX402PaymentAttempts')[0]?.reservationRef).toBeUndefined()
-  })
-
-  it.each([
-    ['buyer reservation', { reservationRef: 'buyer:reservation' }],
-    ['unmanaged credential', { credentialRef: 'credential:other' }],
-    ['wrong payee', { payTo: '0x0000000000000000000000000000000000000001' }],
-    ['wrong network', { network: 'eip155:8453' }],
-    ['greater payment', { amountUnits: '2' }],
-    ['wrong attempt', { attemptRef: 'attempt:other' }],
-    ['wrong generation', { effectGeneration: 2 }],
-    ['wrong currency', { currency: 'AUD' }],
-    ['wrong input', { inputDigest: 'changed' }],
-    ['changed payment identity', { paymentIdentifier: 'changed' }],
-  ])('refuses %s before preparing payment', async (_label, override) => {
-    const { db, args } = await fixture()
-    await expect(prepareCanary({ db }, { ...args, ...override })).rejects.toThrow('seller_canary_payment_')
-    expectNoPaymentAttempts(db)
-  })
-
-  it.each(['expired validation', 'buyer usage', 'cancelled attempt'] as const)(
-    'refuses %s before preparing payment', async (change) => {
-      const { db, args, call } = await fixture()
-      if (change === 'cancelled attempt') {
-        const control = db.rows('actionExecutionControls')[0]!
-        await db.patch(control._id, { control: {
-          executionRef: call.callRef, executionVersion: 2, control: { state: 'cancelled' },
-        } })
-      } else {
-        const envelope = call.sellerOnboardingCanary as Record<string, unknown>
-        await db.patch('call:validation', { sellerOnboardingCanary: {
-          ...envelope,
-          ...(change === 'expired validation' ? { expiresAt: Date.now() - 1 } : {
-            accountingPolicy: { ...(envelope.accountingPolicy as Record<string, unknown>), recordBuyerUsage: true },
-          }),
-        } })
-      }
-      await expect(prepareCanary({ db }, args)).rejects.toThrow('seller_canary_payment_')
-      expectNoPaymentAttempts(db)
-    },
-  )
-
-  it('refuses a revoked platform grant before preparing payment', async () => {
-    const { db, args } = await fixture()
-    await db.patch(db.rows('agentAccessGrants')[0]!._id, { lifecycle: 'revoked' })
-    await expect(prepareCanary({ db }, args)).rejects.toThrow('seller_canary_payment_grant_invalid')
-    expectNoPaymentAttempts(db)
-  })
-})
-
 describe('money x402 payment authorization attempt', () => {
   it('rejects sandbox chain material when production environment is declared', async () => {
     const db = new MemoryDb()

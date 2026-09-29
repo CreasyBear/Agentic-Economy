@@ -10,15 +10,15 @@ import {
   type AuthorityUseMaterial,
   type SpendingPolicySnapshot,
 } from '@/modules/action-execution/runtime'
-import { executeDevelopmentProviderToolAction } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool.actions'
+import { executeDevelopmentProviderToolAction } from './fixtures/provider-tool/development-provider-tool.actions'
 import {
   providerToolActor,
   providerToolInput,
   developmentProviderToolNow,
-} from '../../../tools/dev/fixtures/provider-tool/development-provider-tool-fixture'
-import { createDevelopmentProviderToolProvider } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool-provider'
-import { runProviderToolExecution } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool-runner'
-import { createDevelopmentProviderToolSpendingPolicyService } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool-spending-policy'
+} from './fixtures/provider-tool/development-provider-tool-fixture'
+import { createDevelopmentProviderToolProvider } from './fixtures/provider-tool/development-provider-tool-provider'
+import { runProviderToolExecution } from './fixtures/provider-tool/development-provider-tool-runner'
+import { createDevelopmentProviderToolSpendingPolicyService } from './fixtures/provider-tool/development-provider-tool-spending-policy'
 
 const now = developmentProviderToolNow()
 const principalRef = 'request-owner:mock:request:mandated'

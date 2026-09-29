@@ -46,7 +46,6 @@ export async function materializePurchaseResolutionRecord(
   projection: CallDispatchProjectionShape,
   resolvedAt: number,
 ): Promise<void> {
-  if (row.sellerOnboardingCanary !== undefined) return
   const existing = await ctx.db.query('purchaseResolutionRecords')
     .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
     .unique()

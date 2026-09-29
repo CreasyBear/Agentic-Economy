@@ -7,9 +7,9 @@ import {
   type ActionExecutionView,
   type PreparedExecution,
   type ReconciliationEvidenceVerifier,
-} from '../../../../src/modules/action-execution'
-import type { TransferBoundaryEvent } from '../../../../src/modules/action-execution/transfer-evaluator'
-import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+} from '../../../../../src/modules/action-execution'
+import type { TransferBoundaryEvent } from '../../../../../src/modules/action-execution/transfer-evaluator'
+import { canonicalDigest } from '../../../../../src/modules/common/canonical-digest'
 import {
   cancelDevelopmentProviderToolAction,
   executeDevelopmentProviderToolAction,
@@ -25,7 +25,7 @@ import {
   spendingPolicyRefusalToExecutionRefusal,
   type DevelopmentProviderToolSpendingPolicyService,
 } from './development-provider-tool-spending-policy'
-import type { ExactAmount } from '../../../../src/modules/money/public'
+import type { ExactAmount } from '../../../../../src/modules/money/public'
 
 type Provider = ReturnType<typeof createDevelopmentProviderToolProvider>
 type ProviderToolExecutionEvent = TransferBoundaryEvent | Readonly<{

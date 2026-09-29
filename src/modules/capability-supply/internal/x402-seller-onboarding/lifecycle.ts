@@ -4,7 +4,6 @@ import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-d
 import { copyX402SellerIdentity, validX402SellerIdentity, x402SellerIdentityDigest } from './identity'
 import type {
   CreateX402SellerOnboardingCommand,
-  X402CanaryEvidence,
   X402SellerOnboarding,
   X402SellerOnboardingCommand,
   X402SellerOnboardingResult,
@@ -91,27 +90,6 @@ function validEvidenceDigest(value: string): boolean {
   return isCanonicalDigest(value)
 }
 
-function validCanaryEvidence(evidence: X402CanaryEvidence): boolean {
-  return validRef(evidence.canaryRef)
-    && ['accepted', 'settled', 'failed', 'ambiguous'].includes(evidence.paymentOutcome)
-    && typeof evidence.paid === 'boolean'
-    && validEvidenceDigest(evidence.paymentEvidenceDigest)
-    && typeof evidence.contractValid === 'boolean'
-    && typeof evidence.usable === 'boolean'
-    && validEvidenceDigest(evidence.resultEvidenceDigest)
-}
-
-function canaryState(evidence: X402CanaryEvidence) {
-  if (evidence.paymentOutcome === 'ambiguous') return 'reconciliation_required' as const
-  if (
-    (evidence.paymentOutcome === 'accepted' || evidence.paymentOutcome === 'settled')
-    && evidence.paid
-    && evidence.contractValid
-    && evidence.usable
-  ) return 'published' as const
-  return 'canary_failed' as const
-}
-
 export function createX402SellerOnboarding(
   command: CreateX402SellerOnboardingCommand,
   now: number,
@@ -183,49 +161,8 @@ export function transitionX402SellerOnboarding(
       if (onboarding.state !== 'claimed') return { kind: 'refused', reason: 'invalid_transition' }
       if (!validEvidenceDigest(command.evidenceDigest)) return { kind: 'refused', reason: 'invalid_command' }
       return applyCommand(onboarding, command.commandId, digest, now, {
-        state: 'admitted', admissionEvidenceDigest: command.evidenceDigest,
+        state: 'published', admissionEvidenceDigest: command.evidenceDigest,
       })
-
-    case 'request_canary':
-      if (onboarding.state !== 'admitted' && onboarding.state !== 'canary_failed') {
-        return { kind: 'refused', reason: 'invalid_transition' }
-      }
-      if (!validRef(command.canaryRef)) return { kind: 'refused', reason: 'invalid_command' }
-      return applyCommand(onboarding, command.commandId, digest, now, {
-        state: 'canary_pending', activeCanaryRef: command.canaryRef,
-      })
-
-    case 'record_canary': {
-      if (onboarding.state !== 'canary_pending') return { kind: 'refused', reason: 'invalid_transition' }
-      if (!validCanaryEvidence(command) || command.canaryRef !== onboarding.activeCanaryRef) {
-        return { kind: 'refused', reason: 'invalid_command' }
-      }
-      const evidence: X402CanaryEvidence = {
-        canaryRef: command.canaryRef, paymentOutcome: command.paymentOutcome, paid: command.paid,
-        paymentEvidenceDigest: command.paymentEvidenceDigest, contractValid: command.contractValid,
-        usable: command.usable, resultEvidenceDigest: command.resultEvidenceDigest,
-      }
-      return applyCommand(onboarding, command.commandId, digest, now, {
-        state: canaryState(evidence), canaryEvidence: evidence,
-      })
-    }
-
-    case 'record_reconciliation': {
-      if (onboarding.state !== 'reconciliation_required') {
-        return { kind: 'refused', reason: 'invalid_transition' }
-      }
-      if (!validCanaryEvidence(command) || command.canaryRef !== onboarding.activeCanaryRef) {
-        return { kind: 'refused', reason: 'invalid_command' }
-      }
-      const evidence: X402CanaryEvidence = {
-        canaryRef: command.canaryRef, paymentOutcome: command.paymentOutcome, paid: command.paid,
-        paymentEvidenceDigest: command.paymentEvidenceDigest, contractValid: command.contractValid,
-        usable: command.usable, resultEvidenceDigest: command.resultEvidenceDigest,
-      }
-      return applyCommand(onboarding, command.commandId, digest, now, {
-        state: canaryState(evidence), canaryEvidence: evidence,
-      })
-    }
 
     case 'observe_identity': {
       if (onboarding.state === 'withdrawn' || onboarding.state === 'stale') {

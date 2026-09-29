@@ -1,4 +1,4 @@
-import type { ActionContext, ActionResult } from '../../../../src/modules/common/action'
+import type { ActionContext, ActionResult } from '../../../../../src/modules/common/action'
 
 import type {
   DevelopmentProviderToolCancellationInput,

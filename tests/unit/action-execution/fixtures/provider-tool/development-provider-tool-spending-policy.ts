@@ -6,8 +6,8 @@ import {
   type SpendingPolicyResult,
   type SpendingPolicyRefusalCode,
   type SpendingPolicyAuthorityBasis,
-} from '../../../../src/modules/action-execution'
-import type { ExactAmount } from '../../../../src/modules/money/public'
+} from '../../../../../src/modules/action-execution'
+import type { ExactAmount } from '../../../../../src/modules/money/public'
 import type {
   DevelopmentProviderToolCancellationResult,
   DevelopmentProviderToolInput,

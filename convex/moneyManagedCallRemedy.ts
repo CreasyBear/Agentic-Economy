@@ -69,7 +69,6 @@ export const claim = internalMutation({
     }
     if (call.state !== 'reconciliation_required'
       || call.formanceFinancialState !== 'outcome_unknown'
-      || call.sellerOnboardingCanary !== undefined
       || call.result?.kind !== 'reconciliation_required'
       || call.result.receipt?.commercialModel !== 'account_aud') return null
     const { attemptRef, effectGeneration } = call.result.evidence

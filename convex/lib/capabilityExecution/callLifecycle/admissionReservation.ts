@@ -1,7 +1,5 @@
 import { v } from 'convex/values'
 import type { CallIdempotencyReservation } from '@/modules/capability-execution/call-authority'
-import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
-import { sellerOnboardingCanaryExecutionEnvelopeValue } from '@/modules/capability-execution/convex'
 import { environment } from './contracts'
 
 export const reserveArgs = {
@@ -9,7 +7,6 @@ export const reserveArgs = {
   applicationRef: v.string(), grantRef: v.string(), environment, toolRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
   toolJson: v.optional(v.string()), inputJson: v.optional(v.string()), now: v.number(), turnRef: v.optional(v.string()),
-  sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
   organizationMonthlySpend: v.optional(v.object({
     enabled: v.boolean(),
     ceilingUnits: v.optional(v.string()),
@@ -83,7 +80,6 @@ export type ReserveArgs = Readonly<{
   grantExpiresAt: number
   toolJson?: string
   inputJson?: string
-  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   now: number
   organizationMonthlySpend?: Readonly<{
     enabled: boolean

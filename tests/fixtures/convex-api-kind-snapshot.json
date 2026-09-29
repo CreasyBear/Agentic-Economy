@@ -1369,48 +1369,6 @@
   },
   {
     "visibility": "internal",
-    "module": "capabilitySupplyCanaryFunding",
-    "method": "provisionProductionSellerOnboardingCanaryFunding",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyCanaryFunding",
-    "method": "provisionSellerOnboardingCanaryFunding",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyCanaryFunding",
-    "method": "readExactSellerOnboardingCanaryPlatformGrant",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyCanaryFunding",
-    "method": "readProductionSellerOnboardingCanaryFundingReadiness",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyCanaryFunding",
-    "method": "readSellerOnboardingCanaryFundingReadiness",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyCanaryFundingPreflight",
-    "method": "readSellerOnboardingCanaryCdpReadiness",
-    "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyCurrentTool",
-    "method": "readExactSellerCanaryOperationSnapshot",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
     "module": "capabilitySupplyCurrentTool",
     "method": "readManagedX402InspectionSnapshot",
     "kind": "query"
@@ -1419,24 +1377,6 @@
     "visibility": "internal",
     "module": "capabilitySupplyCurrentTool",
     "method": "recordManagedX402Inspection",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyOwnerCanary",
-    "method": "readSellerOnboardingCanaryEvidence",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyOwnerCanary",
-    "method": "requestSellerOnboardingCanary",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilitySupplyOwnerCanary",
-    "method": "requestSellerOnboardingCanaryForAdmittedPublication",
     "kind": "mutation"
   },
   {
@@ -1572,12 +1512,6 @@
     "kind": "query"
   },
   {
-    "visibility": "internal",
-    "module": "capabilitySupplyTools",
-    "method": "readExactSellerCanaryOperationSnapshot",
-    "kind": "query"
-  },
-  {
     "visibility": "public",
     "module": "capabilitySupplyTools",
     "method": "search",
@@ -1683,12 +1617,6 @@
     "visibility": "public",
     "module": "catalog",
     "method": "renameProviderBusiness",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "catalogOfferingMutations",
-    "method": "promoteAdmittedSellerCanary",
     "kind": "mutation"
   },
   {
@@ -2901,12 +2829,6 @@
     "visibility": "internal",
     "module": "moneyX402PaymentAttempts",
     "method": "observeX402PaymentAttempt",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyX402PaymentAttempts",
-    "method": "prepareSellerOnboardingCanaryPaymentAuthorization",
     "kind": "mutation"
   },
   {

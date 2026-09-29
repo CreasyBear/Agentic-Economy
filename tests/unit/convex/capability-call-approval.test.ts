@@ -43,7 +43,7 @@ import {
   reserve,
 } from '../../../convex/capabilityCalls'
 import { canonicalOwnerApprovalDecisionHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/ownerCallAuthority'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import {
   createPublicToolRef,
   materializeRuntimePublishedTool,

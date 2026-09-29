@@ -12,7 +12,7 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 
 import { findAction } from '@/modules/actions'
 import { requireDurableWriteFixtureAction } from '../../helpers/durable-write-fixture-action'
-import { createDevelopmentEvidenceVerifier } from '../../../tools/dev/fixtures/capability-supply/development-evidence-fixture'
+import { createDevelopmentEvidenceVerifier } from '../capability-supply/fixtures/development-evidence-fixture'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   createDevelopmentReleaseSignal,

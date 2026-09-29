@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { internal } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
 import { convexTestWithMarketComponents } from '../../helpers/convex-fixtures'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 
 // Call idempotency is keyed by the stable Principal tuple
 // (principalId, ownerId, applicationRef, environment). The credential and the

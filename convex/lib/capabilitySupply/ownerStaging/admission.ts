@@ -2,7 +2,6 @@ import {
   publishPreparedCapabilityCommand,
   validRegistrationContext,
   validX402SellerClaimTime,
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
 } from '@/modules/capability-supply/public'
 
 import type { MutationCtx } from '../../../_generated/server'
@@ -21,12 +20,6 @@ import {
 } from './reuse'
 import type { StageOwnerX402CapabilityArgs, StageOwnerX402CapabilityResult } from './contracts'
 
-/**
- * Owner-only admission of one exact managed x402 staging Tool. The exact
- * publication receives a Tool-scoped admission fence. Seller
- * business visibility therefore cannot expose this revision before its paid
- * canary is explicitly promoted.
- */
 export async function stageOwnerX402CapabilityHandler(
   ctx: MutationCtx,
   args: StageOwnerX402CapabilityArgs,
@@ -86,10 +79,7 @@ export async function stageOwnerX402CapabilityHandler(
     operationKey: args.operationKey,
     correlationId: args.correlationId,
     reasonCode: args.reasonCode,
-    evidenceRefs: [
-      ...args.evidenceRefs,
-      X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-    ],
+    evidenceRefs: [...args.evidenceRefs],
     now,
   }, stagingPublicationPorts(ctx, args.businessId))
   return convexStagingResult(result)
