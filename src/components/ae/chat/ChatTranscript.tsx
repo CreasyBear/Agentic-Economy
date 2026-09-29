@@ -54,6 +54,9 @@ export function ChatTranscript({
   onContinueSearch,
   onRepeatSearch,
   onQuoteTool,
+  ownerChatEnabled = false,
+  enableSpendingBusy = false,
+  onEnableSpending,
   ownerChatThreadId,
   ownerChatNow,
   onFreshQuote,
@@ -172,7 +175,7 @@ export function ChatTranscript({
                                   onCompare: toggleCompare,
                                 })}
                               />
-                              {quoteDraft?.turnId !== turn.id || onQuoteTool === undefined || ownerChatThreadId === undefined ? null : (
+                              {quoteDraft?.turnId !== turn.id || onQuoteTool === undefined || ownerChatThreadId === undefined ? null : ownerChatEnabled ? (
                                 <form aria-label="Quote input" className="grid gap-intra rounded-card border border-border bg-card p-4"
                                   onSubmit={(event) => {
                                     event.preventDefault()
@@ -206,6 +209,12 @@ export function ChatTranscript({
                                       onClick={() => setQuoteDraft(null)}>Cancel</Button>
                                   </div>
                                 </form>
+                              ) : (
+                                <div className="grid gap-intra rounded-card border border-border bg-card p-4">
+                                  <p className="text-sm">Turn on paying in chat to get a Quote. Every Call waits for your approval.</p>
+                                  <Button type="button" className="min-h-touch" disabled={enableSpendingBusy || onEnableSpending === undefined}
+                                    onClick={onEnableSpending}>Turn on paying</Button>
+                                </div>
                               )}
                               {readOnly || onCompareRequest === undefined || selected.length < 2 ? null : (
                                 <div className="flex flex-wrap items-center gap-2">

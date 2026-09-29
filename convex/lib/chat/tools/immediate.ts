@@ -1,6 +1,7 @@
 import type { ActionCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import {
   deserializeToolSearchResult,
   PublicToolRegistrySchemaVersion,
@@ -34,7 +35,7 @@ export async function retrieveImmediateTools(
   query: string,
   searchTurn?: SearchTurn,
 ): Promise<ToolChoiceSearchOutput | null> {
-  const trimmed = query.trim().slice(0, 500)
+  const trimmed = query.trim().slice(0, SEARCH_QUERY_MAX_LENGTH)
   if (trimmed.length === 0) return null
   try {
     const admitted = deserializeToolSearchResult(await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {

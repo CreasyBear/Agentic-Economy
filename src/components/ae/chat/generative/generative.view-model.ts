@@ -7,6 +7,8 @@ import type {
 } from './generative.contracts'
 
 const sourceLabel = (provenance: string) => provenance === 'ae_observed' ? 'AE-observed' : provenance === 'directory_reported' ? 'Directory-reported' : provenance === 'business_published' ? 'Business-published' : 'Provider-reported'
+const projectChoiceReadiness = (readiness: string | undefined): OptionView['readiness'] =>
+  readiness === 'ready' || readiness === 'unavailable' ? readiness : 'unverified'
 
 /** A search card identifies the shortlist; a joined registry view supplies richer, attributed facts. */
 export function projectOptionsFromCard(
@@ -45,7 +47,7 @@ export function projectOptionsFromCard(
         ...(displayedPrice === undefined || (currentPrice ? price?.validUntil : choice.priceValidUntil) === undefined
           ? {} : { priceValidUntil: currentPrice ? price?.validUntil : choice.priceValidUntil }),
         ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
-        readiness: ready ? 'ready' : unavailable ? 'unavailable' : 'unverified',
+        readiness: projectChoiceReadiness(choice.readiness),
         ...(seller === undefined ? {} : { seller }),
         selectable: choice.access !== 'external_listing' && !choice.belowMatch
           && (listing === undefined || listing.canonicalToolRef.kind === 'present'),

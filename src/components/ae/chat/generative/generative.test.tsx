@@ -94,7 +94,8 @@ describe('generative chat leaves', () => {
   it('projects only observed facts from chat cards, not imagined prices, usage, sellers or readiness', () => {
     const card = { kind: 'choices', toolId: 'registry.tools.search', title: 'Search', state: 'complete', toolRefs: ['tool:fx'], count: 12, choices: [{ toolRef: 'tool:fx', title: 'Currency exchange' }] } as const
     const option = projectOptionsFromCard(card).options[0]!
-    expect(option).toMatchObject({ price: 'Price to be confirmed', readiness: 'unverified', selectable: true })
+    expect(option).toMatchObject({ price: 'Price to be confirmed', selectable: true })
+    expect(option.readiness).toBe('unverified')
     expect(option.seller).toBeUndefined()
     expect(projectSourcesFromCards([card]).sources).toHaveLength(1)
     expect(projectWorkFromCards([card]).summary).toBe('Found 1 tool')
@@ -209,7 +210,7 @@ describe('generative chat leaves', () => {
     const onQuoteTool = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
     render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [
       { type: 'text', text: 'Currency exchange is available.' }, serializeToolCard(card),
-    ] }]} ownerChatThreadId="owned-thread" onQuoteTool={onQuoteTool} />)
+    ] }]} ownerChatThreadId="owned-thread" ownerChatEnabled onQuoteTool={onQuoteTool} />)
     expect(screen.getByText('A$0.01 per Call')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Get a Quote' }))
     fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))

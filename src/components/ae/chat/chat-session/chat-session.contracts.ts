@@ -124,6 +124,9 @@ export type ChatTranscriptViewProps = Readonly<{
   onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'next-page' }>) => void
   onRepeatSearch?: (query: string) => void
   onQuoteTool?: (toolRef: string, input: Record<string, JsonValue>) => Promise<boolean>
+  ownerChatEnabled?: boolean
+  enableSpendingBusy?: boolean
+  onEnableSpending?: () => void
   ownerChatThreadId?: string
   ownerChatNow?: number
   onFreshQuote?: (toolName: string, inputSummary: string) => void
@@ -140,4 +143,11 @@ export type ChatSessionModel = Readonly<{
   composer: ChatComposerProps
   transcript: ChatTranscriptViewProps
   pageBusy: boolean
+}>
+
+export type ChatLayoutProps = Readonly<{
+  model: ChatSessionModel
+  ownerChatEnabled?: boolean
+  enableSpendingBusy?: boolean
+  onEnableSpending?: () => void
 }>
