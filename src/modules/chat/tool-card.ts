@@ -9,7 +9,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
 import type { PublicToolAuthentication, PublicToolPrice } from '@/modules/capability-supply/public'
 import { projectCompareContrasts, readPosture, readPrice } from './internal/tool-card-compare'
-import { formatToolAuthentication, formatToolReadiness } from '@/modules/market/tool-view-model'
+import { formatToolAuthentication } from '@/modules/market/tool-view-model'
 import {
   callResultKindValues,
   callResultSchema,
@@ -75,11 +75,16 @@ export type ToolChoiceRow = Readonly<{
   provider?: string
   price?: string
   priceValidUntil?: number
-  readiness?: string
+  readiness?: 'ready' | 'unverified' | 'unavailable'
   access?: string
   callable?: boolean
   belowMatch?: boolean
 }>
+
+export function toolChoiceReadinessLabel(readiness: NonNullable<ToolChoiceRow['readiness']>): string {
+  return readiness === 'ready' ? 'Ready to use'
+    : readiness === 'unavailable' ? getStatusPresentation('unavailable').label : 'Not yet verified'
+}
 
 export type ToolFact = Readonly<{
   label: string
@@ -269,13 +274,11 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
       && typeof value.price.validUntil === 'number' && Number.isSafeInteger(value.price.validUntil)
       && value.price.validUntil > Date.now() ? stringField(value.price.label) : undefined
   const healthStatus = stringField(value.healthStatus)
-  const readiness = healthStatus === 'operational'
-    ? getStatusPresentation('operational').label
-    : healthStatus === 'degraded' || (healthStatus === undefined && value.readiness === 'unavailable')
-      ? getStatusPresentation('degraded').label
-      : healthStatus === 'unverified' || (healthStatus === undefined && value.readiness === 'unverified')
-        ? 'Not yet verified'
-        : undefined
+  const readiness = value.readiness === 'ready' || value.readiness === 'unverified' || value.readiness === 'unavailable'
+    ? value.readiness
+    : healthStatus === 'operational' ? 'ready'
+      : healthStatus === 'degraded' ? 'unavailable'
+        : healthStatus === 'unverified' ? 'unverified' : undefined
   const authentication = readAuthentication(value.authentication)
   return {
     toolRef,
@@ -316,7 +319,7 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
     ...(provider === undefined ? {} : { provider }),
     ...(priceLabel === undefined ? {} : { price: priceLabel }),
     ...(priceLabel !== undefined && display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
-    ...(posture === undefined ? {} : { readiness: isRecord(value.availability) && value.availability.reason === 'inspection_required' ? 'Checked when quoting' : formatToolReadiness(posture) }),
+    ...(posture === undefined ? {} : { readiness: posture === 'routeable' ? 'ready' : posture === 'unavailable' ? 'unavailable' : 'unverified' }),
     ...(posture === 'routeable' && Array.isArray(value.navigation)
       && value.navigation.some((item) => isRecord(item) && item.relation === 'call')
       ? { callable: true } : {}),
@@ -355,7 +358,8 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
     ? value.priceValidUntil : undefined
   const price = storedPrice?.startsWith('A$') && (priceValidUntil === undefined || priceValidUntil <= Date.now())
     ? undefined : storedPrice
-  const readiness = stringField(value.readiness)
+  const readiness = value.readiness === 'ready' || value.readiness === 'unverified' || value.readiness === 'unavailable'
+    ? value.readiness : undefined
   const access = stringField(value.access)
   return {
     toolRef,

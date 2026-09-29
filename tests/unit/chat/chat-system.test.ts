@@ -259,7 +259,7 @@ describe('transcript projector', () => {
       provider: 'Sky Co',
       price: 'A$0.51',
       priceValidUntil: 2_000_000_000_000,
-      readiness: 'Not yet verified',
+      readiness: 'unverified',
     }])
     expect(search?.kind === 'choices' ? search.count : undefined).toBe(1)
     expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
@@ -643,7 +643,7 @@ describe('transcript projector', () => {
       provider: 'Sky Co',
       price: 'A$0.51',
       priceValidUntil: 2_000_000_000_000,
-      readiness: 'Not yet verified',
+      readiness: 'unverified',
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')
     clearAnonymousChatHandoff('handoff-thread')

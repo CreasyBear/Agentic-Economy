@@ -27,9 +27,9 @@ import {
   chatShowingTools,
   chatToolStatus,
 } from '@/lib/public/chat-ia'
-import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import {
   toolCardState,
+  toolChoiceReadinessLabel,
   type ChatNeedActions,
   type ToolCardProjection,
   type ToolChoiceRow,
@@ -39,13 +39,10 @@ import type { SearchNextProps, ToolCardProps } from './presentation'
 
 export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
 
-const READY_NOW_LABEL = getStatusPresentation('ready_now').label
-const SETUP_REQUIRED_LABEL = getStatusPresentation('setup_required').label
-const UNAVAILABLE_LABEL = getStatusPresentation('unavailable').label
-
 function inspectHref(toolRef: string): string {
   return `/tools/${encodeURIComponent(toolRef)}`
 }
+
 
 function choiceInitial(title: string): string {
   return title.trim().charAt(0).toUpperCase() || 'T'
@@ -53,22 +50,21 @@ function choiceInitial(title: string): string {
 
 
 function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
-  const highlightedReadiness = choice.readiness === READY_NOW_LABEL
-    || choice.readiness === SETUP_REQUIRED_LABEL || choice.readiness === UNAVAILABLE_LABEL
+  const readinessLabel = choice.readiness === undefined ? undefined : toolChoiceReadinessLabel(choice.readiness)
   return (
     <Item
       variant="muted"
       size="sm"
       render={
-        <a href={choice.detailHref ?? inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness)}>
+        <a href={choice.detailHref ?? inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness === 'ready' ? 'Ready now' : undefined)}>
           <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
             {choiceInitial(choice.title)}
           </ItemMedia>
           <ItemContent>
             <ItemHeader>
               <ItemTitle>{choice.title}</ItemTitle>
-              {choice.readiness === undefined || !highlightedReadiness ? null : (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === READY_NOW_LABEL ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{choice.readiness}</span>
+              {readinessLabel === undefined ? null : (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === 'ready' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{readinessLabel}</span>
               )}
             </ItemHeader>
             {choice.provider === undefined ? null : (
@@ -112,7 +108,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
                 </TableCell>
                 <TableCell>{choice.provider ?? ''}</TableCell>
                 <TableCell className="tabular-nums">{choice.price ?? ''}</TableCell>
-                <TableCell>{choice.readiness ?? ''}</TableCell>
+                <TableCell>{choice.readiness === undefined ? '' : toolChoiceReadinessLabel(choice.readiness)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

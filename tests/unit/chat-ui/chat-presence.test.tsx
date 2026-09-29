@@ -276,7 +276,7 @@ describe('ChatTranscript first-page gate', () => {
       title: 'Compare tools',
       kind: 'choices',
       state: 'complete',
-      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now' }],
+      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'ready' }],
       toolRefs: [toolRef],
     }} />)
     expect(screen.getByRole('table')).toBeTruthy()
@@ -289,7 +289,7 @@ describe('ChatTranscript first-page gate', () => {
       kind: 'choices',
       state: 'complete',
       surface: 'compare',
-      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now', belowMatch: true }],
+      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'ready', belowMatch: true }],
       toolRefs: [toolRef],
     }} />)
     expect(screen.getByRole('table')).toBeTruthy()
