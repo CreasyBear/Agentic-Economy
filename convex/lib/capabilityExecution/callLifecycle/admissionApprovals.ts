@@ -1,4 +1,5 @@
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
+import { recordCallTerminal } from '@/lib/observability/journey'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { enqueueCallDispatch } from './dispatchEnqueue'
@@ -187,6 +188,7 @@ function pendingApprovalIsClean(row: PendingApprovalRow): boolean {
 }
 
 async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): Promise<ApprovalDecisionResult> {
+  recordCallTerminal(row.state, 'refused')
   await ctx.db.patch(row._id, {
     state: 'refused',
     dispatchState: 'failed',

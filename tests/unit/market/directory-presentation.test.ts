@@ -95,10 +95,14 @@ it('shares one persisted Coinbase observation across priced rows, retaining exac
     expect(getFunctionName(reference as never)).toBe('x402DirectoryIndex:browse')
     return { kind: 'ok', coverage: { generation: 'g1' }, searchMethod: 'native_index', page: rows.map(entry => ({ entry, choice: entry.choice })), continueCursor: '', isDone: true }
   })
+  vi.stubEnv('OPENROUTER_API_KEY', 'blocked')
+  const blocked = vi.fn(async () => { throw new Error('coinbase and openrouter blocked') })
+  vi.stubGlobal('fetch', blocked)
   setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never)
   const result = await readX402DirectoryCatalogue({})
   expect(result.kind).toBe('ok')
   if (result.kind !== 'ok' || result.page.kind !== 'ok') return
+  expect(blocked).not.toHaveBeenCalled()
   expect(query).toHaveBeenCalledTimes(2)
   expect(query.mock.calls.map(([reference]) => getFunctionName(reference as never))).toContain('referenceRateRefresh:current')
   const [tiny, larger, zero, options] = result.page.items.map(toDirectoryToolCardModel)
@@ -148,9 +152,11 @@ it('does not turn publication identity into callability after readiness expires 
 })
 
 
-it('reorders bounded catalogue candidates without losing their exact joined ToolRefs', async () => {
+it('keeps indexed catalogue order and joined ToolRefs when Jev is blocked', async () => {
   const ref = `operation:v1:${'d'.repeat(64)}`
-  vi.stubEnv('TYPESAFE_API_KEY', 'local-test-key')
+  vi.stubEnv('OPENROUTER_API_KEY', 'local-test-key')
+  const blocked = vi.fn(async () => { throw new Error('openrouter blocked') })
+  vi.stubGlobal('fetch', blocked)
   vi.spyOn(decisionEngine, 'callJevSystemOne').mockResolvedValue({
     answers: { match_0: { type: 'noul', noul: 0.1 }, match_1: { type: 'noul', noul: 0.9 } },
   } as never)
@@ -166,9 +172,11 @@ it('reorders bounded catalogue candidates without losing their exact joined Tool
   const result = await readX402DirectoryCatalogue({ query: 'convert time' })
   expect(result.kind).toBe('ok')
   if (result.kind !== 'ok' || result.page.kind !== 'ok') return
-  expect(result.page.items.map(item => item.resource)).toEqual(['https://example.com/second', entry.resource])
-  expect(result.page.items[0]?.choice).toEqual({ access: 'ae_callable', toolRef: ref, sourceRouteRef: 'exact-second' })
-  expect(result.page.items[1]?.choice?.access).toBe('external_listing')
+  expect(result.page.items.map(item => item.resource)).toEqual([entry.resource, 'https://example.com/second'])
+  expect(blocked).not.toHaveBeenCalled()
+  expect(decisionEngine.callJevSystemOne).not.toHaveBeenCalled()
+  expect(result.page.items[0]?.choice?.access).toBe('external_listing')
+  expect(result.page.items[1]?.choice).toEqual({ access: 'ae_callable', toolRef: ref, sourceRouteRef: 'exact-second' })
 })
 
 it('returns priced admitted and external Bazaar search rows from persisted FX', async () => {

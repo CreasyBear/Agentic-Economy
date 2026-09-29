@@ -1,6 +1,7 @@
 import { v, type Infer, type ObjectType } from 'convex/values'
 
 import { reconciliationValue } from '@/modules/capability-execution/convex'
+import { recordCallTerminal } from '@/lib/observability/journey'
 
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
@@ -210,6 +211,7 @@ export async function queueExpiredX402AuthorizationHandler(
     paymentUnsignedMaterialJson: undefined,
     state: 'reconciliation_required',
   })
+  recordCallTerminal(invocation.state, 'reconciliation_required')
   await ctx.db.patch(invocation._id, {
     state: 'reconciliation_required',
     result,

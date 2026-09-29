@@ -1,5 +1,6 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { recordSearchResult } from '@/lib/observability/journey'
 import { defineAction } from '@/modules/common/action'
 import { sourceFreshnessState } from '@/modules/common/freshness'
 import { jevDiscoveryRecipient } from '@/modules/decision-engine/public'
@@ -112,6 +113,10 @@ export const registryToolsListAction = defineAction({
 export const registryToolsSearchAction = defineAction({
   ...registryToolsSearchContract,
   run: async ({ data, context }) => {
+    const deliver = <T extends { kind: string }>(output: T): T => {
+      recordSearchResult(output.kind)
+      return output
+    }
     const freshness = await readSupplyProjectionFreshness()
     const admittedWanted = data.source !== 'coinbase' && data.filters?.access !== 'external_listing'
     const directoryWanted = data.source !== 'current'
@@ -171,8 +176,8 @@ export const registryToolsSearchAction = defineAction({
         context.request === undefined ? {} : { signal: context.request.signal })
     }
     if (searchResult.kind === 'unavailable') {
-      return projectToolSearchChoices(searchResult, data.filters, assessment, freshness, data.limit,
-        { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) })
+      return deliver(projectToolSearchChoices(searchResult, data.filters, assessment, freshness, data.limit,
+        { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) }))
     }
     const directoryFilters = {
       ...(data.filters?.actionClass === undefined ? {} : { actionClass: data.filters.actionClass }),
@@ -208,9 +213,9 @@ export const registryToolsSearchAction = defineAction({
           })
           if (page.kind === 'unavailable' && page.reason === 'cursor_invalid') throw new InvalidOpaqueCursorError()
           if (page.kind !== 'ok') {
-            return projectToolSearchChoices(assessment.result, data.filters, assessment, freshness, data.limit,
+            return deliver(projectToolSearchChoices(assessment.result, data.filters, assessment, freshness, data.limit,
               { query: data.query, source, pagination: searchPagination(data.limit, scope, continuation),
-                ...(recipient === undefined ? {} : { recipient }) })
+                ...(recipient === undefined ? {} : { recipient }) }))
           }
           examined = page.page.length
           completedAt = page.coverage.completedAt
@@ -249,7 +254,7 @@ export const registryToolsSearchAction = defineAction({
         ...(recipient === undefined ? {} : { recipient }),
       })
       const budget = searchPageBudget(output, pageSize, admittedRows.length, externalRows.length, externalLimit)
-      if (budget.kind === 'fit') return output
+      if (budget.kind === 'fit') return deliver(output)
       if (budget.kind === 'shrink_external') {
         externalLimit = budget.limit
         continue
@@ -264,9 +269,9 @@ export const registryToolsSearchAction = defineAction({
             ...(filters === undefined ? {} : { filters }),
           })
           if (searchResult.kind === 'unavailable') {
-            return projectToolSearchChoices(searchResult, data.filters,
+            return deliver(projectToolSearchChoices(searchResult, data.filters,
               { verdict: 'noMatch', nearMisses: [] }, freshness, data.limit,
-              { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) })
+              { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) }))
           }
           admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
           searchResult = visibleAdmitted(searchResult)
@@ -276,7 +281,7 @@ export const registryToolsSearchAction = defineAction({
         }
         continue
       }
-      return { ...capacityExceededSearch(data.query, data.limit, output.assessed, freshness), ...(recipient === undefined ? {} : { recipient }) }
+      return deliver({ ...capacityExceededSearch(data.query, data.limit, output.assessed, freshness), ...(recipient === undefined ? {} : { recipient }) })
     }
   },
 })

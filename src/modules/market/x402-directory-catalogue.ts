@@ -16,10 +16,10 @@ export type X402DirectoryCatalogueInput = z.infer<typeof x402DirectoryCatalogueI
 export type X402DirectoryCatalogueUnavailable = Readonly<{ kind: 'unavailable'; reason: string }>
 export type X402DirectoryCatalogue = X402DirectoryCatalogueUnavailable | Readonly<{
   kind: 'ok'
-  source: 'index' | 'upstream_limited'
+  source: 'index'
   page: Extract<X402DirectoryPage, { kind: 'ok' }>
   coverage?: X402DirectoryIndexCoverage
-  searchMethod: 'native_full_text' | 'native_index' | 'upstream'
+  searchMethod: 'native_full_text' | 'native_index'
   indexCursor?: string
   isDone: boolean
   pageStatus?: 'SplitRecommended' | 'SplitRequired' | null
@@ -37,7 +37,7 @@ export type X402DirectoryCatalogueOverview = X402DirectoryCatalogueUnavailable |
   popular: readonly X402IndexedDirectoryEntry[]; recentlyUpdated: readonly X402IndexedDirectoryEntry[]
 }>
 export const x402DirectoryCatalogueResourceInputSchema = z.strictObject({ resource: z.string().min(1).max(8192) })
-/** found_upstream: resolved from the Coinbase upstream because the index had no active generation or no row; carries no index coverage or admitted toolRef. */
+/** found_upstream: a Tool address resolved outside the active index row. It carries no coverage or admitted toolRef. */
 export type X402DirectoryCatalogueResource = X402DirectoryCatalogueUnavailable | Readonly<{ kind: 'not_found' }> | Readonly<{
   kind: 'found'; coverage: X402DirectoryIndexCoverage; item: X402IndexedDirectoryEntry
 }> | Readonly<{ kind: 'found_upstream'; item: Readonly<{ entry: X402DirectoryEntry }> }>

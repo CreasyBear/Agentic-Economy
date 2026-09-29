@@ -1,3 +1,4 @@
+import { recordJourneyOutcome, recordQuoteJourney } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { bindPersistedManagedX402RequirementRef, inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
@@ -30,6 +31,22 @@ export async function quoteActionHandler(
 
 /** Shared public and trusted-chat Quote path after transactional admission. */
 export async function quoteActionCore(
+  ctx: ActionCtx,
+  args: QuoteArgs,
+  subjects: FinancialSubjectsResult,
+  turnRef?: string,
+): Promise<QuoteResult> {
+  try {
+    const result = await evaluateQuoteAction(ctx, args, subjects, turnRef)
+    recordQuoteJourney(result)
+    return result
+  } catch (cause) {
+    recordJourneyOutcome({ journey: 'quote', outcome: 'refused_by_fault', good: false })
+    throw cause
+  }
+}
+
+async function evaluateQuoteAction(
   ctx: ActionCtx,
   args: QuoteArgs,
   subjects: FinancialSubjectsResult,

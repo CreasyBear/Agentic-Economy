@@ -18,6 +18,7 @@ import {
   pricingConfigDigest,
 } from '@/modules/money/public'
 
+import type { CapabilityGraphPorts } from '@/modules/capability-supply/public'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
@@ -48,12 +49,21 @@ type CurrentToolProjectionResult =
   | Readonly<{ kind: 'projected'; record: CapabilityToolSourceRecord }>
   | Readonly<{ kind: 'dropped'; reason: CurrentToolProjectionDropReason }>
 
+export type PreloadedCurrentToolRecords = {
+  offeringDoc: Doc<'capabilityOfferings'> | null
+  bindingDoc: Doc<'capabilityTransportBindings'> | null
+  business: Doc<'businesses'> | null
+  contractResult: Awaited<ReturnType<typeof getExactRegisteredCapabilityContract>>
+  ports: CapabilityGraphPorts
+}
+
 export async function toolRecord(
   ctx: Pick<QueryCtx, 'db'>,
   publication: Doc<'capabilityPublications'>,
   now: number,
+  preloaded?: PreloadedCurrentToolRecords,
 ): Promise<CapabilityToolSourceRecord | undefined> {
-  const projection = await toolRecordProjection(ctx, publication, now)
+  const projection = await toolRecordProjection(ctx, publication, now, preloaded)
   return projection.kind === 'projected' ? projection.record : undefined
 }
 /**
@@ -65,21 +75,24 @@ export async function toolRecordProjection(
   ctx: Pick<QueryCtx, 'db'>,
   publication: Doc<'capabilityPublications'>,
   now: number,
+  preloaded?: PreloadedCurrentToolRecords,
 ): Promise<CurrentToolProjectionResult> {
-  const [offeringDoc, bindingDoc, business, contractResult] = await Promise.all([
-    ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
-      .unique(),
-    ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId))
-      .unique(),
-    ctx.db.get(publication.businessId),
-    getExactRegisteredCapabilityContract(ctx.db, {
-      capabilityId: publication.capabilityId,
-      version: publication.version,
-      contractDigest: publication.contractDigest,
-    }),
-  ])
+  const [offeringDoc, bindingDoc, business, contractResult] = preloaded === undefined
+    ? await Promise.all([
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
+        .unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId))
+        .unique(),
+      ctx.db.get(publication.businessId),
+      getExactRegisteredCapabilityContract(ctx.db, {
+        capabilityId: publication.capabilityId,
+        version: publication.version,
+        contractDigest: publication.contractDigest,
+      }),
+    ])
+    : [preloaded.offeringDoc, preloaded.bindingDoc, preloaded.business, preloaded.contractResult]
   const operationId = capabilityToolId(publication.capabilityId)
   const toolRef = createPublicToolRef({
     operationId,
@@ -145,7 +158,7 @@ export async function toolRecordProjection(
   } catch (cause) {
     return degradeBackend(cause, { kind: 'dropped', reason: 'malformed_binding' } as const, { site: 'toolRecordProjection', reason: 'invalid_response' })
   }
-  const qualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), {
+  const qualification = await qualifySuppliedCandidate(preloaded?.ports ?? capabilitySupplyGraphPorts(ctx.db), {
     candidate: {
       publicationRef: publication.publicationRef,
       revision: publication.revision,

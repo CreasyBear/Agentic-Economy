@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mockJevFetch } from '../../helpers/tool-search-rerank-fixtures'
 const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
 vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
 vi.mock('@/modules/market/x402-directory.server', () => ({ readX402Directory: upstream }))
@@ -10,10 +9,10 @@ import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaqu
 beforeEach(() => { query.mockReset(); upstream.mockReset() })
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('indexed catalogue server boundary', () => {
-  it('uses Jev for query ordering without changing index filters, coverage or cursors', async () => {
+  it('keeps indexed query order when OpenRouter is blocked', async () => {
     vi.stubEnv('TYPESAFE_API_KEY', '')
     vi.stubEnv('OPENROUTER_API_KEY', 'test-key')
-    const fetchImpl = mockJevFetch({ match_0: { type: 'noul', noul: 0.1 }, match_1: { type: 'noul', noul: 0.9 } })
+    const fetchImpl = vi.fn(async () => { throw new Error('openrouter blocked') })
     vi.stubGlobal('fetch', fetchImpl)
     const entries = ['Weather forecasts', 'Image background removal'].map((description, index) => ({
       resource: `https://example.com/${index}`, title: description, description,
@@ -23,7 +22,7 @@ describe('indexed catalogue server boundary', () => {
     query.mockResolvedValue({ kind: 'ok', coverage, searchMethod: 'native_full_text', page: entries.map(entry => ({ entry })), continueCursor: 'next', isDone: false })
     const result = await readX402DirectoryCatalogue({ query: 'transparent images', network: 'base', maxUsdPrice: 0.1 })
     expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, searchMethod: 'native_full_text', isDone: false, page: {
-      items: [entries[1], entries[0]], appliedFilters: { network: 'base', maxUsdPrice: 0.1 },
+      items: entries, appliedFilters: { network: 'base', maxUsdPrice: 0.1 },
     } })
     expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', {
       query: 'transparent images', network: 'base', maxUsdPrice: 0.1,
@@ -31,7 +30,7 @@ describe('indexed catalogue server boundary', () => {
     })
     if (result.kind !== 'ok') throw new Error('expected catalogue')
     expect(decodeOpaqueCursor(result.indexCursor ?? '', { kind: 'x402-directory', scope: 'gen-1' })).toBe('next')
-    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(fetchImpl).not.toHaveBeenCalled()
     expect(upstream).not.toHaveBeenCalled()
   })
   it('validates source-only inputs and rejects incompatible search sorting', async () => {
@@ -90,19 +89,16 @@ describe('indexed catalogue server boundary', () => {
       return args?.paginationOpts?.cursor === 'previous'
     })).toBe(false)
   })
-  it('falls back only when the index explicitly has no active generation', async () => {
+  it('reports an absent generation without calling Coinbase', async () => {
     query.mockResolvedValue({ kind: 'unavailable', reason: 'index_unavailable' })
-    upstream.mockResolvedValue({ kind: 'ok', items: [], offset: 20, limit: 20, nextOffset: 40 })
-    expect(await readX402DirectoryCatalogue({ offset: 20 })).toMatchObject({ kind: 'ok', source: 'upstream_limited', isDone: false })
-    expect(upstream).toHaveBeenCalledWith({ offset: 20 })
-    upstream.mockClear()
-    for (const input of [{ directoryCategory: 'creative' }, { indexCursor: 'cursor' }]) {
+    const fetchImpl = vi.fn(async () => { throw new Error('coinbase blocked') })
+    vi.stubGlobal('fetch', fetchImpl)
+    expect(await readX402DirectoryCatalogue({ offset: 20 })).toEqual({ kind: 'unavailable', reason: 'index_unavailable' })
+    expect(upstream).not.toHaveBeenCalled()
+    for (const input of [{ directoryCategory: 'creative' }, { indexCursor: 'cursor' }, { sort: 'popular' as const }]) {
       expect(await readX402DirectoryCatalogue(input)).toEqual({ kind: 'unavailable', reason: 'index_unavailable' })
     }
-    // Sort cannot block on unavailability - the upstream directory can't honour index-only
-    // orderings (e.g. adoption), so it falls back to relevance rather than staying unavailable.
-    expect(await readX402DirectoryCatalogue({ sort: 'popular' as const })).toMatchObject({ kind: 'ok', source: 'upstream_limited' })
-    upstream.mockClear()
+    expect(fetchImpl).not.toHaveBeenCalled()
     query.mockRejectedValue(new Error('offline'))
     expect(await readX402DirectoryCatalogue({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
     expect(upstream).not.toHaveBeenCalled()

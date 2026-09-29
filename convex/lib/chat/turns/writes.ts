@@ -1,4 +1,5 @@
 import type { MutationCtx } from '../../../_generated/server'
+import { recordChatAnswer } from '@/lib/observability/journey'
 import type { ObjectType } from 'convex/values'
 import { resolveOwnerChatActor } from '../threads/listing'
 import { chatThreadBelongsToPrincipal } from '../threads/ownership'
@@ -72,7 +73,10 @@ export const finishTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeo
     if (turn === null || turn.promptMessageId !== args.promptMessageId || turn.cancelRequestedAt !== undefined
       || (['completed', 'failed', 'rejected', 'canceled'].includes(turn.state)
         && turn.state !== args.state)) return false
-    if (turn.state !== args.state) await ctx.db.patch(turn._id, { state: args.state, updatedAt: Date.now() })
+    if (turn.state !== args.state) {
+      recordChatAnswer(turn.state, args.state)
+      await ctx.db.patch(turn._id, { state: args.state, updatedAt: Date.now() })
+    }
     return true
   }
 

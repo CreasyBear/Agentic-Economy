@@ -1,3 +1,4 @@
+import { recordCallTerminal } from '@/lib/observability/journey'
 import { type ObjectType } from 'convex/values'
 import { internal } from '../../../_generated/api'
 import type { Doc } from '../../../_generated/dataModel'
@@ -129,6 +130,7 @@ export async function finalizeDispatchHandler(
         internal.moneyX402ExpiryActions.recover, { callRef: row.callRef })
     }
   }
+  recordCallTerminal(row.state, normalizedProjection.state)
   return {
     kind: canonicalResult.kind,
     attemptRef: attempt.attemptRef,

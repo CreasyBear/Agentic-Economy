@@ -2,7 +2,11 @@ import { availability } from '@/modules/capability-supply/public'
 import type { DirectoryChoice } from '@/modules/market/x402-directory'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
-import { toolRecord } from '../../capabilitySupply/tool/projection'
+import { getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
+import { capabilitySupplyGraphPorts } from '../../capabilitySupply/graphPorts/ports'
+import { toPublicationRow, toPublishedBusiness } from '../../capabilitySupply/graphPorts/rows'
+import { toolRecord, toolRecordProjection, type PreloadedCurrentToolRecords } from '../../capabilitySupply/tool/projection'
+import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../../capabilitySupplyRowMappers'
 
 /** Exact current publication identity alone never establishes Call readiness. */
 export async function currentDirectoryChoice(ctx: QueryCtx, sourceRouteRef: string | undefined, now: number): Promise<DirectoryChoice> {
@@ -32,4 +36,102 @@ export function choiceForDirectoryPage(ctx: QueryCtx, now: number): (row: Doc<'m
     }
     return choice
   }
+}
+
+function loadedToolPorts(
+  db: QueryCtx['db'],
+  publication: Doc<'capabilityPublications'>,
+  offeringDoc: Doc<'capabilityOfferings'> | null,
+  bindingDoc: Doc<'capabilityTransportBindings'> | null,
+  business: Doc<'businesses'> | null,
+  contractResult: PreloadedCurrentToolRecords['contractResult'],
+): PreloadedCurrentToolRecords['ports'] {
+  const ports = capabilitySupplyGraphPorts(db)
+  return {
+    ...ports,
+    loadPublicationAtRevision: async (publicationRef, revision) => (
+      publication.publicationRef === publicationRef && publication.revision === revision
+        ? toPublicationRow(publication)
+        : ports.loadPublicationAtRevision(publicationRef, revision)
+    ),
+    loadOfferingByOfferingId: async (offeringId) => (
+      offeringDoc?.offeringId === offeringId ? toCapabilityOfferingRow(offeringDoc)
+        : offeringId === publication.offeringId ? null
+          : ports.loadOfferingByOfferingId(offeringId)
+    ),
+    loadBindingByBindingId: async (bindingId) => (
+      bindingDoc?.bindingId === bindingId ? toCapabilityBindingRow(bindingDoc)
+        : bindingId === publication.bindingId ? null
+          : ports.loadBindingByBindingId(bindingId)
+    ),
+    loadPublishedBusiness: async (businessId) => {
+      if (business !== null && String(business._id) === businessId) {
+        return business.publicStatus === 'published' && business.suppressedAt === undefined ? toPublishedBusiness(business) : null
+      }
+      return ports.loadPublishedBusiness(businessId)
+    },
+    getExactRegisteredCapabilityContract: async (ref) => (
+      ref.capabilityId === publication.capabilityId && ref.version === publication.version && ref.contractDigest === publication.contractDigest
+        ? contractResult
+        : ports.getExactRegisteredCapabilityContract(ref)
+    ),
+  }
+}
+
+/** One indexed read per distinct publication, offering, binding, business and contract on the page. */
+export async function choicesForDirectoryRows(
+  ctx: QueryCtx,
+  rows: readonly Doc<'marketDirectorySearchEntries'>[],
+  now: number,
+): Promise<Map<string, DirectoryChoice>> {
+  const refs = [...new Set(rows.flatMap(row => row.sourceRouteRef === undefined ? [] : [row.sourceRouteRef]))]
+  const publications = await Promise.all(refs.map(sourceRouteRef => ctx.db.query('capabilityPublications')
+    .withIndex('by_sourceRouteRef_and_disposition', query => query.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current'))
+    .unique()))
+  const joined = refs.flatMap((sourceRouteRef, index) => {
+    const publication = publications[index]
+    return publication == null ? [] : [{ sourceRouteRef, publication }]
+  })
+  const [offeringDocs, bindingDocs, businesses, contracts] = await Promise.all([
+    Promise.all(joined.map(({ publication }) => ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', query => query.eq('offeringId', publication.offeringId)).unique())),
+    Promise.all(joined.map(({ publication }) => ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', query => query.eq('bindingId', publication.bindingId)).unique())),
+    Promise.all(joined.map(({ publication }) => ctx.db.get(publication.businessId))),
+    Promise.all(joined.map(({ publication }) => getExactRegisteredCapabilityContract(ctx.db, {
+      capabilityId: publication.capabilityId, version: publication.version, contractDigest: publication.contractDigest,
+    }))),
+  ])
+  const byRef = new Map<string, DirectoryChoice>()
+  await Promise.all(joined.map(async ({ sourceRouteRef, publication }, index) => {
+    const offeringDoc = offeringDocs[index] ?? null
+    const bindingDoc = bindingDocs[index] ?? null
+    const business = businesses[index] ?? null
+    const contractResult = contracts[index]
+    if (contractResult === undefined) {
+      byRef.set(sourceRouteRef, { access: 'unavailable', sourceRouteRef })
+      return
+    }
+    const projection = await toolRecordProjection(ctx, publication, now, {
+      offeringDoc, bindingDoc, business, contractResult,
+      ports: loadedToolPorts(ctx.db, publication, offeringDoc, bindingDoc, business, contractResult),
+    })
+    if (projection.kind !== 'projected') {
+      byRef.set(sourceRouteRef, { access: 'unavailable', sourceRouteRef })
+      return
+    }
+    const posture = availability({
+      routeable: projection.record.routeable, integrated: projection.record.integrated, readiness: projection.record.readiness,
+      ...(projection.record.unavailableReason === undefined ? {} : { unavailableReason: projection.record.unavailableReason }),
+    }, now).posture
+    byRef.set(sourceRouteRef, { access: posture === 'routeable' ? 'ae_callable' : posture, sourceRouteRef, toolRef: publication.toolRef })
+  }))
+  for (const sourceRouteRef of refs) if (!byRef.has(sourceRouteRef)) byRef.set(sourceRouteRef, { access: 'external_listing', sourceRouteRef })
+  return new Map(rows.map(row => {
+    const key = row.sourceRouteRef ?? String(row._id)
+    const choice = row.sourceRouteRef === undefined
+      ? { access: 'external_listing' as const }
+      : byRef.get(row.sourceRouteRef) ?? { access: 'external_listing' as const, sourceRouteRef: row.sourceRouteRef }
+    return [key, choice]
+  }))
 }

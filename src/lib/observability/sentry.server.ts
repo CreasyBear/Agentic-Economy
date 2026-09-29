@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node'
 
 import { readObservabilityServerConfig } from '@/lib/observability/config'
+import { setJourneyReporter, type JourneyOutcomeEvent } from '@/lib/observability/journey'
 import {
   sanitizeTelemetryError,
   sanitizeTelemetryEvent,
@@ -36,7 +37,22 @@ export function initSentryServer(): boolean {
     },
   })
   initialized = true
+  setJourneyReporter(reportJourneyToSentry)
   return true
+}
+
+function reportJourneyToSentry(event: JourneyOutcomeEvent): void {
+  const good = event.good ? 'true' : 'false'
+  Sentry.metrics.count('ae.journey', 1, {
+    attributes: { journey: event.journey, outcome: event.outcome, good },
+  })
+  Sentry.withScope((scope) => {
+    scope.setTag('journey', event.journey)
+    scope.setTag('outcome', event.outcome)
+    scope.setTag('good', good)
+    scope.setLevel(event.good ? 'info' : 'warning')
+    Sentry.captureMessage('[ae.journey]')
+  })
 }
 
 export function captureServerException(
