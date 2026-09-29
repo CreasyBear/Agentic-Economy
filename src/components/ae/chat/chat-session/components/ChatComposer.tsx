@@ -16,6 +16,7 @@ import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui
 import { Spinner } from '@/components/ui/spinner'
 import { chatAnonymousCountLine, chatComposer, chatRecovery } from '@/lib/public/chat-ia'
 
+import { MAX_PROMPT_CHARACTERS } from '../anonymous-session'
 import type { ChatComposerProps } from '../chat-session.contracts'
 
 export function ChatComposer({
@@ -77,7 +78,7 @@ export function ChatComposer({
                 <Button
                   type="submit"
                   className="size-9 min-h-9 min-w-9 rounded-xl bg-foreground !p-0 text-background transition-opacity duration-fast disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring/40"
-                  disabled={disabled || prompt.trim().length === 0}
+                  disabled={disabled || prompt.trim().length === 0 || Array.from(prompt.trim()).length > MAX_PROMPT_CHARACTERS}
                   aria-label={busy ? chatComposer.sendingAria : chatComposer.sendAria}
                 >
                   {busy

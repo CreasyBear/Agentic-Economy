@@ -1,9 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { z } from 'zod'
-import {
-  AeOwnerSupplySourceStartPage,
-  type AeOwnerSupplySourceStartPageProps,
-} from '@/components/ae/supply/AeOwnerSupplySourceStartPage'
+import { AeOwnerSupplySourceStartPage } from '@/components/ae/supply/AeOwnerSupplySourceStartPage'
 import { readProviderWorkspaceIdentityDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
 import { degrade } from '@/lib/observability/degrade'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -11,14 +7,11 @@ import {
   readOwnerProviderConnectionsServer,
   resumeOwnerSupplySourceDraftServer,
 } from '@/modules/capability-supply/supply-funnel.functions'
+import { newOperationSearchSchema, ownerNewOperationSearch } from '@/modules/capability-supply/supplier-onboarding.contracts'
 
 export const Route = createFileRoute('/_operator/owner/operations/new')({
   ...operatorRouteOptions,
-  validateSearch: z.object({
-    connection: z.string().trim().min(1).max(300).optional(),
-    environment: z.enum(['sandbox', 'production']).optional(),
-    draft: z.string().trim().min(1).max(300).optional(),
-  }),
+  validateSearch: newOperationSearchSchema,
   loaderDeps: ({ search }) => ({ connectionRef: search.connection, environment: search.environment, draftRef: search.draft }),
   loader: async ({ deps }) => {
     const identity = await readProviderWorkspaceIdentityDetailServer()
@@ -71,7 +64,7 @@ function NewOwnerOfferingRoute() {
   return (
     <AeOwnerSupplySourceStartPage
       data={data}
-      search={search as AeOwnerSupplySourceStartPageProps['search']}
+      search={ownerNewOperationSearch(search)}
       navigate={navigate}
     />
   )

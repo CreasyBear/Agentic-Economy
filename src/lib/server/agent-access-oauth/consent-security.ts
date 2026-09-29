@@ -129,6 +129,7 @@ async function consentResponse(
     grantRevision: grant.revision,
     flow: grant.flow,
     clientName: grant.displayName,
+    ...(grant.redirectUri === undefined ? {} : { redirectUri: grant.redirectUri }),
     mode,
     requestedScopes: grant.requestedScopes,
     state,

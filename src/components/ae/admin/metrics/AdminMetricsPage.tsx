@@ -5,10 +5,11 @@ import { MetricsControls } from './components/MetricsControls'
 import { MetricsDayTable } from './components/MetricsDayTable'
 import { MetricsHeadline } from './components/MetricsHeadline'
 import { MetricsRatios } from './components/MetricsRatios'
+import { AdminSearchNotice } from '../AdminSearchNotice'
 import { ADMIN_METRICS_COPY, type AdminMetricsPageProps } from './metrics.contracts'
 import { useAdminMetrics } from './useAdminMetrics'
 
-export function AdminMetricsPage({ range, onRangeChange }: AdminMetricsPageProps) {
+export function AdminMetricsPage({ range, rejected, onRangeChange }: AdminMetricsPageProps) {
   const data = useAdminMetrics(range)
   if (data.kind === 'loading') return <AdminMetricsPageSkeleton />
   return (
@@ -24,6 +25,7 @@ export function AdminMetricsPage({ range, onRangeChange }: AdminMetricsPageProps
       actions={<MetricsControls range={range} onRangeChange={onRangeChange} />}
       stickyHeader
     >
+      <AdminSearchNotice rejected={rejected} />
       {data.kind === 'refused' ? (
         <AePageState
           title={ADMIN_METRICS_COPY.accessDeniedTitle}

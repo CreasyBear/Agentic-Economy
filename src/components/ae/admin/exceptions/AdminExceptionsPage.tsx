@@ -7,7 +7,8 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { AdminExceptionsPageSkeleton } from './AdminExceptionsPageSkeleton'
 import { ExceptionEvidenceSheet } from './components/ExceptionEvidenceSheet'
 import { ExceptionFeedTable } from './components/ExceptionFeedTable'
-import { ExceptionFilterChips } from './components/ExceptionFilterChips'
+import { AdminSearchNotice } from '../AdminSearchNotice'
+import { ExceptionFilterChips, exceptionQueueCount } from './components/ExceptionFilterChips'
 import { PurchaseResolutionTable } from './components/PurchaseResolutionTable'
 import {
   ADMIN_EXCEPTION_PARTITIONS,
@@ -47,46 +48,55 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
     )
   }
 
-  const selectedPartition = exceptions.data.selectedPartition
+  const ready = exceptions.data
+  const selectedPartition = ready.selectedPartition
   return page(
     <div className="grid gap-section">
       <AeSection
         title={ADMIN_EXCEPTIONS_COPY.filtersTitle}
         description={ADMIN_EXCEPTIONS_COPY.filtersDescription}
       >
+        <AdminSearchNotice rejected={props.search.rejected} />
         <ExceptionFilterChips
-          selected={exceptions.data.selectedKind}
-          overview={exceptions.data.overview}
+          selected={ready.selectedKind}
+          selectedPartition={selectedPartition}
+          overview={ready.overview}
           onSelect={exceptions.onSelectKind}
         />
         <div className="mt-3 flex flex-wrap gap-intra">
-          {ADMIN_EXCEPTION_PARTITIONS[exceptions.data.selectedKind].map((partition) => (
-            <Button key={partition} type="button" size="sm"
-              variant={selectedPartition === partition ? 'default' : 'outline'}
-              aria-pressed={selectedPartition === partition}
-              onClick={() => exceptions.onSelectPartition(partition)}>
-              {ADMIN_EXCEPTION_PARTITION_LABELS[partition]}
-            </Button>
-          ))}
+          {ADMIN_EXCEPTION_PARTITIONS[ready.selectedKind].map((partition) => {
+            const count = exceptionQueueCount(
+              ready.overview.filter((entry) => entry.kind === ready.selectedKind && entry.partition === partition),
+              1,
+            )
+            return (
+              <Button key={partition} type="button" size="sm"
+                variant={selectedPartition === partition ? 'default' : 'outline'}
+                aria-pressed={selectedPartition === partition}
+                onClick={() => exceptions.onSelectPartition(partition)}>
+                {ADMIN_EXCEPTION_PARTITION_LABELS[partition]} ({count})
+              </Button>
+            )
+          })}
         </div>
       </AeSection>
-      {exceptions.data.selectedSourceUnavailable ? (
+      {ready.selectedSourceUnavailable ? (
         <p role="status" className="text-sm text-warning">{ADMIN_EXCEPTIONS_COPY.exceptionsUnavailable}</p>
       ) : null}
       <ExceptionFeedTable
-        rows={exceptions.data.rows}
-        observed={exceptions.data.observed}
-        scanRequests={exceptions.data.scanRequests}
-        complete={exceptions.data.complete}
-        unavailable={exceptions.data.selectedSourceUnavailable}
-        orderLabel={exceptions.data.selectedKind === 'uncertain_call'
+        rows={ready.rows}
+        observed={ready.observed}
+        scanRequests={ready.scanRequests}
+        complete={ready.complete}
+        unavailable={ready.selectedSourceUnavailable}
+        orderLabel={ready.selectedKind === 'uncertain_call'
           ? 'Reconciliation next-attempt order'
           : 'Updated-at index order'}
-        paginationStatus={exceptions.data.paginationStatus}
-        onLoadMore={exceptions.data.loadMore}
+        paginationStatus={ready.paginationStatus}
+        onLoadMore={ready.loadMore}
         onOpen={exceptions.onOpen}
       />
-      <PurchaseResolutionTable rows={exceptions.data.resolutions} />
+      <PurchaseResolutionTable rows={ready.resolutions} />
       <ExceptionEvidenceSheet
         row={exceptions.selectedRow}
         onOpenChange={exceptions.onOpenChange}

@@ -81,18 +81,36 @@ describe('sign-in site stage', () => {
     expect(container.querySelectorAll('.min-h-touch').length).toBeGreaterThanOrEqual(4)
   })
 
-  it('uses default copy for non-supply owner redirects and Market for no return', () => {
+  it('names the preserved destination and uses Market only when that is the return', () => {
+    const Component = routeState.SignIn
+    if (Component === undefined || Component === null) throw new Error('Sign-in route was not captured.')
+
     routeState.search = { redirect: '/owner/settings' }
-    const ProviderComponent = routeState.SignIn
-    if (ProviderComponent === undefined || ProviderComponent === null) throw new Error('Sign-in route was not captured.')
-    const { unmount } = render(<ProviderComponent />)
+    const settings = render(<Component />)
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
     expect(screen.queryByText(/return to your Provider Workspace/)).toBeNull()
-    expect(screen.getByText(/continue on Market/)).toBeTruthy()
-    unmount()
+    expect(screen.getByText(/continue on Settings/)).toBeTruthy()
+    expect(screen.queryByText(/continue on Market/)).toBeNull()
+    settings.unmount()
+
+    routeState.search = { redirect: '/owner/credit?funding=cancelled' }
+    const credit = render(<Component />)
+    expect(screen.getByText(/continue on Credit/)).toBeTruthy()
+    credit.unmount()
+
+    routeState.search = { redirect: '/admin/exceptions' }
+    const admin = render(<Component />)
+    expect(screen.getByText(/continue on Exceptions/)).toBeTruthy()
+    expect(screen.queryByText(/continue on Market/)).toBeNull()
+    admin.unmount()
+
+    routeState.search = { redirect: '/admin' }
+    const overview = render(<Component />)
+    expect(screen.getByText(/continue on Admin/)).toBeTruthy()
+    overview.unmount()
 
     routeState.search = { redirect: undefined }
-    render(<ProviderComponent />)
+    render(<Component />)
     expect(screen.getByText(/continue on Market/)).toBeTruthy()
   })
 

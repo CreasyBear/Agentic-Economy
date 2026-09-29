@@ -8,24 +8,36 @@ export function useInviteTeamMember() {
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
+    const trimmed = email.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError('Enter a valid email address.')
+      setError('')
+      setMessage('')
+      return
+    }
     setPending(true)
+    setEmailError('')
     setError('')
     setMessage('')
-    void inviteTeamMemberServer({ data: { email: email.trim(), role } })
+    void inviteTeamMemberServer({ data: { email: trimmed, role } })
       .then(() => {
-        setMessage(`Invitation sent to ${email.trim()}. The member appears here after accepting.`)
+        setMessage(`Invitation sent to ${trimmed}. The member appears here after accepting.`)
         setEmail('')
       })
       .catch(cause => {
         captureClientExceptionOnClient(cause)
-        setError('Could not send the invitation. Check the address and try again.')
+        const serverMessage = cause instanceof Error ? cause.message : ''
+        setError(serverMessage === 'Sign in to invite a member.' || serverMessage === 'Invitations are no longer available. Refresh Team & roles to see why.'
+          ? serverMessage
+          : 'Could not send the invitation. Try again.')
       })
       .finally(() => setPending(false))
   }
 
-  return { email, setEmail, role, setRole, pending, message, error, submit }
+  return { email, setEmail, role, setRole, pending, message, error, emailError, submit }
 }

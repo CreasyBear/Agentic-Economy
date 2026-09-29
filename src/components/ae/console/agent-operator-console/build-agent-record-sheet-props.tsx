@@ -82,7 +82,7 @@ export function buildAgentRecordSheetProps({
     ),
     technicalFacts: selected === undefined ? [] : technicalAgentFacts(selected),
     credentialHistory: selected === undefined ? null : (
-      <Link to="/owner/settings/agent-keys" className="inline-flex min-h-touch items-center text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">
+      <Link to="/owner/settings/agent-keys" className="inline-flex min-h-touch items-center text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">
         Manage Agent keys and credential history
       </Link>
     ),

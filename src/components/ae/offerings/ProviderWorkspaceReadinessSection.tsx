@@ -34,7 +34,7 @@ export function ProviderWorkspaceReadinessSection({
             </div>
           ) : <SecondarySummary result={result} subject="Connections" notApplicableTitle="No connections configured" unavailableTitle="Connections unavailable" />}
         </DeferredSection>
-        <a href={connectionHref} className="min-h-touch justify-self-start text-sm font-medium underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">
+        <a href={connectionHref} className="min-h-touch justify-self-start text-sm font-medium underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">
           Manage connections
         </a>
       </div>

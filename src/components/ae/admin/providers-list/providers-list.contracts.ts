@@ -2,12 +2,16 @@ import { z } from 'zod'
 
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
 import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
+import { ADMIN_LIST_WINDOW, ADMIN_LIST_WINDOW_MAX } from '../admin-list-window'
 
 export const adminProvidersSearchSchema = z.strictObject({
   filter: z.enum(['all', 'suppressed']).optional(),
+  loaded: z.coerce.number().int().min(ADMIN_LIST_WINDOW).max(ADMIN_LIST_WINDOW_MAX).optional(),
 })
 
-export type AdminProvidersSearch = z.infer<typeof adminProvidersSearchSchema>
+export type AdminProvidersSearch = z.infer<typeof adminProvidersSearchSchema> & {
+  rejected?: string
+}
 export type AdminProviderFilter = 'all' | 'suppressed'
 
 export type AdminProviderRow = Readonly<{

@@ -167,6 +167,7 @@ function renderWithRouter(
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/$slug' }),
   ])
   // A single history entry: `useMarketBackNavigation` always falls back to a
@@ -486,9 +487,11 @@ describe('/tools/$toolRef', () => {
     expect(readDetailMock).not.toHaveBeenCalled()
   })
 
-  it('has a recovery path without commercial claims if the Tool read is unavailable', () => {
+  it('retries the same Tool when the read is unavailable and shows no commercial claims', () => {
     renderWithRouter({ kind: 'source_unavailable', toolRef: tool.toolRef })
-    expect(screen.getByRole('link', { name: 'Check status' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toContain(encodeURIComponent(tool.toolRef))
+    expect(screen.getByRole('link', { name: 'Browse Market' }).getAttribute('href')).toBe('/market')
+    expect(screen.queryByRole('link', { name: 'Check status' })).toBeNull()
     expect(screen.queryByText(/USD 1.25/)).toBeNull()
   })
 

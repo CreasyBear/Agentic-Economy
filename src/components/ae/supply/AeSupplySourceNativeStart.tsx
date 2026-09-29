@@ -18,6 +18,7 @@ import {
   sourceSummary,
 } from './supply-source-native-start-presentation'
 import type { SupplyJourneyContinuation } from './supply-source-native-start-presentation'
+import { supplyPublishAuthorityRequired, useReportSupplyNavigationSafety } from './supply-navigation-safety'
 import { useSupplyNativeStartState, type SupplyNativeStartProps } from './useSupplyNativeStartState'
 
 type SupplyStage = 'source' | 'tool' | 'terms' | 'review'
@@ -29,6 +30,9 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
     : vm.reviewing ? 'review' : 'terms'
   const stageHeadingRef = useRef<HTMLHeadingElement>(null)
   const focusedStageRef = useRef<SupplyStage | null>(null)
+
+  const publishAuthorityRequired = supplyPublishAuthorityRequired(vm)
+  useReportSupplyNavigationSafety(props.onNavigationSafetyChange, vm)
 
   useEffect(() => {
     if (stage === 'source') {
@@ -97,6 +101,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             vm.resetDiscoveryOnSourceEdit()
           }}
           onFieldError={vm.setError}
+          onFieldClear={() => vm.setError(undefined)}
           onDiscover={() => void vm.findTools()}
         />
       ) : null}
@@ -138,7 +143,9 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
           </div>
           {props.initial !== undefined && stage === 'terms' ? (
             <p className="text-sm text-muted-foreground">
-              Review the restored terms and confirm publication authority before submitting.
+              {publishAuthorityRequired
+                ? 'Review the restored terms and confirm publication authority before submitting.'
+                : 'Review the restored terms. Publication stays under review until Provider authority is established.'}
             </p>
           ) : null}
           <SupplyPublicationFlow
@@ -193,6 +200,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             onContinueToReview={vm.continueToReview}
             onEditTerms={vm.editTerms}
             onSubmit={() => void vm.submit()}
+            publishAuthorityRequired={publishAuthorityRequired}
           />
         </div>
       )}

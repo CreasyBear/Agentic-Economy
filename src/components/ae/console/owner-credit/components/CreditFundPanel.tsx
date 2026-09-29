@@ -31,11 +31,25 @@ export function CreditFundPanel({
   const balanceUnavailable = accountBalance === undefined || accountBalance.kind === 'refused'
   const balanceRefreshUnavailable = unavailable.balance === true && accountBalance?.kind === 'available'
   const balanceLocked = accountBalance?.kind === 'available' && accountBalance.locked
+  const creditStatus = balanceLoading && accountBalance === undefined
+    ? 'Loading Credit.'
+    : balanceLoading
+      ? 'Refreshing available credit.'
+      : balanceUnavailable
+        ? 'Credit unavailable. No balance is being inferred.'
+        : balance === undefined
+          ? 'Checking available credit.'
+          : balanceRefreshUnavailable
+            ? `Available credit ${formatDisplayAmount(balance)}. The latest refresh failed, so this is the last authoritative balance.`
+            : `Available credit ${formatDisplayAmount(balance)}.`
 
   return (
     <div id="fund" className="grid gap-related">
       <p className="max-w-[65ch] text-pretty text-sm leading-normal text-muted-foreground">
         Browsing is free. Paid Calls reserve AUD from this Account and remain subject to each Agent’s spending policy.
+      </p>
+      <p className="sr-only" aria-live="polite">
+        {creditStatus}
       </p>
       {balanceLoading && accountBalance === undefined ? (
         <div className="grid gap-intra rounded-card border border-border bg-card p-gutter" aria-busy="true" aria-label="Loading Credit">

@@ -13,9 +13,11 @@ const canonicalToolRefPattern = /^operation:v1:[0-9a-f]{64}$/u
 export function validateAgentAccessSearch(search: Record<string, unknown>): AgentAccessSearch {
   const caller = typeof search.caller === 'string' ? search.caller.trim() : undefined
   const resumeTool = typeof search.resumeTool === 'string' ? search.resumeTool.trim() : undefined
+  const setup = search.setup === 'choose' || search.setup === 'oauth' ? search.setup : undefined
   return {
     ...(caller !== undefined && canonicalPrincipalIdPattern.test(caller) ? { caller } : {}),
     ...(resumeTool !== undefined && canonicalToolRefPattern.test(resumeTool) ? { resumeTool } : {}),
+    ...(setup === undefined ? {} : { setup }),
   }
 }
 

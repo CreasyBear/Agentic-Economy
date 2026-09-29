@@ -30,6 +30,17 @@ export function ChatLayout({ model }: ChatLayoutProps) {
   }
   const empty = !model.pageBusy && !model.transcript.pending && model.transcript.messages.length === 0
   const { onEnableSpending: _onEnableSpending, ...fallbackHeader } = model.header
+  if (model.signInToThread !== undefined) {
+    return (
+      <AeChatPage header={null} dock={null}>
+        <div className="mx-auto flex w-full max-w-prose flex-col gap-4 px-4 py-16">
+          <h1 className="text-2xl font-semibold tracking-tight">Sign in to open this chat</h1>
+          <p className="text-muted-foreground">This conversation is private. Sign in to return to this page.</p>
+          <a href={model.signInToThread.href} className="inline-flex min-h-10 w-fit items-center rounded-md bg-foreground px-4 text-sm text-background">Sign in</a>
+        </div>
+      </AeChatPage>
+    )
+  }
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
       {model.showHistoryRail ? (

@@ -26,6 +26,9 @@ import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-v
 import {
   agentStatusBadgeVariant,
   agentStatusLabel,
+  authorityCellText,
+  authorityIsHistorical,
+  currentAuthorityLabel,
   environmentLabel,
   monthlySpendLabel,
   monthlyUtilizationPercent,
@@ -94,14 +97,23 @@ export function AeAgentDirectoryTable({
         cell: ({ row }) => row.original.connectionsAvailable === false
           ? 'Connection details unavailable'
           : row.original.connectionCount === 0
-            ? 'Legacy credential'
+            ? 'Direct key'
             : row.original.connectorDisplayNames.join(', '),
       },
       {
         id: 'authority',
-        accessorFn: (item) => scopeLabel(item.authorityMode),
+        accessorFn: (item) => authorityCellText(item),
         header: ({ column }) => <AeOperatorSortableHeader label="Authority" column={column} />,
-        cell: ({ row }) => scopeLabel(row.original.authorityMode),
+        cell: ({ row }) => {
+          const current = currentAuthorityLabel(row.original.status, row.original.authorityMode)
+          if (!authorityIsHistorical(row.original.status)) return current
+          return (
+            <div className="grid gap-1">
+              <span>{current}</span>
+              <span className="text-xs text-muted-foreground">Previous authority: {scopeLabel(row.original.authorityMode)}</span>
+            </div>
+          )
+        },
       },
       {
         id: 'monthlySpend',

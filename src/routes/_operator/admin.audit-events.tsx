@@ -6,11 +6,24 @@ import {
   AUDIT_COPY,
   adminAuditSearchSchema,
 } from '@/components/ae/admin/audit/audit.contracts'
+import { recoverableSearch } from '@/lib/client/recoverable-search'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/admin/audit-events')({
   ...operatorRouteOptions,
-  validateSearch: adminAuditSearchSchema,
+  validateSearch: recoverableSearch(adminAuditSearchSchema, {
+    fieldLabels: {
+      eventType: 'Event type',
+      actorRef: 'Actor',
+      targetType: 'Target type',
+      targetRef: 'Target',
+      correlationId: 'Correlation',
+      from: 'From',
+      to: 'To',
+      eventsLoaded: 'Audit page',
+      approvalsLoaded: 'Approval page',
+    },
+  }),
   pendingComponent: AdminAuditPageSkeleton,
   head: () => ({
     meta: [

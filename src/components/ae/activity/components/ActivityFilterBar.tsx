@@ -29,7 +29,7 @@ export function ActivityFilterBar({
   return (
     <div className="flex min-h-[3rem] flex-wrap items-center justify-between gap-3 gap-y-related border-b border-border pb-related">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">Status:</span>
           <div className="flex flex-wrap items-center gap-1">
             {STATUS_FILTERS.map((s) => (
@@ -50,7 +50,7 @@ export function ActivityFilterBar({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">Date:</span>
           <div className="flex flex-wrap items-center gap-1">
             {DATE_FILTERS.map((d) => (

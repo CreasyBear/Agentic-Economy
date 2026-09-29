@@ -205,14 +205,14 @@ export function AeKeyRevealDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className={cn(
-          'sm:max-w-[620px] max-h-[90vh]',
+          'flex max-h-[min(90dvh,calc(100dvh-2rem))] w-full flex-col overflow-hidden sm:max-w-[620px]',
           dismissBlocked && 'ring-2 ring-warning-ring',
         )}
         data-slot="dialog-content"
         onPointerDownOutside={blockDismissInteraction}
         onEscapeKeyDown={blockDismissInteraction}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Save your secret key</DialogTitle>
           <DialogDescription>
             Step 2 of 2 · Save & install
@@ -223,7 +223,7 @@ export function AeKeyRevealDialog({
           </div>
         </DialogHeader>
 
-        <div className="grid gap-4 overflow-y-auto py-2">
+        <div data-ae-key-reveal-scroll className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain py-2">
           <Alert className="border-warning-ring bg-warning-subtle text-warning-foreground">
             <AlertTriangleIcon className="size-4" />
             <AlertTitle>This secret will never be shown again.</AlertTitle>
@@ -442,33 +442,34 @@ export function AeKeyRevealDialog({
             )}
           </div>
 
-          <div
-            className={cn(
-              'flex items-center gap-2 pt-3 border-t rounded-md',
-              dismissBlocked && 'ring-2 ring-warning-ring ring-offset-2 ring-offset-background',
-            )}
-          >
-            <Checkbox
-              id="agent-access-key-saved"
-              ref={acknowledgeCheckboxRef}
-              checked={acknowledged}
-              onCheckedChange={(checked) => setAcknowledged(checked === true)}
-            />
-            <Label
-              htmlFor="agent-access-key-saved"
-              className="text-sm cursor-pointer font-medium leading-none"
-            >
-              I have saved my secret key securely
-            </Label>
-          </div>
-          {dismissBlocked ? (
-            <p role="alert" className="text-xs text-warning-foreground">
-              Confirm you have saved the secret before closing.
-            </p>
-          ) : null}
         </div>
 
-        <DialogFooter>
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-2 border-t pt-3',
+            dismissBlocked && 'rounded-md ring-2 ring-warning-ring ring-offset-2 ring-offset-background',
+          )}
+        >
+          <Checkbox
+            id="agent-access-key-saved"
+            ref={acknowledgeCheckboxRef}
+            checked={acknowledged}
+            onCheckedChange={(checked) => setAcknowledged(checked === true)}
+          />
+          <Label
+            htmlFor="agent-access-key-saved"
+            className="cursor-pointer text-sm font-medium leading-none"
+          >
+            I have saved my secret key securely
+          </Label>
+        </div>
+        {dismissBlocked ? (
+          <p role="alert" className="shrink-0 text-xs text-warning-foreground">
+            Confirm you have saved the secret before closing.
+          </p>
+        ) : null}
+
+        <DialogFooter className="shrink-0">
           <Button
             type="button"
             disabled={!acknowledged}

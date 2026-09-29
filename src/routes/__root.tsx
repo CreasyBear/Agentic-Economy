@@ -5,7 +5,7 @@ import { useEffect, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
-import { ChatConvexProvider, SignedInConvexProvider, requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
+import { ChatConfigurationUnavailable, ChatConvexProvider, SignedInConvexProvider, requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
@@ -51,11 +51,13 @@ export const Route = createRootRoute({
 })
 
 function RootComponent() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const chatUnavailable = requiresChatProviders(pathname) && !import.meta.env.VITE_CONVEX_URL?.trim()
   return (
     <RootDocument>
       <ThemeProvider>
         <AeAppShell>
-          <Outlet />
+          {chatUnavailable ? <ChatConfigurationUnavailable /> : <Outlet />}
         </AeAppShell>
       </ThemeProvider>
     </RootDocument>
@@ -81,7 +83,7 @@ function responsiveToasterProps(isMobile: boolean) {
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const isMobile = useIsMobile()
-  const chatProvidersRequired = requiresChatProviders(pathname)
+  const chatProvidersRequired = requiresChatProviders(pathname) && Boolean(import.meta.env.VITE_CONVEX_URL?.trim())
   const content = (
     <ClerkProvider appearance={clerkAppearance}>
       {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : <SignedInConvexProvider>{children}</SignedInConvexProvider>}
@@ -105,5 +107,3 @@ function RootDocument({ children }: { children: ReactNode }) {
     </html>
   )
 }
-
-

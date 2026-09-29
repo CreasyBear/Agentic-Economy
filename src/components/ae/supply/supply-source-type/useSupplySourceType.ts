@@ -8,7 +8,9 @@ import {
 } from '../supply-source-native-start-presentation'
 import {
   JSON_DISCOVER_DIAGNOSTICS,
+  SUPPLY_SOURCE_TYPE_COPY,
   URL_DISCOVER_DIAGNOSTICS,
+  httpsDiscoverNextStep,
   type DiscoverDiagnosticState,
   type SupplySourceTypeSectionProps,
 } from './supply-source-type.contracts'
@@ -29,21 +31,21 @@ export function useSupplySourceType(props: SupplySourceTypeSectionProps) {
     if (props.sourceKind === 'openapi') {
       const preflight = inspectHttpsUrl(props.definitionUrl)
       if (preflight === 'invalid' || preflight === 'insecure') {
-        setDiscoverDiagnostic({ target: 'definitionUrl', diagnostic: URL_DISCOVER_DIAGNOSTICS[preflight] })
+        setDiscoverDiagnostic({ target: 'definitionUrl', diagnostic: urlDiagnostic(preflight, SUPPLY_SOURCE_TYPE_COPY.httpsExample.openapi) })
         return
       }
     }
     if (props.sourceKind === 'mcp' && props.mcpLocator === 'url') {
       const preflight = inspectHttpsUrl(props.serverUrl)
       if (preflight === 'invalid' || preflight === 'insecure') {
-        setDiscoverDiagnostic({ target: 'serverUrl', diagnostic: URL_DISCOVER_DIAGNOSTICS[preflight] })
+        setDiscoverDiagnostic({ target: 'serverUrl', diagnostic: urlDiagnostic(preflight, SUPPLY_SOURCE_TYPE_COPY.httpsExample.mcp) })
         return
       }
     }
     if (props.sourceKind === 'x402') {
       const preflight = inspectHttpsUrl(props.resourceUrl)
       if (preflight === 'invalid' || preflight === 'insecure') {
-        setDiscoverDiagnostic({ target: 'resourceUrl', diagnostic: URL_DISCOVER_DIAGNOSTICS[preflight] })
+        setDiscoverDiagnostic({ target: 'resourceUrl', diagnostic: urlDiagnostic(preflight, SUPPLY_SOURCE_TYPE_COPY.httpsExample.x402) })
         return
       }
     }
@@ -75,4 +77,10 @@ export function useSupplySourceType(props: SupplySourceTypeSectionProps) {
     onResourceUrlChange: clearThen(props.onResourceUrlChange),
     onX402MethodChange: clearThen(props.onX402MethodChange),
   }
+}
+
+function urlDiagnostic(preflight: 'invalid' | 'insecure', example: string) {
+  const diagnostic = URL_DISCOVER_DIAGNOSTICS[preflight]
+  if (preflight === 'insecure') return diagnostic
+  return { ...diagnostic, nextStep: httpsDiscoverNextStep(example) }
 }

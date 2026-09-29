@@ -20,6 +20,7 @@ import type {
 import type { CapabilityTransportAuthority } from './internal/transport-terms-schema'
 import {
   previewSupplySource,
+  isPublicOpenApiLoadRefusal,
   loadPublicOpenApi,
   supplySourceInputSchema,
   type McpSourceDiscovery,
@@ -81,7 +82,7 @@ export const publishSupplyToolV2InputSchema = z.strictObject({
   environment: z.enum(['sandbox', 'production']),
   idempotencyKey: idempotencyKeySchema,
   attestation: z.strictObject({
-    authorisedToPublish: z.literal(true),
+    authorisedToPublish: z.boolean(),
     informationAccurate: z.literal(true),
     publishAfterSuccessfulValidation: z.literal(true),
   }),
@@ -154,9 +155,10 @@ export async function prepareSupplyPublicationV2(
     ?? (await import('./internal/x402-seller-endpoint-inspector')).inspectX402SellerEndpoint
   const previewDependencies: SupplySourcePreviewDependencies = {
     loadOpenApi: async (url) => {
-      const document = await loadOpenApi(url)
-      openApiDocument = document
-      return document
+      const loaded = await loadOpenApi(url)
+      if (isPublicOpenApiLoadRefusal(loaded)) return loaded
+      openApiDocument = loaded
+      return loaded
     },
     discoverMcp: async (request) => {
       const discovery = await discoverMcp(request)
@@ -194,6 +196,11 @@ export async function prepareSupplyPublicationV2(
     }
   }
   if (preview.sourceDigest !== input.expectedSourceDigest) return refused('source_changed')
+  const publicationAuthorityEstablished = dependencies.providerAuthority !== undefined
+    || preview.provenance.authority === 'verified_registry'
+  if (publicationAuthorityEstablished && input.attestation.authorisedToPublish !== true) {
+    return refused('attestation_required')
+  }
   const candidate = preview.candidates.find(({ candidateRef }) => candidateRef === input.candidateRef)
   if (candidate === undefined) return refused('candidate_changed')
   if (candidate.disposition.kind === 'unsupported') return refused(candidate.disposition.reason)

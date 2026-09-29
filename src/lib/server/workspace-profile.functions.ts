@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { unboundWorkspaceDefaultName } from '@/lib/workspace-label'
 
 export type WorkspaceOrganizationBinding = Readonly<{
   accountRef: string
@@ -23,14 +24,28 @@ const renameSchema = z.strictObject({
 })
 export const readPersonalWorkspaceDefaultNameServer = createServerFn().handler(async (): Promise<string | null> => {
   const binding = await callSourceQuery(readWorkspaceOrganizationBinding, {})
-  if (binding.clerkOrgId !== null || !binding.displayName.startsWith('user_')) return null
-  if (!binding.ownerDisplayName.startsWith('user_')) return `${binding.ownerDisplayName}'s workspace`
-  if (binding.ownerClerkUserId === null) return 'Your workspace'
-  const owner = await clerkClient().users.getUser(binding.ownerClerkUserId)
-  const displayName = [owner.firstName, owner.lastName].filter(Boolean).join(' ')
-    || owner.username || owner.emailAddresses[0]?.emailAddress.split('@')[0] || 'Your'
-  return `${displayName}'s workspace`
+  const needsClerkName = binding.clerkOrgId === null
+    && binding.displayName.startsWith('user_')
+    && binding.ownerDisplayName.startsWith('user_')
+    && binding.ownerClerkUserId !== null
+  const clerkPersonName = needsClerkName
+    ? await clerkPersonLabel(binding.ownerClerkUserId)
+    : null
+  return unboundWorkspaceDefaultName({
+    clerkOrgId: binding.clerkOrgId,
+    displayName: binding.displayName,
+    ownerDisplayName: binding.ownerDisplayName,
+    clerkPersonName,
+  })
 })
+
+async function clerkPersonLabel(userId: string | null): Promise<string | null> {
+  if (userId === null) return null
+  const owner = await clerkClient().users.getUser(userId)
+  const displayName = [owner.firstName, owner.lastName].filter(Boolean).join(' ')
+    || owner.username || owner.emailAddresses[0]?.emailAddress.split('@')[0]
+  return displayName && displayName.length > 0 ? displayName : null
+}
 
 type RenameWorkspaceResult =
   | Readonly<{ kind: 'accepted'; name: string }>

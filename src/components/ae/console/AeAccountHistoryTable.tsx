@@ -17,6 +17,7 @@ import type {
   AccountHistoryResult,
 } from '@/modules/money/public'
 import type { AccountHistoryPort } from '@/modules/money/account-history.contracts'
+import { AccountHistorySourceLink } from './AccountHistorySourceLink'
 import { accountHistoryLabel, accountHistorySourceLabel, deduplicateHistory, formatSignedAmount } from './owner-credit-format'
 
 type AvailableAccountHistory = Extract<AccountHistoryResult, { kind: 'available' }>
@@ -160,12 +161,7 @@ function AvailableAccountHistoryView({
       cell: ({ row }) => (
         <div className="grid gap-1">
           <span className="font-medium text-foreground">{accountHistoryLabel(row.original.kind)}</span>
-          {row.original.kind === 'call_spend' && row.original.sourceRef !== null ? (
-            <a href={`/calls/${encodeURIComponent(row.original.sourceRef)}`} className="w-fit text-xs font-medium text-primary hover:underline"
-              aria-label={`View Call receipt ${row.original.sourceRef}`}>
-              View Call receipt
-            </a>
-          ) : null}
+          <AccountHistorySourceLink entry={row.original} />
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer">Transaction details</summary>
             <dl className="mt-2 grid gap-1">
@@ -292,6 +288,7 @@ function AvailableAccountHistoryView({
           <Button type="button" variant="secondary" disabled={state.status === 'loading'} onClick={() => { void loadNextPage() }}>
             {state.status === 'loading' ? 'Loading more…' : 'Load more'}
           </Button>
+
         </div>
       )}
     </div>

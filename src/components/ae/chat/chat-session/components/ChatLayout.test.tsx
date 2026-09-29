@@ -94,6 +94,17 @@ describe('ChatLayout', () => {
     expect(document.cookie).toContain('chat_sidebar_state=false')
   })
 
+  it('asks a signed-out visitor to sign in instead of opening a new chat', () => {
+    render(<ChatLayout model={buildModel({
+      signInToThread: { href: '/sign-in?redirect=%2Ft%2Fprivate-thread' },
+    })} />)
+    expect(screen.getByRole('heading', { name: 'Sign in to open this chat' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href'))
+      .toBe('/sign-in?redirect=%2Ft%2Fprivate-thread')
+    expect(screen.queryByRole('textbox', { name: chatComposer.promptLabel })).toBeNull()
+    expect(screen.queryByText('What can I find for you?')).toBeNull()
+  })
+
   it('sends the full prompt from an empty-state starter', () => {
     const onStarter = vi.fn()
     const { container } = render(<ChatLayout model={buildModel({

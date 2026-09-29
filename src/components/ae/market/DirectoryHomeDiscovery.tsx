@@ -12,6 +12,7 @@ type DirectoryHomeDiscoveryProps = Readonly<{
   onSave: (item: SavedDirectoryTool) => void
   isSaved: (item: SavedDirectoryTool) => boolean
   saveDisabled?: boolean
+  saveUnknown?: boolean
   onCompare: (item: SavedDirectoryTool) => void
   isComparing: (resource: string) => boolean
   compareDisabled: (resource: string) => boolean
@@ -25,7 +26,7 @@ const navigation = {
 } as const
 
 /** Editorial collections of live directory matches, using the installed Embla carousel. */
-export function DirectoryHomeDiscovery({ home, onSave, isSaved, saveDisabled, onCompare, isComparing, compareDisabled }: DirectoryHomeDiscoveryProps) {
+export function DirectoryHomeDiscovery({ home, onSave, isSaved, saveDisabled, saveUnknown = false, onCompare, isComparing, compareDisabled }: DirectoryHomeDiscoveryProps) {
   const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
   return <div className="pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px)+2rem)] md:pb-8">
     <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
@@ -58,7 +59,7 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, saveDisabled, on
               {rail.items.slice(0, 8).map(entry => {
                 const item = { entry, search: rail.search }
                 return <CarouselItem key={entry.resource} className="h-full basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-                  <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(item)} saveDisabled={saveDisabled === true}
+                  <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(item)} saveDisabled={saveDisabled === true} saveUnknown={saveUnknown}
                     onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 </CarouselItem>
               })}

@@ -49,22 +49,25 @@ export type AeOperatorPageProps = {
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
   suppressSurfaceNavigation?: boolean
+  /** The page body owns the h1, so the frame title stays chrome. */
+  contentOwnsHeading?: boolean
   /** A loading placeholder for the route; focus management waits for the real page. */
   pending?: boolean
   children: ReactNode
 }
 
 type OperatorPageChromeInput = Pick<AeOperatorPageProps, 'operatorRole' | 'title' | 'description' | 'currentPath'> & {
-  [K in 'actions' | 'secondaryBar' | 'stickyHeader' | 'mainContentId' | 'breadcrumbs' | 'suppressSurfaceNavigation' | 'pending']?: AeOperatorPageProps[K] | undefined
+  [K in 'actions' | 'secondaryBar' | 'stickyHeader' | 'mainContentId' | 'breadcrumbs' | 'suppressSurfaceNavigation' | 'pending' | 'contentOwnsHeading']?: AeOperatorPageProps[K] | undefined
 }
 
 function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending } = props
+  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading } = props
   return {
     operatorRole,
     title,
     description,
     currentPath,
+    ...(contentOwnsHeading === undefined ? {} : { contentOwnsHeading }),
     ...(actions === undefined ? {} : { actions }),
     ...(secondaryBar === undefined ? {} : { secondaryBar }),
     ...(stickyHeader === undefined ? {} : { stickyHeader }),
@@ -76,10 +79,10 @@ function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
 }
 
 function useChromeFromProps(props: Omit<AeOperatorPageProps, 'children'>): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending } = props
+  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading } = props
   return useMemo<OperatorPageChrome>(
-    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending }),
-    [operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending],
+    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading }),
+    [operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading],
   )
 }
 
@@ -146,6 +149,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
     <OperatorShellChromeContext.Provider value={registration}>
       <main
         id={resolvedMainContentId}
+        data-shell-mode="operator"
         tabIndex={-1}
         data-testid="operator-content"
         className="ae-rail flex min-h-0 flex-1 flex-col outline-none focus:outline-solid focus:outline-2 focus:outline-offset-2 focus:outline-ring"

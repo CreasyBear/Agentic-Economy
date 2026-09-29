@@ -5,6 +5,16 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import type { ConsentRequestFactsProps } from '../authorize-form.contracts'
 import { formatConsentDuration } from '../format-consent-duration'
 
+function returnSiteFact(props: Pick<ConsentRequestFactsProps, 'flow' | 'redirectDisposition' | 'redirectOrigin'>): { label: string; value: string; mono?: boolean } {
+  if (props.redirectDisposition === 'origin' && props.redirectOrigin !== undefined) {
+    return { label: 'Returns to', value: props.redirectOrigin, mono: true }
+  }
+  if (props.redirectDisposition === 'unavailable' || (props.flow === 'authorization_code' && props.redirectOrigin === undefined)) {
+    return { label: 'Returns to', value: 'Return site unavailable. Decline this request.' }
+  }
+  return { label: 'Returns to', value: 'This request does not redirect your browser.' }
+}
+
 export function ConsentRequestFacts({
   clientName,
   environment,
@@ -14,11 +24,15 @@ export function ConsentRequestFacts({
   grantRevision,
   grantRef,
   toolRefs,
+  flow,
+  redirectDisposition,
+  redirectOrigin,
 }: ConsentRequestFactsProps) {
   return (
     <>
       <AeFactList facts={[
         { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
+        returnSiteFact({ flow, ...(redirectDisposition === undefined ? {} : { redirectDisposition }), ...(redirectOrigin === undefined ? {} : { redirectOrigin }) }),
         { label: 'Tools', value: toolSelectionSummary },
         { label: 'Approved limits', value: accessSummary },
         { label: 'Connection', value: `Stays signed in for ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` },

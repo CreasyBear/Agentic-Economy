@@ -42,6 +42,7 @@ export type AdminActionSheetController = AdminActionSheetState & Readonly<{
   role: AdminRole | null
   allowed: boolean
   clerkFvaAbsent: boolean
+  pending: boolean
   setReason: (value: string) => void
   setEvidence: (value: string, selected: boolean) => void
   setTypedEvidence: (value: string) => void

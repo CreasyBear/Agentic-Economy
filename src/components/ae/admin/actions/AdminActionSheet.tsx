@@ -11,18 +11,22 @@ import { useAdminActionSheet } from './useAdminActionSheet'
 export function AdminActionSheet(props: AdminActionSheetProps) {
   const command = useAdminActionSheet(props)
   const destructive = props.action === 'revoke_admin_membership' || props.action === 'close_removal_dispute'
-  const showBack = command.allowed && ['evidence', 'proof', 'preview', 'confirm'].includes(command.phase) && (props.approval?.kind !== 'approve' || command.phase === 'confirm')
+  const showBack = command.allowed && (
+    command.phase === 'submitting'
+    || (['evidence', 'proof', 'preview', 'confirm'].includes(command.phase) && (props.approval?.kind !== 'approve' || command.phase === 'confirm'))
+  )
   const action = command.allowed && command.phase === 'reason' ? (
     <Button type="button" className="min-h-touch" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
   ) : command.allowed && (command.phase === 'evidence' || command.phase === 'proof') ? (
     <Button type="button" className="min-h-touch" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
   ) : command.allowed && command.phase === 'preview' ? (
-    <Button type="button" className="min-h-touch" onClick={() => {
+    <Button type="button" className="min-h-touch" disabled={command.pending} onClick={() => {
+      if (command.pending) return
       if (destructive) command.next()
       else void command.submit()
     }}>{destructive ? ADMIN_ACTION_SHEET_COPY.continue : ADMIN_ACTION_SHEET_COPY.submit}</Button>
   ) : command.allowed && command.phase === 'confirm' ? (
-    <Button type="button" variant="destructive" className="min-h-touch" onClick={() => { void command.submit() }}>
+    <Button type="button" variant="destructive" className="min-h-touch" disabled={command.pending} onClick={() => { if (!command.pending) void command.submit() }}>
       {ADMIN_ACTION_SHEET_COPY.confirm}
     </Button>
   ) : command.phase === 'submitting' ? (

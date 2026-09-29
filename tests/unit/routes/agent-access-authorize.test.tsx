@@ -289,6 +289,34 @@ describe('/agent-access/authorize consent loading', () => {
     expect(document.body.textContent).toContain('Request revision')
     expect(document.body.textContent).toContain('Request reference')
     expect(screen.queryByText('Loading access request')).toBeNull()
+    expect(screen.getByText('This request does not redirect your browser.')).toBeTruthy()
+  })
+
+  it('shows the redirect origin beside a self-declared client name', async () => {
+    mockConsent({
+      userCode: 'GOOD-CODE',
+      grantRef: 'grant-origin',
+      clientName: 'Trusted assistant',
+      mode: 'read_only',
+      flow: 'authorization_code',
+      redirectDisposition: 'origin',
+      redirectOrigin: 'https://attacker.example',
+    })
+    renderComponent()
+    expect(await screen.findByText('Trusted assistant · Sandbox')).toBeTruthy()
+    expect(screen.getByText('https://attacker.example')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('/callback')
+  })
+
+  it('links Open Agents from a missing code and a refused request', () => {
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({ kind: 'missing' } as never)
+    renderComponent()
+    expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
+    cleanup()
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({ kind: 'problem', code: 'expired_token' } as never)
+    renderComponent()
+    expect(screen.getByText('This connection request expired')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
   })
 
   it('keeps the security-control correlation reference when approval fails closed', async () => {
@@ -571,6 +599,8 @@ function mockConsent(input: Readonly<{
   reconnectAmbiguous?: boolean
   oauthState?: string
   flow?: 'device_code' | 'authorization_code'
+  redirectDisposition?: 'origin' | 'none' | 'unavailable'
+  redirectOrigin?: string
 }>) {
   vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({
     kind: 'ready',
@@ -596,11 +626,14 @@ function mockConsent(input: Readonly<{
       agentTargetsUnavailable: input.agentTargetsUnavailable ?? false,
       ...(input.reconnectPrincipalRef === undefined ? {} : { reconnectPrincipalRef: input.reconnectPrincipalRef }),
       ...(input.reconnectAmbiguous === true ? { reconnectAmbiguous: true } : {}),
+      ...(input.redirectDisposition === undefined ? {} : { redirectDisposition: input.redirectDisposition }),
+      ...(input.redirectOrigin === undefined ? {} : { redirectOrigin: input.redirectOrigin }),
     },
   })
 }
 
 function renderComponent(component: ComponentType = Component) {
+  vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({} as never)
   const Target = component
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([

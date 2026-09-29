@@ -6,10 +6,10 @@ import type {
   SettingsPageProps, SettingsRowProps,
 } from '../settings-section.contracts'
 
-export function SettingsPage({ title, description, action, children }: SettingsPageProps) {
+export function SettingsPage({ title, description, action, children, headingRef }: SettingsPageProps) {
   return <div className="grid min-w-0 gap-8">
     <header className="flex min-w-0 flex-wrap items-start justify-between gap-4">
-      <div className="grid min-w-0 gap-1"><h2 className="text-2xl font-semibold tracking-tight text-foreground focus:outline-none">{title}</h2><p className="text-sm text-muted-foreground">{description}</p></div>
+      <div className="grid min-w-0 gap-1"><h2 ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1} className="text-2xl font-semibold tracking-tight text-foreground focus:outline-none">{title}</h2><p className="text-sm text-muted-foreground">{description}</p></div>
       {action}
     </header>
     {children}

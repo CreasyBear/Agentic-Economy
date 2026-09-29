@@ -257,10 +257,28 @@ describe('source-native Provider start', () => {
     expect(screen.getByRole('radio', { name: 'Sensitive data' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
     await screen.findByRole('group', { name: 'Tool publication decision' })
-    expect(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByRole('checkbox', { name: 'I am authorised to publish this service' })).toBeNull()
+    expect(screen.getByText(/Publication stays under review until Provider authority is established/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
-    expect(screen.getByText('Confirm all three publication statements before submitting.')).toBeTruthy()
+    expect(screen.getByText('Confirm the information is accurate, and that publication can follow validation, before submitting.')).toBeTruthy()
     expect(onPublish).not.toHaveBeenCalled()
+  })
+
+  it('reports unsaved terms as dirty and clears that once the terms are saved', async () => {
+    const states: Array<{ dirty: boolean; pending: boolean; saveOutcome: string }> = []
+    const onSaveTerms = vi.fn().mockResolvedValue({ kind: 'saved' })
+    render(<AeSupplySourceNativeStart businessRef="business:one"
+      initial={selectedOpenApiInitial} onPreview={vi.fn()} onConnect={vi.fn()}
+      onSelectCandidate={vi.fn()} onSaveTerms={onSaveTerms} onPublish={vi.fn()}
+      onNavigationSafetyChange={(next) => { states.push({ ...next }) }}
+    />)
+    expect(states.at(-1)).toMatchObject({ dirty: false, pending: false, saveOutcome: 'idle' })
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Data' } })
+    await waitFor(() => expect(states.at(-1)?.dirty).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    await waitFor(() => expect(states.at(-1)).toMatchObject({ dirty: false, pending: false, saveOutcome: 'saved' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
+    expect(states.at(-1)?.dirty).toBe(false)
   })
 
   it('keeps entered terms editable and does not publish when saving the review draft fails', async () => {
@@ -383,7 +401,6 @@ describe('source-native Provider start', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Personal data' }))
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
     expect(screen.getByRole('group', { name: 'Tool publication decision' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
@@ -413,7 +430,7 @@ describe('source-native Provider start', () => {
         })),
       }),
       attestation: {
-        authorisedToPublish: true,
+        authorisedToPublish: false,
         informationAccurate: true,
         publishAfterSuccessfulValidation: true,
       },
@@ -460,7 +477,6 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
     for (const name of [
-      'I am authorised to publish this service',
       'The information is accurate',
       'Publish after validation succeeds',
     ]) fireEvent.click(screen.getByRole('checkbox', { name }))
@@ -496,7 +512,6 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
     for (const name of [
-      'I am authorised to publish this service',
       'The information is accurate',
       'Publish after validation succeeds',
     ]) fireEvent.click(screen.getByRole('checkbox', { name }))
@@ -533,14 +548,13 @@ describe('source-native Provider start', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
     expect(screen.getAllByText('A$12.30').length).toBeGreaterThan(0)
     for (const name of [
-      'I am authorised to publish this service',
       'The information is accurate',
       'Publish after validation succeeds',
     ]) fireEvent.click(screen.getByRole('checkbox', { name }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit terms' }))
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
-    expect(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByRole('checkbox', { name: 'I am authorised to publish this service' })).toBeNull()
     expect(screen.getByRole('checkbox', { name: 'The information is accurate' }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }).getAttribute('aria-checked')).toBe('false')
   })
@@ -675,6 +689,8 @@ describe('source-native Provider start', () => {
     const resourceUrl = screen.getByLabelText('x402 resource URL') as HTMLInputElement
     expect(resourceUrl.required).toBe(true)
     expect(resourceUrl.placeholder).toBe('https://api.example.com/paid-operation')
+    expect(screen.getByRole('radio', { name: 'POST' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText('POST is selected by default.')).toBeTruthy()
     expect(screen.getAllByText('Required')).toHaveLength(4)
     expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
   })
@@ -721,6 +737,8 @@ describe('source-native Provider start', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'MCP' }))
+    fireEvent.change(screen.getByLabelText('MCP server URL'), { target: { value: 'notaurl' } })
+    expect(screen.getByText('Enter a valid HTTPS URL, for example https://mcp.example.com/sse.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('MCP server URL'), {
       target: { value: 'https://mcp.example.com/sse' },
     })
@@ -728,6 +746,8 @@ describe('source-native Provider start', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /x402 recommended for alpha/i }))
 
+    fireEvent.change(screen.getByLabelText('x402 resource URL'), { target: { value: 'notaurl' } })
+    expect(screen.getByText('Enter a valid HTTPS URL, for example https://api.example.com/paid-operation.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('x402 resource URL'), {
       target: { value: 'http://insecure.example.com/paid' },
     })
@@ -838,6 +858,31 @@ describe('source-native Provider start', () => {
 })
 
 
+describe('plugin file replacement', () => {
+  it('clears a plugin size alert after a later file is accepted', async () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agent Plugin' }))
+    fireEvent.change(screen.getByLabelText('plugin.json'), {
+      target: { files: [new File([new Uint8Array(262_145)], 'plugin.json', { type: 'application/json' })] },
+    })
+    expect(await screen.findByText('plugin.json must be 256 KB or smaller.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('plugin.json'), {
+      target: { files: [new File(['{"$schema":"spec","name":"sample"}'], 'plugin.json', { type: 'application/json' })] },
+    })
+    expect(await screen.findByText(/plugin.json loaded/i)).toBeTruthy()
+    expect(screen.queryByText('plugin.json must be 256 KB or smaller.')).toBeNull()
+  })
+})
+
 describe('Provider source suggestion review', () => {
   const suggestion = { kind: 'suggested', sourceDigest: selectedOpenApiInitial.preview.sourceDigest,
     sourceRevision: selectedOpenApiInitial.preview.sourceRevision, candidateRef: candidate.candidateRef,
@@ -863,7 +908,6 @@ describe('Provider source suggestion review', () => {
     onPublish.mockResolvedValue({ kind: 'refused', reason: 'source_unavailable' })
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))

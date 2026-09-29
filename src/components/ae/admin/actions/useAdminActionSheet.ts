@@ -7,6 +7,7 @@ import { ADMIN_REFUSAL_PRESENTATION } from '@/lib/operator/admin-console/refusal
 import { createPrefixedRandomId } from '@/modules/common/random-id'
 import { canAdminRolePerformAction } from '@/modules/security/public'
 import {
+  ADMIN_ACTION_SHEET_COPY,
   ADMIN_REASON_OPTIONS,
   adminCommandRequestSchema,
   type AdminActionSheetController,
@@ -14,6 +15,12 @@ import {
   type AdminActionSheetState,
 } from './actions.contracts'
 import { useAdminCommandProof } from './useAdminCommandProof'
+
+function isReverificationCancelled(cause: unknown): boolean {
+  if (typeof cause !== 'object' || cause === null) return false
+  const error = cause as { code?: unknown; clerkRuntimeError?: unknown }
+  return error.clerkRuntimeError === true && error.code === 'reverification_cancelled'
+}
 
 export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSheetController {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
@@ -24,6 +31,10 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   const execute = useAdminCommandProof()
   const operationKey = useRef(createPrefixedRandomId('admin:'))
   const correlationId = useRef(createPrefixedRandomId('admin:correlation:'))
+  const generation = useRef(0)
+  const flights = useRef(0)
+  const abandoned = useRef(false)
+  const [pending, setPending] = useState(false)
   const [state, setState] = useState<AdminActionSheetState>({
     phase: props.approval?.kind === 'approve' ? 'preview' : 'reason', reasonCode: props.initialReasonCode ?? '',
     evidenceRefs: props.initialEvidenceRefs ?? [], typedEvidence: '', receipt: null,
@@ -31,6 +42,9 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   })
 
   const resetFromCurrentProps = useEffectEvent(() => {
+    generation.current += 1
+    abandoned.current = false
+    setPending(flights.current > 0)
     operationKey.current = createPrefixedRandomId('admin:')
     correlationId.current = createPrefixedRandomId('admin:correlation:')
     setState({
@@ -82,7 +96,20 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     })
   }
 
+  function unchangedPreview() {
+    return clerkFvaAbsent ? null : ADMIN_REFUSAL_PRESENTATION.mfa_reverification_required.nextStep
+  }
+
+  function leaveSubmitting() {
+    abandoned.current = true
+    setState((previous) => ({ ...previous, phase: 'preview', error: unchangedPreview() }))
+  }
+
   function back() {
+    if (state.phase === 'submitting') {
+      leaveSubmitting()
+      return
+    }
     if (props.approval?.kind === 'approve' && state.phase !== 'confirm') return
     setState((previous) => ({ ...previous, error: null, phase:
       previous.phase === 'confirm' ? 'preview'
@@ -97,7 +124,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       operationKey.current = createPrefixedRandomId('admin:')
       correlationId.current = createPrefixedRandomId('admin:correlation:')
     }
-    if (!allowed || state.phase === 'submitting') return
+    if (!allowed || flights.current > 0 || state.phase === 'submitting') return
     const validated = adminCommandRequestSchema.safeParse({
       action: props.action, input: props.input, reasonCode: state.reasonCode,
       evidenceRefs: state.evidenceRefs,
@@ -108,13 +135,43 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       setState((previous) => ({ ...previous, error: 'Review the reason, evidence and command details before submitting.' }))
       return
     }
+    const ticket = generation.current
+    flights.current += 1
+    abandoned.current = false
+    setPending(true)
     setState((previous) => ({ ...previous, phase: 'submitting', approval: intent, error: null }))
     try {
       const receipt = await execute(validated.data)
+      if (generation.current !== ticket) return
+      if (receipt == null || (receipt.kind !== 'completed' && receipt.kind !== 'proposed' && receipt.kind !== 'refused')) {
+        setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
+        return
+      }
+      if (abandoned.current) {
+        abandoned.current = false
+        if (receipt.kind === 'refused' && receipt.code === 'mfa_reverification_required') return
+        setState((previous) => ({ ...previous, phase: 'receipt', receipt, error: null }))
+        return
+      }
       setState((previous) => ({ ...previous, phase: 'receipt', receipt }))
     } catch (cause) {
-      void cause
-      setState((previous) => ({ ...previous, phase: 'preview', error: 'Command outcome could not be confirmed. Review the current record before retrying.' }))
+      if (generation.current !== ticket) return
+      const cancelled = isReverificationCancelled(cause)
+      if (abandoned.current) {
+        abandoned.current = false
+        if (!cancelled) {
+          setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
+        }
+        return
+      }
+      setState((previous) => ({
+        ...previous,
+        phase: 'preview',
+        error: cancelled ? unchangedPreview() : ADMIN_ACTION_SHEET_COPY.unavailable,
+      }))
+    } finally {
+      flights.current = Math.max(0, flights.current - 1)
+      setPending(flights.current > 0)
     }
   }
 
@@ -135,7 +192,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   return {
-    ...state, role, allowed, clerkFvaAbsent, setReason, setEvidence,
+    ...state, role, allowed, clerkFvaAbsent, pending, setReason, setEvidence,
     setTypedEvidence: (value) => setState((previous) => ({ ...previous, typedEvidence: value })),
     next, back, submit, retry, edit,
   }

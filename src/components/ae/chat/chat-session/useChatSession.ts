@@ -1,6 +1,5 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { useUIMessages } from '@convex-dev/agent/react'
-import { DefaultChatTransport, readUIMessageStream, type UIMessage } from 'ai'
 import { useServerFn } from '@tanstack/react-start'
 import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { createElement, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
@@ -19,15 +18,16 @@ import type { RegistryNextAction } from '@/modules/registry/tool-choice-contract
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 import type { ChatProps, ChatSessionModel } from './chat-session.contracts'
+import { sendAnonymousChatTurn } from './anonymous-chat-send'
 import { ChatHistoryPanelContainer } from './ChatHistoryPanelContainer'
 import {
-  anonymousSessionStorage, assistantTurnStarted, boundPrompt, clearAnonymousSession, messageId,
-  readAnonymousSession, saveAnonymousSession, toTransportMessages, unicodeLength,
+  MAX_PROMPT_CHARACTERS,
+  anonymousSessionStorage, assistantTurnStarted, clearAnonymousSession,
+  promptLimitMessage, readAnonymousSession, readChatDraft, saveAnonymousSession, saveChatDraft,
+  unicodeLength,
 } from './anonymous-session'
 import {
-  anonymousRequestSize,
   clearAnonymousChatHandoff,
-  fetchAnonymousChat,
   friendlyChatError,
   projectChatFailure,
   projectAnonymousTranscript,
@@ -53,7 +53,6 @@ export function useChatNeedActions(): ChatNeedActions {
   }
 }
 
-const MAX_PROMPT_CHARACTERS = 2_000
 const MAX_ANONYMOUS_MESSAGES = 12
 const MAX_ANONYMOUS_BYTES = 16 * 1024
 const PAGE_SIZE = 20
@@ -67,7 +66,7 @@ export function useChatSession({
   onOpenThread = onThreadCreated,
 }: ChatProps): ChatSessionModel {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
-  const [prompt, setPrompt] = useState(() => boundPrompt(initialPrompt))
+  const [prompt, setPrompt] = useState(initialPrompt)
   const [initialHandoff] = useState(() => {
     if (threadId === null) return { threadId: null, messages: [] as TranscriptMessage[] }
     const handoff = readAnonymousChatHandoff(threadId)
@@ -81,7 +80,7 @@ export function useChatSession({
   const anonymousSessionIdRef = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sending, setSending] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => promptLimitMessage(initialPrompt))
   const [errorReference, setErrorReference] = useState<string | undefined>()
   const [browseMarketOnError, setBrowseMarketOnError] = useState(false)
   const [status, setStatus] = useState<ChatStatus>('')
@@ -137,6 +136,13 @@ export function useChatSession({
 
   useEffect(() => {
     if (authLoading || anonymousSessionLoaded) return
+    if (threadId === null && initialPrompt.length === 0) {
+      const draft = readChatDraft(anonymousSessionStorage())
+      if (draft.length > 0) {
+        setPrompt(draft)
+        setError(promptLimitMessage(draft))
+      }
+    }
     if (!isAuthenticated && threadId === null) {
       const session = readAnonymousSession(anonymousSessionStorage())
       anonymousSessionIdRef.current = session.id
@@ -148,6 +154,10 @@ export function useChatSession({
     }
     setAnonymousSessionLoaded(true)
   }, [authLoading, anonymousSessionLoaded, isAuthenticated, threadId, initialPrompt])
+  useEffect(() => {
+    if (!anonymousSessionLoaded || threadId !== null) return
+    saveChatDraft(anonymousSessionStorage(), prompt)
+  }, [anonymousSessionLoaded, prompt, threadId])
   useEffect(() => {
     if (!anonymousSessionLoaded || anonymousSessionIdRef.current === null || isAuthenticated) return
     saveAnonymousSession(anonymousSessionStorage(), {
@@ -166,72 +176,23 @@ export function useChatSession({
   const savedTitle = activeThread?.title
   const firstUserMessage = savedTitle ? undefined : visibleMessages.find((message) => message.role === 'user')
   const threadTitle = savedTitle ?? (firstUserMessage === undefined ? null : textFromParts(firstUserMessage.parts).trim())
-  const transcriptPending = isAuthenticated
-    && threadId !== null
-    && durable.status === 'LoadingFirstPage'
-    && durable.results.length === 0
+  const transcriptPending = threadId !== null && (
+    authLoading || (isAuthenticated && durable.status === 'LoadingFirstPage' && durable.results.length === 0)
+  )
+  const privateThreadLocked = threadId !== null && !authLoading && !isAuthenticated
   const anonymousMessageLimitReached = !isAuthenticated
     && anonymousMessages.length + 2 > MAX_ANONYMOUS_MESSAGES
-  const composerDisabled = busy || authLoading || anonymousMessageLimitReached
+  const promptTooLong = unicodeLength(prompt.trim()) > MAX_PROMPT_CHARACTERS
+  const composerDisabled = busy || authLoading || anonymousMessageLimitReached || privateThreadLocked
 
   async function sendAnonymous(nextPrompt: string, continuation?: SearchContinuation): Promise<void> {
-    const userMessage: TranscriptMessage = {
-      id: messageId('anonymous-user'),
-      role: 'user',
-      parts: [{ type: 'text', text: nextPrompt }],
-    }
-    const requestMessages = [...anonymousMessages, userMessage]
-    if (anonymousMessages.length + 2 > MAX_ANONYMOUS_MESSAGES) {
-      throw new Error('anonymous_message_limit')
-    }
-    if (anonymousRequestSize(requestMessages) > MAX_ANONYMOUS_BYTES) {
-      throw new Error('anonymous_size_limit')
-    }
-    const transport = new DefaultChatTransport<UIMessage>({
-      api: '/api/chat/anonymous',
-      fetch: fetchAnonymousChat,
-      prepareSendMessagesRequest: ({ messages }) => ({
-        body: {
-          messages: projectAnonymousTranscript(messages.map((message) => ({
-            id: message.id,
-            role: message.role === 'assistant' ? 'assistant' : 'user',
-            parts: message.parts,
-          }))),
-          ...(continuation === undefined ? {} : {
-            continuation: { kind: 'search_next_page' as const, ...continuation },
-          }),
-        },
-      }),
+    await sendAnonymousChatTurn({
+      nextPrompt, anonymousMessages, setAnonymousMessages,
+      ...(continuation === undefined ? {} : { continuation }),
+      abortPrevious: () => { abortRef.current?.abort() },
+      adoptController: (controller) => { abortRef.current = controller },
+      maxMessages: MAX_ANONYMOUS_MESSAGES, maxBytes: MAX_ANONYMOUS_BYTES,
     })
-    setAnonymousMessages(requestMessages)
-    const controller = new AbortController()
-    abortRef.current?.abort()
-    abortRef.current = controller
-    try {
-      const stream = await transport.sendMessages({
-        trigger: 'submit-message',
-        chatId: 'anonymous-browser',
-        messageId: undefined,
-        messages: toTransportMessages(requestMessages),
-        abortSignal: controller.signal,
-      })
-      let assistant: UIMessage | undefined
-      const assistantMessageId = messageId('anonymous-assistant')
-      for await (const message of readUIMessageStream({ stream, terminateOnError: true })) {
-        assistant = message
-        setAnonymousMessages([...requestMessages, {
-          id: assistantMessageId,
-          role: 'assistant',
-          parts: message.parts,
-        }])
-      }
-      if (assistant === undefined) throw new Error('chat_unavailable')
-    } catch (caught) {
-      if (!(caught instanceof Error) || caught.name !== 'AbortError') {
-        setAnonymousMessages(anonymousMessages)
-      }
-      throw caught
-    }
   }
 
   async function submit(forceNewThread = false, rawPrompt = prompt, continuation?: SearchContinuation, preserveDraft = false): Promise<boolean> {
@@ -344,6 +305,7 @@ export function useChatSession({
     }
     setAnonymousMessages([])
     setPrompt('')
+    saveChatDraft(anonymousSessionStorage(), '')
     setError('')
     setErrorReference(undefined)
     setBrowseMarketOnError(false)
@@ -391,8 +353,21 @@ export function useChatSession({
 
 
 
+  const unansweredQuestion = !busy && !sending && !privateThreadLocked
+    && visibleMessages.at(-1)?.role === 'user'
+    ? textFromParts(visibleMessages.at(-1)?.parts ?? []).trim()
+    : ''
+  function stopAnonymousSend() {
+    abortRef.current?.abort()
+  }
+  function focusPrompt(value: string) {
+    setPrompt(value)
+    setError(promptLimitMessage(value))
+    document.getElementById('tool-chat-prompt')?.focus()
+  }
   return {
     showHistoryRail: isAuthenticated,
+    ...(privateThreadLocked ? { signInToThread: { href: `/sign-in?redirect=${encodeURIComponent(`/t/${threadId}`)}` } } : {}),
     createHistoryPanel,
     header: {
       authenticated: isAuthenticated,
@@ -445,10 +420,15 @@ export function useChatSession({
       status,
       ...(isAuthenticated ? {} : { anonymousMessageCount: anonymousMessages.length }),
       anonymousMessageLimitReached,
-      ...(isAuthenticated ? {} : { onStop: () => { abortRef.current?.abort() } }),
+      ...(isAuthenticated ? {} : { onStop: stopAnonymousSend }),
       onPromptChange: (value) => {
-        setPrompt(boundPrompt(value))
-        if (error.length > 0) {
+        setPrompt(value)
+        const limit = promptLimitMessage(value)
+        if (limit.length > 0) {
+          setError(limit)
+          setErrorReference(undefined)
+          setBrowseMarketOnError(false)
+        } else if (error.length > 0) {
           setError('')
           setErrorReference(undefined)
           setBrowseMarketOnError(false)
@@ -459,39 +439,27 @@ export function useChatSession({
     transcript: {
       messages: visibleMessages,
       ...(isAuthenticated && threadId !== null ? { ownerChatThreadId: threadId, ownerChatNow: now } : {}),
-      onFreshQuote: (toolName, inputSummary) => {
-        setPrompt(boundPrompt(`Get a fresh Quote for ${toolName} with input ${inputSummary}`))
-        document.getElementById('tool-chat-prompt')?.focus()
-      },
+      onFreshQuote: (toolName, inputSummary) => focusPrompt(`Get a fresh Quote for ${toolName} with input ${inputSummary}`),
       thinking: (sending || activeThread?.busy === true) && !assistantTurnStarted(visibleMessages),
       generating: activeThread?.busy === true,
       clarifyDisabled: composerDisabled,
       onClarifyAnswer: (answer) => { void submit(false, answer) },
-      onContinueSearch: (next) => {
-        void submit(false, `Show more results for ${next.args.query}`, next.args, true)
-      },
-      onRepeatSearch: (query) => {
-        void submit(false, `Search again for ${query}`, undefined, true)
-      },
-      onQuoteTool: (toolRef, input) =>
-        submit(false, `Get a fresh Quote for Tool ${toolRef} with this exact JSON input: ${JSON.stringify(input)}. Use tool.quote and show the terms for my approval. Do not Call the Tool.`, undefined, true),
+      onContinueSearch: (next) => { void submit(false, `Show more results for ${next.args.query}`, next.args, true) },
+      onRepeatSearch: (query) => { void submit(false, `Search again for ${query}`, undefined, true) },
+      onQuoteTool: (toolRef, quoteInput) => submit(false, `Get a fresh Quote for Tool ${toolRef} with this exact JSON input: ${JSON.stringify(quoteInput)}. Use tool.quote and show the terms for my approval. Do not Call the Tool.`, undefined, true),
       ...(transcriptPending ? { pending: true } : {}),
-      ...(isAuthenticated && anonymousMessages.length > 0
-        ? { handoffAfter: anonymousMessages.length }
-        : {}),
+      ...(isAuthenticated && anonymousMessages.length > 0 ? { handoffAfter: anonymousMessages.length } : {}),
       onCopyAnswer: (answer) => {
         void navigator.clipboard.writeText(answer)
           .then(() => setStatus('Answer copied.'), () => setError('Copy failed. Select the answer and copy it manually.'))
       },
-      ...(composerDisabled ? {} : {
-        onSuggest: (nextPrompt) => { setPrompt(boundPrompt(nextPrompt)); document.getElementById('tool-chat-prompt')?.focus() },
+      ...(composerDisabled || promptTooLong ? {} : {
+        onSuggest: (nextPrompt) => focusPrompt(nextPrompt),
         onStarter: (nextPrompt) => { void submit(false, nextPrompt) },
         onRefine: (nextPrompt) => { void submit(false, nextPrompt) },
         onCompareRequest: (nextPrompt) => { void submit(false, nextPrompt) },
-        onEditQuestion: (previousPrompt) => {
-          setPrompt(boundPrompt(previousPrompt))
-          document.getElementById('tool-chat-prompt')?.focus()
-        },
+        onEditQuestion: (previousPrompt) => focusPrompt(previousPrompt),
+        ...(unansweredQuestion.length === 0 ? {} : { onRetryQuestion: () => { void submit(false, unansweredQuestion, undefined, true) } }),
       }),
     },
     pageBusy: busy,

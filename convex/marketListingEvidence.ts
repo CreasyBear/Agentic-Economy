@@ -7,7 +7,7 @@ import { components } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
-
+import { assertBuyerCompletedCall } from './lib/market/listing/buyerCompletedCall'
 const MAX_TOOL_REFS = 20
 const MAX_LATENCY_SAMPLES = 48
 
@@ -77,6 +77,7 @@ export const rate = mutation({
     if (!isPublicToolRef(args.toolRef)) {
       throw new Error('market_rating_tool_ref_invalid')
     }
+    await assertBuyerCompletedCall(ctx, actor.canonicalPrincipalRef, args.toolRef)
     const review = args.review?.trim()
     if (review !== undefined && (review.length === 0 || review.length > 2_000)) {
       throw new Error('market_rating_review_invalid')

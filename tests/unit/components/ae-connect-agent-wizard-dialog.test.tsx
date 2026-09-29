@@ -29,6 +29,30 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByRole('button', { name: /connect an agent/i })).toBeInTheDocument()
   })
 
+  it('restores an unissued draft without storing a secret', () => {
+    const onDraftChange = vi.fn()
+    render(
+      <AeConnectAgentWizardDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        onIssue={vi.fn()}
+        initialDraft={{
+          name: 'Research bot',
+          environment: 'production',
+          authorityMode: 'approval_required',
+          perCallAmount: '1.50',
+          dailyAmount: '25.00',
+          monthlyAmount: '100.00',
+        }}
+        onDraftChange={onDraftChange}
+      />,
+    )
+    expect(screen.getByLabelText(/agent name/i)).toHaveValue('Research bot')
+    fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Research bot 2' } })
+    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ name: 'Research bot 2' }))
+    expect(JSON.stringify(onDraftChange.mock.calls)).not.toContain('sek_')
+  })
+
   it('T2: marks an empty agent name on submit and enforces max length of 80 characters', () => {
     const onIssue = vi.fn()
     render(

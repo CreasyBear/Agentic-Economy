@@ -6,6 +6,7 @@ import {
   type AdminExceptionPartition,
 } from '@/lib/operator/admin-console/contracts'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import { ADMIN_LIST_WINDOW, ADMIN_LIST_WINDOW_MAX } from '../admin-list-window'
 
 export const adminExceptionsSearchSchema = z.object({
   kind: z.enum([
@@ -19,9 +20,12 @@ export const adminExceptionsSearchSchema = z.object({
     'review_required', 'unset', 'submitted', 'under_review',
   ]).optional(),
   ref: z.string().trim().min(1).max(300).optional(),
+  loaded: z.coerce.number().int().min(ADMIN_LIST_WINDOW).max(ADMIN_LIST_WINDOW_MAX).optional(),
 })
 
-export type AdminExceptionsSearch = z.infer<typeof adminExceptionsSearchSchema>
+export type AdminExceptionsSearch = z.infer<typeof adminExceptionsSearchSchema> & {
+  rejected?: string
+}
 
 
 export type AdminExceptionRecord =
@@ -85,6 +89,7 @@ export type AdminExceptionsPageProps = Readonly<{
 
 export type ExceptionFilterChipsProps = Readonly<{
   selected: AdminExceptionKind
+  selectedPartition: AdminExceptionPartition
   onSelect: (kind: AdminExceptionKind) => void
   overview: AdminExceptionsReadyState['overview']
 }>
@@ -153,6 +158,7 @@ export const ADMIN_EXCEPTIONS_COPY = {
   accessDeniedDescription: ADMIN_ACCESS_REFUSED_COPY,
   filtersTitle: 'Exception queue',
   filtersDescription: 'Choose a type and its indexed state.',
+  allStates: 'All states',
   clearAll: 'Clear all',
   exceptionsTitle: 'Cases',
   exceptionsDescription: 'Times use Australia/Perth.',

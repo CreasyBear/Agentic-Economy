@@ -202,6 +202,7 @@ export const financialSubjectsResult = v.union(
       enabled: v.literal(true),
       ceilingUnits: v.string(),
     })),
+    x402QuoteSource: v.optional(v.literal('persisted')),
   }),
   v.object({ kind: v.literal('refused'), code: quoteRefusalCode, reason: v.optional(v.string()) }),
 )

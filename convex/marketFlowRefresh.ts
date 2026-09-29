@@ -6,9 +6,18 @@ import { v } from 'convex/values'
 import { BASE_FACILITATOR_SET_DIGEST } from '@/modules/market/base-facilitator-set'
 import { buildFlowDaySql, buildFlowPayeeWindowSql, chunkRows, daysToIngest, flowPayeeWindow, parseFlowPayeeWindow, parseFlowSqlResult, shiftUtcDay, windowNeedsExpiry } from '@/modules/market/flow-tape'
 
+import {
+  verifyCustomerRequestServiceAssertion,
+  type CustomerRequestServiceAssertion,
+} from '@/modules/agent-access/service-auth-envelope'
+
 import { internal } from './_generated/api'
-import { action, internalAction, type ActionCtx } from './_generated/server'
+import { action, env, internalAction, type ActionCtx } from './_generated/server'
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
+import { serviceAssertion } from './serviceAssertion'
+
+const LOOKUP_VOLUMES_OPERATION = 'marketFlowRefresh.lookupVolumes'
+const LOOKUP_VOLUMES_SCOPE = 'market_flow:lookup'
 
 const HOST = 'api.cdp.coinbase.com'
 const PATH = '/platform/v2/data/query/run'
@@ -79,11 +88,23 @@ function positiveVolumes(rows: readonly Readonly<{ recipient: string; amountAtom
   return rows.flatMap(row => row.amountAtomic === '0' ? [] : [{ payTo: row.recipient, amountAtomic: row.amountAtomic }])
 }
 
+async function lookupVolumesAuthorized(payTos: readonly string[], assertion: CustomerRequestServiceAssertion): Promise<boolean> {
+  const serviceKey = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  if (serviceKey === undefined || serviceKey.length < 32 || !assertion.scopes.includes(LOOKUP_VOLUMES_SCOPE)) return false
+  return await verifyCustomerRequestServiceAssertion({
+    key: serviceKey,
+    operation: LOOKUP_VOLUMES_OPERATION,
+    command: { payTos: [...payTos] },
+    assertion,
+  })
+}
+
 /** Amounts for the payees on the tools being shown. A miss stays a dash; it does not advance the daily checkpoint. */
 export const lookupVolumes = action({
-  args: { payTos: v.array(v.string()) },
+  args: { payTos: v.array(v.string()), serviceAuth: serviceAssertion },
   returns: v.array(v.object({ payTo: v.string(), amountAtomic: v.string() })),
   handler: async (ctx, args): Promise<{ payTo: string; amountAtomic: string }[]> => {
+    if (!await lookupVolumesAuthorized(args.payTos, args.serviceAuth)) throw new Error('authentication_required')
     const payTos = [...new Set(args.payTos.map(payTo => payTo.toLowerCase()))].filter(payTo => /^0x[a-f0-9]{40}$/u.test(payTo)).slice(0, 48)
     if (payTos.length === 0) return []
     const windowEnd = shiftUtcDay(flowPayeeWindow(Date.now()).end, -1)

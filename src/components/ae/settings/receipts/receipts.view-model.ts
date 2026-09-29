@@ -3,16 +3,31 @@ import type { InvoiceExportRow } from '@/lib/export/csv-export'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
-import { calculateAudGstSplit, formatExactAmount } from '@/modules/money/public'
+import { formatExactAmount } from '@/modules/money/public'
 
-const AUD_INCLUSIVE_GST_BPS = 1_000
+const AUD_UNITS = /^(?:0|[1-9]\d*)$/u
+
+function recordedFundingAmounts(row: AeInvoiceHistoryRow) {
+  const parts = [row.principalUnits, row.serviceFeeUnits, row.taxUnits, row.totalUnits]
+  if (!parts.every((units) => AUD_UNITS.test(units))) return undefined
+  const principal = BigInt(row.principalUnits)
+  const fee = BigInt(row.serviceFeeUnits)
+  const tax = BigInt(row.taxUnits)
+  const total = BigInt(row.totalUnits)
+  if (principal + fee + tax !== total) return undefined
+  return { principal, fee, tax, total, net: principal + fee }
+}
+
+function exactAud(units: bigint) {
+  return formatExactAmount({ currency: 'AUD', exponent: 6, units: units.toString() })
+}
 
 export function receiptDisplay(row: AeInvoiceHistoryRow) {
-  const split = calculateAudGstSplit(row.totalUnits, AUD_INCLUSIVE_GST_BPS)
+  const recorded = recordedFundingAmounts(row)
   return {
     date: formatTimestamp(row.createdAt),
     amount: formatAudAmountString(row.totalUnits),
-    gst: split === undefined ? undefined : `${formatAudAmountString(split.gstUnits)} GST included`,
+    gst: recorded === undefined ? undefined : `${formatAudAmountString(recorded.tax.toString())} GST included`,
     status: row.status === 'succeeded'
       ? getStatusPresentation('billing_paid').compactLabel
       : getStatusPresentation('protected_action_reversed').compactLabel,
@@ -20,10 +35,10 @@ export function receiptDisplay(row: AeInvoiceHistoryRow) {
 }
 
 export function receiptExportRow(row: AeInvoiceHistoryRow): InvoiceExportRow {
-  const split = calculateAudGstSplit(row.totalUnits, AUD_INCLUSIVE_GST_BPS)
-  const amountAud = formatExactAmount({ currency: 'AUD', exponent: 6, units: row.totalUnits })
-  const gstAud = split && formatExactAmount({ currency: 'AUD', exponent: 6, units: split.gstUnits })
-  const netAud = split && formatExactAmount({ currency: 'AUD', exponent: 6, units: split.netUnits })
+  const recorded = recordedFundingAmounts(row)
+  const amountAud = recorded && exactAud(recorded.total)
+  const gstAud = recorded && exactAud(recorded.tax)
+  const netAud = recorded && exactAud(recorded.net)
   if (amountAud === undefined || gstAud === undefined || netAud === undefined) {
     throw new RangeError('Invalid AUD invoice amount')
   }

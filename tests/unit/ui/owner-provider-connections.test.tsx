@@ -410,4 +410,14 @@ describe('owner x402 connection controls', () => {
     expect(invalid.result.current.rebindConnectionRef).toBeUndefined()
   })
 
+  it('rejects a non-HTTPS integrations URL before inspection', () => {
+    render(<AeOwnerProviderConnections businessId="business:one" connections={[connection]} />)
+    const resource = screen.getByLabelText('x402 resource URL')
+    fireEvent.change(resource, { target: { value: 'http://seller.example/paid' } })
+    expect(screen.getByRole('alert').textContent).toContain('Provide an absolute public HTTPS endpoint without credentials or a fragment.')
+    expect((screen.getByRole('button', { name: 'Inspect endpoint' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect endpoint' }))
+    expect(mocks.inspect).not.toHaveBeenCalled()
+  })
+
 })

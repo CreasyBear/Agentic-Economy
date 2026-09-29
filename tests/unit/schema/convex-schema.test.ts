@@ -471,6 +471,7 @@ describe('Convex schema', () => {
     expectIndexFields('capabilityCalls', 'by_callRef', ['callRef'])
     expectIndexFields('capabilityCalls', 'by_principalId_and_callRef', ['principalId', 'callRef'])
     expectIndexFields('capabilityCalls', 'by_toolRef_and_state', ['toolRef', 'state'])
+    expectIndexFields('capabilityCalls', 'by_principalId_and_toolRef_and_state', ['principalId', 'toolRef', 'state'])
     expectIndexFields('sellerOnboardingCanaryRearmAudits', 'by_callRef', ['callRef'])
     expectIndexFields('moneyProviderObligations', 'by_callRef', ['callRef'])
     expectIndexFields('moneyUsageEvents', 'by_callRef', ['callRef'])

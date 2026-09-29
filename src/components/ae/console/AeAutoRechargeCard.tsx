@@ -163,50 +163,40 @@ export function AeAutoRechargeCard({
         </Alert>
       )
     }
-    if (pendingTopup) {
-      return (
-        <Alert>
-          <AlertTitle className="flex items-center gap-2 text-sm">
-            <span className="size-2 shrink-0 rounded-full bg-primary animate-pulse motion-reduce:animate-none" aria-hidden />
-            Top-up in progress
-          </AlertTitle>
-          <AlertDescription className="text-xs">
-            Auto-recharge is waiting for the current top-up to finish. A$0.00 will be charged for a duplicate top-up until it completes.
-          </AlertDescription>
-        </Alert>
-      )
-    }
-    if (mandateState === 'missing') {
-      return (
-        <Alert>
-          <AlertDescription>
-            <a href="/owner/settings/payment-methods" className="font-medium underline">Add a payment method</a>
-            {' '}before enabling auto-recharge.
-          </AlertDescription>
-        </Alert>
-      )
-    }
-    if (mandateState === 'failed') {
-      return (
-        <Alert variant="destructive">
-          <AlertTitle className="text-sm">Saved card unavailable</AlertTitle>
-          <AlertDescription className="text-xs">
-            The default card could not be used for off-session top-ups. <a href="/owner/settings/payment-methods" className="underline">Update or replace it</a>, then try again.
-          </AlertDescription>
-        </Alert>
-      )
-    }
-    if (mandateState === 'authentication_required') {
-      return (
-        <Alert>
-          <AlertTitle className="text-sm">Bank authentication required</AlertTitle>
-          <AlertDescription className="text-xs">
-            Your bank needs another check. <a href="/owner/settings/payment-methods" className="underline">Authenticate the saved card</a>, then enable auto-recharge.
-          </AlertDescription>
-        </Alert>
-      )
-    }
-    return null
+    const pendingFunding = pendingTopup ? (
+      <Alert>
+        <AlertTitle className="flex items-center gap-2 text-sm">
+          <span className="size-2 shrink-0 rounded-full bg-primary animate-pulse motion-reduce:animate-none" aria-hidden />
+          Credit top-up in progress
+        </AlertTitle>
+        <AlertDescription className="text-xs">
+          A funding command is still open. <a href="/owner/credit" className="font-medium underline">Recover it on Credit</a>. This is not auto-recharge, and saving these defaults will not start another charge.
+        </AlertDescription>
+      </Alert>
+    ) : null
+    const mandateAlert = mandateState === 'missing' ? (
+      <Alert>
+        <AlertDescription>
+          <a href="/owner/settings/payment-methods" className="font-medium underline">Add a payment method</a>
+          {' '}before enabling auto-recharge.
+        </AlertDescription>
+      </Alert>
+    ) : mandateState === 'failed' ? (
+      <Alert variant="destructive">
+        <AlertTitle className="text-sm">Saved card unavailable</AlertTitle>
+        <AlertDescription className="text-xs">
+          The default card could not be used for off-session top-ups. <a href="/owner/settings/payment-methods" className="underline">Update or replace it</a>, then try again.
+        </AlertDescription>
+      </Alert>
+    ) : mandateState === 'authentication_required' ? (
+      <Alert>
+        <AlertTitle className="text-sm">Bank authentication required</AlertTitle>
+        <AlertDescription className="text-xs">
+          Your bank needs another check. <a href="/owner/settings/payment-methods" className="underline">Authenticate the saved card</a>, then enable auto-recharge.
+        </AlertDescription>
+      </Alert>
+    ) : null
+    return <>{pendingFunding}{mandateAlert}</>
   }
 
   return <SettingsGroup title="Auto-recharge" description="Automatically add credit using your default card when your balance falls below a threshold.">

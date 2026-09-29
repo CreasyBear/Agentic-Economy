@@ -49,22 +49,24 @@ export function SignedInConvexProvider({ children }: { children: ReactNode }) {
   )
 }
 
+export function ChatConfigurationUnavailable() {
+  return (
+    <AePageState
+      title="Chat is unavailable"
+      description="Chat is not configured. The Tool catalogue remains available."
+      tone="warning"
+      action={(
+        <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
+          Browse Tools
+        </Link>
+      )}
+    />
+  )
+}
+
 export function ChatConvexProvider({ children }: { children: ReactNode }) {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
-  if (!convexUrl) {
-    return (
-      <AePageState
-        title="Chat is unavailable"
-        description="Chat is not configured. The Tool catalogue remains available."
-        tone="warning"
-        action={(
-          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
-            Browse Tools
-          </Link>
-        )}
-      />
-    )
-  }
+  if (!convexUrl) return <ChatConfigurationUnavailable />
   return <ConfiguredChatConvexProvider convexUrl={convexUrl}>{children}</ConfiguredChatConvexProvider>
 }
 

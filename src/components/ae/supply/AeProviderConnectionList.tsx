@@ -37,6 +37,8 @@ export function AeProviderConnectionList({
   revokeTriggerRef,
   onRevokeOpenChange,
   onConfirmRevoke,
+  programmaticFocusId,
+  onClearProgrammaticFocus,
 }: Readonly<{
   connections: readonly OwnerProviderConnection[]
   readOnly: boolean
@@ -56,6 +58,8 @@ export function AeProviderConnectionList({
   revokeTriggerRef: RefObject<HTMLButtonElement | null>
   onRevokeOpenChange: (open: boolean) => void
   onConfirmRevoke: () => void
+  programmaticFocusId?: string
+  onClearProgrammaticFocus: () => void
 }>) {
   return (
     <>
@@ -76,7 +80,9 @@ export function AeProviderConnectionList({
               key={connection.connectionRef}
               id={providerConnectionTargetId(connection.connectionRef)}
               tabIndex={-1}
-              className="min-w-0 scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              data-programmatic-focus={programmaticFocusId === providerConnectionTargetId(connection.connectionRef) ? '' : undefined}
+              onPointerDown={onClearProgrammaticFocus}
+              className="min-w-0 scroll-mt-6 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[programmatic-focus]:focus:outline-2 data-[programmatic-focus]:focus:outline-offset-2 data-[programmatic-focus]:focus:outline-ring"
             >
               <SettingsRow
                 label={providerConnectionStatus(connection)}

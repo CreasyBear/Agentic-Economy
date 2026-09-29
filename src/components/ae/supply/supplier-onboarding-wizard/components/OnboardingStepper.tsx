@@ -35,7 +35,7 @@ export function OnboardingStepper({
               <span className="text-xs">{label}</span>
               {completed ? <span className="sr-only">Completed</span> : null}
             </span>
-            <span className="text-[10px] text-muted-foreground/80 font-normal pl-6">{duration}</span>
+            <span className="pl-6 text-xs font-normal text-muted-foreground">{duration}</span>
           </button>
         )
       })}

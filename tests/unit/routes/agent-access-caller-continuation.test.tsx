@@ -214,6 +214,17 @@ describe('agent-access caller locator validation', () => {
       expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, resumeTool })).toEqual({ caller: PRINCIPAL_ID })
     }
   })
+
+  it('keeps a known setup step and drops a malformed one without leaving Agents', () => {
+    expect(validateAgentAccessSearch({ setup: 'choose' })).toEqual({ setup: 'choose' })
+    expect(validateAgentAccessSearch({ setup: 'oauth', caller: PRINCIPAL_ID })).toEqual({
+      setup: 'oauth',
+      caller: PRINCIPAL_ID,
+    })
+    expect(validateAgentAccessSearch({ setup: 'market' })).toEqual({})
+    expect(validateAgentAccessSearch({ setup: ['oauth'] })).toEqual({})
+    expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, setup: 'public' })).toEqual({ caller: PRINCIPAL_ID })
+  })
 })
 
 describe('agent-access caller route continuation', () => {

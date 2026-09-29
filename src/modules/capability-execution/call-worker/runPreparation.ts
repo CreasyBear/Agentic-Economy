@@ -329,6 +329,27 @@ export async function prepareCallRun(
   if (dispatch.grantRef === undefined || dispatch.grantRef !== persistedAuthority.grantRef) {
     return await refuseBeforeClaim(ctx, dispatch, 'grant_generation_stale', false, 'The persisted grant identity is missing or stale.')
   }
+  const priced = normalizePricingConfig(operation.pricingConfig)
+  if (
+    principal.authorityMode === 'approval_required'
+    && dispatch.sellerOnboardingCanary === undefined
+    && dispatch.x402RequirementDigest !== undefined
+    && priced.kind === 'valid'
+    && priced.config.kind === 'managed_x402'
+  ) {
+    const quotedInput = JSON.parse(dispatch.inputJson) as Record<string, never>
+    const probe = await ctx.runAction(internal.capabilityCallLiveX402.probeApprovedManagedX402, {
+      callRef: dispatch.callRef,
+      toolRef: dispatch.toolRef,
+      input: quotedInput,
+      principal: { ...principal, scopes: [...principal.scopes] },
+      expectedDigest: dispatch.x402RequirementDigest,
+    })
+    if (probe.kind === 'pending') return { kind: 'none' as const }
+    if (probe.kind !== 'matched') {
+      return await refuseBeforeClaim(ctx, dispatch, 'operation_not_current', false, 'The live x402 requirement does not match the quote.')
+    }
+  }
   const authorityBasis = persistedAuthority.acceptedBasis
   const authorityExpiresAt = persistedAuthority.expiresAt
   const existingControl = initialControl

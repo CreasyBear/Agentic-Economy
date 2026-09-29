@@ -5,11 +5,14 @@ import {
   ADMIN_OBJECT_SEARCH_COPY,
   adminObjectSearchSchema,
 } from '@/components/ae/admin/object-search/object-search.contracts'
+import { recoverableSearch } from '@/lib/client/recoverable-search'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/admin/search')({
   ...operatorRouteOptions,
-  validateSearch: adminObjectSearchSchema,
+  validateSearch: recoverableSearch(adminObjectSearchSchema, {
+    fieldLabels: { kind: 'Object type', ref: 'Reference' },
+  }),
   head: () => ({
     meta: [
       { title: `${ADMIN_OBJECT_SEARCH_COPY.title} | Agentic Economy` },
@@ -26,6 +29,7 @@ function AdminSearchRoute() {
     <AdminObjectSearch
       {...(search.kind === undefined ? {} : { initialKind: search.kind })}
       {...(search.ref === undefined ? {} : { initialRef: search.ref })}
+      {...(search.rejected === undefined ? {} : { rejected: search.rejected })}
     />
   )
 }

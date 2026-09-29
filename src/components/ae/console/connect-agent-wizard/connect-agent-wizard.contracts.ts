@@ -17,10 +17,22 @@ export type ConnectAgentWizardIssuePort = (
   args: { data: Record<string, unknown> },
 ) => Promise<AgentAccessKeyIssueResult>
 
+export type ConnectAgentWizardDraft = Readonly<{
+  name: string
+  environment: ConnectAgentEnvironment
+  authorityMode: ConnectAgentAuthorityMode
+  perCallAmount: string
+  dailyAmount: string
+  monthlyAmount: string
+}>
+
 export type ConnectAgentWizardPorts = Readonly<{
+  open?: boolean
   onOpenChange: (open: boolean) => void
   onIssue: ConnectAgentWizardIssuePort
   onSuccess?: (reveal: IssuedAgentAccessReveal) => void
+  initialDraft?: ConnectAgentWizardDraft
+  onDraftChange?: (draft: ConnectAgentWizardDraft) => void
 }>
 
 export type ConnectAgentWizardViewState = Readonly<{

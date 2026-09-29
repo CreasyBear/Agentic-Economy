@@ -47,6 +47,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-danger-foreground: var(--ae-danger-foreground);
   --color-border: var(--border);
   --color-border-strong: var(--ae-border-strong);
   --color-input: var(--input);
@@ -213,6 +214,7 @@
   --ae-warning-ring: oklch(0.69 0.13 78 / 0.38);
   --ae-warning-subtle: oklch(0.96 0.035 82);
   --ae-danger: oklch(0.5408 0.176 27.61);
+  --ae-danger-foreground: var(--ae-danger);
   --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
   --ae-danger-subtle: oklch(0.95 0.03 28);
   --ae-info: var(--ae-brand);
@@ -315,7 +317,10 @@
   --accent-foreground: var(--ae-fg);
   --border: var(--ae-border);
   --input: var(--ae-border);
-  --ring: var(--ae-brand);
+  --ae-ring: #b7e7cc;
+  --ring: var(--ae-ring);
+  --ae-focus-ring: 0 0 0 2px var(--ae-ring);
+  --ae-danger-foreground: oklch(0.8 0.11 27.61);
 
 }
 

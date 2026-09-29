@@ -41,6 +41,7 @@ export type AdminMetricsDataState =
     }>
 export type AdminMetricsPageProps = Readonly<{
   range: MarketplaceMetricsRange
+  rejected?: string
   onRangeChange: (range: MarketplaceMetricsRange) => void
 }>
 

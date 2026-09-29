@@ -33,10 +33,11 @@ export type OptionView = Readonly<{
 export type OptionsGridView = Readonly<{ options: readonly OptionView[]; selectedId?: string; comparedIds: readonly string[] }>
 export type OptionsGridProps = Readonly<{
   view: OptionsGridView
-  onSelect: (id: string) => void
-  onCompare: (id: string) => void
+  onSelect?: (id: string) => void
+  onCompare?: (id: string) => void
   onQuoteSelect?: (id: string) => void
   signedIn?: boolean
+  readOnly?: boolean
 }>
 
 export type FilterValue = Readonly<{ price?: string | undefined; readyOnly: boolean; network?: string | undefined; category?: string | undefined }>

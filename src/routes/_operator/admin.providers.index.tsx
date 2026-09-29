@@ -6,11 +6,14 @@ import {
   PROVIDERS_LIST_COPY,
   adminProvidersSearchSchema,
 } from '@/components/ae/admin/providers-list/providers-list.contracts'
+import { recoverableSearch } from '@/lib/client/recoverable-search'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/admin/providers/')({
   ...operatorRouteOptions,
-  validateSearch: adminProvidersSearchSchema,
+  validateSearch: recoverableSearch(adminProvidersSearchSchema, {
+    fieldLabels: { filter: 'Filter', loaded: 'Loaded page' },
+  }),
   pendingComponent: AdminProvidersListSkeleton,
   head: () => ({
     meta: [

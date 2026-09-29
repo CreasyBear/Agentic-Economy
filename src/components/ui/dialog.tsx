@@ -195,7 +195,7 @@ function DialogContent({
         {showCloseButton ? (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-4 right-4 flex size-8 items-center justify-center rounded-md opacity-70 transition-[color,background-color,opacity,transform] duration-fast ease-standard outline-none hover:opacity-100 active:scale-[0.96] disabled:active:scale-100 motion-reduce:active:scale-100 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none data-open:bg-accent data-open:text-muted-foreground max-sm:min-h-touch max-sm:min-w-touch [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute top-4 right-4 flex size-8 items-center justify-center rounded-md opacity-70 transition-[color,background-color,opacity,transform] duration-fast ease-standard outline-none hover:opacity-100 active:scale-[0.96] disabled:active:scale-100 motion-reduce:active:scale-100 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none data-open:bg-accent data-open:text-muted-foreground max-sm:min-h-touch max-sm:min-w-touch [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon aria-hidden="true" />
             <span className="sr-only">Close</span>

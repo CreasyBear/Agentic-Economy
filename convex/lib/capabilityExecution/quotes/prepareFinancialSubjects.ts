@@ -93,9 +93,12 @@ export async function prepareFinancialSubjectsCore(
   if (!isBoundedJsonValue(args.input) || descriptor.validateInput(args.input).kind !== 'valid') return { kind: 'refused', code: 'input_invalid' }
   const pricing = normalizePricingConfig(operation.pricingConfig)
   if (pricing.kind !== 'valid') return { kind: 'refused', code: 'tool_unsupported' }
+  const managedApprovalQuote = pricing.config.kind === 'managed_x402'
+    && authority.principal.authorityMode === 'approval_required'
   if (pricing.config.kind === 'managed_x402'
     && authority.principal.authorityMode !== 'spending_policy'
-    && authority.principal.authorityMode !== 'unrestricted_test_only') return { kind: 'refused', code: 'grant_not_found' }
+    && authority.principal.authorityMode !== 'unrestricted_test_only'
+    && !managedApprovalQuote) return { kind: 'refused', code: 'grant_not_found' }
   const grantRow = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', authority.grantRef))
     .unique()
@@ -217,5 +220,6 @@ export async function prepareFinancialSubjectsCore(
           },
         }),
     ...(organizationMonthlySpendBudget === undefined ? {} : { organizationMonthlySpendBudget }),
+    ...(managedApprovalQuote ? { x402QuoteSource: 'persisted' as const } : {}),
   }
 }

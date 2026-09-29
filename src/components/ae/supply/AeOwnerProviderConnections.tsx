@@ -27,7 +27,9 @@ export function AeOwnerProviderConnections({
     <div
       id="provider-connections"
       tabIndex={-1}
-      className="min-w-0 scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      data-programmatic-focus={vm.programmaticFocusId === 'provider-connections' ? '' : undefined}
+      onPointerDown={vm.clearProgrammaticFocus}
+      className="min-w-0 scroll-mt-6 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[programmatic-focus]:focus:outline-2 data-[programmatic-focus]:focus:outline-offset-2 data-[programmatic-focus]:focus:outline-ring"
     >
       <SettingsPage
         title="Provider connections"
@@ -36,6 +38,8 @@ export function AeOwnerProviderConnections({
         <SettingsGroup title="Connections" description="Inspect authority and health for each endpoint. Tool readiness is checked separately.">
         <AeProviderConnectionList
           connections={connections}
+          {...(vm.programmaticFocusId === undefined ? {} : { programmaticFocusId: vm.programmaticFocusId })}
+          onClearProgrammaticFocus={vm.clearProgrammaticFocus}
           readOnly={readOnly}
           {...(vm.busy === undefined ? {} : { busy: vm.busy })}
           refreshRequired={vm.refreshRequired}

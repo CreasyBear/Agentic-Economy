@@ -12,6 +12,17 @@ import type { AgentAccessAuthorizeLoaded } from './authorize.contracts'
 
 export type AeAgentAccessAuthorizePageProps = Readonly<{ loaded: AgentAccessAuthorizeLoaded }>
 
+function OpenAgentsLink() {
+  return (
+    <Link
+      to="/agent-access"
+      className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+    >
+      Open Agents
+    </Link>
+  )
+}
+
 export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePageProps) {
   if (loaded.kind === 'ready') {
     return <AeAgentAccessAuthorizeForm
@@ -30,12 +41,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
             <AlertDescription>
               <p>The approval may have completed. Do not submit it again.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
-              <Link
-                to="/agent-access"
-                className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
-              >
-                Open Agents
-              </Link>
+              <OpenAgentsLink />
             </AlertDescription>
           </Alert>
         </AeSettingsStack>
@@ -51,12 +57,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
             <AlertDescription>
               <p>This approval has completed. Open Agents for the current credential status.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
-              <Link
-                to="/agent-access"
-                className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
-              >
-                Open Agents
-              </Link>
+              <OpenAgentsLink />
             </AlertDescription>
           </Alert>
         </AeSettingsStack>
@@ -73,6 +74,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
             <AlertDescription>
               <p>{presentation.outcome}</p>
               <p className="mt-2">{presentation.nextAction}</p>
+              <OpenAgentsLink />
             </AlertDescription>
           </Alert>
         </AeSettingsStack>
@@ -84,7 +86,10 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
       <AeSettingsStack>
         <Alert variant="destructive">
           <AlertTitle>This access request is missing a code</AlertTitle>
-          <AlertDescription>Start a new request from your Agent.</AlertDescription>
+          <AlertDescription>
+            <p>Start a new request from your Agent.</p>
+            <OpenAgentsLink />
+          </AlertDescription>
         </Alert>
       </AeSettingsStack>
     </AeOperatorPage>

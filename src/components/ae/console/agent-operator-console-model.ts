@@ -115,7 +115,7 @@ export function agentFacts(detail: AgentDetail): readonly AeFact[] {
       ? 'none need checking'
       : `${usage.outcomeUnknownCallCount} ${usage.outcomeUnknownCallCount === 1 ? 'needs' : 'need'} checking`}`
   return [
-    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
+    ...authorityFacts(detail.agent.status, detail.authorityMode),
     { label: 'Monthly limit', value: detail.spendingPolicy.kind === 'known' ? formatDisplayAmount(detail.spendingPolicy.maximumMonthlySpend) : spendingPolicyStateLabel(detail.spendingPolicy.kind), mono: detail.spendingPolicy.kind === 'known' },
     { label: 'Recent Calls', value: calls },
     { label: 'Last used', value: detail.agent.lastSeenAt === undefined
@@ -167,7 +167,7 @@ export function agentActivityFacts(detail: AgentDetail): readonly AeFact[] {
 export function agentAccessFacts(detail: AgentDetail): readonly AeFact[] {
   return [
     { label: 'Environment', value: environmentLabel(detail.agent.environment) },
-    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
+    ...authorityFacts(detail.agent.status, detail.authorityMode),
     { label: 'Tools', value: toolAccessLabel(detail) },
   ]
 }
@@ -309,6 +309,36 @@ export function scopeLabel(mode: AgentDetail['authorityMode']): string {
       return exhaustive
     }
   }
+}
+
+
+export type AuthorityPresence = 'connected' | 'attention' | 'expired' | 'disconnected' | 'active' | 'revoked'
+
+export function authorityIsHistorical(status: AuthorityPresence): boolean {
+  return status === 'expired' || status === 'disconnected' || status === 'revoked'
+}
+
+export function currentAuthorityLabel(status: AuthorityPresence, mode: AgentDetail['authorityMode']): string {
+  if (status === 'expired') return 'Expired'
+  if (status === 'disconnected' || status === 'revoked') return 'Disconnected'
+  return scopeLabel(mode)
+}
+
+export function authorityCellText(item: Readonly<{ status: AuthorityPresence; authorityMode: AgentDetail['authorityMode'] }>): string {
+  const current = currentAuthorityLabel(item.status, item.authorityMode)
+  if (!authorityIsHistorical(item.status)) return current
+  return `${current} Previous authority: ${scopeLabel(item.authorityMode)}`
+}
+
+export function authorityFacts(
+  status: AuthorityPresence,
+  mode: AgentDetail['authorityMode'],
+): readonly AeFact[] {
+  if (!authorityIsHistorical(status)) return [{ label: 'Authority', value: scopeLabel(mode) }]
+  return [
+    { label: 'Authority', value: currentAuthorityLabel(status, mode) },
+    { label: 'Previous authority', value: scopeLabel(mode) },
+  ]
 }
 
 export function toolAccessLabel(detail: AgentDetail): string {

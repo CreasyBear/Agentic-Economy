@@ -15,13 +15,14 @@ type DirectoryToolListProps = Readonly<{
   onSave: (item: SavedDirectoryTool) => void
   isSaved: (item: SavedDirectoryTool) => boolean
   saveDisabled?: boolean
+  saveUnknown?: boolean
   onCompare: (item: SavedDirectoryTool) => void
   isComparing: (resource: string) => boolean
   compareDisabled: (resource: string) => boolean
 }>
 
 /** Semantic rows stack into decision cards at mobile widths without duplicate controls. */
-export const DirectoryToolList = memo(function DirectoryToolList({ items, onSave, isSaved, saveDisabled, onCompare, isComparing, compareDisabled }: DirectoryToolListProps) {
+export const DirectoryToolList = memo(function DirectoryToolList({ items, onSave, isSaved, saveDisabled, saveUnknown = false, onCompare, isComparing, compareDisabled }: DirectoryToolListProps) {
   return <Table aria-label="Tools" containerClassName="min-w-0 overflow-x-hidden md:overflow-x-auto" className="block min-w-0 md:table">
     <TableHeader className="hidden md:table-header-group">
       <TableRow>
@@ -62,7 +63,7 @@ export const DirectoryToolList = memo(function DirectoryToolList({ items, onSave
           <TableCell className="block px-1 py-1 md:table-cell md:px-3 md:py-2.5 md:text-right">
             <div className="flex items-center justify-between gap-2 md:justify-end">
               <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="inline-flex min-h-10 items-center rounded-md px-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden">Inspect Tool</Link>
-                  <Button variant="ghost" size="icon-sm" className="active:scale-100" onClick={() => onSave(item)} disabled={saveDisabled} aria-label={`${saved ? 'Unsave' : 'Save'} ${model.title}`} aria-pressed={saved}>
+                  <Button variant="ghost" size="icon-sm" className="active:scale-100" onClick={() => onSave(item)} disabled={saveDisabled} aria-label={saveUnknown ? `Saved status unavailable for ${model.title}` : `${saved ? 'Unsave' : 'Save'} ${model.title}`} {...(saveUnknown ? { title: 'Saved status unavailable' } : { 'aria-pressed': saved })}>
                     <HeartIcon className={cn(saved && 'fill-current')} />
                   </Button>
                   <Button variant={comparing ? 'secondary' : 'ghost'} size="sm" className="active:scale-100" onClick={() => onCompare(item)} disabled={compareDisabled(item.entry.resource)} aria-label={`${comparing ? 'Remove' : 'Add'} ${model.title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing}>

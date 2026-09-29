@@ -22,6 +22,14 @@ import { ActivityPaginationControl } from './components/ActivityPaginationContro
 import { ActivityUnavailableState } from './components/ActivityUnavailableState'
 import { useAeActivity } from './useAeActivity'
 
+function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
+  if (vm.pagination.status === 'loading') return 'Loading older Calls.'
+  if (vm.pagination.status === 'failed') return 'Could not load older Calls. The Calls already shown are unchanged.'
+  if (vm.showEmptyNoCalls) return 'No Calls yet.'
+  if (vm.showEmptyNoMatch) return 'No Calls match these filters.'
+  return `${vm.attentionRows.length} Calls need attention. ${vm.recentRows.length} recent Calls shown.`
+}
+
 export function AeActivity({ result }: AeActivityProps) {
   const router = useRouter()
   const [retryPending, setRetryPending] = useState(false)
@@ -68,6 +76,9 @@ function AeActivityAvailable({
       currentPath="/activity"
     >
       <div className="grid gap-section">
+        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {activityStatus(vm)}
+        </p>
         {vm.showFilterBar ? (
           <ActivityFilterBar
             statusFilter={vm.statusFilter}

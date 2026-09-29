@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { handleFundingHandoffAction, publicFundingHandoffResponse } from '@/lib/server/funding-handoff-api'
+import { handleFundingHandoffAction, publicFundingHandoffResponse, readPublicFundingHandoff } from '@/lib/server/funding-handoff-api'
+import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
@@ -173,4 +174,18 @@ describe('agent funding handoff HTTP boundary', () => {
     } })
     expect(body).not.toMatch(/accountRef|owner|balance|checkoutUrl|serviceFee|tax|credential|commandRef|payment/u)
   })
+})
+
+it('reads a public funding handoff without an authenticated source query', async () => {
+  const query = vi.fn(async () => ({ kind: 'not_found' as const }))
+  const restore = setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() })
+  try {
+    await expect(readPublicFundingHandoff('not-a-session')).resolves.toEqual({ kind: 'not_found' })
+    expect(query).not.toHaveBeenCalled()
+    await expect(readPublicFundingHandoff('cs_test_nonexistent123')).resolves.toEqual({ kind: 'not_found' })
+    expect(query).toHaveBeenCalledOnce()
+    expect(publicFundingHandoffResponse({ kind: 'not_found' }).status).toBe(404)
+  } finally {
+    restore()
+  }
 })

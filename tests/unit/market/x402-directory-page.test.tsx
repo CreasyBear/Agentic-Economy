@@ -282,8 +282,8 @@ it('validates alternative identity and preserves it in Market loader dependencie
   const search = validateMarketSearch({ view: 'tools', query: 'weather forecast', alternativeTo: ' source-route:current ' })
   expect(search.alternativeTo).toBe('source-route:current')
   expect(marketLoaderDeps(search).alternativeTo).toBe('source-route:current')
-  expect(() => validateMarketSearch({ view: 'tools', alternativeTo: 'source-route:current' })).toThrow()
-  expect(() => validateMarketSearch({ view: 'tools', query: 'weather', alternativeTo: '   ' })).toThrow()
+  expect(validateMarketSearch({ view: 'tools', alternativeTo: 'source-route:current' })).toEqual({ view: 'tools' })
+  expect(validateMarketSearch({ view: 'tools', query: 'weather', alternativeTo: '   ' })).toEqual({ view: 'tools', query: 'weather' })
 })
 
 it('keeps alternative search in the admitted catalogue instead of sending it to mixed canonical search', () => {
@@ -371,7 +371,7 @@ describe('indexed x402 catalogue controls', () => {
       kind: 'ok', source: 'index', coverage, searchMethod: 'native_index',
       page: { kind: 'ok', items: nextItems, offset: 0, limit: 20 }, indexCursor: 'generation-1:page-3', isDone: false,
     })
-    show({ ...nativeFilters, sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    const { router } = show({ ...nativeFilters, sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(screen.getByText(/2 Tools on this page/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     const { view: _view, ...filtersWithoutView } = nativeFilters
@@ -380,15 +380,31 @@ describe('indexed x402 catalogue controls', () => {
     expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
     expect(screen.getByText(/2 Tools on this page/)).toBeTruthy()
     expect(screen.getByText('Page 2')).toBeTruthy()
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ page: 2 }))
+    expect(router.state.location.search).not.toHaveProperty('indexCursor')
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
     expect(screen.getByRole('link', { name: 'Tool 0' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: nextItems[0]!.title })).toBeNull()
     expect(readX402DirectoryCatalogueServer).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(router.state.location.search.page).toBeUndefined())
 
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy()
     expect(readX402DirectoryCatalogueServer).toHaveBeenCalledTimes(1)
+  })
+
+  it('walks forward to a shared page number without putting the index cursor in the URL', async () => {
+    const nextItems = entries.slice(2, 4)
+    readX402DirectoryCatalogueServer.mockResolvedValue({
+      kind: 'ok', source: 'index', coverage, searchMethod: 'native_index',
+      page: { kind: 'ok', items: nextItems, offset: 0, limit: 20 }, indexCursor: 'generation-1:page-3', isDone: false,
+    })
+    const { router } = show({ view: 'tools', page: 2 }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
+    expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
+    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledTimes(1)
+    expect(router.state.location.search).not.toHaveProperty('indexCursor')
   })
   it('keeps the current page when the next page fails, then retries the same continuation', async () => {
     const nextItems = entries.slice(2, 4)

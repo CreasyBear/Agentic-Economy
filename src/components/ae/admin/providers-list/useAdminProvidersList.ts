@@ -6,6 +6,7 @@ import type {
   AdminProvidersDataState,
   AdminProvidersListPageProps,
 } from './providers-list.contracts'
+import { ADMIN_LIST_WINDOW, nextAdminListWindow } from '../admin-list-window'
 import { providerRowModel } from './providers-list.view-model'
 
 
@@ -16,7 +17,7 @@ export function useAdminProvidersList({ search, onSearchChange }: AdminProviders
   const pagination = usePaginatedQuery(
     api.adminConsoleProviders.listAdminProviders,
     allowed ? { filter } : 'skip',
-    { initialNumItems: 50 },
+    { initialNumItems: search.loaded ?? ADMIN_LIST_WINDOW },
   )
 
   const data: AdminProvidersDataState = access === undefined
@@ -29,7 +30,11 @@ export function useAdminProvidersList({ search, onSearchChange }: AdminProviders
             kind: 'ready',
             rows: pagination.results.map(providerRowModel),
             paginationStatus: pagination.status,
-            loadMore: () => pagination.loadMore(50),
+            loadMore: () => {
+              pagination.loadMore(ADMIN_LIST_WINDOW)
+              const loaded = nextAdminListWindow(search.loaded)
+              if (loaded !== undefined) onSearchChange({ ...search, loaded })
+            },
           }
 
   return {

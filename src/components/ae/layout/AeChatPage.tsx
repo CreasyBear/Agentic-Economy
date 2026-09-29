@@ -23,6 +23,7 @@ export function AeChatPage(props: AeChatAskPageProps | AeChatSharedPageProps) {
     return (
       <main
         id="main-content"
+        data-shell-mode="chat"
         tabIndex={-1}
         className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
         aria-label="Shared chat"
@@ -36,6 +37,7 @@ export function AeChatPage(props: AeChatAskPageProps | AeChatSharedPageProps) {
   return (
     <main
       id="main-content"
+      data-shell-mode="chat"
       tabIndex={-1}
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
       aria-label="Chat"

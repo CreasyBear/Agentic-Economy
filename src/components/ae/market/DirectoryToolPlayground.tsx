@@ -42,12 +42,14 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
   const command = canonical ? playgroundCallCommand(toolRef, schema, inputText) : undefined
   const outputExample = parsePlaygroundJson(entry.output?.exampleJson)
   const errors = value === undefined ? ['Enter valid JSON within the input size limit.'] : validation?.errors.map(error => error.stack) ?? []
+  const hintId = `${id}-hint`
+  const errorId = `${id}-errors`
 
   const jsonEditor = <FieldGroup>
     <Field data-invalid={errors.length > 0}>
       <FieldLabel htmlFor={id}>Request JSON</FieldLabel>
-      <Textarea id={id} value={inputText} onChange={event => setInputText(event.target.value)} spellCheck={false} maxLength={131_072} aria-invalid={errors.length > 0} className="min-h-72 font-mono text-sm" />
-      <FieldDescription>{canonical ? 'This is the exact input passed to the AE Call.' : 'The Provider’s HTTP request description. AE input becomes available after the Tool is prepared.'}</FieldDescription>
+      <Textarea id={id} value={inputText} onChange={event => setInputText(event.target.value)} spellCheck={false} maxLength={131_072} aria-invalid={errors.length > 0} aria-describedby={errors.length > 0 ? `${hintId} ${errorId}` : hintId} className="min-h-72 font-mono text-sm" />
+      <FieldDescription id={hintId}>{canonical ? 'This is the exact input passed to the AE Call.' : 'The Provider’s HTTP request description. AE input becomes available after the Tool is prepared.'}</FieldDescription>
     </Field>
   </FieldGroup>
 
@@ -77,7 +79,7 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
           <TabsContent value="json" className="pt-4">{jsonEditor}</TabsContent>
           {schema ? <TabsContent value="schema" className="pt-4"><JsonExample title={canonical ? 'Tool input schema' : 'Provider request schema'} code={JSON.stringify(schema, null, 2)} /></TabsContent> : null}
         </Tabs>
-        {errors.length > 0 ? <Alert><AlertDescription><ul className="list-inside list-disc">{errors.slice(0, 4).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul></AlertDescription></Alert> : null}
+        {errors.length > 0 ? <Alert id={errorId}><AlertDescription><ul className="list-inside list-disc">{errors.slice(0, 4).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul></AlertDescription></Alert> : null}
         {!formAvailable ? <p className="text-sm text-muted-foreground">{schema ? 'Use JSON for this schema’s input structure.' : entry.input?.schemaOmitted ? 'The full input schema is too large to display here.' : 'This Provider has not published an input schema.'}</p> : null}
       </section>
       <section className="grid min-w-0 content-start gap-4" aria-labelledby={`${id}-output`}>

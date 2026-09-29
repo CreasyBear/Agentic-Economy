@@ -10,6 +10,7 @@ import type { AgentDirectoryProjection } from './agent-operator-view-model'
 export type AgentAccessSearch = Readonly<{
   caller?: string
   resumeTool?: string
+  setup?: 'choose' | 'oauth'
 }>
 
 export type LifecycleCommand =

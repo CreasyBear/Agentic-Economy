@@ -16,18 +16,34 @@ import { issueAgentAccessKeyServer } from '@/modules/agent-access/agent-access.f
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import { CONNECT_AGENT_WIZARD_LIMIT_PLACEHOLDERS } from '@/components/ae/console/connect-agent-wizard/useConnectAgentWizard'
+import type { AgentKeyDraft } from '@/components/ae/console/connect-agent-wizard/agent-key-draft'
 import { useAgentKeysSettings } from './useAgentKeysSettings'
 
 export type AeAgentKeysSettingsProps = Readonly<{
   initialDirectory: AgentDirectoryProjection
   canonicalBaseUrl: string
   openIssueDialog?: boolean
+  draft?: AgentKeyDraft
+  onDraftChange?: (draft: AgentKeyDraft) => void
+  onWizardOpenChange?: (open: boolean) => void
 }>
 
-export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl, openIssueDialog = false }: AeAgentKeysSettingsProps) {
+export function AeAgentKeysSettings({
+  initialDirectory,
+  canonicalBaseUrl,
+  openIssueDialog = false,
+  draft,
+  onDraftChange,
+  onWizardOpenChange,
+}: AeAgentKeysSettingsProps) {
   const vm = useAgentKeysSettings(initialDirectory)
   const issueKey = useServerFn(issueAgentAccessKeyServer)
-  const [wizardOpen, setWizardOpen] = useState(openIssueDialog)
+  const [uncontrolledWizardOpen, setUncontrolledWizardOpen] = useState(openIssueDialog)
+  const wizardOpen = onWizardOpenChange === undefined ? uncontrolledWizardOpen : openIssueDialog
+  const setWizardOpen = (open: boolean) => {
+    if (onWizardOpenChange === undefined) setUncontrolledWizardOpen(open)
+    else onWizardOpenChange(open)
+  }
   const [reveal, setReveal] = useState<IssuedAgentAccessReveal>()
   const keys = vm.directory.details.flatMap((detail) => detail.credentials.map((credential) => ({ detail, credential })))
   const activeKeys = keys.filter(({ credential }) => credential.lifecycle === 'active')
@@ -64,7 +80,7 @@ export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl, openIs
                 ? credential.credentialRef === detail.currentCredentialRef ? getStatusPresentation('current').label : 'Other active'
                 : credential.lifecycle}
             </Badge>
-            <Link to="/agent-access" search={{ caller: detail.agent.principalRef }} className="text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">View Agent</Link>
+            <Link to="/agent-access" search={{ caller: detail.agent.principalRef }} className="text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">View Agent</Link>
           </div>
           <p className="mt-1 break-all text-xs text-muted-foreground">{credential.credentialRef}</p>
         </SettingsRow>
@@ -87,7 +103,14 @@ export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl, openIs
         }, event.currentTarget)}>Revoke key</Button>
       </SettingsRow>)}
     </SettingsDangerZone>}
-    <AeConnectAgentWizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onIssue={issueKey} onSuccess={(issued) => { setReveal(issued); void vm.refresh() }} />
+    <AeConnectAgentWizardDialog
+      open={wizardOpen}
+      onOpenChange={setWizardOpen}
+      onIssue={issueKey}
+      onSuccess={(issued) => { setReveal(issued); void vm.refresh() }}
+      {...(draft === undefined ? {} : { initialDraft: draft })}
+      {...(onDraftChange === undefined ? {} : { onDraftChange })}
+    />
     <AeKeyRevealDialog reveal={reveal} open={reveal !== undefined} onOpenChange={(open) => { if (!open) setReveal(undefined) }} canonicalBaseUrl={canonicalBaseUrl} />
     <AeConfirmDialog
       open={vm.revokeTarget !== undefined}

@@ -6,10 +6,10 @@ import { formatDisplayAmount } from '@/modules/money/public'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import {
+  authorityFacts,
   connectionStateLabel,
   environmentLabel,
   reconnectInstructionFor,
-  scopeLabel,
 } from './agent-operator-console-model'
 
 export function AeAgentConnectionReceipts({
@@ -27,8 +27,8 @@ export function AeAgentConnectionReceipts({
   if (detail.connections.length === 0) {
     return (
       <div className="grid gap-1 rounded-md border border-border p-3">
-        <p className="font-medium text-foreground">Legacy credential</p>
-        <p className="text-sm text-muted-foreground">This access predates durable client connections. No client identity is inferred.</p>
+        <p className="font-medium text-foreground">Direct key</p>
+        <p className="text-sm text-muted-foreground">No client connection is recorded for this key. No client identity is inferred.</p>
       </div>
     )
   }
@@ -44,7 +44,7 @@ export function AeAgentConnectionReceipts({
             </div>
             <AeFactList density="compact" facts={[
               { label: 'Environment', value: environmentLabel(connection.environment) },
-              { label: 'Authority', value: scopeLabel(connection.authorityMode) },
+              ...authorityFacts(connection.state, connection.authorityMode),
               { label: 'Budget', value: formatDisplayAmount(connection.spendingPolicy.budget.maximumMonthlySpend), mono: true },
               { label: 'Connected', value: formatTimestamp(connection.connectedAt), mono: true },
               { label: 'Last refresh', value: formatTimestamp(connection.lastRotatedAt), mono: true },

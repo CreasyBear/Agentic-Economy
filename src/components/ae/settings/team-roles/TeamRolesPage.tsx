@@ -14,7 +14,7 @@ export function TeamRolesPage({ members, inviteAvailability }: TeamRolesPageProp
   return <SettingsPage title="Team & roles" description="People who can act for this workspace and their Agentic Economy roles.">
     {members.length > 0 ? <TeamMemberRows members={members} /> : inviteAvailability === 'available' ? <SettingsEmptyState title="No members yet" description="Invite someone to work in this workspace." /> : null}
     {inviteAvailability === 'available'
-      ? <TeamInviteForm email={invite.email} role={invite.role} pending={invite.pending} message={invite.message} error={invite.error} onEmailChange={invite.setEmail} onRoleChange={invite.setRole} onSubmit={invite.submit} />
+      ? <TeamInviteForm email={invite.email} role={invite.role} pending={invite.pending} message={invite.message} error={invite.error} emailError={invite.emailError} onEmailChange={invite.setEmail} onRoleChange={invite.setRole} onSubmit={invite.submit} />
       : <SettingsEmptyState title="Invitations unavailable" description={inviteReason[inviteAvailability]} />}
   </SettingsPage>
 }

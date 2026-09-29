@@ -31,6 +31,9 @@ type OwnerInvoiceHistoryRow = Readonly<{
   commandRef: string
   createdAt: number
   description: string
+  principalUnits: string
+  serviceFeeUnits: string
+  taxUnits: string
   totalUnits: string
   status: 'succeeded' | 'reversed'
   appliedTransactionRef: string | null
@@ -314,6 +317,12 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
       'funding:w24:h1:older',
     ])
     expect(result.page.every((row) => row.status === 'succeeded')).toBe(true)
+    expect(result.page[0]).toMatchObject({
+      principalUnits: '5000000',
+      serviceFeeUnits: '250000',
+      taxUnits: '30000',
+      totalUnits: '5280000',
+    })
   })
 
   it('H2: listOwnerInvoiceHistory omits pending, failed, and outcome_unknown commands', async () => {

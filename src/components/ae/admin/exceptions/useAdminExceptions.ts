@@ -5,7 +5,8 @@ import { usePaginatedQuery, useQuery } from 'convex/react'
 import { api } from '../../../../../convex/_generated/api'
 import { parseCallRef } from '@/modules/capability-execution/call-contracts'
 import { adminObjectHref, type AdminExceptionKind, type AdminExceptionPartition, type AdminResolutionRow } from '@/lib/operator/admin-console/contracts'
-import { aeStatusValues, getStatusPresentation } from '@/lib/ui/status-presentation'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import { ADMIN_LIST_WINDOW, nextAdminListWindow } from '../admin-list-window'
 import { formatPerthTimestamp, formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
 import {
   ADMIN_EXCEPTION_PARTITIONS,
@@ -26,10 +27,11 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
     ? search.partition : ADMIN_EXCEPTION_PARTITIONS[kind][0]
   const overview = useQuery(api.adminConsoleExceptions.readAdminExceptionOverview, {})
   const allowed = Array.isArray(overview)
+  const pageWindow = search.loaded ?? ADMIN_LIST_WINDOW
   const pagination = usePaginatedQuery(
     api.adminConsoleExceptions.listAdminExceptionsPage,
     allowed ? { kind, partition } : 'skip',
-    { initialNumItems: 50 },
+    { initialNumItems: pageWindow },
   )
   const resolutions = useQuery(api.adminConsoleExceptions.listRecentPurchaseResolutions, allowed ? {} : 'skip')
   const exact = useQuery(
@@ -60,8 +62,16 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
           selectedSourceUnavailable: selectedOverview?.unavailable ?? false,
           paginationStatus: pagination.status,
           loadMore: () => {
-            pagination.loadMore(50)
+            pagination.loadMore(ADMIN_LIST_WINDOW)
             setScanRequests((count) => count + 1)
+            const loaded = nextAdminListWindow(pageWindow)
+            if (loaded !== undefined) {
+              onSearchChange({
+                kind, partition, loaded,
+                ...(search.ref === undefined ? {} : { ref: search.ref }),
+                ...(search.rejected === undefined ? {} : { rejected: search.rejected }),
+              })
+            }
           },
         }
 
@@ -106,15 +116,21 @@ function toExceptionRowModel(exception: AdminExceptionRecord, partition: AdminEx
   }
 }
 
+function purchaseTerminalLabel(state: AdminResolutionRow['terminalState']): string {
+  if (state === 'completed') return getStatusPresentation('completed').label
+  if (state === 'released') return 'Released'
+  if (state === 'refunded') return 'Refunded'
+  return 'Disputed'
+}
+
 function toResolutionRowModel(row: AdminResolutionRow): AdminResolutionRowModel {
-  const status = aeStatusValues.find((candidate) => candidate === row.terminalState)
   const parsed = parseCallRef(row.callRef)
   return {
     callRef: row.callRef,
     href: parsed.kind === 'valid'
       ? adminObjectHref({ kind: 'call', ref: parsed.ref })
       : `/admin/calls/${encodeURIComponent(row.callRef)}`,
-    terminalStateLabel: status === undefined ? row.terminalState : getStatusPresentation(status).label,
+    terminalStateLabel: purchaseTerminalLabel(row.terminalState),
     resolvedAtLabel: formatPerthTimestamp(row.resolvedAt),
     resolvedAtIso: timestampIso(row.resolvedAt),
   }

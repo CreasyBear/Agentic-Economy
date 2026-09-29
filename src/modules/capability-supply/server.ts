@@ -56,6 +56,7 @@ export type {
 export { createSandboxEvmX402PaymentSignature } from './internal/x402-payment-signer'
 export {
   inspectX402SellerEndpoint,
+  selectPinnedX402Alternative,
   type X402SellerEndpointInspectorDependencies,
   type X402SellerEndpointMethod,
 } from './internal/x402-seller-endpoint-inspector'
@@ -224,6 +225,7 @@ export type {
 } from './internal/supply-funnel/provider-connection-handoff-contract'
 
 export { prepareX402Request } from './internal/x402-request'
+export { parseX402FetchTransportConfiguration } from './internal/transport-adapters'
 
 export {
   x402DefaultAssetFacts,

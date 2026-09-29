@@ -10,7 +10,7 @@ import type {
 import { utf8ToHex } from '@/modules/capability-supply/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { degrade } from '@/lib/observability/degrade'
-import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
+import { isAbsoluteHttpsResourceUrl, type OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
 import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 import {
   PROVIDER_CONNECTION_UNCONFIRMED_TEXTS,
@@ -133,6 +133,15 @@ export function useOwnerProviderConnectionFormFlow(deps: OwnerProviderConnection
 
   async function inspectConnection() {
     if (deps.businessId === undefined) return
+    if (!isAbsoluteHttpsResourceUrl(deps.resourceUrl)) {
+      deps.setNotice({
+        kind: 'error',
+        text: 'Provide an absolute public HTTPS endpoint without credentials or a fragment.',
+      })
+      deps.setInspection(undefined)
+      deps.setClaimSignature(undefined)
+      return
+    }
     const { businessId, resourceUrl, method, environment } = deps
     deps.setBusy('inspect')
     deps.setNotice(undefined)

@@ -23,6 +23,10 @@ import {
 
 const TEAMMATE_PRINCIPAL_REF = `prn_${'a'.repeat(32)}`
 const TEAMMATE_MEMBERSHIP_REF = `mem_${'a'.repeat(32)}`
+const AGENT_PRINCIPAL_REF = `prn_${'b'.repeat(32)}`
+const AGENT_MEMBERSHIP_REF = `mem_${'b'.repeat(32)}`
+const WORKLOAD_PRINCIPAL_REF = `prn_${'c'.repeat(32)}`
+const WORKLOAD_MEMBERSHIP_REF = `mem_${'c'.repeat(32)}`
 const TEAMMATE_TOKEN_IDENTIFIER = 'https://clerk.example.test|user_teammate'
 const ORG_BINDING_REF = `eob_${'o'.repeat(32)}`
 const CLERK_ORG_ID = 'org_w14_test'
@@ -185,6 +189,37 @@ async function expectRefusal(run: () => Promise<unknown>, code: string): Promise
   await expect(run()).rejects.toMatchObject({
     name: 'InteractiveAuthorityError',
     code,
+  })
+}
+
+async function seedActiveMember(
+  backend: InteractiveAuthorityBackend,
+  input: Readonly<{ principalRef: string; membershipRef: string; kind: 'human' | 'agent' | 'workload'; displayName: string }>,
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('principals', {
+      principalRef: input.principalRef,
+      kind: input.kind,
+      displayName: input.displayName,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef: input.membershipRef,
+      accountRef: ACCOUNT_REF,
+      memberPrincipalRef: input.principalRef,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: NOW,
+      createdBy: {
+        actorPrincipalRef: PRINCIPAL_REF,
+        activeAccountRef: ACCOUNT_REF,
+        correlationRef: `create:${input.membershipRef}`,
+        idempotencyRef: `create:${input.membershipRef}`,
+      },
+    })
   })
 }
 
@@ -625,6 +660,30 @@ describe('workspaceAccounts readWorkspaceDecommissionEligibility (W-14)', () => 
         membershipRef: TEAMMATE_MEMBERSHIP_REF,
       })],
     })
+  })
+
+  it('E2b: active agent and workload members are not transfer candidates', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedTeammateMembership(backend)
+    await seedActiveMember(backend, {
+      principalRef: AGENT_PRINCIPAL_REF,
+      membershipRef: AGENT_MEMBERSHIP_REF,
+      kind: 'agent',
+      displayName: 'Goblin sweep key',
+    })
+    await seedActiveMember(backend, {
+      principalRef: WORKLOAD_PRINCIPAL_REF,
+      membershipRef: WORKLOAD_MEMBERSHIP_REF,
+      kind: 'workload',
+      displayName: 'Workspace workload',
+    })
+
+    const eligibility = await readEligibility(backend)
+    expect(eligibility.canTransfer).toBe(true)
+    expect(eligibility.transferCandidates.map((candidate) => candidate.principalRef)).toEqual([
+      TEAMMATE_PRINCIPAL_REF,
+    ])
   })
 
   it('E3: member (not owner) -> callerIsOwner false, cannot close or transfer', async () => {
@@ -1131,6 +1190,39 @@ describe('workspaceAccounts transferWorkspaceOwnership (W-14)', () => {
     })
 
     await expectRefusal(() => transferWorkspaceOwnership(backend), 'successor_principal_inactive')
+  })
+
+  it('T8b: active agent successor refuses successor_not_human before ownership changes', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedActiveMember(backend, {
+      principalRef: AGENT_PRINCIPAL_REF,
+      membershipRef: AGENT_MEMBERSHIP_REF,
+      kind: 'agent',
+      displayName: 'Goblin sweep key',
+    })
+
+    await expectRefusal(
+      () => transferWorkspaceOwnership(backend, transferPayload({ successorPrincipalRef: AGENT_PRINCIPAL_REF })),
+      'successor_not_human',
+    )
+    const active = (await listOwnerships(backend)).filter((row) => row.lifecycle === 'active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.ownerPrincipalRef).toBe(PRINCIPAL_REF)
+  })
+
+  it('T8c: human transfer without fresh MFA refuses before ownership changes', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedTeammateMembership(backend)
+
+    await expect(transferWorkspaceOwnership(backend, transferPayload(), identity({ fva: noMfaFva }))).resolves.toEqual({
+      kind: 'refused',
+      code: 'mfa_reverification_required',
+    })
+    const active = (await listOwnerships(backend)).filter((row) => row.lifecycle === 'active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.ownerPrincipalRef).toBe(PRINCIPAL_REF)
   })
 
   it('T9: non-owner caller refuses ownership_mismatch', async () => {

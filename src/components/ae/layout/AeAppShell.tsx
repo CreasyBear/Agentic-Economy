@@ -72,6 +72,7 @@ export function AeAppShell({ children }: { children: ReactNode }) {
           <OperatorChromeProvider>
             <div
               data-shell="app-content"
+              data-owner-scroll={shell.isSignedIn && !chatFrame ? 'document' : undefined}
               className={cn(
                 'flex min-h-0 w-full flex-1 flex-col',
                 chatFrame ? 'overflow-hidden' : 'min-h-svh',

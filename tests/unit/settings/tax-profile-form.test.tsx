@@ -16,6 +16,14 @@ vi.mock('@/lib/ui/toast', () => ({
   },
 }))
 
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-router')>()
+  return {
+    ...actual,
+    useBlocker: () => ({ status: 'idle' as const, proceed() {}, reset() {} }),
+  }
+})
+
 import { TaxProfileForm } from '@/components/ae/settings/TaxProfileForm'
 import type { TaxProfileInitialData } from '@/modules/money/tax-profile.view-model'
 
@@ -50,7 +58,7 @@ describe('TaxProfileForm', () => {
     fireEvent.change(screen.getByLabelText(/postal code/i), { target: { value: '2000' } })
 
     await waitFor(() => {
-      expect(screen.getByText(/invalid abn or incomplete billing address/i)).toBeTruthy()
+      expect(screen.getByText(/invalid abn\./i)).toBeTruthy()
       expect(screen.getByText(/A\$0\.00 affected — tax profile not saved/i)).toBeTruthy()
     })
 
@@ -74,7 +82,7 @@ describe('TaxProfileForm', () => {
     fireEvent.change(screen.getByLabelText(/postal code/i), { target: { value: '2000' } })
 
     await waitFor(() => {
-      expect(screen.queryByText(/invalid abn or incomplete billing address/i)).toBeNull()
+      expect(screen.queryByText(/invalid abn\./i)).toBeNull()
     })
   })
 
@@ -96,6 +104,8 @@ describe('TaxProfileForm', () => {
       'aria-describedby',
       'tax-profile-diagnostic',
     )
+    expect(screen.getByText(/legal business name is missing/i)).toBeTruthy()
+    expect(screen.queryByText(/invalid abn/i)).toBeNull()
   })
 
   it('U5: valid submission calls onSubmit with normalized payload', async () => {

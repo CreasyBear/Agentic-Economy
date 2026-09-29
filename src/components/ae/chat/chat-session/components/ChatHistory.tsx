@@ -94,13 +94,13 @@ export function ChatHistory({
                     ) : (
                       <>
                         <button type="button" aria-current={thread.threadId === activeThreadId ? 'page' : undefined} onClick={() => onOpen(thread.threadId)}
-                          className="flex h-8 min-w-0 flex-1 items-center rounded-md px-2 text-left text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-brand max-md:min-h-touch data-[active=true]:font-medium data-[active=true]:text-foreground"
+                          className="flex h-8 min-w-0 flex-1 items-center rounded-md px-2 text-left text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-md:min-h-touch data-[active=true]:font-medium data-[active=true]:text-foreground"
                           data-active={thread.threadId === activeThreadId}>
                           <span className="truncate">{thread.title}</span>
                           {thread.busy ? <span className="sr-only"> {chatHistory.responding}</span> : null}
                         </button>
                         <DropdownMenu>
-                          <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground opacity-100 focus-visible:outline-2 focus-visible:outline-brand md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100" aria-label={`More options for ${thread.title}`}><MoreHorizontalIcon className="size-4" aria-hidden="true" /></Button>} />
+                          <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground opacity-100 focus-visible:outline-2 focus-visible:outline-ring md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100" aria-label={`More options for ${thread.title}`}><MoreHorizontalIcon className="size-4" aria-hidden="true" /></Button>} />
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => setRenaming(thread.threadId)}><PencilIcon aria-hidden="true" />Rename</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setConfirmDelete(thread.threadId)} className="text-destructive"><Trash2Icon aria-hidden="true" />Delete</DropdownMenuItem>

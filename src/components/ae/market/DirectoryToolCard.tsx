@@ -17,12 +17,13 @@ type DirectoryToolCardProps = Readonly<{
   onSave?: () => void
   saved?: boolean
   saveDisabled?: boolean
+  saveUnknown?: boolean
   onCompare?: () => void
   comparing?: boolean
   compareDisabled?: boolean
 }>
 
-export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave, saved, saveDisabled, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
+export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave, saved, saveDisabled, saveUnknown = false, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
   return (
     <div className="group h-full">
     <Card className="relative grid h-full grid-rows-[auto_1fr_auto] gap-0 overflow-hidden border border-border/70 p-0 shadow-none transition-[box-shadow,transform,border-color] duration-fast ease-standard group-hover:-translate-y-1 hover:shadow-float group-hover:shadow-float motion-reduce:transform-none motion-reduce:transition-none">
@@ -35,7 +36,7 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave
         {onSave === undefined
           ? <ArrowUpRightIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           : (
-            <Button variant="ghost" size="icon" className="relative z-10 active:scale-100" onClick={onSave} disabled={saveDisabled} aria-label={`${saved ? 'Unsave' : 'Save'} ${model.title}`} aria-pressed={saved === true}>
+            <Button variant="ghost" size="icon" className="relative z-10 active:scale-100" onClick={onSave} disabled={saveDisabled} aria-label={saveUnknown ? `Saved status unavailable for ${model.title}` : `${saved ? 'Unsave' : 'Save'} ${model.title}`} {...(saveUnknown ? { title: 'Saved status unavailable' } : { 'aria-pressed': saved === true })}>
               <HeartIcon className={cn(saved && 'fill-current')} />
             </Button>
           )}

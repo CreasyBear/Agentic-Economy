@@ -47,6 +47,7 @@ export type InteractiveAuthorityErrorCode =
   | 'successor_not_active_member'
   | 'successor_same_as_incumbent'
   | 'successor_principal_inactive'
+  | 'successor_not_human'
   | 'account_revision_conflict'
   | 'ownership_revision_conflict'
   | 'account_lifecycle_transition_forbidden'

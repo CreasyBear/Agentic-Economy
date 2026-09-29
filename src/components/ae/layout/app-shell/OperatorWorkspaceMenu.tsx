@@ -13,6 +13,9 @@ function EntitledWorkspaceMenu({ operatorRole }: OperatorWorkspaceMenuProps) {
 }
 
 export function OperatorWorkspaceMenu({ operatorRole }: OperatorWorkspaceMenuProps) {
+  if (!import.meta.env.VITE_CONVEX_URL?.trim()) {
+    return <WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={false} />
+  }
   return (
     <ErrorBoundary fallback={<WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={false} />}>
       <EntitledWorkspaceMenu operatorRole={operatorRole} />

@@ -386,7 +386,19 @@
   {
     "visibility": "internal",
     "module": "capabilityCallLiveX402",
+    "method": "bindPersistedManagedRequirement",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallLiveX402",
     "method": "inspect",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallLiveX402",
+    "method": "probeApprovedManagedX402",
     "kind": "action"
   },
   {
@@ -435,6 +447,12 @@
     "visibility": "internal",
     "module": "capabilityCalls",
     "method": "admit",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "beginX402UnpaidProbe",
     "kind": "mutation"
   },
   {
@@ -501,6 +519,12 @@
     "visibility": "internal",
     "module": "capabilityCalls",
     "method": "finishAutomaticReconciliation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "finishX402UnpaidProbe",
     "kind": "mutation"
   },
   {
@@ -597,6 +621,12 @@
     "visibility": "internal",
     "module": "capabilityCalls",
     "method": "readReplay",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readX402UnpaidProbeAdmission",
     "kind": "query"
   },
   {
@@ -2302,6 +2332,12 @@
     "module": "moneyAccountFunding",
     "method": "reserveAgentHandoff",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "resolveFundingReceiptSources",
+    "kind": "query"
   },
   {
     "visibility": "internal",

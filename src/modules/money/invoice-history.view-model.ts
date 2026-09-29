@@ -6,6 +6,9 @@ export type AeInvoiceHistoryRow = Readonly<{
   commandRef: string
   createdAt: number
   description: string
+  principalUnits: string
+  serviceFeeUnits: string
+  taxUnits: string
   totalUnits: string
   status: 'succeeded' | 'reversed'
   appliedTransactionRef: string | null

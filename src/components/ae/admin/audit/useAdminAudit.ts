@@ -10,6 +10,7 @@ import {
   toAuditRowModel,
   withoutFilter,
 } from './audit.view-model'
+import { ADMIN_LIST_WINDOW, nextAdminListWindow } from '../admin-list-window'
 import {
   auditSearchToFilter,
   type AdminAuditDataState,
@@ -24,12 +25,12 @@ export function useAdminAudit({ search, onSearchChange }: AdminAuditPageProps) {
 
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
   const allowed = access?.kind === 'allowed'
-  const [approvalRefresh, setApprovalRefresh] = useState({ at: 0, initialNumItems: 50 })
+  const [approvalRefresh, setApprovalRefresh] = useState({ at: 0, initialNumItems: search.approvalsLoaded ?? ADMIN_LIST_WINDOW })
   const [now, setNow] = useState<number | null>(null)
   const pagination = usePaginatedQuery(
     api.adminConsoleAudit.listAdminAuditEvents,
     allowed ? { filter: auditSearchToFilter(search) } : 'skip',
-    { initialNumItems: 50 },
+    { initialNumItems: search.eventsLoaded ?? ADMIN_LIST_WINDOW },
   )
   const proposals = usePaginatedQuery(
     api.adminConsoleAudit.listAdminApprovalProposals,
@@ -70,9 +71,17 @@ export function useAdminAudit({ search, onSearchChange }: AdminAuditPageProps) {
             events: pagination.results.map(toAuditRowModel),
             proposals: proposals.results.filter((row) => row.expiresAt > now),
             approvalPaginationStatus: proposals.status,
-            loadMoreApprovals: () => proposals.loadMore(50),
+            loadMoreApprovals: () => {
+              proposals.loadMore(ADMIN_LIST_WINDOW)
+              const approvalsLoaded = nextAdminListWindow(search.approvalsLoaded)
+              if (approvalsLoaded !== undefined) onSearchChange({ ...search, approvalsLoaded })
+            },
             paginationStatus: pagination.status,
-            loadMore: () => pagination.loadMore(50),
+            loadMore: () => {
+              pagination.loadMore(ADMIN_LIST_WINDOW)
+              const eventsLoaded = nextAdminListWindow(search.eventsLoaded)
+              if (eventsLoaded !== undefined) onSearchChange({ ...search, eventsLoaded })
+            },
           }
 
   return {

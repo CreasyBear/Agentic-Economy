@@ -1,4 +1,11 @@
 import { MAX_ACCESS_PATHS_PER_OFFERING } from '@/modules/catalog/public'
+import {
+  displayPriceFromPricingConfig,
+  fixedAudPricingConfig,
+  formatDisplayAmount,
+  parseDecimalExactAmount,
+  rescaleExactAmount,
+} from '@/modules/money/public'
 import { resolveBusinessActor } from '../../../authz'
 import { canonicalSlugForToolRef } from '../../market/directoryIndex/rows'
 import type { QueryCtx } from '../../../_generated/server'
@@ -40,7 +47,9 @@ export async function readOwnerHandler(ctx: QueryCtx, args: Infer<typeof readOwn
       || revision.businessId !== args.businessId
       || paths.length > 20
     ) return { kind: 'not_found' as const }
-    const resumeCandidateRef = paths.find((path) => path.integrationDraft !== undefined)?.integrationDraft?.candidateRef
+    const draft = paths.find((path) => path.integrationDraft !== undefined)?.integrationDraft
+    const resumeCandidateRef = draft?.candidateRef
+    const pricingLabel = identity.publicationRef === undefined ? draftPriceLabel(draft?.terms) : undefined
     return {
       kind: 'available' as const,
       statusJson: JSON.stringify(status),
@@ -53,6 +62,7 @@ export async function readOwnerHandler(ctx: QueryCtx, args: Infer<typeof readOwn
         status: offering.status,
         accessPathCount: paths.filter((path) => path.status !== 'withdrawn').length,
         ...(canonical === null ? {} : { slug: canonical.slug }),
+        ...(pricingLabel === undefined ? {} : { pricingLabel }),
       },
       ...(identity.publicationRef === undefined || identity.publicationRevision === undefined
         ? {}
@@ -107,4 +117,19 @@ export async function listOwnerHandler(ctx: QueryCtx, args: Infer<typeof listOwn
       isDone: rows.isDone,
       continueCursor: rows.continueCursor,
     }
+}
+
+/** Saved draft price shown on status before a publication price exists. */
+export function draftPriceLabel(
+  terms: Readonly<{ pricingKind: 'free' | 'fixed_aud' | 'source_x402'; price: string }> | undefined,
+): string | undefined {
+  if (terms === undefined) return undefined
+  if (terms.pricingKind === 'free') return 'Free'
+  if (terms.pricingKind === 'source_x402') return 'Provider source payment'
+  const parsed = parseDecimalExactAmount('AUD', terms.price, 2)
+  const amount = parsed === undefined ? undefined : rescaleExactAmount(parsed, 6)
+  const config = amount === undefined ? undefined : fixedAudPricingConfig(amount)
+  if (config === undefined) return undefined
+  const display = displayPriceFromPricingConfig(config)
+  return display.kind === 'fixed' ? formatDisplayAmount(display.amount) : undefined
 }

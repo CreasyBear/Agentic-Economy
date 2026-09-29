@@ -119,6 +119,28 @@ describe('supply.publish:v2 preparation', () => {
     expect(contract.inputExamples).toEqual([{ label: 'Validation input', input: { query: 'example' } }])
   })
 
+  it('starts validation for an unverified public source without an authority claim', async () => {
+    const document = sourceDocument()
+    const input = publicationInput(document)
+    input.attestation = { ...input.attestation, authorisedToPublish: false }
+    const result = await prepareSupplyPublicationV2(input, { loadOpenApi: async () => document })
+    expect(result).toMatchObject({ kind: 'prepared', sourceAuthorityState: 'review_required' })
+  })
+
+  it('refuses publication when Provider authority is established but the authority claim is missing', async () => {
+    const document = sourceDocument()
+    const input = publicationInput(document)
+    input.attestation = { ...input.attestation, authorisedToPublish: false }
+    await expect(prepareSupplyPublicationV2(input, {
+      loadOpenApi: async () => document,
+      providerAuthority: {
+        kind: 'provider_connection',
+        connectionRef: 'pca_reference',
+        providerRef: 'business:reference',
+      },
+    })).resolves.toEqual({ kind: 'refused', reason: 'attestation_required' })
+  })
+
   it('does not relabel an explicitly incompatible schema dialect', async () => {
     const document = sourceDocument()
     document.paths['/lookup'].post.requestBody.content['application/json'].schema.$schema = 'http://json-schema.org/draft-07/schema#'

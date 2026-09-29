@@ -50,6 +50,7 @@ export type AeAgentAccessHomeView = Readonly<{
   }) => Promise<AgentSpendingLimitsResult>
   onReadSpendingLimits: (principalRef: string) => Promise<AgentSpendingLimitsReadResult>
   onConnectNewAgent: () => void
+  onSetupStep: (step: 'closed' | 'choose' | 'oauth') => void
   accessUnavailable: boolean
   approvals: readonly PendingCallApproval[]
   approvalsLoading: boolean

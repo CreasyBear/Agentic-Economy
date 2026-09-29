@@ -18,21 +18,26 @@ import { useAeAgentAccessHome, type AgentConnectionStep } from './useAeAgentAcce
 
 export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
   const vm = useAeAgentAccessHome(props)
-  const [connectMode, setConnectMode] = useState<AgentConnectionStep>('closed')
+  const { directory, search } = vm
+  const [connectMode, setConnectMode] = useState<AgentConnectionStep>(search.setup ?? 'closed')
   const choiceRef = useRef<HTMLDivElement>(null)
   const setupRef = useRef<HTMLDivElement>(null)
-  const { directory, search } = vm
+
+  useEffect(() => {
+    setConnectMode(search.setup ?? 'closed')
+  }, [search.setup])
 
   useEffect(() => {
     if (connectMode === 'choose') choiceRef.current?.focus()
     if (connectMode === 'oauth') setupRef.current?.focus()
-  }, [connectMode, vm.showSetup])
+  }, [connectMode])
 
-  const chooseConnection = () => setConnectMode('choose')
-  const focusOauthSetup = () => {
-    vm.onConnectNewAgent()
-    setConnectMode('oauth')
+  const moveSetup = (step: AgentConnectionStep) => {
+    setConnectMode(step)
+    vm.onSetupStep(step)
   }
+  const chooseConnection = () => moveSetup('choose')
+  const focusOauthSetup = () => moveSetup('oauth')
 
   return (
     <AeOperatorPage
@@ -41,7 +46,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
       description="Connect Agents, review requests, and control what each Agent can do."
       currentPath="/agent-access"
     >
-      <Link to="/owner/settings/agent-keys" className="mb-4 inline-flex min-h-touch items-center text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">Manage Agent keys</Link>
+      <Link to="/owner/settings/agent-keys" className="mb-4 inline-flex min-h-touch items-center text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">Manage Agent keys</Link>
       {vm.directoryError === undefined ? null : (
         <HomeDirectoryRecoveryAlert
           title={vm.directoryAlertTitle}
@@ -60,13 +65,13 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
         />
       )}
       {connectMode === 'choose' ? (
-        <div ref={choiceRef} tabIndex={-1} className="mb-4 grid gap-3 rounded-card border border-border bg-background p-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand" aria-label="Choose how to connect an Agent">
+        <div ref={choiceRef} tabIndex={-1} className="mb-4 grid gap-3 rounded-card border border-border bg-background p-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring" aria-label="Choose how to connect an Agent">
           <h2 className="font-semibold">Connect an Agent</h2>
           <p className="text-sm text-muted-foreground">Choose the connection you will use. Both paths require your approval before an Agent can act.</p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" className="min-h-touch" onClick={focusOauthSetup}>Connect with OAuth / MCP</Button>
             <Link to="/owner/settings/agent-keys" search={{ issue: 'manual' }} className={`${buttonVariants({ variant: 'outline' })} min-h-touch`}>Issue a manual key</Link>
-            <Button type="button" variant="ghost" className="min-h-touch" onClick={() => setConnectMode('closed')}>Cancel</Button>
+            <Button type="button" variant="ghost" className="min-h-touch" onClick={() => moveSetup('closed')}>Cancel</Button>
           </div>
         </div>
       ) : null}
@@ -125,9 +130,9 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
       )}
       {directory.items.length === 0 ? null : (
         <HomeAddAnotherAgent
-          showSetup={vm.showSetup}
-          toggleLabel={vm.addAnotherToggleLabel}
-          onToggle={vm.showSetup ? vm.onToggleShowSetup : chooseConnection}
+          showSetup={connectMode === 'oauth'}
+          toggleLabel={connectMode === 'oauth' ? 'Hide setup' : 'Connect an Agent'}
+          onToggle={connectMode === 'oauth' ? () => moveSetup('closed') : chooseConnection}
           installPanel={(
             <div ref={setupRef} tabIndex={-1} aria-label="OAuth and MCP connection steps">
               <AeAssistantInstallFunnel

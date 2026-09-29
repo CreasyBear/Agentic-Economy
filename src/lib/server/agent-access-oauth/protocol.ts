@@ -229,6 +229,12 @@ export function validRedirectUri(value: string): boolean {
   }
 }
 
+
+export function consentRedirectOrigin(redirectUri: string | undefined): string | undefined {
+  if (redirectUri === undefined || !validRedirectUri(redirectUri)) return undefined
+  return new URL(redirectUri).origin
+}
+
 export function modeForGrant(grant: AgentAccessOAuthGrant): AgentAccessAuthorityMode | undefined {
   return agentAuthorityModeForScopes(grant.requestedScopes, { allowCustomerDefault: true })
 }
@@ -253,6 +259,7 @@ export function consentHtml(input: Readonly<{
   agentTargetsUnavailable?: boolean
   reconnectPrincipalRef?: string
   reconnectAmbiguous?: boolean
+  redirectUri?: string
 }>): string {
   const escapedName = escapeHtml(input.clientName)
   const escapedGrantRef = escapeHtml(input.grantRef)
@@ -275,7 +282,20 @@ export function consentHtml(input: Readonly<{
   const targetsUnavailable = input.agentTargetsUnavailable === true ? 'true' : 'false'
   const reconnectPrincipalRef = input.reconnectPrincipalRef === undefined ? '' : escapeHtml(input.reconnectPrincipalRef)
   const reconnectAmbiguous = input.reconnectAmbiguous === true ? 'true' : 'false'
-  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-grant-revision="${grantRevision}" data-flow="${input.flow}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-tool-access="${toolAccess}" data-tool-refs="${toolRefs}" data-expires-in-seconds="${expiry}" data-access-summary="${accessSummary}" data-agent-targets="${targets}" data-agent-targets-next-cursor="${nextCursor}" data-agent-targets-unavailable="${targetsUnavailable}" data-reconnect-principal-ref="${reconnectPrincipalRef}" data-reconnect-ambiguous="${reconnectAmbiguous}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-tools>${toolSummary}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${accessSummary}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
+  const redirectOrigin = consentRedirectOrigin(input.redirectUri)
+  const redirectDisposition = redirectOrigin !== undefined
+    ? 'origin'
+    : input.flow === 'authorization_code'
+      ? 'unavailable'
+      : 'none'
+  const escapedOrigin = redirectOrigin === undefined ? '' : escapeHtml(redirectOrigin)
+  const redirectCopy = redirectDisposition === 'origin'
+    ? `After approval, this browser returns to ${escapedOrigin}.`
+    : redirectDisposition === 'unavailable'
+      ? 'The return site for this request is unavailable. Decline it.'
+      : 'This request does not redirect your browser.'
+  const redirectAttribute = escapedOrigin.length === 0 ? '' : ` data-redirect-origin="${escapedOrigin}"`
+  return `<main data-ae-consent data-redirect-disposition="${redirectDisposition}"${redirectAttribute} data-grant-ref="${escapedGrantRef}" data-grant-revision="${grantRevision}" data-flow="${input.flow}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-tool-access="${toolAccess}" data-tool-refs="${toolRefs}" data-expires-in-seconds="${expiry}" data-access-summary="${accessSummary}" data-agent-targets="${targets}" data-agent-targets-next-cursor="${nextCursor}" data-agent-targets-unavailable="${targetsUnavailable}" data-reconnect-principal-ref="${reconnectPrincipalRef}" data-reconnect-ambiguous="${reconnectAmbiguous}"><h1>Connect ${escapedName} to Agentic Economy</h1><p data-ae-redirect-origin>${redirectCopy}</p><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-tools>${toolSummary}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${accessSummary}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
 }
 
 export function consentRecoveryHtml(grantRef: string): string {

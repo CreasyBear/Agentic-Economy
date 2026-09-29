@@ -1,9 +1,11 @@
 import { Link } from '@tanstack/react-router'
+import { useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
+import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
 import type { ProviderWorkspaceIdentityDetailResult } from '@/components/ae/offerings/provider-workspace.functions'
@@ -43,6 +45,12 @@ export type AeOwnerSupplySourceStartPageProps = Readonly<{
 
 export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwnerSupplySourceStartPageProps) {
   const { identity, connections, resume, resumeRequested, sourceUnavailable } = data
+  const formRef = useRef<HTMLDivElement>(null)
+  const [navigationSafety, setNavigationSafety] = useState<{
+    dirty: boolean
+    pending: boolean
+    saveOutcome: 'idle' | 'saved' | 'failed' | 'outcome_unknown'
+  }>({ dirty: false, pending: false, saveOutcome: 'idle' })
   const assess = useServerFn(assessOwnerSupplySourceServer)
   const preview = useServerFn(previewOwnerSupplySourceServer)
   const connect = useServerFn(startOwnerSupplySourceConnectionServer)
@@ -71,8 +79,25 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
         {resumeRequested && resume.kind !== 'available' ? (
           <Alert variant="destructive" className="mb-5"><AlertTitle>Saved source could not be resumed</AlertTitle><AlertDescription>The saved source is unavailable or changed. Review it from Add Tool before starting another connection.</AlertDescription></Alert>
         ) : null}
+        <AeNavigationSafetyBoundary
+          state={navigationSafety}
+          title="Leave without saving these terms?"
+          pendingTitle="Saving these terms"
+          description="The terms you entered are not saved. Leave this page and they will be discarded."
+          pendingDescription="Agentic Economy is still saving these terms."
+          saveActionRef={formRef}
+          headingRef={formRef}
+        >
+        <div ref={formRef} tabIndex={-1}>
         <AeSupplySourceNativeStart
           businessRef={identity.businessId}
+          onNavigationSafetyChange={(next) => {
+            setNavigationSafety((current) => (
+              current.dirty === next.dirty && current.pending === next.pending && current.saveOutcome === next.saveOutcome
+                ? current
+                : next
+            ))
+          }}
           connections={filterOwnerSupplyAuthorityOptions(identity.businessId, connections)}
           {...(resume.kind === 'available' ? { initial: resume } : {})}
           onAssess={(input, signal) => assess({ data: input, signal })}
@@ -92,6 +117,8 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
           }}
           onPublish={(input) => publish({ data: input })}
         />
+        </div>
+        </AeNavigationSafetyBoundary>
       </>)}
     </AeOperatorPage>
   )

@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/ui/toast'
 import { AUD_EXPONENT, canonicalAudUnits, formatDisplayAmount } from '@/modules/money/public'
 import { audInputTextFromUnits } from './credit-top-up-format'
+import { monthlySpendCeilingSavedNotice } from './monthly-spend-ceiling-notice'
 import {
   MONTHLY_SPEND_CEILING_PRESETS,
   buildCeilingPreviewStatement,
@@ -192,17 +193,11 @@ export function AeMonthlySpendCeilingCard({
         ceilingUnits: nextUnits.toString(),
         expectedRevision: resolvedSettings.revision,
       })
-      if (enabled) {
-        toast.success(
-          `Monthly spending cap updated: ${formatDisplayAmount({
-            currency: 'AUD',
-            exponent: AUD_EXPONENT,
-            units: nextUnits.toString(),
-          })}`,
-        )
-      } else {
-        toast.success('Monthly spending cap disabled')
-      }
+      toast.success(monthlySpendCeilingSavedNotice(
+        enabled,
+        resolvedSettings.enabled,
+        formatDisplayAmount({ currency: 'AUD', exponent: AUD_EXPONENT, units: nextUnits.toString() }),
+      ))
       setDialogOpen(false)
     } catch (error: unknown) {
       const diag = mapMonthlySpendCeilingDiagnostic(error)
