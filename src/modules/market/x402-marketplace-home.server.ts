@@ -1,5 +1,5 @@
 import type { X402DirectoryEntry } from './x402-directory'
-import { readX402Directory } from './x402-directory.server'
+import { readX402DirectoryCatalogue } from './x402-directory-index.server'
 import { X402_MARKETPLACE_COLLECTIONS, type X402MarketplaceHome, type X402MarketplaceRail } from './x402-marketplace-home'
 
 function reportedCount(value: number | undefined): number {
@@ -13,15 +13,15 @@ function byBazaarVolume(left: { entry: X402DirectoryEntry; index: number }, righ
     || left.index - right.index
 }
 
-/** Independent catalogue-wide searches; source transport owns timeout handling. */
+/** Editorial searches read the same persisted generation as the full catalogue. */
 export async function readX402MarketplaceHome(): Promise<X402MarketplaceHome> {
-  const results = await Promise.allSettled(X402_MARKETPLACE_COLLECTIONS.map(collection => readX402Directory({ query: collection.query })))
+  const results = await Promise.allSettled(X402_MARKETPLACE_COLLECTIONS.map(collection => readX402DirectoryCatalogue({ query: collection.query })))
   const rails: X402MarketplaceRail[] = X402_MARKETPLACE_COLLECTIONS.map((collection, index) => {
     const result = results[index]
     const page = result?.status === 'fulfilled' ? result.value : undefined
     const providerCounts = new Map<string, number>()
     const resources = new Set<string>()
-    const ranked = page?.kind !== 'ok' ? [] : page.items.map((entry, itemIndex) => ({ entry, index: itemIndex })).sort(byBazaarVolume).map(item => item.entry)
+    const ranked = page?.kind !== 'ok' ? [] : page.page.items.map((entry, itemIndex) => ({ entry, index: itemIndex })).sort(byBazaarVolume).map(item => item.entry)
     const items = ranked.filter(entry => {
       if (resources.has(entry.resource)) return false
       resources.add(entry.resource)
@@ -35,8 +35,8 @@ export async function readX402MarketplaceHome(): Promise<X402MarketplaceHome> {
       search: { query: collection.query },
       kind: page?.kind === 'ok' ? 'ok' : 'unavailable',
       items,
-      returnedCount: page?.kind === 'ok' ? page.items.length : 0,
-      partialResults: page?.kind === 'ok' && page.partialResults === true,
+      returnedCount: page?.kind === 'ok' ? page.page.items.length : 0,
+      partialResults: page?.kind === 'ok' && !page.isDone,
     }
   })
   return { observedAt: new Date().toISOString(), rails }

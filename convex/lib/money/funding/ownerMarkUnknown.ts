@@ -1,4 +1,5 @@
 import type { Infer } from 'convex/values'
+import { recordFundingTerminal } from '@/lib/observability/journey'
 
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
@@ -31,6 +32,7 @@ export async function markOutcomeUnknownHandler(
     || command.idempotencyKey !== args.idempotencyKey) return refused('funding_pending', true)
   if (command.state === 'failed') return refused('funding_idempotency_conflict')
   if (command.state === 'pending') {
+    recordFundingTerminal(command.state, 'outcome_unknown')
     await ctx.db.patch(command._id, {
       state: 'outcome_unknown',
       providerStatus: 'outcome_unknown',

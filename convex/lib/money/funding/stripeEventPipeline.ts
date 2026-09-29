@@ -1,4 +1,5 @@
 import type { Doc } from '../../../_generated/dataModel'
+import { recordFundingTerminal } from '@/lib/observability/journey'
 import type { MutationCtx } from '../../../_generated/server'
 import {
   AUD_EXPONENT,
@@ -173,6 +174,7 @@ export async function prepareFundingSettlementEvent(
         updatedAt: event.observedAt,
       })
     } else {
+      recordFundingTerminal(command.state, 'failed')
       await ctx.db.patch(command._id, {
         state: 'failed',
         providerStatus: 'failed',
@@ -247,6 +249,7 @@ export async function finalizeFundingEventHandler(
   }
   if (event.status !== 'received') return refused('payment_binding_invalid')
   await recordFundingDocuments(ctx, command, args.formanceTransactionRef, args.event.observedAt)
+  recordFundingTerminal(command.state, 'succeeded')
   await ctx.db.patch(command._id, {
     state: 'succeeded',
     providerStatus: 'succeeded',

@@ -1,5 +1,4 @@
-import { ErrorBoundary } from '@sentry/react'
-
+import { AeRenderErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import type { OperatorRole } from '@/lib/operator/roles'
 
 import { useOperatorEntitlement } from './useOperatorEntitlement'
@@ -17,8 +16,8 @@ export function OperatorWorkspaceMenu({ operatorRole }: OperatorWorkspaceMenuPro
     return <WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={false} />
   }
   return (
-    <ErrorBoundary fallback={<WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={false} />}>
+    <AeRenderErrorBoundary fallback={<WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={false} />}>
       <EntitledWorkspaceMenu operatorRole={operatorRole} />
-    </ErrorBoundary>
+    </AeRenderErrorBoundary>
   )
 }

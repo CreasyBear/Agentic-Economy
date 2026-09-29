@@ -7,7 +7,7 @@ import { directoryNetwork, directoryIndexRangesValid, x402DirectoryIndexInputSch
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { filterArgs, pageValue } from './contracts'
-import { choiceForDirectoryPage } from './choices'
+import { choiceForDirectoryPage, choicesForDirectoryRows } from './choices'
 import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, indexedDirectoryEntry } from './rows'
 
 type SearchRow = Doc<'marketDirectorySearchEntries'>
@@ -120,7 +120,8 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
     ))
     // Rich source documents have a separate bounded budget from slim search rows.
     // A shorter native page still preserves its cursor and complete traversal.
-    const choiceFor = choiceForDirectoryPage(ctx, Date.now())
+    const now = Date.now()
+    const choiceFor = choiceForDirectoryPage(ctx, now)
     const page = await filter(source, async row => {
       if (!matchesRemainingConstraints(row, parsed.data)) return false
       if (alternativeTo === undefined) return true
@@ -133,7 +134,11 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
     })
     const rawEntries = await Promise.all(page.page.map(async row => ({ row, entry: await ctx.db.get(row.entryId) })))
     const found = rawEntries.flatMap(({ row, entry }) => entry === null ? [] : [{ row, entry }])
-    const withTool = await Promise.all(found.map(async item => ({ ...item, choice: await choiceFor(item.row) })))
+    const choices = alternativeTo === undefined ? await choicesForDirectoryRows(ctx, found.map(item => item.row), now) : undefined
+    const withTool = await Promise.all(found.map(async item => ({
+      ...item,
+      choice: choices?.get(item.row.sourceRouteRef ?? String(item.row._id)) ?? await choiceFor(item.row),
+    })))
     return {
       kind: 'ok' as const, coverage: directoryCoverage(generation),
       searchMethod: parsed.data.query ? 'native_full_text' as const : 'native_index' as const,
@@ -225,7 +230,8 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
       ...(objectClass === undefined ? [] : [q.or(q.eq(q.field('objectClass'), objectClass), ...(objectClass === 'unclassified' ? [q.eq(q.field('objectClass'), undefined)] : [q.eq(q.field('objectClass'), 'unclassified'), q.eq(q.field('objectClass'), undefined)]))]),
       ...(priceBand === undefined ? [] : [q.eq(q.field('priceBand'), priceBand)]),
     ))
-  const choiceFor = choiceForDirectoryPage(ctx, Date.now())
+  const now = Date.now()
+  const choiceFor = choiceForDirectoryPage(ctx, now)
   const page = await filter(rows, async row => {
     if (access === undefined) return true
     const choice = await choiceFor(row)
@@ -234,7 +240,7 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
     ...paginationOpts, cursor: nativeCursor, maximumRowsRead: Math.min(paginationOpts.maximumRowsRead ?? 512, access === undefined ? 512 : 48),
     maximumBytesRead: Math.min(paginationOpts.maximumBytesRead ?? 1024 * 1024, 1024 * 1024),
   })
-  const compact = await Promise.all(page.page.map(async row => {
+  const prepared = await Promise.all(page.page.map(async row => {
     // Older rows are served until the ordinary unchanged-source refresh fills
     // their slim projection; current rows never load retained source JSON.
     const legacy = row.documentId === undefined || row.title === undefined || row.summary === undefined
@@ -243,7 +249,12 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
     const title = row.title ?? legacy?.name
     const summary = row.summary ?? legacy?.summary
     if (id === undefined || title === undefined || summary === undefined) throw new Error('directory_index_entry_missing')
-    const choice = await choiceFor(row)
+    const choice = access === undefined ? undefined : await choiceFor(row)
+    return { row, legacy, id, title, summary, choice }
+  }))
+  const batched = access === undefined ? await choicesForDirectoryRows(ctx, page.page, now) : undefined
+  const compact = await Promise.all(prepared.map(async ({ row, legacy, id, title, summary, choice: filtered }) => {
+    const choice = filtered ?? batched?.get(row.sourceRouteRef ?? String(row._id)) ?? await choiceFor(row)
     return {
       id, source: row.source ?? legacy?.source ?? 'coinbase',
       ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),

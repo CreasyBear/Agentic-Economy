@@ -1,3 +1,4 @@
+import { recordCallTerminal } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
@@ -19,6 +20,7 @@ async function patchCancelledInvocation(
   const now = Date.now()
   const hasRefundSchedule = row.reconciliation?.reason === 'refund_pending'
   const shouldScheduleRefund = refundBeforeClaim && isBuyerFormanceReservation(row) && !hasRefundSchedule
+  recordCallTerminal(row.state, 'cancelled')
   await ctx.db.patch(row._id, {
     state: 'cancelled',
     result: {
@@ -56,6 +58,7 @@ async function patchCancellationReconciliation(
   effectGeneration: number,
 ): Promise<void> {
   if (row.state !== 'pending') return
+  recordCallTerminal(row.state, 'reconciliation_required')
   await ctx.db.patch(row._id, {
     state: 'reconciliation_required',
     dispatchState: 'reconciliation_required',

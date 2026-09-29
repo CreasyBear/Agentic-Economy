@@ -6,6 +6,7 @@ import {
 import { capabilityToolId, createPublicToolRef } from '../public-tool-ref'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { recordJourneyOutcome, recordPublishResult } from '@/lib/observability/journey'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 
@@ -247,14 +248,25 @@ export async function publishPreparedCapabilityCommand(
   input: PublishPreparedCapabilityCommandInput,
   ports: PublicationCommandPorts,
 ): Promise<PublishPreparedCapabilityCommandResult> {
-  return commitPreparedPublicationCommand({
+  const result = await commitPreparedPublicationCommand({
     ...input,
     revision: 1,
     operationName: 'publishPreparedCapability',
   }, ports)
+  recordPublishResult(result)
+  return result
 }
 
 export async function republishPreparedCapabilityCommand(
+  input: RepublishPreparedCapabilityCommandInput,
+  ports: PublicationCommandPorts,
+): Promise<RepublishPreparedCapabilityCommandResult> {
+  const result = await republishPreparedCapabilityCommandBody(input, ports)
+  recordPublishResult(result)
+  return result
+}
+
+async function republishPreparedCapabilityCommandBody(
   input: RepublishPreparedCapabilityCommandInput,
   ports: PublicationCommandPorts,
 ): Promise<RepublishPreparedCapabilityCommandResult> {
@@ -720,6 +732,7 @@ async function commitPreparedPublicationCommand(
     return { ...replayed, kind: 'replayed' }
   }
 
+  try {
   const contractResult = await ports.registerContractDocument(encoded.documentJson, input.now)
   if (contractResult.kind === 'refused') throw new Error(`capability_publication_contract_${contractResult.reason}`)
   const offeringResult = await ports.registerOffering(offering, input.now)
@@ -806,6 +819,10 @@ async function commitPreparedPublicationCommand(
   await succeedOperation(ports, operation.operationId, expected, [auditId], input.now)
   await ports.scheduleReadinessProbe(publicationRef, input.revision)
   return { ...expected, kind: 'published', operationId: operation.operationId }
+  } catch (cause) {
+    recordJourneyOutcome({ journey: 'publish', outcome: 'failed', good: false })
+    throw cause
+  }
 }
 
 function validatePreparedPublication(prepared: PreparedPublicationMaterial): PreparedValidation {

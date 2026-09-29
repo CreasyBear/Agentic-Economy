@@ -5,7 +5,6 @@ import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount 
 import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import { readX402Directory } from './x402-directory.server'
 import type { X402DirectoryEntry } from './x402-directory'
-import { rerankX402DirectoryPage } from './x402-directory-reranker'
 import { directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
@@ -116,7 +115,7 @@ export async function readDirectoryFreshnessField(now: number = Date.now()): Pro
 export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput): Promise<X402DirectoryCatalogue> {
   const parsed = x402DirectoryCatalogueInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
-  const { directoryCategory, indexCursor, offset, alternativeTo, ...filters } = parsed.data
+  const { directoryCategory, indexCursor, alternativeTo, offset, ...filters } = parsed.data
   try {
     let engineCursor: string | null = null
     let cursorScope = 'current'
@@ -133,30 +132,21 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
       paginationOpts: { numItems: 24, cursor: engineCursor, maximumRowsRead: 512 },
     })
-    if (result.kind === 'unavailable') {
-      if (result.reason !== 'index_unavailable') return result
-      // Do not silently reinterpret index category or cursor as SDK search. Sort always falls
-      // back to upstream relevance ordering here since the SDK cannot honour index-only sorts
-      // (e.g. adoption) - the /market default view must still render during index refreshes.
-      if (alternativeTo !== undefined || directoryCategory !== undefined || indexCursor !== undefined || Object.keys(filters).some(key => !['query', 'network', 'provider', 'maxUsdPrice', 'sort'].includes(key))) return result
-      console.error('[market] x402 directory index unavailable, using upstream fallback', { reason: result.reason })
-      const { sort: _sort, ...sourceFilters } = filters
-      const page = await readX402Directory({ ...sourceFilters, ...(offset === undefined ? {} : { offset }) })
-      if (page.kind === 'unavailable') return page
-      return { kind: 'ok', source: 'upstream_limited', searchMethod: 'upstream', page: { ...page, items: await withAudEstimates(page.items) }, isDone: page.nextOffset === undefined }
-    }
+    if (result.kind === 'unavailable') return result
     if (offset) return { kind: 'unavailable', reason: 'index_cursor_required' }
     const { network, provider, maxUsdPrice } = filters
     const items = await withAudEstimates(result.page.map(item => ({
       ...item.entry,
       choice: item.choice ?? { access: 'external_listing' as const },
     })))
+    // The persisted generation already has adoption, popularity and full-text order.
+    // A live Jev call would hold this response for the model round-trip, so the page uses that order.
     return {
       kind: 'ok', source: 'index', coverage: result.coverage, searchMethod: result.searchMethod,
-      page: await rerankX402DirectoryPage({ kind: 'ok', items, offset: 0, limit: 24,
+      page: { kind: 'ok', items, offset: 0, limit: 24,
         mode: filters.query ? 'search' : 'browse',
         appliedFilters: { ...(network === undefined ? {} : { network }), ...(provider === undefined ? {} : { provider }), ...(maxUsdPrice === undefined ? {} : { maxUsdPrice }) },
-      }, filters.query),
+      },
       isDone: result.isDone, ...(result.isDone ? {} : { indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: result.coverage.generation ?? cursorScope, cursor: result.continueCursor }) }),
       ...(result.pageStatus === undefined ? {} : { pageStatus: result.pageStatus }),
       ...(result.splitCursor === undefined ? {} : { splitCursor: result.splitCursor }),
@@ -209,12 +199,13 @@ export async function readX402DirectoryCatalogueBySlug(input: { providerKey: str
   }
   if (indexed.kind === 'found' || indexed.kind === 'found_upstream') return indexed
   if (indexed.kind === 'unavailable' && indexed.reason === 'query_invalid') return indexed
-  // The index has no row for this slug. Market renders cards from the same upstream when the index is
-  // unavailable, so the card's destination must resolve from that upstream too (path = destination).
+  // Tool detail is not the market catalogue request. A missing index row still resolves from the
+  // same persisted-or-upstream card destination the route already advertised.
   for (let offset = 0, pages = 0; pages < 3; pages += 1) {
     const page = await readX402Directory({ provider: input.providerKey, ...(offset === 0 ? {} : { offset }) })
     if (page.kind !== 'ok') break
-    const match = page.items.find(entry => directorySlugsFor(entry).includes(input.slug))
+    const match = page.items.find(entry => [entry.slug, directorySlugBase(entry.resource), directorySlugWithMethod(entry.resource, entry.method)]
+      .filter((slug): slug is string => slug !== undefined).includes(input.slug))
     if (match !== undefined) return { kind: 'found_upstream', item: { entry: match } }
     if (page.nextOffset === undefined) break
     offset = page.nextOffset
@@ -222,11 +213,6 @@ export async function readX402DirectoryCatalogueBySlug(input: { providerKey: str
   return indexed
 }
 
-/** Every slug form a card or index row may have used for this entry. */
-function directorySlugsFor(entry: X402DirectoryEntry): readonly string[] {
-  return [...new Set([entry.slug, directorySlugBase(entry.resource), directorySlugWithMethod(entry.resource, entry.method)]
-    .filter((slug): slug is string => slug !== undefined))]
-}
 
 /** Reverse lookup for the `/tools/$toolRef` redirect; `null` keeps the caller on that route. */
 export async function readX402DirectoryCanonicalUrlForTool(input: { toolRef: string }): Promise<{ providerHost: string; slug: string } | null> {

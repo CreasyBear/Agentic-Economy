@@ -1,3 +1,4 @@
+import { recordCallTerminal } from '@/lib/observability/journey'
 import { v } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
@@ -41,6 +42,7 @@ async function patchReconciliationRequired(
   callRef: string,
   attempt: Readonly<{ attemptRef: string; effectGeneration: number }>,
 ): Promise<void> {
+  recordCallTerminal(row.state, 'reconciliation_required')
   await ctx.db.patch(row._id, {
     state: 'reconciliation_required',
     dispatchState: 'reconciliation_required',
@@ -79,6 +81,7 @@ async function reconcilePreReleaseFailure(
 }
 
 async function patchPreReleaseRefusal(ctx: MutationCtx, row: CallRow): Promise<void> {
+  recordCallTerminal(row.state, 'refused')
   await ctx.db.patch(row._id, {
     state: 'refused',
     dispatchState: 'failed',

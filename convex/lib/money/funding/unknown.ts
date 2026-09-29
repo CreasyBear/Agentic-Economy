@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { recordFundingTerminal } from '@/lib/observability/journey'
 
 import type { MutationCtx } from '../../../_generated/server'
 
@@ -19,6 +20,7 @@ export async function markFundingBookingUnknownHandler(
     .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef))
     .unique()
   if (command !== null && command.state !== 'succeeded' && command.state !== 'failed') {
+    recordFundingTerminal(command.state, 'outcome_unknown')
     await ctx.db.patch(command._id, {
       state: 'outcome_unknown', providerStatus: 'outcome_unknown', updatedAt: args.observedAt,
     })

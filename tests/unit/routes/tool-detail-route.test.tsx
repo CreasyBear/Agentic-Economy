@@ -6,7 +6,7 @@ import { toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-in
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import { projectAdmittedListing, projectDirectoryListing } from '@/modules/registry/public'
 import { REFERENCE_RATE_MAX_AGE_MS } from '@/modules/money/public'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -218,7 +218,7 @@ afterEach(() => {
 })
 
 describe('/tools/$toolRef', () => {
-  it('fills the track record from observed market evidence', () => {
+  it('fills the track record from observed market evidence', async () => {
     const evidence = projectMarketListingEvidence({
       toolRef: tool.toolRef,
       ratingCount: 2,
@@ -238,6 +238,9 @@ describe('/tools/$toolRef', () => {
     expect(latencyChart).toBeTruthy()
     expect(within(latencyChart).getByText('5 timed calls')).toBeTruthy()
     expect(within(trackRecord).queryByText(/No completed AE calls/)).toBeNull()
+    await waitFor(() => {
+      expect(latencyChart.querySelector('[data-slot="chart"]')).not.toBeNull()
+    })
   })
 
   it('shows unavailable evidence without claiming zero calls or timed samples', () => {

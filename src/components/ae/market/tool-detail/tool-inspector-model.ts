@@ -13,6 +13,11 @@ import {
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
 
+export type LatencyChartPoint = Readonly<{
+  call: number
+  durationMs: number
+}>
+
 export type ToolInspectorModel = Readonly<{
   toolRef: string
   title: string

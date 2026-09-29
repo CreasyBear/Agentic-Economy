@@ -1,3 +1,4 @@
+import { recordCallTerminal } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
@@ -179,6 +180,7 @@ export async function refuseUnclaimedHandler(
   const releaseRequired = isBuyerFormanceReservation(row)
   const hasRefundSchedule = row.reconciliation?.reason === 'refund_pending'
   const shouldScheduleRefund = releaseRequired && !hasRefundSchedule
+  recordCallTerminal(row.state, 'refused')
   await ctx.db.patch(row._id, {
     state: 'refused',
     result,

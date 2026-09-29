@@ -2,6 +2,7 @@ import type { Infer } from 'convex/values'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import { upsertCallProjection } from './dispatchProjection'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
+import { recordCallTerminal } from '@/lib/observability/journey'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { recordMarketEvidenceFact } from '../../../marketEvidence'
@@ -37,6 +38,7 @@ export async function recordHandler(
     row.state !== 'pending'
     && args.state !== row.state
   ) return { kind: 'recorded' as const }
+  recordCallTerminal(row.state, args.state)
   await ctx.db.patch(row._id, recordPatch(args))
   return { kind: 'recorded' as const }
 }
@@ -211,6 +213,7 @@ export async function projectRecoveryHandler(
     return { kind: 'recorded' as const }
   }
   if (!recoveryProjectionTransitionAllowed(row, args)) return { kind: 'recorded' as const }
+  recordCallTerminal(row.state, args.state)
   await ctx.db.patch(row._id, recoveryProjectionPatch(row, args))
   return { kind: 'recorded' as const }
 }

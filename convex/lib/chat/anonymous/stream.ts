@@ -3,6 +3,7 @@ import { createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type
 import type { z } from 'zod'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { toolChoiceDescribeOutputSchema, toolChoiceSearchOutputSchema, type ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
+import { recordAnonymousChat } from '@/lib/observability/journey'
 import type { ActionCtx } from '../../../_generated/server'
 import { createChatAgent } from '../tools/agent'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
@@ -27,6 +28,7 @@ export async function streamAnonymousChatResponse(
     execute: async ({ writer }) => {
       const completedSteps: { toolResults: { toolName: string; output: unknown }[] }[] = []
       let modelFailure: unknown
+      let answerOutcome: 'completed' | 'input_required' | undefined
       try {
       const result = await agent.streamText(ctx, scope, {
         messages: prompt,
@@ -61,6 +63,7 @@ export async function streamAnonymousChatResponse(
         writer.write({ type: 'text-delta', id: 'completed-tool-facts', delta: answer })
         writer.write({ type: 'text-end', id: 'completed-tool-facts' })
         writer.write({ type: 'finish' })
+        answerOutcome = 'completed'
         return
       }
       const resolution = chatSearchResolution(steps)
@@ -69,6 +72,7 @@ export async function streamAnonymousChatResponse(
         writer.write({ type: 'text-delta', id: 'no-tool-result', delta: resolution ?? CHAT_NO_RESULT_ANSWER })
         writer.write({ type: 'text-end', id: 'no-tool-result' })
         writer.write({ type: 'finish' })
+        answerOutcome = 'completed'
         return
       }
       const last = steps.at(-1)
@@ -80,6 +84,7 @@ export async function streamAnonymousChatResponse(
       if (finish) {
         if (!clarification) for (const chunk of initialText) writer.write(chunk)
         writer.write({ type: 'finish' })
+        answerOutcome = clarification ? 'input_required' : 'completed'
         return
       }
       const final = await agent.streamText(ctx, scope, {
@@ -102,6 +107,7 @@ export async function streamAnonymousChatResponse(
               : chunk,
           )
         }
+        answerOutcome = 'completed'
         return
       }
       const candidates: ChatCandidate[] = []
@@ -127,6 +133,7 @@ export async function streamAnonymousChatResponse(
       writer.write({ type: 'text-delta', id: 'final-fallback', delta: fallback })
       writer.write({ type: 'text-end', id: 'final-fallback' })
       writer.write({ type: 'finish' })
+      answerOutcome = 'completed'
       } catch (error) {
         if (abortSignal?.aborted) throw error
         const answer = completedChatFacts(completedSteps)
@@ -135,6 +142,11 @@ export async function streamAnonymousChatResponse(
         writer.write({ type: 'text-delta', id: 'completed-tool-facts', delta: answer })
         writer.write({ type: 'text-end', id: 'completed-tool-facts' })
         writer.write({ type: 'finish' })
+        answerOutcome = 'completed'
+      } finally {
+        if (!(abortSignal?.aborted === true && answerOutcome === undefined)) {
+          recordAnonymousChat(answerOutcome ?? 'failed')
+        }
       }
     },
   })
