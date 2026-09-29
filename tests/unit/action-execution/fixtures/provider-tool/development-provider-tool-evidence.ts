@@ -1,7 +1,7 @@
 import {
   evaluateAdr009Transfer,
   type TransferBoundaryEvent,
-} from '../../../../../src/modules/action-execution/transfer-evaluator'
+} from '../../../../../src/modules/action-execution/runtime'
 import {
   cancelDevelopmentProviderToolAction,
   executeDevelopmentProviderToolAction,
@@ -241,7 +241,7 @@ export async function runDevelopmentProviderToolEvidence() {
 }
 
 function effectResult(
-  resolution: import('@/modules/action-execution').ActionExecutionView<DevelopmentProviderToolResult>['observedResolution'],
+  resolution: import('@/modules/action-execution/runtime').ActionExecutionView<DevelopmentProviderToolResult>['observedResolution'],
 ) {
   if (resolution.state !== 'returned' || resolution.result.kind !== 'effect_confirmed') {
     throw new Error('confirmed_effect_missing')

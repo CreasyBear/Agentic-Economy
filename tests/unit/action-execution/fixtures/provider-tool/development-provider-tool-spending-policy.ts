@@ -2,11 +2,13 @@ import {
   SpendingPolicyStore,
   type ActionExecutionOrigin,
   type ActionExecutionView,
-  type AuthorityUse,
-  type SpendingPolicyResult,
-  type SpendingPolicyRefusalCode,
   type SpendingPolicyAuthorityBasis,
-} from '../../../../../src/modules/action-execution'
+} from '../../../../../src/modules/action-execution/runtime'
+import type {
+  AuthorityUse,
+  SpendingPolicyRefusalCode,
+  SpendingPolicyResult,
+} from '../../../../../src/modules/action-execution/spending-policy'
 import type { ExactAmount } from '../../../../../src/modules/money/public'
 import type {
   DevelopmentProviderToolCancellationResult,

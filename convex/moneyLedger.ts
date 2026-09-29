@@ -1,4 +1,4 @@
-import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { action, internalQuery, mutation, query } from './_generated/server'
 import {
   creditAccountArgs,
   creditActivityArgs,

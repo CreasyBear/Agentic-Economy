@@ -4,7 +4,6 @@ import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequen
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
@@ -111,13 +110,6 @@ const reservePublicationMutation = sourceMutation<Record<string, unknown>, Owner
 const publishMutation = sourceMutation<Record<string, unknown>, PublicationResult>(
   'capabilitySupply:publishPreparedCapability',
 )
-type OwnerConnectionAttemptReservation =
-  | Readonly<{ kind: 'reserved' | 'replayed'; attemptRef: string; expiresAt: number }>
-  | Readonly<{ kind: 'refused'; code: string }>
-const reserveOwnerConnectionAttemptMutation = sourceMutation<
-  Record<string, unknown>,
-  OwnerConnectionAttemptReservation
->('capabilityProviderConnectionAttempts:reserveOwner')
 type CandidateDraftResult =
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{
@@ -234,7 +226,7 @@ export async function saveOwnerSupplySourceDraft({
 
 export async function previewOwnerSupplySource({
   data,
-  context,
+  context: _context,
 }: {
   data: z.infer<typeof ownerSourcePreviewInputSchema>
   context: unknown
@@ -246,7 +238,7 @@ export async function previewOwnerSupplySource({
 
 export async function startOwnerSupplySourceConnection({
   data,
-  context,
+  context: _context,
 }: {
   data: z.infer<typeof ownerSourceConnectionInputSchema>
   context: unknown
@@ -280,89 +272,6 @@ export async function startOwnerSupplySourceConnection({
       status: 'required',
       title: 'Prove the payee',
     },
-  }
-}
-
-async function reserveOwnerSourceConnection(input: Readonly<{
-  businessId: string
-  sourceKind: 'http_credential' | 'mcp_oauth'
-  sourceUrl: string
-  sourceDescriptorJson?: string
-  authentication:
-    | Readonly<{ kind: 'api_key'; location: 'header' | 'query'; name: string }>
-    | Readonly<{ kind: 'http_bearer' }>
-    | Readonly<{ kind: 'mcp_oauth' }>
-  environment: 'sandbox' | 'production'
-  idempotencyKey: string
-  context: unknown
-  title: string
-  description: string
-  ctaLabel: string
-  candidateDraftRef?: string
-  candidateSourceDigest?: string
-}>): Promise<SupplySourcePreview> {
-  const inputDigest = canonicalDigest({
-    format: 'provider-connection-attempt-input:v1',
-    sourceKind: input.sourceKind,
-    businessRef: input.businessId,
-    sourceUrl: input.sourceUrl,
-    authentication: input.authentication,
-    environment: input.environment,
-    ...(input.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: input.sourceDescriptorJson }),
-    ...(input.candidateDraftRef === undefined ? {} : { candidateDraftRef: input.candidateDraftRef }),
-    ...(input.candidateSourceDigest === undefined ? {} : { candidateSourceDigest: input.candidateSourceDigest }),
-  })
-  const operationKey = canonicalDigest({
-    action: 'supply.connection.connect',
-    ownerIdempotencyKey: input.idempotencyKey,
-    inputDigest,
-  })
-  const command = {
-    businessId: input.businessId,
-    sourceKind: input.sourceKind,
-    sourceUrl: input.sourceUrl,
-    ...(input.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: input.sourceDescriptorJson }),
-    authentication: input.authentication,
-    environment: input.environment,
-    inputDigest,
-    commandId: operationKey,
-    operationKey,
-    correlationId: operationKey,
-    ...(input.candidateDraftRef === undefined ? {} : { candidateDraftRef: input.candidateDraftRef }),
-    ...(input.candidateSourceDigest === undefined ? {} : { candidateSourceDigest: input.candidateSourceDigest }),
-  }
-  try {
-    const sourceWrite = await sourceWriteAdmissionFromContext({
-      context: input.context,
-      command,
-      scope: 'catalog_publish',
-      operationKey,
-      correlationId: operationKey,
-    })
-    const reserved = await callSourceMutation(reserveOwnerConnectionAttemptMutation, {
-      ...command,
-      sourceWrite,
-      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
-    })
-    if (reserved.kind === 'refused') return unavailablePreview()
-    return {
-      kind: 'action_required',
-      requiredAction: {
-        action: 'supply.source.preview',
-        blockedCapabilities: ['supply.publish'],
-        cta: `/owner/supply/connections/new?attempt=${encodeURIComponent(reserved.attemptRef)}`,
-        ctaLabel: input.ctaLabel,
-        description: input.description,
-        iconUrl: null,
-        status: 'required',
-        title: input.title,
-      },
-    }
-  } catch (cause) {
-    return degradeBackend(cause, unavailablePreview(), {
-      site: 'reserveOwnerSourceConnection',
-      reason: 'source_unavailable',
-    })
   }
 }
 
@@ -450,7 +359,6 @@ export async function resumeOwnerSupplySourceDraft({
     ))
     if (!isMatchingX402Connection(connection, parsed.data)) return { kind: 'not_found' }
   }
-  const connectionRef = data.connectionRef
   const preview = await previewSupplySource(parsed.data)
   if (preview.kind !== 'ready'
     || preview.sourceDigest !== saved.draft.sourceDigest

@@ -1,10 +1,7 @@
-import type { ExecutionActor, ReconciliationEvidence, ReconciliationEvidenceMaterial } from '@/modules/action-execution'
+import type { ExecutionActor, ReconciliationEvidence, ReconciliationEvidenceMaterial } from '@/modules/action-execution/runtime'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigDigest } from '@/modules/money/public'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
-import type { CapabilityGraphPorts, GraphCatalogAccessPath, GraphPublicationRow } from '@/modules/capability-supply/internal/graph'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
@@ -14,6 +11,11 @@ import {
   createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
+  type CapabilityBindingRow,
+  type CapabilityGraphPorts,
+  type CapabilityOfferingRow,
+  type GraphCatalogAccessPath,
+  type GraphPublicationRow,
 } from '@/modules/capability-supply/public'
 import { qualifySuppliedCandidate, type SuppliedCandidateQuoteInput } from '@/modules/capability-supply/server'
 

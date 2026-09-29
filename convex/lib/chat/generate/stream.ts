@@ -13,7 +13,6 @@ import { quoteThenCallFromCard } from '../tools/purchase'
 import { parseOwnerQuoteRequest } from '../tools/quoteRequest'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 import { completedChatFacts } from './completedFacts'
-import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 
 export async function streamDurableChatResponse(
   ctx: ActionCtx,

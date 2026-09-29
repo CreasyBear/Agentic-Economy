@@ -1,17 +1,14 @@
 import { z } from 'zod'
 
-import { jsonValueSchema, validateJsonSchema } from '@/modules/capability-contract/public'
+import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { preparePublicationDraft, type PreparedPublicationDraft } from './internal/publication'
 import { sourceRouteRef } from './internal/source-route-identity'
-import { dereferenceOpenApiSchema } from './internal/schema-deref'
 import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
-  CapabilityPublicationSourceSelector,
 } from './internal/publication-importer-types'
 import type { CapabilityTransportAuthority } from './internal/transport-terms-schema'
 import {

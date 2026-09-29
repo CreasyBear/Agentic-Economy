@@ -6,9 +6,9 @@ import {
   type ActionExecutionOrigin,
   type ActionExecutionView,
   type PreparedExecution,
-  type ReconciliationEvidenceVerifier,
-} from '../../../../../src/modules/action-execution'
-import type { TransferBoundaryEvent } from '../../../../../src/modules/action-execution/transfer-evaluator'
+  type TransferBoundaryEvent,
+} from '../../../../../src/modules/action-execution/runtime'
+import type { ReconciliationEvidenceVerifier } from '../../../../../src/modules/action-execution/reconciliation-evidence'
 import { canonicalDigest } from '../../../../../src/modules/common/canonical-digest'
 import {
   cancelDevelopmentProviderToolAction,

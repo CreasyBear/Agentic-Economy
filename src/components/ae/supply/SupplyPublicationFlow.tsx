@@ -212,7 +212,6 @@ export function SupplyPublicationFlow({
         <div className="border-t border-border pt-related">
           <AttestationField
             values={attestation}
-            requireAuthority={publishAuthorityRequired}
             disabled={disabled}
             invalid={invalidField === 'attestation'}
             {...(errorDescribedBy === undefined ? {} : { describedBy: errorDescribedBy })}
@@ -349,7 +348,7 @@ function ConsequencesField({ externalEffect, dataRelease, financialExposure, dat
   )
 }
 
-function AttestationField({ values, requireAuthority, disabled, invalid = false, describedBy, onChange }: Readonly<{ values: Record<AttestationKey, boolean>; requireAuthority: boolean; disabled: boolean; invalid?: boolean; describedBy?: string; onChange: (key: AttestationKey, checked: boolean) => void }>) {
+function AttestationField({ values, disabled, invalid = false, describedBy, onChange }: Readonly<{ values: Record<AttestationKey, boolean>; disabled: boolean; invalid?: boolean; describedBy?: string; onChange: (key: AttestationKey, checked: boolean) => void }>) {
   return (
     <fieldset
       className="grid gap-3"

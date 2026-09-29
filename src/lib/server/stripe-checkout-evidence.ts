@@ -106,7 +106,6 @@ export function mapStripeCheckoutSessionEvidence(
       material.amount,
       material.metadata,
       input.expected,
-      input.config,
     )
   ) {
     return refusal("ledger_idempotency_conflict", false);
@@ -151,7 +150,7 @@ export function mapStripeCheckoutSessionEvidence(
 
 export function stripeCreditRequestDigest(
   input: CreditPaymentRequest,
-  config?: StripeMoneyProviderConfig,
+  _config?: StripeMoneyProviderConfig,
 ): string | undefined {
   const idempotencyKey = stripeCreditIdempotencyKey(input.idempotencyKey);
   const params = creditSessionCreateParams(input);
@@ -380,7 +379,6 @@ function creditSessionMatchesRequest(
   amount: ExactAmount,
   metadata: Readonly<Record<string, string>>,
   input: CreditPaymentRequest,
-  config: StripeMoneyProviderConfig,
 ): boolean {
   const expectedAmount = stripeMinorAmount(input.amount);
   if (expectedAmount === undefined) return false;

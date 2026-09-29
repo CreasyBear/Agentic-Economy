@@ -3,7 +3,7 @@ import { signEd25519Attestation } from '../../../../../src/modules/common/ed2551
 import type {
   ExposureOffsetRuleIdentity,
   ExposureReleaseAttestationMaterial,
-} from '../../../../../src/modules/action-execution'
+} from '../../../../../src/modules/action-execution/exposure-offset-rules'
 import type { ExactAmount } from '../../../../../src/modules/money/public'
 import type { DevelopmentProviderToolSigningCustody } from './development-provider-tool-signing-custody'
 import type {

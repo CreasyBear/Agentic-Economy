@@ -1,11 +1,4 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-
-import {
-  normalizeSupplySourceDescriptor,
-  type SupplyIntegrationDraftNormalization,
-} from './integration-draft'
+import type { SupplyIntegrationDraftNormalization } from './integration-draft'
 
 export type SupplySourceSelectionDraft = Readonly<{
   sourceKind: 'mcp' | 'agent_plugin'

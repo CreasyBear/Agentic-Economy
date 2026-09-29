@@ -1,9 +1,9 @@
 import { actionToToolContract, listActions } from '@/modules/actions'
-import { readCompletedResultIdentity } from '@/modules/action-execution'
 import {
   evaluateAdr009Transfer,
+  readCompletedResultIdentity,
   type TransferBoundaryEvent,
-} from '@/modules/action-execution/transfer-evaluator'
+} from '@/modules/action-execution/runtime'
 import { resolveActionContract } from '@/modules/common/action'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
 import {

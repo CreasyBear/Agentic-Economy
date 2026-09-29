@@ -111,7 +111,7 @@ async function requireOwnerAccountContextForInvoiceHistory(
   return { canonicalAccountRef }
 }
 
-function fundingCommandInvoiceDescription(command: Doc<'moneyFundingCommands'>): string {
+function fundingCommandInvoiceDescription(): string {
   return 'Account top-up'
 }
 
@@ -201,7 +201,7 @@ export async function listOwnerInvoiceHistoryHandler(
     page.push({
       commandRef: command.commandRef,
       createdAt: command.createdAt,
-      description: fundingCommandInvoiceDescription(command),
+      description: fundingCommandInvoiceDescription(),
       principalUnits: command.principalUnits,
       serviceFeeUnits: command.serviceFeeUnits,
       taxUnits: command.taxUnits,

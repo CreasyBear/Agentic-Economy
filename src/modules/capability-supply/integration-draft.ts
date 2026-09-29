@@ -178,14 +178,6 @@ function validUrl(value: unknown): value is string {
   }
 }
 
-function sha256Ref(value: unknown): string | undefined {
-  return typeof value === 'string' && SHA256_REF.test(value) ? value : undefined
-}
-
-function boundedTextValue(value: unknown, maximum: number): string | undefined {
-  return typeof value === 'string' && boundedText(value, maximum) ? value : undefined
-}
-
 export function supplyIntegrationDraftRefs(
   businessId: string,
   candidateRef: string,

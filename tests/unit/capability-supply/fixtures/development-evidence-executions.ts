@@ -6,9 +6,9 @@ import {
   type ActionExecutionOrigin,
   type ActionExecutionView,
   type PreparedExecution,
-} from '@/modules/action-execution'
+  type TransferBoundaryEvent,
+} from '@/modules/action-execution/runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { TransferBoundaryEvent } from '@/modules/action-execution/transfer-evaluator'
 import {
   collectSuppliedCandidateQuoteAction,
   prepareSuppliedCandidateQuote,

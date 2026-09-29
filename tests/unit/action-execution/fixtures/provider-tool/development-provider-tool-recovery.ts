@@ -5,7 +5,7 @@ import {
   type ActionExecutionOrigin,
   type PreparedExecution,
   type ReconciliationEvidenceMaterial,
-} from '../../../../../src/modules/action-execution'
+} from '../../../../../src/modules/action-execution/runtime'
 import { canonicalDigest } from '../../../../../src/modules/common/canonical-digest'
 import {
   executeDevelopmentProviderToolAction,

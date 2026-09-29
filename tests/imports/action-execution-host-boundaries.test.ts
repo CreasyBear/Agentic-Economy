@@ -20,6 +20,13 @@ function referencesDevelopmentProviderFixture(source: string): boolean {
   return developmentProviderFixturePattern.test(source)
 }
 
+function productionReferencesDevelopmentProviderFixture(path: string, source: string): boolean {
+  if (!referencesDevelopmentProviderFixture(source)) return false
+  if (path !== 'src/modules/module-boundaries.ts') return true
+  const withoutWhiteBoxImporters = source.replace(/importers:\s*\[[\s\S]*?\]/gu, '')
+  return referencesDevelopmentProviderFixture(withoutWhiteBoxImporters)
+}
+
 function hostBoundaryViolations(source: string): readonly string[] {
   const violations = []
   const imports = [...source.matchAll(/from\s+['"]([^'"]+)['"]/gu)].map((match) => match[1]!)
@@ -93,9 +100,17 @@ describe('Action execution public host graph', () => {
     expect(referencesDevelopmentProviderFixture(
       "import { fixture } from 'tools/dev/fixtures/provider-operation/development-provider-operation-fixture'",
     )).toBe(true)
+    expect(productionReferencesDevelopmentProviderFixture(
+      'src/modules/module-boundaries.ts',
+      "import { fixture } from 'tests/unit/action-execution/fixtures/provider-tool/development-provider-tool-fixture'",
+    )).toBe(true)
+    expect(productionReferencesDevelopmentProviderFixture(
+      'src/modules/module-boundaries.ts',
+      "importers: ['tests/unit/action-execution/fixtures/provider-tool/development-provider-tool-runner.ts']",
+    )).toBe(false)
     const violations = productionSourceFiles.filter((path) => {
       const source = readFileSync(path, 'utf8')
-      return referencesDevelopmentProviderFixture(source)
+      return productionReferencesDevelopmentProviderFixture(path, source)
     })
 
     expect(violations).toEqual([])

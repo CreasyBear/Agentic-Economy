@@ -1,4 +1,4 @@
-import type { ActionExecutionOrigin, ExecutionActor } from '../../../../../src/modules/action-execution'
+import type { ActionExecutionOrigin, ExecutionActor } from '../../../../../src/modules/action-execution/runtime'
 import type {
   DevelopmentProviderToolCancellationInput,
   DevelopmentProviderToolInput,

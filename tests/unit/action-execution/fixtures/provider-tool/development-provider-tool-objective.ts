@@ -4,10 +4,10 @@ import {
   issueSpendingPolicy,
   materialDigest,
   SpendingPolicyStore,
-  type SpendingPolicyDecision,
-  type SpendingPolicy,
   type SpendingPolicySnapshot,
-} from '../../../../../src/modules/action-execution'
+} from '../../../../../src/modules/action-execution/runtime'
+import type { SpendingPolicy } from '../../../../../src/modules/action-execution/spending-policy'
+import type { SpendingPolicyDecision } from '../../../../../src/modules/action-execution/spending-policy-evaluation'
 import { canonicalDigest } from '../../../../../src/modules/common/canonical-digest'
 import type { AnyAction } from '../../../../../src/modules/common/action'
 import {
