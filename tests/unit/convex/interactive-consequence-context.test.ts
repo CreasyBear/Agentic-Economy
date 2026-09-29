@@ -14,17 +14,17 @@ import { stableStringify } from '@/modules/common/stable-hash'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
-const draftSource = { definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox', kind: 'openapi' } as const
+const draftSource = { environment: 'sandbox', kind: 'x402', method: 'GET', resourceUrl: 'https://provider.example/canonical-owner' } as const
 const draftSourceDigest = `sha256:${'1'.repeat(64)}`
-const draftSelector = { method: 'get', path: '/canonical-owner' }
+const draftSelector = { method: 'GET', resourceUrl: draftSource.resourceUrl }
 const draftFacts = {
   title: 'Canonical authority Operation',
   description: 'An authority-context regression fixture.',
   category: 'testing',
-  sourceKind: 'openapi' as const,
+  sourceKind: 'x402' as const,
   sourceDescriptorJson: stableStringify(draftSource),
   sourceDigest: draftSourceDigest,
-  sourceRevision: 'openapi:canonical-owner',
+  sourceRevision: 'x402:canonical-owner',
   candidateRef: canonicalDigest({ sourceDigest: draftSourceDigest, selector: draftSelector }),
   sourceSelectorJson: stableStringify(draftSelector),
 }
@@ -166,7 +166,7 @@ describe('interactive consequence authority', () => {
         operationKey: `catalog:${slug}`,
         correlationId: `catalog:${slug}`,
         ...draftFacts,
-        sourceRevision: `openapi:${slug}`,
+        sourceRevision: `x402:${slug}`,
         candidateRef: canonicalDigest({
           sourceDigest: draftSourceDigest,
           selector: { ...draftSelector, lifecycle },
