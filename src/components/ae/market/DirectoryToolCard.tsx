@@ -43,11 +43,11 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave
         <h3 className="col-span-3 line-clamp-2 h-11 text-base font-medium leading-snug">
           <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="break-words after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring">{model.title}</Link>
         </h3>
+        {model.factsLine === undefined ? null : <p className="col-span-3 text-xs text-muted-foreground">{model.factsLine}</p>}
       </div>
       <div className="grid content-start gap-intra px-gutter py-related">
         <p className="text-xs font-medium text-foreground">{model.accessLabel}</p>
         {model.glance === undefined ? null : <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{model.glance}</p>}
-        {model.activityLabel === undefined ? null : <p className="text-xs text-muted-foreground" {...(model.activityTitle === undefined ? {} : { title: model.activityTitle })}>Coinbase Bazaar · {model.activityLabel}</p>}
       </div>
       <CardFooter className="flex min-w-0 flex-wrap items-center justify-between gap-related border-t border-border px-gutter py-related">
         <div className="min-w-0 basis-full">

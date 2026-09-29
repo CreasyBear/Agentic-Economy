@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js'
+import { formatRelativeTime } from '@/lib/ui/format-time'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { formatDisplayPrice } from '@/modules/money/public'
 import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
@@ -132,9 +133,6 @@ export function directoryInitials(providerLine: string): string {
   return (letters.slice(0, 2) || 'AE').toUpperCase()
 }
 
-function countPhrase(count: number, singular: string, plural: string): string {
-  return count === 1 ? `1 ${singular}` : `${count} ${plural}`
-}
 
 function countLabel(value: number | undefined): string | undefined {
   if (value === undefined || !Number.isSafeInteger(value) || value < 0) return undefined
@@ -204,7 +202,7 @@ export type DirectoryToolCardModel = Readonly<{
   description?: string
   outputLabel?: string
   glance?: string
-  activityLabel?: string
+  factsLine?: string
   activityTitle?: string
   callsLabel?: string
   payersLabel?: string
@@ -224,24 +222,19 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
   const payers30d = entry.activity?.payers30d
   const callsLabel = countLabel(calls30d)
   const payersLabel = countLabel(payers30d)
-  const lastReported = entry.activity?.lastCalledAt === undefined ? undefined : directoryDate(entry.activity.lastCalledAt)
+  const lastCalledAt = entry.activity?.lastCalledAt
+  const lastReported = lastCalledAt === undefined ? undefined : directoryDate(lastCalledAt)
   const bazaarTitle = lastReported === undefined
     ? 'Coinbase Bazaar volume, not an Agentic Economy Call.'
     : `Coinbase Bazaar volume, not an Agentic Economy Call. Last reported ${lastReported}.`
-  const activity =
-    calls30d !== undefined && calls30d > 0
-      ? {
-          activityLabel: [
-            countPhrase(calls30d, 'reported call', 'reported calls'),
-            ...(payers30d !== undefined && payers30d > 0 ? [countPhrase(payers30d, 'payer', 'payers')] : []),
-          ].join(' · ') + ' in 30 days',
-          activityTitle: bazaarTitle,
-        }
-      : lastReported !== undefined
-        ? { activityLabel: `Last reported ${lastReported}`, activityTitle: bazaarTitle }
-        : entry.provenance?.updatedAt !== undefined
-          ? { activityLabel: `Updated ${directoryDate(entry.provenance.updatedAt)}` }
-          : {}
+  const relativePaid = lastCalledAt === undefined ? undefined : formatRelativeTime(lastCalledAt)
+  const paidFact = relativePaid === undefined ? undefined : `paid ${relativePaid === 'just now' ? 'recently' : relativePaid}`
+  const factsLine = [
+    payers30d !== undefined && payers30d > 0 && payersLabel !== undefined ? `${payersLabel} buyers` : undefined,
+    calls30d !== undefined && callsLabel !== undefined ? `${callsLabel} calls this month` : undefined,
+    paidFact,
+    entry.audEstimate === undefined ? undefined : `from ${entry.audEstimate}`,
+  ].filter((fact): fact is string => fact !== undefined).join(' · ')
   return {
     title,
     providerHost,
@@ -261,7 +254,8 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     ...(rawDescription !== undefined && rawDescription !== '' ? { description: rawDescription } : {}),
     ...(outputLabel === undefined ? {} : { outputLabel }),
     ...(glance === undefined ? {} : { glance }),
-    ...activity,
+    ...(factsLine.length === 0 ? {} : { factsLine }),
+    ...(lastCalledAt === undefined ? {} : { activityTitle: bazaarTitle }),
     ...(callsLabel === undefined ? {} : { callsLabel }),
     ...(payersLabel === undefined ? {} : { payersLabel }),
     ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }),

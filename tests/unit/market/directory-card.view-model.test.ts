@@ -136,16 +136,25 @@ it('counts multiple payment options', () => {
   expect(model.priceContext).toBe('2 Provider payment options · source 0.02 USDC')
 })
 
-it('surfaces Bazaar volume without treating it as an Agentic Economy Call', () => {
-  const model = toDirectoryToolCardModel({ ...entry, activity: { calls30d: 12, lastCalledAt: '2026-09-08T06:00:00.000Z' } })
-  expect(model.activityLabel).toBe('12 reported calls in 30 days')
+it('shows source usage, last payment and AUD price as facts without claiming an Agentic Economy Call', () => {
+  const paidAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+  const model = toDirectoryToolCardModel({
+    ...entry,
+    activity: { calls30d: 12, payers30d: 2, lastCalledAt: paidAt },
+    audEstimate: 'A$0.02',
+  })
+  expect(model.factsLine).toBe('2 buyers · 12 calls this month · paid 2 hours ago · from A$0.02')
   expect(model.callsLabel).toBe('12')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 168128, payers30d: 2 } })).toMatchObject({ callsLabel: '168,128', payersLabel: '2' })
-  expect(model.activityTitle).toBe('Coinbase Bazaar volume, not an Agentic Economy Call. Last reported 8 Sept 2026.')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 1 } }).activityLabel).toBe('1 reported call in 30 days')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 9, payers30d: 2 } }).activityLabel).toBe('9 reported calls · 2 payers in 30 days')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 1, payers30d: 1 } }).activityLabel).toBe('1 reported call · 1 payer in 30 days')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { lastCalledAt: '2026-09-08T06:00:00.000Z' } }).activityLabel).toBe('Last reported 8 Sept 2026')
+  expect(model.payersLabel).toBe('2')
+  expect(model.activityTitle).toContain('Coinbase Bazaar volume, not an Agentic Economy Call.')
+  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 168128, payers30d: 2 } })).toMatchObject({
+    factsLine: '2 buyers · 168,128 calls this month', callsLabel: '168,128', payersLabel: '2',
+  })
+  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 0, payers30d: 0 } }).factsLine).toBe('0 calls this month')
+  expect(toDirectoryToolCardModel({ ...entry, activity: { payers30d: 1 } }).factsLine).toBe('1 buyers')
+  expect(toDirectoryToolCardModel(entry).factsLine).toBeUndefined()
+  expect(toDirectoryToolCardModel({ ...entry, activity: { lastCalledAt: '2026-09-08T06:00:00.000Z' } }).activityTitle)
+    .toBe('Coinbase Bazaar volume, not an Agentic Economy Call. Last reported 8 Sept 2026.')
 })
 
 it('keeps a service icon and two-letter mark for the card', () => {

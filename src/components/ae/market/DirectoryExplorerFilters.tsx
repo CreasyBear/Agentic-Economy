@@ -178,13 +178,14 @@ function FilterBody({ search, overview, onChange, onReset, showHeading = true, j
   return <div className="flex flex-col gap-6">
     <DirectoryQueryFilter search={search} onChange={onChange} {...(jevRecipient === undefined ? {} : { jevRecipient })} />
     {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-semibold">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
-    {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider category" allLabel="All categories" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable /><Facets label="Provider" allLabel="All providers" values={facets.providers} selected={search.provider} onChange={provider => onChange({ provider })} searchable /></>}
+    {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider" allLabel="All providers" values={facets.providers} selected={search.provider} onChange={provider => onChange({ provider })} searchable /></>}
     <Facets label="Provider-listed price · USDC" allLabel="Any Provider-listed price" showCount={false} values={DIRECTORY_PRICE_BANDS.map(key => ({ key, label: priceBandLabels[key], count: 0 }))} selected={search.priceBand} onChange={value => {
       const priceBand = value === undefined ? undefined : DIRECTORY_PRICE_BANDS.find((band): band is DirectoryPriceBand => band === value)
       if (value !== undefined && priceBand === undefined) return
       onChange({ priceBand, minUsdPrice: undefined, maxUsdPrice: undefined })
     }} />
     <AdvancedFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={onChange} />
+    {facets === undefined ? null : <Facets label="Provider category" allLabel="All categories" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable />}
   </div>
 }
 

@@ -295,9 +295,9 @@ describe('directory analytics mapper boundary', () => {
   })
 })
 
-it('accepts momentum sorting through the shared index schema and forwards it to the native index', async () => {
-  expect(x402DirectoryCatalogueInputSchema.safeParse({ sort: 'momentum' }).success).toBe(true)
+it('accepts repeat sorting through the shared index schema and forwards it to the native index', async () => {
+  expect(x402DirectoryCatalogueInputSchema.safeParse({ sort: 'repeat' }).success).toBe(true)
   query.mockResolvedValueOnce({ kind: 'ok', coverage: {}, searchMethod: 'native_index', page: [], continueCursor: 'next', isDone: true })
-  expect(await readX402DirectoryCatalogue({ sort: 'momentum' })).toMatchObject({ kind: 'ok', source: 'index', isDone: true })
-  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { sort: 'momentum', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } })
+  expect(await readX402DirectoryCatalogue({ sort: 'repeat' })).toMatchObject({ kind: 'ok', source: 'index', isDone: true })
+  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { sort: 'repeat', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } })
 })

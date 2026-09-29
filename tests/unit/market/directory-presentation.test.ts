@@ -80,12 +80,12 @@ it('skips a price-only description prefix without changing explicit titles or pr
 it('shares one persisted Coinbase observation across priced rows, retaining exact source and admitted identity', async () => {
   const ref = `operation:v1:${'a'.repeat(64)}`
   const rows = [
-    { ...entry, resource: 'https://example.com/tiny', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001000', symbol: 'USDC' }], choice: { access: 'ae_callable' as const, toolRef: ref, sourceRouteRef: 'coinbase:tiny' } },
-    { ...entry, resource: 'https://example.com/larger', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '1 USDC', decimalAmount: '1.000000', symbol: 'USDC' }], choice: { access: 'external_listing' as const } },
-    { ...entry, resource: 'https://example.com/zero', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0 USDC', decimalAmount: '0.000000', symbol: 'USDC' }], choice: { access: 'external_listing' as const } },
+    { ...entry, resource: 'https://example.com/tiny', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001', symbol: 'USDC' }], choice: { access: 'ae_callable' as const, toolRef: ref, sourceRouteRef: 'coinbase:tiny' } },
+    { ...entry, resource: 'https://example.com/larger', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '1 USDC', decimalAmount: '1', symbol: 'USDC' }], choice: { access: 'external_listing' as const } },
+    { ...entry, resource: 'https://example.com/zero', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0 USDC', decimalAmount: '0', symbol: 'USDC' }], choice: { access: 'external_listing' as const } },
     { ...entry, resource: 'https://example.com/options', prices: [
       { network: 'solana:mainnet', scheme: 'exact', amount: '500 atomic units (unknown-mint)' },
-      { network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001000', symbol: 'USDC' },
+      { network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001', symbol: 'USDC' },
     ], choice: { access: 'external_listing' as const } },
   ]
   const query = vi.fn(async (reference: unknown) => {
@@ -109,12 +109,12 @@ it('shares one persisted Coinbase observation across priced rows, retaining exac
   expect(tiny).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Indicative before Quote · Provider lists 0.001 USDC per Call', access: 'ae_callable', toolRef: ref, sourceRouteRef: 'coinbase:tiny' })
   expect(larger).toMatchObject({ priceLabel: 'A$1.24', priceContext: 'Provider-listed estimate · Provider lists 1 USDC per Call', access: 'external_listing' })
   expect(zero).toMatchObject({ priceLabel: 'A$0.00', priceContext: 'Provider-listed estimate · Provider lists 0 USDC per Call' })
-  expect(options).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Provider-listed estimate · 2 Provider payment options · source 0.001 USDC' })
+  expect(options).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Provider-listed estimate · Provider lists 0.001 USDC per Call' })
   expect(larger?.toolRef).toBeUndefined()
 })
 
 it('keeps AUD unavailable without a persisted rate and preserves exact source USDC', async () => {
-  const priced = { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }] }
+  const priced = { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' }] }
   const query = vi.fn(async (reference: unknown) => getFunctionName(reference as never) === 'referenceRateRefresh:current'
     ? null
     : { kind: 'ok', coverage: { generation: 'g1' }, searchMethod: 'native_index', page: [{ entry: priced }], continueCursor: '', isDone: true })
@@ -152,7 +152,7 @@ it('does not turn publication identity into callability after readiness expires 
 })
 
 
-it('keeps indexed catalogue order and joined ToolRefs when Jev is blocked', async () => {
+it('keeps indexed catalogue order and joined ToolRefs without calling Jev', async () => {
   const ref = `operation:v1:${'d'.repeat(64)}`
   vi.stubEnv('OPENROUTER_API_KEY', 'local-test-key')
   const blocked = vi.fn(async () => { throw new Error('openrouter blocked') })
@@ -162,9 +162,12 @@ it('keeps indexed catalogue order and joined ToolRefs when Jev is blocked', asyn
   } as never)
   setPublicSourceTransportForTests({
     query: vi.fn(async () => ({
-      kind: 'ok', coverage: { generation: 'g1' }, searchMethod: 'native_full_text',
-      page: [{ entry }, { entry: { ...entry, resource: 'https://example.com/second' },
-        choice: { access: 'ae_callable', toolRef: ref, sourceRouteRef: 'exact-second' } }],
+      kind: 'ok', coverage: { generation: 'g1', completedAt: Date.now() },
+      page: [
+        { id: 'exa', source: 'coinbase', resource: entry.resource, title: entry.title, summary: entry.description, provider: entry.provider },
+        { id: 'second', source: 'coinbase', resource: 'https://example.com/second', title: entry.title, summary: entry.description, provider: entry.provider,
+          choice: { access: 'ae_callable', toolRef: ref, sourceRouteRef: 'exact-second' } },
+      ],
       continueCursor: '', isDone: true,
     })),
     mutation: vi.fn(), action: vi.fn(),

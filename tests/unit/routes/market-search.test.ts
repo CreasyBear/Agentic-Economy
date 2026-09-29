@@ -198,13 +198,13 @@ it('keeps valid native filters and drops malformed ones', () => {
 
 describe('indexed directory route', () => {
   it('keeps source categories and pagination separate from canonical market parameters', async () => {
-    const search = validateMarketSearch({ directoryCategory: 'CREATIVE', indexCursor: 'native-next', sort: 'updated' });
-    expect(search).toEqual({ directoryCategory: 'creative', indexCursor: 'native-next', sort: 'updated' });
+    const search = validateMarketSearch({ directoryCategory: 'CREATIVE', indexCursor: 'native-next', sort: 'repeat' });
+    expect(search).toEqual({ directoryCategory: 'creative', indexCursor: 'native-next', sort: 'repeat' });
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: search } as never);
     expect(data).toMatchObject({ catalogue: { coverage: { indexedTotal: 4000 } } });
-    expect(reads.catalogue).toHaveBeenCalledWith({ data: { directoryCategory: 'creative', indexCursor: 'native-next', sort: 'updated' } });
+    expect(reads.catalogue).toHaveBeenCalledWith({ data: { directoryCategory: 'creative', indexCursor: 'native-next', sort: 'repeat' } });
     expect(reads.home).not.toHaveBeenCalled();
   });
 
@@ -262,16 +262,16 @@ describe('indexed directory route', () => {
     expect(marketLoaderDeps(validateMarketSearch({ view: 'tools', page: 2 }))).toEqual({ view: 'tools' });
   });
 
-  it('requests popular for a Tools view with no sort', async () => {
+  it('requests adoption for a Tools view with no sort', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const filters = { priceBand: '0_01_to_0_03', adoptionBand: '0', tags: ['search', 'a&b'], hasInputSchema: false, minPayers30d: 0, maxPayers30d: 4 };
     await loader({ deps: validateMarketSearch({ view: 'tools', ...filters }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { ...filters, sort: 'popular' } });
+    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { ...filters, sort: 'adoption' } });
     await loader({ deps: validateMarketSearch({ view: 'tools' }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'popular' } });
+    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'adoption' } });
     await loader({ deps: validateMarketSearch({ view: 'providers' }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'popular' } });
+    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'adoption' } });
     expect(reads.providers).not.toHaveBeenCalled();
   });
 });

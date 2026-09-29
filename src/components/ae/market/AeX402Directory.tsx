@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MARKET_LINK_STATE, type IndexedPaginationState, type MarketReturnSearch } from './market-return-context'
@@ -198,32 +197,13 @@ export function AeX402Directory(props: AeX402DirectoryProps) {
   return <MarketNavigationProvider path={marketPath}><DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider></MarketNavigationProvider>
 }
 
-const CATALOGUE_SORT_LABELS = {
-  popular: 'Coinbase Bazaar reported calls · 30 days',
-  adoption: 'Coinbase Bazaar reported payers · 30 days',
-  price_asc: 'Lowest listed price',
-  updated: 'Recently updated',
-  relevance: 'Search relevance',
-} as const
-
-function catalogueSortLabel(_tab: 'tools' | 'providers', search: MarketReturnSearch): string {
-  if (search.query !== undefined) return CATALOGUE_SORT_LABELS.relevance
-  const sort = search.sort ?? 'popular'
-  switch (sort) {
-    case 'popular':
-    case 'adoption':
-    case 'price_asc':
-    case 'updated':
-    case 'relevance':
-      return CATALOGUE_SORT_LABELS[sort]
-    case 'momentum':
-      return 'Momentum'
-    default: {
-      const exhaustive: never = sort
-      return exhaustive
-    }
-  }
-}
+const DIRECTORY_SORT_OPTIONS = [
+  { value: 'adoption', label: 'Most used' },
+  { value: 'popular', label: 'Busiest' },
+  { value: 'active', label: 'Recently paid' },
+  { value: 'repeat', label: 'Repeat buyers' },
+  { value: 'price_asc', label: 'Cheapest' },
+] as const
 
 function directoryInput(search: X402DirectoryInput) {
   return {
@@ -278,7 +258,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const comparisonPool = useMemo(() => [
     ...loadMore.items,
     ...(page.kind === 'ok' ? page.items : []),
-    ...(overview?.kind === 'ok' ? [...overview.popular, ...overview.recentlyUpdated].map(item => item.entry) : []),
+    ...(overview?.kind === 'ok' ? overview.popular.map(item => item.entry) : []),
   ], [loadMore.items, overview, page])
   const { refs: compareRefs, selections: comparison, availableEntries: comparisonEntries } = useMarketCompare({ compare: search.compare, resolvedEntries: compareEntries, loadedEntries: comparisonPool })
   const inputForNeed = marketToolSearchInput(search)
@@ -530,10 +510,13 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         return <TabsContent key={tab} value={tab} className="pt-5">
           <div className="min-w-0">
           <section className="min-w-0" aria-label="Tool results">
-          {indexed || search.query !== undefined ? <div className="sticky top-(--header-height) z-10 mb-related grid h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-related bg-background" role="group" aria-label="Catalogue ordering and display">
-            {search.query !== undefined ? <p className="text-sm text-muted-foreground">Search relevance</p> : <Select value={search.sort ?? 'popular'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, sort: value }) }) }}>
-              <SelectTrigger className="h-11! w-full max-w-64 bg-card transition-[background-color,border-color,box-shadow] duration-fast ease-standard enabled:active:scale-100" aria-label={tab === 'providers' ? 'Sort Providers' : 'Sort Tools'}><span className="line-clamp-1">{catalogueSortLabel(tab, search)}</span></SelectTrigger><SelectContent><SelectGroup><SelectItem value="popular">Coinbase Bazaar reported calls · 30 days</SelectItem><SelectItem value="adoption">Coinbase Bazaar reported payers · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem></SelectGroup></SelectContent>
-            </Select>}
+          {indexed || search.query !== undefined ? <div className="sticky top-(--header-height) z-10 mb-related flex min-h-14 items-center gap-related bg-background" role="group" aria-label="Catalogue ordering and display">
+            {search.query !== undefined ? <p className="min-w-0 flex-1 text-sm text-muted-foreground">Search relevance</p> : <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label="Sort results">
+              {DIRECTORY_SORT_OPTIONS.map(({ value, label }) => {
+                const selected = (search.sort ?? 'adoption') === value
+                return <Button key={value} type="button" variant={selected ? 'secondary' : 'outline'} className="min-h-touch shrink-0 rounded-full whitespace-nowrap active:scale-100" aria-pressed={selected} onClick={() => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, sort: value }) }) }}>{label}</Button>
+              })}
+            </div>}
             <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} {...(jevRecipient === undefined || search.alternativeTo !== undefined ? {} : { jevRecipient })} onChange={applyExplorerFilters} onReset={() => explore({})} />
           </div> : null}
           {search.query === undefined && search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}

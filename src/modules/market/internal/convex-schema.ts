@@ -206,29 +206,25 @@ export const marketTables = {
     .index('by_generation_and_network_and_curated_and_payersOrder', ['generation', 'network', 'curated', 'payersOrder'])
     .index('by_generation_and_network_and_resource', ['generation', 'network', 'resource'])
     .index('by_generation_and_network_and_popularOrder', ['generation', 'network', 'popularOrder'])
-    .index('by_generation_and_network_and_updatedOrder', ['generation', 'network', 'updatedOrder'])
     .index('by_generation_and_network_and_category_and_popularOrder', ['generation', 'network', 'category', 'popularOrder'])
-    .index('by_generation_and_network_and_category_and_updatedOrder', ['generation', 'network', 'category', 'updatedOrder'])
     .index('by_generation_and_network_and_provider_and_popularOrder', ['generation', 'network', 'provider', 'popularOrder'])
-    .index('by_generation_and_network_and_provider_and_updatedOrder', ['generation', 'network', 'provider', 'updatedOrder'])
-    // Eligible-narrowed variants for the default (no-provider) browse/search
-    // scope only. A provider filter intentionally reads the un-narrowed
-    // indexes above so the Provider page can show its ineligible long tail
-    // (docs/architecture/catalogue-distillation.md#9, Lane 1). No eligible
-    // variant for momentumOrder (out of Lane 1's scope) or for the
-    // provider-narrowed indexes (never queried eligible-only).
+    .index('by_generation_and_network_and_provider_and_lastActivatedAt', ['generation', 'network', 'provider', 'lastActivatedAt'])
+    .index('by_generation_and_network_and_provider_and_payerDepth', ['generation', 'network', 'provider', 'payerDepth'])
+    // Eligible-narrowed variants for default no-provider browse/search.
+    // Provider-filtered browse reads the un-narrowed indexes above.
     .index('by_generation_and_network_and_elig_and_payersOrder', ['generation', 'network', 'eligible', 'payersOrder'])
     .index('by_generation_and_network_and_elig_and_category_and_payersOrder', ['generation', 'network', 'eligible', 'category', 'payersOrder'])
     .index('by_generation_and_network_and_elig_and_priceOrder', ['generation', 'network', 'eligible', 'priceOrder'])
     .index('by_generation_and_network_and_elig_and_category_and_priceOrder', ['generation', 'network', 'eligible', 'category', 'priceOrder'])
     .index('by_generation_and_network_and_elig_and_popularOrder', ['generation', 'network', 'eligible', 'popularOrder'])
+    .index('by_generation_and_network_and_elig_and_lastActivatedAt', ['generation', 'network', 'eligible', 'lastActivatedAt'])
+    .index('by_gen_net_elig_cat_lastActivated', ['generation', 'network', 'eligible', 'category', 'lastActivatedAt'])
+    .index('by_generation_and_network_and_elig_and_payerDepth', ['generation', 'network', 'eligible', 'payerDepth'])
+    .index('by_gen_net_elig_cat_payerDepth', ['generation', 'network', 'eligible', 'category', 'payerDepth'])
     // Abbreviated (fields still present, just shortened): the unabbreviated
     // name for this field set ran to exactly 64 characters, at the edge of
     // Convex's index name length ceiling.
     .index('by_gen_net_elig_cat_popular', ['generation', 'network', 'eligible', 'category', 'popularOrder'])
-    .index('by_generation_and_network_and_elig_and_updatedOrder', ['generation', 'network', 'eligible', 'updatedOrder'])
-    // Abbreviated for the same reason as by_gen_net_elig_cat_popular above.
-    .index('by_gen_net_elig_cat_updated', ['generation', 'network', 'eligible', 'category', 'updatedOrder'])
     // Canonical Tool URL lookup: providerKey+slug within one generation, then
     // filtered to the '*' network row in the query (minimal compound index -
     // no network segment needed since slug is generation/resource-scoped,

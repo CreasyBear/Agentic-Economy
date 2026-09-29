@@ -351,19 +351,21 @@ describe('indexed x402 catalogue controls', () => {
   })
 
   it('never puts the Convex page cursor in the market URL and offers a next page instead', () => {
-    show({ ...nativeFilters, sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    show({ ...nativeFilters, sort: 'adoption' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(screen.queryByRole('link', { name: 'Next page' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'First page' })).toBeNull()
     for (const link of screen.getAllByRole('link')) expect(new URL(link.getAttribute('href')!, 'https://aecon.ai').searchParams.has('indexCursor')).toBe(false)
     expect(screen.getByRole('button', { name: 'Next page' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Previous page' })).toBeNull()
     const ordering = screen.getByRole('group', { name: 'Catalogue ordering and display' })
-    expect(ordering.className).toContain('grid-cols-[minmax(0,1fr)_auto]')
-    expect(ordering.className).not.toContain('flex-wrap')
-    expect(within(ordering).getByRole('combobox', { name: 'Sort Tools' }).className).toContain('h-11!')
-    expect(within(ordering).getByRole('button', { name: /^Filters/ }).className).toContain('h-11')
-    const pages = screen.getByRole('navigation', { name: 'Catalogue pages' })
-    expect(pages.className).toContain('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]')
+    const sortResults = within(ordering).getByRole('group', { name: 'Sort results' })
+    expect(within(sortResults).getByRole('button', { name: 'Most used' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(sortResults).getByRole('button', { name: 'Busiest' })).toBeTruthy()
+    expect(within(sortResults).getByRole('button', { name: 'Recently paid' })).toBeTruthy()
+    expect(within(sortResults).getByRole('button', { name: 'Repeat buyers' })).toBeTruthy()
+    expect(within(sortResults).getByRole('button', { name: 'Cheapest' })).toBeTruthy()
+    expect(within(ordering).getByRole('button', { name: /^Filters/ })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Catalogue pages' })).toBeTruthy()
   })
   it('replaces the list with the next page, then returns to the first page without another request', async () => {
     const nextItems = entries.slice(2, 4)
@@ -457,11 +459,10 @@ describe('indexed x402 catalogue controls', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, query: 'weather', sort: 'relevance', directoryCategory: 'media' }))
     expect(router.state.location.search).not.toHaveProperty('indexCursor')
   })
-  it('changes sort through its control while preserving filters, without ever adding a cursor', async () => {
+  it('changes sort through its chip row while preserving filters, without ever adding a cursor', async () => {
     const { router } = show({ ...nativeFilters, sort: 'popular' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
-    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Sort Tools' }), { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByRole('option', { name: 'Recently updated' }))
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, sort: 'updated' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Recently paid' }))
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, sort: 'active' }))
     expect(router.state.location.search).not.toHaveProperty('indexCursor')
   })
   it('keeps 12 providers on each page by reading further into the sorted Tool list', async () => {

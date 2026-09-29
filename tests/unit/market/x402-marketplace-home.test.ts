@@ -2,46 +2,63 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const read = vi.hoisted(() => vi.fn())
 vi.mock('@/modules/market/x402-directory-index.server', () => ({ readX402DirectoryCatalogue: read }))
 import { readX402MarketplaceHome } from '@/modules/market/x402-marketplace-home.server'
-import { X402_MARKETPLACE_COLLECTIONS } from '@/modules/market/x402-marketplace-home'
+import { X402_MARKETPLACE_RAILS } from '@/modules/market/x402-marketplace-home'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
-const items: X402DirectoryEntry[] = Array.from({ length: 8 }, (_, i) => ({ resource: `https://api.example.com/${i}`, title: `Tool ${i}`, provider: i < 4 ? 'api.example.com' : 'other.example.com', description: '', protocol: 'http', prices: [], metadataJson: '{}' }))
-function catalogue(entries: readonly X402DirectoryEntry[], isDone = true) {
-  return { kind: 'ok', source: 'index', searchMethod: 'native_full_text', isDone, page: { kind: 'ok', items: entries, offset: 0, limit: 12, mode: 'search', appliedFilters: {} } }
+const entry = (provider: string, index: number): X402DirectoryEntry => ({
+  resource: `https://${provider}/${index}`,
+  title: `${provider} Tool ${index}`,
+  provider,
+  description: '',
+  protocol: 'http',
+  prices: [],
+  metadataJson: '{}',
+})
+function catalogue(entries: readonly X402DirectoryEntry[]) {
+  return { kind: 'ok', source: 'index', searchMethod: 'native_full_text', isDone: true, page: { kind: 'ok', items: entries, offset: 0, limit: 12, mode: 'browse', appliedFilters: {} } }
 }
 beforeEach(() => read.mockReset())
-describe('editorial marketplace collections', () => {
-  it('orders a collection by indexed call volume, then keeps two Tools per Provider', async () => {
-    const ranked: X402DirectoryEntry[] = [
-      { ...items[0]!, title: 'Low', activity: { calls30d: 1, payers30d: 1 } },
-      { ...items[1]!, title: 'High', activity: { calls30d: 50, payers30d: 2 } },
-      { ...items[2]!, title: 'Mid', activity: { calls30d: 9, payers30d: 4 } },
-      { ...items[4]!, title: 'Other', activity: { calls30d: 3, payers30d: 3 } },
-    ]
-    read.mockResolvedValue(catalogue(ranked))
+describe('evidence-based marketplace rails', () => {
+  it('reads the four browse sorts independently and keeps their evidence order', async () => {
+    read.mockImplementation(async (request: { sort?: string } | undefined) => catalogue([entry(`${request?.sort ?? 'missing'}.example.com`, 0)]))
     const home = await readX402MarketplaceHome()
-    expect(home.rails[0]?.items.map(item => item.title)).toEqual(['High', 'Mid', 'Other'])
+
+    expect(home.rails.map(({ id, sort }) => ({ id, sort }))).toEqual([
+      { id: 'adoption', sort: 'adoption' },
+      { id: 'active', sort: 'active' },
+      { id: 'repeat', sort: 'repeat' },
+      { id: 'price_asc', sort: 'price_asc' },
+    ])
+    expect(read.mock.calls.map(([request]) => request)).toEqual([
+      { sort: 'adoption' },
+      { sort: 'active' },
+      { sort: 'repeat' },
+      { sort: 'price_asc' },
+    ])
+    expect(home.rails.map(rail => rail.items[0]?.provider)).toEqual(X402_MARKETPLACE_RAILS.map(rail => `${rail.sort}.example.com`))
   })
 
-  it('searches every collection independently and selects diverse providers in source order', async () => {
-    read.mockResolvedValue(catalogue(items, false))
+  it('keeps at most two Tools per Provider and eight per rail, in browse order', async () => {
+    const ranked = ['one', 'two', 'three', 'four', 'five'].flatMap(provider =>
+      Array.from({ length: 3 }, (_, index) => entry(`${provider}.example.com`, index)),
+    )
+    read.mockResolvedValue(catalogue(ranked))
+
     const home = await readX402MarketplaceHome()
-    expect(read).toHaveBeenCalledTimes(6)
-    expect(home.rails.map(rail => rail.search)).toEqual(X402_MARKETPLACE_COLLECTIONS.map(({ query }) => ({ query })))
-    for (const collection of X402_MARKETPLACE_COLLECTIONS) expect(read).toHaveBeenCalledWith({ query: collection.query })
-    expect(home.rails[0]?.items.map(item => item.title)).toEqual(['Tool 0', 'Tool 1', 'Tool 4', 'Tool 5'])
-    expect(home.rails[0]).toMatchObject({ returnedCount: 8, partialResults: true, kind: 'ok' })
-    expect(Number.isFinite(Date.parse(home.observedAt))).toBe(true)
+    const expected = ['one', 'two', 'three', 'four'].flatMap(provider =>
+      [0, 1].map(index => `https://${provider}.example.com/${index}`),
+    )
+    expect(home.rails).toHaveLength(4)
+    for (const rail of home.rails) expect(rail.items.map(item => item.resource)).toEqual(expected)
   })
-  it('keeps healthy and empty collections available when another request fails', async () => {
+
+  it('hides rejected, unavailable and empty rails without losing a healthy rail', async () => {
     read.mockRejectedValueOnce(new Error('network failure'))
       .mockResolvedValueOnce({ kind: 'unavailable', reason: 'source_unavailable' })
       .mockResolvedValueOnce(catalogue([]))
-      .mockResolvedValue(catalogue(items))
+      .mockResolvedValueOnce(catalogue([entry('healthy.example.com', 0)]))
+
     const home = await readX402MarketplaceHome()
-    expect(home.rails).toHaveLength(6)
-    expect(home.rails[0]).toMatchObject({ kind: 'unavailable', items: [] })
-    expect(home.rails[1]).toMatchObject({ kind: 'unavailable', items: [] })
-    expect(home.rails[2]).toMatchObject({ kind: 'ok', items: [], returnedCount: 0 })
-    expect(home.rails[3]?.items).toHaveLength(4)
+    expect(home.rails.map(rail => rail.id)).toEqual(['price_asc'])
+    expect(home.rails[0]?.items.map(item => item.provider)).toEqual(['healthy.example.com'])
   })
 })

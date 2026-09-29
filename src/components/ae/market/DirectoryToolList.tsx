@@ -49,6 +49,7 @@ export const DirectoryToolList = memo(function DirectoryToolList({ items, onSave
                     <h3 className="text-sm font-medium leading-snug">
                       <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="break-words underline decoration-transparent underline-offset-4 transition-[color,text-decoration-color] duration-fast ease-standard hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{model.title}</Link>
                     </h3>
+                    {model.factsLine === undefined ? null : <p className="text-xs text-muted-foreground">{model.factsLine}</p>}
                     <p className="truncate text-xs text-muted-foreground">{model.providerLine}</p>
                     {model.glance === undefined ? null : <p className="line-clamp-1 text-xs text-muted-foreground">{model.glance}</p>}
                   </div>

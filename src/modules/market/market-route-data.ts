@@ -258,7 +258,7 @@ export async function loadMarketRouteData(deps: MarketSearch) {
     showHome
       ? Promise.resolve(undefined)
       : catalogueInput.query === undefined || catalogueInput.alternativeTo !== undefined
-      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } }).catch((cause: unknown) => {
+      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: 'adoption' as const }) } }).catch((cause: unknown) => {
           console.error('[market] directory catalogue unavailable', { cause })
           return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
         })

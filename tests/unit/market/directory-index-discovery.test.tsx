@@ -31,19 +31,13 @@ function show(data = overview) {
 }
 function linkSearch(name: string) { return new URL(screen.getByRole('link', { name }).getAttribute('href')!, 'https://aecon.ai').searchParams }
 
-it('preserves all source-ranked entries including repeated Providers and uses truthful ranked browse links', () => {
+it('preserves source-ranked Tools including repeated Providers and links to the matching ranking', () => {
   show()
-  const popularShelf = screen.getByRole('region', { name: 'Popular Tools carousel' })
-  expect(within(popularShelf).getAllByRole('heading', { level: 3 }).map(node => node.textContent)).toEqual(popular.map(item => item.entry.title))
-  const updatedShelf = screen.getByRole('region', { name: 'Recently updated carousel' })
-  expect(within(updatedShelf).getAllByRole('heading', { level: 3 }).map(node => node.textContent)).toEqual(['Tool 23', 'Tool 22', 'Tool 21'])
-  expect(within(updatedShelf).getAllByText('Updated 8 Sept 2026')).toHaveLength(3)
-  expect(linkSearch('View all popular tools').get('sort')).toBe('popular')
-  expect(linkSearch('View all recently updated').get('sort')).toBe('updated')
-  for (const name of ['View all popular tools', 'View all recently updated']) {
-    expect(linkSearch(name).get('view')).toBe('tools')
-    expect(linkSearch(name).has('query')).toBe(false)
-  }
+  const shelf = screen.getByRole('region', { name: 'Busiest Tools carousel' })
+  expect(within(shelf).getAllByRole('heading', { level: 3 }).map(node => node.textContent)).toEqual(popular.map(item => item.entry.title))
+  expect(linkSearch('View all busiest tools').get('sort')).toBe('popular')
+  expect(linkSearch('View all busiest tools').get('view')).toBe('tools')
+  expect(linkSearch('View all busiest tools').has('query')).toBe(false)
   expect(screen.queryByText(/new Tools|newly added/iu)).toBeNull()
 })
 it('passes exact resources with an empty source search and preserves saved and comparison control state', () => {
@@ -72,11 +66,10 @@ it('shows the supplied twelve A–Z Provider samples with global counts and scop
     expect(search.get('view')).toBe('tools')
   }
 })
-it('keeps honest empty ranked shelves and navigation available without fake activity or dates', () => {
+it('keeps the remaining ranked shelf honest when usage is unavailable and navigation remains available', () => {
   show({ ...overview, popular: [], recentlyUpdated: [], providers: [] })
-  expect(screen.getByText('No reported Call activity is available for this selection yet.')).toBeTruthy()
-  expect(screen.getByText('No published update dates are available for this selection yet.')).toBeTruthy()
+  expect(screen.getByText('No reported usage is available for this selection yet.')).toBeTruthy()
   expect(screen.getByText('No Provider hostnames are available for this selection.')).toBeTruthy()
-  expect(screen.queryByRole('button', { name: 'Next Popular Tools' })).toBeNull()
-  expect(screen.getByRole('link', { name: 'View all popular tools' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Next Busiest Tools' })).toBeNull()
+  expect(screen.getByRole('link', { name: 'View all busiest tools' })).toBeTruthy()
 })

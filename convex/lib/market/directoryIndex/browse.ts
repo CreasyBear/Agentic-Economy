@@ -12,6 +12,8 @@ import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, ind
 
 type SearchRow = Doc<'marketDirectorySearchEntries'>
 
+const REPEAT_SORT_MIN_PAYERS = 5
+
 /**
  * Joins live, never stored on the directory row: a withdrawn or superseded
  * publication must stop resolving immediately, and this join is the only
@@ -30,8 +32,8 @@ export async function admittedToolRef(ctx: QueryCtx, sourceRouteRef: string | un
  * Eligible-only is the default everywhere except a provider filter: the
  * Provider page intentionally shows its ineligible long tail
  * (docs/architecture/catalogue-distillation.md#9, Lane 1), so a provider
- * filter always reads the un-narrowed indexes. Momentum sort keeps its
- * existing base index (out of Lane 1's scope).
+ * filter always reads the un-narrowed indexes. Sorts use their corresponding
+ * indexes, narrowed by provider or eligible category where applicable.
  */
 function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402DirectoryIndexInput) {
   const network = input.network === undefined ? '*' : directoryNetwork(input.network)
@@ -49,9 +51,15 @@ function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402Dire
       return search
     })
   }
-  if (input.sort === 'momentum') {
-    // Base index only: provider/category narrowing happens in the filter chain.
-    return rows.withIndex('by_generation_and_network_and_momentumOrder', q => q.eq('generation', generation).eq('network', network)).order('desc')
+  if (input.sort === 'active') {
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_lastActivatedAt', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_lastActivated', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+    return rows.withIndex('by_generation_and_network_and_elig_and_lastActivatedAt', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
+  }
+  if (input.sort === 'repeat') {
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payerDepth', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_payerDepth', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+    return rows.withIndex('by_generation_and_network_and_elig_and_payerDepth', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
   }
   if (input.sort === 'adoption') {
     if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
@@ -63,16 +71,15 @@ function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402Dire
     if (category !== undefined) return rows.withIndex('by_generation_and_network_and_elig_and_category_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('asc')
     return rows.withIndex('by_generation_and_network_and_elig_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('asc')
   }
-  if (input.sort === 'updated') {
-    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
-    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_updated', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
-    return rows.withIndex('by_generation_and_network_and_elig_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
+  if (input.sort === 'popular') {
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_popular', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+    return rows.withIndex('by_generation_and_network_and_elig_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
   }
-  if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
-  if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_popular', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
-  return rows.withIndex('by_generation_and_network_and_elig_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
+  if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+  if (category !== undefined) return rows.withIndex('by_generation_and_network_and_elig_and_category_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+  return rows.withIndex('by_generation_and_network_and_elig_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
 }
-
 function matchesRemainingConstraints(row: SearchRow, input: X402DirectoryIndexInput): boolean {
   // Defense in depth: the index/search-filter branches above already narrow to
   // eligible===true whenever no provider filter is present; this catches any
@@ -83,6 +90,7 @@ function matchesRemainingConstraints(row: SearchRow, input: X402DirectoryIndexIn
   if (input.maxUsdPrice !== undefined && (row.minimumUsdPrice === undefined || new Decimal(row.minimumUsdPrice).gt(input.maxUsdPrice))) return false
   if (input.minUsdPrice !== undefined && (row.minimumUsdPrice === undefined || new Decimal(row.minimumUsdPrice).lt(input.minUsdPrice))) return false
   const payersOrder = row.payersOrder ?? -1
+  if (input.sort === 'repeat' && payersOrder < REPEAT_SORT_MIN_PAYERS) return false
   if (input.minPayers30d !== undefined && payersOrder < input.minPayers30d) return false
   if (input.maxPayers30d !== undefined && (payersOrder < 0 || payersOrder > input.maxPayers30d)) return false
   if (input.curatedOnly === true && row.curated !== true) return false
@@ -116,7 +124,6 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
       ...(input.priceBand === undefined ? [] : [q.eq(q.field('priceBand'), input.priceBand)]),
       ...(input.adoptionBand === undefined ? [] : [q.eq(q.field('adoptionBand'), input.adoptionBand)]),
       ...(input.maxUsdPrice === undefined ? [] : [q.gte(q.field('minimumUsdPriceOrder'), 0), q.lte(q.field('minimumUsdPriceOrder'), input.maxUsdPrice)]),
-      ...(input.sort === 'momentum' ? [q.gt(q.field('momentumOrder'), 0)] : []),
     ))
     // Rich source documents have a separate bounded budget from slim search rows.
     // A shorter native page still preserves its cursor and complete traversal.

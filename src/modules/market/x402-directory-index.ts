@@ -18,7 +18,7 @@ export type DirectoryMomentumBand = typeof DIRECTORY_MOMENTUM_BANDS[number]
 export const x402DirectoryIndexInputSchema = x402DirectoryFilterSchema.extend({
   query: z.string().trim().max(SEARCH_QUERY_MAX_LENGTH).optional(),
   category: z.string().trim().min(1).max(80).transform(value => value.toLowerCase()).optional(),
-  sort: z.enum(['relevance', 'popular', 'updated', 'adoption', 'price_asc', 'momentum']).optional(),
+  sort: z.enum(['relevance', 'adoption', 'popular', 'active', 'repeat', 'price_asc']).optional(),
   minUsdPrice: z.number().finite().nonnegative().optional(),
   priceBand: z.enum(DIRECTORY_PRICE_BANDS).optional(),
   adoptionBand: z.enum(DIRECTORY_ADOPTION_BANDS).optional(),

@@ -72,7 +72,7 @@ export const filterArgs = {
   curatedOnly: v.optional(v.boolean()), tags: v.optional(v.array(v.string())), bundleSlugs: v.optional(v.array(v.string())),
   hasInputFields: v.optional(v.boolean()), hasOutputFields: v.optional(v.boolean()),
   hasInputSchema: v.optional(v.boolean()), hasOutputSchema: v.optional(v.boolean()), hasOutputExample: v.optional(v.boolean()),
-  maxUsdPrice: v.optional(v.number()), sort: v.optional(v.union(v.literal('relevance'), v.literal('popular'), v.literal('updated'), v.literal('adoption'), v.literal('price_asc'))),
+  maxUsdPrice: v.optional(v.number()), sort: v.optional(v.union(v.literal('relevance'), v.literal('adoption'), v.literal('popular'), v.literal('active'), v.literal('repeat'), v.literal('price_asc'))),
 }
 export const pageValue = v.union(unavailableValue, v.object({
   kind: v.literal('ok'), coverage: coverageValue,
