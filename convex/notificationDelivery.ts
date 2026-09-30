@@ -8,14 +8,18 @@ import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { internalAction, type ActionCtx } from './_generated/server'
 import { classifyResendOutcome } from './lib/principalAccount/notifications/resendOutcome'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 
-const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 const MAX_BATCH_SIZE = 20
 
 export const deliverDueOwnerNotifications = internalAction({
-  args: {},
+  args: { workload: workloadCronSnapshotValue },
   returns: v.null(),
-  handler: async (ctx): Promise<null> => {
+  handler: async (ctx, args): Promise<null> => {
+    await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: 'deliver owner notifications',
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    })
     const resendApiKey = process.env.RESEND_API_KEY?.trim()
     const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim()
     const clerkSecretKey = process.env.CLERK_SECRET_KEY?.trim()
@@ -65,7 +69,7 @@ export const deliverDueOwnerNotifications = internalAction({
       let status: number | 'network_error'
       let response: Response | undefined
       try {
-        response = await fetch(RESEND_ENDPOINT, {
+        response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           signal: AbortSignal.timeout(10_000),
           headers: {

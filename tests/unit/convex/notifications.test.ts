@@ -1,5 +1,7 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
 import { describe, expect, it, vi } from 'vitest'
+import { internal } from '../../../convex/_generated/api'
+import type { WorkloadCronSnapshot } from '../../../convex/lib/platform/workloadCron/context'
 
 import type { MutationCtx, QueryCtx } from '../../../convex/_generated/server'
 import {
@@ -88,6 +90,11 @@ async function listDeliveryRows(backend: InteractiveAuthorityBackend) {
   return await backend.run((ctx) => ctx.db.query('notificationDeliveries').collect())
 }
 
+async function admittedNotificationWorkload(backend: InteractiveAuthorityBackend): Promise<WorkloadCronSnapshot> {
+  await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+  return await backend.query(internal.workloadCron.admit, { name: 'deliver owner notifications' })
+}
+
 const ACCOUNT_B = `acc_${'b'.repeat(32)}`
 const OWNERSHIP_B = `own_${'b'.repeat(32)}`
 
@@ -152,7 +159,7 @@ const updatePreferencesRef = makeFunctionReference<
 >('notifications:updatePreferences')
 const deliverOwnerNotificationsRef = makeFunctionReference<
   'action',
-  Record<string, never>,
+  { workload: WorkloadCronSnapshot },
   null
 >('notificationDelivery:deliverDueOwnerNotifications')
 
@@ -690,8 +697,45 @@ describe('approval notification deliveries', () => {
       await insertPendingApprovalCall(backend, callRef)
       await enqueueApprovalNotice(backend, callRef)
 
-      await expect(backend.action(deliverOwnerNotificationsRef, {})).resolves.toBeNull()
+      const workload = await admittedNotificationWorkload(backend)
+      await expect(backend.action(deliverOwnerNotificationsRef, { workload })).resolves.toBeNull()
       await expect(listDeliveryRows(backend)).resolves.toMatchObject([{ state: 'pending', attemptCount: 0 }])
+      expect(report).toHaveBeenCalledOnce()
+    } finally {
+      if (previous.resend === undefined) delete process.env.RESEND_API_KEY
+      else process.env.RESEND_API_KEY = previous.resend
+      if (previous.fromEmail === undefined) delete process.env.NOTIFICATION_FROM_EMAIL
+      else process.env.NOTIFICATION_FROM_EMAIL = previous.fromEmail
+      if (previous.clerkSecret === undefined) delete process.env.CLERK_SECRET_KEY
+      else process.env.CLERK_SECRET_KEY = previous.clerkSecret
+      report.mockRestore()
+    }
+  })
+
+  it('runs the real notification cron and leaves deliveries untouched when sender credentials are missing', async () => {
+    const previous = {
+      resend: process.env.RESEND_API_KEY,
+      fromEmail: process.env.NOTIFICATION_FROM_EMAIL,
+      clerkSecret: process.env.CLERK_SECRET_KEY,
+    }
+    delete process.env.RESEND_API_KEY
+    delete process.env.NOTIFICATION_FROM_EMAIL
+    delete process.env.CLERK_SECRET_KEY
+    const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const backend = createBackend()
+      await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+      await seedAuthority(backend)
+      const callRef = 'operation-invocation:v1:notification-cron-no-credentials'
+      await insertPendingApprovalCall(backend, callRef)
+      await enqueueApprovalNotice(backend, callRef)
+
+      await expect(backend.action(internal.workloadCron.deliverOwnerNotifications, {})).resolves.toBeNull()
+      await expect(listDeliveryRows(backend)).resolves.toMatchObject([{
+        sourceEventRef: callRef,
+        state: 'pending',
+        attemptCount: 0,
+      }])
       expect(report).toHaveBeenCalledOnce()
     } finally {
       if (previous.resend === undefined) delete process.env.RESEND_API_KEY
@@ -725,7 +769,8 @@ describe('approval notification deliveries', () => {
       const [delivery] = await listDeliveryRows(backend)
       if (delivery === undefined) throw new Error('notification_delivery_fixture_missing')
 
-      await expect(backend.action(deliverOwnerNotificationsRef, {})).resolves.toBeNull()
+      const workload = await admittedNotificationWorkload(backend)
+      await expect(backend.action(deliverOwnerNotificationsRef, { workload })).resolves.toBeNull()
       expect(clerkMocks.getUser).toHaveBeenCalledWith('user_sam')
       expect(sendEmail).toHaveBeenCalledOnce()
       const [url, request] = sendEmail.mock.calls[0] ?? []
