@@ -46,6 +46,10 @@ export function projectOptionsFromCard(
       ...(displayedPrice === undefined || (currentPrice ? price?.validUntil : choice.priceValidUntil) === undefined
         ? {} : { priceValidUntil: currentPrice ? price?.validUntil : choice.priceValidUntil }),
       ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
+      ...(choice.sourcePrice === undefined ? {} : { providerListedPrice: choice.sourcePrice }),
+      ...(choice.host === undefined ? {} : { host: choice.host }),
+      ...(choice.resourcePath === undefined ? {} : { resourcePath: choice.resourcePath }),
+      ...(choice.networkLabel === undefined ? {} : { networkLabel: choice.networkLabel }),
       readiness: projectChoiceReadiness(choice.readiness),
       ...(seller === undefined ? {} : { seller }),
       selectable: !choice.belowMatch

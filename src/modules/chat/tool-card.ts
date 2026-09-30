@@ -4,7 +4,7 @@ import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agent-turn.contracts'
-import { addRef, collectToolRefs, matchedCount } from '@/modules/chat/tool-card-search'
+import { addRef, collectToolRefs, matchedCount, serializeChoicesCard } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
 import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
@@ -77,6 +77,10 @@ export type ToolChoiceRow = Readonly<{
   provider?: string
   price?: string
   priceValidUntil?: number
+  sourcePrice?: string
+  host?: string
+  resourcePath?: string
+  networkLabel?: string
   readiness?: 'ready' | 'unverified' | 'unavailable'
   access?: string
   callable?: boolean
@@ -87,7 +91,7 @@ export type ToolCardRecommendation = Readonly<{ toolRef: string; by: string }>
 
 export function toolChoiceReadinessLabel(readiness: NonNullable<ToolChoiceRow['readiness']>): string {
   return readiness === 'ready' ? 'Ready to use'
-    : readiness === 'unavailable' ? getStatusPresentation('unavailable').label : 'Not yet verified'
+    : readiness === 'unavailable' ? getStatusPresentation('unavailable').label : 'Unverified'
 }
 
 export type ToolFact = Readonly<{
@@ -210,6 +214,18 @@ function boundedString(value: unknown, maximum: number): string | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) return undefined
   return Array.from(value.trim()).slice(0, maximum).join('')
 }
+function directoryChoiceFields(value: Record<string, unknown>) {
+  const sourcePrice = boundedString(value.sourcePrice, 80)
+  const host = boundedString(value.host, 300)
+  const resourcePath = boundedString(value.resourcePath, 512)
+  const networkLabel = boundedString(value.networkLabel, 128)
+  return {
+    ...(sourcePrice === undefined ? {} : { sourcePrice }),
+    ...(host === undefined ? {} : { host }),
+    ...(resourcePath === undefined ? {} : { resourcePath }),
+    ...(networkLabel === undefined ? {} : { networkLabel }),
+  }
+}
 
 function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return undefined
@@ -244,6 +260,9 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
       title: stringField(value.title) ?? 'External listing',
       ...(provider === undefined ? {} : { provider }),
       ...choicePriceFields(value),
+      ...directoryChoiceFields(value),
+      ...(value.readiness === 'ready' || value.readiness === 'unverified' || value.readiness === 'unavailable'
+        ? { readiness: value.readiness } : {}),
       access: 'external_listing',
       callable: true,
     }
@@ -272,6 +291,7 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...choicePriceFields(value),
+    ...directoryChoiceFields(value),
     ...(value.access === 'ae_callable' && value.readiness === 'ready' ? { callable: true } : {}),
     ...(readiness === undefined ? {} : { readiness }),
     ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
@@ -351,6 +371,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
       ? { detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(toolRef)}` } : {}),
     title,
     ...(provider === undefined ? {} : { provider }),
+    ...directoryChoiceFields(value),
     ...(price === undefined ? {} : { price }),
     ...(price === undefined || priceValidUntil === undefined ? {} : { priceValidUntil }),
     ...(readiness === undefined ? {} : { readiness }),
@@ -908,24 +929,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         ...(card.funding === undefined ? {} : { funding: card.funding }),
       }
     case 'choices':
-      return {
-        type: 'tool-card',
-        kind: 'choices',
-        toolId: card.toolId,
-        title: card.title,
-        state: 'complete',
-        toolRefs: [...card.toolRefs],
-        choices: card.choices.map((choice) => ({ ...choice })),
-        ...(card.count === undefined ? {} : { count: card.count }),
-        ...(card.surface === undefined ? {} : { surface: card.surface }),
-        ...(card.verdict === undefined ? {} : { verdict: card.verdict }),
-        ...(card.coverage === undefined ? {} : { coverage: card.coverage }),
-        ...(card.next === undefined ? {} : { next: card.next }),
-        ...(card.recommendation === undefined ? {} : { recommendation: { ...card.recommendation } }),
-        ...(card.contrasts === undefined || card.contrasts.length === 0
-          ? {}
-          : { contrasts: card.contrasts.map((fact) => ({ ...fact })) }),
-      }
+      return serializeChoicesCard(card)
     case 'inspect':
       return {
         type: 'tool-card',

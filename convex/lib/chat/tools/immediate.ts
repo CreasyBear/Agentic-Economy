@@ -1,8 +1,8 @@
 import type { ActionCtx } from '../../../_generated/server'
-import { truncateText } from '@/modules/common/truncate-text'
-import { internal } from '../../../_generated/api'
+import { api, internal } from '../../../_generated/api'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
+
 import {
   deserializeToolSearchResult,
   PublicToolRegistrySchemaVersion,
@@ -10,6 +10,7 @@ import {
   type ToolSearchResult,
 } from '@/modules/capability-supply/public'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { compactDirectoryRows } from '@/modules/registry/internal/compact-directory-search'
 import {
   projectToolSearchChoices,
   type SearchResult,
@@ -84,30 +85,23 @@ export async function retrieveImmediateTools(
       ? { ...admitted, items: admittedItems }
       : admitted.kind === 'unavailable' ? admitted : emptyResult(trimmed)
     const room = Math.max(1, 8 - admittedItems.length)
-    const directory = await ctx.runQuery(internal.x402DirectoryIndex.searchCompactInternal, {
-      query: trimmed,
-      paginationOpts: { cursor: null, numItems: room },
-      access: 'external_listing',
-    }).catch(cause => degradeBackend(cause, { kind: 'unavailable' as const, reason: 'source_unavailable' }, {
-      site: 'chatImmediateBazaar', reason: 'source_unavailable',
-    }))
-    const external: SearchResult[] = directory.kind === 'unavailable' ? [] : directory.page.flatMap(row => {
-      if (row.source !== 'coinbase' || row.toolRef !== undefined) return []
-      if (!suitableListing(trimmed, row.title, row.summary)) return []
-      const actionClass = ['retrieve','transform','analyze','create','mutate','other','unclassified'].includes(row.actionClass) ? row.actionClass : 'unclassified' as const
-      const objectClass = ['web','document','image','location','chain','data','other','unclassified'].includes(row.objectClass) ? row.objectClass : 'unclassified' as const
-      return [{
-        id: row.id, source: 'coinbase' as const, access: 'external_listing' as const,
-        title: truncateText(row.title, 72),
-        summary: truncateText(row.summary, 100),
-        provider: truncateText(row.provider, 48),
-        actionClass, objectClass,
-        ...(row.category === undefined ? {} : { category: truncateText(row.category, 80) }),
-        readiness: 'unverified' as const, price: { kind: 'unavailable' as const },
-        detailRef: row.id,
-        next: [{ action: 'describe-external' as const, args: { id: row.id }, authority: 'public' as const }],
-      }]
-    })
+    const [directory, directoryStatus] = await Promise.all([
+      ctx.runQuery(internal.x402DirectoryIndex.searchCompactInternal, {
+        query: trimmed,
+        paginationOpts: { cursor: null, numItems: room },
+        access: 'external_listing',
+      }).catch(cause => degradeBackend(cause, { kind: 'unavailable' as const, reason: 'source_unavailable' }, {
+        site: 'chatImmediateBazaar', reason: 'source_unavailable',
+      })),
+      ctx.runQuery(api.x402DirectoryIndex.status, {}).catch(cause => degradeBackend(
+        cause,
+        { kind: 'unavailable' as const, refreshState: 'none' as const },
+        { site: 'chatImmediateBazaarStatus', reason: 'source_unavailable' },
+      )),
+    ])
+    const external: SearchResult[] = directory.kind === 'unavailable' ? [] : compactDirectoryRows(directory, directoryStatus)
+      .filter(result => result.access === 'external_listing' && result.toolRef === undefined
+        && suitableListing(trimmed, result.title, result.summary))
     const admittedNext = narrowed.kind === 'ok' && narrowed.pagination.hasMore ? narrowed.pagination.nextCursor : undefined
     const toolRefs = admittedItems.map(tool => tool.toolRef)
     const evidenceRows = toolRefs.length === 0 ? [] : await ctx.runQuery(
