@@ -6,6 +6,10 @@ export type ClerkConsequenceProofInput = Readonly<{
   firstFactorAgeMinutes: number
   secondFactorAgeMinutes: number
 }>
+export async function hasStrictClerkConsequenceProof(): Promise<boolean> {
+  const identity = await auth()
+  return identity.isAuthenticated && identity.userId !== null && identity.has({ reverification: 'strict' })
+}
 
 /** Uses Clerk's maintained strict-reverification contract and returns only signed session evidence. */
 export async function requireStrictClerkConsequenceProof(

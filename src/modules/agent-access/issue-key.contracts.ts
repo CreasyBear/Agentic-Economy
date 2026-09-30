@@ -26,3 +26,4 @@ export type AgentAccessKeyIssueResult =
       secret: string
     }>
   | Readonly<{ kind: 'error'; code: string; retryable: boolean }>
+  | Readonly<{ kind: 'refused'; code: 'reverification_required' }>

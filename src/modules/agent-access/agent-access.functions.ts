@@ -11,7 +11,7 @@ import {
   sourceQuery,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
-import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
+import { hasStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
 import { degrade } from '@/lib/observability/degrade'
@@ -422,7 +422,9 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     if (principal === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
-    await requireStrictClerkConsequenceProof(data.idempotencyKey)
+    if (!await hasStrictClerkConsequenceProof()) {
+      return { kind: 'refused', code: 'reverification_required' } as const
+    }
     const tokenIdentifier = clerkUserProviderIdentifier(
       readTrimmedEnv(process.env, 'CLERK_JWT_ISSUER_DOMAIN'),
       principal.userId,

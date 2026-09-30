@@ -11,7 +11,7 @@ const calls = vi.hoisted(() => ({
   issue: vi.fn(),
   setup: vi.fn(),
 }))
-const clerkMocks = vi.hoisted(() => ({ prompts: 0 }))
+const clerkMocks = vi.hoisted(() => ({ prompts: 0, reverificationLevels: [] as string[] }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...await importOriginal(),
@@ -25,6 +25,12 @@ vi.mock('@clerk/tanstack-react-start', () => ({
       return await fetcher(...args)
     }
     return first
+  },
+}))
+vi.mock('@clerk/shared/authorization-errors', () => ({
+  reverificationError: (level: string) => {
+    clerkMocks.reverificationLevels.push(level)
+    return { clerk_error: { level } }
   },
 }))
 vi.mock('@/lib/server/agent-access-console.functions', () => ({
@@ -41,12 +47,6 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
   Link: ({ children, to, search }: { children: string; to: string; search?: Record<string, string> }) =>
     createElement('a', { href: `${to}${search ? `?${new URLSearchParams(search)}` : ''}` }, children),
 }))
-vi.mock('@/components/ae/console/connect-agent-wizard/AeConnectAgentWizardDialog', () => ({
-  AeConnectAgentWizardDialog: ({ open, onIssue }: { open: boolean; onIssue: (args: { data: Record<string, unknown> }) => Promise<unknown> }) => open
-    ? createElement('button', { onClick: () => { void onIssue({ data: {} }) } }, 'Issue dialog open')
-    : null,
-}))
-vi.mock('@/components/ae/console/AeKeyRevealDialog', () => ({ AeKeyRevealDialog: () => null }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({ children }: { children: ReactNode }) => createElement('main', null, children),
 }))
@@ -95,7 +95,7 @@ const twoKeysDirectory = {
 } satisfies AgentDirectoryProjection
 
 describe('Agent keys settings revocation', () => {
-  afterEach(() => { vi.clearAllMocks(); clerkMocks.prompts = 0 })
+  afterEach(() => { vi.clearAllMocks(); clerkMocks.prompts = 0; clerkMocks.reverificationLevels.length = 0 })
   it('revokes only the selected credential after approval and refreshes its outcome', async () => {
     calls.revoke.mockResolvedValue({ kind: 'completed', principalRef: 'agent:one', correlationRef: 'corr:one' })
     calls.readDirectory.mockResolvedValue(directory)
@@ -122,7 +122,7 @@ describe('Agent keys settings revocation', () => {
     calls.revoke.mockResolvedValue({ kind: 'completed', principalRef: 'agent:one', correlationRef: 'corr:one' })
     calls.readDirectory.mockResolvedValue(directory)
     const view = render(createElement(AeAgentKeysSettings, {
-      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test', openIssueDialog: true,
+      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
     }))
     const selectedKeyButton = screen.getAllByRole('button', { name: 'Revoke key for Shared name' })[1]
     if (selectedKeyButton === undefined) throw new Error('Expected a revoke button for each active key')
@@ -132,7 +132,7 @@ describe('Agent keys settings revocation', () => {
     view.unmount()
 
     const cancelledView = render(createElement(AeAgentKeysSettings, {
-      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test', openIssueDialog: true,
+      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
     }))
     const cancelledKeyButton = screen.getAllByRole('button', { name: 'Revoke key for Shared name' })[1]
     if (cancelledKeyButton === undefined) throw new Error('Expected a revoke button for each active key')
@@ -141,17 +141,31 @@ describe('Agent keys settings revocation', () => {
     expect(calls.revoke).toHaveBeenCalledOnce()
     cancelledView.unmount()
   })
-  it('wraps key issuance in Clerk reverification', async () => {
-    calls.issue.mockResolvedValueOnce({ clerk_error: { level: 'strict' } })
-    calls.issue.mockResolvedValueOnce({ kind: 'created', keyId: 'key:one', secret: 'secret' })
+  it('re-verifies an issuance refusal and reveals the key issued after retry', async () => {
+    calls.issue
+      .mockResolvedValueOnce({ kind: 'refused', code: 'reverification_required' })
+      .mockResolvedValueOnce({ kind: 'refused', code: 'reverification_required' })
+      .mockResolvedValueOnce({ kind: 'refused', code: 'reverification_required' })
+      .mockResolvedValueOnce({ kind: 'created', keyId: 'key:one', secret: 'secret' })
     render(createElement(AeAgentKeysSettings, {
       initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test', openIssueDialog: true,
     }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Issue dialog open' }))
+    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Research bot' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
 
     await waitFor(() => expect(clerkMocks.prompts).toBe(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect an Agent' }).hasAttribute('disabled')).toBe(false))
     expect(calls.issue).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
+
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Save your secret key' })).toBeTruthy())
+    expect(clerkMocks.prompts).toBe(2)
+    expect(clerkMocks.reverificationLevels).toEqual(['strict', 'strict'])
+    expect(calls.issue).toHaveBeenCalledTimes(4)
+    fireEvent.click(screen.getByRole('button', { name: 'Show secret' }))
+    expect(screen.getByText('secret')).toBeTruthy()
   })
   it('offers both direct connection paths and focuses existing OAuth steps', () => {
     const view = render(createElement(AeAgentAccessHome, {

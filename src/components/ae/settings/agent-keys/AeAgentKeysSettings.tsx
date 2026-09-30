@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { reverificationError } from '@clerk/shared/authorization-errors'
+import { useRef, useState } from 'react'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { useServerFn } from '@tanstack/react-start'
 import { Link } from '@tanstack/react-router'
@@ -38,8 +39,20 @@ export function AeAgentKeysSettings({
   onWizardOpenChange,
 }: AeAgentKeysSettingsProps) {
   const vm = useAgentKeysSettings(initialDirectory)
+  const reverificationAttempted = useRef(false)
   const issueRequest = useServerFn(issueAgentAccessKeyServer)
-  const issueKey = useReverification(issueRequest)
+  const submitIssueRequest = useReverification(async (args: { data: Record<string, unknown> }) => {
+    const result = await issueRequest(args)
+    if (result.kind === 'refused' && result.code === 'reverification_required' && !reverificationAttempted.current) {
+      reverificationAttempted.current = true
+      return reverificationError('strict')
+    }
+    return result
+  })
+  const issueKey = async (args: { data: Record<string, unknown> }) => {
+    reverificationAttempted.current = false
+    return await submitIssueRequest(args)
+  }
   const [uncontrolledWizardOpen, setUncontrolledWizardOpen] = useState(openIssueDialog)
   const wizardOpen = onWizardOpenChange === undefined ? uncontrolledWizardOpen : openIssueDialog
   const setWizardOpen = (open: boolean) => {
