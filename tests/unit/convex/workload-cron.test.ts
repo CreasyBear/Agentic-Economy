@@ -24,6 +24,7 @@ import {
   expireStalePendingApprovalsHandler,
   reconcileDueFacilitatorInvocationsHandler,
   reconcilePromotionalCreditHandler,
+  reconcilePaidCallReportsHandler,
   refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler,
   refreshCurrentMarketPresenceHandler,
@@ -69,6 +70,7 @@ const EXPECTED_BINDINGS = {
   'expire stale pending approvals': 'workloadCron:expireStalePendingApprovals',
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
   'reconcile promotional credit': 'workloadCron:reconcilePromotionalCredit',
+  'reconcile paid Call reports': 'workloadCron:reconcilePaidCallReports',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'reconcile business supply projections': 'workloadCron:reconcileBusinessSupplyProjections',
@@ -83,6 +85,7 @@ const EXPECTED_BINDINGS = {
 const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
   reconcilePromotionalCreditHandler,
+  reconcilePaidCallReportsHandler,
   refreshFacilitatorDiscoveryHandler,
   refreshReferenceRateHandler,
   refreshAgenticEconomyApiRegistryHandler,
@@ -94,6 +97,7 @@ const ACTION_HANDLERS = [
 const ACTION_HANDLER_WORKLOAD_NAMES = [
   'reconcile due facilitator invocations',
   'reconcile promotional credit',
+  'reconcile paid Call reports',
   'refresh facilitator discovery',
   'refresh USDC/AUD reference rate',
   'refresh Agentic Economy API registry',
