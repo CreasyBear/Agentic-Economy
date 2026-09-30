@@ -327,9 +327,9 @@ describe('convex dev timeout', () => {
   })
 
   it('falls back to the generic launcher timeout when the env var is absent or unparseable', () => {
-    expect(convexDevTimeoutMs({})).toBe(120_000)
-    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: 'not-a-number' })).toBe(120_000)
-    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '0' })).toBe(120_000)
+    expect(convexDevTimeoutMs({})).toBe(360_000)
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: 'not-a-number' })).toBe(360_000)
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '0' })).toBe(360_000)
   })
 })
 

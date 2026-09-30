@@ -14,7 +14,7 @@ const DEFAULT_VITE_URL = 'http://127.0.0.1:3024'
 // dev child overrides this from CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS
 // (see convexDevTimeoutMs) since a 2GB local backend can take several
 // minutes to cold-start, well past this generic default.
-const LOCAL_STARTUP_TIMEOUT_MS = 120_000
+const LOCAL_STARTUP_TIMEOUT_MS = 360_000
 // A grown local database (tens of thousands of rows) can take well past the
 // Convex CLI's own 30s default to cold-start; a fresh clone never notices
 // this because its database is empty.
