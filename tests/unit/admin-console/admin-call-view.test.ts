@@ -39,6 +39,7 @@ describe('admin Call view', () => {
       agentRef: null,
       correlationId: null,
       resolution: null,
+      answerModelCost: null,
       timeline: [],
       status,
     })
@@ -46,6 +47,6 @@ describe('admin Call view', () => {
     expect(view.purchase.kind).toBe('uncertain')
     expect(view.receipt.resultKind).toBe('completed')
     expect(view.receipt.complete).toBe(false)
-    expect(JSON.stringify(view)).not.toContain('answer')
+    expect(JSON.stringify(view)).not.toContain('"answer":42')
   })
 })

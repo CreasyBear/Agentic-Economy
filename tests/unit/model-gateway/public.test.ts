@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   DEFAULT_OPENROUTER_MODEL,
+  openRouterCostUsd,
   openRouterGatewayConfig,
   openRouterModel,
   type OpenRouterGatewayConfig,
@@ -32,6 +33,14 @@ afterEach(() => {
 })
 
 describe('openRouterModel routing options', () => {
+  it('accepts only finite nonnegative reported costs, including a reported zero', () => {
+    expect(openRouterCostUsd({ openrouter: { usage: { cost: 0 } } })).toBe(0)
+    expect(openRouterCostUsd({ openrouter: { usage: { cost: 0.0123 } } })).toBe(0.0123)
+    for (const cost of [-1, Infinity, Number.NaN, '0.0123', null]) {
+      expect(openRouterCostUsd({ openrouter: { usage: { cost } } })).toBeUndefined()
+    }
+    expect(openRouterCostUsd(undefined)).toBeUndefined()
+  })
   it('accepts explicit Convex environment values and keeps the single default model', () => {
     expect(openRouterGatewayConfig({
       OPENROUTER_API_KEY: '  convex-key  ',

@@ -9,8 +9,10 @@ import { streamAnonymousChatResponse } from '../../convex/lib/chat/anonymous/str
 import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectToolCard } from '@/modules/chat/tool-card'
-import { convexTestWithMarketComponents, publishedBusinessOwner, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
+import { formatRunRequest } from '@/modules/chat/run-request'
+import { convexTestWithMarketComponents, createTestAgentPrincipal, publishedBusinessOwner, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
+import { withSourceWrite } from '../helpers/source-write-admission'
 
 const SHARE_SECRET = 'chat-share-integration-secret-with-at-least-32-characters'
 const SHARE_KEY_ID = 'chat-share:integration'
@@ -76,6 +78,92 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     restoreEnvironment('AE_CHAT_SHARE_SECRET', previousShareSecret)
     restoreEnvironment('AE_CHAT_SHARE_KEY_ID', previousShareKeyId)
   })
+
+  it('records an observed zero when Card Run saves an answer without requesting a model', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { principal } = await createTestAgentPrincipal(backend, 'card-run-cost')
+    const binding = await startManuallyGeneratedTurn(backend, async () => backend.mutation(api.chatTurns.startTurn,
+      await withSourceWrite('protected_action', {
+        principal: { kind: 'agent_key' as const, ...principal }, clientTurnId: 'card-run-cost',
+        prompt: formatRunRequest(`operation:v1:${'d'.repeat(64)}`, {}),
+        operationKey: 'chat-turn.start', correlationId: 'card-run-cost',
+      })))
+    await backend.mutation(internal.chatTurns.finishTurn, { turnRef: binding.turnRef,
+      promptMessageId: binding.promptMessageId, state: 'working' })
+    const searchTurn = { turnRef: binding.turnRef, threadId: binding.threadId, promptMessageId: binding.promptMessageId }
+    const current = await backend.query(internal.chatTurns.authorizeKeyGeneration, searchTurn)
+    if (current === null) throw new Error('card_run_authority_missing')
+    const model = mockModel({ content: [{ type: 'text', text: 'Must not request this model' }] })
+    const outbound = vi.spyOn(model, 'doStream')
+    await backend.action(ctx => streamDurableChatResponse(ctx, { ...searchTurn, ownerId: current.ownerId,
+      trustedChatAuthority: current.authority, searchTurn }, model))
+    await backend.mutation(internal.chatTurns.finishTurn, { turnRef: binding.turnRef,
+      promptMessageId: binding.promptMessageId, state: 'completed' })
+    expect(outbound).not.toHaveBeenCalled()
+    expect(await backend.query(internal.chatModelCost.readTurn, { turnRef: binding.turnRef })).toMatchObject({
+      status: 'complete', knownCostUsd: '0', requestCount: 0, unknownRequestCount: 0, requests: [],
+    })
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: binding.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    expect(messages.page.some(message => message.role === 'assistant' && message.text.trim().length > 0)).toBe(true)
+  })
+
+  it.each(['immediate_explanation', 'initial', 'final_answer'] as const)(
+    'persists each actual %s request before SDK provider I/O while retaining answer behavior', async surface => {
+      const backend = convexTestWithMarketComponents()
+      const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, `chat-cost-${surface}`)
+      const binding = await startManuallyGeneratedTurn(backend, () => owner.mutation(api.chatTurns.startTurn, {
+        principal: { kind: 'clerk' }, clientTurnId: `cost-${surface}`, prompt: 'Find an exchange-rate Tool',
+      }))
+      const model = mockModel({ contentSteps: surface === 'final_answer' ? [
+        [{ type: 'tool-call', toolCallId: 'inspect-for-cost', toolName: 'registry_tools_describe',
+          input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) }],
+        [{ type: 'text', text: 'Checking those results' }],
+        [{ type: 'text', text: 'No current exchange-rate Tool was verified.' }],
+      ] : [[{ type: 'text', text: 'No current exchange-rate Tool was verified.' }]] })
+      const original = model.doStream.bind(model)
+      let outbound = 0
+      const calls = vi.spyOn(model, 'doStream').mockImplementation(async options => {
+        outbound += 1
+        const summary = await backend.query(internal.chatModelCost.readTurn, { turnRef: binding.turnRef })
+        const requests = summary.requests.filter(request => request.source === 'openrouter')
+        expect(requests).toHaveLength(outbound)
+        expect(requests.at(-1)?.accounting).toEqual({ status: 'pending' })
+        return await original(options)
+      })
+      await backend.action(ctx => {
+        const context = surface === 'immediate_explanation' ? ctx : new Proxy(ctx, {
+          get(target, property, receiver) {
+            if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) => {
+              if (getFunctionName(args[0]) === 'capabilityToolCatalog:searchInternal') {
+                return Promise.reject(new Error('catalogue_unavailable'))
+              }
+              return Reflect.apply(target.runAction, target, args)
+            }
+            return Reflect.get(target, property, receiver) as unknown
+          },
+        }) as ActionCtx
+        return streamDurableChatResponse(context, {
+          threadId: binding.threadId, ownerId: canonicalAccountRef, promptMessageId: binding.promptMessageId,
+          searchTurn: { turnRef: binding.turnRef, threadId: binding.threadId, promptMessageId: binding.promptMessageId },
+        }, model)
+      })
+      const summary = await backend.query(internal.chatModelCost.readTurn, { turnRef: binding.turnRef })
+      const requests = summary.requests.filter(request => request.source === 'openrouter')
+      expect(requests.map(request => request.purpose)).toEqual(surface === 'final_answer'
+        ? ['initial', 'initial', 'final_answer'] : [surface])
+      expect(new Set(requests.map(request => request.requestRef)).size).toBe(requests.length)
+      expect(requests.every(request => request.accounting.status === 'unpriced')).toBe(true)
+      expect(calls).toHaveBeenCalledTimes(surface === 'final_answer' ? 3 : 1)
+      if (surface === 'final_answer') expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
+      const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+        threadId: binding.threadId, paginationOpts: { cursor: null, numItems: 20 },
+      }))
+      expect(messages.page.some(message => message.role === 'assistant' && message.text.trim().length > 0)).toBe(true)
+      calls.mockRestore()
+    },
+  )
 
   it('atomically creates an owned thread, saves the normalized prompt, and derives its title', async () => {
     const backend = convexTestWithMarketComponents()

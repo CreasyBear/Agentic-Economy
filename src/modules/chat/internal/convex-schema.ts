@@ -1,5 +1,6 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { chatModelCostBeginValue, chatModelCostStoredAccountingValue } from '../model-cost'
 
 export const chatTables = {
   chatThreads: defineTable({
@@ -30,6 +31,7 @@ export const chatTables = {
     origin: v.optional(v.literal('owner_chat')),
     clientTurnId: v.string(),
     materialDigest: v.string(),
+    modelCostTrackingVersion: v.optional(v.literal(1)),
     state: v.union(
       v.literal('submitted'), v.literal('working'), v.literal('input-required'),
       v.literal('auth-required'), v.literal('completed'), v.literal('failed'),
@@ -54,4 +56,13 @@ export const chatTables = {
     .index('by_threadId_and_sequence', ['threadId', 'sequence'])
     .index('by_promptMessageId', ['promptMessageId'])
     .index('by_turnRef', ['turnRef']),
+  chatModelCostRequests: defineTable(chatModelCostBeginValue.extend({
+    accountRef: v.string(), accounting: chatModelCostStoredAccountingValue,
+    model: v.optional(v.string()), inputTokens: v.optional(v.number()), outputTokens: v.optional(v.number()),
+    providerGenerationId: v.optional(v.string()), metadataLookupAttempts: v.optional(v.number()),
+    createdAt: v.number(), updatedAt: v.number(),
+  }))
+    .index('by_requestRef', ['requestRef'])
+    .index('by_turnRef', ['turnRef'])
+    .index('by_source_and_providerGenerationId', ['source', 'providerGenerationId']),
 } as const

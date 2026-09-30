@@ -79,10 +79,11 @@ const uncertainView: AdminCallView = {
   agentRef: null,
   correlationId: null,
   resolution: null,
+  answerModelCost: null,
   timeline: [],
 }
 
-function renderCallPage() {
+function renderCallPage(view: AdminCallView = uncertainView) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -103,7 +104,7 @@ function renderCallPage() {
           hydrated
           chatFrame={false}
         />
-        <AdminCallObjectPage result={uncertainView} />
+        <AdminCallObjectPage result={view} />
       </OperatorChromeProvider>
     </RouterContextProvider>
   )
@@ -112,6 +113,24 @@ function renderCallPage() {
 }
 
 describe('/admin/calls/$callRef', () => {
+  it('shows the whole answer subtotal and its unpriced Jev request separately from Call money', () => {
+    renderCallPage({ ...uncertainView, answerModelCost: {
+      cost: { turnRef: 'turn:answer', status: 'incomplete', knownCostUsd: '0.001', requestCount: 2, unknownRequestCount: 1,
+        requests: [
+          { requestRef: 'sdk:one:0', source: 'openrouter', purpose: 'initial', requestedModel: 'test/model', model: 'test/actual',
+            inputTokens: 10, outputTokens: 20, accounting: { status: 'priced', amountUsd: '0.001', source: 'inline' } },
+          { requestRef: 'jev:one', source: 'jev', purpose: 'discovery_rerank', requestedModel: '~typesafe/jev-latest',
+            accounting: { status: 'unpriced', reason: 'jev_usage_only' } },
+        ] }, callRefs: [callRefText, 'operation-invocation:v1:second'], callsTruncated: false,
+    } })
+    expect(screen.getByText('Known subtotal US$0.001 · incomplete (1 unpriced request)')).toBeTruthy()
+    expect(screen.getByText('The cost of the originating chat answer, shared by all its Calls.')).toBeTruthy()
+    expect(screen.getByText('test/actual')).toBeTruthy()
+    expect(screen.getByText('jev usage only')).toBeTruthy()
+    expect(screen.getByText('Related Calls (2)')).toBeTruthy()
+    expect(screen.getByText('Unknown')).toBeTruthy()
+  })
+
   it('shows the canonical uncertainty sentence without claiming a zero charge', () => {
     const { container } = renderCallPage()
     const uncertainty = uncertainView.receipt.issue?.moneyMovement

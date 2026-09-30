@@ -6,6 +6,7 @@ import type { ActionCtx } from '../../../_generated/server'
 import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { recommendTool } from './recommend'
 import { catalogueFact, explanationUsable, immediateSearchToolName, retrieveImmediateTools } from '../tools/immediate'
+import { chatModelCostHooks } from './modelCost'
 
 type ImmediateTurnArgs = Readonly<{
   threadId: string
@@ -54,8 +55,9 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
     ownerId: deps.args.ownerId,
     threadId: deps.args.threadId,
     promptMessageId: deps.args.promptMessageId,
+    ...(deps.args.searchTurn === undefined ? {} : { modelCostBinding: deps.args.searchTurn }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
-  })
+  }, ctx)
   let recommendation = selection.recommendation
   if (recommendation !== null) {
     const selectedRecommendation = recommendation
@@ -135,6 +137,7 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
       userId: deps.args.ownerId,
     }, {
       promptMessageId: deps.args.promptMessageId,
+      ...chatModelCostHooks(ctx, deps.args.searchTurn, 'immediate_explanation'),
       tools: {},
       timeout: { totalMs: 8_000 },
       maxRetries: 0,
@@ -157,4 +160,3 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
   }
   return true
 }
-

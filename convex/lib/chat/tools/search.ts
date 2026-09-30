@@ -233,6 +233,7 @@ export function createSearchTools(
                 ? await ctx.runAction(internal.capabilityToolCatalog.presentSearch, {
                     result: serializeToolSearchResult(source), query: data.query,
                     ...(request === undefined ? {} : { request }),
+                    ...(searchTurn === undefined ? {} : { modelCostBinding: searchTurn }),
                   }).then(value => deserializeToolSearchResult(value.result)).catch(cause => {
                     degradeBackend(cause, undefined, { site: 'chatToolSearchRerank', reason: 'source_unavailable' })
                     return source

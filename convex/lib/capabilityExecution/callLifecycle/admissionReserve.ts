@@ -151,6 +151,7 @@ async function persistReservedCall(
 ): Promise<void> {
   await ctx.db.insert('capabilityCalls', {
     ...reservation,
+    ...(args.turnRef === undefined ? {} : { chatTurnRef: args.turnRef }),
     ...(args.toolJson === undefined ? {} : { toolJson: args.toolJson }),
     ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
     ...(formanceFinancialState === undefined ? {} : { formanceFinancialState }),
@@ -204,6 +205,8 @@ export async function reserveHandler(
   const reservation = reservationFromArgs(args)
   const replay = existing[0]
   if (replay !== undefined) {
+    // A later answer may replay this Call; its original model-cost attribution
+    // remains on the stored Call. Historical unlinked Calls stay unlinked.
     const result = await replayExistingReservation(ctx, replay, args)
     if (result.kind === 'replayed' && turn !== null) {
       await attachCallToTurn(ctx, turn, result.reservation.callRef)
@@ -276,4 +279,3 @@ export async function reserveHandler(
 
   return { kind: 'reserved', reservation }
 }
-

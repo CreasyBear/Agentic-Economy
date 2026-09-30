@@ -1795,6 +1795,36 @@
   },
   {
     "visibility": "internal",
+    "module": "chatModelCost",
+    "method": "begin",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatModelCost",
+    "method": "claimStatsLookup",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatModelCost",
+    "method": "observe",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatModelCost",
+    "method": "readTurn",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatModelCost.actions",
+    "method": "reconcile",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
     "module": "chatQuote",
     "method": "quote",
     "kind": "action"

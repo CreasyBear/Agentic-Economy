@@ -212,7 +212,7 @@ export async function reserveAndStartTurn(
     ...(input.actor.grantRef === undefined ? {} : { grantRef: input.actor.grantRef }),
     ...(input.searchContinuation === undefined ? {} : { searchContinuation: input.searchContinuation }),
     clientTurnId: input.clientTurnId, materialDigest, deadlineAt,
-    state: 'submitted', createdAt: now, updatedAt: now,
+    state: 'submitted', modelCostTrackingVersion: 1, createdAt: now, updatedAt: now,
   })
   let row: Doc<'chatThreads'>
   if (input.threadId === undefined) {
@@ -364,4 +364,3 @@ async function settledTurnText(
     text: text.slice(nativeText.length),
   }
 }
-

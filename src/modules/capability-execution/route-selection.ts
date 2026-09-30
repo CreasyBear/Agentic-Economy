@@ -1,5 +1,5 @@
 import { sanitizeText } from '@/modules/common/sanitize-text'
-import { executeDecisionGateway, type DecisionTier, type JevQuestion } from '@/modules/decision-engine/public'
+import { executeDecisionGateway, type DecisionTier, type JevQuestion, type JevInferenceObserver } from '@/modules/decision-engine/public'
 
 export type SelectionCandidate = Readonly<{
   toolRef: string
@@ -15,6 +15,8 @@ export type RouteSelectionOptions = Readonly<{
   openrouterApiKey?: string
   disableJev?: boolean
   deadlineAt?: number
+  purpose?: 'discovery' | 'provider_source'
+  inferenceObserver?: JevInferenceObserver
 }>
 
 export const MIN_MODEL_CONFIDENCE = 0.60
@@ -94,6 +96,8 @@ export async function routeSelection<T extends SelectionCandidate>(
     ...(options.openrouterApiKey === undefined ? {} : { openrouterApiKey: options.openrouterApiKey }),
     ...(options.disableJev === undefined ? {} : { disableJev: options.disableJev }),
     ...(options.deadlineAt === undefined ? {} : { deadlineAt: options.deadlineAt }),
+    ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
+    ...(options.inferenceObserver === undefined ? {} : { inferenceObserver: options.inferenceObserver }),
   })
   const fit = candidates.map((candidate, index) => {
     const answer = response.answers[`fit_${index}`]

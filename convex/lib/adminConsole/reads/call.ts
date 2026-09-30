@@ -17,6 +17,7 @@ import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { readPurchaseResolutionByCallRef } from '../../capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
+import { readTurnHandler } from '../../chat/turns/modelCost'
 
 type FoundCallStatus = Extract<CallStatusResult, { kind: 'found' }>
 type CallRow = Doc<'capabilityCalls'>
@@ -79,9 +80,24 @@ export async function readAdminCallView(
     agentRef: agent.kind === 'valid' && agent.ref.kind === 'agent' ? agent.ref.ref : null,
     correlationId,
     resolution,
+    answerModelCost: await readAnswerModelCost(ctx, row),
     timeline,
     status,
   })
+}
+
+async function readAnswerModelCost(ctx: QueryCtx, call: CallRow): Promise<AdminCallView['answerModelCost']> {
+  const turnRef = call.chatTurnRef
+  if (turnRef === undefined) return null
+  const turn = await ctx.db.query('chatTurns').withIndex('by_turnRef', q => q.eq('turnRef', turnRef)).unique()
+  if (turn === null || turn.accountRef !== call.ownerId || turn.principalRef !== call.principalId) return null
+  const [cost, related] = await Promise.all([
+    readTurnHandler(ctx, { turnRef }),
+    ctx.db.query('capabilityCalls').withIndex('by_chatTurnRef', q => q.eq('chatTurnRef', turnRef)).take(257),
+  ])
+  return { cost, callRefs: related.slice(0, 256)
+    .filter(row => row.ownerId === call.ownerId && row.principalId === call.principalId)
+    .map(row => row.callRef), callsTruncated: related.length > 256 }
 }
 
 function publicCallState(row: CallRow): FoundCallStatus['state'] {

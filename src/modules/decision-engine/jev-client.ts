@@ -1,11 +1,13 @@
 import { APIConnectionError, APIError, APITimeoutError, APIUserAbortError, TypeSafeClient, type EntryType, type RequestOptions } from '@typesafe-ai/sdk'
 import { JevUnavailableError } from './contracts'
 import { observedInferenceModel, observedInferenceUsage, recordInferenceAttempt } from './inference-observation'
+import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import type {
   DecisionGatewayOptions,
   DecisionGatewayRequest,
   DecisionGatewayResponse,
   JevAnswer,
+  JevInferenceObservation,
 } from './contracts'
 
 const DEFAULT_JEV_MODEL = '~typesafe/jev-latest'
@@ -78,7 +80,24 @@ export async function callJevSystemOne(
 
   // Adapt fetch to map OpenRouter alpha endpoint and append referral metadata
   let outboundAttempts = 0
+  const observationAbort = new AbortController()
+  let observationBlocked = false
+  const pending = new Set<string>()
+  let latestRequestRef: string | undefined
+  // Requires durable begin before I/O. Ensures each retry has its own identity.
+  // Invariant: failed completion remains pending; no provider body or secret is
+  // retained. On begin failure abort SDK retries; on completion failure preserve
+  // the usable decision and leave recovery to the durable observation boundary.
+  const observe = async (input: JevInferenceObservation): Promise<void> => {
+    if (!pending.delete(input.requestRef)) return
+    try { await options.inferenceObserver?.afterAttempt(input) }
+    catch (cause) {
+      degradeBackend(boundaryCauseKind(cause), undefined, { site: 'jevModelCostObservation', reason: 'source_unavailable' })
+    }
+  }
   const adaptedFetch: typeof fetch = async (url, init) => {
+    if (observationBlocked) throw new JevUnavailableError('observation_unavailable')
+    if (init?.signal?.aborted) throw new JevUnavailableError('cancelled')
     let resolvedUrl = url.toString()
     const isOpenRouterHost = new URL(resolvedUrl).hostname === 'openrouter.ai'
     if (isOpenRouterHost && resolvedUrl.endsWith('/v1/systemone')) {
@@ -89,8 +108,27 @@ export async function callJevSystemOne(
       headers.set('HTTP-Referer', 'https://agentic-economy.local')
       headers.set('X-Title', 'Agentic Economy Decision Engine')
     }
-    outboundAttempts += 1
-    return baseFetch(resolvedUrl, { ...init, headers })
+    const requestRef = options.inferenceObserver === undefined ? undefined : `jev:${crypto.randomUUID()}`
+    if (requestRef !== undefined) {
+      try { await options.inferenceObserver?.beforeAttempt({ requestRef, requestedModel: defaultModel }) }
+      catch {
+        observationBlocked = true
+        observationAbort.abort()
+        throw new JevUnavailableError('observation_unavailable')
+      }
+      pending.add(requestRef)
+      latestRequestRef = requestRef
+    }
+    try {
+      if (init?.signal?.aborted || Date.now() >= deadlineAt) throw new JevUnavailableError('timeout')
+      outboundAttempts += 1
+      const response = await baseFetch(resolvedUrl, { ...init, headers })
+      if (!response.ok && requestRef !== undefined) await observe({ requestRef, outcome: 'failed' })
+      return response
+    } catch (cause) {
+      if (requestRef !== undefined) await observe({ requestRef, outcome: 'failed' })
+      throw cause
+    }
   }
 
   const client = new TypeSafeClient({
@@ -106,7 +144,7 @@ export async function callJevSystemOne(
   const remainingMs = deadlineAt - Date.now()
   if (remainingMs <= 0) throw new JevUnavailableError('timeout')
   const deadlineSignal = Number.isFinite(remainingMs) ? AbortSignal.timeout(Math.ceil(remainingMs)) : undefined
-  const signals = [options.signal, deadlineSignal].filter((signal): signal is AbortSignal => signal !== undefined)
+  const signals = [options.signal, deadlineSignal, observationAbort.signal].filter((signal): signal is AbortSignal => signal !== undefined)
   const requestOptions: RequestOptions = {
     timeout: Math.min(timeout, remainingMs),
     retry: { maxRetries: interactive ? 0 : options.maxRetries ?? 1 },
@@ -128,10 +166,19 @@ export async function callJevSystemOne(
       : observedInferenceUsage(result.usage?.input_tokens, result.usage?.output_tokens)
     const durationMs = Date.now() - startedAt
     const { model, modelSource } = observedInferenceModel(result.model, defaultModel)
+    if (latestRequestRef !== undefined) {
+      const attemptUsage = observedInferenceUsage(result.usage?.input_tokens, result.usage?.output_tokens)
+      await observe({ requestRef: latestRequestRef, outcome: 'completed',
+        ...(modelSource === 'provider' ? { model } : {}),
+        ...(attemptUsage.inputTokens === null ? {} : { inputTokens: attemptUsage.inputTokens }),
+        ...(attemptUsage.outputTokens === null ? {} : { outputTokens: attemptUsage.outputTokens }),
+      })
+    }
     recordInferenceAttempt({ tier: 'jev_system_one', purpose: options.purpose, model, modelSource, outcome: 'completed', outboundAttempts, durationMs, usage })
     return { tier: 'jev_system_one', model, answers: result.answers as Record<string, JevAnswer>, usage, durationMs, attemptedTiers: ['jev_system_one'] }
   } catch (cause) {
-    const failure = classifyFailure(cause, options.signal)
+    for (const requestRef of pending) await observe({ requestRef, outcome: 'failed' })
+    const failure = observationBlocked ? new JevUnavailableError('observation_unavailable') : classifyFailure(cause, options.signal)
     recordInferenceAttempt({
       tier: 'jev_system_one', purpose: options.purpose, model: defaultModel, modelSource: 'requested', outcome: 'failed',
       reason: failure instanceof JevUnavailableError ? failure.reason : failure instanceof TypeError ? 'invalid_request' : 'unexpected',

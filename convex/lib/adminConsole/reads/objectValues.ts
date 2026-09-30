@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { chatModelCostSummaryValue } from '@/modules/chat/model-cost'
 
 import {
   callReceiptValue,
@@ -127,6 +128,11 @@ export const adminCallViewValue = v.object({
   agentRef: v.union(v.string(), v.null()),
   correlationId: v.union(v.string(), v.null()),
   resolution: v.union(purchaseResolutionRecordValidator, v.null()),
+  answerModelCost: v.union(v.object({
+    cost: chatModelCostSummaryValue,
+    callRefs: v.array(v.string()),
+    callsTruncated: v.boolean(),
+  }), v.null()),
   timeline: v.array(adminTimelineEntryValue),
 })
 

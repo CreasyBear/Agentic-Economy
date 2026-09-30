@@ -13,6 +13,7 @@ import { quoteThenCallFromCard } from '../tools/purchase'
 import { parseRunRequest } from '@/modules/chat/run-request'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 import { completedChatFacts } from './completedFacts'
+import { chatModelCostHooks } from './modelCost'
 
 const MAX_ABORT_TIMEOUT_MS = 2_147_483_647
 
@@ -111,25 +112,29 @@ export async function streamDurableChatResponse(
   }
   let hasPriorSearch = false
   const runInitial = async () => {
+    const modelCost = chatModelCostHooks(ctx, args.searchTurn, 'initial')
     const result = await agent.streamText(
       ctx,
       { threadId: args.threadId, userId: args.ownerId },
     {
       promptMessageId: args.promptMessageId,
-      prepareStep: args.continuation === undefined
-        ? options => options.stepNumber === 0 && hasPriorSearch
+      onStart: modelCost.onStart,
+      prepareStep: async options => {
+        await modelCost.prepareStep(options)
+        return args.continuation === undefined
+        ? options.stepNumber === 0 && hasPriorSearch
           ? { toolChoice: 'auto' as const }
           : prepareChatToolStep(options)
-        : ({ stepNumber }) =>
-        stepNumber === 0
+        : options.stepNumber === 0
           ? { toolChoice: { type: 'tool' as const,
             toolName: CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'] } }
-          : { toolChoice: 'none' as const },
+          : { toolChoice: 'none' as const }
+      },
       timeout: { stepMs: 15_000 },
       maxRetries: 0,
       ...(abortSignal === undefined ? {} : { abortSignal }),
       onError: event => { modelFailure = event.error },
-      onStepEnd: (step) => {
+      onStepEnd: async (step) => {
         completedSteps.push({ toolResults: step.toolResults.map(result => ({
           toolName: result.toolName,
           output: searchOutputs.has(result.toolCallId)
@@ -172,6 +177,7 @@ export async function streamDurableChatResponse(
             && 'kind' in result.output && result.output.kind === 'needs_authority')) {
           ownerApprovalPending = true
         }
+        await modelCost.onStepEnd(step)
       },
     },
     {
@@ -297,6 +303,7 @@ export async function streamDurableChatResponse(
     try {
       const final = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
         promptMessageId: args.promptMessageId,
+        ...chatModelCostHooks(ctx, args.searchTurn, 'final_answer'),
         tools: {},
         timeout: { totalMs: 12_000 },
         maxRetries: 0,

@@ -4,6 +4,9 @@ import { jevDecisionOptions } from '../../decision/jevDecisionOptions'
 import { MIN_MODEL_CONFIDENCE, routeSelection } from '@/modules/capability-execution/route-selection'
 import { jevDiscoveryRecipient } from '@/modules/decision-engine/public'
 import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
+import type { ChatModelCostBinding } from '@/modules/chat/model-cost'
+import type { ActionCtx } from '../../../_generated/server'
+import { createJevModelCostObserver } from '../turns/jevModelCost'
 
 type RecommendToolInput = Readonly<{
   catalogue: ToolChoiceSearchOutput
@@ -12,6 +15,7 @@ type RecommendToolInput = Readonly<{
   threadId: string
   promptMessageId: string
   signal?: AbortSignal
+  modelCostBinding?: ChatModelCostBinding
 }>
 type RecommendationDecision = Readonly<{
   kind: 'chat_recommend'
@@ -39,7 +43,7 @@ function withinSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   return Promise.race([work, promise]).finally(() => signal.removeEventListener('abort', abort))
 }
 
-export async function recommendTool(input: RecommendToolInput): Promise<RecommendationResult> {
+export async function recommendTool(input: RecommendToolInput, ctx?: Pick<ActionCtx, 'runMutation'>): Promise<RecommendationResult> {
   if (input.catalogue.kind !== 'match' && input.catalogue.kind !== 'scoped') {
     return { recommendation: null, decision: null }
   }
@@ -54,7 +58,14 @@ export async function recommendTool(input: RecommendToolInput): Promise<Recommen
   if (candidates.length === 0) return { recommendation: null, decision: null }
 
   try {
-    const baseOptions = jevDecisionOptions(1_000)
+    if (input.modelCostBinding !== undefined && ctx === undefined) throw new Error('jev_cost_context_required')
+    const baseOptions = {
+      ...jevDecisionOptions(1_000),
+      purpose: 'discovery' as const,
+      ...(input.modelCostBinding === undefined || ctx === undefined ? {} : {
+        inferenceObserver: createJevModelCostObserver(ctx, input.modelCostBinding, 'discovery_recommendation'),
+      }),
+    }
     const options = input.signal === undefined || baseOptions.signal === undefined
       ? baseOptions
       : { ...baseOptions, signal: AbortSignal.any([baseOptions.signal, input.signal]) }

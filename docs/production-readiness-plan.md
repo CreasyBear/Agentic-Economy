@@ -533,3 +533,96 @@ The GitHub-hosted job has not yet run. Authentication, Provider, CDP, screening
 and RPC remain external fixtures in this native packet; it is not the deployed
 Sepolia journey or a live-money drill. The isolated local proof stack is removed
 after acceptance, preserving the existing development stack and its data.
+
+## Stage 19 — cost of a durable chat answer (#278)
+
+Design thesis: an answer has one attributable USD model-cost record assembled
+from its actual requests, with missing evidence visible. Sluice routes this as
+cross-boundary work. The design review uses the non-interactive AFK fallback;
+the interview is skipped. Integrity is strong: request observations, the turn
+summary and the immutable Call-origin join all serve that thesis.
+
+Requires: a durable turn, its matching thread/prompt and a stable request identity
+before outbound inference. Internal observations must contain only bounded model
+identifiers, nonnegative safe token counts and finite nonnegative reported USD
+amounts. Ensures: each SDK step and each Jev discovery request is recorded before
+I/O; completion enriches that record idempotently, including after cancellation.
+Invariant: unknown is never zero; a reported zero is valid; one request and one
+provider generation contribute at most once; a Call retains its originating turn
+on replay; multiple Calls show one answer total. Buyer charges, Provider earnings
+and USDC settlement remain separate facts. On violation: invalid identity/material
+is rejected before outbound I/O or enrichment; a failed completion write leaves
+the durable request visibly pending. Failed/absent provider usage stays unpriced.
+
+Use one indexed child table and existing Convex transactions. Each request has
+one of pending, unpriced (reason), or priced (exact decimal USD and evidence
+source) states. Decimal.js is already installed; bound each amount to 18 integer
+and 30 fractional digits and sum at most 256 rows with 64-digit precision. More
+rows produce an explicitly incomplete bounded report. A tracking-version marker
+on newly created turns distinguishes a completed, genuinely zero-request Card
+Run from historical turns without coverage. Anonymous and legacy generation
+without a durable turn remain outside this first report.
+
+Existing AI SDK hooks observe initial, immediate-explanation and final-answer
+requests. Its notification callbacks swallow errors, so persist starts from the
+awaited prepareStep boundary and compose existing selection logic. Keep zero SDK
+retries; a new SDK call is a new potential cost. Jev's existing fetch adapter
+observes actual discovery attempts; its token-only result remains unpriced.
+Do not retain prompts, raw provider bodies, credentials or arbitrary error text.
+OpenRouter generation IDs need provider provenance (the response header), since
+an SDK response ID can be synthetic. Bounded scheduled metadata lookups may price
+an observed generation after completion; failure remains visible and never
+repeats generation. No inferred token-price estimate or AUD conversion.
+
+Complexity decision: keep a single cost domain helper, one table, one transaction
+module with thin registrations, one shared chat-hook adapter, and a bounded Node
+metadata action. Each has current consumers (three model call paths, Jev and
+operator inspection) and isolates an existing runtime or consistency boundary.
+The cost is one start and completion mutation per inference plus at most three
+metadata lookups for an observed unpriced generation. Console-only measurement
+cannot establish completeness; per-Call totals would duplicate multi-Call spend.
+Reject a billing framework, replacement SDK, model transport, raw-stream parser,
+new dependency, FX service and historical backfill. Existing admin object detail
+is the operator consumer; no additional customer flow is required.
+
+Top risks are missed inference paths, synthetic provider IDs and late/repeated
+observations. Verify single/multi-step and fallback paths, zero-request Card Run,
+failed/aborted streams, duplicate/concurrent writes, later completion, historical
+coverage, immutable Call replay and two Calls sharing one turn. Assert exact USD
+sums, visible unknowns and unchanged financial facts. Root owns integration and
+heavy checks; bounded workers own storage, SDK hooks and Jev propagation. Native
+provider reconciliation remains unverified until an authorized provider run.
+
+Source acceptance — 2026-10-01: durable chat now records initial, immediate
+explanation, final-answer and Jev discovery attempts before provider I/O. Exact
+USD subtotals distinguish pending/unpriced requests, observed zero, historical
+coverage and bounded-read incompleteness. Call reservation stores its original
+turn once; the existing Admin Call page shows the shared answer total, related
+Calls and bounded request evidence. Duplicate/concurrent writes cannot multiply
+cost, and late completion cannot erase the original Account/prompt binding.
+
+The installed SDK can synthesize both response IDs and model names. Generation
+joins therefore require the provider header; a same-as-requested model remains
+labelled requested unless generation metadata establishes its provenance.
+[OpenRouter streaming](https://openrouter.ai/docs/api_reference/streaming) documents
+the generation header; [generation metadata](https://openrouter.ai/docs/api/api-reference/generations/get-generation)
+provides the reported total cost for bounded reconciliation.
+
+Across the final focused runs, **189 tests pass** in 14 files, including actual
+AI SDK/official OpenRouter adapter calls against external response fixtures,
+registered Convex mutations/actions, all three chat request paths, model-free
+Card Run, exact multi-step sums, cancellation, duplicate metadata action delivery,
+three-attempt exhaustion, two Calls sharing one answer and unchanged Call
+financial records. `npm run check` passes with zero dependency cycles. Independent
+review found the SDK model-name provenance gap; its fix has three regression
+cases. React Doctor's stage-scoped score stays 90/100, with no errors and two
+reviewed warnings: a conventional four-column table header and deliberately
+ordered failure observations. Avoiding a generic table abstraction preserves the
+smaller design; no diagnostics were suppressed.
+
+No provider generation, live-money movement or deployment was performed. Native
+OpenRouter billing reconciliation remains runtime evidence work. Anonymous chat
+and historical coverage remain explicitly excluded from complete totals. Full
+Convex codegen needs deployment configuration, absent in this worktree; the local
+API inventory and registration-kind fixture are updated and checked. The release
+gate must run again before merge/release; this stage does not merge or release.

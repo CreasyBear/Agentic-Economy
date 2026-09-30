@@ -344,6 +344,8 @@ export const capabilityCallTables = {
   capabilityCalls: defineTable({
     quoteRef: v.optional(v.string()),
     callRef: v.string(),
+    // Attribution belongs to the first reservation, never to a later replay.
+    chatTurnRef: v.optional(v.string()),
     principalId: v.string(),
     ownerId: v.string(),
     credentialId: v.string(),
@@ -403,6 +405,7 @@ export const capabilityCallTables = {
     createdAt: v.number(),
   })
     .index('by_callRef', ['callRef'])
+    .index('by_chatTurnRef', ['chatTurnRef'])
     .index('by_environment_and_createdAt', ['environment', 'createdAt'])
     .index('by_ownerId_and_buyerSaleTransactionRef', ['ownerId', 'buyerSaleTransactionRef'])
     // Idempotency is keyed by the stable Principal, never by the rotating
