@@ -715,6 +715,33 @@ describe('direct Quote handlers', () => {
     expect(JSON.parse(stored!.rateEvidenceJson!).referenceRate).toEqual(referenceRate)
   })
 
+  it('explains why a read-only Agent cannot quote a paid managed Tool', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await admitDiscoveredToolFixture(backend, { withoutExample: true })
+    const owner = await publishedBusinessOwner(backend, 'read-only-managed-quote')
+    const agent = await seedAgent(backend, owner, fixture.toolRef, 'read-only-managed-quote', '20000000')
+    await backend.run(async ctx => {
+      const principal = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', q => q.eq('principalId', agent.principal.principalId)).unique()
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', q => q.eq('grantRef', agent.grant.grantRef)).unique()
+      if (principal === null || grant === null) throw new Error('quote_agent_missing')
+      await ctx.db.patch(principal._id, { authorityMode: 'read_only' })
+      await ctx.db.patch(grant._id, { authorityMode: 'read_only' })
+    })
+    const result = await backend.mutation(internal.capabilityQuotes.prepareFinancialSubjects,
+      await withSourceWrite('protected_action', {
+        operationKey: 'read-only-managed-quote', correlationId: 'read-only-managed-quote',
+        principal: { ...agent.principal, authorityMode: 'read_only' },
+        toolRef: fixture.toolRef,
+        input: { from: 'UTC', to: 'America/New_York', time: '12:00' },
+      }))
+    expect(result).toEqual({
+      kind: 'refused', code: 'budget_exceeded',
+      reason: 'This Agent is read-only, so it cannot pay for Tools. Give it a monthly budget in Agents to let it spend.',
+    })
+  })
+
   it.each([
     { label: 'revocation', change: 'revocation' },
     { label: 'withdrawal', change: 'withdrawal' },

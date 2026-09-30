@@ -419,7 +419,7 @@ export function projectCallMachineResult(
       toolRef: result.toolRef,
       code: 'authority_required',
       retryable: false,
-      nextAction: 'Ask the Account owner to authorize this exact Call.',
+      nextAction: 'Ask the Account owner to approve this Call at /agent-access.',
       ownerHandoff: {
         kind: 'authorize',
         callRef: result.callRef,

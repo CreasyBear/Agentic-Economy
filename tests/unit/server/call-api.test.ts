@@ -341,6 +341,7 @@ describe('operation.invoke HTTP adapter', () => {
       expect(body).toMatchObject({
         code: 'authority_required',
         retryable: false,
+        nextAction: 'Ask the Account owner to approve this Call at /agent-access.',
         ownerHandoff: { kind: 'authorize', callRef: 'invocation:test', toolRef: operationRef },
       })
     }

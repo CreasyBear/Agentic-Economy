@@ -96,6 +96,12 @@ export async function prepareFinancialSubjectsCore(
   const managedApprovalQuote = pricing.config.kind === 'managed_x402'
     && authority.principal.authorityMode === 'approval_required'
   if (pricing.config.kind === 'managed_x402'
+    && authority.principal.authorityMode === 'read_only') return {
+      kind: 'refused',
+      code: 'budget_exceeded',
+      reason: 'This Agent is read-only, so it cannot pay for Tools. Give it a monthly budget in Agents to let it spend.',
+    }
+  if (pricing.config.kind === 'managed_x402'
     && authority.principal.authorityMode !== 'spending_policy'
     && authority.principal.authorityMode !== 'unrestricted_test_only'
     && !managedApprovalQuote) return { kind: 'refused', code: 'grant_not_found' }
