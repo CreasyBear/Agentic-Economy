@@ -8,6 +8,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { verifyExactEvmX402Settlement } from '@/modules/capability-supply/server'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
+import { callReceiptPaymentProfile } from '@/modules/capability-execution/call-contracts'
 import type { FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money/public'
 const resolvePaidResultFailureResult = v.union(
   v.object({ kind: v.literal('completed') }),
@@ -51,7 +52,9 @@ async function resolvePaidResultFailure(ctx: ActionCtx, args: { callRef: string;
     })
     if (attempt === null || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined
       || attempt.toolRef !== call.toolRef || attempt.inputDigest !== call.inputDigest
-      || attempt.currency !== 'USDC' || attempt.exponent !== 6
+      // The Tool price may be labelled USD; settlement identity is the admitted token.
+      || callReceiptPaymentProfile(call.environment, attempt.network, attempt.asset) === undefined
+      || attempt.exponent !== 6
       || (failureKind === undefined
         ? attempt.transportObservationDigest !== undefined || attempt.quarantinedOutputJson !== undefined
           || attempt.responseStatus !== undefined

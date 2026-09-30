@@ -1539,6 +1539,7 @@ describe('capability Call Workpool lifecycle', () => {
           tokenType: 'api_key' as const,
           id: buyer.principal.credentialId,
           subject: 'user_paid_terminal',
+          claims: { aeEnvironment: buyer.principal.environment },
           scopes: [...buyer.principal.scopes],
         }),
         resolvePrincipal: async () => buyer.principal,
@@ -1714,7 +1715,7 @@ describe('capability Call Workpool lifecycle', () => {
         }
         const first = await runFreshCli(['call', published.toolRef, '--input', JSON.stringify(INPUT), '--idempotency-key', 'paid-recovery-purchase'])
         expect(first).toMatchObject({ status: 1, result: { code: 'call-transport-unknown' } })
-        const recoveryRef = (first.result.detail as { recoveryRef: string }).recoveryRef
+        const recoveryRef = (first.result.refs as { recoveryRef: string }).recoveryRef
         expect(recoveryRef).toEqual(expect.any(String))
         const calls = await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())
         expect(calls).toHaveLength(1)
@@ -1734,7 +1735,10 @@ describe('capability Call Workpool lifecycle', () => {
         expect(status).toMatchObject({ status: 0, result: {
           kind: 'call', ref: callRef, principalRef: buyer.principal.principalId, workState: 'working',
           recovery: { kind: 'found', callRef, state: interruption === 'before claim' ? 'in_progress' : 'reconciliation_required' },
-          next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+          next: [
+            { action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' },
+            { action: 'wait', args: { callRef, afterVersion: expect.any(Number) }, authority: 'same_principal' },
+          ],
         } })
         const cancelled = await runFreshCli(['cancel', callRef, '--idempotency-key', 'paid-recovery-cancel'])
         expect(cancelled, JSON.stringify(cancelled)).toMatchObject({ status: 0, result: {
@@ -1789,6 +1793,7 @@ describe('capability Call Workpool lifecycle', () => {
               tokenType: 'api_key' as const,
               id: buyer.principal.credentialId,
               subject: 'user_paid_recovery',
+              claims: { aeEnvironment: buyer.principal.environment },
               scopes: [...buyer.principal.scopes],
             }),
             resolvePrincipal: async () => buyer.principal,
@@ -1855,6 +1860,7 @@ describe('capability Call Workpool lifecycle', () => {
               tokenType: 'api_key' as const,
               id: buyer.principal.credentialId,
               subject: 'user_paid_recovery',
+              claims: { aeEnvironment: buyer.principal.environment },
               scopes: [...buyer.principal.scopes],
             }),
             resolvePrincipal: async () => buyer.principal,

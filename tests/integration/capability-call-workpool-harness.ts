@@ -138,13 +138,29 @@ async function prepareFundedBuyer(options: PrepareBuyerOptions & {
   mocks: FundedSandboxBuyerMocks
 }, environment: 'sandbox' | 'production') {
   const { external, providerFetch } = options.mocks
-  const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
+  const localGatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
+  const gatewayUrl = environment === 'production' ? 'https://formance-buyer.example.test' : localGatewayUrl
   const ledger = `ae-buyer-${Date.now()}-${process.pid}`
-  // The application path may be production, but this external ledger is the
-  // maintained loopback simulator. Production Formance transport requires HTTPS.
-  const formance = createFormanceContext({ environment: 'sandbox', gatewayUrl, ledger, requestTimeoutMs: 10_000 })
+  // Exercise production configuration and ledger metadata with an explicitly
+  // simulated network boundary. The native ledger remains the loopback service.
+  if (environment === 'production') {
+    expect(['127.0.0.1', 'localhost']).toContain(new URL(localGatewayUrl).hostname)
+    const nativeFetch = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      return url.origin === gatewayUrl
+        ? nativeFetch(new Request(new URL(`${url.pathname}${url.search}`, localGatewayUrl), request))
+        : nativeFetch(request)
+    })
+    vi.stubEnv('AE_FORMANCE_ACCESS_CLIENT_ID', 'fixture-client')
+    vi.stubEnv('AE_FORMANCE_ACCESS_CLIENT_SECRET', 'fixture-secret')
+  }
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', environment === 'production' ? 'production' : 'development')
+  const formance = createFormanceContext({ environment, gatewayUrl, ledger, requestTimeoutMs: 10_000,
+    ...(environment === 'production' ? { accessClientId: 'fixture-client', accessClientSecret: 'fixture-secret' } : {}) })
   expect(await installPackage4FormanceSchema(formance)).toMatchObject({ kind: 'completed' })
-  vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
+  vi.stubEnv('AE_FORMANCE_ENVIRONMENT', environment)
   vi.stubEnv('AE_FORMANCE_GATEWAY_URL', gatewayUrl)
   vi.stubEnv('AE_FORMANCE_LEDGER', ledger)
   vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'buyer-integration-signing-secret-test-32-bytes')
@@ -367,6 +383,8 @@ async function prepareFundedBuyer(options: PrepareBuyerOptions & {
   )
   if (published.kind !== 'published') throw new Error(`buyer_tool_publish:${JSON.stringify(published)}`)
   await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+  // Draining publication work advances fake time; money fixtures use the requested boundary clock.
+  if (options.initialTime !== undefined) vi.setSystemTime(options.initialTime)
   expect(await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: published.publicationRef, expectedRevision: published.publicationRevision, credentialState: 'ready', healthState: 'healthy',
     validUntil: Date.now() + 3_600_000, operationKey: 'buyer-journey:ready', correlationId: 'buyer-journey',

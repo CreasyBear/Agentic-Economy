@@ -35,11 +35,12 @@ const handler = (resolveLostResult as unknown as {
   _handler: (ctx: ActionCtx, input: typeof args) => Promise<unknown>
 })._handler
 
-function context(httpError = false, financialState = 'outcome_unknown') {
-  const retainedAttempt = httpError ? { ...attempt, responseStatus: 500,
+function context(httpError = false, financialState = 'outcome_unknown', currency = 'USDC', assetAddress = asset) {
+  const paymentAttempt = { ...attempt, currency, asset: assetAddress }
+  const retainedAttempt = httpError ? { ...paymentAttempt, responseStatus: 500,
     transportObservationDigest: `sha256:${'e'.repeat(64)}`,
     transportRequestDigest: `sha256:${'f'.repeat(64)}`,
-    paymentObservationDigest: `sha256:${'1'.repeat(64)}` } : attempt
+    paymentObservationDigest: `sha256:${'1'.repeat(64)}` } : paymentAttempt
   const runQuery = vi.fn(async (ref: never) => {
     const name = getFunctionName(ref)
     if (name === 'capabilityCalls:readOwnerRecovery') return call
@@ -73,8 +74,8 @@ describe('operator recovery for a paid Call with a lost response', () => {
     expect(ctx.runMutation).not.toHaveBeenCalled()
     expect(ctx.runAction).not.toHaveBeenCalled()
   })
-  it('verifies the exact original transfer and restores credit without calling or paying the Provider again', async () => {
-    const ctx = context()
+  it.each(['USDC', 'USD'])('verifies the original token transfer for a %s price without paying the Provider again', async currency => {
+    const ctx = context(false, 'outcome_unknown', currency)
     expect(await handler(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'completed' })
     expect(ctx.runAction).toHaveBeenCalledTimes(1)
     expect(getFunctionName(ctx.runAction.mock.calls[0]![0] as never)).toBe('moneyFormance:remedyPaidCall')
@@ -114,11 +115,18 @@ describe('verified paid HTTP error action', () => {
   const resolve = (resolveHttpError as unknown as {
     _handler: (ctx: ActionCtx, input: typeof args) => Promise<unknown>
   })._handler
-  it('accepts a 500 status without quarantined JSON and binds response evidence before ledger work', async () => {
-    const ctx = context(true)
+  it.each(['USDC', 'USD'])('accepts a paid 500 for a %s price and binds response evidence before ledger work', async currency => {
+    const ctx = context(true, 'outcome_unknown', currency)
     expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'completed' })
     expect(ctx.runAction).toHaveBeenCalledTimes(1)
     expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ failureKind: 'http_error' }))
+  })
+  it('refuses a USDC-labelled price on an unadmitted token before chain or ledger work', async () => {
+    const ctx = context(true, 'outcome_unknown', 'USDC', '0x9999999999999999999999999999999999999999')
+    expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'payment_identity_unavailable' })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.runMutation).not.toHaveBeenCalled()
+    expect(ctx.runAction).not.toHaveBeenCalled()
   })
   it.each([200, undefined, 299, 600, 500.5])('refuses ineligible status %s before chain or ledger work', async status => {
     const ctx = context(true)
