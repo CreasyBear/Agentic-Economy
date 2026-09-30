@@ -32,6 +32,7 @@ import {
   readX402EvmReceipt,
 } from './x402Settlement'
 import { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
+import { admitManagedX402Signing } from './x402SigningAdmission'
 import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   currentManagedCustodyConfiguration,
@@ -246,6 +247,10 @@ async function signAndCommitManagedAuthorization(
   const paymentSignature = await createCdpEvmX402PaymentSignature(request, {
     requestFingerprintContext,
     authorityExpiresAt,
+    admitSigning: async (intent) => await admitManagedX402Signing(ctx, {
+      custodyRef: material.custodyRef, authorizationDigest: material.authorizationDigest,
+      custodyGeneration: custodyConfiguration.credentialGeneration,
+    }, intent),
     ...(persistedIntent === undefined
       ? {
           onUnsignedMaterial: async (intent) => {

@@ -21,7 +21,7 @@ export const validateX402ReleaseProofHandler = async (ctx: QueryCtx, args: Infer
           .eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration)).unique(),
     ])
     return call !== null
-      && call.formanceFinancialState === 'reserved'
+      && (call.formanceFinancialState === 'reserved' || call.formanceFinancialState === 'released')
       && call.formanceReservationRefs?.includes(args.reservationRef) === true
       && payment !== null
       && payment.dispatchRef === args.callRef

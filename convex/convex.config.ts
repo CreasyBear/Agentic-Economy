@@ -48,6 +48,8 @@ const app = defineApp({
     AE_X402_CUSTODY_ENABLED: v.optional(v.string()),
     AE_X402_CUSTODY_MAX_ATOMIC: v.optional(v.string()),
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: v.optional(v.string()),
+    AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: v.optional(v.string()),
+    AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: v.optional(v.string()),
     AE_PACKAGE5_WRITES_ENABLED: v.optional(v.string()),
     AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: v.optional(v.string()),
     AE_SUPPLY_MCP_OAUTH_ENABLED: v.optional(v.string()),

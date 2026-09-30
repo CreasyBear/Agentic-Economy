@@ -71,6 +71,8 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_X402_CUSTODY_ENABLED: 'true',
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
+    AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: '100000000',
+    AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: '100000000',
     AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
     STRIPE_SECRET_KEY: 'rk_live_command_example',
     STRIPE_READBACK_KEY: 'rk_live_readback_example',

@@ -118,6 +118,12 @@ const liveGatewaySmokeNames = [
 
 const conditional: readonly RequirementGroup[] = [
   {
+    scope: 'x402-payment', code: 'x402_spend_caps_required', mode: 'all',
+    names: ['AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC',
+      'AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', 'AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC'],
+    trigger: ['AE_X402_CUSTODY_ENABLED', 'CDP_API_KEY_ID'],
+  },
+  {
     scope: 'routing', code: 'route_signing_pair_incomplete', names: ['AE_ROUTE_CALL_SIGNING_SECRET', 'AE_ROUTE_CALL_SIGNING_KEY_ID'], mode: 'all',
     trigger: ['AE_ROUTE_CALL_SIGNING_SECRET', 'AE_ROUTE_CALL_SIGNING_KEY_ID'],
   },
@@ -183,6 +189,7 @@ export const knownNames = Object.freeze([
   'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST',
   'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC',
   'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON',
+  'AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', 'AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC',
   'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT',
   'SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_POSTHOG_KEY',
   'POSTHOG_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
@@ -523,9 +530,12 @@ function validateX402Custody(
   if (enabled !== undefined && enabled !== 'true') {
     add('malformed', 'x402_custody_not_enabled', ['AE_X402_CUSTODY_ENABLED'], 'x402-payment')
   }
-  const maxAtomic = present(environment, 'AE_X402_CUSTODY_MAX_ATOMIC')
-  if (maxAtomic !== undefined && !/^[1-9]\d*$/u.test(maxAtomic)) {
-    add('malformed', 'x402_custody_cap_invalid', ['AE_X402_CUSTODY_MAX_ATOMIC'], 'x402-payment')
+  for (const name of ['AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC',
+    'AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', 'AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC']) {
+    const value = environment[name]
+    if (value !== undefined && value !== '' && !/^[1-9][0-9]{0,77}$/u.test(value)) {
+      add('malformed', 'x402_custody_cap_invalid', [name], 'x402-payment')
+    }
   }
 }
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {

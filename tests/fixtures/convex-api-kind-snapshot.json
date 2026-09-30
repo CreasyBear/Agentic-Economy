@@ -3008,6 +3008,12 @@
   {
     "visibility": "internal",
     "module": "moneyX402PaymentAttempts",
+    "method": "readDefinitiveSigningRejection",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
     "method": "readX402PaymentAttempt",
     "kind": "query"
   },
@@ -3027,6 +3033,18 @@
     "visibility": "internal",
     "module": "moneyX402PaymentAttempts",
     "method": "reconcileX402PaymentAttempt",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "recordDefinitiveSigningRejection",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "recordScreeningAndReserveSigning",
     "kind": "mutation"
   },
   {

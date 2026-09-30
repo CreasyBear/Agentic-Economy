@@ -4,6 +4,7 @@ import { internal } from './_generated/api'
 import { internalMutation, type QueryCtx } from './_generated/server'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
+import { resolveX402SpendReservation } from './lib/money/x402PaymentAttempt/spendResolution'
 
 const owner = (nonce: string) => `expired-unused:${nonce}`
 const proof = {
@@ -96,6 +97,7 @@ export const finish = internalMutation({
         accountingTransactionRefs: [...args.transactionRefs], transactionRef,
       },
     }
+    await resolveX402SpendReservation(ctx, attempt, { kind: 'unused', proof: 'expired_unused', evidenceDigest: args.evidenceDigest })
     await ctx.db.patch(attempt._id, { state: 'observed', settlementStatus: 'not_settled', paymentUnsignedMaterialJson: undefined })
     await ctx.db.patch(obligation._id, { state: 'reversed', updatedAt: now,
       evidenceRefs: [...new Set([...obligation.evidenceRefs, ...args.transactionRefs, args.evidenceDigest])].slice(-32) })

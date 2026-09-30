@@ -537,6 +537,8 @@ import type * as lib_money_x402PaymentAttempt_read from "../lib/money/x402Paymen
 import type * as lib_money_x402PaymentAttempt_reserve from "../lib/money/x402PaymentAttempt/reserve.js";
 import type * as lib_money_x402PaymentAttempt_responseRecovery from "../lib/money/x402PaymentAttempt/responseRecovery.js";
 import type * as lib_money_x402PaymentAttempt_settle from "../lib/money/x402PaymentAttempt/settle.js";
+import type * as lib_money_x402PaymentAttempt_spendAdmission from "../lib/money/x402PaymentAttempt/spendAdmission.js";
+import type * as lib_money_x402PaymentAttempt_spendResolution from "../lib/money/x402PaymentAttempt/spendResolution.js";
 import type * as lib_platform_rateLimit from "../lib/platform/rateLimit.js";
 import type * as lib_platform_scheduledFunctionRetirement from "../lib/platform/scheduledFunctionRetirement.js";
 import type * as lib_platform_workloadCron_admission from "../lib/platform/workloadCron/admission.js";
@@ -1237,6 +1239,8 @@ declare const fullApi: ApiFromModules<{
   "lib/money/x402PaymentAttempt/reserve": typeof lib_money_x402PaymentAttempt_reserve;
   "lib/money/x402PaymentAttempt/responseRecovery": typeof lib_money_x402PaymentAttempt_responseRecovery;
   "lib/money/x402PaymentAttempt/settle": typeof lib_money_x402PaymentAttempt_settle;
+  "lib/money/x402PaymentAttempt/spendAdmission": typeof lib_money_x402PaymentAttempt_spendAdmission;
+  "lib/money/x402PaymentAttempt/spendResolution": typeof lib_money_x402PaymentAttempt_spendResolution;
   "lib/platform/rateLimit": typeof lib_platform_rateLimit;
   "lib/platform/scheduledFunctionRetirement": typeof lib_platform_scheduledFunctionRetirement;
   "lib/platform/workloadCron/admission": typeof lib_platform_workloadCron_admission;

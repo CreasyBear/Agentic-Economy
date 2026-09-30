@@ -37,7 +37,8 @@ import {
 import { cdpX402PolicyRulesDigest, cdpX402ManagedPolicyIsExact } from './cdp-x402-payment-policy'
 import {
   hasPolicy,
-  isRecoverableUnsignedMaterial,
+  isExactUnsignedMaterial,
+  isUnsignedMaterial,
   isSignature,
   paymentAuthorizationExpiryFromValidBefore,
   paymentIdentifier,
@@ -50,11 +51,20 @@ import {
  * intents invoke the official scheme once, persist through onUnsignedMaterial,
  * and only then call CDP's direct typed-data signing endpoint. A persisted
  * intent never invokes the scheme again.
+ * Requires: exact supported USDC material and fresh committed admission.
+ * Ensures: admission precedes CDP, then authority and lifetime are checked again.
+ * Invariant: the frozen intent UUID and canonical material describe the CDP request.
+ * On violation: refuse without signing; actual CDP signing errors propagate.
  */
 export async function createCdpEvmX402PaymentSignature(
   request: X402PaymentSignatureRequest,
   dependencies: CdpX402PaymentSignerDependencies = {},
 ): Promise<string | undefined> {
+  const admitSigning = dependencies.admitSigning
+  if (typeof admitSigning !== 'function') return undefined
+  const persistedIntent = dependencies.persistedIntent === undefined
+    ? undefined
+    : Object.freeze({ ...dependencies.persistedIntent })
   const authorityExpiresAt = dependencies.authorityExpiresAt
   if (
     typeof authorityExpiresAt !== 'number'
@@ -157,7 +167,7 @@ export async function createCdpEvmX402PaymentSignature(
     return degradeBackend(cause, undefined, { site: 'createCdpEvmX402PaymentSignature', reason: 'source_unavailable' })
   }
 
-  let intent = dependencies.persistedIntent
+  let intent = persistedIntent
   let material: CdpX402PaymentUnsignedMaterial | undefined
   if (intent !== undefined) {
     material = readPersistedUnsignedMaterial(
@@ -195,8 +205,16 @@ export async function createCdpEvmX402PaymentSignature(
     throw new Error('x402_payment_unsigned_identity_missing')
   }
   if (
+    !isExactUnsignedMaterial(material, profile, configuration.maxAtomic)
+    || material.authorization.from.toLowerCase() !== account.address.toLowerCase()
+  ) return undefined
+  const signingIntent = boundSigningIntent(material, intent)
+  if (signingIntent === undefined) return undefined
+  if (!await admitExactSigning(signingIntent, admitSigning)) return undefined
+  if (
     material.authorization.validBefore !== material.typedData.message.validBefore
-    || intent.paymentAuthorizationExpiresAt > authorityExpiresAt
+    || signingIntent.paymentAuthorizationExpiresAt > authorityExpiresAt
+    || authorityExpiresAt <= Date.now()
     || Number(material.authorization.validBefore)
       <= Math.floor(Date.now() / 1_000) + X402_MIN_AUTHORIZATION_VALIDITY_SECONDS
   ) return undefined
@@ -206,7 +224,7 @@ export async function createCdpEvmX402PaymentSignature(
     types: material.typedData.types,
     primaryType: material.typedData.primaryType,
     message: material.typedData.message,
-    idempotencyKey: intent.paymentSigningIdempotencyKey,
+    idempotencyKey: signingIntent.paymentSigningIdempotencyKey,
   })
   const signature = signatureResult.signature
   if (!isSignature(signature)) throw new Error('x402_payment_signature_invalid')
@@ -220,28 +238,32 @@ export async function createCdpEvmX402PaymentSignature(
   )
   if (
     identity === undefined
-    || identity.paymentPayer !== intent.paymentPayer
-    || identity.paymentNonce !== intent.paymentNonce
+    || identity.paymentPayer !== signingIntent.paymentPayer
+    || identity.paymentNonce !== signingIntent.paymentNonce
   ) throw new Error('x402_payment_unsigned_identity_conflict')
   return header
 }
 
 /**
  * Forensic replay for an already-persisted signing intent. Unlike normal
- * signing, this permits an historically malformed EIP-712 domain so CDP can
- * replay the exact old request under the same idempotency key. It never builds
- * a payment header or starts provider transport.
+ * signing, this permits expired, valid material under the same idempotency
+ * key after fresh admission. Malformed historical material is refused. It never
+ * builds a payment header or starts provider transport.
  */
 export async function replayCdpX402PaymentSigningIntent(
   intent: CdpX402PaymentSigningIntent,
-  dependencies: Pick<CdpX402PaymentSignerDependencies, 'environment' | 'createClient'> = {},
+  dependencies: Pick<CdpX402PaymentSignerDependencies,
+    'environment' | 'aeEnvironment' | 'createClient' | 'admitSigning'> = {},
 ): Promise<string | undefined> {
+  const admitSigning = dependencies.admitSigning
+  if (typeof admitSigning !== 'function') return undefined
+  intent = Object.freeze({ ...intent })
   if (!isPaymentSigningIdempotencyKey(intent.paymentSigningIdempotencyKey)) return undefined
   let material: CdpX402PaymentUnsignedMaterial
   try {
     const parsed: unknown = JSON.parse(intent.paymentUnsignedMaterialJson)
     if (
-      !isRecoverableUnsignedMaterial(parsed)
+      !isUnsignedMaterial(parsed)
       || containsForbiddenSignatureKey(parsed)
       || stableStringify(parsed as StableHashValue) !== intent.paymentUnsignedMaterialJson
       || canonicalDigest(parsed) !== intent.paymentUnsignedMaterialDigest
@@ -257,37 +279,87 @@ export async function replayCdpX402PaymentSigningIntent(
   }
   const configuration = cdpX402CustodyConfigurationFromEnvironment(dependencies.environment)
   if (configuration === undefined) return undefined
-  const cdp = dependencies.createClient?.(configuration)
-    ?? (new CdpClient({
-      apiKeyId: configuration.apiKeyId,
-      apiKeySecret: configuration.apiKeySecret,
-      walletSecret: configuration.walletSecret,
-    }) as CdpClientLike)
-  const [accountPolicy, projectPolicy] = await Promise.all([
-    cdp.policies.getPolicyById({ id: configuration.accountPolicyId }),
-    cdp.policies.getPolicyById({ id: configuration.projectPolicyId }),
-  ])
+  const profile = x402PaymentProfileForEnvironment(
+    dependencies.aeEnvironment ?? 'production',
+  )
   if (
-    accountPolicy.id.toLowerCase() !== configuration.accountPolicyId
-    || accountPolicy.scope !== 'account'
-    || projectPolicy.id.toLowerCase() !== configuration.projectPolicyId
-    || projectPolicy.scope !== 'project'
-    || cdpX402PolicyRulesDigest(accountPolicy, projectPolicy) !== configuration.policyRulesDigest
+    profile === undefined
+    || !isExactUnsignedMaterial(material, profile, configuration.maxAtomic)
   ) return undefined
-  const account = await cdp.evm.getAccount({ name: configuration.accountName })
-  if (
-    !hasPolicy(account.policies, configuration.accountPolicyId)
-    || !hasPolicy(account.policies, configuration.projectPolicyId)
-    || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
-    || account.address.toLowerCase() !== intent.paymentPayer
-  ) return undefined
+  const signingIntent = boundSigningIntent(material, intent)
+  if (signingIntent === undefined) return undefined
+  let cdp: CdpClientLike
+  let account: Awaited<ReturnType<CdpClientLike['evm']['getAccount']>>
+  try {
+    cdp = dependencies.createClient?.(configuration)
+      ?? (new CdpClient({
+        apiKeyId: configuration.apiKeyId,
+        apiKeySecret: configuration.apiKeySecret,
+        walletSecret: configuration.walletSecret,
+      }) as CdpClientLike)
+    const [accountPolicy, projectPolicy] = await Promise.all([
+      cdp.policies.getPolicyById({ id: configuration.accountPolicyId }),
+      cdp.policies.getPolicyById({ id: configuration.projectPolicyId }),
+    ])
+    if (
+      accountPolicy.id.toLowerCase() !== configuration.accountPolicyId
+      || accountPolicy.scope !== 'account'
+      || projectPolicy.id.toLowerCase() !== configuration.projectPolicyId
+      || projectPolicy.scope !== 'project'
+      || cdpX402PolicyRulesDigest(accountPolicy, projectPolicy) !== configuration.policyRulesDigest
+    ) return undefined
+    account = await cdp.evm.getAccount({ name: configuration.accountName })
+    if (
+      !hasPolicy(account.policies, configuration.accountPolicyId)
+      || !hasPolicy(account.policies, configuration.projectPolicyId)
+      || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
+      || account.address.toLowerCase() !== signingIntent.paymentPayer
+      || !cdpX402ManagedPolicyIsExact(
+        accountPolicy,
+        projectPolicy,
+        account.address,
+        configuration.maxAtomic.toString(),
+        profile.aeEnvironment,
+      )
+    ) return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'replayCdpX402PaymentSigningIntent', reason: 'source_unavailable' })
+  }
+  if (!await admitExactSigning(signingIntent, admitSigning)) return undefined
   const result = await cdp.evm.signTypedData({
     address: account.address,
     domain: material.typedData.domain,
     types: material.typedData.types,
     primaryType: material.typedData.primaryType,
     message: material.typedData.message,
-    idempotencyKey: intent.paymentSigningIdempotencyKey,
+    idempotencyKey: signingIntent.paymentSigningIdempotencyKey,
   })
   return isSignature(result.signature) ? result.signature : undefined
+}
+
+/** Snapshot the exact intent: admission cannot mutate its UUID or canonical material. */
+function boundSigningIntent(
+  material: CdpX402PaymentUnsignedMaterial,
+  intent: CdpX402PaymentSigningIntent,
+): CdpX402PaymentSigningIntent | undefined {
+  const bound = intentFromMaterial(
+    material,
+    intent.paymentSigningIdempotencyKey,
+    intent.requestFingerprint,
+  )
+  return stableStringify(bound as StableHashValue) === stableStringify(intent as StableHashValue)
+    ? bound
+    : undefined
+}
+
+/** Callback refusal/failure has no CDP side effect and cannot be a CDP rejection. */
+async function admitExactSigning(
+  intent: CdpX402PaymentSigningIntent,
+  admitSigning: NonNullable<CdpX402PaymentSignerDependencies['admitSigning']>,
+): Promise<boolean> {
+  try {
+    return await admitSigning(Object.freeze({ ...intent })) === true
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'admitCdpX402PaymentSigning', reason: 'source_unavailable' })
+  }
 }

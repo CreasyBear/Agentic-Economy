@@ -32,6 +32,7 @@ type FailedAuthorizationAttempt = Readonly<{
 }>
 
 type FailedAuthorizationReceipt = Awaited<ReturnType<typeof readX402EvmReceipt>>
+type VerifiedX402Settlement = 'settled' | 'expired_unused' | 'authorization_cancelled'
 
 export type X402EvidencePreparation =
   | Readonly<{ kind: 'not_found' }>
@@ -77,11 +78,12 @@ export async function prepareX402RecoveryEvidence(
     recordX402RecoveryStage(submitted, 'retained_status_not_chargeable')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
-  if (!await verifySettlement(work, submitted)) {
+  const verifiedSettlement = await verifySettlement(work, submitted)
+  if (verifiedSettlement === undefined) {
     recordX402RecoveryStage(submitted, 'settlement_verification_failed')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
-  if (!await persistX402Money(ctx, work, submitted, facts.observedAt)) {
+  if (!await persistX402Money(ctx, work, submitted, facts.observedAt, verifiedSettlement)) {
     recordX402RecoveryStage(submitted, 'money_reconciliation_failed')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
@@ -233,9 +235,9 @@ function submittedDigestMatches(submitted: X402Evidence): boolean {
   return canonicalDigest(material as StableHashValue) === digest
 }
 
-async function verifySettlement(work: RecoveryWorkContext, submitted: X402Evidence): Promise<boolean> {
+async function verifySettlement(work: RecoveryWorkContext, submitted: X402Evidence): Promise<VerifiedX402Settlement | undefined> {
   const attempt = work.x402Attempt
-  if (attempt === null || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return false
+  if (attempt === null || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return undefined
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   try {
     const receipt = await readX402EvmReceipt(
@@ -263,8 +265,8 @@ function settlementReceiptMatches(
   submitted: X402Evidence,
   receipt: Awaited<ReturnType<typeof readX402EvmReceipt>> | undefined,
   aeEnvironment: RecoveryWorkContext['recovered']['environment'],
-): boolean {
-  if (attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return false
+): VerifiedX402Settlement | undefined {
+  if (attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return undefined
   const verification = {
     aeEnvironment,
     response: {
@@ -285,9 +287,9 @@ function settlementReceiptMatches(
     paymentNonce: attempt.paymentNonce,
   }
   if (submitted.settlementStatus === 'settled') {
-    return verifyExactEvmX402Settlement({ ...verification, receipt })
+    return verifyExactEvmX402Settlement({ ...verification, receipt }) ? 'settled' : undefined
   }
-  return failedX402SettlementVerified(verification, attempt, receipt)
+  return failedX402SettlementProof(verification, attempt, receipt)
 }
 
 export function failedX402SettlementVerified(
@@ -295,12 +297,20 @@ export function failedX402SettlementVerified(
   attempt: FailedAuthorizationAttempt,
   receipt: FailedAuthorizationReceipt,
 ): boolean {
+  return failedX402SettlementProof(verification, attempt, receipt) !== undefined
+}
+
+function failedX402SettlementProof(
+  verification: Omit<Parameters<typeof verifyExactEvmX402Settlement>[0], 'receipt'>,
+  attempt: FailedAuthorizationAttempt,
+  receipt: FailedAuthorizationReceipt,
+): Exclude<VerifiedX402Settlement, 'settled'> | undefined {
   const disposition = failedX402SettlementAuthorizationDisposition(
     attempt,
     receipt,
     verification.aeEnvironment,
   )
-  if (disposition === 'cancelled') return true
+  if (disposition === 'cancelled') return 'authorization_cancelled'
   return disposition === 'expired'
     && receipt?.status === 'reverted'
     && receipt.authorizationState === false
@@ -310,7 +320,7 @@ export function failedX402SettlementVerified(
         ? {}
         : { paymentAuthorizationExpiresAt: attempt.paymentAuthorizationExpiresAt }),
       receipt,
-    })
+    }) ? 'expired_unused' : undefined
 }
 
 /**
@@ -352,6 +362,7 @@ async function persistX402Money(
   work: RecoveryWorkContext,
   submitted: X402Evidence,
   observedAt: number,
+  verifiedSettlement: VerifiedX402Settlement,
 ): Promise<boolean> {
   const payment = await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, {
     dispatchRef: work.recovered.callRef,
@@ -365,6 +376,7 @@ async function persistX402Money(
     paymentIdentifier: submitted.paymentIdentifier,
     challengeDigest: submitted.challengeDigest,
     settlementStatus: submitted.settlementStatus,
+    ...(verifiedSettlement === 'settled' ? {} : { paymentUnusedProof: verifiedSettlement }),
     amountUnits: submitted.amount.units,
     currency: submitted.amount.currency,
     exponent: submitted.amount.exponent,

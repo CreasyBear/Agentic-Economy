@@ -121,6 +121,7 @@ export type ReconcileArgs = {
   paymentIdentifier: string
   challengeDigest: string
   settlementStatus: 'settled' | 'not_settled'
+  paymentUnusedProof?: 'expired_unused' | 'authorization_cancelled'
   amountUnits: string
   currency: string
   exponent: number

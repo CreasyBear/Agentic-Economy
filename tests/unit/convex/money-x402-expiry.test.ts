@@ -35,6 +35,8 @@ const payment = {
   paymentPayer: '0x1111111111111111111111111111111111111111',
   paymentNonce: nonce, paymentIdentityDigest: identity, paymentAuthorizationExpiresAt: now - 60_000,
   evidenceRefs: [], settlementStatus: 'unknown' as const,
+  spendReservationRef: 'spend:expiry', paymentUnsignedMaterialDigest: identity,
+  paymentSigningIdempotencyKey: '11111111-1111-4111-8111-111111111111',
 }
 const call = {
   callRef, toolRef, ownerId: 'account:expiry', principalId: 'principal:expiry', credentialId: 'credential:expiry',
@@ -64,6 +66,16 @@ async function fixture() {
   await backend.run(async ctx => {
     await ctx.db.insert('capabilityCalls', call)
     await ctx.db.insert('moneyX402PaymentAttempts', payment)
+    await ctx.db.insert('moneyX402SpendReservations', {
+      reservationRef: payment.spendReservationRef, platformBudgetRef: 'platform:sandbox',
+      custodyBudgetRef: 'wallet:sandbox', custodyRef: payment.custodyRef, custodyGeneration: 1,
+      environment: 'sandbox', network: payment.network, asset: payment.asset.toLowerCase(), currency: 'USDC', exponent: 6,
+      dispatchRef: callRef, attemptRef, effectGeneration: 1, authorizationDigest: payment.authorizationDigest,
+      paymentIdentityDigest: identity, paymentUnsignedMaterialDigest: payment.paymentUnsignedMaterialDigest,
+      paymentSigningIdempotencyKey: payment.paymentSigningIdempotencyKey, typedDataDigest: identity,
+      normalizedPayTo: payment.payTo, amountUnits: payment.amountUnits, reservedAt: payment.preparedAt,
+      policyRevision: 'policy:expiry', initialScreeningCheckRef: 'check:expiry', state: 'liability',
+    })
     await ctx.db.insert('moneyProviderObligations', {
       obligationRef: 'obligation:expiry', callRef, toolRef, providerRef: 'provider:expiry', buyerAccountRef: call.ownerId,
       buyerAsset: 'AUD', buyerExponent: 6, buyerAmountUnits: '1408', providerAsset: 'USDC', providerExponent: 6,
@@ -156,6 +168,8 @@ describe('expired unused authorization claims', () => {
     expect(rows.attempt).toMatchObject({ settlementStatus: 'not_settled' })
     expect(rows.obligation).toMatchObject({ state: 'reversed' })
     expect(rows.activity).toMatchObject([{ state: 'refused', paymentState: 'released', deliveryState: 'not_delivered' }])
+    expect(await backend.run(async ctx => await ctx.db.query('moneyX402SpendReservations').first()))
+      .toMatchObject({ state: 'unused', unusedProof: 'expired_unused', resolvedAt: now, resolutionEvidenceDigest: evidenceDigest })
   })
 })
 

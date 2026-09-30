@@ -26,6 +26,7 @@ import {
   decimalAtomicAmount,
   isEip3009Nonce,
   isEvmAddress,
+  isExactUnsignedMaterial,
   isSignature,
   isUnsignedMaterial,
   normalizeTypedDataRecord,
@@ -116,7 +117,10 @@ export async function captureUnsignedMaterial(
         message: { ...capturedTypedData.message, validBefore },
       },
     }
-    if (containsForbiddenSignatureKey(material)) return undefined
+    if (
+      containsForbiddenSignatureKey(material)
+      || !isExactUnsignedMaterial(material, profile)
+    ) return undefined
     canonicalDigest(material as StableHashValue)
     return JSON.parse(stableStringify(material as StableHashValue)) as CdpX402PaymentUnsignedMaterial
   } catch (cause) {
@@ -190,7 +194,7 @@ export function intentFromMaterial(
     || material.authorization.validBefore !== expiry.paymentAuthorizationValidBefore
   ) throw new Error('x402_payment_authorization_expiry_invalid')
   const paymentUnsignedMaterialJson = stableStringify(material as StableHashValue)
-  return {
+  return Object.freeze({
     paymentUnsignedMaterialJson,
     paymentUnsignedMaterialDigest: canonicalDigest(material as StableHashValue),
     paymentSigningIdempotencyKey,
@@ -198,7 +202,7 @@ export function intentFromMaterial(
     paymentNonce: material.authorization.nonce.toLowerCase(),
     ...expiry,
     requestFingerprint,
-  }
+  })
 }
 
 export function paymentPayloadFromMaterial(

@@ -182,6 +182,7 @@ function makeDependencies(options: Readonly<{
   }>
   persistedIntent?: CdpX402PaymentSigningIntent
   onUnsignedMaterial?: (intent: CdpX402PaymentSigningIntent) => Promise<void> | void
+  admitSigning?: (intent: CdpX402PaymentSigningIntent) => Promise<boolean>
   environment?: Readonly<Record<string, string | undefined>>
   aeEnvironment?: X402AeEnvironment
   authorityExpiresAt?: number
@@ -233,6 +234,7 @@ function makeDependencies(options: Readonly<{
         ...options.environment,
       },
       createClient,
+      admitSigning: options.admitSigning ?? (async () => true),
       authorityExpiresAt: options.authorityExpiresAt ?? Date.now() + 300_000,
       ...(options.aeEnvironment === undefined ? {} : { aeEnvironment: options.aeEnvironment }),
       ...(options.persistedIntent === undefined ? {} : { persistedIntent: options.persistedIntent }),
@@ -414,6 +416,13 @@ describe('CDP x402 custody signer', () => {
         order.push('persist')
         intent = captured
       },
+      admitSigning: vi.fn(async (admitted) => {
+        order.push('admit')
+        expect(admitted).toEqual(intent)
+        expect(admitted).not.toBe(intent)
+        expect(Object.isFrozen(admitted)).toBe(true)
+        return true
+      }),
     })
     fixture.signTypedData.mockImplementation(async (_input: SignTypedDataInput) => {
       order.push('cdp')
@@ -426,7 +435,7 @@ describe('CDP x402 custody signer', () => {
     })
 
     expect(header).toEqual(expect.any(String))
-    expect(order).toEqual(['persist', 'cdp'])
+    expect(order).toEqual(['persist', 'admit', 'cdp'])
     expect(intent?.paymentSigningIdempotencyKey).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     )
@@ -730,7 +739,7 @@ describe('CDP x402 custody signer', () => {
     expect(canonicalDigest(firstHeader)).toBe(canonicalDigest(secondHeader))
   })
 
-  it('forensically replays an old schema-invalid domain without admitting it to normal signing', async () => {
+  it('refuses an old schema-invalid domain in forensic replay and normal signing', async () => {
     let persisted: CdpX402PaymentSigningIntent | undefined
     const first = makeDependencies({ onUnsignedMaterial: (intent) => { persisted = intent } })
     await createCdpEvmX402PaymentSignature(request, {
@@ -750,11 +759,8 @@ describe('CDP x402 custody signer', () => {
     const replay = makeDependencies()
 
     await expect(replayCdpX402PaymentSigningIntent(staleIntent, replay.dependencies))
-      .resolves.toBe(SIGNATURE)
-    expect(replay.signTypedData).toHaveBeenCalledWith(expect.objectContaining({
-      domain: expect.objectContaining({ chainId: '8453' }),
-      idempotencyKey: staleIntent.paymentSigningIdempotencyKey,
-    }))
+      .resolves.toBeUndefined()
+    expect(replay.signTypedData).not.toHaveBeenCalled()
     await expect(createCdpEvmX402PaymentSignature(request, {
       ...replay.dependencies,
       persistedIntent: staleIntent,
@@ -800,6 +806,204 @@ describe('CDP x402 custody signer', () => {
       requestFingerprintContext: fingerprintContext,
     })).rejects.toThrow('x402_payment_unsigned_identity_conflict')
     expect(retry.signTypedData).not.toHaveBeenCalled()
+  })
+
+  it.each(['absent', 'denied', 'throw', 'cdp-looking throw'] as const)(
+    'requires fresh admission on normal signing and replay: %s',
+    async (mode) => {
+      let persisted: CdpX402PaymentSigningIntent | undefined
+      const first = makeDependencies({ onUnsignedMaterial: (intent) => { persisted = intent } })
+      await createCdpEvmX402PaymentSignature(request, {
+        ...first.dependencies,
+        requestFingerprintContext: fingerprintContext,
+      })
+      if (persisted === undefined) throw new Error('test intent was not persisted')
+      const admitSigning = mode === 'absent' ? undefined : vi.fn(async () => {
+        if (mode === 'denied') return false
+        if (mode === 'cdp-looking throw') {
+          throw Object.assign(new Error('policy rejected'), { statusCode: 403, errorType: 'policy_violation' })
+        }
+        throw new Error('admission unavailable')
+      })
+      const fixture = makeDependencies({ persistedIntent: persisted })
+      const dependencies = { ...fixture.dependencies, requestFingerprintContext: fingerprintContext }
+      delete dependencies.admitSigning
+      if (admitSigning !== undefined) dependencies.admitSigning = admitSigning
+
+      await expect(createCdpEvmX402PaymentSignature(request, dependencies)).resolves.toBeUndefined()
+      await expect(replayCdpX402PaymentSigningIntent(persisted, dependencies)).resolves.toBeUndefined()
+      expect(fixture.signTypedData).not.toHaveBeenCalled()
+      if (admitSigning !== undefined) expect(admitSigning).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('keeps admission intent frozen and binds its exact copy to CDP material', async () => {
+    let persisted: CdpX402PaymentSigningIntent | undefined
+    let admitted: CdpX402PaymentSigningIntent | undefined
+    const fixture = makeDependencies({
+      onUnsignedMaterial: (intent) => { persisted = intent },
+      admitSigning: vi.fn(async (intent) => {
+        admitted = intent
+        expect(Object.isFrozen(intent)).toBe(true)
+        expect(Reflect.set(intent, 'paymentSigningIdempotencyKey', PROJECT_POLICY_ID)).toBe(false)
+        expect(Reflect.set(intent, 'paymentUnsignedMaterialJson', '{}')).toBe(false)
+        expect(Reflect.set(intent, 'paymentUnsignedMaterialDigest', canonicalDigest({}))).toBe(false)
+        return true
+      }),
+    })
+
+    expect(await createCdpEvmX402PaymentSignature(request, fixture.dependencies)).toEqual(expect.any(String))
+    expect(fixture.dependencies.admitSigning).toHaveBeenCalledTimes(1)
+    expect(admitted).toEqual(persisted)
+    expect(admitted).not.toBe(persisted)
+    const material = JSON.parse(admitted?.paymentUnsignedMaterialJson ?? '{}') as {
+      typedData: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, unknown> }
+    }
+    expect(admitted?.paymentUnsignedMaterialDigest).toBe(canonicalDigest(material))
+    expect(fixture.signTypedData).toHaveBeenCalledWith({
+      address: account.address,
+      ...material.typedData,
+      idempotencyKey: admitted?.paymentSigningIdempotencyKey,
+    })
+  })
+
+  it('rechecks authorization lifetime after awaited admission before calling CDP', async () => {
+    vi.useFakeTimers()
+    try {
+      const now = 1_800_000_000_000
+      vi.setSystemTime(now)
+      let completeAdmission: ((admitted: boolean) => void) | undefined
+      const admission = new Promise<boolean>((resolve) => { completeAdmission = resolve })
+      const admitSigning = vi.fn(() => admission)
+      const fixture = makeDependencies({ authorityExpiresAt: now + 30_000, admitSigning })
+      const result = createCdpEvmX402PaymentSignature(request, fixture.dependencies)
+      await vi.waitFor(() => expect(admitSigning).toHaveBeenCalledTimes(1))
+      vi.setSystemTime(now + 31_000)
+      completeAdmission?.(true)
+
+      await expect(result).resolves.toBeUndefined()
+      expect(fixture.signTypedData).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each([
+    ['typed to', 'message', 'to', otherAccount.address],
+    ['typed from', 'message', 'from', otherAccount.address],
+    ['typed amount', 'message', 'value', '10001'],
+    ['typed validAfter', 'message', 'validAfter', '1'],
+    ['typed validBefore', 'message', 'validBefore', '9999999999'],
+    ['typed nonce', 'message', 'nonce', `0x${'ff'.repeat(32)}`],
+    ['domain chain', 'domain', 'chainId', 84532],
+    ['domain contract', 'domain', 'verifyingContract', BASE_SEPOLIA_USDC_ADDRESS],
+    ['domain name', 'domain', 'name', 'Other coin'],
+    ['domain version', 'domain', 'version', '3'],
+    ['domain extra field', 'domain', 'salt', `0x${'ff'.repeat(32)}`],
+    ['message extra field', 'message', 'other', '10000'],
+    ['primary type', 'typedData', 'primaryType', 'Permit'],
+    ['typed schema', 'typedData', 'types', { TransferWithAuthorization: [{ name: 'to', type: 'address' }] }],
+  ] as const)('refuses resealed %s divergence in normal signing and replay', async (_label, section, field, value) => {
+    let persisted: CdpX402PaymentSigningIntent | undefined
+    const first = makeDependencies({ onUnsignedMaterial: (intent) => { persisted = intent } })
+    await createCdpEvmX402PaymentSignature(request, {
+      ...first.dependencies,
+      requestFingerprintContext: fingerprintContext,
+    })
+    if (persisted === undefined) throw new Error('test intent was not persisted')
+    const material = JSON.parse(persisted.paymentUnsignedMaterialJson) as {
+      typedData: { domain: Record<string, unknown>; message: Record<string, unknown>; [key: string]: unknown }
+    }
+    const record = section === 'typedData' ? material.typedData : material.typedData[section]
+    record[field] = value
+    const changed = {
+      ...persisted,
+      paymentUnsignedMaterialJson: stableStringify(material as StableHashValue),
+      paymentUnsignedMaterialDigest: canonicalDigest(material),
+    }
+    const admitSigning = vi.fn(async () => true)
+    const fixture = makeDependencies({ persistedIntent: changed, admitSigning })
+    const result = await createCdpEvmX402PaymentSignature(request, {
+      ...fixture.dependencies,
+      requestFingerprintContext: fingerprintContext,
+    }).catch((cause: unknown) => {
+      expect(cause).toEqual(new Error('x402_payment_unsigned_identity_conflict'))
+      return undefined
+    })
+
+    expect(result).toBeUndefined()
+    await expect(replayCdpX402PaymentSigningIntent(changed, fixture.dependencies)).resolves.toBeUndefined()
+    expect(admitSigning).not.toHaveBeenCalled()
+    expect(fixture.signTypedData).not.toHaveBeenCalled()
+  })
+
+  it('replays expired valid material only after fresh admission with the same UUID and material', async () => {
+    vi.useFakeTimers()
+    try {
+      const now = 1_800_000_000_000
+      vi.setSystemTime(now)
+      let persisted: CdpX402PaymentSigningIntent | undefined
+      const first = makeDependencies({ onUnsignedMaterial: (intent) => { persisted = intent } })
+      await createCdpEvmX402PaymentSignature(request, first.dependencies)
+      if (persisted === undefined) throw new Error('test intent was not persisted')
+      vi.setSystemTime(now + 300_000)
+      const order: string[] = []
+      const admitSigning = vi.fn(async (intent: CdpX402PaymentSigningIntent) => {
+        order.push('admit')
+        expect(intent).toEqual(persisted)
+        expect(Object.isFrozen(intent)).toBe(true)
+        return true
+      })
+      const replay = makeDependencies({ admitSigning })
+      replay.signTypedData.mockImplementation(async () => {
+        order.push('cdp')
+        return { signature: SIGNATURE }
+      })
+
+      await expect(replayCdpX402PaymentSigningIntent(persisted, replay.dependencies)).resolves.toBe(SIGNATURE)
+      expect(order).toEqual(['admit', 'cdp'])
+      expect(admitSigning).toHaveBeenCalledTimes(1)
+      expect(replay.signTypedData.mock.calls[0]?.[0]).toEqual(first.signTypedData.mock.calls[0]?.[0])
+      const crossed = makeDependencies({ aeEnvironment: 'sandbox', admitSigning })
+      await expect(replayCdpX402PaymentSigningIntent(persisted, crossed.dependencies)).resolves.toBeUndefined()
+      expect(crossed.signTypedData).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['policy', 'account'] as const)(
+    'refuses a CDP-looking %s preparation error without treating it as a signing rejection',
+    async (boundary) => {
+      let persisted: CdpX402PaymentSigningIntent | undefined
+      const first = makeDependencies({ onUnsignedMaterial: (intent) => { persisted = intent } })
+      await createCdpEvmX402PaymentSignature(request, first.dependencies)
+      if (persisted === undefined) throw new Error('test intent was not persisted')
+      const rejection = Object.assign(new Error('policy rejected'), { statusCode: 403, errorType: 'policy_violation' })
+      const admitSigning = vi.fn(async () => true)
+      const fixture = makeDependencies({
+        admitSigning,
+        ...(boundary === 'policy' ? { getPolicy: () => { throw rejection } } : {}),
+      })
+      if (boundary === 'account') fixture.getAccount.mockRejectedValue(rejection)
+
+      await expect(createCdpEvmX402PaymentSignature(request, fixture.dependencies)).resolves.toBeUndefined()
+      await expect(replayCdpX402PaymentSigningIntent(persisted, fixture.dependencies)).resolves.toBeUndefined()
+      expect(admitSigning).not.toHaveBeenCalled()
+      expect(fixture.signTypedData).not.toHaveBeenCalled()
+    },
+  )
+
+  it('propagates real CDP rejection after admission so recovery retains its original evidence', async () => {
+    let persisted: CdpX402PaymentSigningIntent | undefined
+    const fixture = makeDependencies({ onUnsignedMaterial: (intent) => { persisted = intent } })
+    const rejection = Object.assign(new Error('CDP policy rejected'), { statusCode: 403 })
+    fixture.signTypedData.mockRejectedValue(rejection)
+
+    await expect(createCdpEvmX402PaymentSignature(request, fixture.dependencies)).rejects.toBe(rejection)
+    if (persisted === undefined) throw new Error('test intent was not persisted')
+    await expect(replayCdpX402PaymentSigningIntent(persisted, fixture.dependencies)).rejects.toBe(rejection)
+    expect(fixture.signTypedData).toHaveBeenCalledTimes(2)
   })
 
   it('returns only safe authorization identity when inspecting a transient header', async () => {

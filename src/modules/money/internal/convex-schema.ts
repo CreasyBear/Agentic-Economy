@@ -1,6 +1,7 @@
 import { spendingPeriodAdjustmentValue } from './spending-period-values'
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { x402PayeeScreeningDecisionValue, x402SpendAdmissionRefusalCodeValue } from '../x402-spend-admission'
 
 const currency = v.string()
 const exponent = v.number()
@@ -170,6 +171,32 @@ export const x402PaymentAuthorizationFailureDetailValue = v.union(
   v.literal('readiness_mismatch'),
   v.literal('authority_read_failed'),
 )
+const x402SpendReservationFields = {
+  reservationRef: identifier,
+  platformBudgetRef: identifier,
+  custodyBudgetRef: identifier,
+  custodyRef: identifier,
+  custodyGeneration: v.number(),
+  environment: v.union(v.literal('sandbox'), v.literal('production')),
+  network: identifier,
+  asset: identifier,
+  currency: v.literal('USDC'),
+  exponent: v.literal(6),
+  dispatchRef: identifier,
+  attemptRef: identifier,
+  effectGeneration: v.number(),
+  authorizationDigest: identifier,
+  paymentIdentityDigest: identifier,
+  paymentUnsignedMaterialDigest: identifier,
+  paymentSigningIdempotencyKey: identifier,
+  typedDataDigest: identifier,
+  normalizedPayTo: identifier,
+  amountUnits: units,
+  reservedAt: v.number(),
+  policyRevision: identifier,
+  initialScreeningCheckRef: identifier,
+}
+
 export const moneyTables = {
   moneyPromotionalGrants: defineTable({
     grantRef: v.string(),
@@ -607,6 +634,9 @@ export const moneyTables = {
     currency,
     exponent,
     custodyRef: identifier,
+    // Intended identity only: the reservation row is created by signing admission.
+    // Legacy attempts retain undefined and cannot pass the clean-history fence.
+    spendReservationRef: v.optional(identifier),
     custodyBudgetRef: v.optional(identifier),
     custodyGeneration: v.optional(v.number()),
     custodyDailyMaximumUnits: v.optional(units),
@@ -656,9 +686,60 @@ export const moneyTables = {
   })
     .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
     .index('by_custodyRef', ['custodyRef'])
+    .index('by_network_and_spendReservationRef', ['network', 'spendReservationRef'])
     .index('by_authorizationDigest', ['authorizationDigest'])
     .index('by_paymentIdentifier', ['paymentIdentifier'])
     .index('by_state_and_paymentAuthorizationExpiresAt', ['state', 'paymentAuthorizationExpiresAt']),
+  moneyX402PayeeScreeningChecks: defineTable({
+    screeningCheckRef: identifier,
+    screeningInvocationRef: identifier,
+    custodyRef: identifier,
+    authorizationDigest: identifier,
+    paymentUnsignedMaterialDigest: identifier,
+    paymentSigningIdempotencyKey: identifier,
+    custodyGeneration: v.number(),
+    dispatchRef: v.optional(identifier),
+    attemptRef: v.optional(identifier),
+    effectGeneration: v.optional(v.number()),
+    paymentIdentityDigest: v.optional(identifier),
+    expectedNormalizedPayTo: v.optional(identifier),
+    expectedTypedDataDigest: v.optional(identifier),
+    decision: x402PayeeScreeningDecisionValue,
+    admission: v.union(v.literal('admitted'), v.literal('refused')),
+    refusalCode: v.optional(x402SpendAdmissionRefusalCodeValue),
+    spendReservationRef: v.optional(identifier),
+    policyRevision: v.optional(identifier),
+    recordedAt: v.number(),
+  })
+    .index('by_screeningInvocationRef', ['screeningInvocationRef'])
+    .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
+    .index('by_dispatchRef', ['dispatchRef']),
+  moneyX402SpendReservations: defineTable(v.union(
+    v.object({
+      ...x402SpendReservationFields,
+      state: v.literal('liability'),
+    }),
+    v.object({
+      ...x402SpendReservationFields,
+      state: v.literal('settled'),
+      settledAt: v.number(),
+      resolutionEvidenceDigest: identifier,
+    }),
+    v.object({
+      ...x402SpendReservationFields,
+      state: v.literal('unused'),
+      resolvedAt: v.number(),
+      resolutionEvidenceDigest: identifier,
+      unusedProof: v.union(
+        v.literal('expired_unused'), v.literal('authorization_cancelled'), v.literal('definitively_not_signed'),
+      ),
+    }),
+  ))
+    .index('by_reservationRef', ['reservationRef'])
+    .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
+    .index('by_platformBudgetRef_and_state_and_settledAt', ['platformBudgetRef', 'state', 'settledAt'])
+    .index('by_platformBudgetRef_and_normalizedPayTo_and_reservedAt', ['platformBudgetRef', 'normalizedPayTo', 'reservedAt'])
+    .index('by_dispatchRef', ['dispatchRef']),
   moneyStripeEvents: defineTable({
     stripeEventId: identifier,
     eventType: identifier,

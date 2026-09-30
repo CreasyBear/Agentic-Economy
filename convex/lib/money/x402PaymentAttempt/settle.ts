@@ -4,6 +4,7 @@ import { recordMarketEvidenceFact } from '../../../marketEvidence'
 import { loadByAttempt } from './attempt'
 import { type ReconcileArgs } from './contracts'
 import { reconciliationMismatch } from './identity'
+import { resolveX402SpendReservation } from './spendResolution'
 
 export const reconcileX402PaymentAttemptArgs = {
   dispatchRef: v.string(),
@@ -17,6 +18,7 @@ export const reconcileX402PaymentAttemptArgs = {
   paymentIdentifier: v.string(),
   challengeDigest: v.string(),
   settlementStatus: v.union(v.literal('settled'), v.literal('not_settled')),
+  paymentUnusedProof: v.optional(v.union(v.literal('expired_unused'), v.literal('authorization_cancelled'))),
   amountUnits: v.string(),
   currency: v.string(),
   exponent: v.number(),
@@ -66,6 +68,16 @@ export async function reconcileX402PaymentAttemptHandler(
       && row.paymentResponseDigest === args.paymentResponseDigest
       ? { kind: 'settled', settlementStatus: args.settlementStatus }
       : { kind: 'reconciliation_required' }
+  }
+  if (args.paymentUnusedProof !== undefined && args.settlementStatus !== 'not_settled') {
+    return { kind: 'reconciliation_required' }
+  }
+  if (args.settlementStatus === 'settled') {
+    await resolveX402SpendReservation(ctx, row, { kind: 'settled', evidenceDigest: args.evidenceDigest })
+  } else if (args.paymentUnusedProof !== undefined) {
+    await resolveX402SpendReservation(ctx, row, {
+      kind: 'unused', proof: args.paymentUnusedProof, evidenceDigest: args.evidenceDigest,
+    })
   }
   await ctx.db.patch(row._id, {
     reconciliationEvidenceRef: args.evidenceRef,

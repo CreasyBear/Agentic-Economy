@@ -401,3 +401,4 @@ export { accountCreditBalanceValue, eligiblePromotionalGrantValue, type AccountC
 
 export { managedCallBookingValue, MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from './managed-call-contracts'
 export { settledSaleRefundReference, settledSaleRefundReferences } from './settled-sale-refund-contracts'
+export type { X402PayeeScreeningDecision, X402SpendAdmissionResult } from './x402-spend-admission'

@@ -6,6 +6,7 @@ import { loadByAttempt, loadByCustody } from './attempt'
 import { type EventArgs, type RecordObservationArgs, x402PaymentEventArgs, x402PaymentSettlementStatusValue } from './contracts'
 import { eventAttributionValid } from './identity'
 import { quarantinedOutputFromArgs, quarantinedOutputFromRow, sameQuarantinedOutput } from './quarantinedOutput'
+import { resolveX402SpendReservation } from './spendResolution'
 
 export const markX402PaymentPossiblySubmittedArgs = { ...x402PaymentEventArgs }
 export const markX402PaymentPossiblySubmittedReturns = v.null()
@@ -122,6 +123,8 @@ export async function observeX402PaymentAttemptHandler(
     evidenceRefs,
   })
   if (args.settlementStatus === 'settled') {
+    if (args.settlementDigest === undefined) throw new Error('x402_settlement_evidence_missing')
+    await resolveX402SpendReservation(ctx, row, { kind: 'settled', evidenceDigest: args.settlementDigest })
     await recordMarketEvidenceFact(ctx, 'ae_settlement', `${row.attemptRef}:${row.effectGeneration}`, Date.now())
   }
   if (args.settlementStatus === 'unknown') {
@@ -324,6 +327,7 @@ export async function recordX402PaymentObservationHandler(
     observedAt: args.observedAt,
   })
   if (args.settlementStatus === 'settled') {
+    await resolveX402SpendReservation(ctx, row, { kind: 'settled', evidenceDigest: args.paymentObservationDigest })
     await recordMarketEvidenceFact(ctx, 'ae_settlement', `${args.attemptRef}:${args.effectGeneration}`, args.observedAt)
   }
   if (args.settlementStatus === 'unknown') {

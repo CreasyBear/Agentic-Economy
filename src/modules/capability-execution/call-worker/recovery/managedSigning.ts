@@ -10,6 +10,7 @@ import { internal } from '../../../../../convex/_generated/api'
 import { projectPersistedRecovery, recoveryNotFound } from '@/modules/capability-execution/call-projection/recovery'
 import { loadReadyRecoveryWork, type RecoveryWorkContext } from './loading'
 import type { RecoveryIdentity, RecoveryResult } from './contracts'
+import { admitManagedX402Signing } from '../x402SigningAdmission'
 import {
   managedReservationRefForAttempt,
   projectRetryableRecovery,
@@ -69,11 +70,22 @@ export async function reconcileManagedSigningRecovery(
     observeStage(args.callRef, 'authorization_not_expired')
     return projectPersistedRecovery(work.recovered)
   }
-  const replay = await replayManagedX402SigningForRecovery(
+  const savedRejection: ManagedSigningReplay | null = await ctx.runQuery(
+    internal.moneyX402PaymentAttempts.readDefinitiveSigningRejection,
+    { custodyRef: attempt.custodyRef, authorizationDigest: attempt.authorizationDigest,
+      paymentUnsignedMaterialDigest: attempt.paymentUnsignedMaterialDigest,
+      paymentSigningIdempotencyKey: attempt.paymentSigningIdempotencyKey },
+  )
+  const replay = savedRejection ?? await replayManagedX402SigningForRecovery(
     attempt as X402AttemptMaterial,
     work.operation,
     work.recovered.toolRef,
     work.recovered.environment,
+    { admitSigning: async (intent) => attempt.custodyGeneration === undefined ? false
+      : await admitManagedX402Signing(ctx, {
+        custodyRef: attempt.custodyRef, authorizationDigest: attempt.authorizationDigest,
+        custodyGeneration: attempt.custodyGeneration,
+      }, intent, 'forensic_replay') },
   )
   observeStage(args.callRef, `cdp_replay_${replay.kind}`, unresolvedReplayDiagnostic(replay))
   if (replay.kind !== 'definitive_rejection') return projectPersistedRecovery(work.recovered)
@@ -189,6 +201,16 @@ async function reconcileManagedSigningMoney(
   replay: ManagedSigningReplay,
   prepared: ManagedSigningPreparedEvidence,
 ): Promise<boolean> {
+  const exposureResolved: boolean = await ctx.runMutation(
+    internal.moneyX402PaymentAttempts.recordDefinitiveSigningRejection,
+    {
+      custodyRef: attempt.custodyRef, authorizationDigest: attempt.authorizationDigest,
+      paymentUnsignedMaterialDigest: attempt.paymentUnsignedMaterialDigest,
+      paymentSigningIdempotencyKey: attempt.paymentSigningIdempotencyKey,
+      statusCode: replay.statusCode, errorType: replay.errorType, evidenceDigest: replay.evidenceDigest,
+    },
+  )
+  if (!exposureResolved) return false
   const money = await ctx.runAction(
     internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
     {

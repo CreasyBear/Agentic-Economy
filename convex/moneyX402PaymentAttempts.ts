@@ -53,6 +53,31 @@ import {
 import { beginResponseRecoveryHandler, responseRecoveryIsCurrentHandler } from './lib/money/x402PaymentAttempt/responseRecovery'
 import { persistedCallAuthorityIsCurrent } from './lib/money/billingAuthorization/persistedCall'
 import { persistedPaidCallConsequenceIsAdmitted } from './lib/capabilityExecution/callLifecycle/paidConsequenceAdmission'
+import { recordDefinitiveSigningRejectionArgs, recordDefinitiveSigningRejectionHandler,
+  readDefinitiveSigningRejectionArgs, readDefinitiveSigningRejectionReturns,
+  readDefinitiveSigningRejectionHandler } from './lib/money/x402PaymentAttempt/spendResolution'
+
+export const recordDefinitiveSigningRejection = internalMutation({
+  args: recordDefinitiveSigningRejectionArgs.fields,
+  returns: v.boolean(),
+  handler: recordDefinitiveSigningRejectionHandler,
+})
+export const readDefinitiveSigningRejection = internalQuery({
+  args: readDefinitiveSigningRejectionArgs.fields,
+  returns: readDefinitiveSigningRejectionReturns,
+  handler: readDefinitiveSigningRejectionHandler,
+})
+import {
+  recordScreeningAndReserveSigningArgs,
+  recordScreeningAndReserveSigningReturns,
+  recordScreeningAndReserveSigningHandler,
+} from './lib/money/x402PaymentAttempt/spendAdmission'
+
+export const recordScreeningAndReserveSigning = internalMutation({
+  args: recordScreeningAndReserveSigningArgs,
+  returns: recordScreeningAndReserveSigningReturns,
+  handler: recordScreeningAndReserveSigningHandler,
+})
 
 export const prepareX402PaymentAuthorization = internalMutation({
   args: prepareX402PaymentAuthorizationArgs,
