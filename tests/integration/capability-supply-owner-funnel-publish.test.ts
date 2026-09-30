@@ -49,14 +49,19 @@ describe('owner capability publication admission', () => {
         lastAttemptAt: 1, lastAttemptStatus: 'complete',
       })
     })
-    const fixture = await seedPaidX402Publication(backend, 'published-search-proof', { publisher: 'agent' })
+    const fixture = await seedPaidX402Publication(backend, 'published-search-proof', {
+      publisher: 'agent', environment: 'production',
+    })
     const canonical = await backend.run(async ctx => ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', fixture.published.publicationRef).eq('revision', fixture.published.publicationRevision)).unique())
     expect(canonical?.disposition).toBe('current')
     const result = await backend.query(api.x402DirectoryIndex.searchCompact, {
-      query: 'Paid lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+      query: 'Paid lookup', access: 'ae_callable', paginationOpts: { cursor: null, numItems: 8 },
     })
-    expect(result).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Owner lookup' }] })
+    expect(result).toMatchObject({ kind: 'ok', page: [{
+      source: 'provider', title: 'Owner lookup', toolRef: fixture.published.toolRef,
+      choice: { access: 'ae_callable' },
+    }] })
   })
 
   it.each(['owner', 'agent'] as const)(

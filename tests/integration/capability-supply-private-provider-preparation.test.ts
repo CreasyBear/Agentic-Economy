@@ -17,14 +17,13 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 const source = {
-  kind: 'openapi' as const,
-  definitionUrl: 'https://private-provider.example/openapi.json',
+  kind: 'x402' as const,
+  resourceUrl: 'https://private-provider.example/lookup',
   environment: 'production' as const,
 }
 const selector = {
-  serverUrl: 'https://private-provider.example/',
-  path: '/lookup',
-  method: 'post' as const,
+  resourceUrl: source.resourceUrl,
+  method: 'POST' as const,
 }
 const sourceDigest = canonicalDigest({ source: 'private-provider-preparation-v1' })
 const candidateRef = canonicalDigest({ sourceDigest, selector })
@@ -43,7 +42,7 @@ function draftCommand(
     sourceKind: source.kind,
     sourceDescriptorJson: stableStringify(source),
     sourceDigest,
-    sourceRevision: `openapi:${sourceDigest}`,
+    sourceRevision: `x402:${sourceDigest}`,
     candidateRef,
     sourceSelectorJson: stableStringify(selector),
     operationKey,

@@ -14,7 +14,7 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 describe('Provider connection attempts', () => {
-  it('lets the authenticated Business owner reserve the same credential-free OAuth handoff', async () => {
+  it('refuses retired MCP source drafts and preserves cancellation of credential-free handoffs', async () => {
     const backend = convexTest(schema, modules)
     const fixture = await createPublishedBusinessOwner(backend, 'provider-owner-oauth-attempt')
     const sourceDescriptorJson = stableStringify({
@@ -27,7 +27,6 @@ describe('Provider connection attempts', () => {
       businessId: fixture.businessId,
       sourceKind: 'mcp_oauth' as const,
       sourceUrl: 'https://mcp.provider.example/mcp',
-      sourceDescriptorJson,
       authentication: { kind: 'mcp_oauth' as const },
       environment: 'production' as const,
       inputDigest: `sha256:${'7'.repeat(64)}`,
@@ -36,6 +35,17 @@ describe('Provider connection attempts', () => {
       correlationId: 'provider-owner-oauth-attempt:one',
     }
 
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.reserveOwner,
+      await withSourceWrite('catalog_publish', { ...command, sourceDescriptorJson }),
+    )).resolves.toEqual({ kind: 'refused', code: 'invalid_source' })
+    await expect(backend.run(async ctx => ({
+      attempts: await ctx.db.query('capabilityProviderConnectionAttempts').collect(),
+      drafts: await ctx.db.query('capabilitySupplySourceDrafts').collect(),
+    }))).resolves.toEqual({ attempts: [], drafts: [] })
+
+    // Existing credential handoffs remain cancellable; retired source selection
+    // cannot create a new MCP publishing draft.
     const reserved = await fixture.owner.mutation(
       api.capabilityProviderConnectionAttempts.reserveOwner,
       await withSourceWrite('catalog_publish', command),
@@ -44,7 +54,6 @@ describe('Provider connection attempts', () => {
     expect(reserved).toMatchObject({
       kind: 'reserved',
       attemptRef: expect.stringMatching(/^pca_/u),
-      draftRef: expect.stringMatching(/^sds_/u),
     })
     const row = await backend.run(async (ctx) => (
       await ctx.db.query('capabilityProviderConnectionAttempts')
@@ -57,26 +66,10 @@ describe('Provider connection attempts', () => {
       businessId: fixture.businessId,
       sourceKind: 'mcp_oauth',
       lifecycle: 'pending',
-      draftRef: reserved.kind === 'reserved' ? reserved.draftRef : undefined,
-      expectedSourceDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
     })
     expect(row).not.toHaveProperty('sourceDescriptorJson')
-    if (reserved.kind === 'refused' || reserved.draftRef === undefined) {
-      throw new Error('expected exact source draft')
-    }
-    await expect(fixture.owner.query(
-      api.capabilityProviderConnectionAttempts.readOwnerSourceDraft,
-      { draftRef: reserved.draftRef },
-    )).resolves.toMatchObject({
-      kind: 'available',
-      draft: {
-        draftRef: reserved.draftRef,
-        businessRef: String(fixture.businessId),
-        sourceDescriptorJson,
-        sourceUrl: 'https://mcp.provider.example/mcp',
-        state: 'pending',
-      },
-    })
+    expect(row).not.toHaveProperty('draftRef')
+    if (reserved.kind === 'refused') throw new Error('expected credential handoff')
 
     const preparedCommand = {
       attemptRef: reserved.attemptRef,
@@ -435,11 +428,11 @@ describe('Provider connection attempts', () => {
     const fixture = await createPublishedBusinessOwner(backend, 'provider-http-candidate-binding')
     const foreign = await createPublishedBusinessOwner(backend, 'provider-http-candidate-binding-foreign')
     const source = {
-      kind: 'openapi' as const,
-      definitionUrl: 'https://provider.example/openapi.json',
+      kind: 'x402' as const,
+      resourceUrl: 'https://provider.example/lookup',
       environment: 'production' as const,
     }
-    const selector = { serverUrl: 'https://provider.example/', path: '/lookup', method: 'post' }
+    const selector = { resourceUrl: source.resourceUrl, method: 'POST' }
     const sourceDigest = canonicalDigest({ source: 'provider-http-candidate-binding:v1' })
     const candidateRef = canonicalDigest({ sourceDigest, selector })
     const draftCommand = {
@@ -450,7 +443,7 @@ describe('Provider connection attempts', () => {
       sourceKind: source.kind,
       sourceDescriptorJson: stableStringify(source),
       sourceDigest,
-      sourceRevision: `openapi:${sourceDigest}`,
+      sourceRevision: `x402:${sourceDigest}`,
       candidateRef,
       sourceSelectorJson: stableStringify(selector),
       operationKey: 'provider-http-candidate-binding:draft',
@@ -466,7 +459,7 @@ describe('Provider connection attempts', () => {
     const command = {
       businessId: fixture.businessId,
       sourceKind: 'http_credential' as const,
-      sourceUrl: source.definitionUrl,
+      sourceUrl: source.resourceUrl,
       sourceDescriptorJson: stableStringify(source),
       authentication: { kind: 'api_key' as const, location: 'header' as const, name: 'X-API-Key' },
       environment: source.environment,
@@ -488,7 +481,7 @@ describe('Provider connection attempts', () => {
       { attemptRef: reserved.attemptRef },
     )).resolves.toMatchObject({
       kind: 'available',
-      attempt: { candidateDraftRef: candidateRef, sourceUrl: source.definitionUrl, environment: 'production' },
+      attempt: { candidateDraftRef: candidateRef, sourceUrl: source.resourceUrl, environment: 'production' },
     })
     await expect(backend.run((ctx) => ctx.db.query('capabilitySupplySourceDrafts').collect())).resolves.toEqual([])
 

@@ -12,13 +12,7 @@ vi.mock('@/modules/model-gateway/public', async (importOriginal) => {
     ...actual,
     openRouterModel: vi.fn((...args: unknown[]) => {
       gatewayProbe.modelCalls(...args)
-      if (gatewayProbe.blankFinalAfterTool) return mockModel({ contentSteps: [
-        [{ type: 'tool-call', toolCallId: 'blank-lookup', toolName: 'registry_tools_describe',
-          input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) }],
-        [{ type: 'text', text: ' ' }],
-        [{ type: 'text', text: ' ' }],
-        [{ type: 'text', text: ' ' }],
-      ] })
+      if (gatewayProbe.blankFinalAfterTool) return mockModel({ content: [{ type: 'text', text: ' ' }] })
       return mockModel({
         content: [{ type: 'text', text: 'The current keyless Operation remains available.' }],
       })
@@ -29,11 +23,12 @@ vi.mock('@/modules/model-gateway/public', async (importOriginal) => {
 import { api, internal } from '../../convex/_generated/api'
 import { sendMessage as sendMessageRegistration } from '../../convex/chatMessages'
 import { createThread as createThreadRegistration } from '../../convex/chatThreads'
-import { generate as chatGenerateRegistration } from '../../convex/chatGenerate'
 import type { Id } from '../../convex/_generated/dataModel'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { DEFAULT_OPENROUTER_MODEL } from '@/modules/model-gateway/public'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
+import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 
 async function drainExpectedUnavailableGeneration(
   backend: ReturnType<typeof convexTestWithMarketComponents>,
@@ -241,7 +236,7 @@ describe('scheduled chat consequence authority', () => {
         threadId: `thread:authority-preflight:${caseKind}`,
         promptMessageId: `message:authority-preflight:${caseKind}`,
         authority,
-      })).rejects.toThrow('chat_generation_authority_invalid')
+      })).resolves.toBeNull()
       expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(modelCallsBefore)
       await drainExpectedUnavailableGeneration(backend)
       expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(
@@ -574,7 +569,7 @@ describe('scheduled chat consequence authority', () => {
       threadId: sent.threadId,
       promptMessageId: sent.promptMessageId,
       authority: admittedAuthority,
-    })).rejects.toThrow('chat_generation_authority_invalid')
+    })).resolves.toBeNull()
     expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(modelCallsAfterSettledGeneration)
     const replayMessages = await owner.query(api.chatMessages.listMessages, {
       threadId: sent.threadId,
@@ -611,13 +606,14 @@ describe('scheduled chat consequence authority', () => {
     })).resolves.toMatchObject({ busy: false })
   })
 
-  it('keeps a persistently blank Tool turn visible, failed, and free of duplicate prompts', async () => {
+  it('completes a blank model answer from catalogue facts without duplicate prompts or answers', async () => {
     process.env.OPENROUTER_API_KEY = 'runtime-authority-regression-key'
     gatewayProbe.blankFinalAfterTool = true
     const backend = convexTestWithMarketComponents()
+    await admitDiscoveredToolFixture(backend)
     const { owner } = await publishedBusinessOwner(backend, 'chat-blank-final')
     const sent = await owner.mutation(internal.chatMessages.sendMessage, {
-      prompt: 'Find a current Tool for this job',
+      prompt: 'Find a timezone Tool',
     })
     await drainExpectedUnavailableGeneration(backend)
     const messages = await owner.query(api.chatMessages.listMessages, {
@@ -625,8 +621,14 @@ describe('scheduled chat consequence authority', () => {
       paginationOpts: { cursor: null, numItems: 20 },
     })
     expect(messages.page.filter(message => message.role === 'user')).toHaveLength(1)
-    expect(messages.page.some(message => message.role === 'assistant' && message.text.includes("I couldn't finish the answer. Edit your question to try again."))).toBe(true)
-    expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim().length === 0)).toHaveLength(1)
+    const answers = messages.page.filter(message => message.role === 'assistant')
+    expect(answers).toHaveLength(1)
+    expect(answers[0]?.text).toContain('Timezone')
+    const turn = await backend.run(ctx => ctx.db.query('chatTurns')
+      .withIndex('by_promptMessageId', index => index.eq('promptMessageId', sent.promptMessageId))
+      .unique())
+    expect(turn).toMatchObject({ state: 'completed' })
+    expect(turn?.failureReason).toBeUndefined()
     await expect(owner.query(api.chatThreads.getThread, {
       threadId: sent.threadId, now: Date.now(),
     })).resolves.toMatchObject({ busy: false })
@@ -636,31 +638,22 @@ describe('scheduled chat consequence authority', () => {
     process.env.OPENROUTER_API_KEY = 'runtime-authority-regression-key'
     process.env.AE_LLM_MODEL = 'openai/gpt-oss-120b'
     process.env.AE_SITE_URL = 'https://agentic-economy.example.test'
-    const backend = convexTestWithMarketComponents()
-    await publishedBusinessOwner(backend, 'chat-generation-settings')
-    const authority = await readAuthority(backend, 'chat-generation-settings')
-    const runQuery = vi.fn(async () => null)
-    const runMutation = vi.fn(async () => true)
-    const handler = (chatGenerateRegistration as unknown as {
-      _handler: (ctx: unknown, args: unknown) => Promise<unknown>
-    })._handler
-
-    await expect(handler({ runQuery, runMutation }, {
-      threadId: 'thread:settings',
-      promptMessageId: 'message:settings',
-      authority,
-    })).rejects.toThrow('chat_generation_authority_invalid')
-    expect(runMutation).toHaveBeenCalledOnce()
-    expect(gatewayProbe.modelCalls).not.toHaveBeenCalled()
-
-    delete process.env.AE_LLM_MODEL
-    delete process.env.AE_SITE_URL
-    await expect(handler({ runQuery, runMutation }, {
-      threadId: 'thread:default-settings',
-      promptMessageId: 'message:default-settings',
-      authority,
-    })).rejects.toThrow('chat_generation_authority_invalid')
-    expect(runMutation).toHaveBeenCalledTimes(2)
+    for (const custom of [true, false]) {
+      if (!custom) {
+        delete process.env.AE_LLM_MODEL
+        delete process.env.AE_SITE_URL
+      }
+      const backend = convexTestWithMarketComponents()
+      const { owner } = await publishedBusinessOwner(backend, `chat-generation-settings-${custom}`)
+      await owner.mutation(internal.chatMessages.sendMessage, { prompt: 'Find a weather Tool' })
+      await drainExpectedUnavailableGeneration(backend)
+      const model = custom ? 'openai/gpt-oss-120b' : DEFAULT_OPENROUTER_MODEL
+      expect(gatewayProbe.modelCalls.mock.lastCall).toEqual([{
+        apiKey: 'runtime-authority-regression-key', model,
+        ...(custom ? { siteUrl: 'https://agentic-economy.example.test' } : {}),
+      }, model])
+    }
+    expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(2)
   })
 
   it.each(['revoked', 'expired'] as const)('denies a %s credential at consequence time', async (kind) => {

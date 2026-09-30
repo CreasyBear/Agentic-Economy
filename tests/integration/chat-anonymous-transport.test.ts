@@ -86,20 +86,19 @@ const admitHttp = makeFunctionReference<'mutation', {
 describe('anonymous operation chat transport', () => {
   it('does not turn unsupported lookup results into a verified Tool recommendation', async () => {
     const backend = convexTestWithMarketComponents()
-    const model = mockModel({ contentSteps: [
-      ...Array.from({ length: 5 }, (_, index) => [{
-        type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
-        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
-      }]),
-      [{ type: 'text', text: 'No verified fit was found.' }],
+    const inventedRef = `operation:v1:${'a'.repeat(64)}`
+    const model = mockModel({ content: [
+      { type: 'text', text: `Use ${inventedRef} as the verified OCR Tool.` },
     ] })
     const calls = vi.spyOn(model, 'doStream')
-    await backend.action(async ctx => {
+    const body = await backend.action(async ctx => {
       const response = await streamAnonymousChatResponse(ctx, [{ role: 'user', content: 'Find a verified OCR Tool.' }], model)
       return await response.text()
     })
-    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
+    expect(calls).toHaveBeenCalledOnce()
     expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
+    expect(body).not.toContain(inventedRef)
+    expect(body).toContain('registry_tools_search')
   })
   it('forces a guest next-page search with no model-supplied query or cursor', async () => {
     const backend = convexTestWithMarketComponents()
@@ -122,59 +121,44 @@ describe('anonymous operation chat transport', () => {
     expect(body).not.toContain('x402:')
   })
 
-  it('streams a single fallback message when the required lookup yields no answer', async () => {
+  it('streams a single fallback message when the catalogue explanation is blank', async () => {
     const backend = convexTestWithMarketComponents()
-    const model = mockModel({ contentSteps: [
-      [{ type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
-        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) }],
-      [{ type: 'text', text: 'The Tool reference could not be verified. Next: browse the Market.' }],
-    ] })
+    const model = mockModel({ content: [{ type: 'text', text: ' ' }] })
     const calls = vi.spyOn(model, 'doStream')
     const body = await backend.action(async ctx => {
       const response = await streamAnonymousChatResponse(ctx,
         [{ role: 'user', content: 'Find me a weather API for Sydney and compare options' }], model)
       return await response.text()
     })
-    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
+    expect(calls).toHaveBeenCalledOnce()
     expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
     expect(body.match(/"type":"start"/gu)).toHaveLength(1)
     expect(body.match(/"type":"finish"/gu)).toHaveLength(1)
   })
   it('does not present exploratory planning as the guest answer', async () => {
     const backend = convexTestWithMarketComponents()
-    const model = mockModel({ contentSteps: [
-      [
-        { type: 'text', text: 'Let me search another page.' },
-        { type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
-          input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) },
-      ],
-      [{ type: 'text', text: 'Only Weather Current was found for Sydney; its health is unverified. Check its terms before using it.' }],
-      [{ type: 'text', text: 'Weather Current is the sole Sydney weather listing. Its live health remains unverified; inspect details before use.' }],
-    ] })
+    await admitDiscoveredToolFixture(backend)
+    const model = mockModel({ content: [{ type: 'text', text: 'Let me search another page for a timezone Tool.' }] })
     const calls = vi.spyOn(model, 'doStream')
     const body = await backend.action(async ctx => {
       const response = await streamAnonymousChatResponse(ctx,
-        [{ role: 'user', content: 'Find a Sydney weather API and compare options' }], model)
+        [{ role: 'user', content: 'Find a timezone Tool' }], model)
       return await response.text()
     })
     const text = body.split('\n').filter(line => line.startsWith('data: {'))
       .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
       .filter((chunk): chunk is Extract<UIMessageChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
       .map(chunk => chunk.delta).join('')
-    expect(calls).toHaveBeenCalledTimes(3)
-    expect(text).not.toContain('Let me search another page.')
-    expect(text).toContain('Weather Current')
-    expect(text).toContain('health')
+    expect(calls).toHaveBeenCalledOnce()
+    expect(text).not.toContain('Let me search another page')
+    expect(text).toContain('Timezone')
+    expect(calls.mock.calls[0]?.[0].tools).toBeUndefined()
     expect(body.match(/"type":"start"/gu)).toHaveLength(1)
   })
   it('answers honestly when the tool-free model emits non-answer control tokens', async () => {
     const backend = convexTestWithMarketComponents()
-    const model = mockModel({ contentSteps: [
-      ...Array.from({ length: 5 }, (_, index) => [{
-        type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
-        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
-      }]),
-      [{ type: 'text', text: '<｜begin▁of▁sentence｜>import{ }from\"lodash\"' }],
+    const model = mockModel({ content: [
+      { type: 'text', text: '<｜begin▁of▁sentence｜>import{ }from\"lodash\"' },
     ] })
     const body = await backend.action(async ctx => {
       const response = await streamAnonymousChatResponse(ctx,
@@ -183,19 +167,11 @@ describe('anonymous operation chat transport', () => {
     })
     expect(body).not.toContain('lodash')
   })
-  it('returns completed Tool facts when the post-tool model step fails', async () => {
+  it('returns retrieved Tool facts when the catalogue explanation fails', async () => {
     const backend = convexTestWithMarketComponents()
-    const { toolRef } = await admitDiscoveredToolFixture(backend)
-    const model = mockModel({ contentSteps: [[{
-      type: 'tool-call', toolCallId: 'describe-1', toolName: 'registry_tools_describe',
-      input: JSON.stringify({ toolRef }),
-    }]] })
-    const original = model.doStream.bind(model)
-    let attempts = 0
-    vi.spyOn(model, 'doStream').mockImplementation(async options => {
-      if (++attempts > 1) throw new Error('injected_post_tool_model_failure')
-      return original(options)
-    })
+    await admitDiscoveredToolFixture(backend)
+    const model = mockModel()
+    const attempts = vi.spyOn(model, 'doStream').mockRejectedValue(new Error('injected_post_tool_model_failure'))
     const body = await backend.action(async ctx => {
       const response = await streamAnonymousChatResponse(ctx,
         [{ role: 'user', content: 'Describe the timezone Tool' }], model)
@@ -204,7 +180,7 @@ describe('anonymous operation chat transport', () => {
     expect(body).toContain('Timezone')
     expect(body).not.toContain('chat_stream_failed')
     expect(body).not.toContain('injected_post_tool_model_failure')
-    expect(attempts).toBe(2)
+    expect(attempts).toHaveBeenCalledOnce()
   })
 
   it('streams typed recovery without duplicating it as assistant prose', async () => {
@@ -272,7 +248,7 @@ describe('anonymous operation chat transport', () => {
     ]))
 
     expect(streamed.body).not.toContain('A weather Operation is available.')
-    expect(streamed.queries).toEqual([])
+    expect(streamed.queries).toEqual(['x402DirectoryIndex:searchCompactInternal'])
     expect(streamed.mutations).toEqual([])
     expect(anonymousThreads.page).toEqual([])
     expect(sentinelThreads.page).toEqual([])

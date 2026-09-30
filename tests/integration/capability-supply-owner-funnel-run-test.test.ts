@@ -16,7 +16,7 @@ describe('owner supply test', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('does not turn an exact fresh no-payment challenge into publication authority', async () => {
+  it('completes readiness for an authorized publication without executing a paid Call', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
@@ -126,7 +126,9 @@ describe('owner supply test', () => {
         .collect()
     ))
     expect(admissionCases).toHaveLength(1)
-    expect(admissionCases[0]?.terminalDecision).not.toBe('published')
+    // Publication authority was already established by the owner command above.
+    // Its exact readiness observation can complete admission without a paid canary.
+    expect(admissionCases[0]).toMatchObject({ state: 'completed', terminalDecision: 'published' })
 
     const readTestState = async () => {
       const readback = await owner.query(
@@ -155,7 +157,10 @@ describe('owner supply test', () => {
       state: 'refused',
     })
     await expect(
-      backend.run(async () => []),
-    ).resolves.toEqual([])
+      backend.run(async ctx => ({
+        calls: await ctx.db.query('capabilityCalls').collect(),
+        payments: await ctx.db.query('moneyX402PaymentAttempts').collect(),
+      })),
+    ).resolves.toEqual({ calls: [], payments: [] })
   })
 })

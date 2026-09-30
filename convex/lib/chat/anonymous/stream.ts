@@ -69,6 +69,9 @@ export async function streamAnonymousChatResponse(
           degradeBackend(cause, undefined, { site: 'chatImmediateSearch', reason: 'source_unavailable' })
         }
         if (catalogue !== null) {
+          // This branch writes its own response instead of merging the model's
+          // UI stream, so it also owns the single message start/finish pair.
+          writer.write({ type: 'start' })
           const toolName = immediateSearchToolName()
           writer.write({ type: 'tool-input-start', toolCallId: 'immediate-search', toolName })
           writer.write({ type: 'tool-input-available', toolCallId: 'immediate-search', toolName, input: { query: latestUser, limit: 8 } })

@@ -35,18 +35,20 @@ async function startManuallyGeneratedTurn<T extends { promptMessageId: string }>
   backend: ConvexFixtureBackend,
   start: () => Promise<T>,
 ): Promise<T> {
-  // Hold the real scheduled generator while this fixture supplies a mock model.
+  // Hold generation and its deadline while this fixture supplies a mock model.
   vi.useFakeTimers()
   try {
     const turn = await start()
     await backend.run(async ctx => {
       const jobs = await ctx.db.system.query('_scheduled_functions').take(100)
-      const scheduled = jobs.find(job => job.name === 'chatGenerate:generate'
+      const scheduled = jobs.filter(job => ['chatGenerate:generate', 'chatTurns:finishTurn'].includes(job.name)
         && job.state.kind === 'pending'
         && job.args.some(arg => typeof arg === 'object' && arg !== null && !Array.isArray(arg)
           && 'promptMessageId' in arg && arg.promptMessageId === turn.promptMessageId))
-      if (scheduled === undefined) throw new Error('manual_chat_generation_schedule_missing')
-      await ctx.scheduler.cancel(scheduled._id)
+      if (!scheduled.some(job => job.name === 'chatGenerate:generate')) {
+        throw new Error('manual_chat_generation_schedule_missing')
+      }
+      for (const job of scheduled) await ctx.scheduler.cancel(job._id)
     })
     await backend.finishAllScheduledFunctions(vi.runAllTimers)
     return turn
@@ -169,7 +171,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     await drainExpectedUnavailableGenerations(backend)
   })
 
-  it.each([false, true])('persists a final response and settles stream deltas (extended lookup=%s)', async extended => {
+  it.each([false, true])('persists a final response and settles stream deltas (blank explanation=%s)', async blank => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, {
@@ -193,13 +195,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     })
 
     const model = mockModel({
-      contentSteps: [
-        ...(extended ? Array.from({ length: 5 }, (_, index) => [{
-          type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
-          input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
-        }]) : []),
-        [{ type: 'text', text: 'No current exchange-rate Tool was verified from that reference.' }],
-      ],
+      content: [{ type: 'text', text: blank ? ' ' : 'No current exchange-rate Tool was verified from that reference.' }],
     })
     const modelCalls = vi.spyOn(model, 'doStream')
     await backend.action(async (ctx) => {
@@ -209,8 +205,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         promptMessageId,
       }, model)
     })
-    expect(modelCalls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
-    if (extended) expect(modelCalls.mock.lastCall?.[0].tools).toBeUndefined()
+    expect(modelCalls).toHaveBeenCalledOnce()
+    expect(modelCalls.mock.calls[0]?.[0].tools).toBeUndefined()
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: created.threadId,
       promptMessageId,
@@ -227,6 +223,9 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       }),
     ]))
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
+    expect(messages.page[1]?.text.trim().length).toBeGreaterThan(0)
+    expect(messages.page.flatMap(message => message.parts)
+      .filter(part => part.type === 'tool-registry_tools_search')).toHaveLength(1)
     expect(activeStreams).toEqual([])
   })
   it('keeps one fallback assistant reply when immediate explanation is unusable', async () => {
@@ -328,7 +327,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         key: 'coinbase', refreshGeneration: generation, lastAttemptAt: 1, lastAttemptStatus: 'refreshing',
       })
     })
-    const rows: IndexedSource[] = [1, 2].map(index => {
+    const rows: IndexedSource[] = Array.from({ length: 9 }, (_, index) => index + 1).map(index => {
       const resource = `https://weather.example/tools/${index}`
       const raw = { resource, type: 'http', description: `Weather forecast Tool ${index}` }
       return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
@@ -342,10 +341,10 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       } }
     })
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
-      generation, offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items: rows,
+      generation, offset: 0, reportedTotal: rows.length, observedAt: 2, runStartedAt: 1, workload, items: rows,
     })
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
-      generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [],
+      generation, offset: 100, reportedTotal: rows.length, observedAt: 3, runStartedAt: 1, workload, items: [],
     })
     const pageOne = await backend.query(internal.x402DirectoryIndex.searchCompactInternal, {
       query: 'weather', paginationOpts: { cursor: null, numItems: 1 }, access: 'external_listing',
@@ -358,15 +357,13 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(pageTwo).toMatchObject({ kind: 'ok', page: [{ title: 'Weather forecast Tool 2' }] })
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-next-page-owner')
     const first = await startManuallyGeneratedTurn(backend, () => owner.mutation(api.chatTurns.startTurn, {
-      principal: { kind: 'clerk' }, clientTurnId: 'first-page', prompt: 'Weather in Sydney',
+      principal: { kind: 'clerk' }, clientTurnId: 'first-page', prompt: 'weather',
     }))
     await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: first.turnRef, promptMessageId: first.promptMessageId, state: 'working',
     })
-    const firstModel = mockModel({ contentSteps: [
-      [{ type: 'tool-call', toolCallId: 'first-search', toolName: 'registry_tools_search',
-        input: JSON.stringify({ query: 'weather', source: 'coinbase', limit: 1 }) }],
-      [{ type: 'text', text: 'Search results are in the card. Next: inspect the card.' }],
+    const firstModel = mockModel({ content: [
+      { type: 'text', text: 'Search results are in the card. Next: inspect the card.' },
     ] })
     await backend.action(ctx => streamDurableChatResponse(ctx, {
       threadId: first.threadId, ownerId: canonicalAccountRef, promptMessageId: first.promptMessageId,
@@ -377,9 +374,9 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     }))
     const firstCards = firstMessages.page.flatMap(message => message.parts.map(projectToolCard))
       .filter(card => card?.kind === 'choices')
-    expect(firstCards).toEqual([expect.objectContaining({ kind: 'choices', choices: [
-      expect.objectContaining({ title: 'Weather forecast Tool 1' }),
-    ] })])
+    expect(firstCards).toEqual([expect.objectContaining({ kind: 'choices', count: 8,
+      choices: [1, 2, 3, 4].map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })),
+    })])
     const nextAction = firstCards[0]?.next
     if (nextAction?.action !== 'next-page') throw new Error('signed_first_page_missing')
     const cursor = nextAction.args.cursor
@@ -398,6 +395,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       turnRef: second.turnRef, threadId: second.threadId, promptMessageId: second.promptMessageId,
     })
     if (continuation === null) throw new Error('continuation_missing')
+    expect(JSON.parse(continuation.inputJson)).toEqual({ limit: 8 })
     const model = mockModel({ contentSteps: [
       [{ type: 'tool-call', toolCallId: 'continuation-search', toolName: 'registry_tools_search', input: '{}' }],
       [{ type: 'text', text: 'The next page has been assessed. Next: inspect the search card.' }],
@@ -420,11 +418,11 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const cards = messages.page.flatMap(message => message.parts.map(projectToolCard))
       .filter(card => card?.kind === 'choices')
     expect(cards).toEqual([
+      expect.objectContaining({ kind: 'choices', count: 8,
+        choices: [1, 2, 3, 4].map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })),
+      }),
       expect.objectContaining({ kind: 'choices', choices: [
-        expect.objectContaining({ title: 'Weather forecast Tool 1' }),
-      ] }),
-      expect.objectContaining({ kind: 'choices', choices: [
-        expect.objectContaining({ title: 'Weather forecast Tool 2' }),
+        expect.objectContaining({ title: 'Weather forecast Tool 9' }),
       ] }),
     ])
     expect(messages.page.map(message => message.text).join(' ')).not.toContain(cursor)
@@ -479,8 +477,14 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-clarify-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Clarification' })
+    const first = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find weather Tools',
+    }))
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: first.messageId,
+    }, mockModel({ content: [{ type: 'text', text: ' ' }] })))
     const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
-      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find something suitable',
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Narrow those results to my region',
     }))
     const model = mockModel({
       contentSteps: [[{
@@ -793,7 +797,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
               title: `Tool ${index + 1}`,
               provider: 'Provider',
               price: 'A$0.01',
-              readiness: 'Operational',
+              readiness: 'ready',
             })),
             count: 5,
           },
