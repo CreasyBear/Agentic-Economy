@@ -69,7 +69,10 @@ type Env = {
   readonly CDP_API_KEY_SECRET: string | undefined;
   readonly CDP_WALLET_SECRET: string | undefined;
   readonly CLERK_JWT_ISSUER_DOMAIN: string | undefined;
+  readonly CLERK_SECRET_KEY: string | undefined;
+  readonly NOTIFICATION_FROM_EMAIL: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
+  readonly RESEND_API_KEY: string | undefined;
   readonly SITE_URL: string | undefined;
   readonly STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: string | undefined;
   readonly STRIPE_CHECKOUT_HOST: string | undefined;
