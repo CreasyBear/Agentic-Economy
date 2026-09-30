@@ -15,6 +15,7 @@ import {
 } from '@/modules/money/public'
 import {
   callReceiptPaymentProfile,
+  publicCallRefusalCode,
   type CallReceipt,
   type CallUsageSummary,
   type CallResult,
@@ -406,10 +407,10 @@ async function projectManagedCall(
       result: {
         kind: 'refused',
         toolRef: input.dispatch.toolRef,
-        code: paidButInvalid ? 'provider_output_invalid' : observation.failureCode ?? 'provider_refused',
+        code: paidButInvalid ? 'provider_output_invalid' : publicCallRefusalCode(observation.failureCode),
         retryable: false,
         receipt,
-      },
+      } satisfies CallResult,
       evidenceHash,
       ...(usage === undefined ? {} : { usage }),
       attemptRef: input.durableAttemptRef,

@@ -40,6 +40,20 @@ import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 export const INPUT = { request: 'lookup' } as const
 export const quoteByCallKey = new Map<string, string>()
 
+export async function readEvidence(backend: ConvexFixtureBackend, callRef: string) {
+  return await backend.run(async ctx => {
+    const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+    const control = await ctx.db.query('actionExecutionControls')
+      .withIndex('by_executionRef', q => q.eq('executionRef', callRef)).unique()
+    const attempt = await ctx.db.query('actionExecutionAttempts')
+      .withIndex('by_executionRef_and_attemptRef', q => q.eq('executionRef', callRef).eq('attemptRef', call?.attemptRef ?? '')).unique()
+    const projection = await ctx.db.query('capabilityCallProjections').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+    const history = await ctx.db.query('actionExecutionHistory')
+      .withIndex('by_executionRef_and_executionVersion', q => q.eq('executionRef', callRef)).order('asc').collect()
+    return { call, control, attempt, history, projection }
+  })
+}
+
 export type TestPrincipal = Readonly<{
   principalId: string
   ownerId: string
@@ -71,7 +85,7 @@ export async function seedPrincipal(
   }
 }
 
-export async function registerRotatingBuyer(backend: ConvexFixtureBackend, monthlyUnits = '12000', dailyUnits = '12000', maximumConcurrentCalls = 2) {
+export async function registerRotatingBuyer(backend: ConvexFixtureBackend, monthlyUnits = '12000', dailyUnits = '12000', maximumConcurrentCalls = 2, perCallUnits = '12000') {
   const subject = 'user_rotating-buyer'
   const owner = (await publishedBusinessOwner(backend, 'rotating-buyer')).owner
   const serviceKey = 'rotating-buyer-service-test-key-32-bytes'
@@ -83,7 +97,7 @@ export async function registerRotatingBuyer(backend: ConvexFixtureBackend, month
     })
     return { ...assertion, scopes: [...assertion.scopes] }
   }
-  const limit = { currency: 'AUD' as const, units: '12000', exponent: 6 as const }
+  const limit = { currency: 'AUD' as const, units: perCallUnits, exponent: 6 as const }
   const policy = buildAgentAccessPolicy({ environment: 'sandbox', currency: 'AUD', exponent: 6,
     maximumSpendPerCall: limit, maximumDailySpend: { ...limit, units: dailyUnits }, maximumMonthlySpend: { ...limit, units: monthlyUnits } })
   const input = {

@@ -56,6 +56,18 @@ export const callRefusalCodeValues = [
   'source_unavailable',
 ] as const
 export const callRefusalCodeSchema = z.enum(callRefusalCodeValues)
+
+/**
+ * Requires a transport or recorded refusal code, not a successful outcome.
+ * Ensures an existing public category while private detail stays in audit.
+ * Invariant: this projection changes no state, receipt, authority or retry fact.
+ * On a private code: use the public refusal category; never broaden the schema.
+ */
+export function publicCallRefusalCode(code: string | undefined): CallRefusalCode {
+  if (code === 'payment_requirement_outside_authority') return 'pre_release_failed'
+  const known = callRefusalCodeSchema.safeParse(code)
+  return known.success ? known.data : 'provider_refused'
+}
 const callRefPattern = /^operation-invocation:v1:[0-9a-f]{64}$/u
 const quoteRefPattern = /^operation-commitment:v1:[0-9a-f]{64}$/u
 

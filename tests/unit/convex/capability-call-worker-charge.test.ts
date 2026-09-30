@@ -243,7 +243,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSigningIntent')
     expect(worker.state.payment.prepare).toBeUndefined()
     expect(worker.state.unknownCharges).toHaveLength(0)
-    expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused', result: { code: 'payment_provider_requirement_stale' } })
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused', result: { code: 'provider_refused' } })
   })
 
   it('releases the managed reservation when signing fails before submission', async () => {
@@ -263,7 +263,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
-      result: { kind: 'refused', code: 'payment_signature_unavailable' },
+      result: { kind: 'refused', code: 'provider_refused' },
     })
   })
   it('releases a definite no-authorization refusal only after proving no payment attempt exists', async () => {
@@ -286,7 +286,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
-      result: { kind: 'refused', code: 'payment_signature_unavailable' },
+      result: { kind: 'refused', code: 'provider_refused' },
     })
   })
   it.each([

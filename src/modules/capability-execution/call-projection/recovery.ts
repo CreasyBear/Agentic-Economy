@@ -1,5 +1,6 @@
 import type { Infer } from 'convex/values'
 import { callReceiptValue } from '../internal/convex-schema'
+import { publicCallRefusalCode } from '../call-contracts'
 import type { PublicExecutionStatus } from '@/modules/action-execution/runtime'
 import type { RecoveryAttempt, RecoveryRow, WorkerRecoveryResult } from './contracts'
 
@@ -20,7 +21,9 @@ export function projectPureCallStatus(
     || (status.control === 'terminal' && row.result?.kind === 'pending')
     || (status.control === 'cancelled' && row.result?.kind === 'pending')
   )
-  const projectedResult = staleResult ? undefined : row.result
+  const projectedResult = staleResult ? undefined : row.result?.kind === 'refused'
+    ? { ...row.result, code: publicCallRefusalCode(row.result.code) }
+    : row.result
   const receipt = projectedResult !== undefined && 'receipt' in projectedResult
     ? projectedResult.receipt
     : undefined
@@ -80,7 +83,9 @@ export function projectPersistedRecovery(
     : undefined
   const projectedResult = state === 'cancelled' && row.result?.kind === 'pending'
     ? undefined
-    : row.result
+    : row.result?.kind === 'refused'
+      ? { ...row.result, code: publicCallRefusalCode(row.result.code) }
+      : row.result
   const receipt = projectedResult !== undefined && 'receipt' in projectedResult
     ? projectedResult.receipt
     : undefined
@@ -145,4 +150,3 @@ export function reconciliationResult(
     ...(receipt === undefined ? {} : { receipt }),
   }
 }
-

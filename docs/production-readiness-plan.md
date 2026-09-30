@@ -448,9 +448,88 @@ integration tests, 4 type tests, 74 import checks, the TypeScript standards chec
 packaging. The separate `AE_FORMANCE_INTEGRATION=true` Workpool run passed all 25
 tests against pinned native Ledger v2.4.14, including accepted-Call recovery after
 spending-policy changes. The ordinary gate still has 44 optional integration
-skips and 3 todos; mandatory native-money CI is the next #277 packet. React Doctor
-reported zero errors and one existing action-sheet complexity advisory.
+skips and 3 todos; mandatory native-money CI is the next #277 packet. React Doctor's
+changed-line scan reported zero errors and one existing action-sheet complexity
+advisory. The staged whole-file hook also reported an unchanged chat-bootstrap
+render-ref mutation and existing warnings; that bootstrap code was not modified.
 
 This completes #289's source requirement. Genuine session-claim rotation,
 interactive MFA and the deployed Clerk configuration remain unverified under
 #281. No production deployment, live payment or public launch was performed.
+
+## Native money matrix implementation contract — 2026-10-01 (#277)
+
+Sluice: main, test and CI boundaries. Root owns acceptance and heavy execution;
+one worker owns the matrix and minimal Workpool harness reuse, another owns the
+isolated CI stack and workflow. No production money rules change in this packet.
+
+- Requires: an isolated native Ledger v2.4.14 with strict schema enforcement,
+  canonical funded buyer and Quote, real registered Convex/Workpool handlers, and
+  fixtures only for authentication and external Provider/CDP/screening/RPC calls.
+- Ensures: the nine scenarios assert the typed HTTP result, persisted Call/history,
+  exact native references/postings and holds, signatures, and separate unpaid and
+  paid Provider hit counts. Required CI fails on missing native execution.
+- Invariant: uncertainty retains all liabilities; replay and concurrent attempts
+  cannot pay twice. A settled 2xx is charged even when delivery is invalid. A
+  settled non-2xx is a Provider loss without a buyer charge. A proven unpaid
+  refusal releases holds. Chain settlement without response status cannot justify
+  an ordinary buyer capture.
+- On violation: the matrix fails with the observed HTTP/state/ledger discrepancy;
+  missing native services and skipped mandatory cases fail CI. Timeout recovery
+  must demonstrate eventual exact settlement once, while the no-response control
+  remains explicitly uncertain.
+
+The scenarios are settled 2xx, unpaid seller 500, settled seller error, receipt
+timeout and recovery, changed Quote challenge, same-key replay, insufficient
+credit, per-Call/daily limits, and concurrent attempts for one allowance.
+
+Complexity decision: keep one new matrix file, extract the existing evidence
+reader only for its second caller, and use official pinned PostgreSQL/Ledger/
+Gateway images in disposable CI. Real Request/Response handlers need no additional
+HTTP server. Reject a scenario framework, replacement ledger, paid test service
+or generalized runtime wrapper. Existing native Workpool and ledger-boundary
+tests remain complementary evidence. Verification runs the native matrix plus
+those suites, workflow checks and `npm run check`; root inspects exact financial
+assertions before acceptance. Live custody, RPC and screening remain separate
+runtime evidence requirements.
+
+Native matrix finding: released unpaid/changed-challenge Calls persisted private
+transport failure codes as public refusal codes, so status validation returned
+HTTP 503 despite completed release. Contract Enforcer and Error Strategist apply
+at this projection boundary: require a recorded refusal, ensure an existing
+public refusal category, preserve receipt/state/retry and exact transport audit
+facts, and continue rejecting invalid fields outside this explicit mapping.
+This is a producer/projection bug; no financial recovery or additional retry is
+appropriate. Map private challenge-authority refusal to `pre_release_failed` and
+other private transport refusals to `provider_refused`, preserving already-public
+codes. Apply the same mapping when reading older records. Keep one small mapper
+in the existing contract module, shared by actual producers and projections;
+it replaces an incomplete owner-only special case and adds no schema or layer.
+
+Source acceptance — 2026-10-01: all nine money scenarios pass through real HTTP
+handlers and registered Convex/Workpool handlers against the disposable pinned
+native Ledger v2.4.14 stack. The matrix verifies exact buyer/legal/principal/
+custody/provider accounting subjects, native postings and holds, durable signing
+liability, audit history and separate unpaid/paid Provider hit counts. Retained
+paid-response recovery settles exactly once; losing the HTTP response retains
+liability even with a valid chain receipt. The matrix also caught and fixed the
+private-code/public-status defect, including read-only projection of historical
+records and same-key replay without changes to stored effects.
+
+The exact required CI packet passed **43/43 tests, zero skips/todos**: matrix 9,
+Workpool 25 and ledger-boundary 9. Its sanitized evidence verifier accepted every
+required file and assertion. Enabling native proof with an unavailable gateway
+produced the expected failure. The workflow boots digest-pinned isolated
+PostgreSQL/Ledger/Gateway services, checks actual version/health, uses the local
+npm toolchain, rejects incomplete reports, publishes sanitized evidence and
+removes its containers/volumes on success or failure. It runs on every supported
+workflow event, including pull requests.
+
+The 52 contract/replay/workflow and 72 worker/recovery tests pass; `npm run check`
+passes with zero dependency cycles. Independent review found and closed the
+historical replay gap. This completes #277's source requirement. The full release
+gate must run again before merge/release; no merge or release is performed here.
+The GitHub-hosted job has not yet run. Authentication, Provider, CDP, screening
+and RPC remain external fixtures in this native packet; it is not the deployed
+Sepolia journey or a live-money drill. The isolated local proof stack is removed
+after acceptance, preserving the existing development stack and its data.

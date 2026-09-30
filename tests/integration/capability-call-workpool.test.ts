@@ -22,6 +22,7 @@ import {
   prepareFundedProductionBuyer,
   prepareFundedSandboxBuyer as prepareFundedSandboxBuyerHarness,
   quoteByCallKey,
+  readEvidence,
   registerRotatingBuyer,
   seedPrincipal,
   type PrepareBuyerOptions,
@@ -470,39 +471,6 @@ async function statusQueryArgs(principal: TestPrincipal, callRef: string, suffix
     callRef,
   }
   return await withSourceWriteCommand('protected_action', args, args)
-}
-
-async function readEvidence(
-  backend: ConvexFixtureBackend,
-  callRef: string,
-) {
-  return await backend.run(async (ctx) => {
-    const call = await ctx.db.query('capabilityCalls')
-      .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
-      .unique()
-    const control = await ctx.db.query('actionExecutionControls')
-      .withIndex('by_executionRef', (query) => query.eq('executionRef', callRef))
-      .unique()
-    const attempt = await ctx.db.query('actionExecutionAttempts')
-      .withIndex('by_executionRef_and_attemptRef', (query) => (
-        query.eq('executionRef', callRef).eq('attemptRef', call?.attemptRef ?? '')
-      ))
-      .unique()
-    const projection = await ctx.db.query('capabilityCallProjections')
-      .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
-      .unique()
-    const history = await ctx.db.query('actionExecutionHistory')
-      .withIndex('by_executionRef_and_executionVersion', (query) => query.eq('executionRef', callRef))
-      .order('asc')
-      .collect()
-    return {
-      call,
-      control,
-      attempt,
-      history,
-      projection,
-    }
-  })
 }
 
 afterEach(() => {

@@ -5,6 +5,7 @@ import type { ActionCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { OwnerCallContext } from '@/modules/capability-execution/call-recovery-contracts'
+import { publicCallRefusalCode } from '@/modules/capability-execution/call-contracts'
 import { callState, callSummaryPageValue, principalAndSourceArgs, type ownerCallStatusResultValue } from './contracts'
 import {
   reconciliationEvidenceValue,
@@ -66,12 +67,8 @@ function projectRecordedOwnerTerminalStatus(
         ? 'cancelled' as const
         : undefined
   if (terminalState === undefined) return undefined
-  // This internal transport refusal predates the public Call refusal vocabulary.
-  // Preserve its terminal and receipt facts while projecting the truthful public
-  // pre-release category instead of leaking an unparseable private code.
   const result = recordedResult.kind === 'refused'
-    && recordedResult.code === 'payment_requirement_outside_authority'
-    ? { ...recordedResult, code: 'pre_release_failed' }
+    ? { ...recordedResult, code: publicCallRefusalCode(recordedResult.code) }
     : recordedResult
   const receipt = 'receipt' in result ? result.receipt : undefined
   return {
@@ -294,4 +291,3 @@ export async function reconcileOwnerCallHandler(
     evidence: args.evidence,
   })
 }
-
