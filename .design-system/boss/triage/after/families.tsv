@@ -1,0 +1,10 @@
+Button	13	own 6, stock 5, raw copies 6
+Input|TextField|Field	8	own 6, stock 4, raw copies 1
+Select|Dropdown|Combobox	5	own 1, stock 1, raw copies 3
+Dialog|Modal|Drawer|Sheet	12	own 11, stock 4, raw copies 0
+Card	9	own 8, stock 1, raw copies 0
+Badge|Tag|Chip|Pill	2	own 1, stock 2, raw copies 0
+Toast|Snackbar|Notification	0	own 0, stock 0, raw copies 0
+Tooltip|Popover	1	own 0, stock 2, raw copies 0
+Tabs?	1	own 0, stock 1, raw copies 0
+Link	50	own 1, stock 1, raw copies 48

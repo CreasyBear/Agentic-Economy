@@ -18,7 +18,7 @@ type ReviewRow = Readonly<Pick<
   'correlationId' | 'kind' | 'offered' | 'pickedToolRef' | 'tier' | 'modelConfidence' | 'fit' | 'latencyMs'
 >>
 
-const KINDS: readonly SelectionDecisionKind[] = ['procure', 'registry_rerank', 'directory_rerank']
+const KINDS: readonly SelectionDecisionKind[] = ['procure', 'registry_rerank', 'directory_rerank', 'chat_recommend']
 const TIERS: readonly SelectionDecisionRecord['tier'][] = [
   'jev_system_one',
   'secondary_llm_adapter',

@@ -71,6 +71,11 @@ export type JourneyRef =
 export type WorkState =
   | 'submitted' | 'working' | 'input-required' | 'auth-required'
   | 'completed' | 'failed' | 'canceled' | 'rejected'
+export const CHAT_TURN_FAILURE_REASONS = [
+  'generation_failed', 'generation_timed_out', 'outcome_unknown',
+] as const
+export type ChatTurnFailureReason = (typeof CHAT_TURN_FAILURE_REASONS)[number]
+
 
 type EventBase = Readonly<{
   eventId: string
@@ -83,6 +88,9 @@ export type TurnEvent = EventBase & Readonly<{
   turnRef: TurnRef
   contextId: ThreadRef
   callRef?: never
+  deadlineAt?: number
+  failureReason?: ChatTurnFailureReason
+  failureCallRefs?: readonly string[]
   payment?: never
 }>
 export type CallEvent = EventBase & Readonly<{

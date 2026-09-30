@@ -5,7 +5,7 @@ import {
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
 
-export type SelectionDecisionKind = 'procure' | 'registry_rerank' | 'directory_rerank'
+export type SelectionDecisionKind = 'procure' | 'registry_rerank' | 'directory_rerank' | 'chat_recommend'
 export type SelectionDecisionRecord = Readonly<{
   kind: SelectionDecisionKind
   accountRef?: string
@@ -17,6 +17,11 @@ export type SelectionDecisionRecord = Readonly<{
   fit: readonly { toolRef: string; noul: number | null; score: number | null }[]
   latencyMs: number
   costAud: number | null
+  threadId?: string
+  promptMessageId?: string
+  shown?: boolean
+  ranToolRef?: string
+  ranAt?: number
 }>
 
 type SelectionDecisionMutationArgs = Readonly<{

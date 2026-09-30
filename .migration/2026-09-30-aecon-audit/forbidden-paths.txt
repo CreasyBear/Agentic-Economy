@@ -1,0 +1,11 @@
+src/**
+convex/**
+components.json
+scripts/**
+package.json
+package-lock.json
+AGENTS.md
+PRODUCT.md
+DESIGN.md
+CONTEXT.md
+.design-system/**

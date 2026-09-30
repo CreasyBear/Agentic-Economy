@@ -1,0 +1,2 @@
+# No legacy paths are declared: the active local target is src/styles/globals.css + DESIGN.md + src/components/ui.
+# No registry.json, migration map or replaces metadata identifies a superseded UI module; do not infer one.

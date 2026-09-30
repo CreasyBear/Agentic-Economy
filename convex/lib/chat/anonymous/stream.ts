@@ -58,7 +58,7 @@ export async function streamAnonymousChatResponse(
     execute: async ({ writer }) => {
       const completedSteps: { toolResults: { toolName: string; output: unknown }[] }[] = []
       let modelFailure: unknown
-      let answerOutcome: 'completed' | 'input_required' | undefined
+      let answerOutcome: 'completed' | 'input_required' | 'failed' | undefined
       try {
       const latestUser = [...messages].reverse().find(message => message.role === 'user')?.content ?? ''
       if (continuation === undefined && latestUser.trim().length > 0) {
@@ -195,12 +195,17 @@ export async function streamAnonymousChatResponse(
       } catch (error) {
         if (abortSignal?.aborted) throw error
         const answer = completedChatFacts(completedSteps)
-        if (answer === null) throw error
-        writer.write({ type: 'text-start', id: 'completed-tool-facts' })
-        writer.write({ type: 'text-delta', id: 'completed-tool-facts', delta: answer })
-        writer.write({ type: 'text-end', id: 'completed-tool-facts' })
+        if (answer !== null) {
+          writer.write({ type: 'text-start', id: 'completed-tool-facts' })
+          writer.write({ type: 'text-delta', id: 'completed-tool-facts', delta: answer })
+          writer.write({ type: 'text-end', id: 'completed-tool-facts' })
+          writer.write({ type: 'finish' })
+          answerOutcome = 'completed'
+          return
+        }
+        writer.write({ type: 'data-chat-failure', data: { reason: 'generation_failed' } })
         writer.write({ type: 'finish' })
-        answerOutcome = 'completed'
+        answerOutcome = 'failed'
       } finally {
         if (!(abortSignal?.aborted === true && answerOutcome === undefined)) {
           recordAnonymousChat(answerOutcome ?? 'failed')

@@ -4,7 +4,7 @@ import { canonicalDigest } from '../../../../src/modules/common/canonical-digest
 import { MARKET_TOOLS_CALL_SCOPE } from '../../../../src/modules/agent-access/contract'
 import { components, internal } from '../../../_generated/api'
 import type { Doc } from '../../../_generated/dataModel'
-import { isChatThreadBusy, normalizeChatThreadTitle, requireChatOwner, resolveOwnerChatActor, type TurnActor } from '../threads/listing'
+import { ACTIVE_CHAT_GENERATION_MS, isChatThreadBusy, normalizeChatThreadTitle, requireChatOwner, resolveOwnerChatActor, type TurnActor } from '../threads/listing'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveCurrentAgentAuthority } from '../../capabilityExecution/callLifecycle/agentCallAuthority'
 import { resolveCanonicalAgentContext } from '../../authority/canonicalAgent/authority'
@@ -12,6 +12,7 @@ import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrit
 import { type SourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { chatThreadBelongsToPrincipal, readPrincipalChatThread } from '../threads/ownership'
 import { assertAdmission } from '../../platform/rateLimit'
+import { expireStaleTurn } from './recovery'
 
 
 export type KeyTurnPrincipal = Readonly<{
@@ -164,7 +165,7 @@ export async function reserveAndStartTurn(
   ctx: MutationCtx,
   input: Readonly<{ actor: TurnActor; threadId: string | undefined; prompt: string; clientTurnId: string;
     searchContinuation?: { query: string; cursor: string; inputJson: string } }>,
-): Promise<{ threadId: string; turnRef: string; promptMessageId: string; state: Doc<'chatTurns'>['state']; sequence: number }> {
+): Promise<{ threadId: string; turnRef: string; promptMessageId: string; state: Doc<'chatTurns'>['state']; sequence: number; deadlineAt?: number }> {
   const prompt = normalizedTurnPrompt(input.prompt)
   if (input.clientTurnId.trim().length === 0 || input.clientTurnId.length > 200) throw new Error('invalid_input')
   const materialDigest = canonicalDigest({
@@ -191,6 +192,7 @@ export async function reserveAndStartTurn(
     return {
       threadId: previous.threadId, turnRef: previous.turnRef,
       promptMessageId: previous.promptMessageId, state: previous.state, sequence: previous.sequence,
+      ...(previous.deadlineAt === undefined ? {} : { deadlineAt: previous.deadlineAt }),
     }
   }
   const admission = await assertAdmission(ctx, {
@@ -199,6 +201,7 @@ export async function reserveAndStartTurn(
   })
   if (!admission.ok) throw new ConvexError({ code: 'rate_limited', retryAfter: admission.retryAfter })
   const now = Date.now()
+  const deadlineAt = now + ACTIVE_CHAT_GENERATION_MS
   const turnRef = `turn_${crypto.randomUUID()}`
   // Reservation is deliberately first: a retry cannot create a second agent thread.
   const reservationId = await ctx.db.insert('chatTurns', {
@@ -208,7 +211,7 @@ export async function reserveAndStartTurn(
     ...(input.actor.origin === undefined ? {} : { origin: input.actor.origin }),
     ...(input.actor.grantRef === undefined ? {} : { grantRef: input.actor.grantRef }),
     ...(input.searchContinuation === undefined ? {} : { searchContinuation: input.searchContinuation }),
-    clientTurnId: input.clientTurnId, materialDigest,
+    clientTurnId: input.clientTurnId, materialDigest, deadlineAt,
     state: 'submitted', createdAt: now, updatedAt: now,
   })
   let row: Doc<'chatThreads'>
@@ -237,7 +240,16 @@ export async function reserveAndStartTurn(
     && latest?.promptMessageId === row.activePromptMessageId
     && latest.cancelRequestedAt === undefined
     && !['completed', 'failed', 'canceled', 'rejected'].includes(latest.state)) {
-    await ctx.db.patch(latest._id, { state: 'canceled', cancelRequestedAt: now, updatedAt: now })
+    const staleDeadlineAt = latest.deadlineAt
+      ?? (row.activeStartedAt === undefined ? undefined : row.activeStartedAt + ACTIVE_CHAT_GENERATION_MS)
+    if (staleDeadlineAt !== undefined && staleDeadlineAt <= now) {
+      await expireStaleTurn(ctx, {
+        turnRef: latest.turnRef, promptMessageId: latest.promptMessageId,
+        expectedDeadlineAt: staleDeadlineAt, now,
+      })
+    } else {
+      await ctx.db.patch(latest._id, { state: 'canceled', cancelRequestedAt: now, updatedAt: now })
+    }
   }
   const sequence = (latest?.sequence ?? 0) + 1
   const { messageId: promptMessageId } = await saveMessage(ctx, components.agent, {
@@ -250,17 +262,23 @@ export async function reserveAndStartTurn(
   await ctx.db.patch(row._id, {
     title, activePromptMessageId: promptMessageId, activeStartedAt: now, updatedAt: now,
   })
-  await ctx.db.patch(reservationId, { threadId: row.threadId, sequence, promptMessageId, updatedAt: now })
+  await ctx.db.patch(reservationId, {
+    threadId: row.threadId, sequence, promptMessageId, updatedAt: now,
+  })
+  await ctx.scheduler.runAfter(ACTIVE_CHAT_GENERATION_MS, internal.chatTurns.finishTurn, {
+    turnRef, promptMessageId, state: 'failed', failureReason: 'generation_timed_out',
+    expectedDeadlineAt: deadlineAt,
+  })
   if (input.actor.authority !== undefined) {
     await ctx.scheduler.runAfter(0, internal.chatGenerate.generate, {
-      threadId: row.threadId, promptMessageId, turnRef, authority: input.actor.authority,
+      threadId: row.threadId, promptMessageId, turnRef, authority: input.actor.authority, deadlineAt,
     })
   } else {
     await ctx.scheduler.runAfter(0, internal.chatGenerate.generate, {
-      threadId: row.threadId, promptMessageId, turnRef,
+      threadId: row.threadId, promptMessageId, turnRef, deadlineAt,
     })
   }
-  return { threadId: row.threadId, turnRef, promptMessageId, state: 'submitted', sequence }
+  return { threadId: row.threadId, turnRef, promptMessageId, state: 'submitted', sequence, deadlineAt }
 }
 
 /** @convex-dev/agent owns storage; Turn only scopes its published stream cursor. */
@@ -347,19 +365,3 @@ async function settledTurnText(
   }
 }
 
-/** Linked Calls remain historical; only unresolved effects block a stopped cancellation. */
-export async function unresolvedTurnCallRefs(
-  ctx: Pick<QueryCtx, 'db'>,
-  callRefs: readonly string[],
-): Promise<string[]> {
-  const unresolved: string[] = []
-  for (const callRef of callRefs) {
-    const call = await ctx.db.query('capabilityCalls')
-      .withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
-    if (call !== null && (call.state === 'pending' || call.state === 'reconciliation_required'
-      || call.formanceFinancialState === 'possibly_submitted'
-      || call.formanceFinancialState === 'outcome_unknown'
-      || call.usage?.chargeState === 'outcome_unknown')) unresolved.push(callRef)
-  }
-  return unresolved
-}

@@ -4,7 +4,8 @@ import type { ObjectType } from 'convex/values'
 import { resolveOwnerChatActor } from '../threads/listing'
 import { chatThreadBelongsToPrincipal } from '../threads/ownership'
 import { publicChatTurn } from './errors'
-import { ownerReadableActor, requirePrincipalTurn, reserveAndStartTurn, resolveTurnActor, unresolvedTurnCallRefs } from './handlers'
+import { ownerReadableActor, requirePrincipalTurn, reserveAndStartTurn, resolveTurnActor } from './handlers'
+import { expireStaleTurn, failPendingTurnSteps, unresolvedTurnCallRefs } from './recovery'
 import type { startTurnArgs, cancelTurnArgs, recordOwnerChatCallArgs, finishTurnArgs } from './contracts'
 import { issueSearchContinuation, resolveSearchContinuation } from './searchContinuation'
 
@@ -68,16 +69,48 @@ export const recordOwnerChatCallHandler = async (ctx: MutationCtx, { authority, 
   }
 
 export const finishTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeof finishTurnArgs>) => {
-    const turn = await ctx.db.query('chatTurns').withIndex('by_turnRef', q => q.eq('turnRef', args.turnRef)).unique()
-    if (turn === null || turn.promptMessageId !== args.promptMessageId || turn.cancelRequestedAt !== undefined
-      || (['completed', 'failed', 'rejected', 'canceled'].includes(turn.state)
-        && turn.state !== args.state)) return false
-    if (turn.state !== args.state) {
-      recordChatAnswer(turn.state, args.state)
-      await ctx.db.patch(turn._id, { state: args.state, updatedAt: Date.now() })
+  if (args.expectedDeadlineAt !== undefined) {
+    return args.state === 'failed' && await expireStaleTurn(ctx, {
+      turnRef: args.turnRef,
+      promptMessageId: args.promptMessageId,
+      expectedDeadlineAt: args.expectedDeadlineAt,
+    })
+  }
+  const turn = await ctx.db.query('chatTurns')
+    .withIndex('by_turnRef', query => query.eq('turnRef', args.turnRef)).unique()
+  if (turn === null || turn.promptMessageId !== args.promptMessageId || turn.cancelRequestedAt !== undefined) {
+    return false
+  }
+  if (['completed', 'failed', 'rejected', 'canceled'].includes(turn.state)) return turn.state === args.state
+  if (args.state === 'working') {
+    if (turn.deadlineAt !== undefined && Date.now() >= turn.deadlineAt) {
+      return await expireStaleTurn(ctx, {
+        turnRef: turn.turnRef, promptMessageId: turn.promptMessageId,
+        expectedDeadlineAt: turn.deadlineAt,
+      })
     }
+    if (turn.state !== 'submitted') return false
+  }
+  const now = Date.now()
+  if (args.state === 'failed') {
+    const callRefs = await unresolvedTurnCallRefs(ctx, turn.inFlightCallRefs ?? [])
+    const failureReason = callRefs.length > 0 ? 'outcome_unknown' : args.failureReason ?? 'generation_failed'
+    await failPendingTurnSteps(ctx, turn)
+
+    recordChatAnswer(turn.state, 'failed')
+    await ctx.db.patch(turn._id, {
+      state: 'failed', failureReason,
+      ...(callRefs.length === 0 ? { failureCallRefs: undefined } : { failureCallRefs: callRefs }),
+      updatedAt: now,
+    })
     return true
   }
+  if (turn.state !== args.state) {
+    recordChatAnswer(turn.state, args.state)
+    await ctx.db.patch(turn._id, { state: args.state, updatedAt: now })
+  }
+  return true
+}
 
 export { issueSearchContinuation }
 

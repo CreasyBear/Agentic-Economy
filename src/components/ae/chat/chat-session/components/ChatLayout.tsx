@@ -11,11 +11,27 @@ import { ChatSuggestedActions } from './ChatSuggestedActions'
 import { ChatComposer } from './ChatComposer'
 import { ChatHeader } from './ChatHeader'
 import { ChatHeaderAuthorityContainer } from '../ChatHeaderAuthorityContainer'
+import { RecoveryNotice } from '../../recovery/RecoveryNotice'
 
 
 export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy = model.header.busy, onEnableSpending, onAddCredit, balanceLabel }: ChatLayoutProps) {
   const [historyOpen, setHistoryOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [offline, setOffline] = useState(false)
+  const [historyVersion, setHistoryVersion] = useState(0)
+  useEffect(() => {
+    const syncOffline = () => setOffline(!navigator.onLine)
+    syncOffline()
+    window.addEventListener('online', syncOffline)
+    window.addEventListener('offline', syncOffline)
+    return () => {
+      window.removeEventListener('online', syncOffline)
+      window.removeEventListener('offline', syncOffline)
+    }
+  }, [])
+  const retryHistory = () => setHistoryVersion(version => version + 1)
+  const retryConnection = () => setOffline(!navigator.onLine)
+  const focusPrompt = () => document.getElementById('tool-chat-prompt')?.focus()
   useEffect(() => {
     if (document.cookie.split('; ').includes('chat_sidebar_state=false')) setHistoryOpen(false)
   }, [])
@@ -44,7 +60,8 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
       {model.showHistoryRail ? (
         <aside aria-label="Conversation history" className={`hidden h-full shrink-0 flex-col border-r border-border bg-card text-foreground md:flex ${historyOpen ? 'w-64' : 'w-12'}`}>
           {historyOpen
-            ? <ErrorBoundary key={model.header.threadId} fallback={<a href="/market" className="m-3 text-sm underline">Browse Tools</a>}>
+            ? <ErrorBoundary key={`${model.header.threadId}:${historyVersion}`}
+                fallback={<RecoveryNotice className="m-3" reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} />}>
                 {model.createHistoryPanel('rail')}
               </ErrorBoundary>
             : <Button type="button" variant="ghost" size="icon" className="m-1 min-h-10 min-w-10" aria-label="New chat" onClick={model.header.onNewChat}><PlusIcon aria-hidden="true" /></Button>}
@@ -59,7 +76,8 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
               balanceLabel={balanceLabel}
               ownerChatEnabled={ownerChatEnabled}
               mobileHistory={model.showHistoryRail ? (
-                <ErrorBoundary key={model.header.threadId} fallback={<a href="/market" className="m-3 text-sm underline">Browse Tools</a>}>
+                <ErrorBoundary key={`${model.header.threadId}:${historyVersion}`}
+                  fallback={<RecoveryNotice className="m-3" reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} />}>
                   {model.createHistoryPanel('history', () => setMobileOpen(false))}
                 </ErrorBoundary>
               ) : null}
@@ -73,6 +91,11 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
         {...model.pageBusy ? { busy: true } : {}}
       >
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          {offline ? (
+            <div className="px-4 pt-3">
+              <RecoveryNotice reason="network_offline" onRetry={retryConnection} onEdit={focusPrompt} />
+            </div>
+          ) : null}
           <ChatTranscript {...model.transcript} ownerChatEnabled={ownerChatEnabled}
             onRunTool={model.onRunTool}
             enableSpendingBusy={enableSpendingBusy}

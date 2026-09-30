@@ -145,13 +145,18 @@ describe('search result state', () => {
       displayPrice: { kind: 'indicative', amount: { currency: 'AUD', units: '1', exponent: 6 },
         rateObservedAt: 1_900_000_000_000, validUntil: 2_000_000_000_000 },
       price: { kind: 'indicative', label: 'USDC 0.000001' }, readiness: 'ready' }
+    const recommendation = { toolRef: TOOL_REF, by: 'Jev (decision.example)' }
     const matched = projectToolCard({
-      type: toolType, state: 'output-available', output: { kind: 'match', results: [item] },
+      type: toolType, state: 'output-available', output: { kind: 'match', results: [item], recommendation },
     })
-    expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1,
+    expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1, recommendation,
       choices: [{ title: 'Lookup A', price: 'A$0.01', priceValidUntil: 2_000_000_000_000 }] })
-    if (matched === null) throw new Error('missing_card')
-    expect(projectToolCard(serializeToolCard(matched))).toEqual(matched)
+    if (matched === null) throw new Error('missing_projected_card')
+    const stored = serializeToolCard(matched)
+    expect(projectToolCard(stored)).toEqual(matched)
+    if (stored === null) throw new Error('missing_stored_card')
+    expect(projectToolCard({ ...stored, recommendation: { toolRef: 'operation:invalid', by: 'Jev' } }))
+      .not.toHaveProperty('recommendation')
   })
 
   it('carries the live estimate expiry from indexed search to chat instead of retaining an old price', () => {
@@ -292,11 +297,29 @@ describe('inspect Quote tool cards', () => {
       state: 'output-available', output,
     })
     expect(card).toMatchObject({
-      kind: 'status', state: 'refused',
-      summary: 'AE could not complete this Quote request. Contact support before trying again.',
+      kind: 'status', state: 'refused', recoveryReason: 'inspection_unavailable',
     })
     if (card === null) throw new Error('missing_card')
+    render(createElement(ToolCard, { projection: card }))
+    expect(screen.getByRole('link', { name: 'Try another Tool' }).getAttribute('href')).toBe('/market')
+    expect(screen.queryByText('missing_source_write_admission')).toBeNull()
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+  })
+  it('offers Add credit for an insufficient-balance refusal', () => {
+    const output = projectToolQuoteRefusal({
+      toolRef: TOOL_REF, input: {}, code: 'insufficient_balance', retryable: false,
+      correlationRef: 'chat-insufficient-balance',
+      funding: { principalAmount: PRICE, idempotencyKey: 'chat-funding-handoff' },
+    })
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']}`,
+      state: 'output-available', output,
+    })
+    if (card === null) throw new Error('missing_card')
+    const onAddCredit = vi.fn()
+    render(createElement(ToolCard, { projection: card, onAddCredit }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add credit' }))
+    expect(onAddCredit).toHaveBeenCalledWith({ units: PRICE.units, exponent: PRICE.exponent })
   })
 
   it('keeps Account available and Agent maximum on the owner inspect projection', () => {

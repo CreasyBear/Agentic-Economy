@@ -15,7 +15,7 @@ import { rateLimitedResponse, withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { projectStreamJourneyProblem, type CallEvent, type TurnEvent, type WorkState } from '@/modules/actions/contract'
+import { projectStreamJourneyProblem, type CallEvent, type ChatTurnFailureReason, type TurnEvent, type WorkState } from '@/modules/actions/contract'
 
 const startTurn = sourceMutation<Record<string, unknown>, TurnSnapshot>('chatTurns:startTurn')
 const cancelTurn = sourceMutation<Record<string, unknown>, CancelResult>('chatTurns:cancelTurn')
@@ -34,11 +34,19 @@ const STREAM_WINDOW_MS = 60_000
 
 type KeyPrincipal = AgentAccessPrincipal & Readonly<{ kind: 'agent_key' }>
 type TurnPrincipal = KeyPrincipal | Readonly<{ kind: 'clerk' }>
-type TurnSnapshot = Readonly<{ turnRef: string; threadId: string; promptMessageId: string; sequence: number; state: WorkState; cancelRequestedAt?: number; callRefs?: readonly string[]; inFlightCallRefs?: readonly string[] }>
+type TurnSnapshot = Readonly<{
+  turnRef: string; threadId: string; promptMessageId: string; sequence: number; state: WorkState
+  deadlineAt?: number; cancelRequestedAt?: number; failureReason?: ChatTurnFailureReason; failureCallRefs?: readonly string[]
+  callRefs?: readonly string[]; inFlightCallRefs?: readonly string[]
+}>
 type CancelResult = Readonly<{ kind: 'stopped' | 'in_flight'; turnRef: string; inFlightEffects: readonly { callRef: string }[] }>
 type StreamMessage = Readonly<{ streamId: string; status: 'streaming' | 'finished' | 'aborted' }>
 type StreamDelta = Readonly<{ streamId: string; start: number; end: number; parts: readonly unknown[] }>
-type TurnDeltas = Readonly<{ turnRef: string; sequence: number; state: WorkState; streams: { kind: 'list'; messages: readonly StreamMessage[] } | { kind: 'deltas'; deltas: readonly StreamDelta[] } }>
+type TurnDeltas = Readonly<{
+  turnRef: string; sequence: number; state: WorkState; deadlineAt?: number
+  failureReason?: ChatTurnFailureReason; failureCallRefs?: readonly string[]
+  streams: { kind: 'list'; messages: readonly StreamMessage[] } | { kind: 'deltas'; deltas: readonly StreamDelta[] }
+}>
 type StreamArgs = Readonly<{ kind: 'list' }> | Readonly<{ kind: 'deltas'; cursors: readonly { streamId: string; cursor: number }[] }>
 export type ChatTurnSource = Readonly<{
   start(input: Readonly<{ prompt: string; threadId?: string; clientTurnId: string }>): Promise<TurnSnapshot>
@@ -126,7 +134,16 @@ function sourceProblem(error: unknown, request: Request, correlationId: string):
 }
 
 function turnEvent(turn: TurnSnapshot, correlationId: string, sequence: number): TurnEvent {
-  return { kind: 'turn', turnRef: turn.turnRef as TurnEvent['turnRef'], contextId: turn.threadId as TurnEvent['contextId'], state: turn.state, sequence, eventId: `${turn.turnRef}:${sequence}`, correlationId }
+  return {
+    kind: 'turn', turnRef: turn.turnRef as TurnEvent['turnRef'],
+    contextId: turn.threadId as TurnEvent['contextId'], state: turn.state, sequence,
+    ...(turn.deadlineAt === undefined ? {} : { deadlineAt: turn.deadlineAt }),
+    eventId: `${turn.turnRef}:${sequence}`, correlationId,
+    ...(turn.failureReason === undefined ? {} : {
+      failureReason: turn.failureReason,
+      ...(turn.failureCallRefs === undefined ? {} : { failureCallRefs: turn.failureCallRefs }),
+    }),
+  }
 }
 
 
@@ -169,7 +186,14 @@ function streamTurn(request: Request, turn: TurnSnapshot, source: ChatTurnSource
             }
           }
           if (listed.state !== current.state) {
-            current = { ...current, state: listed.state }
+            current = {
+              ...current, state: listed.state,
+              ...(listed.deadlineAt === undefined ? {} : { deadlineAt: listed.deadlineAt }),
+              ...(listed.failureReason === undefined ? {} : {
+                failureReason: listed.failureReason,
+                ...(listed.failureCallRefs === undefined ? {} : { failureCallRefs: listed.failureCallRefs }),
+              }),
+            }
             writer.write({ type: 'data-ae-state', data: turnEvent(current, correlationId, sequence++) })
           }
           if (terminal.has(listed.state)) break

@@ -1266,6 +1266,12 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "capabilitySelectionDecisions",
+    "method": "markRunInternal",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "capabilitySelectionDecisions",
     "method": "recent",
@@ -1275,6 +1281,12 @@
     "visibility": "public",
     "module": "capabilitySelectionDecisions",
     "method": "record",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySelectionDecisions",
+    "method": "recordInternal",
     "kind": "mutation"
   },
   {

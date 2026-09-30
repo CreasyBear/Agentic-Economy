@@ -13,11 +13,12 @@ import {
   withdrawOwnerMarketDemand,
 } from '@/modules/market-demand/market-demand.functions'
 import type { ChatNeedActions } from '@/modules/chat/tool-card'
+import { formatRunRequest, parseRunRequest, type RunIntent } from '@/modules/chat/run-request'
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
-import type { ChatProps, ChatSessionModel } from './chat-session.contracts'
+import type { ChatProps, ChatRunResult, ChatSessionModel } from './chat-session.contracts'
 import { sendAnonymousChatTurn } from './anonymous-chat-send'
 import { ChatHistoryPanelContainer } from './ChatHistoryPanelContainer'
 import {
@@ -37,6 +38,7 @@ import {
   type ChatStatus,
   type TranscriptMessage,
 } from '../presentation'
+import type { ChatRecoveryReason } from '../recovery/recovery.contracts'
 
 export function useChatNeedActions(): ChatNeedActions {
   const { isSignedIn } = useAuth()
@@ -83,6 +85,7 @@ export function useChatSession({
   const [error, setError] = useState(() => promptLimitMessage(initialPrompt))
   const [errorReference, setErrorReference] = useState<string | undefined>()
   const [browseMarketOnError, setBrowseMarketOnError] = useState(false)
+  const [recovery, setRecovery] = useState<ChatRecoveryReason | 'unknown'>()
   const [status, setStatus] = useState<ChatStatus>('')
 
   const [sharePath, setSharePath] = useState<string | null>(null)
@@ -95,6 +98,15 @@ export function useChatSession({
   const mountedRef = useRef(false)
   const handoffStoredRef = useRef(false)
   const initialSubmitPendingRef = useRef(initialPrompt.trim().length > 0)
+  const retryableClientTurnRef = useRef<Readonly<{ prompt: string; clientTurnId?: string }> | null>(null)
+  const [retryableClientTurn, setRetryableClientTurn] = useState<Readonly<{ prompt: string; clientTurnId?: string }> | null>(null)
+  const uncertainRunKeysRef = useRef(new Set<string>())
+  const turnInFlightRef = useRef(false)
+  const requestGenerationRef = useRef(0)
+  function updateRetryableClientTurn(value: Readonly<{ prompt: string; clientTurnId?: string }> | null): void {
+    retryableClientTurnRef.current = value
+    setRetryableClientTurn(value)
+  }
 
   const durable = useUIMessages(
     api.chatMessages.listMessages,
@@ -120,9 +132,24 @@ export function useChatSession({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      requestGenerationRef.current += 1
       abortRef.current?.abort()
     }
   }, [])
+  useEffect(() => {
+    requestGenerationRef.current += 1
+    abortRef.current?.abort()
+    if (turnInFlightRef.current) {
+      turnInFlightRef.current = false
+      operationInFlightRef.current = false
+      setBusy(false)
+      setSending(false)
+    }
+    retryableClientTurnRef.current = null
+    setRetryableClientTurn(null)
+    uncertainRunKeysRef.current.clear()
+    setRecovery(undefined)
+  }, [threadId])
   useEffect(() => {
     if (initialHandoff.threadId !== null) clearAnonymousChatHandoff(initialHandoff.threadId)
   }, [initialHandoff])
@@ -185,9 +212,16 @@ export function useChatSession({
   const promptTooLong = unicodeLength(prompt.trim()) > MAX_PROMPT_CHARACTERS
   const composerDisabled = busy || authLoading || anonymousMessageLimitReached || privateThreadLocked
 
-  async function sendAnonymous(nextPrompt: string, continuation?: SearchContinuation): Promise<void> {
+  async function sendAnonymous(
+    nextPrompt: string,
+    requestGeneration: number,
+    continuation?: SearchContinuation,
+  ): Promise<void> {
     await sendAnonymousChatTurn({
-      nextPrompt, anonymousMessages, setAnonymousMessages,
+      nextPrompt, anonymousMessages,
+      setAnonymousMessages: messages => {
+        if (requestGenerationRef.current === requestGeneration) setAnonymousMessages(messages)
+      },
       ...(continuation === undefined ? {} : { continuation }),
       abortPrevious: () => { abortRef.current?.abort() },
       adoptController: (controller) => { abortRef.current = controller },
@@ -195,43 +229,72 @@ export function useChatSession({
     })
   }
 
-  async function submit(forceNewThread = false, rawPrompt = prompt, continuation?: SearchContinuation, preserveDraft = false): Promise<boolean> {
+  async function submit(
+    forceNewThread = false,
+    rawPrompt = prompt,
+    continuation?: SearchContinuation,
+    preserveDraft = false,
+    retryClientTurnId?: string,
+  ): Promise<ChatRunResult> {
     const nextPrompt = rawPrompt.trim()
     if (nextPrompt.length === 0) {
       setError('Enter a message before sending.')
-      return false
+      setRecovery('input_invalid')
+      return { kind: 'not_submitted', reason: 'input_invalid' }
     }
     if (unicodeLength(nextPrompt) > MAX_PROMPT_CHARACTERS) {
       setError('Messages can be at most 2,000 characters.')
-      return false
+      setRecovery('input_invalid')
+      return { kind: 'not_submitted', reason: 'input_invalid' }
     }
     if (threadId !== null && !isAuthenticated) {
       setError('Reconnect to your account before sending to this conversation.')
-      return false
+      setRecovery('private_thread_locked')
+      return { kind: 'not_submitted', reason: 'private_thread_locked' }
     }
     if (continuation !== undefined && isAuthenticated && threadId === null) {
       setError('Open the conversation before loading more results.')
-      return false
+      setRecovery('chat_unavailable')
+      return { kind: 'not_submitted', reason: 'chat_unavailable' }
     }
-    if (operationInFlightRef.current) return false
+    if (operationInFlightRef.current) {
+      setRecovery('thread_busy')
+      return { kind: 'not_submitted', reason: 'thread_busy' }
+    }
+    if (retryClientTurnId !== undefined) {
+      const retryable = retryableClientTurnRef.current
+      if (retryable?.prompt !== nextPrompt || retryable.clientTurnId !== retryClientTurnId) {
+        return { kind: 'not_submitted', reason: 'input_invalid' }
+      }
+    } else {
+      updateRetryableClientTurn(null)
+    }
+    const requestGeneration = requestGenerationRef.current
     operationInFlightRef.current = true
+    turnInFlightRef.current = true
     setBusy(true)
     setSending(true)
     setError('')
     setErrorReference(undefined)
     setBrowseMarketOnError(false)
+    setRecovery(undefined)
     setStatus(isAuthenticated ? 'Sending message…' : 'Getting a response…')
+    let clientTurnId: string | undefined
     try {
       if (isAuthenticated) {
+        clientTurnId = retryClientTurnId ?? globalThis.crypto.randomUUID()
         const result = await startTurn({
           principal: { kind: 'clerk' }, prompt: nextPrompt,
-          clientTurnId: globalThis.crypto.randomUUID(),
+          clientTurnId,
           ...(threadId === null || forceNewThread ? {} : { threadId }),
           ...(continuation === undefined ? {} : {
             continuation: { kind: 'search_next_page' as const, ...continuation },
           }),
         })
+        if (!mountedRef.current || requestGenerationRef.current !== requestGeneration) return { kind: 'submitted' }
+        updateRetryableClientTurn(null)
         if (!preserveDraft) setPrompt('')
+        setRecovery(undefined)
         setStatus('Message sent.')
         if (result.threadId !== threadId) {
           if (!handoffStoredRef.current && anonymousMessages.length > 0) {
@@ -241,29 +304,60 @@ export function useChatSession({
           onThreadCreated(result.threadId)
         }
       } else {
-        await sendAnonymous(nextPrompt, continuation)
+        await sendAnonymous(nextPrompt, requestGeneration, continuation)
+        if (!mountedRef.current || requestGenerationRef.current !== requestGeneration) return { kind: 'submitted' }
+        updateRetryableClientTurn(null)
         if (!preserveDraft) setPrompt('')
+        setRecovery(undefined)
         setStatus('Response complete.')
       }
-      return true
+      return { kind: 'submitted' }
     } catch (caught) {
-      if (caught instanceof Error && caught.name === 'AbortError') return false
-      if (String(caught).includes('anonymous_message_limit')) {
-        setError('This browser conversation has reached its 12-message limit. Sign in or start a new chat.')
-      } else if (String(caught).includes('anonymous_size_limit')) {
-        setError('This browser conversation is full. Sign in or start a new chat.')
-      } else {
-        const failure = projectChatFailure(caught)
-        setError(failure.message)
-        setErrorReference(failure.reference)
-        setBrowseMarketOnError(failure.browseMarket)
+      const isRunRequest = parseRunRequest(nextPrompt) !== null
+      if (!mountedRef.current || requestGenerationRef.current !== requestGeneration) {
+        return isRunRequest
+          ? { kind: 'outcome_unknown' }
+          : { kind: 'not_submitted', reason: 'turn_stopped' }
       }
+      if (caught instanceof Error && caught.name === 'AbortError') {
+        setStatus('')
+        if (isRunRequest) {
+          setError('We could not confirm whether the Run started. Check the conversation before trying again.')
+          setRecovery('outcome_unknown')
+          updateRetryableClientTurn(null)
+          return { kind: 'outcome_unknown' }
+        }
+        setRecovery('turn_stopped')
+        return { kind: 'not_submitted', reason: 'turn_stopped' }
+      }
+      const failure = projectChatFailure(caught)
+      setErrorReference(failure.reference)
+      setBrowseMarketOnError(failure.browseMarket)
       setStatus('')
-      return false
+      if (isRunRequest && failure.reason !== 'rate_limited') {
+        setError('We could not confirm whether the Run started. Check the conversation before trying again.')
+        setRecovery('outcome_unknown')
+        updateRetryableClientTurn(null)
+        return { kind: 'outcome_unknown' }
+      }
+      setError(failure.message)
+      setRecovery(failure.reason)
+      if (failure.reason === 'rate_limited') {
+        updateRetryableClientTurn({
+          prompt: nextPrompt,
+          ...(clientTurnId === undefined ? {} : { clientTurnId }),
+        })
+        return { kind: 'not_submitted', reason: failure.reason }
+      }
+      updateRetryableClientTurn(null)
+      return { kind: 'outcome_unknown' }
     } finally {
-      operationInFlightRef.current = false
-      setBusy(false)
-      setSending(false)
+      if (mountedRef.current && requestGenerationRef.current === requestGeneration) {
+        operationInFlightRef.current = false
+        turnInFlightRef.current = false
+        setBusy(false)
+        setSending(false)
+      }
     }
   }
 
@@ -298,7 +392,17 @@ export function useChatSession({
   }
 
   function startNewChat(): void {
+    requestGenerationRef.current += 1
     abortRef.current?.abort()
+    if (turnInFlightRef.current) {
+      turnInFlightRef.current = false
+      operationInFlightRef.current = false
+      setBusy(false)
+      setSending(false)
+    }
+    updateRetryableClientTurn(null)
+    uncertainRunKeysRef.current.clear()
+    setRecovery(undefined)
     if (anonymousSessionIdRef.current !== null) {
       clearAnonymousSession(anonymousSessionStorage(), anonymousSessionIdRef.current)
       anonymousSessionIdRef.current = crypto.randomUUID()
@@ -353,15 +457,20 @@ export function useChatSession({
 
 
 
-  const unansweredQuestion = !busy && !sending && !privateThreadLocked
+  const unansweredText = !busy && !sending && !privateThreadLocked
     && visibleMessages.at(-1)?.role === 'user'
     ? textFromParts(visibleMessages.at(-1)?.parts ?? []).trim()
     : ''
+  const unansweredQuestion = unansweredText !== ''
+    && retryableClientTurn?.prompt === unansweredText
+    && parseRunRequest(unansweredText) === null ? unansweredText : ''
   function stopAnonymousSend() {
     abortRef.current?.abort()
   }
   function focusPrompt(value: string) {
     setPrompt(value)
+    setRecovery(undefined)
+    if (retryableClientTurnRef.current?.prompt !== value) updateRetryableClientTurn(null)
     setError(promptLimitMessage(value))
     document.getElementById('tool-chat-prompt')?.focus()
   }
@@ -372,9 +481,34 @@ export function useChatSession({
   function submitText(text: string, newThread = false): void {
     void submit(newThread, text)
   }
+  async function runTool(toolRef: string, input: RunIntent['input']): Promise<ChatRunResult> {
+    let runRequest: string
+    try {
+      runRequest = formatRunRequest(toolRef, input)
+    } catch {
+      setRecovery('operation_ref_invalid')
+      return { kind: 'not_submitted', reason: 'operation_ref_invalid' }
+    }
+    const requestKey = JSON.stringify([threadId, toolRef, input])
+    if (uncertainRunKeysRef.current.has(requestKey)) {
+      setRecovery('outcome_unknown')
+      return { kind: 'outcome_unknown' }
+    }
+    const result = await submit(false, runRequest, undefined, true)
+    if (result.kind === 'outcome_unknown') uncertainRunKeysRef.current.add(requestKey)
+    return result
+  }
   function retryLastRequest(): void {
     const lastRequest = lastUserText()
-    if (lastRequest) submitText(lastRequest)
+    const retryable = retryableClientTurnRef.current
+    if (lastRequest === undefined || retryable?.prompt !== lastRequest || parseRunRequest(lastRequest) !== null) return
+    void submit(false, retryable.prompt, undefined, true, retryable.clientTurnId)
+  }
+  function retryComposerRequest(): void {
+    const retryable = retryableClientTurnRef.current
+    if (recovery !== 'rate_limited' || retryable === null || retryable.prompt !== prompt
+      || parseRunRequest(retryable.prompt) !== null) return
+    void submit(false, retryable.prompt, undefined, false, retryable.clientTurnId)
   }
   return {
     showHistoryRail: isAuthenticated,
@@ -429,9 +563,16 @@ export function useChatSession({
       status,
       ...(isAuthenticated ? {} : { anonymousMessageCount: anonymousMessages.length }),
       anonymousMessageLimitReached,
+      ...(recovery === undefined ? {} : { recovery }),
+      ...(recovery === 'rate_limited' && retryableClientTurn?.prompt === prompt
+        && parseRunRequest(prompt) === null ? { onRetry: retryComposerRequest } : {}),
+      onEditLast: () => focusPrompt(lastUserText() ?? prompt),
+      onNewChat: startNewChat,
       ...(isAuthenticated ? {} : { onStop: stopAnonymousSend }),
       onPromptChange: (value) => {
         setPrompt(value)
+        if (retryableClientTurnRef.current?.prompt !== value) updateRetryableClientTurn(null)
+        setRecovery(undefined)
         const limit = promptLimitMessage(value)
         if (limit.length > 0) {
           setError(limit)
@@ -447,6 +588,7 @@ export function useChatSession({
     },
     transcript: {
       messages: visibleMessages,
+      onNewChat: startNewChat,
       ...(isAuthenticated && threadId !== null ? { ownerChatThreadId: threadId, ownerChatNow: now } : {}),
       onFreshQuote: (toolName, inputSummary) => focusPrompt(`Get a fresh Quote for ${toolName} with input ${inputSummary}`),
       thinking: (sending || activeThread?.busy === true) && !assistantTurnStarted(visibleMessages),
@@ -455,7 +597,7 @@ export function useChatSession({
       onClarifyAnswer: (answer) => { void submit(false, answer) },
       onContinueSearch: (next) => { void submit(false, `Show more results for ${next.args.query}`, next.args, true) },
       onRepeatSearch: (query) => { void submit(false, `Search again for ${query}`, undefined, true) },
-      onQuoteTool: (toolRef, quoteInput) => submit(false, `Get a fresh Quote for Tool ${toolRef} with this exact JSON input: ${JSON.stringify(quoteInput)}. Use tool.quote and show the terms for my approval. Do not Call the Tool.`, undefined, true),
+      onRunTool: runTool,
       ...(transcriptPending ? { pending: true } : {}),
       ...(isAuthenticated && anonymousMessages.length > 0 ? { handoffAfter: anonymousMessages.length } : {}),
       onCopyAnswer: (answer) => {
@@ -468,15 +610,13 @@ export function useChatSession({
         onRefine: (nextPrompt) => { void submit(false, nextPrompt) },
         onCompareRequest: (nextPrompt) => { void submit(false, nextPrompt) },
         onEditQuestion: (previousPrompt) => focusPrompt(previousPrompt),
-        ...(unansweredQuestion.length === 0 ? {} : { onRetryQuestion: () => { void submit(false, unansweredQuestion, undefined, true) } }),
+        ...(unansweredQuestion.length === 0 ? {} : { onRetryQuestion: () => retryLastRequest() }),
       }),
     },
     pageBusy: busy,
     lastUserText,
     submitText,
-    onRunTool: (toolRef, title, ask, newThread = false) => {
-      submitText(`Use ${title} (${toolRef}) to answer: "${ask ?? lastUserText() ?? ''}". Describe it to read its input, fill the input from that, run it, and give me the answer.`, newThread)
-    },
+    onRunTool: runTool,
     retryLastRequest,
   }
 }

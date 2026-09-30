@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group'
 import { Spinner } from '@/components/ui/spinner'
+import { RecoveryNotice } from '../../recovery/RecoveryNotice'
 import { chatAnonymousCountLine, chatComposer, chatRecovery } from '@/lib/public/chat-ia'
 
 import { MAX_PROMPT_CHARACTERS } from '../anonymous-session'
@@ -29,8 +30,12 @@ export function ChatComposer({
   status,
   anonymousMessageCount,
   anonymousMessageLimitReached,
+  recovery,
   onPromptChange,
   onSubmit,
+  onRetry,
+  onEditLast,
+  onNewChat,
   onStop,
 }: ChatComposerProps) {
   const promptLength = Array.from(prompt).length
@@ -91,30 +96,36 @@ export function ChatComposer({
           </InputGroup>
           <div className={cn('flex items-start justify-between gap-related', !invalid && anonymousMessageCount === undefined && promptLength < 1_800 && 'max-sm:hidden')}>
             <div className="min-w-0 flex-1">
-              {invalid
-                ? (
-                    <FieldError id="tool-chat-error" className="grid gap-intra">
-                      <p>{error}</p>
-                      {errorReference === undefined ? null : (
-                        <p className="flex flex-wrap items-center gap-intra text-muted-foreground">
-                          <span>{chatRecovery.reference}</span>
-                          <AeCopyReference label="chat support reference" value={errorReference} />
-                        </p>
-                      )}
-                      {browseMarketOnError ? (
-                        <a
-                          href="/market"
-                          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch w-fit')}
-                        >
-                          {chatRecovery.browse}
-                        </a>
-                      ) : null}
-                    </FieldError>
-                  )
-                : <div id="tool-chat-error" role="alert" />}
-              {anonymousMessageCount === undefined || invalid ? null : (
+              {invalid ? (
+                <div id="tool-chat-error" className="grid gap-intra">
+                  {recovery === undefined
+                    ? <FieldError>{error}</FieldError>
+                    : <RecoveryNotice reason={recovery}
+                      {...(onRetry === undefined ? {} : { onRetry })}
+                      {...(onEditLast === undefined ? {} : { onEdit: onEditLast })}
+                      {...(onNewChat === undefined ? {} : { onNewChat })} />}
+                  {errorReference === undefined ? null : (
+                    <p className="flex flex-wrap items-center gap-intra text-muted-foreground">
+                      <span>{chatRecovery.reference}</span>
+                      <AeCopyReference label="chat support reference" value={errorReference} />
+                    </p>
+                  )}
+                  {browseMarketOnError && recovery === undefined ? (
+                    <a
+                      href="/market"
+                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch w-fit')}
+                    >
+                      {chatRecovery.browse}
+                    </a>
+                  ) : null}
+                </div>
+              ) : <div id="tool-chat-error" role="alert" />}
+              {anonymousMessageLimitReached && !invalid ? (
+                <RecoveryNotice reason="anonymous_message_limit"
+                  {...(onNewChat === undefined ? {} : { onNewChat })} />
+              ) : anonymousMessageCount === undefined || invalid ? null : (
                 <FieldDescription>
-                  {chatAnonymousCountLine(anonymousMessageCount, anonymousMessageLimitReached)}
+                  {chatAnonymousCountLine(anonymousMessageCount, false)}
                 </FieldDescription>
               )}
             </div>

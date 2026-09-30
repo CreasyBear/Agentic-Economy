@@ -13,7 +13,7 @@ type ReplayOptions = Readonly<{
 
 type RankedOffer = SelectionDecisionRecord['offered'][number]
 
-const KINDS: readonly SelectionDecisionKind[] = ['procure', 'registry_rerank', 'directory_rerank']
+const KINDS: readonly SelectionDecisionKind[] = ['procure', 'registry_rerank', 'directory_rerank', 'chat_recommend']
 const TIERS: readonly SelectionDecisionRecord['tier'][] = [
   'jev_system_one',
   'secondary_llm_adapter',
@@ -105,6 +105,9 @@ function validateDecision(value: unknown, index: number): SelectionDecisionRecor
     || typeof row.latencyMs !== 'number'
     || !Number.isFinite(row.latencyMs)
     || !(row.costAud === undefined || row.costAud === null || (typeof row.costAud === 'number' && Number.isFinite(row.costAud)))
+    || !(row.shown === undefined || typeof row.shown === 'boolean')
+    || !(row.ranToolRef === undefined || typeof row.ranToolRef === 'string')
+    || !(row.ranAt === undefined || (typeof row.ranAt === 'number' && Number.isFinite(row.ranAt)))
   ) throw new Error(`decision row ${index} does not match the selection record contract`)
 
   for (const offer of row.offered) {
@@ -167,6 +170,25 @@ function run(argv: readonly string[]): void {
   const options = parseOptions(argv)
   const rows = readDecisions(options)
   if (rows.length === 0) throw new Error('no selection decision rows returned; the harness has no data yet')
+  if (options.kind === 'chat_recommend') {
+    const shown = rows.filter((row) => row.kind === 'chat_recommend' && row.shown === true)
+    if (shown.length === 0) {
+      throw new Error('no chat_recommend decisions shown; the harness has no eligible data yet')
+    }
+    const ran = shown.filter((row) => row.ranToolRef !== undefined)
+    const accepted = ran.filter((row) => row.ranToolRef === row.pickedToolRef).length
+    const meanLatency = shown.reduce((sum, row) => sum + row.latencyMs, 0) / shown.length
+    process.stdout.write('Selection replay (chat_recommend)\n')
+    process.stdout.write('Metric             Result\n')
+    process.stdout.write(`shown              ${shown.length}\n`)
+    process.stdout.write(`ran                ${ran.length}\n`)
+    process.stdout.write(`accepted           ${accepted}\n`)
+    process.stdout.write(`overridden         ${ran.length - accepted}\n`)
+    process.stdout.write(`acceptance         ${ran.length === 0 ? 'n/a' : `${accepted}/${ran.length} (${formatPercent(accepted, ran.length)})`}\n`)
+    process.stdout.write(`mean latency (ms)  ${meanLatency.toFixed(1)}\n`)
+    return
+  }
+
 
   const decisions = rows.filter((row) => row.kind === options.kind && row.pickedToolRef !== null)
   if (decisions.length === 0) {

@@ -185,7 +185,7 @@ describe('ChatTranscript first-page gate', () => {
     expect(screen.queryByText('Thinking…')).toBeNull()
   })
 
-  it('groups answer prose after the work disclosure and copies a fenced block', async () => {
+  it('groups answer prose before the work disclosure and copies a fenced block', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -205,11 +205,14 @@ describe('ChatTranscript first-page gate', () => {
       ],
     }]} />)
 
+    const answer = screen.getByRole('region', { name: 'Answer' })
     const before = screen.getByText('Before the search.')
     const tool = document.querySelector('article[aria-label="Assistant"] details > summary')
     const after = screen.getByText('After the search.')
     if (tool === null) throw new Error('Work disclosure missing')
-    expect(tool.compareDocumentPosition(before) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(answer.contains(before)).toBe(true)
+    expect(answer.contains(after)).toBe(true)
+    expect(answer.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('   ')).toBeNull()
 

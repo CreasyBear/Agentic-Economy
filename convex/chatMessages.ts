@@ -159,6 +159,29 @@ export const listMessages = query({
         streamArgs: args.streamArgs,
       }),
     ])
-    return { ...messages, streams: streams ?? { kind: 'list' as const, messages: [] } }
+    const failureRows = await Promise.all(messages.page
+      .filter(message => message.role === 'user')
+      .map(async message => {
+        const turn = await ctx.db.query('chatTurns')
+          .withIndex('by_promptMessageId', index => index.eq('promptMessageId', message.id))
+          .unique()
+        return turn?.failureReason === undefined ? null : [message.id, turn] as const
+      }))
+    const failureByPromptId = new Map(failureRows.flatMap(row => row === null ? [] : [row]))
+    const page = messages.page.map((message): typeof chatUIMessageValue.type => {
+      const turn = message.role === 'user' ? failureByPromptId.get(message.id) : undefined
+      if (turn?.failureReason === undefined) return message
+      return {
+        ...message,
+        parts: [...message.parts, {
+          type: 'data-chat-failure' as const,
+          data: {
+            reason: turn.failureReason,
+            ...(turn.failureCallRefs === undefined ? {} : { callRefs: turn.failureCallRefs }),
+          },
+        }],
+      }
+    })
+    return { ...messages, page, streams: streams ?? { kind: 'list' as const, messages: [] } }
   },
 })

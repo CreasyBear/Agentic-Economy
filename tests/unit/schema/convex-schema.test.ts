@@ -272,6 +272,7 @@ const requiredIndexes = {
     'by_ownerId_and_state_and_createdAt',
     'by_createdAt',
   ],
+  toolSelectionDecisions: ['by_threadId_and_promptMessageId', 'by_threadId_and_createdAt'],
   capabilityCallProjections: [
     'by_callRef',
     'by_accountRef_and_createdAt',

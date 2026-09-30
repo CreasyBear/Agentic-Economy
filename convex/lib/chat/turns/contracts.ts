@@ -22,15 +22,20 @@ const turnPrincipalValue = v.union(v.object({ kind: v.literal('clerk') }), keyPr
 const proofArgs = {
   operationKey: v.optional(v.string()), correlationId: v.optional(v.string()), ...sourceWriteArgs,
 }
+const turnFailureReasonValue = v.union(
+  v.literal('generation_failed'), v.literal('generation_timed_out'), v.literal('outcome_unknown'),
+)
 const turnReadArgs = { principal: turnPrincipalValue, turnRef: v.string(), ...proofArgs }
 const turnSnapshotValue = v.object({
   threadId: v.string(), turnRef: v.string(), promptMessageId: v.string(),
-  state: workStateValue, sequence: v.number(), cancelRequestedAt: v.optional(v.number()),
+  state: workStateValue, sequence: v.number(), deadlineAt: v.optional(v.number()),
+  cancelRequestedAt: v.optional(v.number()),
+  failureReason: v.optional(turnFailureReasonValue), failureCallRefs: v.optional(v.array(v.string())),
   callRefs: v.array(v.string()), inFlightCallRefs: v.array(v.string()),
 })
 const startValue = v.object({
   threadId: v.string(), turnRef: v.string(), promptMessageId: v.string(),
-  state: workStateValue, sequence: v.number(),
+  state: workStateValue, sequence: v.number(), deadlineAt: v.optional(v.number()),
 })
 export const trustedChatAuthorityValue = v.object({
   kind: v.literal('agent_key'), turnRef: v.string(), credentialLocator: v.string(),
@@ -64,13 +69,16 @@ export const readTurnArgs = turnReadArgs
 export const readTurnResult = turnSnapshotValue
 
 export const readDeltasArgs = { ...turnReadArgs, streamArgs: vStreamArgs }
+
 export const readDeltasResult = v.object({
-    turnRef: v.string(), sequence: v.number(), state: workStateValue,
-    streams: v.union(
-      v.object({ kind: v.literal('list'), messages: v.array(vStreamMessage) }),
-      v.object({ kind: v.literal('deltas'), deltas: v.array(vStreamDelta) }),
-    ),
-  })
+  turnRef: v.string(), sequence: v.number(), state: workStateValue,
+  deadlineAt: v.optional(v.number()),
+  failureReason: v.optional(turnFailureReasonValue), failureCallRefs: v.optional(v.array(v.string())),
+  streams: v.union(
+    v.object({ kind: v.literal('list'), messages: v.array(vStreamMessage) }),
+    v.object({ kind: v.literal('deltas'), deltas: v.array(vStreamDelta) }),
+  ),
+})
 
 export const authorizeKeyGenerationArgs = { turnRef: v.string(), threadId: v.string(), promptMessageId: v.string() }
 export const authorizeKeyGenerationResult = v.union(v.object({ ownerId: v.string(), authority: trustedChatAuthorityValue }), v.null())
@@ -82,8 +90,11 @@ export const authorizePayableToolArgs = { authority: trustedChatAuthorityValue, 
 export const authorizePayableToolResult = v.boolean()
 
 export const finishTurnArgs = { turnRef: v.string(), promptMessageId: v.string(),
-    state: v.union(v.literal('working'), v.literal('input-required'), v.literal('auth-required'),
-      v.literal('completed'), v.literal('failed'), v.literal('rejected')) }
+  state: v.union(v.literal('working'), v.literal('input-required'), v.literal('auth-required'),
+    v.literal('completed'), v.literal('failed'), v.literal('rejected')),
+  failureReason: v.optional(turnFailureReasonValue),
+  expectedDeadlineAt: v.optional(v.number()),
+}
 export const finishTurnResult = v.boolean()
 
 export const issueSearchContinuationArgs = {

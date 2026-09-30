@@ -1,0 +1,1 @@
+src/components/ae/command-panel/pages/ToolDetailPage.tsx

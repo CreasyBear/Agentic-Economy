@@ -9,7 +9,13 @@ export const capabilityCallTables = {
       v.literal('procure'),
       v.literal('registry_rerank'),
       v.literal('directory_rerank'),
+      v.literal('chat_recommend'),
     ),
+    threadId: v.optional(v.string()),
+    promptMessageId: v.optional(v.string()),
+    shown: v.optional(v.boolean()),
+    ranToolRef: v.optional(v.string()),
+    ranAt: v.optional(v.number()),
     accountRef: v.optional(v.string()),
     correlationId: v.string(),
     offered: v.array(v.object({
@@ -31,5 +37,7 @@ export const capabilityCallTables = {
   })
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
     .index('by_kind_and_createdAt', ['kind', 'createdAt'])
-    .index('by_createdAt', ['createdAt']),
+    .index('by_createdAt', ['createdAt'])
+    .index('by_threadId_and_promptMessageId', ['threadId', 'promptMessageId'])
+    .index('by_threadId_and_createdAt', ['threadId', 'createdAt']),
 } as const

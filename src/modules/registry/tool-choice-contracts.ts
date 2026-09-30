@@ -18,6 +18,8 @@ import {
 import { exactAmountSchema, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
+
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
 import { searchVerdict } from './search-verdict'
 import { searchNextActions } from './next-action'
@@ -164,6 +166,7 @@ const searchMetaSchema = {
   query: z.string(),
   partialResults: z.boolean(),
   recipient: z.strictObject({ label: z.string(), host: z.string(), data: z.literal('query and candidate summaries') }).optional(),
+  recommendation: z.strictObject({ toolRef: z.string().refine(isPublicToolRef), by: z.string().min(1).max(80) }).optional(),
   freshness: supplyProjectionFreshnessSchema.optional(),
   assessed: z.strictObject({
     source: z.enum(['current', 'coinbase', 'all']),

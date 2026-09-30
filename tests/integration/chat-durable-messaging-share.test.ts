@@ -434,7 +434,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(messages.page.some(message => JSON.stringify(message.parts).includes('awaiting_answer'))).toBe(true)
   })
 
-  it('records a safe recovery message when durable generation is unavailable', async () => {
+  it('records a typed turn failure when durable generation is unavailable', async () => {
     const previousApiKey = process.env.OPENROUTER_API_KEY
     delete process.env.OPENROUTER_API_KEY
     const backend = convexTestWithMarketComponents()
@@ -449,11 +449,15 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         threadId: sent.threadId,
         paginationOpts: { cursor: null, numItems: 20 },
       })
-      expect(messages.page.map((message: { role: string }) => message.role)).toEqual(['user', 'assistant'])
-      const recovery = messages.page.find((message: { role: string; text: string }) => message.role === 'assistant')?.text ?? ''
-      expect(recovery).toMatch(/couldn't finish the answer/i)
-      expect(recovery).toMatch(/edit your question to try again/i)
-      expect(recovery).not.toContain('agent_unavailable')
+      const turn = await backend.run(ctx => ctx.db.query('chatTurns')
+        .withIndex('by_promptMessageId', index => index.eq('promptMessageId', sent.promptMessageId))
+        .unique())
+      expect(turn).toMatchObject({ state: 'failed', failureReason: 'generation_failed' })
+      expect(messages.page.map((message: { role: string }) => message.role)).toEqual(['user'])
+      const prompt = messages.page.find((message: { id: string }) => message.id === sent.promptMessageId)
+      expect(prompt?.parts).toContainEqual({
+        type: 'data-chat-failure', data: { reason: 'generation_failed' },
+      })
       await expect(owner.query(api.chatThreads.getThread, {
         threadId: sent.threadId,
         now: Date.now(),
@@ -515,18 +519,11 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       paginationOpts: { cursor: null, numItems: 20 },
     })
     expect(shared.title).toBe('Compare current weather Tools')
-    expect(shared.page).toHaveLength(2)
+    expect(shared.page).toHaveLength(1)
     expect(shared.page[0]).toEqual({
       id: sent.promptMessageId,
       role: 'user',
       parts: [{ type: 'text', text: 'Compare current weather Tools' }],
-    })
-    expect(shared.page[1]).toMatchObject({
-      role: 'assistant',
-      parts: [{
-        type: 'text',
-        text: expect.stringMatching(/couldn't finish the answer/i),
-      }],
     })
     expect(shared).not.toHaveProperty('streams')
 

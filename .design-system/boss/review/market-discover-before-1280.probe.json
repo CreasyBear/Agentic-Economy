@@ -1,0 +1,1255 @@
+{
+ "url": "/market?view=discover",
+ "width": 1280,
+ "height": 900,
+ "controls": [
+  {
+   "key": "link \"Skip to content\"",
+   "role": "link",
+   "name": "Skip to content",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "",
+   "box": {
+    "x": 10,
+    "y": -1,
+    "w": 1,
+    "h": 1
+   }
+  },
+  {
+   "key": "link \"Agentic Economy home\"",
+   "role": "link",
+   "name": "Agentic Economy home",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/",
+   "box": {
+    "x": 19,
+    "y": 10,
+    "w": 44,
+    "h": 44
+   }
+  },
+  {
+   "key": "link \"Market\"",
+   "role": "link",
+   "name": "Market",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": "page",
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/market",
+   "box": {
+    "x": 79,
+    "y": 10,
+    "w": 76,
+    "h": 44
+   }
+  },
+  {
+   "key": "link \"For agents\"",
+   "role": "link",
+   "name": "For agents",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/for-agents",
+   "box": {
+    "x": 156,
+    "y": 10,
+    "w": 98,
+    "h": 44
+   }
+  },
+  {
+   "key": "link \"For providers\"",
+   "role": "link",
+   "name": "For providers",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/for-providers",
+   "box": {
+    "x": 255,
+    "y": 10,
+    "w": 112,
+    "h": 44
+   }
+  },
+  {
+   "key": "link \"System status\"",
+   "role": "link",
+   "name": "System status",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/status",
+   "box": {
+    "x": 885,
+    "y": 16,
+    "w": 76,
+    "h": 32
+   }
+  },
+  {
+   "key": "button \"Find Tools\"",
+   "role": "button",
+   "name": "Find Tools",
+   "tag": "button",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": "false",
+   "ariaSelected": null,
+   "required": false,
+   "type": "button",
+   "href": null,
+   "box": {
+    "x": 969,
+    "y": 10,
+    "w": 160,
+    "h": 44
+   }
+  },
+  {
+   "key": "button \"Appearance: Light\"",
+   "role": "button",
+   "name": "Appearance: Light",
+   "tag": "button",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": "false",
+   "ariaSelected": null,
+   "required": false,
+   "type": "button",
+   "href": null,
+   "box": {
+    "x": 1137,
+    "y": 16,
+    "w": 32,
+    "h": 32
+   }
+  },
+  {
+   "key": "link \"Sign in\"",
+   "role": "link",
+   "name": "Sign in",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/sign-in",
+   "box": {
+    "x": 1177,
+    "y": 12,
+    "w": 84,
+    "h": 40
+   }
+  },
+  {
+   "key": "searchbox \"Ask about any tool or service\"",
+   "role": "searchbox",
+   "name": "Ask about any tool or service",
+   "tag": "input",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": "search",
+   "href": null,
+   "box": {
+    "x": 78,
+    "y": 432,
+    "w": 486,
+    "h": 36
+   }
+  },
+  {
+   "key": "button \"Start conversation\"",
+   "role": "button",
+   "name": "Start conversation",
+   "tag": "button",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": "submit",
+   "href": null,
+   "box": {
+    "x": 564,
+    "y": 430,
+    "w": 72,
+    "h": 40
+   }
+  },
+  {
+   "key": "link \"Most used Tools From possibility to something real. Find Too\"",
+   "role": "link",
+   "name": "Most used Tools From possibility to something real. Find Too",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/market?sort=adoption",
+   "box": {
+    "x": 693,
+    "y": 113,
+    "w": 550,
+    "h": 432
+   }
+  },
+  {
+   "key": "tab \"Collections\"",
+   "role": "tab",
+   "name": "Collections",
+   "tag": "button",
+   "disabled": false,
+   "ariaDisabled": "false",
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": "true",
+   "required": false,
+   "type": "button",
+   "href": null,
+   "box": {
+    "x": 40,
+    "y": 596,
+    "w": 293,
+    "h": 36
+   }
+  },
+  {
+   "key": "tab \"Providers\"",
+   "role": "tab",
+   "name": "Providers",
+   "tag": "button",
+   "disabled": false,
+   "ariaDisabled": "false",
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": "false",
+   "required": false,
+   "type": "button",
+   "href": null,
+   "box": {
+    "x": 337,
+    "y": 596,
+    "w": 293,
+    "h": 36
+   }
+  },
+  {
+   "key": "tab \"Tools\"",
+   "role": "tab",
+   "name": "Tools",
+   "tag": "button",
+   "disabled": false,
+   "ariaDisabled": "false",
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": "false",
+   "required": false,
+   "type": "button",
+   "href": null,
+   "box": {
+    "x": 634,
+    "y": 596,
+    "w": 293,
+    "h": 36
+   }
+  },
+  {
+   "key": "tab \"Saved\"",
+   "role": "tab",
+   "name": "Saved",
+   "tag": "button",
+   "disabled": false,
+   "ariaDisabled": "false",
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": "false",
+   "required": false,
+   "type": "button",
+   "href": null,
+   "box": {
+    "x": 931,
+    "y": 596,
+    "w": 293,
+    "h": 36
+   }
+  },
+  {
+   "key": "tabpanel \"\"",
+   "role": "tabpanel",
+   "name": "",
+   "tag": "div",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": null,
+   "box": {
+    "x": 37,
+    "y": 660,
+    "w": 1206,
+    "h": 60
+   }
+  },
+  {
+   "key": "link \"Browse Tools\"",
+   "role": "link",
+   "name": "Browse Tools",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": "page",
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/market",
+   "box": {
+    "x": 494,
+    "y": 1091,
+    "w": 135,
+    "h": 48
+   }
+  },
+  {
+   "key": "link \"System status\" #2",
+   "role": "link",
+   "name": "System status",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/status",
+   "box": {
+    "x": 641,
+    "y": 1091,
+    "w": 145,
+    "h": 48
+   }
+  },
+  {
+   "key": "link \"About AECON\"",
+   "role": "link",
+   "name": "About AECON",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "https://aecon.ai",
+   "box": {
+    "x": 37,
+    "y": 1279,
+    "w": 386,
+    "h": 85
+   }
+  },
+  {
+   "key": "link \"API reference\"",
+   "role": "link",
+   "name": "API reference",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/developers/api",
+   "box": {
+    "x": 447,
+    "y": 1314,
+    "w": 86,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"Support\"",
+   "role": "link",
+   "name": "Support",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/support",
+   "box": {
+    "x": 652,
+    "y": 1314,
+    "w": 52,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"Status\"",
+   "role": "link",
+   "name": "Status",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/status",
+   "box": {
+    "x": 652,
+    "y": 1350,
+    "w": 43,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"Privacy\"",
+   "role": "link",
+   "name": "Privacy",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/privacy",
+   "box": {
+    "x": 857,
+    "y": 1314,
+    "w": 46,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"Terms\"",
+   "role": "link",
+   "name": "Terms",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/terms",
+   "box": {
+    "x": 857,
+    "y": 1350,
+    "w": 40,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"Remove a listing\"",
+   "role": "link",
+   "name": "Remove a listing",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/privacy/remove-business",
+   "box": {
+    "x": 857,
+    "y": 1386,
+    "w": 104,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"llms.txt\"",
+   "role": "link",
+   "name": "llms.txt",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/llms.txt",
+   "box": {
+    "x": 1062,
+    "y": 1314,
+    "w": 48,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"SKILL.md\"",
+   "role": "link",
+   "name": "SKILL.md",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/SKILL.md",
+   "box": {
+    "x": 1062,
+    "y": 1350,
+    "w": 58,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \".well-known/ucp\"",
+   "role": "link",
+   "name": ".well-known/ucp",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/.well-known/ucp",
+   "box": {
+    "x": 1062,
+    "y": 1386,
+    "w": 107,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"glossary.md\"",
+   "role": "link",
+   "name": "glossary.md",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "/glossary.md",
+   "box": {
+    "x": 1062,
+    "y": 1422,
+    "w": 77,
+    "h": 19
+   }
+  },
+  {
+   "key": "link \"LinkedIn\"",
+   "role": "link",
+   "name": "LinkedIn",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "https://www.linkedin.com/company/aecon-ai/",
+   "box": {
+    "x": 37,
+    "y": 1544,
+    "w": 46,
+    "h": 44
+   }
+  },
+  {
+   "key": "link \"X\"",
+   "role": "link",
+   "name": "X",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "https://x.com/Aeconai",
+   "box": {
+    "x": 103,
+    "y": 1544,
+    "w": 7,
+    "h": 44
+   }
+  },
+  {
+   "key": "link \"Facebook\"",
+   "role": "link",
+   "name": "Facebook",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "https://www.facebook.com/profile.php?id=61594070258261",
+   "box": {
+    "x": 130,
+    "y": 1544,
+    "w": 53,
+    "h": 44
+   }
+  },
+  {
+   "key": "link \"ABN 98 700 838 115\"",
+   "role": "link",
+   "name": "ABN 98 700 838 115",
+   "tag": "a",
+   "disabled": false,
+   "ariaDisabled": null,
+   "ariaBusy": null,
+   "ariaInvalid": null,
+   "ariaCurrent": null,
+   "ariaExpanded": null,
+   "ariaSelected": null,
+   "required": false,
+   "type": null,
+   "href": "https://abr.business.gov.au/ABN/View?abn=98700838115",
+   "box": {
+    "x": 1138,
+    "y": 1534,
+    "w": 105,
+    "h": 44
+   }
+  }
+ ],
+ "headings": [
+  {
+   "key": "heading \"Tools forwhat’s next.\"",
+   "level": "1",
+   "text": "Tools forwhat’s next."
+  },
+  {
+   "key": "heading \"From possibilityto something real.\"",
+   "level": "2",
+   "text": "From possibilityto something real."
+  },
+  {
+   "key": "heading \"Take control of your Agentic future\"",
+   "level": "2",
+   "text": "Take control of your Agentic future"
+  },
+  {
+   "key": "heading \"Resources\"",
+   "level": "2",
+   "text": "Resources"
+  },
+  {
+   "key": "heading \"Help\"",
+   "level": "2",
+   "text": "Help"
+  },
+  {
+   "key": "heading \"Legal\"",
+   "level": "2",
+   "text": "Legal"
+  },
+  {
+   "key": "heading \"Machines\"",
+   "level": "2",
+   "text": "Machines"
+  }
+ ],
+ "texts": [
+  {
+   "key": "a \"Skip to content\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 16,
+   "weight": 400
+  },
+  {
+   "key": "a \"Market\"",
+   "color": "#24543d",
+   "bg": "#e7e4db",
+   "ratio": 6.85,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "a \"For agents\"",
+   "color": "#141414",
+   "bg": "#e7e4db",
+   "ratio": 14.49,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "a \"For providers\"",
+   "color": "#141414",
+   "bg": "#e7e4db",
+   "ratio": 14.49,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "a \"Status\"",
+   "color": "#141414",
+   "bg": "#e7e4db",
+   "ratio": 14.49,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "span \"Find Tools\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "kbd \"⌘K\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 11,
+   "weight": 500
+  },
+  {
+   "key": "a \"Sign in\"",
+   "color": "#141414",
+   "bg": "#e7e4db",
+   "ratio": 14.49,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "p \"THE TOOL MARKET\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 500
+  },
+  {
+   "key": "h1 \"Tools for what’s next.\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": true,
+   "size": 72,
+   "weight": 200
+  },
+  {
+   "key": "p \"Search the web. Work with data. Make som\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 16,
+   "weight": 400
+  },
+  {
+   "key": "label \"Ask about any tool or service\"",
+   "color": "#141414",
+   "bg": "#f2efe7",
+   "ratio": 16.03,
+   "large": false,
+   "size": 16,
+   "weight": 400
+  },
+  {
+   "key": "span \"Ask\"",
+   "color": "#e8e4da",
+   "bg": "#141414",
+   "ratio": 14.51,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "p \"Chat recipient unavailable here. Check b\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 400
+  },
+  {
+   "key": "span \"Most used Tools\"",
+   "color": "#e8e4da",
+   "bg": "#141414",
+   "ratio": 14.51,
+   "large": false,
+   "size": 12,
+   "weight": 500
+  },
+  {
+   "key": "h2 \"From possibility to something real.\"",
+   "color": "#e8e4da",
+   "bg": "#141414",
+   "ratio": 14.51,
+   "large": true,
+   "size": 36,
+   "weight": 300
+  },
+  {
+   "key": "p \"Find Tools buyers use most this month.\"",
+   "color": "#e7e4db/0.85",
+   "bg": "#141414",
+   "ratio": 10.67,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "button \"Collections\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "button \"Providers\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "button \"Tools\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "button \"Saved\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "span \"Agentic Economy\"",
+   "color": "#ffffff/0.90",
+   "bg": "#a29f98",
+   "ratio": 2.43,
+   "large": false,
+   "size": 12,
+   "weight": 500
+  },
+  {
+   "key": "h2 \"Take control of your Agentic future\"",
+   "color": "#ffffff",
+   "bg": "#e8e4da",
+   "ratio": 1.27,
+   "large": true,
+   "size": 36,
+   "weight": 200
+  },
+  {
+   "key": "p \"Find Tools, pay per Call in AUD, and con\"",
+   "color": "#ffffff/0.80",
+   "bg": "#e8e4da",
+   "ratio": 1.21,
+   "large": false,
+   "size": 18,
+   "weight": 400
+  },
+  {
+   "key": "a \"Browse Tools\"",
+   "color": "#09090b",
+   "bg": "#ffffff",
+   "ratio": 19.9,
+   "large": false,
+   "size": 14,
+   "weight": 600
+  },
+  {
+   "key": "a \"System status\"",
+   "color": "#e8e4da",
+   "bg": "#141414",
+   "ratio": 14.51,
+   "large": false,
+   "size": 14,
+   "weight": 500
+  },
+  {
+   "key": "a \"AECON\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 14,
+   "weight": 600
+  },
+  {
+   "key": "p \"The marketplace built for agents.\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "h2 \"Resources\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 12,
+   "weight": 600
+  },
+  {
+   "key": "a \"API reference\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "h2 \"Help\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 12,
+   "weight": 600
+  },
+  {
+   "key": "a \"Support\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "a \"Status\" #2",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "h2 \"Legal\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 12,
+   "weight": 600
+  },
+  {
+   "key": "a \"Privacy\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "a \"Terms\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "a \"Remove a listing\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "h2 \"Machines\"",
+   "color": "#141414",
+   "bg": "#e8e4da",
+   "ratio": 14.51,
+   "large": false,
+   "size": 12,
+   "weight": 600
+  },
+  {
+   "key": "a \"llms.txt\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "a \"SKILL.md\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "a \".well-known/ucp\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "a \"glossary.md\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 14,
+   "weight": 400
+  },
+  {
+   "key": "p \"The marketplace built for agents.\" #2",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 400
+  },
+  {
+   "key": "a \"LinkedIn\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 400
+  },
+  {
+   "key": "a \"X\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 400
+  },
+  {
+   "key": "a \"Facebook\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 400
+  },
+  {
+   "key": "p \"© 2026 Agentic Economy\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 400
+  },
+  {
+   "key": "a \"ABN 98 700 838 115\"",
+   "color": "#595854",
+   "bg": "#e8e4da",
+   "ratio": 5.61,
+   "large": false,
+   "size": 12,
+   "weight": 400
+  }
+ ],
+ "links": [],
+ "heightMismatch": [
+  [
+   {
+    "key": "button \"Find Tools\"",
+    "h": 44
+   },
+   {
+    "key": "button \"Appearance: Light\"",
+    "h": 32
+   }
+  ],
+  [
+   {
+    "key": "searchbox \"Ask about any tool or service\"",
+    "h": 36
+   },
+   {
+    "key": "button \"Start conversation\"",
+    "h": 40
+   }
+  ]
+ ],
+ "wrappedButtons": [],
+ "flatSurfaces": [],
+ "clipped": [],
+ "tallOverlays": [],
+ "reducedMotion": true,
+ "motion": []
+}

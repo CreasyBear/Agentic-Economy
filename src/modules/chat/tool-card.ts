@@ -6,6 +6,7 @@ import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agent-turn.contracts'
 import { addRef, collectToolRefs, matchedCount } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
 import type { PublicToolAuthentication } from '@/modules/capability-supply/public'
 import { readPosture, readPrice } from './internal/tool-card-compare'
@@ -81,6 +82,8 @@ export type ToolChoiceRow = Readonly<{
   callable?: boolean
   belowMatch?: boolean
 }>
+export type ToolCardRecommendation = Readonly<{ toolRef: string; by: string }>
+
 
 export function toolChoiceReadinessLabel(readiness: NonNullable<ToolChoiceRow['readiness']>): string {
   return readiness === 'ready' ? 'Ready to use'
@@ -132,7 +135,7 @@ export function parseChatQuoteInput(toolRef: string, draft: string): Record<stri
 
 export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
-  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed; funding?: { units: string; exponent: number } })
+  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; recoveryReason?: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed; funding?: { units: string; exponent: number } })
   | (CardChrome & {
       kind: 'choices'
       state: 'complete'
@@ -144,6 +147,7 @@ export type ToolCardProjection =
       verdict?: 'match' | 'scoped'
       coverage?: 'complete' | 'partial'
       next?: RegistryNextAction
+      recommendation?: ToolCardRecommendation
     })
   | (CardChrome & {
       kind: 'inspect'
@@ -166,6 +170,7 @@ export type ToolCardProjection =
       summary: string
       nextAction?: string
       retryable?: boolean
+      recoveryReason?: string
       suggestedNextAction?: SuggestedNextAction
     })
   | (CardChrome & {
@@ -355,6 +360,12 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   }
 }
 
+function readRecommendation(value: unknown): ToolCardRecommendation | undefined {
+  if (!isRecord(value) || !isPublicToolRef(value.toolRef) || typeof value.by !== 'string' || value.by.length > 80) return undefined
+  const by = stringField(value.by)
+  return by === undefined ? undefined : { toolRef: value.toolRef, by }
+}
+
 function projectStoredChoices(values: unknown): ToolChoiceRow[] {
   if (!Array.isArray(values)) return []
   const choices: ToolChoiceRow[] = []
@@ -512,8 +523,9 @@ function projectCallResult(result: CallResult): ToolCardProjection {
       ],
       ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
       summary: 'The external effect is uncertain. Do not retry this call until it is reconciled.',
+      recoveryReason: 'outcome_unknown',
       suggestedNextAction: callNextAction(result.kind, result.callRef),
-    }
+  }
   }
   return {
     ...chrome('tool.call'),
@@ -523,6 +535,7 @@ function projectCallResult(result: CallResult): ToolCardProjection {
     facts: receiptFacts(result),
     ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
     summary: REFUSAL_SUMMARIES[result.code] ?? result.code.replaceAll('_', ' '),
+    recoveryReason: result.code,
     ...(result.nextAction === undefined ? {} : { nextAction: result.nextAction }),
     retryable: result.retryable,
   }
@@ -573,8 +586,8 @@ function outputRecord(part: Record<string, unknown>): Record<string, unknown> | 
   return isRecord(output) ? output : undefined
 }
 
-function statusCard(toolId: ChatToolId, state: 'refused' | 'error' | 'attention', summary: string): Extract<ToolCardProjection, { kind: 'status' }> {
-  return { ...chrome(toolId), kind: 'status', state, summary }
+function statusCard(toolId: ChatToolId, state: 'refused' | 'error' | 'attention', summary: string, recoveryReason?: string): Extract<ToolCardProjection, { kind: 'status' }> {
+  return { ...chrome(toolId), kind: 'status', state, summary, ...(recoveryReason === undefined ? {} : { recoveryReason }) }
 }
 
 function liveChoices(
@@ -582,6 +595,7 @@ function liveChoices(
   output: Record<string, unknown>,
   choices: readonly ToolChoiceRow[],
   contrasts?: readonly ToolFact[],
+  recommendation?: ToolCardRecommendation,
 ): Extract<ToolCardProjection, { kind: 'choices' }> {
   const count = toolId === 'registry.tools.describe' ? undefined : matchedCount(output)
   const next = toolId === 'registry.tools.search' ? firstSearchNext(output) : undefined
@@ -598,6 +612,7 @@ function liveChoices(
         ...(isRecord(output.assessed) && (output.assessed.coverage === 'complete' || output.assessed.coverage === 'partial')
           ? { coverage: output.assessed.coverage } : {}) }
       : {}),
+    ...(recommendation === undefined ? {} : { recommendation }),
   }
 }
 
@@ -627,7 +642,7 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>, in
             ...(saveNeed === undefined ? {} : { saveNeed }),
           }
         }
-        return liveChoices(toolId, output, projectLiveChoices(output.results))
+        return liveChoices(toolId, output, projectLiveChoices(output.results), undefined, readRecommendation(output.recommendation))
       }
       return liveChoices(toolId, output, projectLiveChoices(output.items))
     }
@@ -669,11 +684,11 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
       ? exactAmountSchema.safeParse({ ...part.funding, currency: 'AUD' })
       : undefined
     return {
-      ...statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable')),
-      ...(next === undefined ? {} : { next }),
+      ...statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable'), stringField(part.recoveryReason)),
       ...(funding?.success && funding.data.currency === 'AUD'
         ? { funding: { units: funding.data.units, exponent: funding.data.exponent } }
         : {}),
+      ...(next === undefined ? {} : { next }),
       ...(saveNeed?.success ? { saveNeed: saveNeed.data } : {}),
     }
   }
@@ -701,6 +716,7 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     const paid = state === 'completed' ? boundedString(part.paid, 80) : undefined
     const summary = boundedString(part.summary, 320) ?? 'Call result recorded.'
     const nextAction = boundedString(part.nextAction, 320)
+    const recoveryReason = stringField(part.recoveryReason)
     return {
       ...chrome(toolId),
       kind: 'execute',
@@ -708,6 +724,7 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
       toolRefs: refs,
       ...(name === undefined ? {} : { name }),
       ...(callRef === undefined ? {} : { callRef }),
+      ...(recoveryReason === undefined ? {} : { recoveryReason }),
       ...(outputPreview === undefined ? {} : { outputPreview }),
       ...(part.outputTruncated === true ? { outputTruncated: true } : {}),
       ...(paid === undefined ? {} : { paid }),
@@ -729,6 +746,7 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
   const title = stringField(part.title)
   const surface = part.surface === 'compare' || part.surface === 'describe' ? part.surface : undefined
   const next = firstSearchNext(part)
+  const recommendation = toolId === 'registry.tools.search' ? readRecommendation(part.recommendation) : undefined
   return {
     ...chrome(toolId),
     ...(title === undefined ? {} : { title }),
@@ -742,18 +760,19 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     ...(part.verdict === 'match' || part.verdict === 'scoped' ? { verdict: part.verdict } : {}),
     ...(part.coverage === 'complete' || part.coverage === 'partial' ? { coverage: part.coverage } : {}),
     ...(next === undefined ? {} : { next }),
+    ...(recommendation === undefined ? {} : { recommendation }),
   }
 }
 
 function projectClarifyPart(part: Record<string, unknown>): ToolCardProjection {
   if (isRecord(part.output) && part.output.kind === 'chat_tool_refused') {
     const reason = typeof part.output.reason === 'string' ? REFUSAL_SUMMARIES[part.output.reason] : undefined
-    return statusCard('chat.clarify', 'refused', reason ?? 'Request refused')
+    return statusCard('chat.clarify', 'refused', reason ?? 'Request refused', typeof part.output.reason === 'string' ? part.output.reason : undefined)
   }
   const parsed = chatClarifyInputSchema.safeParse(part.input)
   if (!parsed.success) {
     return part.state === 'output-available'
-      ? statusCard('chat.clarify', 'error', 'Tool unavailable')
+      ? statusCard('chat.clarify', 'error', 'Tool unavailable', 'tool_unavailable')
       : { ...chrome('chat.clarify'), kind: 'working' }
   }
   return {
@@ -787,19 +806,19 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
   const providerName = providerToolName(part)
   const toolId = providerName === undefined ? undefined : providerToCanonical[providerName]
   if (toolId === undefined) return null
-  if (part.state === 'output-error') return statusCard(toolId, 'error', 'Tool unavailable')
-  if (part.state === 'output-denied') return statusCard(toolId, 'refused', 'Request refused')
+  if (part.state === 'output-error') return statusCard(toolId, 'error', 'Tool unavailable', 'tool_unavailable')
+  if (part.state === 'output-denied') return statusCard(toolId, 'refused', 'Request refused', 'authority_denied')
   if (toolId === 'chat.clarify') return projectClarifyPart(part)
   if (part.state !== 'output-available') return { ...chrome(toolId), kind: 'working' }
 
   const output = outputRecord(part)
   const kind = output?.kind
-  if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable')
-  if (kind === 'unavailable' && toolId !== 'registry.tools.search') return statusCard(toolId, 'error', 'Tool unavailable')
+  if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable', 'tool_unavailable')
+  if (kind === 'unavailable' && toolId !== 'registry.tools.search') return statusCard(toolId, 'error', 'Tool unavailable', 'tool_unavailable')
   if (toolId === 'tool.call') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
-      return statusCard(toolId, 'refused', reason ?? 'Request refused')
+      return statusCard(toolId, 'refused', reason ?? 'Request refused', typeof output?.reason === 'string' ? output.reason : undefined)
     }
     if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
     const result = callResultSchema.safeParse(output)
@@ -814,7 +833,7 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
         ? fundingShortfall(output.funding)
         : undefined
       return {
-        ...statusCard(toolId, 'refused', reason ?? 'Request refused'),
+        ...statusCard(toolId, 'refused', reason ?? 'Request refused', typeof output?.reason === 'string' ? output.reason : undefined),
         ...(funding === undefined ? {} : { funding }),
       }
     }
@@ -835,6 +854,7 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
         'refused',
         result.data.requiredActions?.[0]?.description
           ?? REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
+        result.data.code,
       ),
       ...(funding === undefined ? {} : { funding }),
     }
@@ -846,7 +866,7 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
     const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
     const summary = reason
       ?? (kind === 'not_found' ? 'Not found' : 'Request refused')
-    return statusCard(toolId, 'refused', summary)
+    return statusCard(toolId, 'refused', summary, typeof output?.reason === 'string' ? output.reason : kind === 'not_found' ? 'tool_not_found' : undefined)
   }
   if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
   if (kind !== 'ok' && kind !== 'found' && !(toolId === 'registry.tools.search'
@@ -882,6 +902,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         title: card.title,
         state: card.state,
         summary: card.summary,
+        ...(card.recoveryReason === undefined ? {} : { recoveryReason: card.recoveryReason }),
         ...(card.next === undefined ? {} : { next: card.next }),
         ...(card.saveNeed === undefined ? {} : { saveNeed: card.saveNeed }),
         ...(card.funding === undefined ? {} : { funding: card.funding }),
@@ -900,6 +921,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         ...(card.verdict === undefined ? {} : { verdict: card.verdict }),
         ...(card.coverage === undefined ? {} : { coverage: card.coverage }),
         ...(card.next === undefined ? {} : { next: card.next }),
+        ...(card.recommendation === undefined ? {} : { recommendation: { ...card.recommendation } }),
         ...(card.contrasts === undefined || card.contrasts.length === 0
           ? {}
           : { contrasts: card.contrasts.map((fact) => ({ ...fact })) }),
@@ -931,6 +953,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         ...(card.receiptRef === undefined ? {} : { receiptRef: card.receiptRef }),
         ...(card.evidenceHash === undefined ? {} : { evidenceHash: card.evidenceHash }),
         summary: card.summary,
+        ...(card.recoveryReason === undefined ? {} : { recoveryReason: card.recoveryReason }),
         ...(card.nextAction === undefined ? {} : { nextAction: card.nextAction }),
         ...(card.retryable === undefined ? {} : { retryable: card.retryable }),
       }

@@ -206,6 +206,30 @@ describe('anonymous operation chat transport', () => {
     expect(body).not.toContain('injected_post_tool_model_failure')
     expect(attempts).toBe(2)
   })
+
+  it('streams typed recovery without duplicating it as assistant prose', async () => {
+    const backend = convexTestWithMarketComponents()
+    const model = mockModel()
+    vi.spyOn(model, 'doStream').mockRejectedValue(new Error('injected_generation_failure'))
+    const body = await backend.action(async ctx => {
+      const unavailableCatalogue = new Proxy(ctx, {
+        get(target, property, receiver) {
+          if (property === 'runAction') return () => Promise.reject(new Error('catalogue_unavailable'))
+          return Reflect.get(target, property, receiver) as unknown
+        },
+      }) as ActionCtx
+      const response = await streamAnonymousChatResponse(
+        unavailableCatalogue, [{ role: 'user', content: 'Find a current weather Tool' }], model,
+      )
+      return await response.text()
+    })
+    const chunks = body.split('\n').filter(line => line.startsWith('data: {'))
+      .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
+    expect(chunks).toContainEqual(expect.objectContaining({
+      type: 'data-chat-failure', data: { reason: 'generation_failed' },
+    }))
+    expect(chunks.filter(chunk => chunk.type === 'text-delta')).toEqual([])
+  })
   it('streams from a fake model without creating Agent threads or messages', async () => {
     const backend = convexTestWithMarketComponents()
     const streamed = await backend.action(async (ctx) => {
