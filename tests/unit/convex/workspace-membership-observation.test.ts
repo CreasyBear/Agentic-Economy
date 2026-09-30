@@ -70,7 +70,7 @@ type OrganizationMembershipCreatedCommand = Readonly<{
 
 type OrganizationMembershipCreatedResult = Readonly<
   | { kind: 'accepted'; status: 'applied' | 'replayed' | 'ignored' }
-  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' }
+  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' | 'organization_unbound' }
 >
 
 type OrganizationMembershipUpdatedCommand = OrganizationMembershipCreatedCommand
@@ -325,6 +325,7 @@ async function provisionBoundOrgWorkspace(
     correlationRef: correlationRef(`provision:${clerkOrgId}`),
     serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
   })
+  if (result.kind === 'refused') throw new Error(`provisioning refused: ${result.code}`)
   return result.accountRef
 }
 
@@ -626,7 +627,7 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     expect(await listMembershipAuditEvents(backend)).toHaveLength(1)
   })
 
-  it('C4: unknown clerkOrgId is accepted ignored with zero memberships and audits', async () => {
+  it('C4: unknown clerkOrgId refuses organization_unbound with zero memberships and audits', async () => {
     const backend = createBackend()
     await seedMembershipObservationFixture(backend)
     const command = membershipCommand({
@@ -635,14 +636,14 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     })
 
     expect(await recordOrganizationMembershipCreatedForServer(backend, command)).toEqual({
-      kind: 'accepted',
-      status: 'ignored',
+      kind: 'refused',
+      code: 'organization_unbound',
     })
     expect(await listMembershipRows(backend)).toHaveLength(0)
     expect(await listMembershipAuditEvents(backend)).toHaveLength(0)
   })
 
-  it('C5: inactive binding or inactive account is accepted ignored with zero memberships and audits', async () => {
+  it('C5: inactive account is ignored and revoked binding is refused without memberships or audits', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedInviteePrincipalWithBinding(backend)
@@ -677,7 +678,7 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     expect(await recordOrganizationMembershipCreatedForServer(backend, membershipCommand({
       clerkOrgId: OTHER_CLERK_ORG_ID,
       deliveryRef: 'delivery-c5-binding',
-    }))).toEqual({ kind: 'accepted', status: 'ignored' })
+    }))).toEqual({ kind: 'refused', code: 'organization_unbound' })
 
     expect(await listMembershipRows(backend)).toHaveLength(0)
     expect(await listMembershipAuditEvents(backend)).toHaveLength(0)

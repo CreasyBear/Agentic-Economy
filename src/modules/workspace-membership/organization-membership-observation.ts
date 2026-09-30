@@ -37,7 +37,7 @@ export type OrganizationMembershipDeletedObservation = OrganizationMembershipCre
 
 export type OrganizationMembershipCreatedObservationResult = Readonly<
   | { kind: 'accepted'; status: 'applied' | 'replayed' | 'ignored' }
-  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' }
+  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' | 'organization_unbound' }
 >
 
 export type OrganizationMembershipUpdatedObservationResult = OrganizationMembershipCreatedObservationResult

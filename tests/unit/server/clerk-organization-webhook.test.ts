@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { handleClerkOrganizationWebhookRequest } from '@/lib/server/clerk-organization-webhook'
 import type { OrganizationProvisioningCommand } from '@/lib/server/clerk-organization-webhook'
 import { handleClerkWebhookRequest } from '@/routes/api.clerk.webhook'
+import { verifiedClerkWebhook } from '../../helpers/clerk-webhook'
 
 const issuer = 'https://clerk.example.test'
 const CLERK_ORG_ID = 'org_test_clerk_organization_webhook'
@@ -31,23 +32,24 @@ describe('Clerk organization-created webhook', () => {
   })
 
   it('returns 503 with Retry-After when the signed creator has not bound an identity', async () => {
-    const response = await handleClerkOrganizationWebhookRequest(request('delivery_creator_missing_binding'), {
-      issuer,
-      verify: async () => organizationCreatedEvent(),
-      provision: async () => { throw new Error('Uncaught Error: creator_binding_missing') },
-    })
+    const response = await handleClerkOrganizationWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_creator_missing_binding'), async () => organizationCreatedEvent()),
+      {
+        issuer,
+        provision: async () => ({ kind: 'refused', code: 'creator_binding_missing' }),
+      },
+    )
 
     expect(response.status).toBe(503)
     expect(response.headers.get('Retry-After')).toBe('5')
   })
 
-  it('returns 409 and reports the failure when created_by is absent', async () => {
+  it('returns 409 when created_by is absent', async () => {
     const provision = createProvisionSpy()
-    const response = await handleClerkOrganizationWebhookRequest(request('delivery_without_creator'), {
-      issuer,
-      verify: async () => organizationCreatedEvent({ created_by: undefined }),
-      provision,
-    })
+    const response = await handleClerkOrganizationWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_without_creator'), async () => organizationCreatedEvent({ created_by: undefined })),
+      { issuer, provision },
+    )
 
     expect(response.status).toBe(409)
     expect(provision).not.toHaveBeenCalled()
@@ -55,7 +57,7 @@ describe('Clerk organization-created webhook', () => {
 
   it('returns 400 without provisioning when signature verification fails', async () => {
     const provision = createProvisionSpy()
-    const response = await handleClerkOrganizationWebhookRequest(request('delivery_bad_signature'), {
+    const response = await handleClerkWebhookRequest(request('delivery_bad_signature'), {
       issuer,
       verify: async () => { throw new Error('whsec_private') },
       provision,
@@ -71,21 +73,38 @@ describe('Clerk organization-created webhook', () => {
     'authority_conflict',
     'clerk_org_id_invalid',
   ] as const)('returns 409 for provisioning refusal %s', async (code) => {
-    const response = await handleClerkOrganizationWebhookRequest(request(`delivery_${code}`), {
-      issuer,
-      verify: async () => organizationCreatedEvent(),
-      provision: async () => { throw new Error(`Uncaught Error: ${code}`) },
-    })
+    const response = await handleClerkOrganizationWebhookRequest(
+      await verifiedClerkWebhook(request(`delivery_${code}`), async () => organizationCreatedEvent()),
+      {
+        issuer,
+        provision: async () => ({ kind: 'refused', code }),
+      },
+    )
 
     expect(response.status).toBe(409)
   })
 
+  it('acknowledges a closed workspace without provisioning it again', async () => {
+    const response = await handleClerkOrganizationWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_workspace_closed'), async () => organizationCreatedEvent()),
+      {
+        issuer,
+        provision: async () => ({ kind: 'refused', code: 'workspace_closed' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ kind: 'accepted', status: 'ignored' })
+  })
+
   it('returns retryable 503 for unexpected provisioning failures', async () => {
-    const response = await handleClerkOrganizationWebhookRequest(request('delivery_provision_unavailable'), {
-      issuer,
-      verify: async () => organizationCreatedEvent(),
-      provision: async () => { throw new Error('unavailable') },
-    })
+    const response = await handleClerkOrganizationWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_provision_unavailable'), async () => organizationCreatedEvent()),
+      {
+        issuer,
+        provision: async () => { throw new Error('unavailable') },
+      },
+    )
 
     expect(response.status).toBe(503)
     expect(response.headers.get('Retry-After')).toBe('5')
@@ -93,15 +112,14 @@ describe('Clerk organization-created webhook', () => {
 
   it('ignores other event types without provisioning', async () => {
     const provision = createProvisionSpy()
-    const response = await handleClerkOrganizationWebhookRequest(request('delivery_other_event'), {
-      issuer,
-      verify: async () => ({
+    const response = await handleClerkOrganizationWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_other_event'), async () => ({
         type: 'organization.updated',
         object: 'event',
         data: { id: CLERK_ORG_ID, name: 'Northwind Research' },
-      }),
-      provision,
-    })
+      })),
+      { issuer, provision },
+    )
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ kind: 'accepted', status: 'ignored' })

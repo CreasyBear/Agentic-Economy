@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { verifiedClerkWebhook } from '../../helpers/clerk-webhook'
 
 import { handleClerkOrganizationMembershipWebhookRequest } from '@/lib/server/clerk-organization-membership-webhook'
 import type {
@@ -35,19 +36,15 @@ describe('Clerk organization membership webhook (W-17)', () => {
     it('H1: verified organizationMembership.created applies one redacted command', async () => {
       const applied: OrganizationMembershipCreatedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
-      const response = await handleClerkOrganizationMembershipWebhookRequest(incoming, {
-        issuer,
-        verify: async (verifiedRequest) => {
-          expect(verifiedRequest).toBe(incoming)
-          expect(await verifiedRequest.text()).toBe(sensitiveBody())
-          expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
-          return membershipCreatedEvent()
-        },
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      })
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
+        expect(verifiedRequest).toBe(incoming)
+        expect(await verifiedRequest.text()).toBe(sensitiveBody())
+        expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
+        return membershipCreatedEvent()
+      }), { issuer, apply: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, })
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ kind: 'accepted', status: 'applied' })
@@ -62,14 +59,10 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H2: command hashes match sha256 digest pattern', async () => {
       const applied: OrganizationMembershipCreatedObservation[] = []
-      await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h2'), {
-        issuer,
-        verify: async () => membershipCreatedEvent(),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      })
+      await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h2'), async () => membershipCreatedEvent()), { issuer, apply: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, })
 
       expect(applied[0]?.deliveryRefHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
       expect(applied[0]?.membershipRefHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
@@ -77,14 +70,10 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H3: serialized command contains no sensitive membership material', async () => {
       const applied: OrganizationMembershipCreatedObservation[] = []
-      await handleClerkOrganizationMembershipWebhookRequest(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), {
-        issuer,
-        verify: async () => membershipCreatedEvent(),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      })
+      await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), async () => membershipCreatedEvent()), { issuer, apply: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, })
 
       const serialized = JSON.stringify(applied[0])
       expect(serialized).not.toContain('invitee@example.test')
@@ -104,42 +93,30 @@ describe('Clerk organization membership webhook (W-17)', () => {
         MEMBERSHIP_ID,
         MEMBERSHIP_ID_BETA,
       ].entries()) {
-        const response = await handleClerkOrganizationMembershipWebhookRequest(request(`delivery_h4_${index}`), {
-          issuer,
-          verify: async () => membershipCreatedEvent({ data: { id } }),
-          apply: async (command) => {
-            commands.push(command)
-            return { kind: 'accepted', status: 'applied' }
-          },
-        })
+        const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request(`delivery_h4_${index}`), async () => membershipCreatedEvent({ data: { id } })), { issuer, apply: async (command) => {
+          commands.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        }, })
         expect(response.status).toBe(200)
       }
 
       expect(new Set(commands.map((command) => command.membershipRefHash)).size).toBe(2)
       const sameIdCommands: OrganizationMembershipCreatedObservation[] = []
       for (const index of [0, 1]) {
-        await handleClerkOrganizationMembershipWebhookRequest(request(`delivery_h4_same_${index}`), {
-          issuer,
-          verify: async () => membershipCreatedEvent({ data: { id: MEMBERSHIP_ID } }),
-          apply: async (command) => {
-            sameIdCommands.push(command)
-            return { kind: 'accepted', status: 'applied' }
-          },
-        })
+        await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request(`delivery_h4_same_${index}`), async () => membershipCreatedEvent({ data: { id: MEMBERSHIP_ID } })), { issuer, apply: async (command) => {
+          sameIdCommands.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        }, })
       }
       expect(new Set(sameIdCommands.map((command) => command.membershipRefHash)).size).toBe(1)
     })
 
     it('H5: providerIdentifier equals issuer pipe user_id never raw user_id alone', async () => {
       const applied: OrganizationMembershipCreatedObservation[] = []
-      await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h5'), {
-        issuer,
-        verify: async () => membershipCreatedEvent(),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      })
+      await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h5'), async () => membershipCreatedEvent()), { issuer, apply: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, })
 
       expect(applied[0]?.providerIdentifier).toBe(`${issuer}|${INVITEE_USER_ID}`)
       expect(applied[0]?.providerIdentifier).not.toBe(INVITEE_USER_ID)
@@ -147,36 +124,14 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H6: invalid role returns 400 problem', async () => {
       const apply = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h6'), {
-        issuer,
-        verify: async () => membershipCreatedEvent({
-          data: { role: 'org:custom_role' },
-        }),
-        apply,
-      })
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h6'), async () => membershipCreatedEvent({
+        data: { role: 'org:custom_role' },
+      })), { issuer, apply, })
 
       expect(response.status).toBe(400)
       expect(apply).not.toHaveBeenCalled()
     })
 
-    it.each([
-      ['missing', null],
-      ['empty', ''],
-      ['too long', 'x'.repeat(301)],
-    ] as const)('H7: invalid svix-id (%s) returns 400 problem', async (_label, svixId) => {
-      const apply = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(
-        request('delivery_h7', '{}', svixId),
-        {
-          issuer,
-          verify: async () => membershipCreatedEvent(),
-          apply,
-        },
-      )
-
-      expect(response.status).toBe(400)
-      expect(apply).not.toHaveBeenCalled()
-    })
 
     it.each([
       ['id', { id: undefined }],
@@ -185,13 +140,9 @@ describe('Clerk organization membership webhook (W-17)', () => {
       ['created_at', { created_at: undefined }],
     ] as const)('H8: missing %s returns 400 problem', async (_field, patch) => {
       const apply = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h8'), {
-        issuer,
-        verify: async () => membershipCreatedEvent({
-          data: patch,
-        }),
-        apply,
-      })
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h8'), async () => membershipCreatedEvent({
+        data: patch,
+      })), { issuer, apply, })
 
       expect(response.status).toBe(400)
       expect(apply).not.toHaveBeenCalled()
@@ -203,58 +154,28 @@ describe('Clerk organization membership webhook (W-17)', () => {
       ['public_user_data.user_id', { public_user_data: { user_id: 'bad_user_ref' } }],
     ] as const)('H9: invalid %s prefix returns 400 problem', async (_field, patch) => {
       const apply = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h9'), {
-        issuer,
-        verify: async () => membershipCreatedEvent({
-          data: patch,
-        }),
-        apply,
-      })
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h9'), async () => membershipCreatedEvent({
+        data: patch,
+      })), { issuer, apply, })
 
       expect(response.status).toBe(400)
       expect(apply).not.toHaveBeenCalled()
     })
 
-    it('H10: failed verification returns 400 without leaking verifier secrets', async () => {
-      const apply = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h10'), {
-        issuer,
-        verify: async () => { throw new Error('whsec_private verifier details') },
-        apply,
-      })
 
-      expect(response.status).toBe(400)
-      expect(await response.text()).not.toContain('whsec_private')
-      expect(apply).not.toHaveBeenCalled()
-    })
-
-    it('H11: oversized body returns 413 without calling verifier', async () => {
-      const verify = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(
-        request('delivery_h11', 'x'.repeat(257 * 1024)),
-        { issuer, verify },
-      )
-
-      expect(response.status).toBe(413)
-      expect(verify).not.toHaveBeenCalled()
-    })
 
     it('H12: verified organizationMembership.deleted applies one redacted command via applyDeleted', async () => {
       const applied: OrganizationMembershipDeletedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
-      const response = await handleClerkOrganizationMembershipWebhookRequest(incoming, {
-        issuer,
-        verify: async (verifiedRequest) => {
-          expect(verifiedRequest).toBe(incoming)
-          expect(await verifiedRequest.text()).toBe(sensitiveBody())
-          expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
-          return membershipDeletedEvent({ data: { updated_at: 4_500 } })
-        },
-        applyDeleted: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
+        expect(verifiedRequest).toBe(incoming)
+        expect(await verifiedRequest.text()).toBe(sensitiveBody())
+        expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
+        return membershipDeletedEvent({ data: { updated_at: 4_500 } })
+      }), { issuer, applyDeleted: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ kind: 'accepted', status: 'applied' })
@@ -268,11 +189,7 @@ describe('Clerk organization membership webhook (W-17)', () => {
     })
 
     it('H14: applier failure returns 503 with Retry-After and no cause leak', async () => {
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h14'), {
-        issuer,
-        verify: async () => membershipCreatedEvent(),
-        apply: async () => { throw new Error('private persistence failure') },
-      })
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h14'), async () => membershipCreatedEvent()), { issuer, apply: async () => { throw new Error('private persistence failure') }, })
 
       expect(response.status).toBe(503)
       expect(response.headers.get('Retry-After')).toBe('5')
@@ -280,32 +197,95 @@ describe('Clerk organization membership webhook (W-17)', () => {
     })
 
     it('H15: missing identity binding refusal returns 503 with Retry-After', async () => {
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h15'), {
-        issuer,
-        verify: async () => membershipCreatedEvent(),
-        apply: async () => ({ kind: 'refused', code: 'identity_binding_missing' }),
-      })
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h15'), async () => membershipCreatedEvent()), { issuer, apply: async () => ({ kind: 'refused', code: 'identity_binding_missing' }), })
 
       expect(response.status).toBe(503)
       expect(response.headers.get('Retry-After')).toBe('5')
     })
+    it('H29: unbound membership for a newly created organization returns 503 with Retry-After 60', async () => {
+      const now = Date.UTC(2026, 8, 30, 12)
+      vi.useFakeTimers()
+      vi.setSystemTime(now)
+      try {
+        const webhook = await verifiedClerkWebhook(request('delivery_h29'), async () =>
+          membershipCreatedEvent({
+            data: { organization: { created_at: now - 60 * 60 * 1000 } },
+          }),
+        )
+        const response = await handleClerkOrganizationMembershipWebhookRequest(webhook, {
+          issuer,
+          apply: async () => ({ kind: 'refused', code: 'organization_unbound' }),
+        })
+
+        expect(response.status).toBe(503)
+        expect(response.headers.get('Retry-After')).toBe('60')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('H30: unbound membership for an old organization is acknowledged as ignored', async () => {
+      const now = Date.UTC(2026, 8, 30, 12)
+      vi.useFakeTimers()
+      vi.setSystemTime(now)
+      try {
+        const webhook = await verifiedClerkWebhook(request('delivery_h30'), async () =>
+          membershipCreatedEvent({
+            data: { organization: { created_at: now - 7 * 60 * 60 * 1000 } },
+          }),
+        )
+        const response = await handleClerkOrganizationMembershipWebhookRequest(webhook, {
+          issuer,
+          apply: async () => ({ kind: 'refused', code: 'organization_unbound' }),
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({ status: 'ignored' })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('H31: an unbound organization event is applied after the dependency accepts it', async () => {
+      const now = Date.UTC(2026, 8, 30, 12)
+      vi.useFakeTimers()
+      vi.setSystemTime(now)
+      try {
+        const webhook = await verifiedClerkWebhook(request('delivery_h31'), async () =>
+          membershipCreatedEvent({
+            data: { organization: { created_at: now - 60 * 60 * 1000 } },
+          }),
+        )
+        const apply = vi.fn()
+          .mockResolvedValueOnce({ kind: 'refused', code: 'organization_unbound' })
+          .mockResolvedValueOnce({ kind: 'accepted', status: 'applied' })
+
+        const firstResponse = await handleClerkOrganizationMembershipWebhookRequest(webhook, { issuer, apply })
+        expect(firstResponse.status).toBe(503)
+        expect(firstResponse.headers.get('Retry-After')).toBe('60')
+
+        const retryResponse = await handleClerkOrganizationMembershipWebhookRequest(webhook, { issuer, apply })
+        expect(retryResponse.status).toBe(200)
+        expect(await retryResponse.json()).toEqual({ kind: 'accepted', status: 'applied' })
+        expect(apply).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
 
     it('H16: verified organizationMembership.updated applies one redacted command', async () => {
       const applied: OrganizationMembershipUpdatedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
-      const response = await handleClerkOrganizationMembershipWebhookRequest(incoming, {
-        issuer,
-        verify: async (verifiedRequest) => {
-          expect(verifiedRequest).toBe(incoming)
-          expect(await verifiedRequest.text()).toBe(sensitiveBody())
-          expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
-          return membershipUpdatedEvent({ data: { updated_at: 4_000, role: 'org:admin' } })
-        },
-        applyUpdated: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
+        expect(verifiedRequest).toBe(incoming)
+        expect(await verifiedRequest.text()).toBe(sensitiveBody())
+        expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
+        return membershipUpdatedEvent({ data: { updated_at: 4_000, role: 'org:admin' } })
+      }), { issuer, applyUpdated: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ kind: 'accepted', status: 'applied' })
@@ -322,14 +302,10 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H17: serialized updated command contains no sensitive membership material', async () => {
       const applied: OrganizationMembershipUpdatedObservation[] = []
-      await handleClerkOrganizationMembershipWebhookRequest(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), {
-        issuer,
-        verify: async () => membershipUpdatedEvent(),
-        applyUpdated: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      } satisfies MembershipWebhookDependencies)
+      await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), async () => membershipUpdatedEvent()), { issuer, applyUpdated: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, } satisfies MembershipWebhookDependencies)
 
       const serialized = JSON.stringify(applied[0])
       expect(serialized).not.toContain('invitee@example.test')
@@ -345,13 +321,9 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H18: invalid updated role returns 400 problem', async () => {
       const applyUpdated = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h18'), {
-        issuer,
-        verify: async () => membershipUpdatedEvent({
-          data: { role: 'org:custom_role' },
-        }),
-        applyUpdated,
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h18'), async () => membershipUpdatedEvent({
+        data: { role: 'org:custom_role' },
+      })), { issuer, applyUpdated, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(400)
       expect(applyUpdated).not.toHaveBeenCalled()
@@ -363,13 +335,9 @@ describe('Clerk organization membership webhook (W-17)', () => {
       ['negative', -1],
     ] as const)('H19: invalid updated_at (%s) returns 400 problem', async (_label, updatedAt) => {
       const applyUpdated = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h19'), {
-        issuer,
-        verify: async () => membershipUpdatedEvent({
-          data: { updated_at: updatedAt },
-        }),
-        applyUpdated,
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h19'), async () => membershipUpdatedEvent({
+        data: { updated_at: updatedAt },
+      })), { issuer, applyUpdated, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(400)
       expect(applyUpdated).not.toHaveBeenCalled()
@@ -381,11 +349,7 @@ describe('Clerk organization membership webhook (W-17)', () => {
       ['public_user_data.user_id', { public_user_data: { user_id: undefined } }],
     ] as const)('H20: missing %s on updated returns 400 problem', async (_field, patch) => {
       const applyUpdated = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h20'), {
-        issuer,
-        verify: async () => membershipUpdatedEvent({ data: patch }),
-        applyUpdated,
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h20'), async () => membershipUpdatedEvent({ data: patch })), { issuer, applyUpdated, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(400)
       expect(applyUpdated).not.toHaveBeenCalled()
@@ -397,11 +361,7 @@ describe('Clerk organization membership webhook (W-17)', () => {
       ['public_user_data.user_id', { public_user_data: { user_id: 'bad_user_ref' } }],
     ] as const)('H20: invalid %s prefix on updated returns 400 problem', async (_field, patch) => {
       const applyUpdated = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h20_prefix'), {
-        issuer,
-        verify: async () => membershipUpdatedEvent({ data: patch }),
-        applyUpdated,
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h20_prefix'), async () => membershipUpdatedEvent({ data: patch })), { issuer, applyUpdated, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(400)
       expect(applyUpdated).not.toHaveBeenCalled()
@@ -411,13 +371,9 @@ describe('Clerk organization membership webhook (W-17)', () => {
       const apply = vi.fn()
       const applyUpdated = vi.fn()
       const applyDeleted = vi.fn(async () => ({ kind: 'accepted' as const, status: 'applied' as const }))
-      await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h21'), {
-        issuer,
-        verify: async () => membershipDeletedEvent(),
-        apply,
-        applyUpdated,
-        applyDeleted,
-      } satisfies MembershipWebhookDependencies)
+      await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h21'), async () => membershipDeletedEvent()), { issuer, apply,
+      applyUpdated,
+      applyDeleted, } satisfies MembershipWebhookDependencies)
 
       expect(apply).not.toHaveBeenCalled()
       expect(applyUpdated).not.toHaveBeenCalled()
@@ -426,14 +382,10 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H24: serialized deleted command contains no sensitive membership material', async () => {
       const applied: OrganizationMembershipDeletedObservation[] = []
-      await handleClerkOrganizationMembershipWebhookRequest(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), {
-        issuer,
-        verify: async () => membershipDeletedEvent(),
-        applyDeleted: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      } satisfies MembershipWebhookDependencies)
+      await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), async () => membershipDeletedEvent()), { issuer, applyDeleted: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, } satisfies MembershipWebhookDependencies)
 
       const serialized = JSON.stringify(applied[0])
       expect(serialized).not.toContain('invitee@example.test')
@@ -449,14 +401,10 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H25: deleted command hashes match sha256 digest pattern and providerIdentifier is issuer pipe user_id', async () => {
       const applied: OrganizationMembershipDeletedObservation[] = []
-      await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h25'), {
-        issuer,
-        verify: async () => membershipDeletedEvent(),
-        applyDeleted: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      } satisfies MembershipWebhookDependencies)
+      await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h25'), async () => membershipDeletedEvent()), { issuer, applyDeleted: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      }, } satisfies MembershipWebhookDependencies)
 
       expect(applied[0]?.deliveryRefHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
       expect(applied[0]?.membershipRefHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
@@ -473,22 +421,14 @@ describe('Clerk organization membership webhook (W-17)', () => {
       ['bad user id', { public_user_data: { user_id: 'bad_user_ref' } }],
     ] as const)('H26: deleted invalid field (%s) returns 400 without calling applier', async (_label, patch) => {
       const applyDeleted = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h26'), {
-        issuer,
-        verify: async () => membershipDeletedEvent({ data: patch }),
-        applyDeleted,
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h26'), async () => membershipDeletedEvent({ data: patch })), { issuer, applyDeleted, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(400)
       expect(applyDeleted).not.toHaveBeenCalled()
     })
 
     it('H27: identity_binding_missing on deleted returns 503 with Retry-After', async () => {
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h27'), {
-        issuer,
-        verify: async () => membershipDeletedEvent(),
-        applyDeleted: async () => ({ kind: 'refused', code: 'identity_binding_missing' }),
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h27'), async () => membershipDeletedEvent()), { issuer, applyDeleted: async () => ({ kind: 'refused', code: 'identity_binding_missing' }), } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(503)
       expect(response.headers.get('Retry-After')).toBe('5')
@@ -496,29 +436,21 @@ describe('Clerk organization membership webhook (W-17)', () => {
 
     it('H28: deleted tombstone without org or user returns 400 without calling applier', async () => {
       const applyDeleted = vi.fn()
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h28'), {
-        issuer,
-        verify: async () => ({
-          type: 'organizationMembership.deleted',
-          object: 'event',
-          data: {
-            id: MEMBERSHIP_ID,
-            deleted: true,
-          },
-        }),
-        applyDeleted,
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h28'), async () => ({
+        type: 'organizationMembership.deleted',
+        object: 'event',
+        data: {
+          id: MEMBERSHIP_ID,
+          deleted: true,
+        },
+      })), { issuer, applyDeleted, } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(400)
       expect(applyDeleted).not.toHaveBeenCalled()
     })
 
     it('H23: identity_binding_missing on updated returns 503 with Retry-After', async () => {
-      const response = await handleClerkOrganizationMembershipWebhookRequest(request('delivery_h23'), {
-        issuer,
-        verify: async () => membershipUpdatedEvent(),
-        applyUpdated: async () => ({ kind: 'refused', code: 'identity_binding_missing' }),
-      } satisfies MembershipWebhookDependencies)
+      const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(request('delivery_h23'), async () => membershipUpdatedEvent()), { issuer, applyUpdated: async () => ({ kind: 'refused', code: 'identity_binding_missing' }), } satisfies MembershipWebhookDependencies)
 
       expect(response.status).toBe(503)
       expect(response.headers.get('Retry-After')).toBe('5')
@@ -555,7 +487,7 @@ describe('Clerk organization membership webhook (W-17)', () => {
           applied.push(command)
           return { kind: 'accepted', status: 'applied' }
         },
-      } satisfies MembershipWebhookDependencies)
+      })
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ kind: 'accepted', status: 'applied' })
@@ -621,7 +553,7 @@ function membershipCreatedEvent(overrides: Readonly<{
 }> = {}) {
   const baseData = {
     id: MEMBERSHIP_ID,
-    organization: { id: CLERK_ORG_ID },
+    organization: { id: CLERK_ORG_ID, created_at: 3_000 },
     public_user_data: {
       user_id: INVITEE_USER_ID,
       first_name: 'Secret',

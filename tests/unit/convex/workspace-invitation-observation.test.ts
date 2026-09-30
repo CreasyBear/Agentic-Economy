@@ -195,6 +195,7 @@ async function provisionBoundOrgWorkspace(
     correlationRef: correlationRef(`provision:${clerkOrgId}`),
     serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
   })
+  if (result.kind === 'refused') throw new Error(`provisioning refused: ${result.code}`)
   return result.accountRef
 }
 

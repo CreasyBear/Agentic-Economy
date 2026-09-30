@@ -31,13 +31,13 @@ const recordResultValue = v.union(
   }),
   v.object({
     kind: v.literal('refused'),
-    code: v.union(v.literal('authority_conflict'), v.literal('identity_binding_missing')),
+    code: v.union(v.literal('authority_conflict'), v.literal('identity_binding_missing'), v.literal('organization_unbound')),
   }),
 )
 
 export type RecordResult = Readonly<
   | { kind: 'accepted'; status: 'applied' | 'replayed' | 'ignored' }
-  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' }
+  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' | 'organization_unbound' }
 >
 
 export type RecordCommand = Readonly<{
