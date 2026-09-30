@@ -67,13 +67,14 @@ vi.mock('@/components/ae/agent-access/home/useAeAgentAccessHome', () => ({
 
 import { useAgentKeysSettings } from './useAgentKeysSettings'
 import { AeAgentKeysSettings } from './AeAgentKeysSettings'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { AeAgentAccessHome } from '@/components/ae/agent-access/home/AeAgentAccessHome'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 
 const directory = { items: [], details: [] }
 const target = {
   credentialRef: 'credential:one', generation: 2, principalRef: 'agent:one',
-  name: 'Agent one', environment: 'production' as const, current: true,
+  name: 'Agent one', environment: 'production' as const, current: true, issuedAt: 1,
 }
 const twoKeysDirectory = {
   items: [],
@@ -87,7 +88,7 @@ const twoKeysDirectory = {
     currentCredentialRef: 'credential:one',
     credentials: [
       { credentialRef: 'credential:one', generation: 2, lifecycle: 'active', issuedAt: 1, expiresAt: 999_999 },
-      { credentialRef: 'credential:two', generation: 1, lifecycle: 'active', issuedAt: 1, expiresAt: 999_999 },
+      { credentialRef: 'credential:two', generation: 1, lifecycle: 'active', issuedAt: 86_400_001, expiresAt: 999_999_999_999 },
     ],
     connections: [], authorityMode: 'spending_policy', scopes: [], spendingPolicy: { kind: 'unavailable' },
     activity: [], dataState: 'source',
@@ -124,7 +125,7 @@ describe('Agent keys settings revocation', () => {
     const view = render(createElement(AeAgentKeysSettings, {
       initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
     }))
-    const selectedKeyButton = screen.getAllByRole('button', { name: 'Revoke key for Shared name' })[1]
+    const selectedKeyButton = screen.getAllByRole('button', { name: /^Revoke key/ })[1]
     if (selectedKeyButton === undefined) throw new Error('Expected a revoke button for each active key')
     fireEvent.click(selectedKeyButton)
     fireEvent.click(screen.getByRole('button', { name: 'Revoke this key' }))
@@ -134,12 +135,39 @@ describe('Agent keys settings revocation', () => {
     const cancelledView = render(createElement(AeAgentKeysSettings, {
       initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
     }))
-    const cancelledKeyButton = screen.getAllByRole('button', { name: 'Revoke key for Shared name' })[1]
+    const cancelledKeyButton = screen.getAllByRole('button', { name: /^Revoke key/ })[1]
     if (cancelledKeyButton === undefined) throw new Error('Expected a revoke button for each active key')
     fireEvent.click(cancelledKeyButton)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(calls.revoke).toHaveBeenCalledOnce()
     cancelledView.unmount()
+  })
+
+  it('distinguishes active keys by creation time through revoke confirmation', () => {
+    const view = render(createElement(AeAgentKeysSettings, {
+      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
+    }))
+    const buttons = screen.getAllByRole('button', { name: /^Revoke key/ })
+    const firstCredential = twoKeysDirectory.details[0]?.credentials[0]
+    const secondCredential = twoKeysDirectory.details[0]?.credentials[1]
+    if (firstCredential === undefined || secondCredential === undefined || buttons[0] === undefined || buttons[1] === undefined) {
+      throw new Error('Expected two active credentials and their revoke buttons')
+    }
+    const firstCreated = formatTimestamp(firstCredential.issuedAt)
+    const secondCreated = formatTimestamp(secondCredential.issuedAt)
+    const firstLabel = buttons[0].getAttribute('aria-label')
+    const secondLabel = buttons[1].getAttribute('aria-label')
+    expect(firstLabel).toContain(firstCreated)
+    expect(secondLabel).toContain(secondCreated)
+    expect(firstLabel).not.toBe(secondLabel)
+
+    fireEvent.click(buttons[0])
+    expect(screen.getByRole('alertdialog').textContent).toContain(firstCreated)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: `Revoke key created ${secondCreated} for Shared name` }))
+    expect(screen.getByRole('alertdialog').textContent).toContain(secondCreated)
+    expect(screen.getByRole('alertdialog').textContent).not.toContain(firstCreated)
+    view.unmount()
   })
   it('re-verifies an issuance refusal and reveals the key issued after retry', async () => {
     calls.issue

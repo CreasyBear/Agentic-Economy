@@ -2,6 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ClerkRuntimeError } from '@clerk/shared/error'
 
 vi.mock('@/lib/ui/toast', () => ({
   toast: {
@@ -17,6 +18,8 @@ vi.mock('@/lib/observability/degrade', () => ({
 }))
 
 import { useConnectAgentWizard } from './useConnectAgentWizard'
+import { degrade } from '@/lib/observability/degrade'
+import { toast } from '@/lib/ui/toast'
 
 function submitHook(result: { current: ReturnType<typeof useConnectAgentWizard> }) {
   const event = { preventDefault: vi.fn() }
@@ -180,5 +183,23 @@ describe('useConnectAgentWizard', () => {
     expect(result.current.view.name).toBe('')
     expect(result.current.view.environment).toBe('sandbox')
     expect(result.current.view.authorityMode).toBe('spending_policy')
+  })
+
+  it('keeps the issue wizard ready without logging when step-up is cancelled', async () => {
+    const onIssue = vi.fn().mockRejectedValue(
+      new ClerkRuntimeError('Reverification was cancelled', { code: 'reverification_cancelled' }),
+    )
+    const onOpenChange = vi.fn()
+    const { result } = renderHook(() => useConnectAgentWizard({ onOpenChange, onIssue }))
+
+    act(() => result.current.handleNameChange('Research Agent'))
+    await submitHook(result)
+
+    expect(result.current.view.name).toBe('Research Agent')
+    expect(result.current.view.diagnostic).toBeNull()
+    expect(result.current.view.isSubmitting).toBe(false)
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(degrade).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
   })
 })
