@@ -89,20 +89,6 @@ async function listDirectory(
   return await session.query(listDirectoryRef, {})
 }
 
-async function insertSessionSelection(
-  backend: InteractiveAuthorityBackend,
-  activeAccountRef: string,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: 'test:team-directory:selection',
-    })
-  })
-}
 
 async function insertAccountBWithOwnership(
   backend: InteractiveAuthorityBackend,
@@ -113,12 +99,12 @@ async function insertAccountBWithOwnership(
       displayName: 'Workspace B',
       lifecycle: 'active',
       recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-      creationActorPrincipalRef: PRINCIPAL_REF,
+      creationActorPrincipalRef: MEMBER_PRINCIPAL,
       creationIdempotencyRef: `account:${ACCOUNT_B}`,
       initialOwnershipRef: OWNERSHIP_B,
       currentOwnershipRef: OWNERSHIP_B,
       revision: 1,
-      createdAt: NOW,
+      createdAt: NOW - 1,
       updatedAt: NOW,
       lastAction: {
         actorPrincipalRef: PRINCIPAL_REF,
@@ -283,21 +269,19 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
     )
   })
 
-  it('Q4: two workspaces without selection throws active_account_selection_required', async () => {
+  it('Q4: the principal-created Account wins over an older Account', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await insertAccountBWithOwnership(backend)
 
-    await expectDirectoryRefusal(
-      () => listDirectory(backend),
-      'active_account_selection_required',
-    )
+    const result = await listDirectory(backend)
+    expect(result.accountRef).toBe(ACCOUNT_REF)
+    expect(result.owner.principalRef).toBe(PRINCIPAL_REF)
   })
 
   it('Q5: owner on active workspace with no extra members returns owner and empty members', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
 
     const result = await listDirectory(backend)
 
@@ -313,7 +297,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q6: owner plus one human membership returns active member row', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -338,7 +321,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
     const memberToken = 'https://clerk.example.test|user_alex'
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -382,7 +364,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q8: foreign-account membership never appears in directory', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await insertAccountBWithOwnership(backend)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
@@ -398,7 +379,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q9: ended membership is omitted', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -413,7 +393,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q10: ended predecessor ownership omitted; current owner only', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await backend.run(async (ctx) => {
       await ctx.db.insert('accountOwnerships', {
         ownershipRef: ENDED_OWNERSHIP,
@@ -445,7 +424,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q11: agent membership on same account is omitted', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: AGENT_PRINCIPAL,
       membershipRef: `mem_${'g'.repeat(32)}`,
@@ -460,7 +438,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q12: workload membership on same account is omitted', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: WORKLOAD_PRINCIPAL,
       membershipRef: `mem_${'w'.repeat(32)}`,
@@ -475,7 +452,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q13: owner membership row omitted from members', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
 
     const result = await listDirectory(backend)
     expect(result.members.some((row) => row.membershipRef === MEMBERSHIP_REF)).toBe(false)
@@ -485,7 +461,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q14: owner principal missing throws directory_principal_missing', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await backend.run(async (ctx) => {
       const owner = await ctx.db.query('principals')
         .withIndex('by_principalRef', (query) => query.eq('principalRef', PRINCIPAL_REF))
@@ -502,7 +477,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q15: two active ownerships for account throws ownership_ambiguous', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await backend.run(async (ctx) => {
       await insertHumanPrincipal(ctx, {
         principalRef: MEMBER_PRINCIPAL,
@@ -536,7 +510,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
     await seedAuthority(backend, {
       accountCurrentOwnershipRef: SECOND_OWNERSHIP,
     })
-    await insertSessionSelection(backend, ACCOUNT_REF)
 
     await expectDirectoryRefusal(
       () => listDirectory(backend),
@@ -547,7 +520,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q17: principalNotificationEmails fills email; otherwise null', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -575,7 +547,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q18: result has no invitations key', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
 
     const result = await listDirectory(backend)
     expect('invitations' in result).toBe(false)
@@ -584,7 +555,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q19: member role is only member', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -598,7 +568,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('W-18: membership with role org:admin maps to directory role admin', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -614,7 +583,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('W-18: membership with role undefined maps to directory role member', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -626,29 +594,20 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
     expect(result.members[0]?.role).toBe('member')
   })
 
-  it('Q20: query is read-only and does not create session selections', async () => {
+  it('Q20: directory query is read-only', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
 
     const before = await collectAuthorityTables(backend)
-    const selectionCountBefore = await backend.run(async (ctx) =>
-      (await ctx.db.query('interactiveSessionSelections').collect()).length)
-
     await listDirectory(backend)
-
     const after = await collectAuthorityTables(backend)
-    const selectionCountAfter = await backend.run(async (ctx) =>
-      (await ctx.db.query('interactiveSessionSelections').collect()).length)
 
     expect(after).toEqual(before)
-    expect(selectionCountAfter).toBe(selectionCountBefore)
   })
 
   it('Q21: suspended or closed account throws account_inactive', async () => {
     const suspendedBackend = createBackend()
     await seedAuthority(suspendedBackend, { accountLifecycle: 'suspended' })
-    await insertSessionSelection(suspendedBackend, ACCOUNT_REF)
     await expectDirectoryRefusal(
       () => listDirectory(suspendedBackend),
       'account_inactive',
@@ -656,7 +615,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
 
     const closedBackend = createBackend()
     await seedAuthority(closedBackend, { accountLifecycle: 'closed' })
-    await insertSessionSelection(closedBackend, ACCOUNT_REF)
     await expectDirectoryRefusal(
       () => listDirectory(closedBackend),
       'account_inactive',
@@ -666,7 +624,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q22: workspace without Clerk org binding still returns directory', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
 
     const bindings = await backend.run(async (ctx) =>
       await ctx.db.query('accountExternalOrganizationBindings').collect())
@@ -680,7 +637,6 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
   it('Q23: active membership with inactive human principal throws directory_principal_missing', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await seedHumanMember(backend, {
       principalRef: MEMBER_PRINCIPAL,
       membershipRef: MEMBER_MEMBERSHIP,
@@ -775,7 +731,6 @@ describe('workspaceTeam:invitationContext', () => {
   it('owner is eligible only with exactly one active Clerk organization binding', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     expect(await invitation(backend)).toEqual({ kind: 'organization_unset' })
 
     await bindOrganization(backend, 'aob_revoked', 'org_old', 'revoked')
@@ -791,7 +746,6 @@ describe('workspaceTeam:invitationContext', () => {
   it('admin can invite; member receives only a role reason even with a linked organization', async () => {
     const adminBackend = createBackend()
     await seedAuthority(adminBackend)
-    await insertSessionSelection(adminBackend, ACCOUNT_REF)
     await bindOrganization(adminBackend, 'aob_active', 'org_current')
     await bindMember(adminBackend, 'org:admin')
     expect(await invitation(adminBackend, samIdentity(memberToken))).toEqual({
@@ -800,7 +754,6 @@ describe('workspaceTeam:invitationContext', () => {
 
     const memberBackend = createBackend()
     await seedAuthority(memberBackend)
-    await insertSessionSelection(memberBackend, ACCOUNT_REF)
     await bindOrganization(memberBackend, 'aob_active', 'org_secret')
     await bindMember(memberBackend, 'org:member')
     const memberResult = await invitation(memberBackend, samIdentity(memberToken))
@@ -811,7 +764,6 @@ describe('workspaceTeam:invitationContext', () => {
   it('rechecks eligibility after an allowed view when the binding or admin role changes', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await insertSessionSelection(backend, ACCOUNT_REF)
     await bindOrganization(backend, 'aob_active', 'org_current')
     await bindMember(backend, 'org:admin')
     const admin = samIdentity(memberToken)

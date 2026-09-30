@@ -17,7 +17,6 @@ export type InteractiveAuthorityErrorCode =
   | 'principal_kind_invalid'
   | 'account_access_missing'
   | 'account_access_ambiguous'
-  | 'active_account_selection_required'
   | 'account_missing'
   | 'account_ambiguous'
   | 'account_inactive'

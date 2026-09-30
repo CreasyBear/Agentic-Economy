@@ -43,12 +43,7 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
 
     let canonicalAccountRef: ReturnType<typeof accountRef>
     try {
-      const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-        ctx.db,
-        canonicalPrincipalRef,
-        identity,
-        'require',
-      )
+      const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
       canonicalAccountRef = accountRef(activeAccountRef)
     } catch (error) {
       if (!(error instanceof InteractiveAuthorityError) || error.code !== 'account_access_missing') {

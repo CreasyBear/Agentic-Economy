@@ -40,12 +40,7 @@ export async function requireAuthenticatedAccountContext(
 }> {
   const principal = await requireAccountInteractiveHumanPrincipal(db, identity)
   const canonicalPrincipalRef = principalRef(principal.principalRef)
-  const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-    db,
-    canonicalPrincipalRef,
-    identity,
-    'require',
-  )
+  const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)
   const canonicalAccountRef = accountRef(activeAccountRef)
   await requireAccessFactForAccount(db, canonicalPrincipalRef, canonicalAccountRef)
   const account = await db

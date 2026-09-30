@@ -183,12 +183,7 @@ export async function resolveDevSeedOwningAccountRef(
   if (ownership === null || ownership.lifecycle !== 'active' || ownership.accountRef !== candidate) {
     throw new DevSeedCatalogAuthorityError()
   }
-  const resolved = await resolveActiveAccountRefForPrincipal(
-    ctx.db,
-    principalRef(ownership.ownerPrincipalRef),
-    undefined,
-    'require',
-  )
+  const resolved = await resolveActiveAccountRefForPrincipal(ctx.db, principalRef(ownership.ownerPrincipalRef), undefined)
   if (resolved.activeAccountRef !== candidate) throw new DevSeedCatalogAuthorityError()
   return candidate
 }

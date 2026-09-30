@@ -459,12 +459,7 @@ describe('workspace provisioning (W-11)', () => {
       await deleteSessionSelection(backend)
 
       const resolution = await backend.run(async (ctx) =>
-        resolveActiveAccountRefForPrincipal(
-          ctx.db,
-          principalRef(PRINCIPAL_REF),
-          identity({ org_id: CLERK_ORG_ID }),
-          'require',
-        ))
+        resolveActiveAccountRefForPrincipal(ctx.db, principalRef(PRINCIPAL_REF), identity({ org_id: CLERK_ORG_ID })))
 
       expect(resolution).toMatchObject({
         activeAccountRef: provisioned.accountRef,

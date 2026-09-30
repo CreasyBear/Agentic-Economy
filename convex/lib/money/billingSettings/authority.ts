@@ -56,12 +56,7 @@ export async function requireAuthenticatedAccountContext(
 }> {
   const principal = await requireInteractiveHumanPrincipal(db, identity)
   const canonicalPrincipalRef = principalRef(principal.principalRef)
-  const res = await resolveActiveAccountRefForPrincipal(
-    db,
-    canonicalPrincipalRef,
-    identity,
-    'require',
-  )
+  const res = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)
   const canonicalAccountRef = accountRef(res.activeAccountRef)
   const access = await requireAccessFactForAccount(db, canonicalPrincipalRef, canonicalAccountRef)
   if (access.kind !== 'ownership') {

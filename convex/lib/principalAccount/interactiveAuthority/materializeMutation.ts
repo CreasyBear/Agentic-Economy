@@ -23,7 +23,6 @@ export async function materializeCurrentInteractiveAuthorityHandler(
     return true
   } catch (error) {
     if (error instanceof InteractiveAuthorityError) {
-      if (error.code === 'active_account_selection_required') return true
       logProvisionRefusal('materialize_failed', { code: error.code })
       return false
     }

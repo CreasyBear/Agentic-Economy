@@ -2,9 +2,8 @@ import type { UserIdentity } from 'convex/server'
 
 export type InteractiveAccountSelectionState =
   | 'unique'
-  | 'selected'
   | 'org_bound'
-  | 'selection_required'
+  | 'personal'
 
 export function clerkActiveOrganizationId(identity: UserIdentity): string | null {
   const record = identity as UserIdentity & Record<string, unknown> & { o?: { id?: unknown } }

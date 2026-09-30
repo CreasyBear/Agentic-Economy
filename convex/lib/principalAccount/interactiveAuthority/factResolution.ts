@@ -171,12 +171,7 @@ export async function resolveInteractiveAuthorityFactsForToken(
     throw new InteractiveAuthorityError('principal_kind_invalid')
   }
 
-  const activeAccountResolution = await resolveActiveAccountRefForPrincipal(
-    db,
-    canonicalPrincipalRef,
-    identity,
-    'require',
-  )
+  const activeAccountResolution = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)
   const canonicalAccountRef = requireCanonicalRef(activeAccountResolution.activeAccountRef, accountRef)
   const account = requireExactlyOne(
     await db

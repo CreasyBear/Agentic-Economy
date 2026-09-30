@@ -46,12 +46,7 @@ export const readState = query({
     if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
     const principal = await requireInteractiveHumanPrincipal(ctx.db, identity)
     const canonicalPrincipalRef = principalRef(principal.principalRef)
-    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-      ctx.db,
-      canonicalPrincipalRef,
-      identity,
-      'require',
-    )
+    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
     const canonicalAccountRef = accountRef(activeAccountRef)
 
     const account = await ctx.db
@@ -98,12 +93,7 @@ export const complete = mutation({
     if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
     const principal = await requireInteractiveHumanPrincipal(ctx.db, identity)
     const canonicalPrincipalRef = principalRef(principal.principalRef)
-    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-      ctx.db,
-      canonicalPrincipalRef,
-      identity,
-      'require',
-    )
+    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
     const canonicalAccountRef = accountRef(activeAccountRef)
 
     const account = await ctx.db

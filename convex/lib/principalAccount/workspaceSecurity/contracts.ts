@@ -4,7 +4,6 @@ const WORKSPACE_SECURITY_ERROR_CODES = [
   'identity_invalid',
   'principal_kind_invalid',
   'account_access_missing',
-  'active_account_selection_required',
   'account_missing',
   'account_inactive',
   'ownership_mismatch',

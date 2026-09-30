@@ -11,7 +11,6 @@ import {
 import { internal } from '../../../convex/_generated/api'
 import { accountRef } from '../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../src/modules/principal-account/principal/public'
-import type { Doc } from '../../../convex/_generated/dataModel'
 import {
   InteractiveAuthorityError,
   requireAccessFactForAccount,
@@ -49,43 +48,12 @@ const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 
 type RunCtx = Parameters<Parameters<InteractiveAuthorityBackend['run']>[0]>[0]
-type SessionSelectionRow = Doc<'interactiveSessionSelections'>
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)
 
 const correlationRef = (label: string) => `test:tenancy:${label}`
 
-async function countSessionSelections(backend: InteractiveAuthorityBackend): Promise<number> {
-  return await backend.run(async (ctx) =>
-    (await ctx.db.query('interactiveSessionSelections').collect()).length)
-}
-
-async function readSessionSelection(
-  backend: InteractiveAuthorityBackend,
-): Promise<SessionSelectionRow | null> {
-  return await backend.run(async (ctx) =>
-    ctx.db.query('interactiveSessionSelections')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', PRINCIPAL_REF))
-      .unique())
-}
-
-async function insertSessionSelection(
-  backend: InteractiveAuthorityBackend,
-  activeAccountRef: string,
-  revision = 1,
-  selectedAt = NOW,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef,
-      revision,
-      selectedAt,
-      lastCorrelationRef: correlationRef('seed-selection'),
-    })
-  })
-}
 
 async function insertOrgBinding(
   backend: InteractiveAuthorityBackend,
@@ -117,6 +85,8 @@ async function insertAccountWithOwnership(
     displayName: string
     ownerPrincipalRef: string
     lifecycle?: 'active' | 'suspended'
+    creationActorPrincipalRef?: string
+    createdAt?: number
   }>,
 ): Promise<void> {
   await ctx.db.insert('accounts', {
@@ -124,12 +94,12 @@ async function insertAccountWithOwnership(
     displayName: input.displayName,
     lifecycle: input.lifecycle ?? 'active',
     recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-    creationActorPrincipalRef: input.ownerPrincipalRef,
+    creationActorPrincipalRef: input.creationActorPrincipalRef ?? input.ownerPrincipalRef,
     creationIdempotencyRef: `account:${input.accountRef}`,
     initialOwnershipRef: input.ownershipRef,
     currentOwnershipRef: input.ownershipRef,
     revision: 1,
-    createdAt: NOW,
+    createdAt: input.createdAt ?? NOW,
     updatedAt: NOW,
     lastAction: {
       actorPrincipalRef: input.ownerPrincipalRef,
@@ -145,7 +115,7 @@ async function insertAccountWithOwnership(
     lifecycle: 'active',
     changeKind: 'creation',
     revision: 1,
-    createdAt: NOW,
+    createdAt: input.createdAt ?? NOW,
     createdBy: {
       actorPrincipalRef: input.ownerPrincipalRef,
       activeAccountRef: input.accountRef,
@@ -206,7 +176,13 @@ async function seedOwnedAccountB(backend: InteractiveAuthorityBackend): Promise<
   })
 }
 
-async function seedMemberAccountB(backend: InteractiveAuthorityBackend): Promise<void> {
+async function seedMemberAccountB(
+  backend: InteractiveAuthorityBackend,
+  input: Readonly<{
+    createdAt?: number
+    creationActorPrincipalRef?: string
+  }> = {},
+): Promise<void> {
   await backend.run(async (ctx) => {
     await ensureOtherOwnerPrincipal(ctx)
     await insertAccountWithOwnership(ctx, {
@@ -214,6 +190,8 @@ async function seedMemberAccountB(backend: InteractiveAuthorityBackend): Promise
       ownershipRef: OWNERSHIP_B,
       displayName: 'Workspace B',
       ownerPrincipalRef: OTHER_OWNER_PRINCIPAL,
+      creationActorPrincipalRef: input.creationActorPrincipalRef ?? OTHER_OWNER_PRINCIPAL,
+      createdAt: input.createdAt ?? NOW,
     })
     await insertMembershipForPrincipal(ctx, {
       membershipRef: MEMBERSHIP_B,
@@ -232,9 +210,13 @@ async function seedCanonicalWithExtraOwnedB(
 
 async function seedCanonicalWithMemberB(
   backend: InteractiveAuthorityBackend,
+  input: Readonly<{
+    createdAt?: number
+    creationActorPrincipalRef?: string
+  }> = {},
 ): Promise<void> {
   await seedAuthority(backend)
-  await seedMemberAccountB(backend)
+  await seedMemberAccountB(backend, input)
 }
 
 function clerkOrgIdentity(
@@ -256,19 +238,16 @@ describe('interactive authority tenancy (W-10)', () => {
   })
 
   describe('Section A: auto-select (single Account)', () => {
-    it('A1: single ownership without selection resolves Account A and writes no selection row', async () => {
+    it('A1: single ownership resolves Account A', async () => {
       const backend = await seededBackend()
       const context = await resolveContext(backend)
 
       expect(context.accountRef).toBe(ACCOUNT_A)
       expect(context.provenance.accessKind).toBe('ownership')
-      expect(await countSessionSelections(backend)).toBe(0)
-
-      await resolveContext(backend)
-      expect(await countSessionSelections(backend)).toBe(0)
+      await expect(resolveContext(backend)).resolves.toMatchObject({ accountRef: ACCOUNT_A })
     })
 
-    it('A2: single membership without selection resolves with accessKind membership', async () => {
+    it('A2: single membership resolves with accessKind membership', async () => {
       const backend = await seededBackend({ access: 'membership' })
       const context = await resolveContext(backend)
 
@@ -277,7 +256,6 @@ describe('interactive authority tenancy (W-10)', () => {
         accessKind: 'membership',
         accessRef: MEMBERSHIP_A,
       })
-      expect(await countSessionSelections(backend)).toBe(0)
     })
 
     it('A3: ownership and membership on one Account prefers ownership', async () => {
@@ -291,17 +269,22 @@ describe('interactive authority tenancy (W-10)', () => {
       })
     })
 
-    it('A4: stale selection to missing Account auto-selects the only accessible Account', async () => {
-      const backend = await seededBackend()
-      await insertSessionSelection(backend, ACCOUNT_C)
-
-      const context = await resolveContext(backend)
-
-      expect(context.accountRef).toBe(ACCOUNT_A)
-      expect(await readSessionSelection(backend)).toMatchObject({
-        activeAccountRef: ACCOUNT_C,
-        revision: 1,
+    it('A4: an inaccessible saved workspace falls back to the sole accessible Account', async () => {
+      const backend = createBackend()
+      await seedCanonicalWithMemberB(backend)
+      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
+        accountRef: ACCOUNT_B,
+        correlationRef: correlationRef('a4'),
       })
+      await backend.run(async (ctx) => {
+        const membership = await ctx.db.query('memberships')
+          .withIndex('by_membershipRef', (query) => query.eq('membershipRef', MEMBERSHIP_B))
+          .unique()
+        if (membership === null) throw new Error('membership B missing')
+        await ctx.db.patch(membership._id, { lifecycle: 'ended' })
+      })
+
+      await expect(resolveContext(backend)).resolves.toMatchObject({ accountRef: ACCOUNT_A })
     })
 
     it('A5: zero access facts throws account_access_missing', async () => {
@@ -312,50 +295,67 @@ describe('interactive authority tenancy (W-10)', () => {
     })
   })
 
-  describe('Section B: multi-Account and selection row', () => {
-    it('B1: two Accounts with selection on A resolves Account A', async () => {
+  describe('Section B: deterministic multi-Account resolution', () => {
+    it('B1: a saved workspace does not override the deterministic choice', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
-      await insertSessionSelection(backend, ACCOUNT_A)
+      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
+        accountRef: ACCOUNT_B,
+        correlationRef: correlationRef('b1'),
+      })
 
       const context = await resolveContext(backend)
       expect(context.accountRef).toBe(ACCOUNT_A)
       expect(context.provenance.accessKind).toBe('ownership')
     })
 
-    it('B2: two Accounts with membership selection on B resolves Account B', async () => {
+    it('B2: a saved membership workspace does not override the personal Account', async () => {
       const backend = createBackend()
       await seedCanonicalWithMemberB(backend)
-      await insertSessionSelection(backend, ACCOUNT_B)
+      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
+        accountRef: ACCOUNT_B,
+        correlationRef: correlationRef('b2'),
+      })
 
       const context = await resolveContext(backend)
-      expect(context.accountRef).toBe(ACCOUNT_B)
-      expect(context.provenance.accessKind).toBe('membership')
+      expect(context.accountRef).toBe(ACCOUNT_A)
+      expect(context.provenance.accessKind).toBe('ownership')
     })
 
-    it('B3: two Accounts without selection or org throws active_account_selection_required', async () => {
+    it('B3: personal Account wins over an accessible org-bound Account without an org claim', async () => {
+      const backend = createBackend()
+      await seedCanonicalWithMemberB(backend, {
+        createdAt: NOW - 1,
+        creationActorPrincipalRef: PRINCIPAL_REF,
+      })
+      await insertOrgBinding(backend, {
+        bindingRef: ORG_BINDING_B_REF,
+        accountRef: ACCOUNT_B,
+        providerIdentifier: CLERK_ORG_B,
+      })
+
+      const context = await resolveContext(backend)
+      expect(context.accountRef).toBe(ACCOUNT_A)
+      expect(context.provenance.accessKind).toBe('ownership')
+    })
+
+    it('B4: setting an inaccessible workspace throws account_access_missing', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
 
-      await expect(resolveContext(backend)).rejects.toEqual(
-        new InteractiveAuthorityError('active_account_selection_required'),
-      )
+      await expect(backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
+        accountRef: ACCOUNT_C,
+        correlationRef: correlationRef('b4'),
+      })).rejects.toEqual(new InteractiveAuthorityError('account_access_missing'))
     })
 
-    it('B4: selection to inaccessible Account throws account_access_missing', async () => {
+    it('B5: an org claim overrides a saved workspace when its Account is accessible', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
-      await insertSessionSelection(backend, ACCOUNT_C)
-
-      await expect(resolveContext(backend)).rejects.toEqual(
-        new InteractiveAuthorityError('account_access_missing'),
-      )
-    })
-
-    it('B5: selection row wins over org_id bound to another Account', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      await insertSessionSelection(backend, ACCOUNT_A)
+      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
+        accountRef: ACCOUNT_A,
+        correlationRef: correlationRef('b5'),
+      })
       await insertOrgBinding(backend, {
         bindingRef: ORG_BINDING_B_REF,
         accountRef: ACCOUNT_B,
@@ -363,10 +363,10 @@ describe('interactive authority tenancy (W-10)', () => {
       })
 
       const context = await resolveContext(backend, clerkOrgIdentity(CLERK_ORG_B))
-      expect(context.accountRef).toBe(ACCOUNT_A)
+      expect(context.accountRef).toBe(ACCOUNT_B)
     })
 
-    it('B6: selection to suspended Account throws account_inactive', async () => {
+    it('B6: selecting a suspended Account still throws account_inactive', async () => {
       const backend = createBackend()
       await seedAuthority(backend)
       await backend.run(async (ctx) => {
@@ -376,7 +376,6 @@ describe('interactive authority tenancy (W-10)', () => {
         if (account === null) throw new Error('account A missing')
         await ctx.db.patch(account._id, { lifecycle: 'suspended' })
       })
-      await insertSessionSelection(backend, ACCOUNT_A)
       await seedOwnedAccountB(backend)
 
       await expect(resolveContext(backend)).rejects.toEqual(
@@ -385,7 +384,7 @@ describe('interactive authority tenancy (W-10)', () => {
     })
   })
 
-  describe('Section C: Clerk org_id hint without selection row', () => {
+  describe('Section C: Clerk org_id hint and personal fallback', () => {
     it('C1: org_id bound to owned Account A resolves Account A', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
@@ -397,7 +396,6 @@ describe('interactive authority tenancy (W-10)', () => {
 
       const context = await resolveContext(backend, clerkOrgIdentity(CLERK_ORG_A))
       expect(context.accountRef).toBe(ACCOUNT_A)
-      expect(await countSessionSelections(backend)).toBe(0)
     })
 
     it('C2: Clerk v2 o.id claim bound to Account A resolves Account A', async () => {
@@ -413,18 +411,53 @@ describe('interactive authority tenancy (W-10)', () => {
       expect(context.accountRef).toBe(ACCOUNT_A)
     })
 
-    it('C3: org_id without binding throws active_account_selection_required', async () => {
+    it('C3: an org claim selects the same accessible org Account despite personal fallback', async () => {
       const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
+      await seedCanonicalWithMemberB(backend, {
+        createdAt: NOW - 1,
+        creationActorPrincipalRef: PRINCIPAL_REF,
+      })
+      await insertOrgBinding(backend, {
+        bindingRef: ORG_BINDING_B_REF,
+        accountRef: ACCOUNT_B,
+        providerIdentifier: CLERK_ORG_B,
+      })
 
-      await expect(resolveContext(backend, clerkOrgIdentity(CLERK_ORG_A))).rejects.toEqual(
-        new InteractiveAuthorityError('active_account_selection_required'),
-      )
+      const context = await resolveContext(backend, clerkOrgIdentity(CLERK_ORG_B))
+      expect(context.accountRef).toBe(ACCOUNT_B)
+      expect(context.provenance.accessKind).toBe('membership')
     })
 
-    it('C4: org_id bound to inaccessible Account throws active_account_selection_required', async () => {
+    it('C4: principal-created Account wins over an older Account created by someone else', async () => {
       const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
+      await seedCanonicalWithMemberB(backend, { createdAt: NOW - 1_000 })
+
+      const context = await resolveContext(backend)
+      expect(context.accountRef).toBe(ACCOUNT_A)
+      expect(context.provenance.accessKind).toBe('ownership')
+    })
+
+    it('C5: older Account wins when neither accessible Account was created by the principal', async () => {
+      const backend = createBackend()
+      await seedCanonicalWithMemberB(backend)
+      await backend.run(async (ctx) => {
+        const account = await ctx.db.query('accounts')
+          .withIndex('by_accountRef', (query) => query.eq('accountRef', ACCOUNT_A))
+          .unique()
+        if (account === null) throw new Error('account A missing')
+        await ctx.db.patch(account._id, {
+          creationActorPrincipalRef: OTHER_OWNER_PRINCIPAL,
+          createdAt: NOW - 1_000,
+        })
+      })
+
+      const context = await resolveContext(backend)
+      expect(context.accountRef).toBe(ACCOUNT_A)
+    })
+
+    it('C6: an org claim bound to an inaccessible Account falls through to personal', async () => {
+      const backend = createBackend()
+      await seedAuthority(backend)
       await backend.run(async (ctx) => {
         await ensureOtherOwnerPrincipal(ctx)
         await insertAccountWithOwnership(ctx, {
@@ -440,12 +473,12 @@ describe('interactive authority tenancy (W-10)', () => {
         providerIdentifier: CLERK_ORG_INACCESSIBLE,
       })
 
-      await expect(resolveContext(
+      const context = await resolveContext(
         backend,
         clerkOrgIdentity(CLERK_ORG_INACCESSIBLE),
-      )).rejects.toEqual(
-        new InteractiveAuthorityError('active_account_selection_required'),
       )
+      expect(context.accountRef).toBe(ACCOUNT_A)
+      expect(context.provenance.accessKind).toBe('ownership')
     })
   })
 
@@ -480,7 +513,7 @@ describe('interactive authority tenancy (W-10)', () => {
   })
 
   describe('Section E: setActiveWorkspace', () => {
-    it('E1: switching to owned Account creates selection row at revision 1', async () => {
+    it('E1: switching to an owned Account returns revision 1', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
       const session = backend.withIdentity(identity())
@@ -496,11 +529,6 @@ describe('interactive authority tenancy (W-10)', () => {
         revision: 1,
         selectedAt: NOW,
       })
-      expect(await readSessionSelection(backend)).toMatchObject({
-        activeAccountRef: ACCOUNT_A,
-        revision: 1,
-        lastCorrelationRef: correlationRef('e1'),
-      })
     })
 
     it('E2: switching again to the same Account is idempotent', async () => {
@@ -513,10 +541,6 @@ describe('interactive authority tenancy (W-10)', () => {
       const second = await session.mutation(setActiveWorkspaceRef, args)
 
       expect(second.revision).toBe(1)
-      expect(await readSessionSelection(backend)).toMatchObject({
-        revision: 1,
-        selectedAt: NOW,
-      })
     })
 
     it('E3: switching to another accessible Account bumps revision and selectedAt', async () => {
@@ -553,13 +577,12 @@ describe('interactive authority tenancy (W-10)', () => {
       })).rejects.toEqual(new InteractiveAuthorityError('account_access_missing'))
     })
 
-    it('E5: materialize succeeds with two Accounts and no selection (identity armed)', async () => {
+    it('E5: materialize succeeds with two Accounts (identity armed)', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
       const session = backend.withIdentity(identity())
 
       await expectMaterialize(session, true)
-      expect(await countSessionSelections(backend)).toBe(0)
     })
   })
 

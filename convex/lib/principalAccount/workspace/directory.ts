@@ -77,7 +77,7 @@ async function resolveEmailForPrincipal(
   return null
 }
 
-async function resolveClerkUserIdForPrincipal(db: WorkspaceDb, targetPrincipalRef: string): Promise<string | null> {
+export async function resolveClerkUserIdForPrincipal(db: WorkspaceDb, targetPrincipalRef: string): Promise<string | null> {
   const bindings = await db.query('externalIdentityBindings')
     .withIndex('by_principalRef_and_lifecycle', (q) => q.eq('principalRef', targetPrincipalRef).eq('lifecycle', 'active'))
     .take(20)
@@ -99,12 +99,7 @@ export const listDirectoryHandler = async (ctx: QueryCtx): Promise<DirectoryView
     const principal = await requireDirectoryInteractiveHumanPrincipal(ctx.db, identity)
     const canonicalPrincipalRef = principalRef(principal.principalRef)
 
-    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-      ctx.db,
-      canonicalPrincipalRef,
-      identity,
-      'require',
-    )
+    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
     const canonicalAccountRef = accountRef(activeAccountRef)
 
     await requireAccessFactForAccount(ctx.db, canonicalPrincipalRef, canonicalAccountRef)
