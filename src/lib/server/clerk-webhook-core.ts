@@ -26,7 +26,7 @@ export async function verifyClerkWebhookRequest(
   request: Request,
   verify: ClerkWebhookVerifier = verifyWebhook,
 ): Promise<ClerkWebhookVerificationResult> {
-  const bounded = await readBoundedRequestText(request.clone(), MAX_CLERK_WEBHOOK_BODY_BYTES)
+  const bounded = await readBoundedRequestText(request, MAX_CLERK_WEBHOOK_BODY_BYTES)
   if (!bounded.ok) {
     return {
       kind: 'rejected',
@@ -35,7 +35,9 @@ export async function verifyClerkWebhookRequest(
   }
 
   try {
-    const event = await verify(request)
+    // A cloned body is a tee branch whose cancel() never settles until the sibling is read, so the
+    // body is consumed once under the cap and the verifier reads the same bytes from a fresh Request.
+    const event = await verify(new Request(request.url, { method: request.method, headers: request.headers, body: bounded.text }))
     return {
       kind: 'verified',
       webhook: {
@@ -74,7 +76,11 @@ export function clerkWebhookProblem(
 ): Response {
   return problem(
     { status, kind: kindForStatus(status), code, detail: code },
-    retryAfterSeconds === undefined ? {} : { 'Retry-After': String(retryAfterSeconds) },
+    {
+      ...(retryAfterSeconds === undefined ? {} : { 'Retry-After': String(retryAfterSeconds) }),
+      // The unread remainder of a rejected upload must not be parsed as the next request on this socket.
+      ...(status === 413 ? { Connection: 'close' } : {}),
+    },
   )
 }
 

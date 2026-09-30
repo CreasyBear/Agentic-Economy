@@ -11,7 +11,6 @@ describe('Clerk security webhook', () => {
     const applied: ClerkSecurityObservation[] = []
     const incoming = request('delivery_1', sensitiveBody())
     const webhook = await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
-      expect(verifiedRequest).toBe(incoming)
       expect(await verifiedRequest.text()).toBe(sensitiveBody())
       expect(verifiedRequest.headers.get('svix-id')).toBe('delivery_1')
       return sessionEvent('session.created')

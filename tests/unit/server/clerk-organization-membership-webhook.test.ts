@@ -37,7 +37,6 @@ describe('Clerk organization membership webhook (W-17)', () => {
       const applied: OrganizationMembershipCreatedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
       const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
-        expect(verifiedRequest).toBe(incoming)
         expect(await verifiedRequest.text()).toBe(sensitiveBody())
         expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
         return membershipCreatedEvent()
@@ -168,7 +167,6 @@ describe('Clerk organization membership webhook (W-17)', () => {
       const applied: OrganizationMembershipDeletedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
       const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
-        expect(verifiedRequest).toBe(incoming)
         expect(await verifiedRequest.text()).toBe(sensitiveBody())
         expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
         return membershipDeletedEvent({ data: { updated_at: 4_500 } })
@@ -278,7 +276,6 @@ describe('Clerk organization membership webhook (W-17)', () => {
       const applied: OrganizationMembershipUpdatedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
       const response = await handleClerkOrganizationMembershipWebhookRequest(await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
-        expect(verifiedRequest).toBe(incoming)
         expect(await verifiedRequest.text()).toBe(sensitiveBody())
         expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
         return membershipUpdatedEvent({ data: { updated_at: 4_000, role: 'org:admin' } })
