@@ -118,6 +118,7 @@ export const commercialPolicyControlValue = v.union(
   }),
   v.object({
     family: v.literal('operations'),
+    paidCallReportsPerDay: v.optional(v.number()),
     fundingServiceFeeBps: v.number(),
     buyerPricingMarginBps: v.number(),
     commitmentTtlMs: v.number(),

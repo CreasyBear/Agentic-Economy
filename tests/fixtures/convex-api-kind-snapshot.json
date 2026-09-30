@@ -445,6 +445,54 @@
   },
   {
     "visibility": "internal",
+    "module": "capabilityCallReports",
+    "method": "admit",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallReports",
+    "method": "claimWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallReports",
+    "method": "due",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallReports",
+    "method": "finishWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallReports",
+    "method": "process",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallReports",
+    "method": "readOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallReports",
+    "method": "reportOwner",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallReports",
+    "method": "sweep",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
     "module": "capabilityCalls",
     "method": "abandon",
     "kind": "mutation"
@@ -2546,6 +2594,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "refundSettledSale",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "releaseExpiredUnusedCall",
     "kind": "action"
   },
@@ -3291,6 +3345,12 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "reconcileDueFacilitatorInvocations",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "reconcilePaidCallReports",
     "kind": "action"
   },
   {

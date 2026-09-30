@@ -30,6 +30,8 @@ export {
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
   remedyFormancePaidCall,
+  refundFormanceSettledSale,
+  type FormanceSettledSaleRefund,
   syncFormanceCapacity,
   type FormanceBuyerAdjustment,
   type FormanceCapacitySync,

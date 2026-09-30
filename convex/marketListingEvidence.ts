@@ -51,6 +51,7 @@ const selectionEvidenceValue = v.object({
   toolRef: v.string(),
   aeCompleted: v.number(),
   aeFailed: v.number(),
+  reportedByBuyers30d: v.number(),
   usedBefore: v.boolean(),
 })
 

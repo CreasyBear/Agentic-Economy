@@ -9,7 +9,12 @@ import {
   type FormanceContext,
   type FormanceMoneyResult,
 } from './formance'
-import { completed, refused, unavailable } from './formance-result'
+import { completed, refused, unavailable, unknown } from './formance-result'
+import {
+  prepareFormanceSettledSaleRefund,
+  settledSalePostingsMatch,
+  type FormanceSettledSaleRefund,
+} from './internal/formance-settled-sale-refund'
 import {
   balanceAccount,
   balanceAsset,
@@ -45,6 +50,8 @@ import {
 
 export * from './internal/formance-transaction-templates'
 export * from './internal/formance-promotional-credit'
+export { prepareFormanceSettledSaleRefund }
+export type { FormanceSettledSaleRefund }
 
 export type FormanceDisplayBalanceResult =
   | Readonly<{
@@ -104,6 +111,69 @@ export async function settleFormanceManagedCall(
   input: FormanceManagedCallFinalization,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallSettlement(input))
+}
+
+/**
+ * CONTRACT: refundFormanceSettledSale(context, input)
+ *   Requires: the frozen booking and the complete ordered native settlement
+ *     references, plus a canonical digest of the approved refund report.
+ *   Ensures: executes the same atomic refund bulk on every replay only after
+ *     each original settlement is proven by native readback against a command
+ *     reconstructed from the sale's actual external evidence digest.
+ *   Invariant: missing, unknown or conflicting original evidence never writes
+ *     a refund; treasury and Provider settlement remain untouched.
+ *   On violation: refuses on evidence conflict, or returns source unavailability
+ *     without executing. Native write uncertainty uses the existing bulk result.
+ */
+export async function refundFormanceSettledSale(
+  context: FormanceContext,
+  input: FormanceSettledSaleRefund,
+): Promise<FormanceMoneyResult> {
+  const prepared = prepareFormanceSettledSaleRefund(input)
+  if (prepared.kind === 'refused') return prepared
+  const saleRef = input.originalSettlementRefs[0]
+  if (saleRef === undefined) return refused('formance_settled_sale_evidence_invalid')
+  const sale = await readFormanceTransactionByReference(context, saleRef)
+  if (sale.kind === 'setup_required') return refused(sale.code)
+  if (sale.kind === 'unavailable') return unavailable(sale.code)
+  if (sale.kind !== 'found' || !/^[a-f0-9]{64}$/u.test(sale.metadata.external_evidence_digest ?? '')) {
+    return refused('formance_settled_sale_evidence_invalid')
+  }
+
+  const original = prepareFormanceManagedCallSettlement({
+    booking: input.booking,
+    externalEvidenceDigest: `sha256:${sale.metadata.external_evidence_digest}`,
+  })
+  if (original.kind === 'refused'
+    || original.bulk.commands.length !== input.originalSettlementRefs.length) {
+    return refused('formance_settled_sale_evidence_invalid')
+  }
+  for (const [index, expected] of original.bulk.commands.entries()) {
+    if (input.originalSettlementRefs[index] !== expected.commandRef) {
+      return refused('formance_settled_sale_evidence_invalid')
+    }
+    const actual = index === 0 ? sale : await readFormanceTransactionByReference(context, expected.commandRef)
+    if (actual.kind === 'setup_required') return refused(actual.code)
+    if (actual.kind === 'unavailable') return unavailable(actual.code)
+    if (actual.kind !== 'found' || actual.reference !== expected.commandRef
+      || actual.template !== expected.template
+      || !settledSalePostingsMatch(expected, actual.postings)
+      || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+      return refused('formance_settled_sale_evidence_invalid')
+    }
+  }
+  const posted = await executePreparedBulk(context, prepared)
+  if (posted.kind !== 'completed') return posted
+  // A successful submit/replay must still prove the exact financial effects.
+  // Failure after submission is uncertain, never submission-proven-absent.
+  for (const command of prepared.bulk.commands) {
+    const actual = await readFormanceTransactionByReference(context, command.commandRef)
+    if (actual.kind !== 'found') return unknown(command.commandRef)
+    if (actual.template !== command.template || actual.reference !== command.commandRef
+      || Object.entries(command.metadata).some(([key, value]) => actual.metadata[key] !== value)
+      || !settledSalePostingsMatch(command, actual.postings)) return refused('formance_refund_evidence_invalid')
+  }
+  return posted
 }
 
 export async function remedyFormancePaidCall(

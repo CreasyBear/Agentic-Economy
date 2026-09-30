@@ -23,6 +23,7 @@ export type SelectionEvidenceRow = Readonly<{
   toolRef: string
   aeCompleted: number
   aeFailed: number
+  reportedByBuyers30d: number
   usedBefore: boolean
 }>
 
@@ -69,7 +70,7 @@ export async function readSelectionEvidence(
   const now = Date.now()
   const since = now - SELECTION_EVIDENCE_WINDOW_MS
   return await Promise.all(toolRefs.map(async (toolRef) => {
-    const [completedRows, refusedRows] = await Promise.all([
+    const [completedRows, refusedRows, reportRows] = await Promise.all([
       ctx.db.query('capabilityCalls')
         .withIndex('by_toolRef_and_state_and_updatedAt', (index) => index
           .eq('toolRef', toolRef)
@@ -86,6 +87,9 @@ export async function readSelectionEvidence(
           .lte('updatedAt', now))
         .order('desc')
         .take(MAX_TERMINAL_CALLS_PER_TOOL + 1),
+      ctx.db.query('paidCallReports')
+        .withIndex('by_toolRef_and_createdAt', index => index.eq('toolRef', toolRef).gte('createdAt', since).lte('createdAt', now))
+        .order('desc').take(MAX_TERMINAL_CALLS_PER_TOOL),
     ])
     const priorCompletedRows = accountRef === undefined
       ? []
@@ -99,6 +103,7 @@ export async function readSelectionEvidence(
       toolRef,
       aeCompleted: Math.min(completedRows.filter(isCompletedCall).length, MAX_TERMINAL_CALLS_PER_TOOL),
       aeFailed: Math.min(refusedRows.filter(isProviderSideFailure).length, MAX_TERMINAL_CALLS_PER_TOOL),
+      reportedByBuyers30d: new Set(reportRows.map(row => row.reporterRef)).size,
       usedBefore: priorCompletedRows.length > 0,
     }
   }))

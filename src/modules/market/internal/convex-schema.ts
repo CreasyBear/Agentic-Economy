@@ -264,12 +264,14 @@ export const marketTables = {
   marketEvidenceFacts: defineTable({
     kind: v.union(
       v.literal('ae_invocation'),
+      v.literal('ae_answer_reported'),
       v.literal('ae_invocation_completed'),
       v.literal('ae_settlement'),
       v.literal('ae_qualified_use'),
       v.literal('ae_reconciliation_required'),
     ),
     sourceRef: v.string(),
+    reporterRef: v.optional(v.string()),
     toolRef: v.optional(v.string()),
     durationMs: v.optional(v.number()),
     occurredAt: v.number(),

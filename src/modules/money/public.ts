@@ -398,3 +398,6 @@ export type {
 export { promotionalCreditReference, promotionalPurchasedAmounts, promotionalCreditAllocationValue, MAX_PROMOTIONAL_GRANTS_PER_CALL, type PromotionalCreditAllocation } from './promotional-credit-contracts'
 
 export { accountCreditBalanceValue, eligiblePromotionalGrantValue, type AccountCreditBalance, type EligiblePromotionalGrant } from './promotional-credit-contracts'
+
+export { managedCallBookingValue, MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from './managed-call-contracts'
+export { settledSaleRefundReference, settledSaleRefundReferences } from './settled-sale-refund-contracts'

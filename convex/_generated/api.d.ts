@@ -29,6 +29,7 @@ import type * as capabilityCallIdentity from "../capabilityCallIdentity.js";
 import type * as capabilityCallLiveX402 from "../capabilityCallLiveX402.js";
 import type * as capabilityCallProjection from "../capabilityCallProjection.js";
 import type * as capabilityCallProjections from "../capabilityCallProjections.js";
+import type * as capabilityCallReports from "../capabilityCallReports.js";
 import type * as capabilityCallWorker from "../capabilityCallWorker.js";
 import type * as capabilityCallX402AuthorizationExpiry from "../capabilityCallX402AuthorizationExpiry.js";
 import type * as capabilityCalls from "../capabilityCalls.js";
@@ -227,6 +228,8 @@ import type * as lib_capabilityExecution_callWorker_reconcileScheduled from "../
 import type * as lib_capabilityExecution_callWorker_recover from "../lib/capabilityExecution/callWorker/recover.js";
 import type * as lib_capabilityExecution_callWorker_run from "../lib/capabilityExecution/callWorker/run.js";
 import type * as lib_capabilityExecution_liveX402Requirement_requirementRef from "../lib/capabilityExecution/liveX402Requirement/requirementRef.js";
+import type * as lib_capabilityExecution_paidCallReports_admission from "../lib/capabilityExecution/paidCallReports/admission.js";
+import type * as lib_capabilityExecution_paidCallReports_lifecycle from "../lib/capabilityExecution/paidCallReports/lifecycle.js";
 import type * as lib_capabilityExecution_providerConsequence_abort from "../lib/capabilityExecution/providerConsequence/abort.js";
 import type * as lib_capabilityExecution_providerConsequence_attest from "../lib/capabilityExecution/providerConsequence/attest.js";
 import type * as lib_capabilityExecution_providerConsequence_claim from "../lib/capabilityExecution/providerConsequence/claim.js";
@@ -726,6 +729,7 @@ declare const fullApi: ApiFromModules<{
   capabilityCallLiveX402: typeof capabilityCallLiveX402;
   capabilityCallProjection: typeof capabilityCallProjection;
   capabilityCallProjections: typeof capabilityCallProjections;
+  capabilityCallReports: typeof capabilityCallReports;
   capabilityCallWorker: typeof capabilityCallWorker;
   capabilityCallX402AuthorizationExpiry: typeof capabilityCallX402AuthorizationExpiry;
   capabilityCalls: typeof capabilityCalls;
@@ -924,6 +928,8 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/callWorker/recover": typeof lib_capabilityExecution_callWorker_recover;
   "lib/capabilityExecution/callWorker/run": typeof lib_capabilityExecution_callWorker_run;
   "lib/capabilityExecution/liveX402Requirement/requirementRef": typeof lib_capabilityExecution_liveX402Requirement_requirementRef;
+  "lib/capabilityExecution/paidCallReports/admission": typeof lib_capabilityExecution_paidCallReports_admission;
+  "lib/capabilityExecution/paidCallReports/lifecycle": typeof lib_capabilityExecution_paidCallReports_lifecycle;
   "lib/capabilityExecution/providerConsequence/abort": typeof lib_capabilityExecution_providerConsequence_abort;
   "lib/capabilityExecution/providerConsequence/attest": typeof lib_capabilityExecution_providerConsequence_attest;
   "lib/capabilityExecution/providerConsequence/claim": typeof lib_capabilityExecution_providerConsequence_claim;

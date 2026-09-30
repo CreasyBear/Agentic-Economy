@@ -135,3 +135,7 @@ export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActi
 export async function reconcilePromotionalCreditHandler(ctx: WorkloadCronActionContext): Promise<null> {
   return await runAdmittedAction(ctx, 'reconcile promotional credit', internal.moneyPromotionalCredit.sweep, {})
 }
+
+export async function reconcilePaidCallReportsHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'reconcile paid Call reports', internal.capabilityCallReports.sweep, {})
+}

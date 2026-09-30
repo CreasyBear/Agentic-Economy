@@ -1111,6 +1111,77 @@ describe('capability Call Workpool lifecycle', () => {
     expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
   })
 
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('reports a completed paid answer and recovers after native refund before local acknowledgement', async () => {
+    let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
+    const { backend, published, buyer, resource, payer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
+      buyerSetup: async backend => { registered = await registerRotatingBuyer(backend, '5000000', '5000000'); return registered },
+    })
+    if (registered === undefined) throw new Error('report_owner_missing')
+    const owner = registered.owner
+    const transactionHash: Hex = `0x${'6'.repeat(64)}`
+        providerFetch.mockImplementation(async (_url, init) => {
+      const payment = new Headers(init?.headers as HeadersInit).get('payment-signature')
+      if (payment === null) return new UndiciResponse('', { status: 402,
+        headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) } })
+      const { authorization } = decodePaymentSignatureHeader(payment).payload as {
+        authorization: { from: Hex; to: Hex; value: string; validAfter: string; validBefore: string; nonce: Hex }
+      }
+      external.receipt.mockResolvedValue({ transactionHash, status: 'success', confirmations: 12n,
+        blockHash: `0x${'7'.repeat(64)}`, blockNumber: 100n,
+        observedBlockTimestamp: BigInt(Math.floor(Date.now() / 1000)), authorizationState: true,
+        transactionTo: BASE_SEPOLIA_USDC_ADDRESS,
+        transactionInput: encodeFunctionData({ abi: eip3009ABI, functionName: 'transferWithAuthorization', args: [
+          authorization.from, authorization.to, BigInt(authorization.value), BigInt(authorization.validAfter),
+          BigInt(authorization.validBefore), authorization.nonce, 27, `0x${'b'.repeat(64)}`, `0x${'c'.repeat(64)}`,
+        ] }),
+        logs: [{ address: BASE_SEPOLIA_USDC_ADDRESS,
+          data: encodeAbiParameters([{ type: 'uint256' }], [BigInt(authorization.value)]),
+          topics: encodeEventTopics({ abi: erc20Abi, eventName: 'Transfer', args: { from: authorization.from, to: authorization.to } }),
+        }],
+      })
+      return new UndiciResponse(JSON.stringify({ result: 'reported answer' }), { status: 200, headers: { 'Content-Type': 'application/json',
+        'Payment-Response': encodePaymentResponseHeader({ success: true, transaction: transactionHash,
+          network: BASE_SEPOLIA_NETWORK, payer: payer.address }),
+      } })
+    })
+    const pending = await invokeCall(backend, buyer.principal, published.toolRef, 'report-completed', 'report-completed')
+    if (pending.kind !== 'pending') throw new Error(`report_call_missing:${JSON.stringify(pending)}`)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    const original = (await readEvidence(backend, pending.callRef)).call
+    expect(original).toMatchObject({ state: 'completed', formanceFinancialState: 'settled', result: { kind: 'completed' } })
+    expect(await owner.query(api.capabilityCallReports.readOwner, { callRef: pending.callRef }))
+      .toMatchObject({ kind: 'eligible', amountUnits: '12000', remainingToday: 3 })
+    expect(await backend.action(api.capabilityCallReports.reportOwner, { callRef: pending.callRef }))
+      .toMatchObject({ kind: 'refused', code: 'owner_required' })
+    expect(await owner.mutation(internal.capabilityCallReports.admit, { callRef: pending.callRef }))
+      .toMatchObject({ kind: 'pending' })
+    const work = await backend.mutation(internal.capabilityCallReports.claimWork, { callRef: pending.callRef })
+    if (work === null) throw new Error('report_work_missing')
+    // Native posting succeeds, then the process stops before recording completion.
+    expect(await backend.action(internal.moneyFormance.refundSettledSale, work)).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await owner.query(api.capabilityCallReports.readOwner, { callRef: pending.callRef })).toMatchObject({ kind: 'pending' })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    const retries = await Promise.all([0, 1].map(() => owner.action(api.capabilityCallReports.reportOwner, { callRef: pending.callRef })))
+    expect(retries).toEqual([expect.objectContaining({ kind: 'posted' }), expect.objectContaining({ kind: 'posted' })])
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    const after = await readEvidence(backend, pending.callRef)
+    expect(after.call).toMatchObject({ state: 'completed', formanceFinancialState: 'released',
+      formanceSettlementRefs: original!.formanceSettlementRefs,
+      result: { kind: 'completed', output: original!.result!.kind === 'completed' ? original!.result!.output : null,
+        receipt: { state: 'refunded', refundState: 'released' } }, usage: { chargeState: 'refunded' } })
+    expect(after.projection).toMatchObject({ state: 'completed', deliveryState: 'delivered', paymentState: 'released', providerObligationState: 'settled' })
+    const evidence = await backend.run(async ctx => ({
+      reports: await ctx.db.query('paidCallReports').collect(),
+      facts: await ctx.db.query('marketEvidenceFacts').withIndex('by_kind_and_sourceRef', q => q.eq('kind', 'ae_answer_reported')).collect(),
+      resolution: await ctx.db.query('purchaseResolutionRecords').withIndex('by_callRef', q => q.eq('callRef', pending.callRef)).unique(),
+    }))
+    expect(evidence.reports).toHaveLength(1)
+    expect(evidence.facts).toHaveLength(1)
+    expect(evidence.resolution).toMatchObject({ terminalState: 'refunded' })
+    expect(evidence.reports[0]?.originalResolution).toMatchObject({ terminalState: 'completed' })
+    expect(signedAuthorizations).toHaveLength(1)
+  })
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('updates owner limits without reviving stale Quotes, reminting usage or stranding accepted Calls', async () => {
     let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
     const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({

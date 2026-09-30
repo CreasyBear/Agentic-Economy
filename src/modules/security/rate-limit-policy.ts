@@ -17,6 +17,7 @@ export const RATE_LIMIT_NAMES = [
   'chat-anonymous',
   'chat-anonymous-edge',
   'dispute-open',
+  'paid-call-report',
   'mcp-anonymous',
 ] as const
 
@@ -38,6 +39,7 @@ export const RATE_LIMIT_POLICY: Record<RateLimitName, RateLimitPolicyConfig> = {
   'chat-stream': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
   'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
   'chat-anonymous-edge': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
+  'paid-call-report': { kind: 'token bucket', rate: 5, period: MINUTE_MS, capacity: 5 },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE_MS, capacity: 3 },
   'mcp-anonymous': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
 }

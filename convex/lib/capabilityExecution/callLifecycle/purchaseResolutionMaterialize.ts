@@ -46,11 +46,15 @@ export async function materializePurchaseResolutionRecord(
   row: CallRow,
   projection: CallDispatchProjectionShape,
   resolvedAt: number,
+  replacement?: { expectedRecordDigest: string },
 ): Promise<void> {
   const existing = await ctx.db.query('purchaseResolutionRecords')
     .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
     .unique()
-  if (existing !== null) return
+  if (existing !== null && replacement === undefined) return
+  if (replacement !== undefined && existing?.recordDigest !== replacement.expectedRecordDigest) {
+    throw new Error('purchase_resolution_adjustment_conflict')
+  }
 
   if (row.toolJson === undefined || row.quoteRef === undefined) return
   const quoteRef = row.quoteRef
@@ -106,8 +110,10 @@ export async function materializePurchaseResolutionRecord(
   })
   if (built.kind !== 'admitted') return
 
-  await ctx.db.insert('purchaseResolutionRecords', {
-    ...built.record,
-    createdAt: resolvedAt,
-  })
+  if (replacement !== undefined && existing !== null) {
+    // The report retains the prior record; this row is the current resolution.
+    await ctx.db.replace(existing._id, { ...built.record, createdAt: existing.createdAt })
+  } else {
+    await ctx.db.insert('purchaseResolutionRecords', { ...built.record, createdAt: resolvedAt })
+  }
 }

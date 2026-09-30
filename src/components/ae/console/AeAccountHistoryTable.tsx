@@ -169,7 +169,7 @@ function AvailableAccountHistoryView({
               <div><dt className="inline">Reference: </dt><dd className="inline font-mono">{row.original.transactionRef ?? 'Not recorded'}</dd></div>
               <div><dt className="inline">Occurred: </dt><dd className="inline font-mono">{formatTimestamp(row.original.occurredAt)}</dd></div>
               <div><dt className="inline">Source: </dt>
-                <dd className={(row.original.kind === 'call_spend' || row.original.kind === 'promotional_use') && row.original.sourceRef !== null ? 'inline break-all font-mono' : 'inline'}>
+                <dd className={(row.original.kind === 'call_spend' || row.original.kind === 'promotional_use' || row.original.kind === 'call_refund' || row.original.kind === 'promotional_refund') && row.original.sourceRef !== null ? 'inline break-all font-mono' : 'inline'}>
                   {accountHistorySourceLabel(row.original)}</dd></div>
               {row.original.sourceDigest === null ? null : (
                 <div><dt className="inline">Evidence digest: </dt><dd className="inline break-all font-mono">{row.original.sourceDigest}</dd></div>

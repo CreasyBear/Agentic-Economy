@@ -83,7 +83,7 @@ export function bookingFromRows(
     || call.toolRef !== quote.toolRef
     || (periodAware
       ? (quote.formanceSchemaVersion !== 'v1.4.0'
-          && quote.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion)
+          && quote.formanceSchemaVersion !== 'v1.5.0')
       : quote.formanceSchemaVersion !== 'v1.3.0')
     || (quote.formanceSchemaVersion === 'v1.5.0' && call.promotionalCreditAllocation === undefined)
     || (quote.formanceSchemaVersion !== 'v1.5.0' && call.promotionalCreditAllocation !== undefined)

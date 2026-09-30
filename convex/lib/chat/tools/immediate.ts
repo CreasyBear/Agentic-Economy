@@ -28,7 +28,7 @@ type SearchTurn = Readonly<{ turnRef: string; threadId: string; promptMessageId:
 
 function selectionEvidenceFor(
   candidate: SearchResult,
-  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore'>>,
+  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore' | 'reportedByBuyers30d'>>,
 ): ToolSelectionEvidence {
   const projection = candidate as SearchResult & { payers30d?: number; minimumUsdPrice?: number }
   const aeEvidence = candidate.toolRef === undefined ? undefined : evidenceByToolRef.get(candidate.toolRef)
@@ -37,6 +37,7 @@ function selectionEvidenceFor(
       ? { payers30d: projection.payers30d } : {}),
     aeCompleted: aeEvidence?.aeCompleted ?? 0,
     aeFailed: aeEvidence?.aeFailed ?? 0,
+    reportedByBuyers30d: aeEvidence?.reportedByBuyers30d ?? 0,
     ...(typeof projection.minimumUsdPrice === 'number' && Number.isFinite(projection.minimumUsdPrice)
       ? { minimumUsdPrice: projection.minimumUsdPrice } : {}),
     usedBefore: aeEvidence?.usedBefore ?? false,
@@ -45,7 +46,7 @@ function selectionEvidenceFor(
 
 function evidenceOrderedResults(
   results: readonly SearchResult[],
-  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore'>>,
+  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore' | 'reportedByBuyers30d'>>,
 ): SearchResult[] {
   return [
     ...rankToolsForSelection(results.filter(result => result.access === 'ae_callable'),

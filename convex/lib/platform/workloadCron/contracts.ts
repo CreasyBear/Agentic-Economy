@@ -2,6 +2,8 @@ import { v, type Validator } from 'convex/values'
 import type { JsonValue } from '@/modules/capability-contract/public'
 
 export const CONSEQUENCE_OPERATIONS = [
+  'capabilityCallReports:claimWork',
+  'capabilityCallReports:finishWork',
   'capabilityCalls:cancelBeforeClaim',
   'capabilityCalls:claimAutomaticReconciliationCandidate',
   'capabilityCalls:finishAutomaticReconciliation',

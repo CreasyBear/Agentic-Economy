@@ -77,6 +77,20 @@ describe('public Call receipt projection', () => {
     expect(view.complete).toBe(false)
   })
 
+  it('describes a reported delivered sale as returned credit while retaining the answer', () => {
+    const view = projectCallReceipt({ kind: 'found', version: 1, callRef, toolRef, state: 'terminal',
+      purchaseResolution: { ...releasedResolution, terminalState: 'refunded', deliveryState: 'delivered' },
+      result: { kind: 'completed', callRef, toolRef, output: { answer: 'kept' }, evidenceHash: 'sha256:answer', receipt: releasedReceipt,
+        usage: { usageRef: 'usage:answer', chargeState: 'refunded', amount: releasedReceipt.totalBuyerCharge,
+          priceDigest: releasedReceipt.priceDigest, observedAt: releasedResolution.resolvedAt } },
+    })
+    expect(view.statusLabel).toBe('Credit returned')
+    expect(view.complete).toBe(true)
+    expect(view.statusDetail).toContain('original credit sources')
+    expect(view.issue?.moneyMovement).not.toContain('Reserved')
+    expect(view.issue?.userNext).toBe('The answer remains available below.')
+  })
+
   it('keeps conflicting or disputed resolution facts uncertain', () => {
     for (const resolution of [
       { ...releasedResolution, terminalState: 'disputed' as const },

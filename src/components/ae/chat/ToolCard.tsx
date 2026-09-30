@@ -35,6 +35,7 @@ import {
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
 import { NeedSaveAction } from './need-save-action/NeedSaveAction'
+import { PaidCallReportControl } from '@/components/ae/call-receipt/PaidCallReportControl'
 import { RecoveryNotice } from './recovery/RecoveryNotice'
 import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './presentation'
 import type { RunIntent } from '@/modules/chat/run-request'
@@ -46,6 +47,7 @@ type ToolCardProps = ToolCardBaseProps & Readonly<{
 }>
 
 export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
+export const PaidCallReportOwnerContext = createContext<Readonly<{ onPosted: () => void }> | null>(null)
 
 function inspectHref(toolRef: string): string {
   return `/tools/${encodeURIComponent(toolRef)}`
@@ -183,7 +185,7 @@ export function SearchNext({ next, onContinueSearch, onRepeatSearch, signedThrea
   return null
 }
 
-function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['onAddCredit']) {
+function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['onAddCredit'], reportOwner?: { onPosted: () => void } | null) {
   switch (projection.kind) {
     case 'working':
     case 'clarify':
@@ -229,7 +231,9 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
               <AlertDescription>{projection.summary}</AlertDescription>
             </Alert>
           )}
-          {projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
+          {projection.state === 'completed' && projection.paid !== undefined && projection.callRef !== undefined && reportOwner != null
+            ? <PaidCallReportControl key={projection.callRef} callRef={projection.callRef} paidLabel={projection.paid} onPosted={reportOwner.onPosted} />
+            : projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
         </div>
       )
     default: {
@@ -278,6 +282,7 @@ const STATUS_VARIANT = {
 
 export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread, onAddCredit }: ToolCardProps) {
   const needActions = useContext(ChatNeedActionsContext)
+  const reportOwner = useContext(PaidCallReportOwnerContext)
   if (projection.kind === 'working') {
     return (
       <p className="flex items-center gap-related text-sm text-muted-foreground" role="status">
@@ -299,7 +304,7 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
         </CardAction>
       </CardHeader>
       <CardContent>
-        {cardBody(projection, onAddCredit)}
+        {cardBody(projection, onAddCredit, reportOwner)}
       </CardContent>
       {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
         || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (

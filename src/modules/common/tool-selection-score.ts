@@ -16,6 +16,8 @@ export type ToolSelectionEvidence = Readonly<{
   /** AE Calls to this Tool that completed / failed on the provider side. */
   aeCompleted: number
   aeFailed: number
+  /** Distinct verified paid-answer reporters in the last 30 days; separate from delivery failures. */
+  reportedByBuyers30d?: number
   /** Cheapest price per call in USD; undefined when unknown. */
   minimumUsdPrice?: number
   /** The requesting account has completed a Call to this Tool before. */
@@ -39,7 +41,10 @@ export function scoreToolEvidence(evidence: ToolSelectionEvidence, preference: T
   const adoption = Math.min(1, Math.log10(1 + Math.max(0, evidence.payers30d ?? 0)) / 4)
   const price = evidence.minimumUsdPrice === undefined ? 0.5 : 1 / (1 + Math.max(0, evidence.minimumUsdPrice) * 100)
   const usual = evidence.usedBefore ? 1 : 0
-  return weights.reliability * reliability + weights.adoption * adoption + weights.price * price + weights.usual * usual
+  const reports = Math.max(0, evidence.reportedByBuyers30d ?? 0)
+  // Bounded complaint signal: repeated reports by one buyer count once upstream.
+  const reportPenalty = 0.15 * reports / (reports + 3)
+  return Math.max(0, weights.reliability * reliability + weights.adoption * adoption + weights.price * price + weights.usual * usual - reportPenalty)
 }
 
 export function toolSelectionReasons(evidence: ToolSelectionEvidence): readonly string[] {
@@ -48,6 +53,7 @@ export function toolSelectionReasons(evidence: ToolSelectionEvidence): readonly 
   const aeTotal = evidence.aeCompleted + evidence.aeFailed
   if (aeTotal > 0) reasons.push(`${Math.round((evidence.aeCompleted / aeTotal) * 100)}% of ${aeTotal} calls succeeded`)
   if (evidence.payers30d !== undefined && evidence.payers30d > 0) reasons.push(`${evidence.payers30d.toLocaleString('en-AU')} buyers this month`)
+  if ((evidence.reportedByBuyers30d ?? 0) > 0) reasons.push(`${evidence.reportedByBuyers30d} buyers reported an answer this month`)
   return reasons
 }
 

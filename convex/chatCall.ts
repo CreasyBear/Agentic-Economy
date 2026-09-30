@@ -130,7 +130,7 @@ export const readOwnerChatCards = query({
                   units: (BigInt(binding.units) - price).toString() }, window: binding.window } }),
           })
         } else {
-          const kind = call.state === 'completed' ? 'delivered'
+          const kind = call.state === 'completed' ? (call.result?.kind === 'completed' && call.result.receipt?.state === 'refunded' ? 'refunded' : 'delivered')
             : call.state === 'reconciliation_required' ? 'uncertain'
               : call.result?.kind === 'refused' && call.result.code === 'authority_denied' ? 'failed' : 'pending'
           result.push({

@@ -3,6 +3,7 @@
 import type { FormanceMoneyResult } from '../../../../src/modules/money/public'
 import type {
   FormancePromotionalCreditBooking,
+  FormanceSettledSaleRefund,
   FormanceBuyerAdjustment,
   FormanceCapacitySync,
   FormanceFundingBooking,
@@ -26,6 +27,7 @@ import {
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
   remedyFormancePaidCall,
+  refundFormanceSettledSale,
   syncFormanceCapacity,
 } from './gateway'
 
@@ -131,4 +133,11 @@ export async function expirePromotionalCreditHandler(_ctx: unknown, args: Forman
   if (context.kind === 'setup_required') return { kind: 'refused' as const, code: context.code, retryable: false as const }
   const prepared = prepareFormancePromotionalCreditExpiry(args)
   return prepared.kind === 'refused' ? prepared : convexMoneyResult(await executeFormanceMoneyCommand(context.context, prepared.command))
+}
+
+export async function refundSettledSaleHandler(_ctx: unknown, args: FormanceSettledSaleRefund) {
+  const context = configuredContext()
+  return context.kind === 'setup_required'
+    ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+    : convexMoneyResult(await refundFormanceSettledSale(context.context, args))
 }

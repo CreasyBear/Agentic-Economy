@@ -9,7 +9,11 @@ import {
   createFormanceContext,
   executeFormanceMoneyBulk,
   FORMANCE_SCHEMA,
+  FORMANCE_TEMPLATE_NAMES,
   PERIOD_FORMANCE_SCHEMA,
+  PROMOTIONAL_FORMANCE_SCHEMA,
+  PROMOTIONAL_FORMANCE_SCHEMA_DIGEST,
+  PROMOTIONAL_FORMANCE_TEMPLATE_NAMES,
   formanceMonetaryVariable,
   formanceSafeUnitsFromSdk,
   mapFormanceWriteError,
@@ -44,8 +48,13 @@ afterEach(() => {
 
 describe('Package 4 official Formance boundary', () => {
   it('locks the immutable schema to the approved named machine templates', () => {
-    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.5.0')
+    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.6.0')
     expect(PACKAGE4_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(PROMOTIONAL_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(Object.keys(PROMOTIONAL_FORMANCE_SCHEMA.transactions ?? {})).toEqual(PROMOTIONAL_FORMANCE_TEMPLATE_NAMES)
+    expect(Object.keys(FORMANCE_SCHEMA.transactions ?? {})).toEqual(FORMANCE_TEMPLATE_NAMES)
+    expect(PROMOTIONAL_FORMANCE_SCHEMA.transactions?.BUYER_SALE_REFUNDED).toBeUndefined()
+    expect(FORMANCE_SCHEMA.transactions?.BUYER_SALE_REFUNDED?.script).toContain('source = $legal_settled')
     expect(Object.keys(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})).toEqual(
       PACKAGE4_FORMANCE_TEMPLATE_NAMES,
     )
@@ -71,6 +80,7 @@ describe('Package 4 official Formance boundary', () => {
         getSchema: vi.fn(async ({ version }: { version: string }) => {
           if (version === 'v1.4.0') return { v2SchemaResponse: { data: { version, ...PERIOD_FORMANCE_SCHEMA } } }
           if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
+          if (version === 'v1.5.0') return { v2SchemaResponse: { data: { version, ...PROMOTIONAL_FORMANCE_SCHEMA } } }
           if (currentInstalled) return { v2SchemaResponse: { data: { version, ...FORMANCE_SCHEMA } } }
           throw Object.assign(new Error('schema absent'), { statusCode: 404 })
         }),
@@ -91,7 +101,7 @@ describe('Package 4 official Formance boundary', () => {
     await expect(installPackage4FormanceSchema(context)).resolves.toMatchObject({
       kind: 'completed',
       ledger: 'existing-ledger',
-      schemaVersion: 'v1.5.0',
+      schemaVersion: 'v1.6.0',
       replayed: false,
     })
     expect(insertSchema).toHaveBeenCalledTimes(1)

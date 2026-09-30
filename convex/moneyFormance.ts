@@ -1,5 +1,6 @@
 "use node"
 
+import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import {
   accountHistoryResultValue, buyerAdjustmentArgs,
@@ -21,7 +22,7 @@ import {
 import {
   adjustSpendingPeriodHandler, bookBuyerAdjustmentHandler, bookFundingReversalHandler,
   bookFundingSettlementHandler, releaseExpiredUnusedCallHandler, releaseManagedCallHandler,
-  remedyPaidCallHandler, reserveManagedCallHandler, reverseProviderSettlementHandler,
+  refundSettledSaleHandler, remedyPaidCallHandler, reserveManagedCallHandler, reverseProviderSettlementHandler,
   settleManagedCallHandler, syncCapacityHandler,
   grantPromotionalCreditHandler, expirePromotionalCreditHandler,
 } from './lib/money/formance/postings'
@@ -86,4 +87,9 @@ export const expirePromotionalCredit = internalAction({
 
 export const readCreditBalance = internalAction({
   args: readCreditBalanceArgs, returns: accountCreditBalanceValue, handler: readCreditBalanceHandler,
+})
+
+export const refundSettledSale = internalAction({
+  args: { booking: v.object(managedCallBookingArgs), originalSettlementRefs: v.array(v.string()), reportDigest: v.string() },
+  returns: moneyResult, handler: refundSettledSaleHandler,
 })

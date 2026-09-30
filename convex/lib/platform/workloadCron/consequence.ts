@@ -49,6 +49,8 @@ type ConsequenceHandler = (
 // Exhaustive by construction: removing an operation from CONSEQUENCE_OPERATIONS
 // makes its entry here a type error, and no operation can fall through.
 const CONSEQUENCE_HANDLERS: Record<ConsequenceOperation, ConsequenceHandler> = {
+  'capabilityCallReports:claimWork': (ctx, payload) => ctx.runMutation(internal.capabilityCallReports.claimWork, payload as never),
+  'capabilityCallReports:finishWork': (ctx, payload) => ctx.runMutation(internal.capabilityCallReports.finishWork, payload as never),
   'moneyPromotionalCredit:claimWork': (ctx, payload) => ctx.runMutation(internal.moneyPromotionalCredit.claimWork, payload as never),
   'moneyPromotionalCredit:finishWork': (ctx, payload) => ctx.runMutation(internal.moneyPromotionalCredit.finishWork, payload as never),
   'capabilityCalls:cancelBeforeClaim': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.cancelBeforeClaim, payload as never),

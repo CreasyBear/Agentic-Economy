@@ -76,6 +76,21 @@ describe('booked Account history', () => {
     ])
   })
 
+  it('shows purchased and promotional refund sources separately without counting spend allowance', async () => {
+    const grant = `accounts:${accountDigest}:promo:${'d'.repeat(64)}:available`
+    const { context } = boundary(page([
+      transaction(3n, 'CALL_PROMO_REFUNDED', [posting('platform:expense:marketing', grant, 40n)]),
+      transaction(2n, 'CALL_SPEND_REFUNDED', [posting('agents:one:spent', 'agents:one:available', 100n)]),
+      transaction(1n, 'BUYER_SALE_REFUNDED', [posting('platform:revenue:sales', available, 50n), posting('platform:tax:gst', available, 10n)]),
+    ]))
+    const result = accountHistoryResultSchema.parse(await readFormanceAccountHistory(context, input))
+    expect(result).toMatchObject({ kind: 'available', coverage: 'complete' })
+    if (result.kind !== 'available') throw new Error(result.code)
+    expect(result.entries.map(entry => [entry.kind, entry.accountEffect.units, entry.sourceDigest])).toEqual([
+      ['promotional_refund', '40', callDigest], ['call_refund', '60', callDigest],
+    ])
+  })
+
   it('uses the official cursor once per identity, including equal and backdated timestamps', async () => {
     const { context, listTransactions } = boundary(
       page([transaction(4n), { ...transaction(3n), timestamp: new Date(500) }], 'official:next'),

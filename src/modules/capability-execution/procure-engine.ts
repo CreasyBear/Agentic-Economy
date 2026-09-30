@@ -50,6 +50,7 @@ type SelectionEvidenceRow = Readonly<{
   toolRef: string
   aeCompleted: number
   aeFailed: number
+  reportedByBuyers30d?: number
   usedBefore: boolean
 }>
 const selectionEvidenceQuery = sourceQuery<{
@@ -225,6 +226,7 @@ export class CapabilityProcurementEngine {
         ...(candidate.payers30d === undefined ? {} : { payers30d: candidate.payers30d }),
         aeCompleted: evidence?.aeCompleted ?? 0,
         aeFailed: evidence?.aeFailed ?? 0,
+        reportedByBuyers30d: evidence?.reportedByBuyers30d ?? 0,
         ...(candidate.minimumUsdPrice === undefined ? {} : { minimumUsdPrice: candidate.minimumUsdPrice }),
         usedBefore: evidence?.usedBefore ?? false,
       }

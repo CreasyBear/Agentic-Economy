@@ -6,12 +6,11 @@ import {
   formanceMonetaryVariable,
   LEGACY_FORMANCE_SCHEMA_VERSION,
   PERIOD_FORMANCE_SCHEMA_VERSION,
-  FORMANCE_SCHEMA_VERSION,
+  PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
   type FormanceMoneyCommand,
   type FormanceMoneyBulkCommand,
 } from '../formance'
 import { refused } from '../formance-result'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from './commercial-policy'
 import { spendingPeriodAdjustmentReference } from './spending-period-values'
 import { MAX_PROMOTIONAL_GRANTS_PER_CALL, promotionalPurchasedAmounts, type PromotionalCreditAllocation } from '../promotional-credit-contracts'
 
@@ -295,7 +294,7 @@ export function prepareFormanceBuyerAdjustment(input: FormanceBuyerAdjustment): 
     command: Object.freeze({
       commandRef: formanceReference(commandIdentity, 'buyer-adjustment'),
       idempotencyKey: idempotencyDigest,
-      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      schemaVersion: PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
       template: 'BUYER_ADJUSTED',
       variables: Object.freeze({
         source: signedUnits > 0n ? adjustmentAccount : 'platform:revenue:sales',
@@ -340,7 +339,7 @@ export function prepareFundingCommand(
     command: Object.freeze({
       commandRef: formanceReference(input.commandRef, suffix),
       idempotencyKey: idempotencyDigest,
-      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      schemaVersion: PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
       template,
       variables: Object.freeze({
         processor: `processor:${processorDigest}:settlement`,
@@ -737,7 +736,7 @@ export function managedCallCommand(
     commandRef: formanceReference(identity, stage.includes('-promo-') ? 'promo-call' : stage),
     idempotencyKey: idempotencyDigest,
     schemaVersion: input.promotionalCreditAllocation !== undefined
-      ? FORMANCE_SCHEMA_VERSION
+      ? PROMOTIONAL_FORMANCE_SCHEMA_VERSION
       : input.spendingPeriods === undefined
         ? LEGACY_FORMANCE_SCHEMA_VERSION
         : PERIOD_FORMANCE_SCHEMA_VERSION,
@@ -852,7 +851,7 @@ export function prepareFormanceCapacitySync(input: FormanceCapacitySync): Prepar
     command: Object.freeze({
       commandRef: reference,
       idempotencyKey: idempotencyDigest,
-      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      schemaVersion: PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
       template: 'TREASURY_CAPACITY_SYNCED',
       variables: {
         capacity: account,
@@ -891,7 +890,7 @@ export function prepareFormanceSpendingPeriodAdjustment(
     command: Object.freeze({
       commandRef: spendingPeriodAdjustmentReference(input),
       idempotencyKey: idempotencyDigest,
-      schemaVersion: FORMANCE_SCHEMA_VERSION,
+      schemaVersion: PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
       template: decrease ? 'SPENDING_PERIOD_DECREASED' : 'SPENDING_PERIOD_INCREASED',
       variables: Object.freeze({
         period_available: periodAccount.available,

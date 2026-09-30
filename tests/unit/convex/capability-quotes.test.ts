@@ -1,3 +1,4 @@
+import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader } from '@x402/core/http'
 import * as networkServer from '@/modules/network-guard/server'
@@ -11,7 +12,6 @@ import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 import { api, internal } from '../../../convex/_generated/api'
 import { ACTIVE_CHAT_GENERATION_MS } from '../../../convex/chatThreads'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,
@@ -490,7 +490,7 @@ describe('direct Quote handlers', () => {
       budgetPolicyRef: agent.policy.budget.budgetPolicyRef,
       budgetGeneration: agent.policy.budget.generation,
       maximumSpendPerInvocationUnits: agent.policy.budget.maximumSpendPerCall.units,
-      formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
       legalCustomerRef: subjects.legalCustomerRef,
       legalCustomerGeneration: subjects.legalCustomerGeneration,
       buyerRevenueUnits: sale.revenueUnits,

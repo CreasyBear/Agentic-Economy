@@ -74,6 +74,8 @@ export function accountHistoryLabel(kind: AccountHistoryEntry['kind']): string {
     case 'funding': return 'Credit added'
     case 'funding_reversal': return 'Credit reversed'
     case 'call_spend': return 'Call purchase'
+    case 'call_refund': return 'Call credit returned'
+    case 'promotional_refund': return 'Promotional credit returned'
     case 'promotional_grant': return 'Promotional credit added'
     case 'promotional_use': return 'Promotional credit used'
     case 'promotional_expiry': return 'Promotional credit expired'
@@ -84,6 +86,8 @@ export function accountHistoryLabel(kind: AccountHistoryEntry['kind']): string {
 
 export function accountHistorySourceLabel(entry: AccountHistoryEntry): string {
   switch (entry.kind) {
+    case 'call_refund':
+    case 'promotional_refund':
     case 'promotional_use':
     case 'call_spend': return entry.sourceRef ?? 'Call reference not recorded'
     case 'promotional_grant': return 'Promotional grant'

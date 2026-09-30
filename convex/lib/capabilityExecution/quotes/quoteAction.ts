@@ -1,8 +1,8 @@
+import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { recordJourneyOutcome, recordQuoteJourney } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { bindPersistedManagedX402RequirementRef, inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import { spendingPeriodPreparationIsRetryable } from './quoteValuation'
 import { readOrganizationMonthlySpendSnapshotForQuote } from './environmentHelpers'
 import { refuse } from './refusalHelpers'
@@ -125,7 +125,7 @@ async function evaluateQuoteAction(
         legalCustomerGeneration: subjects.legalCustomerGeneration,
         legalExposureAvailableUnits: subjects.legalExposureUnits,
         policyGeneration: subjects.policyGeneration,
-        formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+        formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
         buyerTaxBps: subjects.buyerTaxBps,
         observedAt: Date.now(),
         ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
@@ -233,7 +233,7 @@ async function evaluateQuoteAction(
         legalCustomerGeneration: subjects.legalCustomerGeneration,
         legalExposureAvailableUnits: exposure.units,
         policyGeneration: subjects.policyGeneration,
-        formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+        formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
         buyerTaxBps: subjects.buyerTaxBps,
         observedAt,
         ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),

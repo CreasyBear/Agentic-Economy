@@ -195,6 +195,8 @@ function derivePurchaseTerminalState(
   input: PurchaseResolutionBuildInput,
 ): PurchaseTerminalState | null {
   if (input.providerObligationState === 'disputed') return 'disputed'
+  if (input.callState === 'completed' && input.deliveryState === 'delivered'
+    && input.receiptState === 'refunded') return 'refunded'
   if (input.paymentState === 'released' || input.receiptRefundState === 'released') return 'released'
   if (input.receiptState === 'refunded' || input.providerObligationState === 'reversed') {
     return 'refunded'

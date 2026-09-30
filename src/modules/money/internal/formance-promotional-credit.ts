@@ -1,5 +1,5 @@
 import { MAX_PROMOTIONAL_GRANTS_PER_CALL, type AccountCreditBalance, type EligiblePromotionalGrant, promotionalCreditReference } from '../promotional-credit-contracts'
-import { canonicalFormanceUnits, formanceMonetaryVariable, FORMANCE_SCHEMA_VERSION, readFormanceAccount, type FormanceContext, type FormanceMoneyCommand } from '../formance'
+import { canonicalFormanceUnits, formanceMonetaryVariable, PROMOTIONAL_FORMANCE_SCHEMA_VERSION, readFormanceAccount, type FormanceContext, type FormanceMoneyCommand } from '../formance'
 import { refused } from '../formance-result'
 import { digestReference, digestValue } from './formance-digest'
 import { balanceAccount, boundedReference, promotionalGrantAccount, type PreparedCommand } from './formance-transaction-templates'
@@ -40,7 +40,7 @@ function preparePromotionalCommand(input: FormancePromotionalCreditBooking, stag
   const command: FormanceMoneyCommand = Object.freeze({
     commandRef: promotionalCreditReference(input.grantRef, input.revision ?? 1, stage),
     idempotencyKey,
-    schemaVersion: FORMANCE_SCHEMA_VERSION,
+    schemaVersion: PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
     template: stage === 'grant' ? 'PROMO_GRANTED' : 'PROMO_EXPIRED',
     variables: Object.freeze(stage === 'grant'
       ? { destination: grantAccount, amount }

@@ -4,7 +4,7 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
-import { spendingPeriodsValue, promotionalCreditAllocationValue } from '@/modules/money/public'
+import { spendingPeriodsValue, promotionalCreditAllocationValue, managedCallBookingValue } from '@/modules/money/public'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
@@ -207,7 +207,25 @@ const providerConsequenceJournalStateValue = v.union(
 )
 
 
+const paidCallReportFields = {
+  reportRef: v.string(), callRef: v.string(), accountRef: v.string(), reporterRef: v.string(),
+  toolRef: v.string(), providerRef: v.string(), environment: v.union(v.literal('sandbox'), v.literal('production')),
+  reason: v.literal('answer_not_useful'), booking: managedCallBookingValue,
+  originalSettlementRefs: v.array(v.string()), originalResolution: purchaseResolutionRecordValidator,
+  reportDigest: v.string(), createdAt: v.number(), updatedAt: v.number(),
+}
+
 export const capabilityCallTables = {
+  paidCallReports: defineTable(v.union(
+    v.object({ ...paidCallReportFields, state: v.literal('pending'), nextWorkAt: v.number() }),
+    v.object({ ...paidCallReportFields, state: v.literal('posted'), postedAt: v.number(), buyerRefundTransactionRef: v.string(), transactionRefs: v.array(v.string()) }),
+  ))
+    .index('by_callRef', ['callRef'])
+    .index('by_accountRef_and_buyerRefundTransactionRef', ['accountRef', 'buyerRefundTransactionRef'])
+    .index('by_reporterRef_and_createdAt', ['reporterRef', 'createdAt'])
+    .index('by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
+    .index('by_environment_and_state_and_nextWorkAt', ['environment', 'state', 'nextWorkAt']),
+
   purchaseResolutionRecords: defineTable({
     ...purchaseResolutionRecordValidator.fields,
     createdAt: v.number(),

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  FORMANCE_SCHEMA,
-  FORMANCE_SCHEMA_VERSION,
+  PROMOTIONAL_FORMANCE_SCHEMA,
+  PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
   LEGACY_FORMANCE_SCHEMA_VERSION,
   PERIOD_FORMANCE_SCHEMA_VERSION,
   readFormanceAccount,
@@ -104,7 +104,7 @@ function contextForAdjustment() {
   })
   const ledger = {
     getSchema: vi.fn(async () => ({
-      v2SchemaResponse: { data: { version: FORMANCE_SCHEMA_VERSION, ...FORMANCE_SCHEMA } },
+      v2SchemaResponse: { data: { version: PROMOTIONAL_FORMANCE_SCHEMA_VERSION, ...PROMOTIONAL_FORMANCE_SCHEMA } },
     })),
     listTransactions: vi.fn(async ({ query }: { query: { $match: { reference: string } } }) => {
       const transaction = transactions.get(query.$match.reference)
@@ -378,8 +378,8 @@ describe('promotional funding ledger commands', () => {
     expect(issued.command.variables.destination).toBe(expired.command.variables.source)
     expect(issued.command.variables).not.toHaveProperty('source')
     expect(expired.command.variables).not.toHaveProperty('destination')
-    expect(FORMANCE_SCHEMA.transactions?.PROMO_GRANTED?.script).toContain('source = @world')
-    expect(FORMANCE_SCHEMA.transactions?.PROMO_EXPIRED?.script).toContain('destination = @world')
+    expect(PROMOTIONAL_FORMANCE_SCHEMA.transactions?.PROMO_GRANTED?.script).toContain('source = @world')
+    expect(PROMOTIONAL_FORMANCE_SCHEMA.transactions?.PROMO_EXPIRED?.script).toContain('destination = @world')
     expect(prepareFormancePromotionalCreditGrant({ ...input, revision: 2 })).toMatchObject({ kind: 'refused' })
     expect(prepareFormancePromotionalCreditExpiry({ ...input, revision: 2 })).not.toEqual(expired)
   })

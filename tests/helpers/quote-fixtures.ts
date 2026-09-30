@@ -1,3 +1,4 @@
+import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { expect } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -12,7 +13,6 @@ import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   COMMERCIAL_POLICY_FAMILIES,
-  PACKAGE4_FORMANCE_REQUIREMENTS,
   spendingPeriodAdjustmentReference,
   type SpendingPeriods,
 } from '@/modules/money/public'
@@ -467,7 +467,7 @@ export function formanceSnapshot(
     legalCustomerGeneration: subjects.legalCustomerGeneration,
     legalExposureAvailableUnits: subjects.legalExposureUnits,
     policyGeneration: subjects.policyGeneration,
-    formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+    formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
     buyerTaxBps: subjects.buyerTaxBps,
     spendingPeriods: subjects.spendingPeriods,
     dailyPeriodAvailableUnits: '20000000',

@@ -23,6 +23,8 @@ export type FormanceSchemaData = Readonly<{
 export const LEGACY_FORMANCE_SCHEMA_VERSION = 'v1.3.0' as const
 /** The period-aware schema used by accepted Calls before promotional credit. */
 export const PERIOD_FORMANCE_SCHEMA_VERSION = 'v1.4.0' as const
+/** The promotional schema used by accepted Calls and credit commands. */
+export const PROMOTIONAL_FORMANCE_SCHEMA_VERSION = 'v1.5.0' as const
 /** The current schema pin, shared with the commercial policy requirements. */
 export const FORMANCE_SCHEMA_VERSION = PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
 
@@ -47,13 +49,20 @@ export const PERIOD_FORMANCE_TEMPLATE_NAMES = Object.freeze([
   'SPENDING_PERIOD_DECREASED',
 ] as const)
 
-export const FORMANCE_TEMPLATE_NAMES = Object.freeze([
+export const PROMOTIONAL_FORMANCE_TEMPLATE_NAMES = Object.freeze([
   ...PERIOD_FORMANCE_TEMPLATE_NAMES,
   'PROMO_GRANTED',
   'PROMO_EXPIRED',
   'CALL_PROMO_RESERVED',
   'CALL_PROMO_RELEASED',
   'CALL_PROMO_SETTLED',
+] as const)
+
+export const FORMANCE_TEMPLATE_NAMES = Object.freeze([
+  ...PROMOTIONAL_FORMANCE_TEMPLATE_NAMES,
+  'BUYER_SALE_REFUNDED',
+  'CALL_SPEND_REFUNDED',
+  'CALL_PROMO_REFUNDED',
 ] as const)
 
 export type FormanceMoneyTemplate = (typeof FORMANCE_TEMPLATE_NAMES)[number]
@@ -544,7 +553,7 @@ export const PERIOD_FORMANCE_SCHEMA_DIGEST = canonicalDigest({
 })
 
 /** v1.5 retains the period schema and adds grant-specific promotional accounts. */
-export const FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
+export const PROMOTIONAL_FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
   ...PERIOD_FORMANCE_SCHEMA,
   chart: Object.freeze({
     ...PERIOD_FORMANCE_SCHEMA.chart,
@@ -591,6 +600,47 @@ send $amount (
   }),
 }) as FormanceSchemaData
 
+export const PROMOTIONAL_FORMANCE_SCHEMA_DIGEST = canonicalDigest({
+  format: 'ae.package4.formance-schema:v1',
+  schema: PROMOTIONAL_FORMANCE_SCHEMA,
+})
+
+/** v1.6 appends settled-sale refund templates without changing historic schemas. */
+export const FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
+  ...PROMOTIONAL_FORMANCE_SCHEMA,
+  transactions: Object.freeze({
+    ...PROMOTIONAL_FORMANCE_SCHEMA.transactions,
+    BUYER_SALE_REFUNDED: Object.freeze({
+      description: 'Refund settled buyer AUD sale and restore legal-customer exposure',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $account_available
+  account $revenue
+  account $tax
+  account $legal_settled
+  account $legal_available
+  monetary $revenue_amount
+  monetary $tax_amount
+  monetary $exposure_amount
+}
+send $revenue_amount (
+  source = $revenue
+  destination = $account_available
+)
+send $tax_amount (
+  source = $tax
+  destination = $account_available
+)
+send $exposure_amount (
+  source = $legal_settled
+  destination = $legal_available
+)`,
+    }),
+    CALL_SPEND_REFUNDED: transferTemplate('Restore original Agent and period spending allowances'),
+    CALL_PROMO_REFUNDED: transferTemplate('Restore promotional AUD to its original grant'),
+  }),
+}) as FormanceSchemaData
+
 export const FORMANCE_SCHEMA_DIGEST = canonicalDigest({
   format: 'ae.package4.formance-schema:v1',
   schema: FORMANCE_SCHEMA,
@@ -615,4 +665,5 @@ export function schemaReadbackDigest(schema: unknown): string {
 
 export const LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PACKAGE4_FORMANCE_SCHEMA)
 export const PERIOD_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PERIOD_FORMANCE_SCHEMA)
+export const PROMOTIONAL_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PROMOTIONAL_FORMANCE_SCHEMA)
 export const FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(FORMANCE_SCHEMA)

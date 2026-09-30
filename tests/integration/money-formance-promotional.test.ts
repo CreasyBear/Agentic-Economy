@@ -9,9 +9,10 @@ import {
 } from '@/modules/money/formance'
 import {
   adjustFormanceSpendingPeriod, bookFormanceFundingSettlement,
+  formanceSpendingPeriodAccount, managedCallAccounts,
   prepareFormancePromotionalCreditExpiry, prepareFormancePromotionalCreditGrant,
   promotionalGrantAccount, releaseFormanceManagedCall, reserveFormanceManagedCall,
-  settleFormanceManagedCall, syncFormanceCapacity,
+  refundFormanceSettledSale, settleFormanceManagedCall, syncFormanceCapacity,
   type FormanceManagedCallBooking, type FormancePromotionalCreditBooking,
 } from '@/modules/money/formance-workflows'
 
@@ -93,7 +94,7 @@ function booking(label: string, buyerAmountUnits: string, purchasedUnits: string
     spendingPeriods,
     promotionalCreditAllocation: {
       version: 'ae.promotional-credit-allocation:v1', purchasedUnits,
-      grants: [{ grantRef, amountUnits: promoUnits, expiresAt: periodAt + 86_400_000 }],
+      grants: promoUnits === '0' ? [] : [{ grantRef, amountUnits: promoUnits, expiresAt: periodAt + 86_400_000 }],
     },
   }
 }
@@ -102,14 +103,67 @@ function accountSegment(kind: string, reference: string): string {
   return canonicalDigest({ format: 'ae.formance-account-segment:v1', value: { kind, reference } }).slice(7)
 }
 
-async function units(context: ReturnType<typeof createFormanceContext>, address: string): Promise<string> {
+async function units(context: ReturnType<typeof createFormanceContext>, address: string, asset: 'AUD/6' | 'USDC/6' = 'AUD/6'): Promise<string> {
   const read = await readFormanceAccount(context, address)
   if (read.kind === 'not_found') return '0'
   if (read.kind !== 'completed') throw new Error(`read:${read.kind}`)
-  return read.volumes['AUD/6']?.balanceUnits ?? '0'
+  return read.volumes[asset]?.balanceUnits ?? '0'
 }
 
 describe.runIf(runIf)('real Formance promotional credit', () => {
+  it.each([{ purchased: '40', promotional: '60' }, { purchased: '0', promotional: '100' }, { purchased: '100', promotional: '0' }])('refunds settled purchased=$purchased promotional=$promotional while Provider stays paid', async ({ purchased, promotional }) => {
+    const { context } = await setup('settled-refund', '200', '100')
+    const mixed = booking('settled-refund', '100', purchased, promotional)
+    const accounts = managedCallAccounts(mixed)
+    if (accounts === undefined) throw new Error('invalid managed Call fixture')
+    const promo = promotionalGrantAccount(accountRef, grantRef)
+    const dayAccount = formanceSpendingPeriodAccount(principalRef, 'day', day.periodStartAt)
+    const monthAccount = formanceSpendingPeriodAccount(principalRef, 'month', month.periodStartAt)
+
+    expect(await reserveFormanceManagedCall(context, mixed)).toMatchObject({ kind: 'completed' })
+    const settlement = await settleFormanceManagedCall(context, { booking: mixed, externalEvidenceDigest: evidenceDigest })
+    expect(settlement).toMatchObject({ kind: 'completed', replayed: false })
+    if (settlement.kind !== 'completed') throw new Error(`settlement:${settlement.kind}`)
+    expect(await units(context, accounts.accountAvailable)).toBe((200n - BigInt(purchased)).toString())
+    expect(await units(context, promo)).toBe((100n - BigInt(promotional)).toString())
+    expect(await units(context, accounts.legalSettled)).toBe('100')
+    expect(await units(context, dayAccount.spent)).toBe('100')
+    expect(await units(context, monthAccount.spent)).toBe('100')
+    expect(await units(context, accounts.providerSettlement, 'USDC/6')).toBe('10')
+    const originalTreasury = await units(context, accounts.treasuryAvailable, 'USDC/6')
+
+    const refund = {
+      booking: mixed,
+      originalSettlementRefs: settlement.transactionRefs,
+      reportDigest: sha('approved-report:settled-refund'),
+    }
+    expect(await refundFormanceSettledSale(context, {
+      ...refund, originalSettlementRefs: [`ae-p4:${'f'.repeat(64)}`, ...settlement.transactionRefs.slice(1)],
+    })).toMatchObject({ kind: 'refused', code: 'formance_settled_sale_refund_input_invalid' })
+    expect(await units(context, accounts.accountAvailable)).toBe((200n - BigInt(purchased)).toString())
+    expect(await units(context, promo)).toBe((100n - BigInt(promotional)).toString())
+
+    expect(await refundFormanceSettledSale(context, refund)).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await units(context, accounts.accountAvailable)).toBe('200')
+    expect(await units(context, promo)).toBe('100')
+    expect(await units(context, 'platform:revenue:sales')).toBe('1')
+    expect(await units(context, 'platform:tax:gst')).toBe('1')
+    expect(await units(context, 'platform:expense:marketing')).toBe('0')
+    expect(await units(context, accounts.legalAvailable)).toBe('1000')
+    expect(await units(context, accounts.legalSettled)).toBe('0')
+    expect(await units(context, dayAccount.available)).toBe('1000')
+    expect(await units(context, dayAccount.spent)).toBe('0')
+    expect(await units(context, monthAccount.available)).toBe('1000')
+    expect(await units(context, monthAccount.spent)).toBe('0')
+    expect(await units(context, accounts.providerSettlement, 'USDC/6')).toBe('10')
+    expect(await units(context, accounts.treasuryAvailable, 'USDC/6')).toBe(originalTreasury)
+
+    expect(await refundFormanceSettledSale(context, refund)).toMatchObject({ kind: 'completed', replayed: true })
+    expect(await units(context, accounts.accountAvailable)).toBe('200')
+    expect(await units(context, promo)).toBe('100')
+    expect(await units(context, accounts.providerSettlement, 'USDC/6')).toBe('10')
+  })
+
   it('keeps grant, mixed purchase, release and expiry on their original ledgers with replay safety', async () => {
     const { context, grant } = await setup('flow', '200', '100')
     const purchased = `accounts:${accountSegment('account', accountRef)}:available`

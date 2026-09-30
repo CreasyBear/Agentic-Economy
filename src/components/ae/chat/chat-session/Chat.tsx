@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../../convex/_generated/api'
 import { AddCreditSheet } from '../add-credit/AddCreditSheet'
 import type { AddCreditSheetProps } from '../add-credit/add-credit.contracts'
 import { useChatNeedActions, useChatSession } from './useChatSession'
-import { ChatNeedActionsContext } from '../ToolCard'
+import { ChatNeedActionsContext, PaidCallReportOwnerContext } from '../ToolCard'
 import { ChatLayout } from './components/ChatLayout'
 import type { ChatPendingResume, ChatProps } from './chat-session.contracts'
 import { readAccountFundingBalanceServer } from '@/modules/money/money.functions'
@@ -40,6 +40,8 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
   const readAccountFundingBalance = useServerFn(readAccountFundingBalanceServer)
   const ownerChatEnabled = grantStatus?.enabled === true
   const [balanceRefresh, setBalanceRefresh] = useState(0)
+  const reportOwner = useMemo(() => model.header.authenticated && ownerChatEnabled
+    ? { onPosted: () => setBalanceRefresh(value => value + 1) } : null, [model.header.authenticated, ownerChatEnabled])
   const [balanceLabel, setBalanceLabel] = useState<string>()
   const [balanceDescription, setBalanceDescription] = useState<string>()
   const [balanceLoading, setBalanceLoading] = useState(false)
@@ -148,6 +150,7 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
 
   return (
     <ChatNeedActionsContext.Provider value={needActions}>
+      <PaidCallReportOwnerContext.Provider value={reportOwner}>
       <>
         <ChatLayout
           model={model}
@@ -193,6 +196,7 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
           onFunded={handleFunded}
         />
       </>
+      </PaidCallReportOwnerContext.Provider>
     </ChatNeedActionsContext.Provider>
   )
 }

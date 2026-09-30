@@ -7,6 +7,7 @@ import { internal } from './_generated/api'
 // Every scheduled workload must name its handler here; a missing or extra key
 // is a type error. Cadence lives with the declaration in scheduled-workloads.
 const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'action', 'internal'>> = {
+  'reconcile paid Call reports': internal.workloadCron.reconcilePaidCallReports,
   'reconcile promotional credit': internal.workloadCron.reconcilePromotionalCredit,
   'reconcile due facilitator invocations': internal.workloadCron.reconcileDueFacilitatorInvocations,
   'refresh facilitator discovery': internal.workloadCron.refreshFacilitatorDiscovery,

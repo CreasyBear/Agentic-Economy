@@ -23,6 +23,7 @@ import { CallRecoveryPanel } from './CallRecoveryPanel'
 import { CallOutputSection, CallRequestSection, CallTechnicalRecord } from './CallTechnicalRecord'
 import { CallReuseActions } from './CallReuseActions'
 import { CallSummarySection } from './CallSummarySection'
+import { PaidCallReportControl } from './PaidCallReportControl'
 import { machineLabel } from './call-receipt-format'
 
 function MachineReadableReceipt({ view }: Readonly<{ view: CallReceiptView }>) {
@@ -105,6 +106,11 @@ export function CallStatusFoundView({
   return (
     <CallReceiptWorkspace callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
       <CallSummarySection result={result} receiptView={receiptView} />
+      {result.ownerContext != null && result.result?.kind === 'completed'
+        && (receiptView.receipt?.state === 'settled' || receiptView.receipt?.state === 'refunded'
+          || receiptView.usage?.chargeState === 'paid' || receiptView.usage?.chargeState === 'refunded')
+        ? <PaidCallReportControl key={result.callRef} callRef={result.callRef}
+            {...(actions?.onRefresh === undefined ? {} : { onPosted: actions.onRefresh })} /> : null}
       <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
       <CallRequestSection input={result.previousInput} />
       {result.result === undefined ? null : <CallOutputSection result={result.result} />}
