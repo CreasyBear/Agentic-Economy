@@ -747,7 +747,13 @@ describe('approval request expiry', () => {
         state: 'pending',
         formanceFinancialState: 'reserved',
         formanceReservationRefs: ['reservation:1', 'reservation:2', 'reservation:3'],
-        result: needsAuthorityResult(callRef),
+        result: {
+          ...needsAuthorityResult(callRef),
+          authorityRequest: {
+            ...authorityRequest(),
+            maximumSpend: { currency: 'AUD', units: '1000000', exponent: 6 },
+          },
+        },
         createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
         updatedAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
       })
