@@ -512,6 +512,12 @@
   {
     "visibility": "internal",
     "module": "capabilityCalls",
+    "method": "expireStalePendingApprovals",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
     "method": "finalizeDispatch",
     "kind": "mutation"
   },
@@ -2922,6 +2928,36 @@
     "kind": "action"
   },
   {
+    "visibility": "internal",
+    "module": "notificationDelivery",
+    "method": "deliverDueOwnerNotifications",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "claimDueNotificationDeliveries",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "enqueueAgentApprovalRequested",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "finishNotificationDelivery",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "readNotificationContext",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "notifications",
     "method": "readPreferences",
@@ -3140,6 +3176,12 @@
   {
     "visibility": "internal",
     "module": "workloadCron",
+    "method": "deliverOwnerNotifications",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
     "method": "dispatchConsequence",
     "kind": "mutation"
   },
@@ -3147,6 +3189,12 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "ensurePlatformWorkloadIdentities",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "expireStalePendingApprovals",
     "kind": "mutation"
   },
   {
@@ -3276,7 +3324,7 @@
     "kind": "mutation"
   },
   {
-    "visibility": "internal",
+    "visibility": "public",
     "module": "workspaceProvisioning",
     "method": "provisionOrganizationWorkspaceForServer",
     "kind": "mutation"
