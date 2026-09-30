@@ -156,9 +156,8 @@ export const notificationDeliveryValue = v.object({
   suppressCode: v.optional(v.string()),
   vendorMessageId: v.optional(v.string()),
   vendorCode: v.optional(v.string()),
-  attemptCount: v.optional(v.number()),
-  nextAttemptAt: v.optional(v.number()),
   lastFailureCode: v.optional(v.string()),
+  workId: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -237,7 +236,8 @@ export const accountTables = {
   accounts: defineTable(accountValue)
     .index('by_accountRef', ['accountRef'])
     .index('by_creationActorPrincipalRef_and_creationIdempotencyRef', ['creationActorPrincipalRef', 'creationIdempotencyRef'])
-    .index('by_lifecycle_and_updatedAt', ['lifecycle', 'updatedAt']),
+    .index('by_lifecycle_and_updatedAt', ['lifecycle', 'updatedAt'])
+    .index('by_lastAction_actorPrincipalRef_and_lifecycle', ['lastAction.actorPrincipalRef', 'lifecycle']),
   accountOwnerships: defineTable(accountOwnershipValue)
     .index('by_ownershipRef', ['ownershipRef'])
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
@@ -269,8 +269,7 @@ export const accountTables = {
       'eventKind',
       'sourceEventRef',
     ])
-    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
-    .index('by_state_and_nextAttemptAt', ['state', 'nextAttemptAt']),
+    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
   principalNotificationEmails: defineTable(principalNotificationEmailValue)
     .index('by_principalRef', ['principalRef']),
 } as const

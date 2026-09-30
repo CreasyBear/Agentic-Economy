@@ -63,6 +63,7 @@ const app = defineApp({
 
 app.use(workpool)
 app.use(workpool, { name: 'stripeWebhookWorkpool' })
+app.use(workpool, { name: 'notificationWorkpool' })
 app.use(workflow)
 app.use(rateLimiter)
 app.use(agent)

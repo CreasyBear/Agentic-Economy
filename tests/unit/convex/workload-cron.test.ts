@@ -30,7 +30,6 @@ import {
   refreshReferenceRateHandler,
   observeX402TreasuryHandler,
   refreshMarketFlowHandler,
-  deliverOwnerNotificationsHandler,
   snapshotMarketplaceMetricsDayHandler,
   reconcileBusinessSupplyProjectionsHandler,
 } from '../../../convex/lib/platform/workloadCron/scheduled'
@@ -66,7 +65,6 @@ import {
 const EXPECTED_BINDINGS = {
   'cleanup expired agent access oauth grants': 'workloadCron:cleanupExpiredAgentAccessOAuthGrants',
   'cleanup expired source write nonces': 'workloadCron:cleanupExpiredSourceWriteNonces',
-  'deliver owner notifications': 'workloadCron:deliverOwnerNotifications',
   'expire stale pending approvals': 'workloadCron:expireStalePendingApprovals',
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
@@ -87,7 +85,6 @@ const ACTION_HANDLERS = [
   refreshAgenticEconomyApiRegistryHandler,
   observeX402TreasuryHandler,
   refreshMarketFlowHandler,
-  deliverOwnerNotificationsHandler,
   snapshotMarketplaceMetricsDayHandler,
 ] as const
 
@@ -98,7 +95,6 @@ const ACTION_HANDLER_WORKLOAD_NAMES = [
   'refresh Agentic Economy API registry',
   'observe x402 treasury',
   'refresh market flow',
-  'deliver owner notifications',
   'snapshot marketplace metrics day',
 ] as const
 
@@ -144,10 +140,6 @@ describe('System workload cron boundary', () => {
     expect(convexCrons.crons['expire stale pending approvals']?.schedule).toEqual({
       type: 'interval',
       minutes: 5,
-    })
-    expect(convexCrons.crons['deliver owner notifications']?.schedule).toEqual({
-      type: 'interval',
-      minutes: 1,
     })
     expect(convexCrons.crons['snapshot marketplace metrics day']?.schedule).toEqual({
       type: 'cron',
@@ -406,8 +398,8 @@ describe('System workload cron boundary', () => {
 
     expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
     // Business projection reconciliation dispatches two mutations under one admission.
-    expect(context.dispatches).toHaveLength(15)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 14 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
+    expect(context.dispatches).toHaveLength(14)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 13 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 

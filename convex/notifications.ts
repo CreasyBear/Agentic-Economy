@@ -1,11 +1,8 @@
 import { v } from 'convex/values'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
-  claimDueNotificationDeliveriesArgs,
-  claimDueNotificationDeliveriesHandler,
-  claimDueNotificationDeliveriesResult,
-  finishNotificationDeliveryArgs,
-  finishNotificationDeliveryHandler,
+  completeDeliveryArgs,
+  completeDeliveryHandler,
   readNotificationContextArgs,
   readNotificationContextHandler,
   readNotificationContextResult,
@@ -35,15 +32,9 @@ export const updatePreferences = mutation({
 export const enqueueAgentApprovalRequested = internalMutation({
   args: { callRef: v.string() },
   returns: v.object({
-    kind: v.union(v.literal('enqueued'), v.literal('exists'), v.literal('skipped')),
+    kind: v.union(v.literal('enqueued'), v.literal('exists'), v.literal('skipped'), v.literal('suppressed')),
   }),
   handler: enqueueAgentApprovalRequestedHandler,
-})
-
-export const claimDueNotificationDeliveries = internalMutation({
-  args: claimDueNotificationDeliveriesArgs,
-  returns: claimDueNotificationDeliveriesResult,
-  handler: claimDueNotificationDeliveriesHandler,
 })
 
 export const readNotificationContext = internalQuery({
@@ -52,8 +43,8 @@ export const readNotificationContext = internalQuery({
   handler: readNotificationContextHandler,
 })
 
-export const finishNotificationDelivery = internalMutation({
-  args: finishNotificationDeliveryArgs,
+export const completeDelivery = internalMutation({
+  args: completeDeliveryArgs,
   returns: v.null(),
-  handler: finishNotificationDeliveryHandler,
+  handler: completeDeliveryHandler,
 })
