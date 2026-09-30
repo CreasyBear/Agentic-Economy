@@ -1,3 +1,0 @@
-Source tree: src/ plus convex/moneyDocumentRender.ts; the latter is a user-facing standalone business-document renderer.
-Excluded by migrate-design-system inventory: src/styles/globals.css (target token source), src/components/ui/** (current shared system layer), tests, src/lib/ui/contract-scans.ts (check tooling), dependencies, generated docs and build output.
-No other workspace package imports from this app's UI; packages/cli is a separate published CLI package and is not a web route.

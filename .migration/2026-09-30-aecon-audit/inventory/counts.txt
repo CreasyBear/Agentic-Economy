@@ -1,9 +1,0 @@
-Inventory source: src/ plus convex/moneyDocumentRender.ts; token source, system component directory, tests, docs, build output and check tooling excluded.
-imports 0
-raw 309
-palette 2
-files 0
-unassigned 0
-overlaps 0
-source_files 1507
-legacy_spec empty; current system has no registry replacement/migration map
