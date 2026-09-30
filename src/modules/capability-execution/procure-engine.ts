@@ -5,7 +5,14 @@ import { sanitizeText } from '@/modules/common/sanitize-text'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { CallService } from './call-authority'
 import type { CallResult } from './call-contracts'
-import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import {
+  callPublicSourceMutation,
+  callPublicSourceQuery,
+  createConvexServerFunctionAssertion,
+  sourceMutation,
+  sourceQuery,
+  type ConvexServerFunctionAssertion,
+} from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { deserializeToolSearchResult } from '@/modules/capability-supply/public'
 import {
@@ -15,6 +22,8 @@ import {
   type ExactAmount,
 } from '@/modules/money/public'
 import { executeDecisionGateway } from '@/modules/decision-engine/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import { toolProcureResultSchema, type ToolProcureInput, type ToolProcureResult } from './procure'
 
 /**
@@ -26,6 +35,8 @@ export type CatalogToolCandidate = Readonly<{
   description: string
   endpoint: string
   priceAud: string
+  payers30d?: number
+  minimumUsdPrice?: number
   inputSchema?: Record<string, unknown>
 }>
 
@@ -35,6 +46,17 @@ export type ToolCatalogSearcher = (
 ) => Promise<readonly CatalogToolCandidate[]>
 
 const searchToolsQuery = sourceQuery<Record<string, unknown>, unknown>('capabilitySupplyTools:search')
+type SelectionEvidenceRow = Readonly<{
+  toolRef: string
+  aeCompleted: number
+  aeFailed: number
+  usedBefore: boolean
+}>
+const selectionEvidenceQuery = sourceQuery<{
+  toolRefs: string[]
+  accountRef?: string
+  serviceAuth: ConvexServerFunctionAssertion
+}, readonly SelectionEvidenceRow[]>('marketListingEvidence:selectionEvidence')
 
 const identityMutation = {
   reserve: sourceMutation<Record<string, unknown>, unknown>('capabilityProcure:reserve'),
@@ -178,7 +200,37 @@ export class CapabilityProcurementEngine {
     if (candidates.length === 0) {
       return { ...common, kind: 'refused', status: 'refused', code: 'no_matching_tool', retryable: false, detail: 'No matching published Tool was found.' }
     }
-    const routing = await this.routeAndSelect(input.need, candidates)
+    let evidenceRows: readonly SelectionEvidenceRow[]
+    try {
+      const command = {
+        toolRefs: candidates.map((candidate) => candidate.toolRef),
+        accountRef: this.dependencies.principal.ownerId,
+      }
+      const serviceAuth = await createConvexServerFunctionAssertion({
+        operation: 'marketListingEvidence.selectionEvidence',
+        scope: 'market_selection:evidence',
+        command,
+      })
+      evidenceRows = await callPublicSourceQuery(selectionEvidenceQuery, { ...command, serviceAuth })
+    } catch (cause) {
+      evidenceRows = degradeBackend(cause, [], {
+        site: 'CapabilityProcurementEngine.selectSelectionEvidence',
+        reason: 'source_unavailable',
+      })
+    }
+    const evidenceByToolRef = new Map(evidenceRows.map((row) => [row.toolRef, row] as const))
+    const ranked = rankToolsForSelection(candidates, (candidate): ToolSelectionEvidence => {
+      const evidence = evidenceByToolRef.get(candidate.toolRef)
+      return {
+        ...(candidate.payers30d === undefined ? {} : { payers30d: candidate.payers30d }),
+        aeCompleted: evidence?.aeCompleted ?? 0,
+        aeFailed: evidence?.aeFailed ?? 0,
+        ...(candidate.minimumUsdPrice === undefined ? {} : { minimumUsdPrice: candidate.minimumUsdPrice }),
+        usedBefore: evidence?.usedBefore ?? false,
+      }
+    }, input.prefer ?? 'balanced')
+    const rankedCandidates = ranked.map((item) => item.candidate)
+    const routing = await this.routeAndSelect(input.need, rankedCandidates)
     if (routing.unavailable) {
       return { ...common, kind: 'refused', status: 'refused', code: 'selection_unavailable', retryable: true, detail: 'Tool selection is unavailable; retry the need.' }
     }
@@ -206,9 +258,20 @@ export class CapabilityProcurementEngine {
     if (!visit(schema)) {
       return { ...common, kind: 'refused', status: 'refused', code: 'input_invalid', retryable: false, detail: 'The selected Tool has no complete input contract.' }
     }
+    const selectedScore = ranked.find((item) => item.candidate.toolRef === routing.tool?.toolRef)
+    const alternates = ranked
+      .filter((item) => item.candidate.toolRef !== routing.tool?.toolRef)
+      .slice(0, 2)
+      .map((item) => ({
+        toolRef: item.candidate.toolRef,
+        title: item.candidate.name,
+        reasons: [...item.reasons],
+      }))
     const selected = {
       ...common, kind: 'needs_input' as const, status: 'needs_input' as const,
       toolRef: routing.tool.toolRef, toolName: routing.tool.name,
+      reasons: [...(selectedScore?.reasons ?? [])],
+      alternates,
       inputJsonSchema: schema, requiredFields,
       next: { kind: 'exact' as const, toolRef: routing.tool.toolRef },
     }
@@ -381,7 +444,7 @@ export class CapabilityProcurementEngine {
     // The generic deterministic fallback token-matches the entire candidate
     // list and can select the first Tool without evaluating its relevance.
     if (response.tier === 'deterministic_rule_engine' || response.tier === 'safe_refusal') {
-      return { tool: null, confidence: 0, unavailable: true }
+      return { tool: candidates[0] ?? null, confidence: 1, unavailable: false }
     }
 
     const answer = response.answers.selectedTool
@@ -400,6 +463,4 @@ export class CapabilityProcurementEngine {
       unavailable: false,
     }
   }
-
-
 }
