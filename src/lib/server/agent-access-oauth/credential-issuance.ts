@@ -1,4 +1,5 @@
 import { clerkClient } from '@clerk/tanstack-react-start/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import {
   AGENT_ACCESS_DEFAULT_APPLICATION_REF,
@@ -69,6 +70,10 @@ export async function defaultIssueRefreshKey(input: Readonly<{
   grantRef: string
   expiresInSeconds: number
 }>): Promise<Readonly<{ keyId: string }>> {
+  if (deploymentPaymentEnvironment(process.env) !== input.family.environment
+    || (input.family.environment === 'production' && input.family.authorityMode === 'unrestricted_test_only')) {
+    throw new AgentAccessOAuthIssueRefusal('invalid_grant')
+  }
   const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
   const key = await api.create({
     name: input.family.displayName,
@@ -259,6 +264,12 @@ export async function issueGrantKey(
   target: AgentConnectionTarget,
   options: OAuthApiOptions,
 ): Promise<{ keyId: string; replacement?: AgentCredentialReplacement }> {
+  const environment = deploymentPaymentEnvironment(process.env)
+  if (environment === undefined
+    || grant.requestedAccess.environment !== environment
+    || grant.approvedAccess.environment !== environment) {
+    throw new AgentAccessOAuthIssueRefusal('invalid_grant')
+  }
   const issue: AgentAccessOAuthIssueKey = async ({ ownerId: inputOwnerId, grant: inputGrant, target: inputTarget }) => {
     const idempotencyKey = inputGrant.issuanceKey ?? `oauth-${inputGrant.grantRef.replaceAll(':', '-')}`
     const authorityMode = modeForGrant(inputGrant)

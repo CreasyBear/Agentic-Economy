@@ -18,9 +18,11 @@ import { issueAgentAccessKeyServer } from '@/modules/agent-access/agent-access.f
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type { AgentKeyDraft } from '@/components/ae/console/connect-agent-wizard/agent-key-draft'
+import type { ConnectAgentEnvironment } from '@/components/ae/console/connect-agent-wizard/connect-agent-wizard.contracts'
 import { useAgentKeysSettings } from './useAgentKeysSettings'
 
 export type AeAgentKeysSettingsProps = Readonly<{
+  deploymentEnvironment: ConnectAgentEnvironment
   initialDirectory: AgentDirectoryProjection
   canonicalBaseUrl: string
   openIssueDialog?: boolean
@@ -30,6 +32,7 @@ export type AeAgentKeysSettingsProps = Readonly<{
 }>
 
 export function AeAgentKeysSettings({
+  deploymentEnvironment,
   initialDirectory,
   canonicalBaseUrl,
   openIssueDialog = false,
@@ -98,6 +101,7 @@ export function AeAgentKeysSettings({
       </SettingsRow>)}
     </SettingsDangerZone>}
     <AeConnectAgentWizardDialog
+      deploymentEnvironment={deploymentEnvironment}
       open={wizardOpen}
       onOpenChange={setWizardOpen}
       onIssue={issueKey}

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import { createCallService, handleCallListGet } from '@/lib/server/call-api'
@@ -6,6 +6,9 @@ import { createPublicSourceTransport, setPublicSourceTransportForTests } from '@
 import type { CallService } from '@/modules/capability-execution/call-authority'
 import { installTestSourceWriteSecret } from '../../helpers/source-write-admission'
 import { convexUrl } from './server-seams-harness'
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
 
 const principal = {
   principalId: 'prn_00000000000040008000000000000043',
@@ -22,6 +25,7 @@ const authenticate = async () => ({
   id: principal.credentialId,
   subject: 'user_one',
   scopes: principal.scopes,
+  claims: { aeEnvironment: 'sandbox' },
 })
 const resolvePrincipal: AgentAccessPrincipalResolver = async (projection) => ({
   ...projection,

@@ -16,7 +16,7 @@ import type { AgentKeyDraft } from './agent-key-draft'
 
 import { AgentNameField } from './components/AgentNameField'
 import { AuthorityModeRadioCards } from './components/AuthorityModeRadioCards'
-import { EnvironmentRadioCards } from './components/EnvironmentRadioCards'
+import type { ConnectAgentEnvironment } from './connect-agent-wizard.contracts'
 import {
   CONNECT_AGENT_WIZARD_LIMIT_IDS,
   CONNECT_AGENT_WIZARD_LIMIT_PLACEHOLDERS,
@@ -25,6 +25,7 @@ import {
 } from './useConnectAgentWizard'
 
 export interface AeConnectAgentWizardDialogProps {
+  deploymentEnvironment: ConnectAgentEnvironment
   open: boolean
   onOpenChange: (open: boolean) => void
   onIssue: (args: { data: Record<string, unknown> }) => Promise<AgentAccessKeyIssueResult>
@@ -34,6 +35,7 @@ export interface AeConnectAgentWizardDialogProps {
 }
 
 export function AeConnectAgentWizardDialog({
+  deploymentEnvironment,
   open,
   onOpenChange,
   onIssue,
@@ -42,6 +44,7 @@ export function AeConnectAgentWizardDialog({
   onDraftChange,
 }: Readonly<AeConnectAgentWizardDialogProps>) {
   const wizard = useConnectAgentWizard({
+    deploymentEnvironment,
     open,
     onOpenChange,
     onIssue,
@@ -91,12 +94,6 @@ export function AeConnectAgentWizardDialog({
               invalid={view.nameInvalid}
               inputRef={wizard.nameInputRef}
               onChange={wizard.handleNameChange}
-            />
-
-            <EnvironmentRadioCards
-              value={view.environment}
-              disabled={view.isSubmitting}
-              onChange={wizard.handleEnvironmentChange}
             />
 
             <AuthorityModeRadioCards

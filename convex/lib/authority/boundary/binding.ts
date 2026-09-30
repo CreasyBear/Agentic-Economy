@@ -1,5 +1,6 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import type { MutationCtx } from '../../../_generated/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { env, type MutationCtx } from '../../../_generated/server'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import { credentialRef } from '@/modules/principal-account/external-identity/public'
@@ -32,6 +33,7 @@ export async function resolveCanonicalAgentBinding(
   ctx: MutationCtx,
   input: ResolveAgentBindingArgs,
 ): Promise<CanonicalAgentBinding | null> {
+  if (deploymentPaymentEnvironment(env) !== input.environment) return null
   const admissionNow = Date.now()
   const canonicalInput = canonicalResolveInput(input)
   if (!currentServerTime(admissionNow)
@@ -238,6 +240,7 @@ export async function resolveCanonicalAgentBinding(
 }
 
 export async function resolveAgentBindingHandler(ctx: MutationCtx, args: ResolveAgentBindingArgs): Promise<CanonicalAgentBinding | null> {
+    if (deploymentPaymentEnvironment(env) !== args.environment) return null
     if (canonicalResolveInput(args) === undefined) return null
     const admitted = await requireSourceWrite(ctx, args, 'agent_identity')
     if (admitted.kind === 'rejected') {

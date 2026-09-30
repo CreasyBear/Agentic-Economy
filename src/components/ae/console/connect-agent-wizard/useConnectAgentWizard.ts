@@ -17,7 +17,6 @@ import { createRuntimeId } from '@/modules/common/runtime-id'
 
 import type {
   ConnectAgentAuthorityMode,
-  ConnectAgentEnvironment,
   ConnectAgentWizardDraft,
   ConnectAgentWizardPorts,
   ConnectAgentWizardViewState,
@@ -58,7 +57,6 @@ export const CONNECT_AGENT_WIZARD_LIMIT_PLACEHOLDERS = {
 function resetWizardFields(
   setters: Readonly<{
     setName: (v: string) => void
-    setEnvironment: (v: ConnectAgentEnvironment) => void
     setAuthorityMode: (v: ConnectAgentAuthorityMode) => void
     setPerCallAmount: (v: string) => void
     setDailyAmount: (v: string) => void
@@ -67,7 +65,6 @@ function resetWizardFields(
   }>,
 ): void {
   setters.setName('')
-  setters.setEnvironment('sandbox')
   setters.setAuthorityMode('spending_policy')
   setters.setPerCallAmount(DEFAULT_PER_CALL)
   setters.setDailyAmount(DEFAULT_DAILY)
@@ -76,6 +73,7 @@ function resetWizardFields(
 }
 
 export function useConnectAgentWizard({
+  deploymentEnvironment: environment,
   open = true,
   onOpenChange,
   onIssue,
@@ -84,7 +82,6 @@ export function useConnectAgentWizard({
   onDraftChange,
 }: ConnectAgentWizardPorts) {
   const [name, setName] = useState(initialDraft?.name ?? '')
-  const [environment, setEnvironment] = useState<ConnectAgentEnvironment>(initialDraft?.environment ?? 'sandbox')
   const [authorityMode, setAuthorityMode] =
     useState<ConnectAgentAuthorityMode>(initialDraft?.authorityMode ?? 'spending_policy')
 
@@ -113,27 +110,25 @@ export function useConnectAgentWizard({
     wasOpenRef.current = open
     if (!becameOpen) return
     const draft = initialDraft ?? AGENT_KEY_DRAFT_DEFAULTS
-    draftRef.current = { ...draft }
+    draftRef.current = { ...draft, environment }
     setName(draft.name)
-    setEnvironment(draft.environment)
     setAuthorityMode(draft.authorityMode)
     setPerCallAmount(draft.perCallAmount)
     setDailyAmount(draft.dailyAmount)
     setMonthlyAmount(draft.monthlyAmount)
-  }, [open, initialDraft])
+  }, [open, initialDraft, environment])
 
   const publishDraft = useCallback((patch: Partial<ConnectAgentWizardDraft>) => {
-    const draft = { ...draftRef.current, ...patch }
+    const draft = { ...draftRef.current, ...patch, environment }
     draftRef.current = draft
     onDraftChange?.(draft)
-  }, [onDraftChange])
+  }, [onDraftChange, environment])
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (!nextOpen && !isSubmitting) {
         resetWizardFields({
           setName,
-          setEnvironment,
           setAuthorityMode,
           setPerCallAmount,
           setDailyAmount,
@@ -141,14 +136,14 @@ export function useConnectAgentWizard({
           setDiagnostic,
         })
         setNameInvalid(false)
-        draftRef.current = { ...AGENT_KEY_DRAFT_DEFAULTS }
+        draftRef.current = { ...AGENT_KEY_DRAFT_DEFAULTS, environment }
         idempotencyKeyRef.current = undefined
       }
       if (!isSubmitting) {
         onOpenChange(nextOpen)
       }
     },
-    [isSubmitting, onOpenChange],
+    [isSubmitting, onOpenChange, environment],
   )
 
   const handleNameChange = useCallback(
@@ -162,12 +157,6 @@ export function useConnectAgentWizard({
     },
     [diagnostic, publishDraft],
   )
-
-  const handleEnvironmentChange = useCallback((value: ConnectAgentEnvironment) => {
-    setEnvironment(value)
-    publishDraft({ environment: value })
-    setDiagnostic(null)
-  }, [publishDraft])
 
   const handleAuthorityChange = useCallback((value: ConnectAgentAuthorityMode) => {
     setAuthorityMode(value)
@@ -338,7 +327,6 @@ export function useConnectAgentWizard({
     handleOpenChange,
     handleSubmit,
     handleNameChange,
-    handleEnvironmentChange,
     setAuthorityMode: handleAuthorityChange,
     setPerCallAmount: handlePerCallAmountChange,
     setDailyAmount: handleDailyAmountChange,

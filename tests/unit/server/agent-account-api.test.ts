@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleAgentAccountActionPost, handleAgentAccountGet } from '@/lib/server/agent-account-api'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
 
 const authenticate = async (scopes: readonly string[] = ['market_tools:call']) => ({
   isAuthenticated: true as const,
@@ -9,6 +12,7 @@ const authenticate = async (scopes: readonly string[] = ['market_tools:call']) =
   id: 'key_current',
   subject: 'user_owner',
   scopes,
+  claims: { aeEnvironment: 'sandbox' },
 })
 
 describe('agent account HTTP adapter', () => {

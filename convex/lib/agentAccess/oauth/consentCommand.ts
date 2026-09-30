@@ -1,9 +1,10 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { principalRef } from '@/modules/principal-account/public'
 import { AGENT_ACCESS_AUTHORITY_MODE_VALUES, agentAuthorityModeAllows } from '@/modules/agent-access/contract'
 import { normalizeRequestedScopes, requestedScopesForMode } from '@/modules/agent-access/oauth-state'
 import { normalizeAgentAccessToolSelection } from '@/modules/agent-access/policy'
-import type { MutationCtx } from '../../../_generated/server'
+import { env, type MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import type { ConsentCommand, ConsentReservationArgs } from './contracts'
 import { resolveReplacementPredecessor, samePredecessorSnapshot } from './consentPredecessor'
@@ -13,6 +14,11 @@ export async function deriveConsentCommand(
   args: ConsentReservationArgs,
   activeAccountRef: string,
 ): Promise<ConsentCommand | null> {
+  if (!isCompletedConsentGrant(oauthGrant.status)
+    && (oauthGrant.requestedAccess.environment !== deploymentPaymentEnvironment(env)
+      || oauthGrant.approvedAccess.environment !== deploymentPaymentEnvironment(env)
+      || (oauthGrant.requestedAccess.environment === 'production'
+        && args.authorityMode === 'unrestricted_test_only'))) return null
   const requested = normalizeRequestedScopes(oauthGrant.requestedScopes.join(' '))
   if (requested === undefined
     || !AGENT_ACCESS_AUTHORITY_MODE_VALUES.includes(args.authorityMode)

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import {
   authenticateWithScopes,
   handleMcpRequest,
@@ -33,6 +34,8 @@ async function listWith(scopes: readonly string[], path = '/mcp') {
   expect(body.error).toBeUndefined()
   return body
 }
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP role toolsets', () => {
   it('lists exactly public discovery for an anonymous principal, never Operation-level tools', async () => {

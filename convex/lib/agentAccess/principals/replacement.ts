@@ -1,6 +1,7 @@
 import { v, type ObjectType } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import type { MutationCtx } from '../../../_generated/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { env, type MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { agentAccessPolicyDigest, createAgentAccessGrant, normalizeAgentAccessToolSelection, normalizeStoredAgentAccessPolicy, normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
@@ -41,6 +42,7 @@ export async function prepareCredentialReplacementForServerHandler(
   args: ObjectType<typeof replacementRegistrationArgs> & Readonly<{ serviceAuth: CustomerRequestServiceAssertion }>,
 ) {
   const { serviceAuth, ...input } = args
+  if (deploymentPaymentEnvironment(env) !== input.environment) return { kind: 'conflict' as const }
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null || !await validReplacementAssertion(
     PREPARE_REPLACEMENT_OPERATION,
@@ -65,6 +67,7 @@ export async function prepareCredentialReplacementCore(
   owner: CanonicalCredentialOwner,
   now: number,
 ) {
+  if (deploymentPaymentEnvironment(env) !== input.environment) return { kind: 'conflict' as const }
   const scopes = uniqueSorted(input.scopes)
   const toolSelection = normalizeAgentAccessToolSelection(input)
   if (input.principalRef.trim().length === 0

@@ -4,7 +4,7 @@ import {
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
@@ -44,6 +44,8 @@ const reconciliationEvidence: ReconciliationEvidence = callReconciliationEvidenc
 })
 
 afterEach(() => vi.unstubAllEnvs())
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter operation recovery', () => {
   it('returns the canonical bearer challenge for an unauthenticated status request without calling the service', async () => {

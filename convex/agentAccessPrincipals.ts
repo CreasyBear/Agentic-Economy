@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import type { RegisteredMutation } from 'convex/server'
-import { mutation, internalMutation, internalQuery } from './_generated/server'
+import { mutation, query, internalMutation, internalQuery } from './_generated/server'
 import { serviceAssertion } from './serviceAssertion'
 import {
   agentAccessPrincipalValue,
@@ -16,6 +16,7 @@ import {
   recordAgentPrincipalHandler,
   registerAgentPrincipalHandler,
   getAgentPrincipalHandler,
+  readLegacyOwnerChatPrincipalHandler,
 } from './lib/agentAccess/principals/records'
 import {
   issuedBindingArgs,
@@ -123,4 +124,10 @@ export const getAgentPrincipal = internalQuery({
   args: { principalId: v.string() },
   returns: getAgentPrincipalResult,
   handler: getAgentPrincipalHandler,
+})
+
+export const readLegacyOwnerChatPrincipal = query({
+  args: {},
+  returns: v.union(v.string(), v.null()),
+  handler: readLegacyOwnerChatPrincipalHandler,
 })

@@ -288,6 +288,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "readLegacyOwnerChatPrincipal",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "agentAccessPrincipals",
     "method": "recordAgentPrincipal",

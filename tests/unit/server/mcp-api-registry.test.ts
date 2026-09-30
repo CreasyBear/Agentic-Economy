@@ -1,5 +1,5 @@
 import { authenticateWithScopes, handleMcpRequest, postMcp, readMcpBody } from './mcp-api-harness'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   registryToolsDescribeAction,
@@ -24,6 +24,8 @@ function noMatch(
     next: [...next],
   }
 }
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter registry', () => {
   it('calls the registered registry search action with MCP attribution', async () => {

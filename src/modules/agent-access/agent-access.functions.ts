@@ -2,6 +2,7 @@ import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import type { ClerkClient } from '@clerk/backend'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
 
 import {
   callSourceMutation,
@@ -108,8 +109,8 @@ export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
   | 'maximumCallsPerHour'
   | 'expiresInSeconds'
   | 'authorityMode'
->>): AgentAccessPolicy {
-  const environment = input.environment ?? 'sandbox'
+> & { environment: PaymentEnvironment }>): AgentAccessPolicy {
+  const environment = input.environment
   if (environment === 'sandbox') return defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
   const hasBudget = input.maximumSpendPerCall !== undefined
     && input.maximumDailySpend !== undefined
@@ -257,6 +258,9 @@ const recordProviderRevocationMutation = sourceMutation<LifecycleMutationArgs<Pr
 const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
 )
+const readLegacyOwnerChatPrincipalQuery = sourceQuery<Record<string, never>, string | null>(
+  'agentAccessPrincipals:readLegacyOwnerChatPrincipal',
+)
 const revokeOwnerConnectionMutation = sourceMutation<Readonly<{
   connectionRef: string
   expectedRevision: number
@@ -401,15 +405,17 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
       return { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }
     }
     const scopes = issueScopes(data)
-    const environment = data.environment ?? 'sandbox'
+    const environment = deploymentPaymentEnvironment(process.env)
     const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
-    if (scopes === undefined || authorityMode === undefined
+    if (environment === undefined
+      || (data.environment !== undefined && data.environment !== environment)
+      || scopes === undefined || authorityMode === undefined
       || (environment === 'production' && authorityMode === 'unrestricted_test_only')) {
       return { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }
     }
     let policy: AgentAccessPolicy
     try {
-      policy = buildOwnerAgentAccessPolicy(data)
+      policy = buildOwnerAgentAccessPolicy({ ...data, environment })
     } catch (cause) {
       return degrade(cause, { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }, { site: 'issueAgentAccessKeyServer', reason: 'invalid_response' })
     }
@@ -454,7 +460,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
         ...(data.expiresInSeconds === undefined ? {} : { expiresInSeconds: data.expiresInSeconds }),
         grantRef,
         ...(data.applicationRef === undefined ? {} : { applicationRef: data.applicationRef }),
-        ...(data.environment === undefined ? {} : { environment: data.environment }),
+        environment,
       },
       spendingPolicy: policy,
       api,
@@ -465,12 +471,30 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
 /** A dedicated owner-chat grant never delivers its bearer secret to the browser. */
 export const enableOwnerChatSpendingServer = createServerFn({ method: 'POST' })
   .handler(async () => {
+    const environment = deploymentPaymentEnvironment(process.env)
+    if (environment === undefined) return { kind: 'refused' as const, code: 'invalid_input' as const }
     const session = await auth()
     if (!session.isAuthenticated || session.userId === null) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
     await requireCanonicalOwnerAuthorityServer()
-    const idempotencyKey = `owner-chat-spend-${session.userId}`
+    // Retain the old canonical record so a interrupted provider cleanup can be
+    // retried. No new credential is issued until that cleanup has completed.
+    try {
+      const legacyPrincipal = await callSourceQuery(readLegacyOwnerChatPrincipalQuery, {})
+      if (legacyPrincipal !== null) {
+        const retired = await completeAgentLifecycle(await lifecycleCanonicalMutation(
+          'agentAccessPrincipals.disconnectAgentForServer', disconnectAgentMutation,
+          { principalRef: legacyPrincipal, correlationRef: lifecycleCorrelationRef() },
+        ))
+        if (retired.kind !== 'completed' && retired.kind !== 'replayed') {
+          return { kind: 'refused' as const, code: 'issuance_unavailable' as const, retryable: true }
+        }
+      }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused' as const, code: 'issuance_unavailable' as const, retryable: true }, { site: 'enableOwnerChatSpendingServer', reason: 'source_unavailable' })
+    }
+    const idempotencyKey = `owner-chat-spend-${session.userId}-${environment}`
     const result = await issueAgentAccessKey({
       principal: { userId: session.userId },
       input: {
@@ -478,10 +502,17 @@ export const enableOwnerChatSpendingServer = createServerFn({ method: 'POST' })
         idempotencyKey,
         grantRef: issuedAgentGrantRef(session.userId, idempotencyKey),
         applicationRef: 'ae-owner-chat',
-        environment: 'sandbox',
+        environment,
         scopes: [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode('spending_policy')],
       },
-      spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }),
+      spendingPolicy: environment === 'sandbox'
+        ? defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
+        : buildProductionAgentAccessPolicy({
+            currency: 'AUD', exponent: 6,
+            maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '1000000' },
+            maximumDailySpend: { currency: 'AUD', exponent: 6, units: '5000000' },
+            maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '20000000' },
+          }),
       api: createClerkAgentAccessKeyApi(clerkClient().apiKeys),
       registerBinding: registerIssuedAgentBinding,
       returnSecret: false,

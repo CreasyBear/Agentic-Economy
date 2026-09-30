@@ -1,6 +1,7 @@
 import { v, type ObjectType } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import type { MutationCtx } from '../../../_generated/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { env, type MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
@@ -88,6 +89,10 @@ export async function transitionCredentialReplacementCore(
       ? { kind: 'conflict' as const }
       : { kind: 'replayed' as const, providerCredentialId: predecessor.binding.providerIdentifier }
   }
+  const paymentEnvironment = deploymentPaymentEnvironment(env)
+  if (paymentEnvironment === undefined
+    || current.environment !== paymentEnvironment
+    || successorGrant.environment !== paymentEnvironment) return { kind: 'conflict' as const }
   if (successor.lifecycle !== 'active'
     || successorBinding.lifecycle !== 'active'
     || normalizedSuccessorGrant.lifecycle !== 'active'

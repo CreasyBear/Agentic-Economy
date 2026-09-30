@@ -123,7 +123,7 @@ describe('Agent keys settings revocation', () => {
     calls.revoke.mockResolvedValue({ kind: 'completed', principalRef: 'agent:one', correlationRef: 'corr:one' })
     calls.readDirectory.mockResolvedValue(directory)
     const view = render(createElement(AeAgentKeysSettings, {
-      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
+      deploymentEnvironment: 'production', initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
     }))
     const selectedKeyButton = screen.getAllByRole('button', { name: /^Revoke key/ })[1]
     if (selectedKeyButton === undefined) throw new Error('Expected a revoke button for each active key')
@@ -133,7 +133,7 @@ describe('Agent keys settings revocation', () => {
     view.unmount()
 
     const cancelledView = render(createElement(AeAgentKeysSettings, {
-      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
+      deploymentEnvironment: 'production', initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
     }))
     const cancelledKeyButton = screen.getAllByRole('button', { name: /^Revoke key/ })[1]
     if (cancelledKeyButton === undefined) throw new Error('Expected a revoke button for each active key')
@@ -145,7 +145,7 @@ describe('Agent keys settings revocation', () => {
 
   it('distinguishes active keys by creation time through revoke confirmation', () => {
     const view = render(createElement(AeAgentKeysSettings, {
-      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
+      deploymentEnvironment: 'production', initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
     }))
     const buttons = screen.getAllByRole('button', { name: /^Revoke key/ })
     const firstCredential = twoKeysDirectory.details[0]?.credentials[0]
@@ -176,7 +176,7 @@ describe('Agent keys settings revocation', () => {
       .mockResolvedValueOnce({ kind: 'refused', code: 'reverification_required' })
       .mockResolvedValueOnce({ kind: 'created', keyId: 'key:one', secret: 'secret' })
     render(createElement(AeAgentKeysSettings, {
-      initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test', openIssueDialog: true,
+      deploymentEnvironment: 'production', initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test', openIssueDialog: true,
     }))
 
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Research bot' } })

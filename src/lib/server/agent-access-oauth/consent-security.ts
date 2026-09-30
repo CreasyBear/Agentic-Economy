@@ -1,4 +1,5 @@
 import { auth } from '@clerk/tanstack-react-start/server'
+import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
 import { reverificationErrorResponse } from '@clerk/shared/authorization-errors'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
@@ -239,14 +240,24 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (decision === 'deny') {
     return await denyConsentGrant(store, grantRef, owner.userId, state, options)
   }
+  const environment = deploymentPaymentEnvironment(process.env)
+  const currentGrant = await store.getGrantByRef(grantRef)
+  if (environment === undefined || currentGrant === null
+    || currentGrant.requestedAccess.environment !== environment
+    || currentGrant.approvedAccess.environment !== environment) return oauthError('invalid_grant', 400)
   const authorityMode = consentAuthorityMode(form)
   if (authorityMode === null || authorityMode === undefined) return oauthError('invalid_scope', 400)
+  if (environment === 'production'
+    && (authorityMode === 'unrestricted_test_only' || modeForGrant(currentGrant) === 'unrestricted_test_only')) {
+    return oauthError('invalid_scope', 400)
+  }
   if (!authObject.has({ reverification: 'strict' })) return strictReverificationJson()
   const proof = consentProofFromAuth(authObject)
   if (proof === null) return consentJson({ kind: 'refused', code: 'security_evidence_unavailable' }, 403)
   const approval = consentApprovalFields(form)
   if (approval === undefined) return oauthError('invalid_request', 400)
   return await reserveAndFinalizeConsent({
+    environment,
     request,
     sourceBody,
     store,
@@ -289,6 +300,7 @@ async function denyConsentGrant(
 }
 
 async function reserveAndFinalizeConsent(input: Readonly<{
+  environment: PaymentEnvironment
   request: Request
   sourceBody: string
   store: AgentAccessOAuthStore
@@ -355,6 +367,7 @@ async function reserveAndFinalizeConsent(input: Readonly<{
     return consentOutcomeUnknown(input.grantRef, reservation.correlationRef)
   }
   const approved = await approveGrant(input.store, {
+    environment: input.environment,
     grantRef: input.grantRef,
     ownerId: input.ownerId,
     now: currentNow(input.options),

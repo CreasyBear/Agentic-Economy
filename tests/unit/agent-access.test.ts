@@ -10,10 +10,11 @@ import {
   agentAccessToolSelectionDigest,
   listAgentAccessKeys,
   projectAgentAccessKey,
+  type AgentAccessKeyIssueInput,
 } from '../../src/modules/agent-access/agent-access'
 import { CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, CUSTOMER_REQUEST_UNRESTRICTED_TEST_ONLY_SCOPE } from '../../src/modules/agent-access/contract'
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
-import { buildProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
+import { buildProductionAgentAccessPolicy, defaultProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
 import { issuedAgentCanonicalRefs } from '../../src/modules/agent-access/issued-agent-binding'
 
 const policy = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
@@ -56,6 +57,48 @@ const recordedBinding = (grantRef: string, spendingPolicyDigest = `policy:${gran
 })
 
 describe('agent access', () => {
+  it.each([
+    ['missing', undefined, policy],
+    ['empty', '', policy],
+    ['preview', 'preview', policy],
+    ['case variant', 'Sandbox', policy],
+    ['whitespace', ' production ', policy],
+    ['production request with sandbox policy', 'production', policy],
+    ['sandbox request with production policy', 'sandbox', defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 })],
+  ] as const)('refuses %s environment before key or binding effects', async (_case, rawEnvironment, spendingPolicy) => {
+    const api = { list: vi.fn(), create: vi.fn(), getSecret: vi.fn() }
+    const registerBinding = vi.fn()
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: {
+        name: 'My assistant', idempotencyKey: 'setup-12345678',
+        environment: rawEnvironment as AgentAccessKeyIssueInput['environment'],
+      },
+      spendingPolicy,
+      api,
+      registerBinding,
+    })
+    expect(result).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
+    expect(api.list).not.toHaveBeenCalled()
+    expect(api.create).not.toHaveBeenCalled()
+    expect(registerBinding).not.toHaveBeenCalled()
+  })
+
+  it('issues a generic zero-budget production key with explicit production policy', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'zero_prod_key', secret: 'zero_prod_secret' })
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: { name: 'Zero budget agent', idempotencyKey: 'zero-prod-12345678', environment: 'production' },
+      spendingPolicy: defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+      api: { list: vi.fn().mockResolvedValue({ data: [] }), create, getSecret: vi.fn() },
+      registerBinding: vi.fn().mockResolvedValue(recordedBinding('zero-prod-12345678')),
+    })
+    expect(result).toMatchObject({ kind: 'created', authorityMode: 'read_only' })
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      claims: expect.objectContaining({ aeEnvironment: 'production' }),
+    }))
+  })
+
   it('keeps agent identity stable while credential generations remain distinct', () => {
     const first = issuedAgentCanonicalRefs({
       ownerAccountRef: 'act_owner',
@@ -92,7 +135,7 @@ describe('agent access', () => {
   it('issues a supply-only key without adding the default operation scope', async () => {
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
-      input: { name: 'Supply key', idempotencyKey: 'supply-12345678', scopes: [MARKET_SUPPLY_MANAGE_SCOPE] },
+      input: { name: 'Supply key', idempotencyKey: 'supply-12345678', environment: 'sandbox', scopes: [MARKET_SUPPLY_MANAGE_SCOPE] },
       spendingPolicy: policy,
       api: {
         create: vi.fn().mockResolvedValue({ id: 'supply_key', secret: 'supply_secret', revoked: false, expired: false }),
@@ -113,6 +156,7 @@ describe('agent access', () => {
       input: {
         name: 'Legacy create key',
         idempotencyKey: 'create-12345678',
+        environment: 'sandbox',
         scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE],
       },
       spendingPolicy: policy,
@@ -131,6 +175,7 @@ describe('agent access', () => {
       input: {
         name: 'CLI key',
         idempotencyKey: 'cli-12345678',
+        environment: 'sandbox',
         scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
       },
       spendingPolicy: policy,
@@ -162,6 +207,7 @@ describe('agent access', () => {
     const input = {
       name: 'Owner chat',
       idempotencyKey: 'owner-chat-12345678',
+      environment: 'sandbox' as const,
       applicationRef: 'ae-owner-chat',
       scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
     }
@@ -195,14 +241,14 @@ describe('agent access', () => {
 
     const first = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
-      input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
+      input: { name: 'My assistant', idempotencyKey: 'setup-12345678', environment: 'sandbox' },
       spendingPolicy: policy,
       api,
       registerBinding,
     })
     const replay = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
-      input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
+      input: { name: 'My assistant', idempotencyKey: 'setup-12345678', environment: 'sandbox' },
       spendingPolicy: policy,
       api,
       registerBinding,
@@ -259,6 +305,7 @@ describe('agent access', () => {
     const registerBinding = vi.fn().mockResolvedValue(recordedBinding('selected-12345678'))
     const input = {
       name: 'Selected assistant', idempotencyKey: 'selected-12345678',
+      environment: 'sandbox' as const,
       toolAccess: 'selected_tools' as const, toolRefs: [...toolRefs].reverse(),
     }
     await expect(issueAgentAccessKey({
@@ -303,7 +350,7 @@ describe('agent access', () => {
 
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
-      input: { name: 'Atomic assistant', idempotencyKey: 'atomic-12345678' },
+      input: { name: 'Atomic assistant', idempotencyKey: 'atomic-12345678', environment: 'sandbox' },
       spendingPolicy: policy,
       api: {
         create,
@@ -415,7 +462,7 @@ describe('agent access', () => {
     const registerBinding = vi.fn().mockResolvedValue({ kind: 'unavailable' as const })
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_fresh' },
-      input: { name: 'Fresh assistant', idempotencyKey: 'fresh-12345678' },
+      input: { name: 'Fresh assistant', idempotencyKey: 'fresh-12345678', environment: 'sandbox' },
       spendingPolicy: policy,
       api: {
         create: vi.fn().mockResolvedValue({ id: 'key_fresh', secret: 'secret_fresh' }),
@@ -440,7 +487,7 @@ describe('agent access', () => {
     const revoke = vi.fn()
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
-      input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
+      input: { name: 'My assistant', idempotencyKey: 'setup-12345678', environment: 'sandbox' },
       spendingPolicy: policy,
       api: {
         create: vi.fn(),
@@ -458,7 +505,7 @@ describe('agent access', () => {
   it('fails closed without an authenticated owner', async () => {
     await expect(issueAgentAccessKey({
       principal: undefined,
-      input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
+      input: { name: 'My assistant', idempotencyKey: 'setup-12345678', environment: 'sandbox' },
       spendingPolicy: policy,
       api: { create: vi.fn(), getSecret: vi.fn(), list: vi.fn() },
       registerBinding: vi.fn(),
@@ -470,7 +517,7 @@ describe('agent access', () => {
     const getSecret = vi.fn()
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
-      input: { name: 'Changed assistant', idempotencyKey: 'setup-12345678' },
+      input: { name: 'Changed assistant', idempotencyKey: 'setup-12345678', environment: 'sandbox' },
       spendingPolicy: policy,
       api: {
         create,

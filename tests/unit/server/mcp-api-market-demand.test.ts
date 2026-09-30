@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { authenticateWithScopes, postMcp, readMcpBody } from './mcp-api-harness'
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP private request withdrawal', () => {
   it.each([true, false])('requires buyer access before withdrawal (authorized=%s)', async authorized => {

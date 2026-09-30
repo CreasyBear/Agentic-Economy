@@ -4,7 +4,8 @@ import {
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+
 import { z } from 'zod'
 
 import { defineAction, mcpToolName } from '@/modules/actions'
@@ -15,6 +16,8 @@ import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 afterEach(() => {
   setHttpRateLimitAdmissionForTests(undefined)
 })
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter protocol', () => {
   it('initializes with server information and the tools capability', async () => {

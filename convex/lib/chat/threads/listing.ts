@@ -3,6 +3,8 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import type { BusinessActor, InteractiveBusinessAuthorityContext } from '../../../../src/modules/business/public'
 import type { MutationCtx } from '../../../_generated/server'
+import { env } from '../../../_generated/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { resolveBusinessActor } from '../../../authz'
 import { resolveCurrentAgentAuthority } from '../../capabilityExecution/callLifecycle/agentCallAuthority'
 import { resolveCanonicalAgentContext } from '../../authority/canonicalAgent/authority'
@@ -86,10 +88,13 @@ async function ownerPage(ctx: QueryCtx, page: PaginationResult<Doc<'chatThreads'
 export async function resolveOwnerChatActor(ctx: Pick<QueryCtx, 'auth' | 'db'> | MutationCtx): Promise<TurnActor | null> {
   const owner = await resolveBusinessActor(ctx)
   if (owner.kind !== 'authenticated_owner') throw new Error('unauthenticated')
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
+  if (deploymentEnvironment === undefined) return null
   const rows = await ctx.db.query('agentAccessPrincipals')
     .withIndex('by_ownerId_and_lifecycle', q => q
       .eq('ownerId', owner.canonicalAccountRef).eq('lifecycle', 'active')).take(100)
-  const matches = rows.filter(row => row.applicationRef === 'ae-owner-chat')
+  const matches = rows.filter(row => row.applicationRef === 'ae-owner-chat'
+    && row.environment === deploymentEnvironment)
   if (matches.length !== 1) return null
   const [row] = matches
   if (row === undefined || row.authorityMode !== 'spending_policy') return null

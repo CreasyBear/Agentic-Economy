@@ -298,6 +298,7 @@ export function createUserCode(): string {
 export async function beginDeviceGrant(
   store: AgentAccessOAuthStore,
   input: Readonly<{
+    environment: AgentAccessEnvironment | undefined
     client: AgentAccessOAuthClient
     requestedScopes: readonly string[]
     requestedAccess?: AgentAccessOAuthRequestedAccess
@@ -306,8 +307,9 @@ export async function beginDeviceGrant(
 ): Promise<AgentAccessOAuthTransition<AgentAccessOAuthCreatedDeviceGrant>> {
   if (!input.client.grantTypes.includes('urn:ietf:params:oauth:grant-type:device_code')) return { kind: 'refused', reason: 'invalid_client' }
   const scopes = normalizeRequestedScopes(input.requestedScopes.join(' '))
-  if (scopes === undefined || scopes.offlineAccess) return { kind: 'refused', reason: 'invalid_scope' }
-  const requestedAccess = normalizeOAuthRequestedAccess(input.requestedAccess)
+  if (scopes === undefined || scopes.offlineAccess
+    || (input.environment === 'production' && scopes.mode === 'unrestricted_test_only')) return { kind: 'refused', reason: 'invalid_scope' }
+  const requestedAccess = normalizeOAuthRequestedAccess(input.requestedAccess, input.environment)
   if (requestedAccess === undefined
     || (scopes.profile === 'provider' && requestedAccess.toolAccess !== 'all_admitted')) {
     return { kind: 'refused', reason: 'invalid_scope' }
@@ -337,6 +339,7 @@ export async function beginDeviceGrant(
 export async function beginAuthorizationCodeGrant(
   store: AgentAccessOAuthStore,
   input: Readonly<{
+    environment: AgentAccessEnvironment | undefined
     client: AgentAccessOAuthClient
     redirectUri: string
     requestedScopes: readonly string[]
@@ -352,9 +355,11 @@ export async function beginAuthorizationCodeGrant(
   if (input.codeChallenge.trim().length === 0 || input.codeChallengeMethod !== 'S256') return { kind: 'refused', reason: 'invalid_pkce' }
   if (input.ownerId.trim().length === 0) return { kind: 'refused', reason: 'owner_required' }
   const scopes = normalizeRequestedScopes(input.requestedScopes.join(' '))
-  if (scopes === undefined) return { kind: 'refused', reason: 'invalid_scope' }
+  if (scopes === undefined
+    || (input.environment === 'production' && scopes.mode === 'unrestricted_test_only')) return { kind: 'refused', reason: 'invalid_scope' }
   const requestedAccess = normalizeOAuthRequestedAccess(
     input.requestedAccess,
+    input.environment,
     scopes.offlineAccess ? AGENT_ACCESS_OAUTH_REFRESH_FAMILY_TTL_SECONDS : undefined,
   )
   if (requestedAccess === undefined
@@ -385,14 +390,17 @@ export async function beginAuthorizationCodeGrant(
 
 function normalizeOAuthRequestedAccess(
   requestedAccess: AgentAccessOAuthRequestedAccess | undefined,
+  environment: AgentAccessEnvironment | undefined,
   defaultExpiresInSeconds = AGENT_ACCESS_KEY_TTL_SECONDS,
 ): AgentAccessOAuthRequestedAccess | undefined {
+  if (environment !== 'sandbox' && environment !== 'production') return undefined
   const source = requestedAccess ?? {
-    environment: 'sandbox' as const,
+    environment,
     toolAccess: 'all_admitted' as const,
     toolRefs: [],
     expiresInSeconds: defaultExpiresInSeconds,
   }
+  if (source.environment !== environment) return undefined
   const selection = normalizeAgentAccessToolSelection(source)
   return selection === undefined ? undefined : {
     ...source,
@@ -432,6 +440,7 @@ export async function readGrantForConsent(
 export async function approveGrant(
   store: AgentAccessOAuthStore,
   input: Readonly<{
+    environment: AgentAccessEnvironment | undefined
     grantRef?: string
     userCode?: string
     ownerId: string
@@ -453,6 +462,12 @@ export async function approveGrant(
   if (grant.ownerId !== input.ownerId) return { kind: 'refused', reason: 'owner_mismatch' }
   const requested = normalizeRequestedScopes(grant.requestedScopes.join(' '))
   if (requested === undefined) return { kind: 'refused', reason: 'invalid_scope' }
+  if ((input.environment !== 'sandbox' && input.environment !== 'production')
+    || grant.requestedAccess.environment !== input.environment
+    || grant.approvedAccess.environment !== input.environment
+    || (input.environment === 'production' && requested.mode === 'unrestricted_test_only')) {
+    return { kind: 'refused', reason: 'invalid_grant' }
+  }
   if (input.authorityMode !== undefined && input.authorityMode !== requested.mode) {
     return { kind: 'refused', reason: 'invalid_scope' }
   }

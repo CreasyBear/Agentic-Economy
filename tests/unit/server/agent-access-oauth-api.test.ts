@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
 import {
@@ -34,6 +34,8 @@ import {
 import type { AgentAccessOAuthRefreshStore } from '@/lib/server/agent-access-oauth-store'
 
 const allTools = { toolAccess: 'all_admitted' as const, toolRefs: [] as const }
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
 const toolRefA = `operation:v1:${'a'.repeat(64)}`
 const toolRefB = `operation:v1:${'b'.repeat(64)}`
 
@@ -110,6 +112,55 @@ const productionRequestedAccess = {
 type OAuthIssueInput = Parameters<NonNullable<OAuthApiOptions['issueKey']>>[0]
 
 describe('Customer Request OAuth HTTP adapter', () => {
+  it.each([
+    ['production', 'sandbox'], ['development', 'production'], [undefined, 'sandbox'], ['invalid', 'production'],
+  ] as const)('refuses device and code grants outside declared %s before insertion', async (deployment, environment) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    const store = storeFixture()
+    await store.insertClient(defaultOAuthClientFixture('client-local', { grantTypes: ['authorization_code', 'urn:ietf:params:oauth:grant-type:device_code'] }))
+    const options = { store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) }
+    const authorizationDetails = JSON.stringify([{ type: 'agentic_economy_market_tools', environment, expires_in_seconds: 3_600 }])
+    const device = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+      client_id: 'client-local', scope: 'market_tools:call customer_requests:read_only', authorization_details: authorizationDetails,
+    }), options)
+    expect(device.status).toBe(400)
+    const url = new URL('http://localhost/oauth/authorize')
+    url.search = new URLSearchParams({
+      client_id: 'client-local', redirect_uri: 'http://localhost/callback', response_type: 'code', state: 'state',
+      code_challenge: 'challenge', code_challenge_method: 'S256', scope: 'market_tools:call customer_requests:read_only',
+      authorization_details: authorizationDetails,
+    }).toString()
+    expect((await handleOAuthAuthorizeGet(new Request(url), options)).status).toBe(400)
+    expect(store.grants.size).toBe(0)
+  })
+
+  it('uses production for an OAuth request without authorization details', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const store = storeFixture()
+    await store.insertClient(defaultOAuthClientFixture())
+    const response = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+      client_id: 'client-local', scope: 'market_tools:call customer_requests:read_only',
+    }), { store, now: () => 1_000 })
+    expect(response.status).toBe(200)
+    expect([...store.grants.values()][0]?.requestedAccess.environment).toBe('production')
+  })
+
+  it('refuses a stored opposite-environment grant before reserving consent or issuing a key', async () => {
+    const store = storeFixture()
+    await store.insertGrant(defaultOAuthGrantFixture('device:before-cutover'))
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const reserveConsent = vi.fn()
+    const issueKey = vi.fn()
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: 'device:before-cutover', expected_grant_revision: '1', expected_target_revision: '1',
+      decision: 'approve', authority_mode: 'read_only', connection_target: 'new_agent',
+    }), { store, authObject: strictAuthObject, reserveConsent, issueKey, now: () => 1_000, canonicalBaseUrl: 'http://localhost' })
+    expect(response.status).toBe(400)
+    expect(reserveConsent).not.toHaveBeenCalled()
+    expect(issueKey).not.toHaveBeenCalled()
+    expect(store.grants.get('device:before-cutover')?.status).toBe('pending')
+  })
+
   it('normalizes exact Tool selection and rejects partial or malformed authorization details', () => {
     const detail = (selection: Record<string, unknown> = {}) => JSON.stringify([{
       type: 'agentic_economy_market_tools',
@@ -503,6 +554,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
 
   it('persists the same requested access through device and authorization-code grants', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-details-device', clientName: 'Details device', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     await store.insertClient({ clientId: 'client-details-code', clientName: 'Details code', redirectUris: ['http://localhost/callback'], grantTypes: ['authorization_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
@@ -876,6 +928,28 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(revoked).toEqual(['ak_access_1'])
   })
 
+  it.each(['claimed', 'recovered'] as const)('does not deliver or rotate a %s refresh family from the opposite environment', async (kind) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const store = storeFixture()
+    await store.insertClient(defaultOAuthClientFixture('client-local', { grantTypes: ['authorization_code', 'refresh_token'] }))
+    const family = refreshFamilyFixture({ clientId: 'client-local', environment: 'sandbox' })
+    const issueRefreshKey = vi.fn()
+    const getSecret = vi.fn()
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'refresh_token', client_id: 'client-local', refresh_token: 'old-refresh',
+    }), {
+      store, now: () => 10_000, issueRefreshKey, getSecret,
+      refreshStore: refreshStoreFixture({
+        claimRefreshFamily: async () => kind === 'claimed'
+          ? { kind, family, claimRef: 'claimed-before-cutover' }
+          : { kind, family },
+      }),
+    })
+    expect(response.status).toBe(400)
+    expect(issueRefreshKey).not.toHaveBeenCalled()
+    expect(getSecret).not.toHaveBeenCalled()
+  })
+
   it('rejects a refresh from a compromised inactive family before successor key issuance', async () => {
     const now = 12_000
     const oldRefreshToken = 'compromised-old-refresh-token'
@@ -1212,6 +1286,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
 
   it('renders persisted production controls and the production zero default truthfully', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-production-consent', clientName: 'Production assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['authorization_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     const options = { store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) }
@@ -1306,6 +1381,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       ['device:production-zero', 'approval_required'],
       ['device:production-bounded', 'spending_policy'],
     ] as const) {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', grantRef === 'device:sandbox-issuance' ? 'development' : 'production')
       const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: grantRef, expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: authorityMode, connection_target: 'new_agent' }), options)
       expect(response.status).toBe(200)
     }
@@ -1344,6 +1420,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
 
   it('does not issue production unrestricted_test_only or invalid persisted access', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const store = storeFixture()
     await store.insertGrant(defaultOAuthGrantFixture('device:full-yolo', {
       requestedScopes: ['market_tools:call', 'customer_requests:unrestricted_test_only'],
@@ -1372,10 +1449,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
     }
     const unrestrictedTestOnly = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:full-yolo', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'unrestricted_test_only', connection_target: 'new_agent' }), options)
     const invalid = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:invalid-access', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'approval_required', connection_target: 'new_agent' }), options)
-    expect(unrestrictedTestOnly.status).toBe(202)
+    expect(unrestrictedTestOnly.status).toBe(400)
     expect(invalid.status).toBe(202)
     expect(issueCount).toBe(0)
-    expect(store.grants.get('device:full-yolo')?.status).toBe('issuing')
+    expect(store.grants.get('device:full-yolo')?.status).toBe('pending')
     expect(store.grants.get('device:invalid-access')?.status).toBe('issuing')
   })
 

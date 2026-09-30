@@ -1,8 +1,9 @@
 import { v, type ObjectType } from 'convex/values'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import { agentAccessPolicyValue } from '@/modules/agent-access/public'
-import type { MutationCtx } from '../../../_generated/server'
+import { env, type MutationCtx } from '../../../_generated/server'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { prepareCredentialReplacementCore } from '../principals/replacement'
 import { transitionCredentialReplacementCore } from '../principals/replacementTransition'
@@ -70,6 +71,13 @@ export async function createRefreshFamilyHandler(
   }
   const current = await resolveRefreshCanonicalMaterial(ctx, args.keyId)
   if (current === null) return { kind: 'conflict' as const, code: 'canonical_binding_invalid' as const }
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
+  if (deploymentEnvironment === undefined
+    || current.environment !== deploymentEnvironment
+    || oauthGrant.requestedAccess.environment !== deploymentEnvironment
+    || oauthGrant.approvedAccess.environment !== deploymentEnvironment) {
+    return { kind: 'conflict' as const, code: 'canonical_binding_invalid' as const }
+  }
   const familyRef = canonicalDigest({
     format: 'agent-access-oauth-refresh-family:v1',
     grantRef: args.grantRef,
@@ -146,6 +154,7 @@ export async function claimRefreshFamilyHandler(
         ? { kind: 'recovered' as const, family: refreshFamilyFromDocument(family) }
         : await revokeRefreshReuse(ctx, family, args.now, args.correlationId)
     }
+    if (family.environment !== deploymentPaymentEnvironment(env)) return { kind: 'invalid_grant' as const }
     const conflict = await ctx.db.query('agentAccessOAuthRefreshTokens')
       .withIndex('by_tokenHash', (query) => query.eq('tokenHash', args.successorTokenHash)).unique()
     if (conflict !== null) return { kind: 'invalid_grant' as const }
@@ -191,6 +200,7 @@ export async function claimRefreshFamilyHandler(
     }
     if (token.claimExpiresAt !== undefined && token.claimExpiresAt > args.now) return { kind: 'busy' as const }
   }
+  if (family.environment !== deploymentPaymentEnvironment(env)) return { kind: 'invalid_grant' as const }
   const successor = await ctx.db.query('agentAccessOAuthRefreshTokens')
     .withIndex('by_tokenHash', (query) => query.eq('tokenHash', args.successorTokenHash)).unique()
   if (successor !== null) return { kind: 'invalid_grant' as const }

@@ -3,6 +3,7 @@ import {
   AGENT_ACCESS_MIN_TTL_SECONDS,
 } from '@/modules/agent-access/agent-access'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   promoteAgentCredentialReplacement,
   recordAgentProviderRevocation,
@@ -150,6 +151,10 @@ export async function exchangeRefreshToken(form: URLSearchParams, request: Reque
   }
 
   const family = claimed.family
+  if (deploymentPaymentEnvironment(process.env) !== family.environment
+    || (family.environment === 'production' && family.authorityMode === 'unrestricted_test_only')) {
+    return oauthError('invalid_grant', 400)
+  }
   if (!refreshScopeMatches(form.get('scope'), family)) {
     await refreshStore.revokeRefreshFamily({ tokenHash, clientId, now, reason: 'scope_expansion_attempt' }).catch(() => {})
     return oauthError('invalid_scope', 400)
@@ -263,6 +268,10 @@ async function deliverClaimedGrant(
   options: OAuthApiOptions,
 ): Promise<Response> {
   if (claimed.kind !== 'ok') return oauthTransitionError(claimed)
+  const environment = deploymentPaymentEnvironment(process.env)
+  if (environment === undefined
+    || claimed.value.grant.requestedAccess.environment !== environment
+    || claimed.value.grant.approvedAccess.environment !== environment) return oauthError('invalid_grant', 400)
   const keyId = claimed.value.grant.keyId
   if (keyId === undefined) return oauthError('invalid_grant', 400)
   const firstDelivery = claimed.value.grant.status !== 'consumed'

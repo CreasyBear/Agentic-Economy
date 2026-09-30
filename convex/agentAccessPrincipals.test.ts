@@ -38,6 +38,9 @@ type RegisterResult = Readonly<Record<string, unknown>>
 const registerIssuedBinding = makeFunctionReference<'mutation', RegisterArgs, RegisterResult>(
   'agentAccessPrincipals:registerIssuedAgentBindingForServer',
 )
+const readLegacyOwnerChatPrincipal = makeFunctionReference<'query', Record<string, never>, string | null>(
+  'agentAccessPrincipals:readLegacyOwnerChatPrincipal',
+)
 const prepareReplacement = makeFunctionReference<'mutation', AgentCredentialReplacementRegistration & { serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
   'agentAccessPrincipals:prepareCredentialReplacementForServer',
 )
@@ -128,6 +131,54 @@ describe('issued agent binding', () => {
     vi.useRealTimers()
     if (previousKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousKey
+  })
+
+  it('finds only this owner’s historical sandbox chat grant, including after revocation', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    const other = backend.withIdentity(identity('user_other'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    await other.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    expect(await owner.query(readLegacyOwnerChatPrincipal, {})).toBeNull()
+
+    const issuanceKey = 'owner-chat-spend-user_owner'
+    const input = {
+      ...bindingInput(),
+      issuanceKey,
+      grantRef: issuedAgentGrantRef('user_owner', issuanceKey),
+      applicationRef: 'ae-owner-chat',
+    }
+    await expect(owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) }))
+      .resolves.toMatchObject({ kind: 'recorded' })
+    const grant = await backend.run(ctx => ctx.db.query('agentAccessGrants')
+      .withIndex('by_grantRef', query => query.eq('grantRef', input.grantRef)).unique())
+    expect(grant).not.toBeNull()
+    expect(await owner.query(readLegacyOwnerChatPrincipal, {})).toBe(grant?.principalId)
+    expect(await other.query(readLegacyOwnerChatPrincipal, {})).toBeNull()
+
+    if (grant === null) return
+    const command = { principalRef: grant.principalId, correlationRef: 'corr-legacy-chat-cleanup' }
+    const serviceAuth = await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', command)
+    const first = await owner.mutation(disconnectAgentLifecycle, { ...command, serviceAuth })
+    expect(first).toMatchObject({ kind: 'completed', principalRef: grant.principalId })
+    const [target] = first.providerTargets as Array<{ credentialRef: string; providerCredentialId: string }>
+    if (target === undefined) throw new Error('legacy_provider_target_missing')
+    expect(await owner.query(readLegacyOwnerChatPrincipal, {})).toBe(grant.principalId)
+    const retryCommand = { principalRef: grant.principalId, correlationRef: 'corr-legacy-chat-retry' }
+    const retryAuth = await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', retryCommand)
+    await expect(owner.mutation(disconnectAgentLifecycle, { ...retryCommand, serviceAuth: retryAuth }))
+      .resolves.toMatchObject({ kind: 'replayed', providerTargets: [target] })
+    const provider = { ...target, principalRef: grant.principalId, correlationRef: command.correlationRef, outcome: 'revoked' as const }
+    await expect(owner.mutation(recordProviderRevocation, {
+      ...provider,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', provider),
+    })).resolves.toMatchObject({ kind: 'completed' })
+    await expect(owner.mutation(disconnectAgentLifecycle, { ...retryCommand, serviceAuth: retryAuth }))
+      .resolves.toMatchObject({ kind: 'replayed', providerTargets: [] })
+    await backend.run(ctx => ctx.db.patch(grant._id, { lifecycle: 'revoked' }))
+    expect(await owner.query(readLegacyOwnerChatPrincipal, {})).toBe(grant.principalId)
+    await backend.run(ctx => ctx.db.patch(grant._id, { environment: 'production' }))
+    expect(await owner.query(readLegacyOwnerChatPrincipal, {})).toBeNull()
   })
 
   it('atomically creates a first-class agent under the authenticated owner account', async () => {
