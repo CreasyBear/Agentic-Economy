@@ -39,6 +39,7 @@ export type PersonalAccountExportRead = Readonly<{
     callFailureSpike: boolean
     invoiceReady: boolean
     teamMembershipChanged: boolean
+    agentApprovalRequested: boolean
     revision: number
     updatedAt: number | null
   }>[]

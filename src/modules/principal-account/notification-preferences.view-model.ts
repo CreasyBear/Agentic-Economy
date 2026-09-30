@@ -1,7 +1,5 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 
-export const LOW_CREDIT_THRESHOLD_CENTS = [1000, 2500, 5000] as const
-
 export type NotificationPreferencesView = Readonly<{
   lowCreditBalance: boolean
   lowCreditThresholdCents: number
@@ -9,6 +7,7 @@ export type NotificationPreferencesView = Readonly<{
   callFailureSpike: boolean
   invoiceReady: boolean
   teamMembershipChanged: boolean
+  agentApprovalRequested: boolean
   revision: number
 }>
 
@@ -19,15 +18,11 @@ export type NotificationPreferencePatch = Readonly<{
   callFailureSpike?: boolean
   invoiceReady?: boolean
   teamMembershipChanged?: boolean
+  agentApprovalRequested?: boolean
   expectedRevision: number
 }>
 
-export type PreferenceSwitchKey =
-  | 'lowCreditBalance'
-  | 'spendCapWarning'
-  | 'callFailureSpike'
-  | 'invoiceReady'
-  | 'teamMembershipChanged'
+export type PreferenceSwitchKey = 'agentApprovalRequested'
 
 export type NotificationUpdateDiagnostic = Rule4Diagnostic
 
@@ -38,6 +33,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferencesView = {
   callFailureSpike: true,
   invoiceReady: true,
   teamMembershipChanged: true,
+  agentApprovalRequested: true,
   revision: 0,
 }
 
@@ -52,9 +48,5 @@ export const PREFERENCE_SWITCHES: ReadonlyArray<{
   label: string
   description: string
 }> = [
-  { key: 'lowCreditBalance', label: 'Email when credit balance is low', description: 'Know when your balance reaches the threshold below.' },
-  { key: 'spendCapWarning', label: 'Email when spend cap is reached', description: 'Get a notice when an Agent reaches its spending limit.' },
-  { key: 'callFailureSpike', label: 'Email when calls fail repeatedly', description: 'Catch repeated Tool failures before they interrupt work.' },
-  { key: 'invoiceReady', label: 'Email when a tax invoice or statement is ready', description: 'Receive a notice when a new billing document is available.' },
-  { key: 'teamMembershipChanged', label: 'Email when team membership changes', description: 'Keep track of invitations and role changes.' },
+  { key: 'agentApprovalRequested', label: 'Email when an Agent needs your approval', description: 'Get an email when an Agent is waiting for you to approve a request.' },
 ]

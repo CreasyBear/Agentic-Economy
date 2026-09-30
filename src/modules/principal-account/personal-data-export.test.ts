@@ -47,6 +47,7 @@ const personal = {
     callFailureSpike: true,
     invoiceReady: true,
     teamMembershipChanged: true,
+    agentApprovalRequested: true,
     revision: 4,
     updatedAt: 4,
   }],

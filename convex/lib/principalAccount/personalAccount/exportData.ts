@@ -45,6 +45,7 @@ export const exportUserDataResult = v.object({
       callFailureSpike: v.boolean(),
       invoiceReady: v.boolean(),
       teamMembershipChanged: v.boolean(),
+      agentApprovalRequested: v.boolean(),
       revision: v.number(),
       updatedAt: v.union(v.null(), v.number()),
     })),
@@ -120,6 +121,7 @@ export const exportUserDataHandler = async (ctx: QueryCtx) => {
         callFailureSpike: row.callFailureSpike,
         invoiceReady: row.invoiceReady,
         teamMembershipChanged: row.teamMembershipChanged,
+        agentApprovalRequested: row.agentApprovalRequested ?? true,
         revision: row.revision,
         updatedAt: row.updatedAt,
       })))

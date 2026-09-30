@@ -122,6 +122,7 @@ export const userNotificationPreferenceValue = v.object({
   callFailureSpike: v.boolean(),
   invoiceReady: v.boolean(),
   teamMembershipChanged: v.boolean(),
+  agentApprovalRequested: v.optional(v.boolean()),
   revision: v.number(),
   updatedAt: v.number(),
   lastCorrelationRef: v.string(),
@@ -135,6 +136,7 @@ export const notificationEventKindValue = v.union(
   v.literal('call_failure_spike'),
   v.literal('invoice_ready'),
   v.literal('team_membership_changed'),
+  v.literal('agent_approval_requested'),
 )
 
 export const notificationDeliveryStateValue = v.union(
@@ -154,6 +156,9 @@ export const notificationDeliveryValue = v.object({
   suppressCode: v.optional(v.string()),
   vendorMessageId: v.optional(v.string()),
   vendorCode: v.optional(v.string()),
+  attemptCount: v.optional(v.number()),
+  nextAttemptAt: v.optional(v.number()),
+  lastFailureCode: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -264,7 +269,8 @@ export const accountTables = {
       'eventKind',
       'sourceEventRef',
     ])
-    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
+    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
+    .index('by_state_and_nextAttemptAt', ['state', 'nextAttemptAt']),
   principalNotificationEmails: defineTable(principalNotificationEmailValue)
     .index('by_principalRef', ['principalRef']),
 } as const

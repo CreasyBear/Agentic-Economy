@@ -28,6 +28,7 @@ export const readPreferencesResult = v.object({
   callFailureSpike: v.boolean(),
   invoiceReady: v.boolean(),
   teamMembershipChanged: v.boolean(),
+  agentApprovalRequested: v.boolean(),
   revision: v.number(),
   updatedAt: v.union(v.number(), v.null()),
   isVirtualDefault: v.boolean(),
@@ -40,6 +41,7 @@ export const updatePreferencesArgs = {
   callFailureSpike: v.optional(v.boolean()),
   invoiceReady: v.optional(v.boolean()),
   teamMembershipChanged: v.optional(v.boolean()),
+  agentApprovalRequested: v.optional(v.boolean()),
   expectedRevision: v.number(),
   correlationRef: v.string(),
   idempotencyRef: v.string(),
@@ -56,6 +58,7 @@ type PreferenceFields = Readonly<{
   callFailureSpike: boolean
   invoiceReady: boolean
   teamMembershipChanged: boolean
+  agentApprovalRequested: boolean
 }>
 
 const VIRTUAL_DEFAULT_PREFERENCE_FIELDS: PreferenceFields = {
@@ -65,6 +68,7 @@ const VIRTUAL_DEFAULT_PREFERENCE_FIELDS: PreferenceFields = {
   callFailureSpike: true,
   invoiceReady: true,
   teamMembershipChanged: true,
+  agentApprovalRequested: true,
 }
 
 function validateCorrelationRef(value: string): void {
@@ -141,6 +145,7 @@ function preferenceFieldsFromRow(row: Doc<'userNotificationPreferences'>): Prefe
     callFailureSpike: row.callFailureSpike,
     invoiceReady: row.invoiceReady,
     teamMembershipChanged: row.teamMembershipChanged,
+    agentApprovalRequested: row.agentApprovalRequested ?? true,
   }
 }
 
@@ -153,6 +158,7 @@ function patchMatchesExisting(
     callFailureSpike?: boolean
     invoiceReady?: boolean
     teamMembershipChanged?: boolean
+    agentApprovalRequested?: boolean
   }>,
 ): boolean {
   if (args.lowCreditBalance !== undefined && args.lowCreditBalance !== existing.lowCreditBalance) {
@@ -179,6 +185,12 @@ function patchMatchesExisting(
   ) {
     return false
   }
+  if (
+    args.agentApprovalRequested !== undefined
+    && args.agentApprovalRequested !== (existing.agentApprovalRequested ?? true)
+  ) {
+    return false
+  }
   return true
 }
 
@@ -191,6 +203,7 @@ function mergePreferencePatch(
     callFailureSpike?: boolean
     invoiceReady?: boolean
     teamMembershipChanged?: boolean
+    agentApprovalRequested?: boolean
   }>,
 ): PreferenceFields {
   return {
@@ -200,6 +213,7 @@ function mergePreferencePatch(
     callFailureSpike: args.callFailureSpike ?? base.callFailureSpike,
     invoiceReady: args.invoiceReady ?? base.invoiceReady,
     teamMembershipChanged: args.teamMembershipChanged ?? base.teamMembershipChanged,
+    agentApprovalRequested: args.agentApprovalRequested ?? base.agentApprovalRequested,
   }
 }
 
@@ -245,6 +259,7 @@ export async function updatePreferencesHandler(
     spendCapWarning?: boolean
     callFailureSpike?: boolean
     invoiceReady?: boolean
+    agentApprovalRequested?: boolean
     teamMembershipChanged?: boolean
     expectedRevision: number
     correlationRef: string
