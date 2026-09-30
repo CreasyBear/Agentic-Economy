@@ -233,9 +233,10 @@ export async function reserveHandler(
       grantRef: args.grantRef, grantGeneration: normalizedGrant.generation,
     }, Date.now())
     if (paymentAccess.kind === 'refused') return {
-      kind: 'refused', code: 'operation_not_ready', retryable: false,
+      kind: 'refused', code: 'operation_not_ready', retryable: paymentAccess.code === 'payments_not_ready',
       nextAction: paymentAccess.code === 'payments_paused'
         ? 'Paid Tool purchases are temporarily paused. You can keep searching and comparing Tools.'
+        : paymentAccess.code === 'payments_not_ready' ? 'Paid Tool purchases are temporarily unavailable. You can keep searching and comparing Tools.'
         : 'Paid Tool purchases are currently available to Admins only. You can keep searching and comparing Tools.',
     }
   }

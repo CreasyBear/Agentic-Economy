@@ -856,6 +856,33 @@ describe('Package 4 official Formance boundary', () => {
     expect(requests[0]?.headers.get('CF-Access-Client-Secret')).toBe('access-client-secret')
   })
 
+  it('keeps the operation deadline active while the SDK reads a stalled response body', async () => {
+    const controller = new AbortController()
+    let headersReceived!: () => void
+    const received = new Promise<void>(resolve => { headersReceived = resolve })
+    const requests: Request[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      const body = new ReadableStream<Uint8Array>({ start(stream) {
+        stream.enqueue(new TextEncoder().encode('{'))
+        request.signal.addEventListener('abort', () => stream.error(request.signal.reason), { once: true })
+      } })
+      headersReceived()
+      return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    const context = createFormanceContext({ environment: 'sandbox', gatewayUrl: 'http://127.0.0.1:8080',
+      ledger: 'sandbox', requestTimeoutMs: 100 }, { signal: controller.signal })
+    const result = context.sdk.getVersions({ retries: { strategy: 'none' } })
+    // Attach the rejection assertion before cancelling so asynchronous failures are observed.
+    const assertion = expect(result).rejects.toThrow()
+    await received
+    controller.abort(new Error('operation_deadline'))
+    await assertion
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.signal.aborted).toBe(true)
+  })
+
   it('refuses a healthy v2.4.12 Ledger after the approved version advances', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({

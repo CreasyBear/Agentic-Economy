@@ -53,6 +53,7 @@ export const chatRecoveryReasons = [
   'treasury_capacity_unavailable',
   'payments_paused',
   'payments_admins_only',
+  'payments_not_ready',
   'pricing_setup_required',
   'commercial_policy_unavailable',
   'inspection_unavailable',

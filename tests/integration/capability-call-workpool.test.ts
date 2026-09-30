@@ -51,6 +51,7 @@ import {
   quoteAudAccountFunding,
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
+import { seedPaymentReadiness } from '../helpers/payment-readiness-fixture'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
@@ -545,6 +546,7 @@ describe('capability Call Workpool lifecycle', () => {
         input,
       } = await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
       await seedCommercialPolicies(backend, Date.now())
+      await seedPaymentReadiness(backend)
       const deliveries: string[] = []
       const providerRequests: Array<{ url: string; paid: boolean }> = []
       const settlementHash: Hex = `0x${'6'.repeat(64)}`
@@ -723,6 +725,7 @@ describe('capability Call Workpool lifecycle', () => {
       const { backend, published, buyer, resource, readBalance, signedAuthorizations, input } =
         await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
       await seedCommercialPolicies(backend, Date.now())
+      await seedPaymentReadiness(backend)
       const original = resource.paymentRequired
       const cases = [
         ['network', (challenge: typeof original) => ({ ...challenge, accepts: challenge.accepts.map((item) => ({ ...item, network: BASE_SEPOLIA_NETWORK })) })],

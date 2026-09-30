@@ -11,6 +11,7 @@ export const CONSEQUENCE_OPERATIONS = [
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
   'moneyTreasury:recordObservation',
+  'moneyReadiness:publish',
   'moneyTreasuryReconciliation:beginBatch',
   'moneyTreasuryReconciliation:finishBatch',
   'moneyTreasuryReconciliation:publishSnapshot',

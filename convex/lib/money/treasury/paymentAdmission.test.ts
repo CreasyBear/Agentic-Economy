@@ -2,11 +2,12 @@ import { makeFunctionReference } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { convexTestWithMarketComponents, ownerAdmin } from '../../../../tests/helpers/convex-fixtures'
 import { seedAgent, testRef } from '../../../../tests/helpers/quote-fixtures'
+import { seedPaymentReadiness } from '../../../../tests/helpers/payment-readiness-fixture'
 import { readAgentPaymentAdmission, readPaymentsAudience, type PaymentAdmissionResult } from './paymentAdmission'
 
 const ownerAccess = makeFunctionReference<'query', { environment: 'production' | 'sandbox' }, PaymentAdmissionResult | { kind: 'refused'; code: 'authentication_required' | 'environment_mismatch' }>('platformLaunch:readOwnerPaymentAccess')
 
-async function adminDelegationFixture() {
+async function adminDelegationFixture(ready = true) {
   const backend = convexTestWithMarketComponents()
   const admin = await ownerAdmin(backend, 'user_payment-root')
   const root = await backend.run(async (ctx) => {
@@ -37,11 +38,12 @@ async function adminDelegationFixture() {
     })
   })
   const input = { environment: 'production' as const, accountRef: root.accountRef, grantRef: agent.grant.grantRef, grantGeneration: agent.grant.generation }
+  if (ready) await seedPaymentReadiness(backend)
   return { backend, admin, root, rootGrantRef, input }
 }
 
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 describe('live payment audience admission', () => {
   it('defaults production to Admins and development to everyone', async () => {
@@ -91,7 +93,7 @@ describe('live payment audience admission', () => {
   })
 
   it('reads pause for both canonical Agent and interactive owner admission', async () => {
-    const fixture = await adminDelegationFixture()
+    const fixture = await adminDelegationFixture(false)
     await fixture.backend.run(async (ctx) => {
       const row = await ctx.db.query('platformLaunch').withIndex('by_environment', (q) => q.eq('environment', 'production')).unique()
       if (row === null) throw new Error('launch_missing')
@@ -109,4 +111,30 @@ describe('live payment audience admission', () => {
     })
     expect(await fixture.admin.query(ownerAccess, { environment: 'production' })).toEqual({ kind: 'refused', code: 'payments_admins_only' })
   })
+
+  it.each(['missing', 'failed', 'expired', 'configuration_rotated'] as const)(
+    'refuses both production Agent and owner spending for %s evidence even when audience is everyone', async fault => {
+      const fixture = await adminDelegationFixture(false)
+      await fixture.backend.run(async ctx => {
+        const launch = await ctx.db.query('platformLaunch').withIndex('by_environment', q => q.eq('environment', 'production')).unique()
+        if (launch === null) throw new Error('launch_missing')
+        await ctx.db.patch(launch._id, { paymentsOpenTo: 'everyone' })
+      })
+      if (fault === 'failed') {
+        const failed = { kind: 'failed' as const, code: 'formance_access_unavailable' }
+        await seedPaymentReadiness(fixture.backend, { checks: { web_configuration: failed, formance: failed,
+          cdp_custody: failed, base_rpc: failed, reference_rate: failed, sanctions: failed, commercial_policy: failed, treasury: failed } })
+      }
+      if (fault === 'expired' || fault === 'configuration_rotated') {
+        const evidence = await seedPaymentReadiness(fixture.backend)
+        if (fault === 'expired') vi.spyOn(Date, 'now').mockReturnValue(evidence.expiresAt)
+        else vi.stubEnv('CDP_API_KEY_SECRET', 'rotated-admission-fixture')
+      }
+      expect(await fixture.backend.run(ctx => readAgentPaymentAdmission(ctx, fixture.input, Date.now())))
+        .toEqual({ kind: 'refused', code: 'payments_not_ready' })
+      expect(await fixture.admin.query(ownerAccess, { environment: 'production' }))
+        .toEqual({ kind: 'refused', code: 'payments_not_ready' })
+      expect(await fixture.backend.run(ctx => ctx.db.query('capabilityCalls').take(1))).toEqual([])
+    },
+  )
 })

@@ -34,15 +34,13 @@ import {
   paymentPayloadFromMaterial,
   readPersistedUnsignedMaterial,
 } from './cdp-x402-payment-material'
-import { cdpX402PolicyRulesDigest, cdpX402ManagedPolicyIsExact } from './cdp-x402-payment-policy'
+import { readCdpX402CustodyAccount } from './cdp-x402-payment-policy'
 import {
-  hasPolicy,
   isExactUnsignedMaterial,
   isUnsignedMaterial,
   isSignature,
   paymentAuthorizationExpiryFromValidBefore,
   paymentIdentifier,
-  sameEvmAddress,
   supportedRequirement,
 } from './cdp-x402-payment-validation'
 
@@ -129,33 +127,9 @@ export async function createCdpEvmX402PaymentSignature(
         apiKeySecret: configuration.apiKeySecret,
         walletSecret: configuration.walletSecret,
       }) as CdpClientLike)
-    const [accountPolicy, projectPolicy] = await Promise.all([
-      cdp.policies.getPolicyById({ id: configuration.accountPolicyId }),
-      cdp.policies.getPolicyById({ id: configuration.projectPolicyId }),
-    ])
-    if (
-      accountPolicy.id.toLowerCase() !== configuration.accountPolicyId
-      || accountPolicy.scope !== 'account'
-      || projectPolicy.id.toLowerCase() !== configuration.projectPolicyId
-      || projectPolicy.scope !== 'project'
-      || cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)
-        !== configuration.policyRulesDigest
-    ) return undefined
-    account = await cdp.evm.getAccount({ name: configuration.accountName })
-    if (
-      !hasPolicy(account.policies, configuration.accountPolicyId)
-      || !hasPolicy(account.policies, configuration.projectPolicyId)
-      || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
-    ) return undefined
-    if (
-      !cdpX402ManagedPolicyIsExact(
-        accountPolicy,
-        projectPolicy,
-        account.address,
-        configuration.maxAtomic.toString(),
-        profile.aeEnvironment,
-      )
-    ) return undefined
+    const custody = await readCdpX402CustodyAccount(cdp, configuration, profile.aeEnvironment)
+    if (custody.kind !== 'ready') return undefined
+    account = { address: custody.address }
 
     required = {
       x402Version: request.challenge.x402Version,
@@ -297,31 +271,9 @@ export async function replayCdpX402PaymentSigningIntent(
         apiKeySecret: configuration.apiKeySecret,
         walletSecret: configuration.walletSecret,
       }) as CdpClientLike)
-    const [accountPolicy, projectPolicy] = await Promise.all([
-      cdp.policies.getPolicyById({ id: configuration.accountPolicyId }),
-      cdp.policies.getPolicyById({ id: configuration.projectPolicyId }),
-    ])
-    if (
-      accountPolicy.id.toLowerCase() !== configuration.accountPolicyId
-      || accountPolicy.scope !== 'account'
-      || projectPolicy.id.toLowerCase() !== configuration.projectPolicyId
-      || projectPolicy.scope !== 'project'
-      || cdpX402PolicyRulesDigest(accountPolicy, projectPolicy) !== configuration.policyRulesDigest
-    ) return undefined
-    account = await cdp.evm.getAccount({ name: configuration.accountName })
-    if (
-      !hasPolicy(account.policies, configuration.accountPolicyId)
-      || !hasPolicy(account.policies, configuration.projectPolicyId)
-      || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
-      || account.address.toLowerCase() !== signingIntent.paymentPayer
-      || !cdpX402ManagedPolicyIsExact(
-        accountPolicy,
-        projectPolicy,
-        account.address,
-        configuration.maxAtomic.toString(),
-        profile.aeEnvironment,
-      )
-    ) return undefined
+    const custody = await readCdpX402CustodyAccount(cdp, configuration, profile.aeEnvironment)
+    if (custody.kind !== 'ready' || custody.address.toLowerCase() !== signingIntent.paymentPayer) return undefined
+    account = { address: custody.address }
   } catch (cause) {
     return degradeBackend(cause, undefined, { site: 'replayCdpX402PaymentSigningIntent', reason: 'source_unavailable' })
   }

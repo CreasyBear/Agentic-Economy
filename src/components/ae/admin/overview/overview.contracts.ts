@@ -1,14 +1,7 @@
 import { ADMIN_ACCESS_REFUSED_COPY, type AdminException } from '@/lib/operator/admin-console/contracts'
-import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { AdminRecentRef } from '../object-search/object-search.contracts'
+import type { PaymentReadinessView } from '@/modules/money/payment-readiness'
 
-export type AdminConfiguredState = 'configured' | 'not_configured' | 'unavailable'
-export type AdminOverviewConfiguration = Readonly<{
-  formance: AdminConfiguredState
-  x402Custody: AdminConfiguredState
-  clerkFva: 'present' | 'absent'
-  convex: 'ok'
-}>
 export type AdminOverviewExceptionRow = Readonly<{
   id: string
   label: string
@@ -37,30 +30,18 @@ export type AdminOverviewDataState =
   | Readonly<{ kind: 'refused' }>
   | Readonly<{
       kind: 'ready'
-      configuration: AdminOverviewConfiguration
+      paymentReadiness: PaymentReadinessView | null
       recent: readonly AdminOverviewRecentRow[]
     }>
 
-export type AdminOverviewPageProps = Readonly<{ formance: AdminConfiguredState }>
-
 export const ADMIN_OVERVIEW_COPY = {
   title: 'Overview',
-  description: 'Configuration truth, exceptions, and marketplace activity.',
+  description: 'Payment readiness, exceptions, and marketplace activity.',
   adminBreadcrumb: 'Admin',
-  configurationTitle: 'Configuration',
-  configurationDescription: 'Live service presence for this deployment.',
-  formance: 'Formance',
-  x402Custody: 'x402 custody',
-  clerkFva: 'Clerk MFA claim',
-  convex: 'Convex',
-  configured: 'Configured',
-  notConfigured: 'Not configured',
-  unavailable: getStatusPresentation('unavailable').label,
+  configurationTitle: 'Payment readiness',
+  configurationDescription: 'Current evidence for opening payments in this deployment.',
   metricsUnavailable: 'Metrics unavailable. Open Metrics to try again.',
   noCompletedMetrics: 'A complete 7-day snapshot is not available. Daily records remain in Metrics.',
-  present: 'Present',
-  absent: 'Absent',
-  ok: 'OK',
   searchTitle: 'Exact-reference search',
   searchDescription: 'Find a Call, Quote, Tool version, Workspace, Agent, or Provider.',
   exceptionsTitle: 'Exception queues',

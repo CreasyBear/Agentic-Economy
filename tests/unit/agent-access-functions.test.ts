@@ -81,7 +81,7 @@ beforeEach(() => {
 })
 
 describe('owner chat environment cutover', () => {
-  it.each(['payments_paused', 'payments_admins_only'] as const)('refuses %s before legacy cleanup or issuing credentials', async (code) => {
+  it.each(['payments_paused', 'payments_admins_only', 'payments_not_ready'] as const)('refuses %s before legacy cleanup or issuing credentials', async (code) => {
     serverMocks.callSourceQuery.mockImplementation(async (reference: { name: string }) =>
       reference.name === 'platformLaunch:readOwnerPaymentAccess' ? { kind: 'refused', code } : [])
     await expect(enableOwnerChatSpendingServer()).resolves.toEqual({ kind: 'refused', code })

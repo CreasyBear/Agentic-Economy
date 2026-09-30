@@ -8,6 +8,9 @@ import {
   type FormanceContext,
 } from '../../../../src/modules/money/formance'
 export {
+  createFormanceContext,
+  readFormanceConfiguration,
+  readFormanceHealth,
   executeFormanceMoneyCommand,
   readFormanceAccountHistory,
   readFormancePeriodSpend,

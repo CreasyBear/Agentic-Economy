@@ -8,6 +8,7 @@ import { evaluateCommercialPolicyGate } from '@/modules/money/public'
 import { convexTestWithMarketComponents, createTestAgentPrincipal, publishedBusinessOwner } from '../helpers/convex-fixtures'
 import { issueBuyerAgent } from '../helpers/issued-buyer-agent'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { seedPaymentReadiness } from '../helpers/payment-readiness-fixture'
 import {
   formanceSnapshot, observeHealthyReadiness, prepareSubjects, publishCurrentTool,
   seedAgent, seedCommercialPolicies, recordTreasuryObservation, withCustodyEnvironment,
@@ -47,6 +48,7 @@ describe('production financial boundary isolation', () => {
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, tool, suffix)
     await observeHealthyReadiness(backend, sandboxTool, `${suffix}-sandbox-tool`)
+    await seedPaymentReadiness(backend)
     const input = { request: 'Perth' }
     const subjects = await prepareSubjects(backend, buyer, tool.toolRef, input, suffix)
     expect(subjects.kind).toBe('prepared') // same-world authority and financial subjects are valid
@@ -89,10 +91,16 @@ describe('production financial boundary isolation', () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
     try {
       await recordTreasuryObservation(backend, suffix, { observedAt: now - 30 * 60_000 })
-      const fresh = await withCustodyEnvironment(() => prepareSubjects(backend, buyer, tool.toolRef, { request: 'Perth' }, `${suffix}:fresh`))
+      const fresh = await withCustodyEnvironment(async () => {
+        await seedPaymentReadiness(backend)
+        return await prepareSubjects(backend, buyer, tool.toolRef, { request: 'Perth' }, `${suffix}:fresh`)
+      })
       expect(fresh.treasury).toMatchObject({ targetUnits: '9000000' })
       clock.mockReturnValue(now + 1)
-      const stale = await withCustodyEnvironment(() => prepareSubjects(backend, buyer, tool.toolRef, { request: 'Perth' }, `${suffix}:stale`))
+      const stale = await withCustodyEnvironment(async () => {
+        await seedPaymentReadiness(backend)
+        return await prepareSubjects(backend, buyer, tool.toolRef, { request: 'Perth' }, `${suffix}:stale`)
+      })
       expect(stale.treasury).toBeUndefined()
       expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').collect())).toEqual([])
       expect(await backend.run(ctx => ctx.db.query('moneyProviderObligations').collect())).toEqual([])
@@ -110,6 +118,7 @@ describe('production financial boundary isolation', () => {
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, tool, suffix)
     const input = { request: 'Perth' }
+    await seedPaymentReadiness(backend)
     const subjects = await prepareSubjects(backend, buyer, tool.toolRef, input, suffix)
     const quote = await backend.mutation(internal.capabilityQuotes.issueQuote, {
       operationKey: `${suffix}:issue`, correlationId: `${suffix}:issue`, principal: buyer.principal,

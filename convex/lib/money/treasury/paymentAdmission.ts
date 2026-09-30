@@ -1,3 +1,4 @@
+import { readPaymentReadiness } from '../readiness/store'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import type { PaymentEnvironment } from '@/lib/deployment/environment'
@@ -5,7 +6,7 @@ import { DELEGATION_MAX_ANCESTRY_GRANTS } from '@/modules/authority/delegation/p
 
 export type PaymentAdmissionResult =
   | Readonly<{ kind: 'allowed' }>
-  | Readonly<{ kind: 'refused'; code: 'payments_paused' | 'payments_admins_only' }>
+  | Readonly<{ kind: 'refused'; code: 'payments_paused' | 'payments_admins_only' | 'payments_not_ready' }>
 
 type AgentPaymentAuthority = Readonly<{
   environment: PaymentEnvironment
@@ -39,7 +40,8 @@ export async function rootIssuerIsActiveAdmin(ctx: Pick<QueryCtx, 'db'>, princip
 
 /**
  * Requires: the caller has validated canonical Agent authority; now is that admission's server timestamp.
- * Ensures: none refuses; everyone allows; admins allows only a live root issuer with an active Clerk/Admin identity.
+ * Ensures: paused refuses; production needs fresh matching readiness; audience then requires a live authorized issuer.
+ * Invariant: readiness never changes authority, and accepted Call replay stays outside this new-purchase gate.
  * Invariant: ancestor traversal is bounded, in-account, generation-pinned and cycle-free; no legacy owner token authorizes.
  * On violation: payments_admins_only, with no writes, credentials or purchase effects.
  */
@@ -50,6 +52,9 @@ export async function readAgentPaymentAdmission(
 ): Promise<PaymentAdmissionResult> {
   const audience = await readPaymentsAudience(ctx, input.environment)
   if (audience === 'none') return { kind: 'refused', code: 'payments_paused' }
+  if (input.environment === 'production' && (await readPaymentReadiness(ctx, input.environment, now)).kind !== 'ready') {
+    return { kind: 'refused', code: 'payments_not_ready' }
+  }
   if (audience === 'everyone') return { kind: 'allowed' }
   const refuse: PaymentAdmissionResult = { kind: 'refused', code: 'payments_admins_only' }
   if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(input.grantGeneration) || input.grantGeneration < 1) return refuse

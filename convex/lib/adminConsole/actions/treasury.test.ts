@@ -5,6 +5,11 @@ import type { AdminCommandWireArgs } from '../commands/contracts'
 import { parseAdminProposalCommand } from '@/components/ae/admin/actions/actions.contracts'
 import { convexTestWithMarketComponents, ownerAdmin, supportAdmin, type ConvexFixtureBackend } from '../../../../tests/helpers/convex-fixtures'
 import { withSourceWrite } from '../../../../tests/helpers/source-write-admission'
+import { seedPaymentReadiness } from '../../../../tests/helpers/payment-readiness-fixture'
+import { recordTreasuryObservation, validCustodyEnvironment } from '../../../../tests/helpers/quote-fixtures'
+import { sealTreasurySnapshot } from '@/modules/money/treasury-report'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { internal } from '../../../_generated/api'
 import { readTreasuryControlState } from './treasury'
 
 const pauseRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
@@ -85,6 +90,7 @@ describe('admin treasury controls', () => {
 
   it('requires a second owner for resume and restores only the saved audience', async () => {
     const backend = convexTestWithMarketComponents()
+    await seedResumeReadiness(backend)
     const admin = await ownerAdmin(backend, 'user_treasury-proposer')
     const approver = await ownerAdmin(backend, 'user_treasury-approver')
     await admin.mutation(pauseRef, await pauseCommand(backend, 'treasury:stop', true))
@@ -106,6 +112,7 @@ describe('admin treasury controls', () => {
 
   it('preserves an already open everyone audience through pause and resume', async () => {
     const backend = convexTestWithMarketComponents()
+    await seedResumeReadiness(backend)
     const admin = await ownerAdmin(backend, 'user_treasury-audience')
     await backend.run((ctx) => ctx.db.insert('platformLaunch', { environment: 'production', paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'admins', revision: 2, updatedAt: 1 }))
     await admin.mutation(pauseRef, await pauseCommand(backend, 'treasury:audience-stop', true))
@@ -183,3 +190,35 @@ describe('admin treasury controls', () => {
     expect(await backend.run((ctx) => ctx.db.query('platformLaunch').collect())).toEqual([])
   })
 })
+
+/** Explicit healthy evidence isolates audience/approval semantics from readiness refusals. */
+async function seedResumeReadiness(backend: ConvexFixtureBackend) {
+  for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
+  vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
+  vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '10000')
+  await recordTreasuryObservation(backend, 'admin-resume', { totalUnits: '110000', bufferUnits: '10000' })
+  const now = Date.now()
+  const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: now })
+  if (context.kind !== 'available') throw new Error(context.code)
+  const zero = { kind: 'matched' as const, checkedCount: 0, expectedUnits: '0', observedUnits: '0', differenceUnits: '0' }
+  const snapshot = sealTreasurySnapshot({
+    snapshotAt: now, environment: 'production', custodyRef: context.identity.custodyRef,
+    custodyGeneration: context.identity.custodyGeneration, custodyIdentityDigest: canonicalDigest(context.identity),
+    ledger: { kind: 'available', observedAt: now, availableUnits: '100000', committedUnits: '0', bufferUnits: '10000',
+      payments24hUnits: '0', payments7dUnits: '0', paymentBasis: 'gross_provider_payments',
+      purchasedAvailableAudUnits: '0', purchasedReservedAudUnits: '0', promotionalAvailableAudUnits: '0', promotionalReservedAudUnits: '0' },
+    chain: { kind: 'available', observedAt: now, blockTimestamp: now, blockNumber: '100',
+      blockHash: `0x${'a'.repeat(64)}`, totalUnits: '110000', caughtUp: true },
+    referenceRate: { kind: 'unavailable', code: 'not_needed_for_payment_resume' },
+    spending: { kind: 'available', observedAt: now, windowStartsAt: now - 86_400_000,
+      settledUnits: '0', liabilityUnits: '0', maximumUnits: '100000' },
+    inFlight: { kind: 'available', observedAt: now, count: 0, amountUnits: '0', oldestAt: null,
+      overdueCount: 0, overdueUnits: '0', calls: [], listedCallsComplete: true },
+    checks: { cash: { ...zero, checkedCount: 1, expectedUnits: '110000', observedUnits: '110000' },
+      settlements: zero, funding: zero, reservations: zero },
+    rawCashDifferenceUnits: '0', cashTimingAdjustmentUnits: '0', historyStartedAt: now,
+    deposits: [], depositsComplete: true, alerts: [],
+  })
+  expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })).toMatchObject({ kind: 'published' })
+  await seedPaymentReadiness(backend)
+}

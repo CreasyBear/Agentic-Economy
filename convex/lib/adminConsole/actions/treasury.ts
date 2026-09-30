@@ -1,3 +1,4 @@
+import { readPaymentReadiness } from '../../money/readiness/store'
 import { treasuryResumeRefusal } from '../../money/treasury/health'
 import type { Doc } from '../../../_generated/dataModel'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
@@ -77,6 +78,9 @@ export function paymentsPausedSpec(
       if (!treasuryCommandEnvironmentMatches(environment)) return { kind: 'refused', code: 'environment_mismatch' }
       const { launch } = await readTreasuryControlState(ctx, environment)
       if (!paused && launch.paymentsOpenTo === 'none') {
+        if (environment === 'production' && (await readPaymentReadiness(ctx, environment, Date.now())).kind !== 'ready') {
+          return { kind: 'refused', code: 'payments_not_ready' }
+        }
         const refusal = await treasuryResumeRefusal(ctx, environment, Date.now())
         if (refusal !== undefined) return { kind: 'refused', code: refusal }
       }

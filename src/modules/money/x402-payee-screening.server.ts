@@ -4,6 +4,13 @@ export type X402PayeeScreeningRequest = Readonly<Pick<X402PayeeScreeningDecision
   'network' | 'normalizedPayTo' | 'paymentUnsignedMaterialDigest' | 'typedDataDigest'
 >>
 
+const UNAVAILABLE_REASON = 'trm_tenant_contract_unavailable'
+
+/** Provider readiness cannot be inferred from a key or a manually set flag. */
+export function readX402PayeeScreeningReadiness(): Readonly<{ kind: 'unavailable'; code: string }> {
+  return { kind: 'unavailable', code: UNAVAILABLE_REASON }
+}
+
 /**
  * TRM Wallet Screening requires the tenant-entitled API contract. Public
  * Sanctions Screening is a different product and cannot provide this verdict.
@@ -19,6 +26,6 @@ export async function screenX402Payee(
     outcome: 'unavailable',
     startedAt,
     checkedAt: Date.now(),
-    reason: 'trm_tenant_contract_unavailable',
+    reason: UNAVAILABLE_REASON,
   }
 }

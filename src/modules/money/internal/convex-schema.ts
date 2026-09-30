@@ -5,6 +5,7 @@ import { x402PayeeScreeningDecisionValue, x402SpendAdmissionRefusalCodeValue } f
 import { paymentsAudienceValue, treasuryEnvironmentValue, treasuryThresholdsValue,
   treasuryChainCheckpointValue, treasuryChainObservationValue, treasuryCursorStateValue } from '../treasury'
 import { treasuryAlertCodeValue, treasurySnapshotValue } from '../treasury-report'
+import { paymentReadinessSnapshotValue } from '../payment-readiness'
 
 const currency = v.string()
 const exponent = v.number()
@@ -593,6 +594,8 @@ export const moneyTables = {
   moneyTreasurySnapshots: defineTable(treasurySnapshotValue)
     .index('by_snapshotRef', ['snapshotRef'])
     .index('by_environment_and_snapshotAt', ['environment', 'snapshotAt']),
+  moneyPaymentReadiness: defineTable(paymentReadinessSnapshotValue)
+    .index('by_environment', ['environment']),
   moneyTreasuryAlerts: defineTable({
     alertRef: identifier, environment: treasuryEnvironmentValue,
     custodyIdentityDigest: identifier, code: treasuryAlertCodeValue,

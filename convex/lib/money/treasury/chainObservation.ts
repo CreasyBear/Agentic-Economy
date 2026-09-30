@@ -51,7 +51,7 @@ export async function readTreasuryChainObservation(
     || !Number.isSafeInteger(now) || now < 0
     || targets.length < (input.environment === 'production' ? 2 : 1) || targets.length > 2
     || targets.some(target => target.protocol !== 'https:' || target.username !== '' || target.password !== '')
-    || new Set(targets.map(target => target.origin)).size !== targets.length
+    || new Set(targets.map(target => target.hostname.toLowerCase().replace(/\.$/u, ''))).size !== targets.length
     || (input.checkpoint !== undefined && (!DECIMAL.test(input.checkpoint.blockNumber)
       || !HASH.test(input.checkpoint.blockHash) || !safeUnits(input.checkpoint.balanceUnits)))) {
     return unavailable('treasury_chain_configuration_invalid')
@@ -59,14 +59,30 @@ export async function readTreasuryChainObservation(
   const dispatcher = dependencies.rpc === undefined
     ? new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } }) : undefined
   const rpc: TreasuryRpc = dependencies.rpc ?? (async (target, method, params) => {
-    if (dispatcher === undefined || !await isPublicHttpTarget(target, defaultDnsResolver)) {
-      throw new Error('treasury_rpc_target_invalid')
+    if (dispatcher === undefined) throw new Error('treasury_rpc_target_invalid')
+    // The same deadline covers DNS preflight, connection and body. Keep the
+    // preflight: native sockets can bypass the guarded lookup for IP literals.
+    const signal = AbortSignal.timeout(5_000)
+    signal.throwIfAborted()
+    let onAbort = () => {}
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(signal.reason)
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+    try {
+      if (!await Promise.race([isPublicHttpTarget(target, defaultDnsResolver), aborted])) {
+        throw new Error('treasury_rpc_target_invalid')
+      }
+    } finally {
+      signal.removeEventListener('abort', onAbort)
     }
+    // A DNS response arriving after expiry must never initiate HTTP.
+    signal.throwIfAborted()
     const response = await guardedFetch(target, {
       method: 'POST', dispatcher, redirect: 'error',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      signal: AbortSignal.timeout(5_000),
+      signal,
     })
     if (!response.ok) throw new Error('treasury_rpc_unavailable')
     const bounded = await readBoundedRequestText(response, 256 * 1024)
@@ -169,7 +185,7 @@ export async function readTreasuryChainObservation(
   } catch {
     return unavailable('treasury_chain_unavailable')
   } finally {
-    if (dispatcher !== undefined) await dispatcher.close()
+    if (dispatcher !== undefined) await dispatcher.destroy()
   }
 }
 

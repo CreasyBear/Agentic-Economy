@@ -8,6 +8,7 @@ import {
   sourceWriteKeyFamilyForScope,
 } from '@/modules/security/source-write-admission'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/convex'
 import { SCHEDULED_WORKLOAD_JOB_NAMES } from './scheduled-workloads'
 import { deploymentPaymentEnvironment, type DeploymentEnvironment, type PaymentEnvironment } from './environment'
 
@@ -53,13 +54,21 @@ const forbiddenProductionNames = Object.freeze([
   'AE_API_KEY',
 ])
 
-const requiredProduction: readonly RequirementGroup[] = [
+const sharedProduction: readonly RequirementGroup[] = [
   { scope: 'environment', code: 'deployment_environment_invalid', names: ['AE_DEPLOYMENT_ENVIRONMENT'], mode: 'all' },
   { scope: 'canonical', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL'], mode: 'all' },
   { scope: 'convex', code: 'convex_source_required', names: ['CONVEX_URL', 'VITE_CONVEX_URL'], mode: 'one-of' },
   { scope: 'convex-auth', code: 'server_function_auth_required', names: ['AE_CONVEX_SERVER_FUNCTION_TOKEN'], mode: 'all' },
   { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN', 'CLERK_WEBHOOK_SIGNING_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
+]
+
+const requiredProduction: readonly RequirementGroup[] = [
+  ...sharedProduction,
+  { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
+  { scope: 'x402-payment', code: 'x402_custody_configuration_required', names: ['AE_X402_CUSTODY_ENABLED', 'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', 'AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC'], mode: 'all' },
+  { scope: 'x402-payment', code: 'x402_rpc_configuration_required', names: ['AE_X402_RPC_URLS_JSON'], mode: 'all' },
+  { scope: 'observability', code: 'sentry_configuration_required', names: ['SENTRY_DSN', 'VITE_SENTRY_DSN', 'SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT'], mode: 'all' },
 ]
 
 const package5ControlledRequirements: readonly RequirementGroup[] = [
@@ -148,8 +157,7 @@ const optionalNames = Object.freeze([
   'AE_JEV_DISCOVERY_ENABLED',
   'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
   'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
-  'AE_SITE_URL', 'SITE_URL', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
-  'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
+  'AE_SITE_URL', 'SITE_URL', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
   'AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG',
@@ -204,6 +212,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   schemaVersion: 'ae.deployment-manifest:v1', version: 1,
   runtime: Object.freeze({ nodeMajor: 22, engine: 'nodejs22.x' }),
   configuration: Object.freeze({
+    sharedProduction: Object.freeze(sharedProduction),
     requiredProduction: Object.freeze(requiredProduction),
     controlledPackage5: Object.freeze(package5ControlledRequirements),
     conditional: Object.freeze(conditional), optional: optionalNames,
@@ -270,8 +279,10 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
     findings.push(Object.freeze({ kind, code, names: Object.freeze(sortedNames), scope }))
   }
   const envClass = resolveEnvironment(environment, options.environment, add)
-  const production = envClass === 'production'
   const paymentEnvironment = deploymentPaymentEnvironment(environment)
+  // Build/hosting mode does not choose the money world. A development deployment
+  // can use a production bundle without inheriting live credentials or policies.
+  const production = paymentEnvironment === 'production'
   if (paymentEnvironment === undefined) {
     add(
       environment.AE_DEPLOYMENT_ENVIRONMENT === undefined || environment.AE_DEPLOYMENT_ENVIRONMENT === '' ? 'missing' : 'malformed',
@@ -300,9 +311,10 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
   if (production) validatePackage5Rollout(environment, add)
+  if (production) validateProductionSentryConfiguration(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
-  validateX402Custody(environment, add)
-  validateX402RpcUrls(environment, add)
+  validateX402Custody(environment, add, production)
+  validateX402RpcUrls(environment, add, production)
 
   const convex = present(environment, 'CONVEX_URL')
   const viteConvex = present(environment, 'VITE_CONVEX_URL')
@@ -477,12 +489,53 @@ function validateProductionFormanceConfiguration(
     add('conflict', 'formance_environment_mismatch', ['AE_FORMANCE_ENVIRONMENT'], 'formance')
   }
   const gateway = present(environment, 'AE_FORMANCE_GATEWAY_URL')
-  if (gateway !== undefined && !validUrl(gateway, paymentEnvironment === 'production')) {
-    add('malformed', 'formance_gateway_invalid', ['AE_FORMANCE_GATEWAY_URL'], 'formance')
+  if (gateway !== undefined) {
+    let valid = false
+    try {
+      const url = new URL(gateway)
+      const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+      valid = url.username === '' && url.password === '' && url.search === ''
+        && url.hash === '' && url.pathname === '/'
+        && (url.protocol === 'https:' || (paymentEnvironment === 'sandbox' && loopback && url.protocol === 'http:'))
+    } catch { /* Invalid configuration is a named finding, never a raw URL diagnostic. */ }
+    if (!valid) add('malformed', 'formance_gateway_invalid', ['AE_FORMANCE_GATEWAY_URL'], 'formance')
+  }
+  const ledger = present(environment, 'AE_FORMANCE_LEDGER')
+  if (ledger !== undefined && !/^[a-z][a-z0-9-]{2,62}$/u.test(ledger)) {
+    add('malformed', 'formance_configuration_invalid', ['AE_FORMANCE_LEDGER'], 'formance')
   }
   const timeout = present(environment, 'AE_FORMANCE_REQUEST_TIMEOUT_MS')
   if (timeout !== undefined && (!/^\d+$/u.test(timeout) || Number(timeout) < 100 || Number(timeout) > 30_000)) {
     add('malformed', 'formance_timeout_invalid', ['AE_FORMANCE_REQUEST_TIMEOUT_MS'], 'formance')
+  }
+}
+function validateProductionSentryConfiguration(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  for (const name of ['SENTRY_DSN', 'VITE_SENTRY_DSN']) {
+    const value = present(environment, name)
+    if (value === undefined) continue
+    let valid = false
+    try {
+      const url = new URL(value)
+      // Sentry DSNs carry the public ingestion key in userinfo. They are not
+      // ordinary service URLs; private/password userinfo remains invalid.
+      valid = url.protocol === 'https:' && /^[A-Za-z0-9]+$/u.test(url.username)
+        && url.password === '' && url.hostname.length > 0 && url.search === ''
+        && url.hash === '' && /\/[0-9]+$/u.test(url.pathname)
+    } catch { /* Do not include the DSN or ingestion key in diagnostics. */ }
+    if (!valid) add('malformed', 'sentry_dsn_invalid', [name], 'observability')
+  }
+  for (const name of ['SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT']) {
+    if (environment[name] !== undefined && environment[name] !== 'production') {
+      add('conflict', 'sentry_environment_mismatch', [name], 'observability')
+    }
+  }
+  for (const name of ['AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY']) {
+    if (present(environment, name) === 'true') {
+      add('forbidden', 'production_observability_disabled', [name], 'observability')
+    }
   }
 }
 function validateProductionBrowserSecurity(
@@ -497,10 +550,12 @@ function validateProductionBrowserSecurity(
 function validateX402RpcUrls(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  production: boolean,
 ): void {
   const value = present(environment, 'AE_X402_RPC_URLS_JSON')
   if (value === undefined) return
   try {
+    if (value.length > 16_384) throw new Error('invalid')
     const parsed: unknown = JSON.parse(value)
     if (
       typeof parsed !== 'object'
@@ -513,18 +568,30 @@ function validateX402RpcUrls(
         || !Array.isArray(urls)
         || urls.length < 1
         || urls.length > 2
-        || urls.some((url) => typeof url !== 'string' || !validUrl(url, true))
-        || new Set(urls).size !== urls.length
+        || urls.some((value) => {
+          if (typeof value !== 'string') return true
+          const url = new URL(value)
+          return url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.hash !== ''
+        })
+        || new Set(urls.map((value: string) => new URL(value).href)).size !== urls.length
       )
     ) throw new Error('invalid')
-  } catch (cause) {
-    captureRouteException(cause, { site: 'validateX402RpcUrls' }, 'warning')
+    if (production) {
+      const urls = (parsed as Record<string, unknown>)['eip155:8453']
+      if (!Array.isArray(urls) || urls.length !== 2) throw new Error('invalid')
+      // Match the runtime's two normalized targets and treasury's distinct
+      // origins; a path, key, port or trailing-dot variation is not a second host.
+      // Different hosts are a static prerequisite, not proof of operator independence.
+      if (new Set(urls.map((value: string) => new URL(value).hostname.toLowerCase().replace(/\.$/u, ''))).size !== 2) throw new Error('invalid')
+    }
+  } catch {
     add('malformed', 'x402_rpc_urls_invalid', ['AE_X402_RPC_URLS_JSON'], 'x402-payment')
   }
 }
 function validateX402Custody(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  production: boolean,
 ): void {
   const enabled = present(environment, 'AE_X402_CUSTODY_ENABLED')
   if (enabled !== undefined && enabled !== 'true') {
@@ -536,6 +603,17 @@ function validateX402Custody(
     if (value !== undefined && value !== '' && !/^[1-9][0-9]{0,77}$/u.test(value)) {
       add('malformed', 'x402_custody_cap_invalid', [name], 'x402-payment')
     }
+  }
+  const capsValid = ['AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC']
+    .every(name => /^[1-9][0-9]{0,77}$/u.test(environment[name] ?? ''))
+  if (production && (!capsValid || cdpX402CustodyConfigurationFromEnvironment(environment) === undefined)) {
+    add('malformed', 'x402_custody_configuration_invalid', [
+      'AE_X402_CUSTODY_ENABLED', 'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET',
+      'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
+      'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID',
+      'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION',
+      'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC',
+    ], 'x402-payment')
   }
 }
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {

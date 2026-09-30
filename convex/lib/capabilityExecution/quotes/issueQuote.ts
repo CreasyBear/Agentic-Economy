@@ -120,7 +120,7 @@ export async function issueQuoteHandler(
       environment: authority.principal.environment, accountRef: authority.principal.ownerId,
       grantRef: authority.grantRef, grantGeneration: authority.grantGeneration,
     }, now)
-    if (paymentAccess.kind === 'refused') return refuse(args, paymentAccess.code, false)
+    if (paymentAccess.kind === 'refused') return refuse(args, paymentAccess.code, paymentAccess.code === 'payments_not_ready')
   }
 
   const policyGate = await readCommercialPolicyGate(ctx.db, {

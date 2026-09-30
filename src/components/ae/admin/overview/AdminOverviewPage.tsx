@@ -10,11 +10,11 @@ import { ConfigurationBanner } from './components/ConfigurationBanner'
 import { OverviewExceptionsSection } from './components/OverviewExceptionsSection'
 import { OverviewMetricsSection } from './components/OverviewMetricsSection'
 import { RecentlyViewed } from './components/RecentlyViewed'
-import { ADMIN_OVERVIEW_COPY, type AdminOverviewPageProps } from './overview.contracts'
+import { ADMIN_OVERVIEW_COPY } from './overview.contracts'
 import { useAdminOverview, useOverviewExceptions, useOverviewMetrics } from './useAdminOverview'
 
-export function AdminOverviewPage({ formance }: AdminOverviewPageProps) {
-  const data = useAdminOverview(formance)
+export function AdminOverviewPage() {
+  const data = useAdminOverview()
   const search = useAdminObjectSearch()
   if (data.kind === 'loading') return <AdminOverviewPageSkeleton />
   return (
@@ -34,7 +34,7 @@ export function AdminOverviewPage({ formance }: AdminOverviewPageProps) {
         />
       ) : (
         <div className="grid gap-section">
-          <ConfigurationBanner configuration={data.configuration} />
+          <ConfigurationBanner readiness={data.paymentReadiness} />
           <AeSection title={ADMIN_OVERVIEW_COPY.searchTitle} description={ADMIN_OVERVIEW_COPY.searchDescription}>
             <AdminObjectSearchForm state={search.state} onSubmit={(input) => void search.submit(input)} />
           </AeSection>

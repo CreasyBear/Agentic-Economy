@@ -33,6 +33,7 @@ export const quoteRefusalCode = v.union(
   v.literal('treasury_capacity_unavailable'),
   v.literal('payments_paused'),
   v.literal('payments_admins_only'),
+  v.literal('payments_not_ready'),
   v.literal('pricing_setup_required'),
   v.literal('commercial_policy_unavailable'),
   v.literal('inspection_unavailable'),

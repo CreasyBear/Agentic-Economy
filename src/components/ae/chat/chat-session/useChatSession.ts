@@ -532,6 +532,8 @@ export function useChatSession({
           } else {
             setEnableProblem(result.code === 'payments_paused'
               ? 'Paid Tool purchases are temporarily paused. You can keep searching and comparing Tools.'
+              : result.code === 'payments_not_ready'
+                ? 'Paid Tool purchases are temporarily unavailable. You can keep searching and comparing Tools.'
               : result.code === 'payments_admins_only'
                 ? 'Paid Tool purchases are currently available to Admins only. You can keep searching and comparing Tools.'
                 : 'Could not enable chat spending. Check your session and try again.')

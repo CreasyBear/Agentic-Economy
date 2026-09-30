@@ -137,6 +137,7 @@ export const ADMIN_REFUSAL_PRESENTATION = {
     copy: 'The promotional credit amount or expiry is invalid.',
     nextStep: 'Check the amount and choose a future expiry before creating a new command.',
   },
+  payments_not_ready: { certainty: 'not_applied', retry: 'new_key', copy: 'Payments are not ready to resume.', nextStep: 'Check Payment readiness in Admin overview. All checks must pass before reviewing resume again.' },
   environment_mismatch: {
     certainty: 'not_applied', retry: 'no',
     copy: 'This workspace is not in the current payment environment.',

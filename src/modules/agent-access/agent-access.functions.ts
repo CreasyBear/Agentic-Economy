@@ -470,7 +470,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
 
 type OwnerPaymentAccess =
   | Readonly<{ kind: 'allowed' }>
-  | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'environment_mismatch' | 'payments_paused' | 'payments_admins_only' }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'environment_mismatch' | 'payments_paused' | 'payments_admins_only' | 'payments_not_ready' }>
 const readOwnerPaymentAccessQuery = sourceQuery<{ environment: PaymentEnvironment }, OwnerPaymentAccess>('platformLaunch:readOwnerPaymentAccess')
 
 /** A dedicated owner-chat grant never delivers its bearer secret to the browser. */

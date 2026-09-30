@@ -9,7 +9,9 @@ import { readTreasuryControlState } from '../../../convex/lib/adminConsole/actio
 import { readAgentPaymentAdmission } from '../../../convex/lib/money/treasury/paymentAdmission'
 import { convexTestWithMarketComponents, ownerAdmin, type ConvexFixtureBackend } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
-import { observeHealthyReadiness, publishCurrentTool, seedAgent, seedCommercialPolicies, testRef, validCustodyEnvironment, recordTreasuryObservation } from '../../helpers/quote-fixtures'
+import { seedPaymentReadiness } from '../../helpers/payment-readiness-fixture'
+import { observeHealthyReadiness, publishCurrentTool, seedAgent, seedCommercialPolicies, testRef, validCustodyEnvironment, recordTreasuryObservation,
+  prepareSubjects, formanceSnapshot } from '../../helpers/quote-fixtures'
 
 const pauseRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
 
@@ -18,7 +20,7 @@ const pauseRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_pay
 // Admin role admits paid preparation. Refusal preserves launch/purchase state.
 // These tests do not substitute provider calls or native ledger evidence.
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 async function pauseCommand(
   backend: ConvexFixtureBackend,
@@ -61,7 +63,7 @@ async function rootAccount(backend: ConvexFixtureBackend, accountRef: string) {
   })
 }
 
-async function paidAuthorityFixture(suffix: string, rootIsAdmin: boolean) {
+async function paidAuthorityFixture(suffix: string, rootIsAdmin: boolean, ready = true) {
   const backend = convexTestWithMarketComponents()
   const tool = await publishCurrentTool(backend, suffix)
   await seedCommercialPolicies(backend, suffix, Date.now())
@@ -98,6 +100,7 @@ async function paidAuthorityFixture(suffix: string, rootIsAdmin: boolean) {
   })
   await backend.finishAllScheduledFunctions(() => undefined)
   await observeHealthyReadiness(backend, tool, suffix)
+  if (ready) await seedPaymentReadiness(backend)
   const paymentAuthority = { environment: 'production' as const, accountRef: tool.accountRef,
     grantRef: agent.grant.grantRef, grantGeneration: agent.grant.generation }
   const prepare = async (key: string) => await backend.mutation(internal.capabilityQuotes.prepareFinancialSubjects,
@@ -108,7 +111,7 @@ async function paidAuthorityFixture(suffix: string, rootIsAdmin: boolean) {
   const purchases = async () => await backend.run(async ctx => ({
     quotes: await ctx.db.query('capabilityQuotes').collect(), calls: await ctx.db.query('capabilityCalls').collect(),
   }))
-  return { backend, root, intermediate, parentRef, paymentAuthority, prepare, purchases }
+  return { backend, root, intermediate, parentRef, paymentAuthority, prepare, purchases, agent, tool }
 }
 
 describe('independent treasury control transaction evaluation', () => {
@@ -198,6 +201,30 @@ describe('independent treasury control transaction evaluation', () => {
 })
 
 describe('independent production paid preparation authority evaluation', () => {
+  it.each(['missing', 'failed', 'expired', 'configuration_rotated'] as const)(
+    'refuses new paid preparation for %s readiness without creating financial subjects or purchases', async fault => {
+      const fixture = await paidAuthorityFixture(`readiness-${fault === 'configuration_rotated' ? 'rotated' : fault}`, true, false)
+      if (fault === 'failed') {
+        const failed = { kind: 'failed' as const, code: 'formance_access_unavailable' }
+        await seedPaymentReadiness(fixture.backend, { checks: { web_configuration: failed, formance: failed,
+          cdp_custody: failed, base_rpc: failed, reference_rate: failed, sanctions: failed, commercial_policy: failed, treasury: failed } })
+      }
+      if (fault === 'expired' || fault === 'configuration_rotated') {
+        const evidence = await seedPaymentReadiness(fixture.backend)
+        if (fault === 'expired') vi.spyOn(Date, 'now').mockReturnValue(evidence.expiresAt)
+        else vi.stubEnv('CDP_API_KEY_SECRET', 'rotated-preparation-fixture')
+      }
+      const financialState = () => fixture.backend.run(async ctx => ({
+        quotes: await ctx.db.query('capabilityQuotes').take(10), calls: await ctx.db.query('capabilityCalls').take(10),
+        legalBindings: await ctx.db.query('moneyLegalCustomerBindings').take(10),
+        customerTaxFacts: await ctx.db.query('moneyCustomerTaxFacts').take(10),
+      }))
+      const before = await financialState()
+      expect(await fixture.prepare(`not-ready-${fault}`)).toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
+      expect(await financialState()).toEqual(before)
+    },
+  )
+
   it('an active intermediate Admin cannot substitute for the nonadmin human root issuer', async () => {
     const fixture = await paidAuthorityFixture('independent-root-role', false)
     const before = await fixture.purchases()
@@ -238,6 +265,79 @@ describe('independent production paid preparation authority evaluation', () => {
     expect(await fixture.prepare('ownership-after')).toMatchObject({ kind: 'refused' })
     expect(await fixture.purchases()).toEqual(before)
   })
+
+  it('refuses an unused paid Quote after readiness expires while replaying an accepted Call', async () => {
+    const fixture = await paidAuthorityFixture('readiness-call-replay', true, false)
+    const evidence = await seedPaymentReadiness(fixture.backend, { validityMs: 30_000 })
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(fixture.backend, fixture.agent, fixture.tool.toolRef, input, 'readiness-call-replay')
+    const issue = async (suffix: string) => {
+      const result = await fixture.backend.mutation(internal.capabilityQuotes.issueQuote, {
+        operationKey: `readiness:quote:${suffix}`, correlationId: `readiness:quote:${suffix}`,
+        principal: fixture.agent.principal, toolRef: fixture.tool.toolRef, input, formance: formanceSnapshot(subjects),
+      })
+      if (result.kind !== 'committed') throw new Error(`fixture_quote_refused:${result.code}`)
+      const row = await fixture.backend.run(ctx => ctx.db.query('capabilityQuotes')
+        .withIndex('by_quoteRef', q => q.eq('quoteRef', result.quoteRef)).unique())
+      if (row === null) throw new Error('fixture_quote_missing')
+      expect(row.expiresAt).toBeGreaterThan(evidence.expiresAt)
+      return { quoteRef: row.quoteRef, callRef: `call:readiness:${suffix}`, principalId: row.principalId,
+        ownerId: row.accountRef, credentialId: row.credentialId, applicationRef: row.applicationRef,
+        grantRef: row.grantRef, grantGeneration: row.grantGeneration, policyDigest: row.grantPolicyDigest,
+        grantExpiresAt: row.grantExpiresAt, environment: row.environment, toolRef: row.toolRef,
+        idempotencyKey: `readiness:call:${suffix}`, inputDigest: row.inputDigest,
+        requestDigest: canonicalDigest({ quoteRef: row.quoteRef }), toolJson: row.toolJson,
+        inputJson: row.normalizedInputJson, now: Date.now(), organizationMonthlySpend: { enabled: false as const } }
+    }
+    const accepted = await issue('accepted')
+    const unused = await issue('unused')
+    expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, accepted)).toMatchObject({ kind: 'reserved' })
+    const before = await fixture.purchases()
+    vi.spyOn(Date, 'now').mockReturnValue(evidence.expiresAt)
+    expect(await fixture.backend.mutation(internal.capabilityQuotes.issueQuote, {
+      operationKey: 'readiness:quote:after-expiry', correlationId: 'readiness:quote:after-expiry',
+      principal: fixture.agent.principal, toolRef: fixture.tool.toolRef, input, formance: formanceSnapshot(subjects),
+    })).toMatchObject({ kind: 'refused', code: 'payments_not_ready', retryable: true })
+    expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, { ...unused, now: evidence.expiresAt }))
+      .toMatchObject({ kind: 'refused', code: 'operation_not_ready', retryable: true,
+        nextAction: expect.stringContaining('temporarily unavailable') })
+    expect(await fixture.purchases()).toEqual(before)
+    expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, { ...accepted, now: evidence.expiresAt }))
+      .toMatchObject({ kind: 'replayed', reservation: { callRef: accepted.callRef } })
+    expect(await fixture.purchases()).toEqual(before)
+  })
+})
+
+describe('production readiness cannot block emergency pause', () => {
+  it.each(['missing', 'failed', 'expired', 'configuration_rotated'] as const)(
+    'keeps pause available and refuses resume for %s evidence', async fault => {
+      const backend = convexTestWithMarketComponents()
+      await seedHealthyTreasury(backend)
+      const admin = await ownerAdmin(backend, `user_readiness-control-${fault}`)
+      await backend.run(async ctx => {
+        const evidence = await ctx.db.query('moneyPaymentReadiness').withIndex('by_environment', q => q.eq('environment', 'production')).unique()
+        if (evidence === null) throw new Error('fixture_readiness_missing')
+        if (fault === 'missing' || fault === 'failed') await ctx.db.delete(evidence._id)
+        if (fault === 'expired') vi.spyOn(Date, 'now').mockReturnValue(evidence.expiresAt)
+      })
+      if (fault === 'failed') {
+        const failed = { kind: 'failed' as const, code: 'base_rpc_unavailable' }
+        await seedPaymentReadiness(backend, { checks: { web_configuration: failed, formance: failed, cdp_custody: failed,
+          base_rpc: failed, reference_rate: failed, sanctions: failed, commercial_policy: failed, treasury: failed } })
+      }
+      if (fault === 'configuration_rotated') vi.stubEnv('CDP_API_KEY_SECRET', 'rotated-controls-fixture')
+      expect(await admin.mutation(pauseRef, await pauseCommand(backend, `readiness:${fault}:pause`, true)))
+        .toMatchObject({ kind: 'completed', code: 'payments_paused' })
+      const before = await controlsSnapshot(backend)
+      expect(await admin.mutation(pauseRef, await pauseCommand(backend, `readiness:${fault}:resume`, false)))
+        .toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
+      const after = await controlsSnapshot(backend)
+      expect(after.state).toEqual(before.state)
+      expect(after.effects).toEqual(before.effects)
+      expect(after.proposals).toEqual(before.proposals)
+      expect(after.state.launch.paymentsOpenTo).toBe('none')
+    },
+  )
 })
 
 // The approval-race test exercises a resume that is otherwise ready. Health
@@ -270,4 +370,5 @@ async function seedHealthyTreasury(backend: ConvexFixtureBackend) {
     deposits: [], depositsComplete: true, alerts: [],
   })
   expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })).toMatchObject({ kind: 'published' })
+  await seedPaymentReadiness(backend)
 }

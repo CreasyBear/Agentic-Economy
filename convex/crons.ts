@@ -23,6 +23,7 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
   'observe x402 treasury': internal.workloadCron.observeX402Treasury,
   'snapshot marketplace metrics day': internal.workloadCron.snapshotMarketplaceMetricsDay,
   'refresh market flow': internal.workloadCron.refreshMarketFlow,
+  'refresh payment readiness': internal.workloadCron.refreshPaymentReadiness,
 }
 
 const crons = cronJobs()

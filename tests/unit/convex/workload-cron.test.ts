@@ -32,6 +32,7 @@ import {
   refreshReferenceRateHandler,
   observeX402TreasuryHandler,
   reconcileTreasuryBalancesHandler,
+  refreshPaymentReadinessHandler,
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
   reconcileBusinessSupplyProjectionsHandler,
@@ -80,6 +81,7 @@ const EXPECTED_BINDINGS = {
   'refresh USDC/AUD reference rate': 'workloadCron:refreshReferenceRate',
   'observe x402 treasury': 'workloadCron:observeX402Treasury',
   'reconcile treasury balances': 'workloadCron:reconcileTreasuryBalances',
+  'refresh payment readiness': 'workloadCron:refreshPaymentReadiness',
   'refresh market flow': 'workloadCron:refreshMarketFlow',
   'snapshot marketplace metrics day': 'workloadCron:snapshotMarketplaceMetricsDay',
 } as const
@@ -93,6 +95,7 @@ const ACTION_HANDLERS = [
   refreshAgenticEconomyApiRegistryHandler,
   observeX402TreasuryHandler,
   reconcileTreasuryBalancesHandler,
+  refreshPaymentReadinessHandler,
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
 ] as const
@@ -106,6 +109,7 @@ const ACTION_HANDLER_WORKLOAD_NAMES = [
   'refresh Agentic Economy API registry',
   'observe x402 treasury',
   'reconcile treasury balances',
+  'refresh payment readiness',
   'refresh market flow',
   'snapshot marketplace metrics day',
 ] as const

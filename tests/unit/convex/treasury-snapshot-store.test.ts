@@ -5,6 +5,8 @@ import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment } f
 import { sealTreasurySnapshot, TREASURY_SNAPSHOT_MAX_AGE_MS, type TreasurySnapshot } from '@/modules/money/treasury-report'
 import { X402_SPEND_WINDOW_MS } from '@/modules/money/x402-spend-admission'
 import { convexTestWithMarketComponents, nonAdmin, ownerAdmin, type ConvexFixtureAdmin, type ConvexFixtureBackend } from '../../helpers/convex-fixtures'
+import { seedCommercialPolicies } from '../../helpers/quote-fixtures'
+import { REFERENCE_RATE_MAX_AGE_MS } from '@/modules/money/public'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const NOW = Date.UTC(2026, 9, 1, 12)
@@ -91,6 +93,44 @@ async function command(admin: ConvexFixtureAdmin, key: string, paused: boolean) 
 }
 
 describe('registered treasury snapshot publication and control behavior', () => {
+  it('readiness preserves the original FX and wallet evidence expiry', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedObservation(backend, NOW - 120_000)
+    await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: report() })
+    await backend.run(ctx => ctx.db.insert('moneyReferenceRates', {
+      pair: 'USDC/AUD', rate: '1.2', fetchedAt: NOW - REFERENCE_RATE_MAX_AGE_MS + 1_000,
+    }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+      .toEqual({ reference_rate: { kind: 'passed', validUntil: NOW + 1_000 },
+        treasury: { kind: 'passed', validUntil: NOW + 8 * 60_000 },
+        commercial_policy: { kind: 'passed', validUntil: NOW + 10 * 60_000 } })
+    clock = NOW + 1_000
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+      .toMatchObject({ reference_rate: { kind: 'failed', code: 'reference_rate_stale' } })
+    clock = NOW + 8 * 60_000
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+      .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_observation_stale' } })
+  })
+
+  it('readiness cannot extend a production approval or borrow sandbox evidence', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTestWithMarketComponents()
+    await seedCommercialPolicies(backend, 'readiness-expiry', NOW)
+    await backend.run(async ctx => {
+      const policy = await ctx.db.query('moneyCommercialPolicies')
+        .withIndex('by_policyRef', q => q.eq('policyRef', 'commercial-policy:quote:readiness-expiry:tax:1')).unique()
+      if (policy === null) throw new Error('fixture_policy_missing')
+      await ctx.db.patch(policy._id, { expiresAt: NOW + 1_000 })
+    })
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: NOW }))
+      .toMatchObject({ commercial_policy: { kind: 'passed', validUntil: NOW + 1_000 } })
+    clock = NOW + 1_000
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: clock }))
+      .toMatchObject({ commercial_policy: { kind: 'failed' } })
+    const crossed = await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock })
+    expect(Object.values(crossed)).toEqual(Array(3).fill({ kind: 'failed', code: 'readiness_environment_mismatch' }))
+  })
+
   it('publishes exact concurrent/retry snapshots once and returns one durable alert episode', async () => {
     const emitted = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const backend = convexTestWithMarketComponents()

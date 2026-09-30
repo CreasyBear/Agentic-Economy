@@ -1,10 +1,9 @@
 import { bootValidationClass } from './environment'
 import { validateEnvironment } from './env-schema'
 
-// Validate only shared infrastructure at the request boundary. Model, money
-// rail, custody and observability settings are checked by the operations that
-// need them; a missing enhancement cannot take down public pages.
-// Vercel Preview uses NODE_ENV=production but does not inherit hosted secrets.
+// Production money requires the full static manifest at the request boundary;
+// provider health and operational approval remain separate payment checks.
+// Development deployments can use NODE_ENV=production without live secrets.
 let validated = false
 
 export function ensureBootEnvironmentValidated(): void {

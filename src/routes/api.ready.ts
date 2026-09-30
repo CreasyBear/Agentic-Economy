@@ -35,6 +35,7 @@ export async function handleReadyRequest(
             status: 'ready',
             checks: { config: 'ready', convex: 'ready' },
             commercial: readiness.commercial,
+            deployment: readiness.deployment,
           },
           { headers: { 'Cache-Control': 'no-store' } },
         )
@@ -47,6 +48,7 @@ export async function handleReadyRequest(
           extras: {
             checks: projectChecks(readiness.checks),
             commercial: readiness.commercial,
+            deployment: readiness.deployment,
           },
         })
     const projected = head

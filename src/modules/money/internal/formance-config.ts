@@ -237,7 +237,10 @@ export function readFormanceConfiguration(
   })
 }
 
-export function createFormanceContext(configuration: FormanceConfiguration): FormanceContext {
+export function createFormanceContext(
+  configuration: FormanceConfiguration,
+  options: Readonly<{ signal?: AbortSignal }> = {},
+): FormanceContext {
   const httpClient = new HTTPClient()
   const gatewayOrigin = new URL(configuration.gatewayUrl).origin
   httpClient.addHook('beforeRequest', (request) => {
@@ -248,6 +251,12 @@ export function createFormanceContext(configuration: FormanceConfiguration): For
       && configuration.accessClientSecret !== undefined) {
       request.headers.set('CF-Access-Client-Id', configuration.accessClientId)
       request.headers.set('CF-Access-Client-Secret', configuration.accessClientSecret)
+    }
+    // A caller's whole-operation deadline survives SDK per-request timers and
+    // remains attached while response bodies are consumed. Existing callers
+    // retain their configured request timeout and exact origin fence.
+    if (options.signal !== undefined) {
+      return new Request(request, { signal: AbortSignal.any([request.signal, options.signal]) })
     }
   })
   return Object.freeze({

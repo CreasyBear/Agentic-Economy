@@ -73,7 +73,11 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: '100000000',
-    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc","https://base.other.example/rpc"]}',
+    SENTRY_DSN: 'https://serverkey@example.ingest.sentry.io/1',
+    VITE_SENTRY_DSN: 'https://browserkey@example.ingest.sentry.io/1',
+    SENTRY_ENVIRONMENT: 'production',
+    VITE_SENTRY_ENVIRONMENT: 'production',
     STRIPE_SECRET_KEY: 'rk_live_command_example',
     STRIPE_READBACK_KEY: 'rk_live_readback_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_example',
@@ -145,6 +149,31 @@ describe('operational diagnostics routes', () => {
     await expect(head.text()).resolves.toBe('')
   })
 
+  it.each(['AE_FORMANCE_LEDGER', 'CDP_WALLET_SECRET', 'AE_X402_RPC_URLS_JSON', 'SENTRY_DSN', 'VITE_SENTRY_DSN'])(
+    'refuses production web readiness when %s is missing without probing the backend', async name => {
+      const env = productionReadinessEnvironment()
+      delete env[name]
+      const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
+      const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), { env, fetch: fetchImpl, nodeMajor: 22 })
+      expect(response.status).toBe(503)
+      const body = await response.json()
+      expect(body).toMatchObject({ checks: { config: { status: 'failed', code: 'deployment_manifest_invalid' } },
+        deployment: { paymentEnvironment: 'production', convexOrigin: 'https://convex.example' } })
+      expect(fetchImpl).not.toHaveBeenCalled()
+      expect(JSON.stringify(body)).not.toContain(env.CDP_API_KEY_SECRET)
+    },
+  )
+
+  it('binds ready web evidence to the actual money environment and Convex origin', async () => {
+    const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), {
+      env: productionReadinessEnvironment(), fetch: vi.fn(async () => new Response(null, { status: 200 })), nodeMajor: 22,
+    })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await response.json()).toMatchObject({ status: 'ready',
+      deployment: { paymentEnvironment: 'production', convexOrigin: 'https://convex.example' } })
+  })
+
   it('reports readiness when validated config and Convex reachability pass', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
     const result = await readServerReadiness({
@@ -170,8 +199,9 @@ describe('operational diagnostics routes', () => {
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
-  it('keeps production ready when operation-only settings are absent or malformed', async () => {
+  it('keeps hosted sandbox ready when operation-only settings are absent or malformed', async () => {
     const env = productionReadinessEnvironment()
+    env.AE_DEPLOYMENT_ENVIRONMENT = 'development'
     for (const name of [
       'OPENROUTER_API_KEY', 'AE_LLM_MODEL', 'AE_CHAT_PROXY_SECRET',
       'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET',
@@ -221,6 +251,7 @@ describe('operational diagnostics routes', () => {
       status: 'ready',
       checks: { config: 'ready', convex: 'ready' },
       commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
+      deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
     })
     const serialized = JSON.stringify(body)
     for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
@@ -341,6 +372,7 @@ describe('operational diagnostics routes', () => {
         convex: { status: 'failed', code: 'convex_probe_failed' },
       },
       commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
+      deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
     })
     const serialized = JSON.stringify(body)
     for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
@@ -696,6 +728,7 @@ describe('operational diagnostics routes', () => {
       const body = await response.json()
       expect(body).toEqual({
         status: 'ready',
+        deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
         checks: { config: 'ready', convex: 'ready' },
         commercial: { catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: true },
       })

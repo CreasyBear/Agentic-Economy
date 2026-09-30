@@ -12,7 +12,7 @@ import {
   reconcileDueFacilitatorInvocationsHandler, refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler, refreshMarketFlowHandler,
-  refreshReferenceRateHandler,
+  refreshReferenceRateHandler, refreshPaymentReadinessHandler,
   snapshotMarketplaceMetricsDayHandler, reconcileTreasuryBalancesHandler,
 } from './lib/platform/workloadCron/scheduled'
 
@@ -139,3 +139,5 @@ export const reconcilePaidCallReports = internalAction({
 })
 
 export const reconcileTreasuryBalances = internalAction({ args: {}, returns: v.null(), handler: reconcileTreasuryBalancesHandler })
+
+export const refreshPaymentReadiness = internalAction({ args: {}, returns: v.null(), handler: refreshPaymentReadinessHandler })

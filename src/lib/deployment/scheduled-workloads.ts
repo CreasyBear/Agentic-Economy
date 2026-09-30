@@ -18,6 +18,7 @@ export type ScheduledWorkload = Readonly<{
 }>
 
 export const SCHEDULED_WORKLOADS = [
+  { name: 'refresh payment readiness', workloadKind: 'cron', handler: 'refreshPaymentReadiness', interval: { minutes: 5 } },
   { name: 'reconcile paid Call reports', workloadKind: 'reconciliation', handler: 'reconcilePaidCallReports', interval: { minutes: 1 } },
   { name: 'reconcile promotional credit', workloadKind: 'reconciliation', handler: 'reconcilePromotionalCredit', interval: { minutes: 1 } },
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
@@ -61,5 +62,6 @@ export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'refresh facilitator discovery',
   'refresh USDC/AUD reference rate',
   'refresh market flow',
+  'refresh payment readiness',
   'snapshot marketplace metrics day',
 ] as const satisfies readonly ScheduledWorkloadName[]

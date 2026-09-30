@@ -35,6 +35,12 @@ type Env = {
   readonly AE_CHAT_SHARE_SECRET: string | undefined;
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
   readonly AE_DEPLOYMENT_ENVIRONMENT: "production" | "development";
+  readonly AE_FORMANCE_ACCESS_CLIENT_ID: string | undefined;
+  readonly AE_FORMANCE_ACCESS_CLIENT_SECRET: string | undefined;
+  readonly AE_FORMANCE_ENVIRONMENT: string | undefined;
+  readonly AE_FORMANCE_GATEWAY_URL: string | undefined;
+  readonly AE_FORMANCE_LEDGER: string | undefined;
+  readonly AE_FORMANCE_REQUEST_TIMEOUT_MS: string | undefined;
   readonly AE_JEV_DISCOVERY_ENABLED: "true" | "false" | undefined;
   readonly AE_LLM_MODEL: string | undefined;
   readonly AE_OPENROUTER_API_BASE_URL: string | undefined;

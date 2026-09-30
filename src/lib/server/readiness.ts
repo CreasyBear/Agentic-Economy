@@ -1,4 +1,4 @@
-import { deploymentPaymentEnvironment, resolveDeploymentMode } from '@/lib/deployment/environment'
+import { deploymentPaymentEnvironment, resolveDeploymentMode, type PaymentEnvironment } from '@/lib/deployment/environment'
 import {
   DEPLOYMENT_MANIFEST,
   validateDeploymentManifest,
@@ -113,9 +113,9 @@ export function readNamesOnlyReadinessDiagnostics(
 
 
 /**
- * Whether a sale can complete right now, additive to the Kubernetes-style
- * infra `checks` above (config/convex = "process is up"; this = "the doctor's
- * discovery/quoting/purchase grouping actually clears"). Every field is
+ * Discovery and configured funding signals used by the CLI doctor. These do
+ * not establish current paid-Call admission: production also requires the
+ * backend payment-readiness evidence and purchase authority. Every field is
  * best-effort: a source outage or timeout degrades to the named unavailable
  * state, it never fails the request or flips the HTTP status.
  */
@@ -130,15 +130,22 @@ export type CommercialReadiness = Readonly<{
   sellable: boolean
 }>
 
+export type WebReadinessDeployment = Readonly<{
+  paymentEnvironment: PaymentEnvironment | null
+  convexOrigin: string | null
+}>
+
 export type ServerReadinessResult =
   | Readonly<{
       status: 'ready'
+      deployment: WebReadinessDeployment
       checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
       diagnostics: ReadinessDiagnostics
       commercial: CommercialReadiness
     }>
   | Readonly<{
       status: 'not_ready'
+      deployment: WebReadinessDeployment
       checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
       diagnostics: ReadinessDiagnostics
       commercial: CommercialReadiness
@@ -157,6 +164,11 @@ export async function readServerReadiness(
   const env = options.env ?? process.env
   const diagnostics = readNamesOnlyReadinessDiagnostics(env, options.nodeMajor)
   const config = readDeploymentConfig(env, options.nodeMajor)
+  const convexSource = readTrimmedEnv(env, 'CONVEX_URL') ?? readTrimmedEnv(env, 'VITE_CONVEX_URL')
+  const deployment: WebReadinessDeployment = {
+    paymentEnvironment: deploymentPaymentEnvironment(env) ?? null,
+    convexOrigin: convexSource === undefined ? null : readHttpUrl(convexSource)?.origin ?? null,
+  }
   // Commercial truth is independent of the deployment-manifest gate above
   // (e.g. a missing canonical URL in production still leaves Convex, the
   // directory, and the money rails reachable) and shares its probe budget
@@ -167,6 +179,7 @@ export async function readServerReadiness(
   if (config.kind === 'failed') {
     return {
       status: 'not_ready',
+      deployment,
       checks: {
         config: { status: 'failed', code: config.code },
         convex: { status: 'failed', code: 'convex_probe_skipped' },
@@ -183,6 +196,7 @@ export async function readServerReadiness(
   if (convex.status === 'failed') {
     return {
       status: 'not_ready',
+      deployment,
       checks: {
         config: { status: 'ready' },
         convex,
@@ -194,6 +208,7 @@ export async function readServerReadiness(
 
   return {
     status: 'ready',
+    deployment,
     checks: {
       config: { status: 'ready' },
       convex,
@@ -310,7 +325,7 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
     }
   }
 
-  if (mode === 'production' || mode === 'preview') {
+  if (deploymentPaymentEnvironment(env) === 'production' || mode === 'production' || mode === 'preview') {
     let deployment
     try {
       deployment = validateDeploymentManifest(env, {
@@ -322,6 +337,13 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
         site: 'readDeploymentConfig',
         reason: 'invalid_response',
       })
+    }
+    // Requires the actual web environment, not a mirrored backend configuration.
+    // A production readiness response proves every static manifest check; its
+    // environment/source identity lets the backend reject a different deployment.
+    // Provider health and payment readiness remain separate, preventing a probe cycle.
+    if (deploymentPaymentEnvironment(env) === 'production' && !deployment.ok) {
+      return { kind: 'failed', code: 'deployment_manifest_invalid' }
     }
     const sharedScopes: readonly string[] = ['canonical', 'convex', 'convex-auth', 'clerk', 'source-write', 'browser-security', 'runtime']
     if (deployment.findings.some((finding) =>

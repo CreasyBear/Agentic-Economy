@@ -33,10 +33,12 @@ export {
   cdpX402RequestFingerprint,
   isPaymentSigningIdempotencyKey,
   observeCdpX402Treasury,
+  readCdpX402CustodyReadiness,
   readCdpX402PaymentAuthorization,
   replayCdpX402PaymentSigningIntent,
 } from './internal/cdp-x402-payment-signer'
 export type {
+  CdpX402CustodyReadinessResult,
   CdpX402PaymentAuthorization,
   CdpX402PaymentSignerDependencies,
   CdpX402RequestFingerprintContext,

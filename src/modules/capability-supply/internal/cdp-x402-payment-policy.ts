@@ -1,10 +1,81 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import { x402PaymentProfileForEnvironment, type X402AeEnvironment } from './x402-payment-profile'
-import type { CdpX402PolicyIdentity } from './cdp-x402-payment-contracts'
+import type { CdpClientLike, CdpX402PolicyIdentity } from './cdp-x402-payment-contracts'
+import type { CdpX402CustodyConfiguration } from './x402-custody-configuration'
+import { hasPolicy, sameEvmAddress } from './cdp-x402-payment-validation'
+
+export type CdpX402CustodyReadinessResult =
+  | Readonly<{ kind: 'ready'; address: string; policyRulesDigest: string }>
+  | Readonly<{ kind: 'refused'; code: 'cdp_custody_configuration_invalid' | 'cdp_custody_environment_unsupported'
+      | 'cdp_custody_policy_mismatch' | 'cdp_custody_account_mismatch' | 'cdp_custody_not_found' }>
+  | Readonly<{ kind: 'unavailable'; code: 'cdp_custody_read_unavailable' | 'cdp_custody_response_invalid' }>
+
+type CdpCustodyReader = Readonly<{
+  policies: Readonly<{ getPolicyById: (options: Readonly<{ id: string }>) => Promise<CdpX402PolicyIdentity | JsonValue> }>
+  evm: Readonly<{ getAccount: (options: Readonly<{ name: string }>) => Promise<Awaited<ReturnType<CdpClientLike['evm']['getAccount']>> | JsonValue> }>
+}>
+
+/**
+ * Requires: parsed custody configuration and a supported payment environment.
+ * Ensures: ready only for the exact live account and both approved policy documents.
+ * Invariant: only reads; signing and readiness use the same custody predicate.
+ * On violation: known drift is refused, malformed responses are unavailable;
+ * transport failures propagate to the caller's existing recovery boundary.
+ */
+export async function readCdpX402CustodyAccount(
+  reader: CdpCustodyReader,
+  configuration: CdpX402CustodyConfiguration,
+  aeEnvironment: X402AeEnvironment,
+): Promise<CdpX402CustodyReadinessResult> {
+  const [rawAccountPolicy, rawProjectPolicy] = await Promise.all([
+    reader.policies.getPolicyById({ id: configuration.accountPolicyId }),
+    reader.policies.getPolicyById({ id: configuration.projectPolicyId }),
+  ])
+  const accountPolicy = readPolicyIdentity(rawAccountPolicy)
+  const projectPolicy = readPolicyIdentity(rawProjectPolicy)
+  if (accountPolicy === undefined || projectPolicy === undefined) {
+    return degradeBackend('cdp_custody_response_invalid',
+      { kind: 'unavailable', code: 'cdp_custody_response_invalid' } as const,
+      { site: 'readCdpX402CustodyAccount', reason: 'invalid_response' })
+  }
+  if (accountPolicy.id.toLowerCase() !== configuration.accountPolicyId
+    || accountPolicy.scope !== 'account'
+    || projectPolicy.id.toLowerCase() !== configuration.projectPolicyId
+    || projectPolicy.scope !== 'project'
+    || cdpX402PolicyRulesDigest(accountPolicy, projectPolicy) !== configuration.policyRulesDigest) {
+    return { kind: 'refused', code: 'cdp_custody_policy_mismatch' }
+  }
+  const account = await reader.evm.getAccount({ name: configuration.accountName })
+  if (!isRecord(account) || typeof account.address !== 'string'
+    || (account.policies !== undefined && (!Array.isArray(account.policies)
+      || !account.policies.every((id: unknown) => typeof id === 'string')))) {
+    return degradeBackend('cdp_custody_response_invalid',
+      { kind: 'unavailable', code: 'cdp_custody_response_invalid' } as const,
+      { site: 'readCdpX402CustodyAccount', reason: 'invalid_response' })
+  }
+  if (!hasPolicy(account.policies, configuration.accountPolicyId)
+    || !hasPolicy(account.policies, configuration.projectPolicyId)
+    || !sameEvmAddress(account.address, configuration.expectedEvmAddress)) {
+    return { kind: 'refused', code: 'cdp_custody_account_mismatch' }
+  }
+  if (!cdpX402ManagedPolicyIsExact(accountPolicy, projectPolicy, account.address,
+    configuration.maxAtomic.toString(), aeEnvironment)) {
+    return { kind: 'refused', code: 'cdp_custody_policy_mismatch' }
+  }
+  return { kind: 'ready', address: account.address, policyRulesDigest: configuration.policyRulesDigest }
+}
+
+function readPolicyIdentity(value: unknown): CdpX402PolicyIdentity | undefined {
+  if (!isRecord(value) || typeof value.id !== 'string'
+    || (value.scope !== 'account' && value.scope !== 'project')) return undefined
+  const rules = boundedCdpPolicyRules(value.rules)
+  return rules === undefined ? undefined : { id: value.id, scope: value.scope, rules }
+}
 
 const MAX_CDP_POLICY_RULES = 10
 const MAX_CDP_POLICY_RULES_BYTES = 64 * 1024

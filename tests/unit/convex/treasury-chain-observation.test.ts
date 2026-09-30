@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { toEventSelector } from 'viem'
 import { readTreasuryChainObservation, type TreasuryRpc } from '../../../convex/lib/money/treasury/chainObservation'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
 import type { JsonValue } from '@/modules/common/bounded-json'
+
+afterEach(() => vi.restoreAllMocks())
 
 const now = 1_790_000_000_000
 const address = `0x${'1'.repeat(40)}`
@@ -45,6 +48,62 @@ async function read(options: Parameters<typeof fixture>[0] = {}, previous: typeo
 }
 
 describe('treasury finalized chain evidence', () => {
+  it('cancels a stalled DNS preflight and refuses late results without waiting for lookup completion', async () => {
+    const controller = new AbortController()
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal)
+    let started!: () => void
+    const lookupStarted = new Promise<void>(resolve => { started = resolve })
+    const pending: Array<(value: readonly { address: string }[]) => void> = []
+    const dns = vi.spyOn(defaultDnsResolver, 'lookup').mockImplementation(async () => {
+      started()
+      return await new Promise(resolve => pending.push(resolve))
+    })
+    const result = readTreasuryChainObservation({ environment: 'production', address, now }, { targets })
+    await lookupStarted
+    controller.abort(new Error('fixture_deadline'))
+    expect(await result).toEqual({ kind: 'unavailable', code: 'treasury_chain_unavailable' })
+    expect(dns).toHaveBeenCalledTimes(4)
+    for (const resolve of pending) resolve([{ address: '8.8.8.8' }])
+    // Late preflight results cannot initiate HTTP (which would resolve DNS again
+    // through the real Undici Agent's guarded lookup).
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(dns).toHaveBeenCalledTimes(4)
+  })
+
+  it('cancels connection DNS after public preflight and destroys pending Undici requests', async () => {
+    const controller = new AbortController()
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal)
+    let started!: () => void
+    const lookupStarted = new Promise<void>(resolve => { started = resolve })
+    const pending: Array<(value: readonly { address: string }[]) => void> = []
+    let lookups = 0
+    const dns = vi.spyOn(defaultDnsResolver, 'lookup').mockImplementation(async () => {
+      lookups += 1
+      if (lookups <= 4) return [{ address: '8.8.8.8' }]
+      started()
+      return await new Promise(resolve => pending.push(resolve))
+    })
+    const result = readTreasuryChainObservation({ environment: 'production', address, now }, { targets })
+    await lookupStarted
+    controller.abort(new Error('fixture_connection_deadline'))
+    expect(await result).toEqual({ kind: 'unavailable', code: 'treasury_chain_unavailable' })
+    expect(dns.mock.calls.length).toBeGreaterThan(4)
+    // Drain our external fixture after cancellation; the non-public address also
+    // ensures a late callback cannot open a real network connection in this test.
+    for (const resolve of pending) resolve([{ address: '127.0.0.1' }])
+  })
+
+  it.each([
+    ['https://127.0.0.1', 'https://127.0.0.2'],
+    ['https://[::1]', 'https://[fc00::1]'],
+  ])('refuses private IP literal RPC targets before network I/O: %s', async (first, second) => {
+    const dns = vi.spyOn(defaultDnsResolver, 'lookup')
+    expect(await readTreasuryChainObservation({ environment: 'production', address, now }, {
+      targets: [new URL(first), new URL(second)],
+    })).toEqual({ kind: 'unavailable', code: 'treasury_chain_unavailable' })
+    expect(dns).not.toHaveBeenCalled()
+  })
+
   it('pins both providers to the finalized block hash and returns the exact incoming event', async () => {
     const { result, calls } = await read()
     expect(result).toMatchObject({ kind: 'observed', caughtUp: true, fromBlock: '101',
@@ -82,10 +141,11 @@ describe('treasury finalized chain evidence', () => {
     expect(calls.filter(call => call.method === 'eth_getLogs').map(call => (call.params[0] as { toBlock: string }).toBlock))
       .toEqual(['0x834', '0x834', '0x834', '0x834'])
   })
-  it('rejects duplicate provider origins before any RPC request', async () => {
+  it.each(['https://rpc-a.example/other-key', 'https://RPC-A.example:8443/key', 'https://rpc-a.example./key'])(
+    'rejects the same provider hostname %s before any RPC request', async duplicate => {
     const external = fixture()
     expect(await readTreasuryChainObservation({ environment: 'production', address, now }, {
-      rpc: external.rpc, targets: [targets[0]!, new URL('https://rpc-a.example/other-key')],
+      rpc: external.rpc, targets: [targets[0]!, new URL(duplicate)],
     })).toMatchObject({ kind: 'unavailable', code: 'treasury_chain_configuration_invalid' })
     expect(external.calls).toHaveLength(0)
   })
