@@ -3,6 +3,7 @@
 import { HTTPClient, SDK } from '@formance/formance-sdk'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   LEGACY_FORMANCE_SCHEMA_VERSION,
   FORMANCE_SCHEMA_VERSION,
@@ -178,10 +179,12 @@ export const NO_RETRY = Object.freeze({ retries: Object.freeze({ strategy: 'none
 export function readFormanceConfiguration(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): FormanceConfigurationResult {
-  const environment = env.AE_FORMANCE_ENVIRONMENT?.trim()
+  const environment = env.AE_FORMANCE_ENVIRONMENT
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
   const gateway = env.AE_FORMANCE_GATEWAY_URL?.trim()
   const ledger = env.AE_FORMANCE_LEDGER?.trim()
   if ((environment !== 'sandbox' && environment !== 'production')
+    || deploymentEnvironment !== environment
     || gateway === undefined
     || ledger === undefined
     || !LEDGER_NAME_PATTERN.test(ledger)) {

@@ -41,6 +41,7 @@ import {
 import { env, type MutationCtx } from '../../../_generated/server'
 
 const LEGAL_CUSTOMER_REQUIRED: CommercialPolicyRefusalReason = 'legal_customer_required'
+const MAX_TREASURY_OBSERVATION_AGE_MS = 30 * 60_000
 
 export const prepareFinancialSubjectsArgs = {
   operationKey: v.string(),
@@ -157,6 +158,9 @@ export async function prepareFinancialSubjectsCore(
     || custodyRef === undefined
     || custodyGeneration === undefined
     || paymentProfile === undefined
+    || !Number.isSafeInteger(observation.observedAt)
+    || observation.observedAt > now
+    || now - observation.observedAt > MAX_TREASURY_OBSERVATION_AGE_MS
     ? undefined
     : treasurySpendableUnits(observation, {
         environment,

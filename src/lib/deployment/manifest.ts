@@ -462,9 +462,11 @@ function validateProductionFormanceConfiguration(
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
   paymentEnvironment: PaymentEnvironment,
 ): void {
-  const formanceEnvironment = present(environment, 'AE_FORMANCE_ENVIRONMENT')
+  const formanceEnvironment = environment.AE_FORMANCE_ENVIRONMENT
   const expected = paymentEnvironment === 'sandbox' ? 'sandbox' : 'production'
-  if (formanceEnvironment !== undefined && formanceEnvironment !== expected) {
+  if (formanceEnvironment === undefined || formanceEnvironment === '') {
+    add('missing', 'formance_environment_required', ['AE_FORMANCE_ENVIRONMENT'], 'formance')
+  } else if (formanceEnvironment !== expected) {
     add('conflict', 'formance_environment_mismatch', ['AE_FORMANCE_ENVIRONMENT'], 'formance')
   }
   const gateway = present(environment, 'AE_FORMANCE_GATEWAY_URL')

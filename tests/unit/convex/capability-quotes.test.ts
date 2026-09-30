@@ -702,6 +702,18 @@ describe('direct Quote handlers', () => {
     })).toBe(true)
     const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.3854', fetchedAt: Date.now() }
     await backend.run(async ctx => { await ctx.db.insert('moneyReferenceRates', { pair: 'USDC/AUD', rate: referenceRate.rate, fetchedAt: referenceRate.fetchedAt }) })
+    await recordTreasuryObservation(backend, 'managed-quote-stale', { observedAt: Date.now() - 30 * 60_000 - 1 })
+    const inspectOnly = vi.fn(async () => live)
+    const staleRefusal = await withCustodyEnvironment(async () => await handler(
+      { runMutation: backend.mutation, runAction: inspectOnly },
+      await withSourceWrite('protected_action', {
+        operationKey: 'managed-quote:stale-treasury', correlationId: 'managed-quote:stale-treasury',
+        principal: agent.principal, toolRef: fixture.toolRef, input,
+      }),
+    ))
+    expect(staleRefusal).toMatchObject({ kind: 'refused', code: 'treasury_capacity_unavailable' })
+    expect(inspectOnly).toHaveBeenCalledOnce()
+    expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').collect())).toEqual([])
     const issued = await backend.mutation(internal.capabilityQuotes.issueQuote, {
       operationKey: 'managed-quote:issue', correlationId: 'managed-quote:issue',
       principal: agent.principal, toolRef: fixture.toolRef, input, liveX402Requirement: live.requirement,
@@ -796,12 +808,12 @@ describe('direct Quote handlers', () => {
     await recordTreasuryObservation(backend, `${suffix}-old`, {
       totalUnits: '10000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     await recordTreasuryObservation(backend, `${suffix}-new`, {
       totalUnits: '20000000',
       bufferUnits: '3000000',
-      observedAt: 1_800_000_000_001,
+      observedAt: Date.now() - 999,
     })
 
     const subjects = await withCustodyEnvironment(() => prepareSubjects(
@@ -820,6 +832,73 @@ describe('direct Quote handlers', () => {
     })
   })
 
+  it.each([
+    { label: 'exactly 30 minutes old', ageMs: 30 * 60_000, accepted: true },
+    { label: '30 minutes and one millisecond old', ageMs: 30 * 60_000 + 1, accepted: false },
+    { label: 'one millisecond in the future', ageMs: -1, accepted: false },
+  ])('uses treasury evidence only when it is fresh: $label', async ({ ageMs, accepted }) => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = ageMs < 0 ? 'treasury-age-future' : `treasury-age-${ageMs}`
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      await recordTreasuryObservation(backend, suffix, { observedAt: now - ageMs })
+      const subjects = await withCustodyEnvironment(() => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+      if (accepted) expect(subjects.treasury).toMatchObject({ targetUnits: '9000000' })
+      else expect(subjects.treasury).toBeUndefined()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('does not fall back from an invalid newest timestamp to older valid evidence', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-newest-future'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      await recordTreasuryObservation(backend, `${suffix}-old`, { observedAt: now - 1_000 })
+      await recordTreasuryObservation(backend, `${suffix}-future`, { observedAt: now + 1 })
+      const subjects = await withCustodyEnvironment(() => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+      expect(subjects.treasury).toBeUndefined()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('ignores an unsafe observedAt even when recordedAt is current', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-unsafe-time'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, suffix)
+    await backend.run(async (ctx) => {
+      const row = (await ctx.db.query('moneyTreasuryObservations')
+        .withIndex('by_custody_and_observedAt', (query) => query
+          .eq('environment', 'production')
+          .eq('custodyRef', activeCustodyRef)
+          .eq('custodyGeneration', activeCustodyGeneration))
+        .order('desc').take(1))[0]
+      if (row === undefined) throw new Error('treasury observation missing')
+      await ctx.db.patch(row._id, { observedAt: Date.now() - 1_000.5, recordedAt: Date.now() })
+    })
+    const subjects = await withCustodyEnvironment(() => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+    expect(subjects.treasury).toBeUndefined()
+  })
+
   it('ignores old generations and other custody rows without an environment fallback', async () => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'treasury-identity-filter'
@@ -831,19 +910,19 @@ describe('direct Quote handlers', () => {
     await recordTreasuryObservation(backend, `${suffix}-active`, {
       totalUnits: '10000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     await recordTreasuryObservation(backend, `${suffix}-old-generation`, {
       custodyGeneration: activeCustodyGeneration - 1,
       totalUnits: '90000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_002,
+      observedAt: Date.now() - 998,
     })
     await recordTreasuryObservation(backend, `${suffix}-other-custody`, {
       custodyRef: 'custody:quote:other',
       totalUnits: '80000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_003,
+      observedAt: Date.now() - 997,
     })
 
     const subjects = await withCustodyEnvironment(() => prepareSubjects(
@@ -869,11 +948,11 @@ describe('direct Quote handlers', () => {
     await observeHealthyReadiness(backend, fixture, suffix)
     await recordTreasuryObservation(backend, `${suffix}-old-generation`, {
       custodyGeneration: activeCustodyGeneration - 1,
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     await recordTreasuryObservation(backend, `${suffix}-other-custody`, {
       custodyRef: 'custody:quote:other',
-      observedAt: 1_800_000_000_001,
+      observedAt: Date.now() - 999,
     })
 
     const subjects = await withCustodyEnvironment(() => prepareSubjects(
@@ -920,15 +999,15 @@ describe('direct Quote handlers', () => {
     await recordTreasuryObservation(backend, `${suffix}-old`, {
       totalUnits: '10000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     if (kind === 'malformed') {
-      await insertMalformedTreasuryObservation(backend, `${suffix}-new`, 1_800_000_000_001)
+      await insertMalformedTreasuryObservation(backend, `${suffix}-new`, Date.now() - 999)
     } else {
       await recordTreasuryObservation(backend, `${suffix}-new`, {
         totalUnits: '100',
         bufferUnits: '200',
-        observedAt: 1_800_000_000_001,
+        observedAt: Date.now() - 999,
       })
     }
 

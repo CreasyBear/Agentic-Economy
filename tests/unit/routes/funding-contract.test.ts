@@ -40,6 +40,8 @@ describe('public funding preflight', () => {
 
   beforeEach(() => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    vi.stubEnv('STRIPE_SECRET_KEY', 'rk_test_funding_contract')
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_funding_contract')
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     restorePublicSource = installPlatformFundingQuery()
   })

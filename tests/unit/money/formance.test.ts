@@ -751,30 +751,62 @@ describe('Package 4 official Formance boundary', () => {
 
   it('accepts loopback only for sandbox and requires Cloudflare Access for remote Gateway use', () => {
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
       AE_FORMANCE_ENVIRONMENT: 'sandbox',
       AE_FORMANCE_GATEWAY_URL: 'http://127.0.0.1:8080',
       AE_FORMANCE_LEDGER: 'agentic-economy-sandbox',
     })).toMatchObject({ kind: 'configured' })
 
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'http://formance.example.com',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',
     })).toEqual({ kind: 'setup_required', code: 'formance_gateway_invalid' })
 
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',
     })).toEqual({ kind: 'setup_required', code: 'formance_access_configuration_invalid' })
 
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com/path',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',
       AE_FORMANCE_ACCESS_CLIENT_ID: 'id',
       AE_FORMANCE_ACCESS_CLIENT_SECRET: 'secret',
     })).toEqual({ kind: 'setup_required', code: 'formance_gateway_invalid' })
+  })
+
+  it.each([
+    ['development', 'sandbox', 'configured'],
+    ['production', 'production', 'configured'],
+    ['development', 'production', 'setup_required'],
+    ['production', 'sandbox', 'setup_required'],
+    [undefined, 'sandbox', 'setup_required'],
+    ['preview', 'sandbox', 'setup_required'],
+    [' development ', 'sandbox', 'setup_required'],
+    ['development', undefined, 'setup_required'],
+    ['development', ' sandbox ', 'setup_required'],
+    ['production', 'staging', 'setup_required'],
+  ] as const)('requires exact matching deployment %j and Formance %j', (deployment, formance, kind) => {
+    const result = readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: deployment,
+      AE_FORMANCE_ENVIRONMENT: formance,
+      AE_FORMANCE_GATEWAY_URL: formance === 'production'
+        ? 'https://formance.example.com' : 'http://127.0.0.1:8080',
+      AE_FORMANCE_LEDGER: 'agentic-economy-sandbox',
+      AE_FORMANCE_ACCESS_CLIENT_ID: 'id',
+      AE_FORMANCE_ACCESS_CLIENT_SECRET: 'secret',
+    })
+    if (kind === 'configured') {
+      expect(result).toMatchObject({ kind: 'configured', configuration: { environment: formance } })
+    } else {
+      expect(result).toEqual({ kind: 'setup_required', code: 'formance_configuration_invalid' })
+    }
   })
 
   it('uses the official HTTP hook for Access headers and disables SDK retries', async () => {
@@ -792,6 +824,7 @@ describe('Package 4 official Formance boundary', () => {
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }))
     const configuration = readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',

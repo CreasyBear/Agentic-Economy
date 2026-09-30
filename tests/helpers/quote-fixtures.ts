@@ -145,7 +145,7 @@ export async function recordTreasuryObservation(
     observedAt?: number
   }> = {},
 ): Promise<void> {
-  const observedAt = overrides.observedAt ?? 1_800_000_000_000
+  const observedAt = overrides.observedAt ?? Date.now() - 1_000
   const result = await backend.mutation(internal.moneyTreasury.recordObservation, {
     environment: 'production',
     custodyRef: overrides.custodyRef ?? activeCustodyRef,

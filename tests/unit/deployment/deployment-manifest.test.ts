@@ -286,6 +286,7 @@ describe('deployment manifest validator', () => {
     const result = validateDeploymentManifest({
       NODE_ENV: 'production',
       AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
     }, { environment: 'preview', nodeMajor: 22 })
     expect(result).toMatchObject({ ok: true, environment: 'preview', findings: [] })
   })
@@ -311,6 +312,26 @@ describe('deployment manifest validator', () => {
       'stripe_secret_key_invalid', 'formance_environment_mismatch',
     ]))
   })
+
+  it.each(['development', 'production'] as const)(
+    'requires a Formance environment declaration for %s money', declaration => {
+      const result = validateDeploymentManifest({
+        ...productionEnvironment(), AE_DEPLOYMENT_ENVIRONMENT: declaration, AE_FORMANCE_ENVIRONMENT: undefined,
+      }, { environment: 'preview' })
+      expect(result.findings).toContainEqual({
+        kind: 'missing', code: 'formance_environment_required', names: ['AE_FORMANCE_ENVIRONMENT'], scope: 'formance',
+      })
+    },
+  )
+
+  it.each([' production ', 'PRODUCTION', 'development'])(
+    'refuses malformed Formance environment %j without normalization', formanceEnvironment => {
+      const result = validateDeploymentManifest({ ...productionEnvironment(), AE_FORMANCE_ENVIRONMENT: formanceEnvironment })
+      expect(result.findings).toContainEqual({
+        kind: 'conflict', code: 'formance_environment_mismatch', names: ['AE_FORMANCE_ENVIRONMENT'], scope: 'formance',
+      })
+    },
+  )
 
   it('allows a local Formance gateway only for a development payment declaration', () => {
     const gateway = 'http://localhost:3068'
@@ -568,6 +589,7 @@ describe('deployment manifest validator', () => {
     const development: DeploymentEnvironmentInput = {
       NODE_ENV: 'development',
       AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
       AE_SOURCE_WRITE_SECRET: 'development-source-write-secret-that-is-long-enough',
     }
     expect(validateDeploymentManifest(development, { environment: 'development', nodeMajor: 22 }).findings).toEqual([])

@@ -312,10 +312,10 @@ export async function readAccountFundingConstraintsThroughSource(
 export async function readPlatformFundingConstraintsThroughSource(
   runtime: AccountFundingServerRuntime = {},
 ): Promise<PlatformFundingConstraints> {
-  const environment = fundingEnvironmentFromRuntime(runtime)
-  if (isMoneyRefusal(environment)) return environment
+  const providerContext = createAccountFundingProvider(runtime)
+  if (isMoneyRefusal(providerContext)) return providerContext
   return await callPublicSourceQuery(readPlatformFundingConstraintsQuery, {
-    environment,
+    environment: providerContext.environment,
     now: Date.now(),
   })
 }
