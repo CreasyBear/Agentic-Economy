@@ -157,6 +157,7 @@ export type ChatTranscriptViewProps = Readonly<{
   ownerChatThreadId?: string
   ownerChatNow?: number
   onFreshQuote?: (toolName: string, inputSummary: string) => void
+  loadEarlier?: Readonly<{ hasMore: boolean; loading: boolean; onLoad: () => void }>
   readOnly?: boolean
 }>
 

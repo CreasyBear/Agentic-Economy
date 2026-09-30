@@ -58,7 +58,7 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
       typeof row === 'object' && row !== null && 'title' in row && typeof row.title === 'string'
         && 'summary' in row && typeof row.summary === 'string')
     if (rows.length > 0) {
-      return `**${rows.map(row => markdownText(row.title)).join(', ')} ${rows.length === 1 ? 'is a Tool to inspect' : 'are Tools to inspect'}.**\n\n${rows.slice(0, 3).map(row => `- ${markdownText(row.title)}: ${markdownText(row.summary)}`).join('\n')}\n\nNext: Open a Tool card to check its inputs and current terms.`
+      return `**${rows.map(row => markdownText(row.title)).join(', ')} ${rows.length === 1 ? 'is a Tool to inspect' : 'are Tools to inspect'}.**\n\n${rows.slice(0, 3).map(row => `- ${markdownText(row.title)}: ${markdownText(row.summary)}`).join('\n')}`
     }
     return null
   }

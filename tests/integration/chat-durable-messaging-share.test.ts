@@ -229,6 +229,70 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
     expect(activeStreams).toEqual([])
   })
+  it('keeps one fallback assistant reply when immediate explanation is unusable', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-immediate-single-voice-owner')
+    const created = await owner.mutation(internal.chatThreads.createThread, {
+      title: 'Find an exchange-rate Tool',
+    })
+    const prompt = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find an exchange-rate Tool',
+    }))
+    const model = mockModel({ contentSteps: [[{ type: 'text', text: 'No.' }]] })
+
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: prompt.messageId,
+    }, model))
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    const answers = messages.page.filter(message => message.role === 'assistant' && message.text?.trim())
+    const searchCards = messages.page.flatMap(message =>
+      message.parts.filter(part => part.type === 'tool-registry_tools_search'))
+    expect(searchCards).toHaveLength(1)
+    expect(answers[0]?.text).not.toBe('No.')
+    expect(answers).toHaveLength(1)
+  })
+
+  it('uses an earlier search result for follow-ups before choosing another search', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-search-followup-owner')
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Search follow-up' })
+    const firstPrompt = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find blockchain tools',
+    }))
+    await backend.run(ctx => saveMessages(ctx, components.agent, {
+      threadId: created.threadId,
+      userId: canonicalAccountRef,
+      promptMessageId: firstPrompt.messageId,
+      messages: [
+        { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'prior-search', toolName: 'registry_tools_search', input: { query: 'blockchain' } }] },
+        { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'prior-search', toolName: 'registry_tools_search', output: { type: 'json', value: { kind: 'match', marker: 'Earlier blockchain result' } } }] },
+      ],
+    }))
+    const followup = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef,
+      prompt: 'Which of those is relevant to blockchain?',
+    }))
+    const model = mockModel({ contentSteps: [[{
+      type: 'text', text: 'The earlier blockchain result is the relevant match.',
+    }]] })
+    const modelCalls = vi.spyOn(model, 'doStream')
+
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: followup.messageId,
+    }, model))
+
+    expect(modelCalls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'auto' })
+    expect(JSON.stringify(modelCalls.mock.calls[0]?.[0])).toContain('Earlier blockchain result')
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    const searchResults = messages.page.flatMap(message => message.parts.filter(part =>
+      part.type === 'tool-registry_tools_search'))
+    expect(searchResults).toHaveLength(1)
+  })
+
   it('settles distinct unsuccessful searches without inventing options', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-no-match-owner')

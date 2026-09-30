@@ -148,3 +148,4 @@ export function chatShowingTools(shown: number, total: number): string {
   if (shown === 0 || total <= shown) return chatMatchedOperations(total)
   return `Showing ${shown} of ${total}`
 }
+export const chatLoadEarlierMessages = chatShared.loadMore

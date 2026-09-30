@@ -109,13 +109,18 @@ export async function streamDurableChatResponse(
     })
     return clarificationRequested || ownerApprovalPending
   }
+  let hasPriorSearch = false
   const runInitial = async () => {
     const result = await agent.streamText(
       ctx,
       { threadId: args.threadId, userId: args.ownerId },
     {
       promptMessageId: args.promptMessageId,
-      prepareStep: args.continuation === undefined ? prepareChatToolStep : ({ stepNumber }) =>
+      prepareStep: args.continuation === undefined
+        ? options => options.stepNumber === 0 && hasPriorSearch
+          ? { toolChoice: 'auto' as const }
+          : prepareChatToolStep(options)
+        : ({ stepNumber }) =>
         stepNumber === 0
           ? { toolChoice: { type: 'tool' as const,
             toolName: CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'] } }
@@ -180,7 +185,13 @@ export async function streamDurableChatResponse(
     const history = await listMessages(ctx, components.agent, {
       threadId: args.threadId, paginationOpts: { cursor: null, numItems: 20 },
     })
-    const promptText = history.page.find(row => row._id === args.promptMessageId)?.text ?? ''
+    const prompt = history.page.find(row => row._id === args.promptMessageId)
+    const promptText = prompt?.text ?? ''
+    hasPriorSearch = prompt !== undefined && history.page.some(row =>
+      row.order < prompt.order && row.status === 'success'
+      && row.message?.role === 'tool' && Array.isArray(row.message.content)
+      && row.message.content.some(part => part.type === 'tool-result'
+        && part.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']))
     const runRequest = parseRunRequest(promptText)
     if (runRequest !== null && args.trustedChatAuthority?.kind === 'agent_key') {
       if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
@@ -238,7 +249,8 @@ export async function streamDurableChatResponse(
       return purchased.call?.kind === 'needs_authority'
     }
     // A Run from a card needs the purchase tools, so it skips the tool-less immediate search.
-    if (promptText.trim().length > 0 && await streamImmediateCatalogue(ctx, {
+    // Prior search results are already in the agent's context; let its tool loop decide what to do next.
+    if (!hasPriorSearch && promptText.trim().length > 0 && await streamImmediateCatalogue(ctx, {
       agent,
       args,
       promptText,

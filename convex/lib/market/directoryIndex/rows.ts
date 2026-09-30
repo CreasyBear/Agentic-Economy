@@ -1,4 +1,5 @@
 import { directorySourceLabels } from '@/modules/market/x402-directory-metadata'
+import { truncateText } from '@/modules/common/truncate-text'
 import { isRecord } from '@/modules/common/is-record'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import type { Doc } from '../../../_generated/dataModel'
@@ -9,16 +10,9 @@ import type { X402DirectoryIndexCoverage } from '@/modules/market/x402-directory
 
 export type DirectoryActionClass = 'retrieve' | 'transform' | 'analyze' | 'create' | 'mutate' | 'other' | 'unclassified'
 export type DirectoryObjectClass = 'web' | 'document' | 'image' | 'location' | 'chain' | 'data' | 'other' | 'unclassified'
-/** Retain Unicode code points for compact search rows without copying source JSON. */
+/** Retain complete words where possible, without splitting Unicode graphemes. */
 export function compactDirectoryText(value: string, limit: number): string {
-  let text = ''
-  let length = 0
-  for (const point of value.trim()) {
-    if (length === limit) break
-    text += point
-    length += 1
-  }
-  return text
+  return truncateText(value.trim(), limit)
 }
 
 

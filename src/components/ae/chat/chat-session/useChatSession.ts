@@ -587,6 +587,13 @@ export function useChatSession({
       onSubmit: () => void submit(),
     },
     transcript: {
+      ...(isAuthenticated && threadId !== null ? {
+        loadEarlier: {
+          hasMore: durable.status === 'CanLoadMore' || durable.status === 'LoadingMore',
+          loading: durable.status === 'LoadingMore',
+          onLoad: () => durable.loadMore(PAGE_SIZE),
+        },
+      } : {}),
       messages: visibleMessages,
       onNewChat: startNewChat,
       ...(isAuthenticated && threadId !== null ? { ownerChatThreadId: threadId, ownerChatNow: now } : {}),

@@ -1,5 +1,5 @@
 // Immediate chat turns persist the catalogue card before optional selection; this copies streamDurableChatResponse's fallback order.
-import { saveMessages, type Agent } from '@convex-dev/agent'
+import { listMessages, saveMessages, type Agent } from '@convex-dev/agent'
 import type { JSONValue } from '@ai-sdk/provider'
 import { components, internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
@@ -40,7 +40,6 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
     messages: [
       { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'immediate-search', toolName, input: { query: deps.promptText, limit: 8 } }] },
       { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'immediate-search', toolName, output: { type: 'json', value: catalogue as JSONValue } }] },
-      { role: 'assistant', content: catalogueFact(catalogue) },
     ],
     agentName: 'Agentic Economy Operation Market',
   })
@@ -105,6 +104,31 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
   }
 
   if (deps.signal?.aborted) throw deps.signal.reason ?? new Error('chat_generation_deadline_exceeded')
+  const saveFallback = async (messageId?: string): Promise<void> => {
+    const history = messageId === undefined
+      ? await listMessages(ctx, components.agent, {
+        threadId: deps.args.threadId, paginationOpts: { cursor: null, numItems: 20 },
+      })
+      : undefined
+    const prompt = history?.page.find(message => message._id === deps.args.promptMessageId)
+    const existingId = messageId ?? history?.page.find(message =>
+      message.order === prompt?.order && message.message?.role === 'assistant' && !message.tool)?._id
+    if (existingId !== undefined) {
+      await deps.agent.updateMessage(ctx, {
+        messageId: existingId,
+        patch: { message: { role: 'assistant', content: catalogueFact(catalogue) }, status: 'success' },
+      })
+      return
+    }
+    await saveMessages(ctx, components.agent, {
+      threadId: deps.args.threadId,
+      userId: deps.args.ownerId,
+      promptMessageId: deps.args.promptMessageId,
+      messages: [{ role: 'assistant', content: catalogueFact(catalogue) }],
+      agentName: 'Agentic Economy Operation Market',
+    })
+  }
+
   try {
     const explanation = await deps.agent.streamText(ctx, {
       threadId: deps.args.threadId,
@@ -122,32 +146,14 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
     })
     const text = (await explanation.text).trim()
     if (!explanationUsable(text, catalogue)) {
-      const savedAssistant = explanation.savedMessages?.findLast(message => message.message?.role === 'assistant')
-      const fact = catalogueFact(catalogue)
-      if (savedAssistant === undefined) {
-        await saveMessages(ctx, components.agent, {
-          threadId: deps.args.threadId,
-          userId: deps.args.ownerId,
-          promptMessageId: deps.args.promptMessageId,
-          messages: [{ role: 'assistant', content: fact }],
-          agentName: 'Agentic Economy Operation Market',
-        })
-      } else {
-        await deps.agent.updateMessage(ctx, {
-          messageId: savedAssistant._id,
-          patch: { message: { role: 'assistant', content: fact }, status: 'success' },
-        })
-      }
+      const savedAssistant = explanation.savedMessages?.findLast(message =>
+        message.message?.role === 'assistant' && !message.tool)
+      if (savedAssistant === undefined) await saveFallback()
+      else await saveFallback(savedAssistant._id)
     }
   } catch (cause) {
     if (deps.signal?.aborted) throw cause
-    await saveMessages(ctx, components.agent, {
-      threadId: deps.args.threadId,
-      userId: deps.args.ownerId,
-      promptMessageId: deps.args.promptMessageId,
-      messages: [{ role: 'assistant', content: catalogueFact(catalogue) }],
-      agentName: 'Agentic Economy Operation Market',
-    })
+    await saveFallback()
   }
   return true
 }

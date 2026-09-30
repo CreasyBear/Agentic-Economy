@@ -205,7 +205,7 @@ describe('Tool chat Agent tools', () => {
       const providerToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]
       expect(CHAT_TOOL_NAME_MAP.providerToCanonical[providerToolName]).toBe(toolId)
     }
-    expect(agent.options.contextOptions?.excludeToolMessages).toBe(true)
+    expect(agent.options.contextOptions?.excludeToolMessages).toBe(false)
     expect(agent.options.stopWhen).toBeTypeOf('function')
   })
 

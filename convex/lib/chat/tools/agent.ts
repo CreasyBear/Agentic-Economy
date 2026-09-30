@@ -75,7 +75,7 @@ export function createChatAgent(
     ].join(' '),
     languageModel,
     tools,
-    contextOptions: { recentMessages: 20, excludeToolMessages: true },
+    contextOptions: { recentMessages: 20, excludeToolMessages: false },
     stopWhen: options => stepCountIs(MAX_CHAT_STEPS)(options)
       || chatNoMatchSearchCount(options.steps) >= MAX_CHAT_SEARCHES
       || hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify'])(options),

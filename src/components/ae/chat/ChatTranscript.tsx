@@ -15,7 +15,14 @@ import {
   MessageScrollerViewport,
 } from '@/components/ui/message-scroller'
 import { Skeleton } from '@/components/ui/skeleton'
-import { chatHandoffNotice, chatLoading, chatThinking, chatToolPanel } from '@/lib/public/chat-ia'
+import {
+  chatHandoffNotice,
+  chatLoadEarlierMessages,
+  chatLoading,
+  chatShared,
+  chatThinking,
+  chatToolPanel,
+} from '@/lib/public/chat-ia'
 import { readOpenUiBundle } from '@/modules/chat/openui-bundle'
 
 import { ChatOpenUiBundle } from './ChatOpenUiBundle'
@@ -87,6 +94,7 @@ export function ChatTranscript({
   generating = false,
   clarifyDisabled = false,
   pending = false,
+  loadEarlier,
   readOnly = false,
 }: ChatTranscriptProps) {
   const [comparedByTurn, setComparedByTurn] = useState<Record<string, readonly string[]>>({})
@@ -234,6 +242,22 @@ export function ChatTranscript({
             aria-live="polite"
             aria-relevant="additions text"
           >
+            {loadEarlier === undefined ? null : (
+              <div className="col-span-12 flex min-h-touch items-center justify-center">
+                {loadEarlier.hasMore ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-touch whitespace-nowrap"
+                    disabled={loadEarlier.loading}
+                    aria-busy={loadEarlier.loading}
+                    onClick={loadEarlier.onLoad}
+                  >
+                    {loadEarlier.loading ? chatShared.loadingMore : chatLoadEarlierMessages}
+                  </Button>
+                ) : null}
+              </div>
+            )}
             {turns.map((turn, index) => {
               const previousPrompt = turns.slice(0, index).findLast(message => message.role === 'user')?.text
               const bundle = turn.role === 'assistant' ? readOpenUiBundle(turn.text, turn.tools) : null

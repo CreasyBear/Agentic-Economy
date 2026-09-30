@@ -18,6 +18,7 @@ import {
 import { exactAmountSchema, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
+import { truncateText } from '@/modules/common/truncate-text'
 import { isPublicToolRef } from '@/modules/common/tool-ref'
 
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
@@ -408,9 +409,9 @@ export function projectToolSearchChoices(
       source: 'current',
       access: tool.availability.posture === 'routeable' ? 'ae_callable' : tool.availability.posture,
       toolRef: tool.toolRef,
-      title: Array.from(tool.listing.label).slice(0, 72).join(''),
-      summary: Array.from(tool.summary).slice(0, 100).join(''),
-      provider: Array.from(tool.business.name).slice(0, 48).join(''),
+      title: truncateText(tool.listing.label, 72),
+      summary: truncateText(tool.summary, 100),
+      provider: truncateText(tool.business.name, 48),
       actionClass: 'unclassified',
       objectClass: 'unclassified',
       readiness: projectToolChoiceEvidence(tool).readiness,
