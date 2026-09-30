@@ -27,9 +27,16 @@ The code path is identical in both phases. Only the source of the float differs,
 - **Liability:** aecon doesn't verify sellers or outputs. Liability is capped at the greater of fees paid in the last 12 months or A$100, subject to non-excludable consumer guarantees (the OpenRouter and treg pattern). **[confirm]**
 - **Auto top-up:** off. Opt-in only, if it's ever added.
 
-## Tax (corrects decision R2)
-- **GST is on usage, not on top-up.** ATO GSTR 2003/5 ¶¶49-54: a top-up of an account for unspecified future services is not a supply or a face-value voucher when it is funded. GST applies as the taxable services are supplied, and on forfeited balance when forfeited ([ATO ruling](https://www.ato.gov.au/law/view/document?DocID=GST/GSTR20035/NAT/ATO/00001#P49)).
-- The code currently books GST on principal + fee at top-up (`formance-schema.ts:121-149`, `aud-funding.ts:21-77`) and zero on Calls (`issueQuote.ts:154-156`). **Change:** GST on each Call's credit draw. The funding fee, if kept, is its own supply taxed at top-up. **[confirm]**
+## Tax
+- **Credits are prepaid usage credits, not vouchers.** GSTR 2003/5 ¶¶49-54 agrees: account credit for unspecified future services is not a Division 100 face-value voucher ([ATO ruling](https://www.ato.gov.au/law/view/document?DocID=GST/GSTR20035/NAT/ATO/00001#P49)).
+- **Timing is the only question.** Either the top-up is payment for aecon's service, with GST attributed at top-up (the attribution rules put GST in the period consideration is received), or the top-up is a deposit into an account, with GST on each credit draw.
+  - The Anthropic API charges tax when credits are added. OpenAI and OpenRouter don't publish their timing.
+  - The current code uses GST at top-up on principal + fee (`formance-schema.ts:121-149`).
+- **Default: keep GST at top-up (decision R2 stands).** It is simplest, matches market practice, and is what the code does. Consequences:
+  - A refund of unused credit needs a GST adjustment.
+  - Promotional credits carry no GST: no consideration at grant or on use.
+  - The accountant confirms the timing before beta. **[confirm]**
+- **aecon is the principal.** It supplies its own routing service to the user. Sellers are aecon's suppliers. Customer-facing wording must never say aecon buys or pays "on the user's behalf": that framing points toward payments or remittance (AUSTRAC "for a person"; Stripe's "purchase from third parties" restriction).
 - **USDC float** is likely trading stock (held to pay suppliers in ordinary business). Each payment is a disposal: record the AUD value per transfer ([ATO crypto in business](https://www.ato.gov.au/businesses-and-organisations/income-deductions-and-concessions/income-and-deductions-for-business/crypto-assets-and-business/crypto-assets-used-in-business)). **[confirm]**
 - **Founder-funded alpha float:** Joel's transfer disposes of his personal crypto. Record the date, amount, AUD value and purpose, and book it as a director loan or capital contribution. **[confirm]**
 
@@ -59,7 +66,7 @@ The code path is identical in both phases. Only the source of the float differs,
 |---|---|---|
 | 1 | Promotional credit grant (admin action; separate promo ledger account; drawn first; expiry) | Alpha |
 | 2 | Charge on settled 2xx (paid-200 rule); seller errors written off | Alpha |
-| 3 | GST booked on the Call credit draw, not the top-up principal | Before beta **[confirm]** |
+| 3 | GST timing confirmed by the accountant (default: at top-up, as built); GST adjustment on refunds of unused credit | Before beta **[confirm]** |
 | 4 | Separate production CDP wallet; `/admin/treasury`; deposit booking; reconciler | Alpha |
 | 5 | Screen `payTo` before signing; aecon-side per-Call, rolling-day and per-payee caps | Alpha |
 | 6 | Release unbroadcast authorizations after `validBefore` | Alpha |
