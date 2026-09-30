@@ -7,6 +7,7 @@ import type { FormanceTreasuryAuditTransaction } from '@/modules/money/formance-
 import { prepareFormanceFundingSettlement, prepareFormanceFundingReversal, type FormanceFundingBooking } from '@/modules/money/formance-workflows'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isMoneyRefusal, type CreditPaymentRequest } from '@/modules/money/public'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { mapStripeCheckoutSessionEvidence, mapStripeFundingRefundEvidence } from '../../../src/lib/server/stripe-money-provider'
 
 // Mock only external SDK I/O. Provider mapping, environment fences, command
@@ -253,8 +254,6 @@ describe('fresh Stripe treasury funding audit', () => {
 
   it('aborts a continually dripping response body after headers through the actual maintained Fetch adapter', async () => {
     const { source, settlement } = fixture()
-    await auditTreasuryFunding([source], [settlement], 'sandbox')
-    const options = sdk.construct.mock.calls[0]?.[1] as { httpClient: ReturnType<typeof Stripe.createFetchHttpClient> }
     const actualTimeout = AbortSignal.timeout.bind(AbortSignal)
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => actualTimeout(25))
     let aborted = false
@@ -278,11 +277,48 @@ describe('fresh Stripe treasury funding audit', () => {
     }))
     // Headers arrive immediately, so the SDK clears its own timeout. Body I/O
     // keeps progressing, demonstrating why an inactivity timeout is insufficient.
-    const response = await options.httpClient.makeRequest('api.stripe.com', '443', '/v1/audit-proof', 'GET', {}, '', 'https', 5_000)
-    await expect(response.toJSON()).rejects.toMatchObject({ name: 'TimeoutError' })
+    sdk.checkout.mockImplementationOnce(async () => {
+      const options = sdk.construct.mock.calls[0]?.[1] as { httpClient: ReturnType<typeof Stripe.createFetchHttpClient> }
+      const response = await options.httpClient.makeRequest('api.stripe.com', '443', '/v1/audit-proof', 'GET', {}, '', 'https', 5_000)
+      return await response.toJSON()
+    })
+    expect(await auditTreasuryFunding([source], [settlement], 'sandbox')).toEqual({
+      kind: 'unavailable', code: 'treasury_funding_processor_read_unavailable',
+    })
     expect(timeout).toHaveBeenCalledWith(TREASURY_FUNDING_REQUEST_TIMEOUT_MS)
     expect(aborted).toBe(true)
     expect(signal?.aborted).toBe(true)
+  })
+
+  it.each([
+    ['169.254.169.254', 'GET'], ['other.example', 'GET'], ['api.stripe.com', 'POST'],
+  ])('refuses unexpected SDK target %s or method %s before sending credentials', async (host, method) => {
+    const { source, settlement } = fixture()
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    sdk.checkout.mockImplementationOnce(async () => {
+      const options = sdk.construct.mock.calls[0]?.[1] as { httpClient: ReturnType<typeof Stripe.createFetchHttpClient> }
+      const response = await options.httpClient.makeRequest(host, '443', '/v1/audit-proof', method, {}, '', 'https', 5_000)
+      return await response.toJSON()
+    })
+    expect(await auditTreasuryFunding([source], [settlement], 'sandbox')).toEqual({
+      kind: 'unavailable', code: 'treasury_funding_processor_read_unavailable',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('refuses a private Stripe DNS answer through the actual SDK and guarded transport', async () => {
+    const { source, settlement } = fixture()
+    const dns = vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
+    sdk.checkout.mockImplementationOnce(async () => {
+      const options = sdk.construct.mock.calls[0]?.[1] as { httpClient: ReturnType<typeof Stripe.createFetchHttpClient> }
+      const response = await options.httpClient.makeRequest('api.stripe.com', '443', '/v1/audit-proof', 'GET', {}, '', 'https', 5_000)
+      return await response.toJSON()
+    })
+    expect(await auditTreasuryFunding([source], [settlement], 'sandbox')).toEqual({
+      kind: 'unavailable', code: 'treasury_funding_processor_read_unavailable',
+    })
+    expect(dns).toHaveBeenCalledWith('api.stripe.com')
   })
 
   it('preserves a proven processor binding mismatch when the next payment read fails', async () => {

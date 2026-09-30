@@ -20,7 +20,9 @@ const MAX_RESPONSE_BYTES = 64 * 1024
  * Requires: explicit custody environment and supported payment network.
  * Ensures: ready only after all three live CDP reads pass the signing predicate.
  * Invariant: no signing or provisioning; credentials and cancellation are local
- * to this check, with one deadline covering requests and response bodies.
+ * to this check, with one deadline covering guarded DNS, requests and response
+ * bodies. The fixed provider origin and refused redirects retain credentials at
+ * CDP; a private DNS answer cannot become a readiness read.
  * On violation: known drift/missing custody is refused; provider failures return
  * unavailable with a safe code, never a raw response or credential.
  *
@@ -40,8 +42,12 @@ export async function readCdpX402CustodyReadiness(
     || !/^[A-Za-z0-9][A-Za-z0-9-]{0,34}[A-Za-z0-9]$/.test(configuration.accountName)) {
     return { kind: 'refused', code: 'cdp_custody_configuration_invalid' }
   }
+  const [{ Agent }, { createGuardedLookup, defaultDnsResolver }] = await Promise.all([
+    import('undici'), import('@/modules/network-guard/public'),
+  ])
   const completed = new AbortController()
   const signal = AbortSignal.any([AbortSignal.timeout(READ_TIMEOUT_MS), completed.signal])
+  const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   const read = async (path: string): Promise<JsonValue> => {
     signal.throwIfAborted()
     const headers = await getAuthHeaders({
@@ -53,9 +59,10 @@ export async function readCdpX402CustodyReadiness(
       source: 'ae-custody-readiness',
     })
     signal.throwIfAborted()
-    const response = await fetch(`${CDP_ORIGIN}${path}`, {
-      method: 'GET', headers, signal, redirect: 'error',
-    })
+    // Node's maintained fetch accepts the Undici dispatcher; keep it scoped to
+    // this check so neither credentials nor transport state cross invocations.
+    const requestOptions = { method: 'GET', headers, signal, redirect: 'error' as const, dispatcher }
+    const response = await fetch(`${CDP_ORIGIN}${path}`, requestOptions)
     if (!response.ok) {
       await cancelResponseBody(response)
       throw Object.assign(new Error('CDP custody read failed'), { kind: 'cdp_custody_read_failure',
@@ -89,5 +96,6 @@ export async function readCdpX402CustodyReadiness(
   } finally {
     // Stop a parallel policy read immediately when its sibling fails.
     completed.abort()
+    await dispatcher.destroy().catch(() => undefined)
   }
 }

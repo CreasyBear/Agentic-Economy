@@ -1,10 +1,12 @@
 "use node"
 
 import Stripe from 'stripe'
+import { Agent } from 'undici'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import { compareExactAmounts, isMoneyRefusal, rescaleExactAmount, type ExactAmount } from '@/modules/money/public'
 import type { TreasuryCheck } from '@/modules/money/treasury-report'
+import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import {
   createStripeMoneyProvider, mapStripeFundingRefundEvidence, readStripeFundingRefund,
   readStripeMoneyReadbackProviderConfig, resolveStripeMoneyProviderContext,
@@ -48,7 +50,10 @@ const objectId = (value: string | { id: string } | null): string | undefined =>
  * Keep: stored success flags cannot discover refunds missing from webhook ingestion.
  * Alpha limit: <=250 funding rows, <=1,000 refunds/charge, <=120s total;
  * every SDK request has a 5s wall-clock abort covering fetch AND response body,
- * independent of the SDK header timer, and zero retries. Proven mismatches survive
+ * independent of the SDK header timer, and zero retries. Reads require the fixed
+ * Stripe HTTPS origin and GET, guarded DNS and no redirects. One audit-scoped
+ * dispatcher reuses the existing guard and is destroyed on completion/failure.
+ * Proven mismatches survive
  * an unrelated read outage/deadline; missing work never becomes a matched check.
  */
 export async function auditTreasuryFunding(
@@ -129,18 +134,25 @@ export async function auditTreasuryFunding(
   if (deploymentPaymentEnvironment(globalThis.process.env) !== environment) return failed('treasury_funding_environment_invalid')
   const config = readStripeMoneyReadbackProviderConfig(globalThis.process.env, environment === 'production' ? 'live' : 'test')
   if (isMoneyRefusal(config)) return failed('treasury_funding_processor_unavailable')
+  const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   try {
     const resolved = resolveStripeMoneyProviderContext({ config, client: new Stripe(config.secretKey, {
       apiVersion: Stripe.API_VERSION, typescript: true, timeout: TREASURY_FUNDING_REQUEST_TIMEOUT_MS, maxNetworkRetries: 0,
       // Stripe's default Node timeout is inactivity-based; its Fetch adapter's
       // own timer ends at headers. This independent signal remains bound to the
       // native fetch response body until consumption finishes or aborts.
-      httpClient: Stripe.createFetchHttpClient((url, init) => globalThis.fetch(url, {
-        ...init, signal: AbortSignal.any([
-          AbortSignal.timeout(TREASURY_FUNDING_REQUEST_TIMEOUT_MS),
-          ...(init?.signal === undefined || init.signal === null ? [] : [init.signal]),
-        ]),
-      })),
+      httpClient: Stripe.createFetchHttpClient(async (url, init) => {
+        const target = new URL(url instanceof Request ? url.url : url)
+        if (target.origin !== 'https://api.stripe.com' || target.username !== '' || target.password !== ''
+          || init?.method !== 'GET') throw new Error('treasury_funding_processor_target_invalid')
+        const requestOptions = {
+          ...init, dispatcher, redirect: 'error' as const, signal: AbortSignal.any([
+            AbortSignal.timeout(TREASURY_FUNDING_REQUEST_TIMEOUT_MS),
+            ...(init.signal === undefined || init.signal === null ? [] : [init.signal]),
+          ]),
+        }
+        return await globalThis.fetch(target, requestOptions)
+      }),
     }) })
     if (isMoneyRefusal(resolved)) return failed('treasury_funding_processor_unavailable')
     const context: ProcessorContext = { ...resolved, deadlineAt }
@@ -248,6 +260,8 @@ export async function auditTreasuryFunding(
     return degradeBackend(boundaryCauseKind(cause), failed('treasury_funding_processor_read_unavailable'), {
       site: 'auditTreasuryFunding', reason: 'source_unavailable',
     })
+  } finally {
+    await dispatcher.destroy().catch(() => undefined)
   }
   if (Date.now() >= deadlineAt) return failed('treasury_funding_read_budget_exhausted')
   if (mismatchCode !== undefined) return mismatch(mismatchCode, rows.length, expected, observed, [...mismatchRefs].slice(0, EVIDENCE_LIMIT))

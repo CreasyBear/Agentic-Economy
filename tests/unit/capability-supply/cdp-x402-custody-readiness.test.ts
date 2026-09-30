@@ -1,6 +1,7 @@
 import { CdpClient } from '@coinbase/cdp-sdk'
 import { getAuthHeaders } from '@coinbase/cdp-sdk/auth'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
 
 import {
   cdpX402ManagedPolicyRules,
@@ -55,6 +56,35 @@ afterEach(() => {
 })
 
 describe('read-only CDP custody readiness', () => {
+  it('refuses private provider DNS answers through the actual guarded transport', async () => {
+    const f = fixture()
+    vi.unstubAllGlobals()
+    const dns = vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
+    expect(await readCdpX402CustodyReadiness(f.environment, 'sandbox')).toEqual({
+      kind: 'unavailable', code: 'cdp_custody_read_unavailable',
+    })
+    expect(dns).toHaveBeenCalledWith('api.cdp.coinbase.com')
+    expect(CdpClient).not.toHaveBeenCalled()
+  })
+
+  it('cancels stalled provider DNS at the shared deadline and releases its transport', async () => {
+    const f = fixture()
+    vi.unstubAllGlobals()
+    const controller = new AbortController()
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal)
+    let started!: () => void
+    const lookupStarted = new Promise<void>(resolve => { started = resolve })
+    vi.spyOn(defaultDnsResolver, 'lookup').mockImplementation(async () => {
+      started()
+      return await new Promise(() => {})
+    })
+    const pending = readCdpX402CustodyReadiness(f.environment, 'sandbox')
+    await lookupStarted
+    controller.abort(new Error('fixture_deadline'))
+    expect(await pending).toEqual({ kind: 'unavailable', code: 'cdp_custody_read_unavailable' })
+    expect(CdpClient).not.toHaveBeenCalled()
+  })
+
   it.each(['sandbox', 'production'] as const)('reads exact live %s custody without signing or provisioning', async (paymentEnvironment) => {
     const f = fixture(paymentEnvironment)
     expect(await readCdpX402CustodyReadiness(f.environment, paymentEnvironment)).toEqual({

@@ -119,6 +119,8 @@ describe('ensureBootEnvironmentValidated', () => {
   })
 
   it('runs semantic live checks on preview boot and does not cache a refusal', () => {
+    // The release runner's CLI build switch is not web deployment configuration.
+    vi.stubEnv('AE_CLI_PREBUILT', undefined)
     for (const name of new Set([...DEPLOYMENT_MANIFEST.configuration.requiredProduction.flatMap(group => group.names),
       ...DEPLOYMENT_MANIFEST.configuration.forbiddenProduction])) vi.stubEnv(name, undefined)
     for (const [name, value] of Object.entries(liveConfiguration())) vi.stubEnv(name, value)
