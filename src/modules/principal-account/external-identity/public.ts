@@ -1,10 +1,6 @@
 export {
-  CREDENTIAL_LIFECYCLES,
-  CREDENTIAL_TYPES,
   CLERK_USER_PROVIDER_NAMESPACE,
-  EXTERNAL_IDENTITY_BINDING_LIFECYCLES,
   KNOWN_EXTERNAL_PROVIDER_STATES,
-  ExternalIdentityRegistry,
   ExternalIdentityRegistryError,
   credentialRef,
   clerkUserProviderIdentifier,
@@ -12,24 +8,6 @@ export {
   externalProviderState,
   generateCredentialRef,
   generateExternalIdentityBindingRef,
-} from './registry'
-export type {
-  AuthenticatedExternalIdentity,
-  Credential,
-  CredentialLifecycle,
-  CredentialRef,
-  CredentialType,
-  ExternalIdentityBinding,
-  ExternalIdentityBindingLifecycle,
-  ExternalIdentityBindingRef,
-  ExternalIdentityRegistryCommit,
-  ExternalIdentityRegistryErrorCode,
-  ExternalIdentityRegistryOptions,
-  ExternalIdentityRegistryStore,
-  ExternalIdentityRegistryTransaction,
-  ExternalProviderState,
-  KnownExternalProviderState,
-  RevisionedExternalIdentityReplacement,
 } from './registry'
 export {
   credentialLifecycleValue,
