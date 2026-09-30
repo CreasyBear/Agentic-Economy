@@ -33,6 +33,8 @@ import {
   isBuyerFormanceReservation,
   refundReconciliation,
 } from './dispatchRefusal'
+import { parseWorkloadCronSnapshot } from '../../platform/workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from '../../platform/workloadCron/admission'
 
 export const AUTHORITY_REQUEST_TTL_MS = 60 * 60 * 1000
 
@@ -231,7 +233,10 @@ async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): P
 
 export async function expireStalePendingApprovalsHandler(
   ctx: MutationCtx,
+  args: Readonly<{ workload: unknown }>,
 ): Promise<{ scanned: number; expired: number }> {
+  const workload = parseWorkloadCronSnapshot(args.workload)
+  await reconcileWorkloadCronSnapshot(ctx, 'expire stale pending approvals', workload)
   const cutoff = Date.now() - AUTHORITY_REQUEST_TTL_MS
   const rows = await ctx.db.query('capabilityCalls')
     .withIndex('by_state_and_result_kind_and_createdAt', (query) => query

@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { getFunctionName } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as CurrentToolReads from '../../../convex/lib/capabilitySupply/currentTool/reads'
@@ -54,6 +55,14 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigDecisionAmount } from '@/modules/money/public'
 import { normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import { convexTest } from 'convex-test'
+import { internal } from '../../../convex/_generated/api'
+import schema from '../../../convex/schema'
+import { admitWorkloadCron } from '../../../convex/lib/platform/workloadCron/admission'
+import { ensurePlatformWorkloadIdentitiesHandler } from '../../../convex/lib/platform/workloadCron/identities'
+
+const convexModules = Object.fromEntries(Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
+  .map(([path, load]) => [path.replace('../../../convex/', './'), load]))
 
 type Row = Record<string, unknown> & { _id: string }
 type QueryBuilder = {
@@ -352,6 +361,10 @@ function context(options: Readonly<{
     scheduler: { runAfter: vi.fn(async (..._args: unknown[]) => undefined) },
     runMutation: vi.fn(async () => ({ ok: true as const })),
   }
+}
+async function expiryWorkload(ctx: { db: MemoryDb }) {
+  await ensurePlatformWorkloadIdentitiesHandler(ctx as never)
+  return await admitWorkloadCron(ctx as never, 'expire stale pending approvals')
 }
 
 function functionPath(reference: unknown): string {
@@ -686,8 +699,8 @@ describe('approval request expiry', () => {
     })
     const ctx = context({ invocation: stale })
     ctx.db.seed('capabilityCalls', young)
-
-    await expect(expiryHandler(ctx, {})).resolves.toEqual({ scanned: 1, expired: 1 })
+    const workload = await expiryWorkload(ctx)
+    await expect(expiryHandler(ctx, { workload })).resolves.toEqual({ scanned: 1, expired: 1 })
     expect(ctx.db.row('capabilityCalls', stale._id)).toMatchObject({
       state: 'refused',
       dispatchState: 'failed',
@@ -696,7 +709,7 @@ describe('approval request expiry', () => {
     })
     expect(ctx.db.row('capabilityCalls', young._id)).toMatchObject({ state: 'pending' })
     expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
-    await expect(expiryHandler(ctx, {})).resolves.toEqual({ scanned: 0, expired: 0 })
+    await expect(expiryHandler(ctx, { workload })).resolves.toEqual({ scanned: 0, expired: 0 })
     expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
   })
 
@@ -709,6 +722,46 @@ describe('approval request expiry', () => {
       state: 'refused',
       dispatchState: 'failed',
       result: { kind: 'refused', code: 'authority_denied' },
+    })
+  })
+  it('runs the real admitted cron target and reconciles a stale reserved approval', async () => {
+    const backend = convexTest(schema, convexModules)
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const callRef = 'operation-invocation:v1:cron-expiry'
+    await backend.run(async ({ db }) => {
+      await db.insert('capabilityCalls', {
+        callRef,
+        principalId: principal.principalId,
+        ownerId: owner,
+        credentialId: principal.credentialId,
+        applicationRef: principal.applicationRef,
+        toolRef,
+        idempotencyKey: 'idempotency:cron-expiry',
+        environment: 'sandbox',
+        grantRef: 'grant:approval',
+        grantGeneration: 1,
+        policyDigest: approvalPolicyDigest,
+        grantExpiresAt,
+        inputDigest: canonicalDigest(input),
+        requestDigest: canonicalDigest({ toolRef, input }),
+        state: 'pending',
+        formanceFinancialState: 'reserved',
+        formanceReservationRefs: ['reservation:1', 'reservation:2', 'reservation:3'],
+        result: needsAuthorityResult(callRef),
+        createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
+        updatedAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
+      })
+    })
+
+    await expect(backend.mutation(internal.workloadCron.expireStalePendingApprovals, {}))
+      .resolves.toBeNull()
+    const row = await backend.run(async ({ db }) => db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique())
+    expect(row).toMatchObject({
+      state: 'refused',
+      dispatchState: 'failed',
+      result: { kind: 'refused', code: 'authority_denied' },
+      reconciliation: { reason: 'refund_pending' },
     })
   })
 })

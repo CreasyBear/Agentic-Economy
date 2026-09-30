@@ -2,6 +2,7 @@ import { getFunctionName } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as CallReservationModule from '../../../convex/lib/capabilityExecution/callLifecycle/callReservationActions'
 import type * as CallRecoveryModule from '../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryActions'
+import type * as AdmissionApprovalsModule from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
 import type * as SourceWriteAdmissionModule from '../../../convex/lib/security/sourceWrite/admission'
 
 const mocks = vi.hoisted(() => ({
@@ -68,7 +69,8 @@ vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryActio
   reconcileOwnerCallHandler: mocks.reconcileOwner,
 }))
 
-vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals', () => ({
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals', async (importOriginal) => ({
+  ...(await importOriginal<typeof AdmissionApprovalsModule>()),
   listPendingCallApprovalsHandler: mocks.listApprovals,
   decideCallApprovalHandler: mocks.decideApproval,
 }))

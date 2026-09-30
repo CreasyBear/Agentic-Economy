@@ -8,6 +8,7 @@ import {
 } from './lib/capabilityExecution/callLifecycle/contracts'
 import { approvalDecisionResult } from './lib/capabilityExecution/callLifecycle/admissionApproval'
 import { expireStalePendingApprovalsHandler } from './lib/capabilityExecution/callLifecycle/admissionApprovals'
+import { workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import { abandonArgs, abandonResult, reserveArgs, reserveResult } from './lib/capabilityExecution/callLifecycle/admissionReservation'
 import { callArgs, admitArgs, admitResult, admitHandler } from './lib/capabilityExecution/callLifecycle/admission'
 import { reserveHandler } from './lib/capabilityExecution/callLifecycle/admissionReserve'
@@ -104,7 +105,7 @@ export const decideCallApproval = mutation({
   args: decideCallApprovalArgs, returns: approvalDecisionResult, handler: canonicalOwnerApprovalDecisionHandler,
 })
 export const expireStalePendingApprovals = internalMutation({
-  args: {},
+  args: { workload: workloadCronSnapshotValue },
   returns: v.object({ scanned: v.number(), expired: v.number() }),
   handler: expireStalePendingApprovalsHandler,
 })
