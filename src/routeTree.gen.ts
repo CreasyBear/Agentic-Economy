@@ -16,7 +16,6 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OpenapiDotjsonRouteImport } from './routes/openapi[.]json'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
@@ -196,11 +195,6 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const OpenapiDotjsonRoute = OpenapiDotjsonRouteImport.update({
   id: '/openapi.json',
   path: '/openapi.json',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -987,7 +981,6 @@ export interface FileRoutesByFullPath {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
-  '/onboarding': typeof OnboardingRoute
   '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
@@ -1141,7 +1134,6 @@ export interface FileRoutesByTo {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
-  '/onboarding': typeof OnboardingRoute
   '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
@@ -1297,7 +1289,6 @@ export interface FileRoutesById {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
-  '/onboarding': typeof OnboardingRoute
   '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
@@ -1453,7 +1444,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
-    | '/onboarding'
     | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
@@ -1607,7 +1597,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
-    | '/onboarding'
     | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
@@ -1762,7 +1751,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
-    | '/onboarding'
     | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
@@ -1918,7 +1906,6 @@ export interface RootRouteChildren {
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   MarketRoute: typeof MarketRoute
   McpRoute: typeof McpRoute
-  OnboardingRoute: typeof OnboardingRoute
   OpenapiDotjsonRoute: typeof OpenapiDotjsonRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
   RobotsDottxtRoute: typeof RobotsDottxtRoute
@@ -2053,13 +2040,6 @@ declare module '@tanstack/react-router' {
       path: '/openapi.json'
       fullPath: '/openapi.json'
       preLoaderRoute: typeof OpenapiDotjsonRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -3367,7 +3347,6 @@ const rootRouteChildren: RootRouteChildren = {
   LlmsDottxtRoute: LlmsDottxtRoute,
   MarketRoute: MarketRoute,
   McpRoute: McpRoute,
-  OnboardingRoute: OnboardingRoute,
   OpenapiDotjsonRoute: OpenapiDotjsonRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
   RobotsDottxtRoute: RobotsDottxtRoute,

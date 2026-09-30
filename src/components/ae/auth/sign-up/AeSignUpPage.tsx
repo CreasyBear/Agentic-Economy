@@ -23,8 +23,8 @@ export function AeSignUpPage(props: AeSignUpPageProps) {
   const signUpProps: SignUpProps & { fallback?: ReactNode } = {
     appearance: clerkAuthSurfaceAppearance,
     fallback: <SignUpClerkFallback />,
-    fallbackRedirectUrl: model.onboardingRedirectUrl,
-    forceRedirectUrl: model.onboardingRedirectUrl,
+    fallbackRedirectUrl: model.redirectUrl,
+    forceRedirectUrl: model.redirectUrl,
     signInFallbackRedirectUrl: model.signInFallbackRedirectUrl,
     signInUrl: model.signInUrl,
   }

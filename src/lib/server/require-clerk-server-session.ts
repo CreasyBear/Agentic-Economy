@@ -30,5 +30,5 @@ const requireSignedInServer = createServerFn()
   .handler(async ({ data }) => requireClerkServerSession(data))
 
 export async function requireSignedInBeforeLoad(location: { href: string }): Promise<void> {
-  await requireSignedInServer({ data: { redirectTo: signedInReturnPath(location.href, '/onboarding') } })
+  await requireSignedInServer({ data: { redirectTo: signedInReturnPath(location.href, '/market') } })
 }
