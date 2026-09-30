@@ -6,7 +6,7 @@ export const accountHistoryEntrySchema = z.strictObject({
   transactionRef: z.string().nullable(),
   occurredAt: z.number().int().nonnegative(),
   recordedAt: z.number().int().nonnegative().nullable(),
-  kind: z.enum(['funding', 'funding_reversal', 'call_spend', 'document_adjustment', 'unmapped']),
+  kind: z.enum(['funding', 'funding_reversal', 'call_spend', 'document_adjustment', 'promotional_grant', 'promotional_use', 'promotional_expiry', 'unmapped']),
   /** Available plus reserved customer credit; internal reservations net to zero. */
   accountEffect: z.strictObject({ currency: z.literal('AUD'), units: signedUnits, exponent: z.literal(6) }),
   /** Document rounding is separate and never changes spendable credit. */

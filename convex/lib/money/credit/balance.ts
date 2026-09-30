@@ -3,7 +3,8 @@ import { internal } from '../../../_generated/api'
 import type { ActionCtx, QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { exactAmount, identifier } from '../../../moneyLedgerValues'
-import { creditAccountResultValue, type FormanceDisplayBalanceRead } from './contracts'
+import { creditAccountResultValue } from './contracts'
+import type { AccountCreditBalance } from '@/modules/money/public'
 export const creditAccountMoneyFactsArgs = { accountRef: identifier }
 
 
@@ -51,9 +52,8 @@ export async function readCreditAccountHandler(ctx: ActionCtx, args: { principal
     if (args.principalId !== actor.canonicalAccountRef) {
       return { kind: 'refused' as const, code: 'billing_identity_mismatch' }
     }
-    const balance: FormanceDisplayBalanceRead = await ctx.runAction(internal.moneyFormance.readDisplayBalance, {
-      balanceKind: 'account_aud' as const,
-      subjectRef: actor.canonicalAccountRef,
+    const balance: AccountCreditBalance = await ctx.runAction(internal.moneyAccountCreditBalance.read, {
+      accountRef: actor.canonicalAccountRef,
     })
     if (balance.kind !== 'available') return { kind: 'refused' as const, code: 'source_unavailable' }
     const moneyFacts: CreditAccountMoneyFacts = await ctx.runQuery(
@@ -65,6 +65,9 @@ export async function readCreditAccountHandler(ctx: ActionCtx, args: { principal
       principalId: actor.canonicalAccountRef,
       accountId: actor.canonicalAccountRef,
       balance: { currency: balance.currency, units: balance.units, exponent: balance.exponent },
+      purchasedBalance: { currency: balance.currency, units: balance.purchasedUnits, exponent: balance.exponent },
+      promotionalBalance: { currency: balance.currency, units: balance.promotionalUnits, exponent: balance.exponent },
+      nextPromotionalExpiryAt: balance.nextPromotionalExpiryAt,
       ...(moneyFacts.pendingTopup === undefined ? {} : { pendingTopup: moneyFacts.pendingTopup }),
       evidence: 'source' as const,
     }

@@ -41,6 +41,7 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
   const ownerChatEnabled = grantStatus?.enabled === true
   const [balanceRefresh, setBalanceRefresh] = useState(0)
   const [balanceLabel, setBalanceLabel] = useState<string>()
+  const [balanceDescription, setBalanceDescription] = useState<string>()
   const [balanceLoading, setBalanceLoading] = useState(false)
   useEffect(() => {
     if (previousThreadIdRef.current === model.header.threadId) return
@@ -74,26 +75,46 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
   useEffect(() => {
     if (!model.header.authenticated) {
       setBalanceLabel(undefined)
+      setBalanceDescription(undefined)
       setBalanceLoading(false)
       return
     }
     let active = true
+    let expiryTimer: ReturnType<typeof setTimeout> | undefined
     setBalanceLoading(true)
     void readAccountFundingBalance().then(balance => {
       if (!active) return
       if (balance.kind !== 'available') {
         setBalanceLabel(undefined)
+        setBalanceDescription(undefined)
         return
       }
-      const { units, exponent } = balance.balance
+      const { units, exponent } = balance.totalBalance ?? balance.balance
       setBalanceLabel(formatDisplayAmount({ currency: 'AUD', units, exponent }))
+      const purchased = formatDisplayAmount(balance.balance)
+      const promotional = balance.promotionalBalance
+      const promotionalUnits = promotional?.units ?? '0'
+      const expiry = balance.nextPromotionalExpiryAt
+      if (expiry != null) expiryTimer = setTimeout(() => {
+        setBalanceLabel(undefined)
+        setBalanceDescription(undefined)
+        setBalanceRefresh(value => value + 1)
+      }, Math.min(2_147_483_647, Math.max(0, expiry - Date.now())))
+      const nextExpiry = expiry == null ? undefined : new Intl.DateTimeFormat('en-AU', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+        timeZone: 'Australia/Perth', timeZoneName: 'short',
+      }).format(expiry)
+      setBalanceDescription(promotional !== undefined && promotionalUnits !== '0'
+        ? `Purchased credit ${purchased}. Promotional credit ${formatDisplayAmount(promotional)}.${nextExpiry === undefined ? '' : ` Next promotional credit expiry ${nextExpiry}.`}`
+        : `Purchased credit ${purchased}.`)
     }, () => {
       if (!active) return
       setBalanceLabel(undefined)
+      setBalanceDescription(undefined)
     }).finally(() => {
       if (active) setBalanceLoading(false)
     })
-    return () => { active = false }
+    return () => { active = false; clearTimeout(expiryTimer) }
   }, [balanceRefresh, model.header.authenticated, readAccountFundingBalance])
 
   useEffect(() => {
@@ -143,6 +164,7 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
             setCreditOpen(true)
           }}
           balanceLabel={balanceLabel}
+          balanceDescription={balanceDescription}
           {...(grantStatus !== undefined && model.header.onEnableSpending !== undefined
             ? { onEnableSpending: model.header.onEnableSpending }
             : {})}
@@ -174,4 +196,3 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
     </ChatNeedActionsContext.Provider>
   )
 }
-

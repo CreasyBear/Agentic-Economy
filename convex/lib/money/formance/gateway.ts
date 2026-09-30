@@ -8,11 +8,16 @@ import {
   type FormanceContext,
 } from '../../../../src/modules/money/formance'
 export {
+  executeFormanceMoneyCommand,
   readFormanceAccountHistory,
   readFormancePeriodSpend,
   readFormanceStatementPage,
 } from '../../../../src/modules/money/formance'
 export {
+  readFormanceAccountCreditBalance,
+  prepareFormancePromotionalCreditGrant,
+  prepareFormancePromotionalCreditExpiry,
+  type FormancePromotionalCreditBooking,
   adjustFormanceSpendingPeriod,
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,

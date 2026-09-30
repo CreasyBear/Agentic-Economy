@@ -14,7 +14,7 @@ import { ChatHeaderAuthorityContainer } from '../ChatHeaderAuthorityContainer'
 import { RecoveryNotice } from '../../recovery/RecoveryNotice'
 
 
-export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy = model.header.busy, onEnableSpending, onAddCredit, balanceLabel }: ChatLayoutProps) {
+export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy = model.header.busy, onEnableSpending, onAddCredit, balanceLabel, balanceDescription }: ChatLayoutProps) {
   const [historyOpen, setHistoryOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [offline, setOffline] = useState(false)
@@ -70,10 +70,11 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
       <AeChatPage
         header={
           <ErrorBoundary key={model.header.threadId} fallback={<ChatHeader {...fallbackHeader}
-            balanceLabel={balanceLabel} mobileHistory={null} mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} onToggleHistory={toggleHistory} />}>
+            balanceLabel={balanceLabel} balanceDescription={balanceDescription} mobileHistory={null} mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} onToggleHistory={toggleHistory} />}>
             <ChatHeaderAuthorityContainer
               {...fallbackHeader}
               balanceLabel={balanceLabel}
+              balanceDescription={balanceDescription}
               ownerChatEnabled={ownerChatEnabled}
               mobileHistory={model.showHistoryRail ? (
                 <ErrorBoundary key={`${model.header.threadId}:${historyVersion}`}

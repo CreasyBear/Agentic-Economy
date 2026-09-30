@@ -44,6 +44,7 @@ import {
 } from './internal/formance-transaction-templates'
 
 export * from './internal/formance-transaction-templates'
+export * from './internal/formance-promotional-credit'
 
 export type FormanceDisplayBalanceResult =
   | Readonly<{

@@ -1,3 +1,4 @@
+import { restorePromotionalCredit } from '../promotionalCredit/allocation'
 import { v, type Infer } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
 
@@ -63,7 +64,7 @@ export const finalizeReleaseHandler = async (ctx: MutationCtx, args: Infer<typeo
     const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
-    if (row === null || args.transactionRefs.length !== 2) {
+    if (row === null || args.transactionRefs.length !== 2 + (row.promotionalCreditAllocation?.grants.length ?? 0)) {
       return { kind: 'refused' as const, code: 'managed_call_release_invalid' }
     }
     if (row.formanceFinancialState === 'released') {
@@ -73,6 +74,10 @@ export const finalizeReleaseHandler = async (ctx: MutationCtx, args: Infer<typeo
     }
     if (row.formanceFinancialState !== 'reserved') {
       return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
+    }
+    if (row.promotionalCreditAllocation !== undefined) {
+      const restored = await restorePromotionalCredit(ctx, row.promotionalCreditAllocation, row.ownerId, row.environment, args.now)
+      if (restored.kind !== 'restored') throw new Error('promotional_credit_restore_failed')
     }
     await ctx.db.patch(row._id, {
       formanceFinancialState: 'released',
@@ -93,7 +98,7 @@ export const finalizeSettlementHandler = async (ctx: MutationCtx, args: Infer<ty
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
     const [buyerSaleTransactionRef, settlementTransactionRef] = args.transactionRefs
-    if (row === null || args.transactionRefs.length !== 2 || !buyerSaleTransactionRef || !settlementTransactionRef) {
+    if (row === null || args.transactionRefs.length !== 2 + (row.promotionalCreditAllocation?.grants.length ?? 0) || !buyerSaleTransactionRef || !settlementTransactionRef) {
       return { kind: 'refused' as const, code: 'managed_call_settlement_invalid' }
     }
     if (row.reconciliation?.leaseOwner?.startsWith('paid-result-loss:')

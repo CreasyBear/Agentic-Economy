@@ -9,6 +9,8 @@ export const CONSEQUENCE_OPERATIONS = [
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
   'moneyTreasury:recordObservation',
+  'moneyPromotionalCredit:claimWork',
+  'moneyPromotionalCredit:finishWork',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
 ] as const
 export type ConsequenceOperation = typeof CONSEQUENCE_OPERATIONS[number]

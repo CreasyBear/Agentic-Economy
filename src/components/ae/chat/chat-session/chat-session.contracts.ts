@@ -95,6 +95,7 @@ export type ChatHeaderProps = Readonly<{
   ownerChatEnabled?: boolean
   enableProblem?: string
   balanceLabel?: string | undefined
+  balanceDescription?: string | undefined
   onEnableSpending?: () => void
   mobileHistory: ReactNode
   mobileOpen: boolean
@@ -185,4 +186,5 @@ export type ChatLayoutProps = Readonly<{
   onEnableSpending?: () => void
   onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: RunIntent) => void
   balanceLabel?: string | undefined
+  balanceDescription?: string | undefined
 }>

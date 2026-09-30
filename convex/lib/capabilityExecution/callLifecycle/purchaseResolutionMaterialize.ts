@@ -1,3 +1,4 @@
+import { promotionalPurchasedAmounts } from '@/modules/money/public'
 import { v, type Infer } from 'convex/values'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
@@ -66,11 +67,16 @@ export async function materializePurchaseResolutionRecord(
     .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
     .unique()
 
-  const considerationAmount = accountReceipt?.totalBuyerCharge ?? {
+  const promoAllocation = row.promotionalCreditAllocation
+  const purchasedAmounts = promoAllocation === undefined ? undefined : promotionalPurchasedAmounts(
+    quote.decisionAudUnits, quote.buyerTaxUnits, promoAllocation.purchasedUnits,
+  )
+  if (promoAllocation !== undefined && purchasedAmounts === undefined) return
+  const considerationAmount = promoAllocation === undefined ? accountReceipt?.totalBuyerCharge ?? {
     currency: 'AUD',
     units: quote.decisionAudUnits,
     exponent: 6,
-  }
+  } : { currency: 'AUD', units: promoAllocation.purchasedUnits, exponent: 6 }
   const providerObligationAmount = accountReceipt?.providerObligation.amount ?? {
     currency: 'USDC',
     units: quote.sourceUsdcUnits ?? obligation?.providerAmountUnits ?? '0',
@@ -93,8 +99,8 @@ export async function materializePurchaseResolutionRecord(
     ...(accountReceipt?.state === undefined ? {} : { receiptState: accountReceipt.state }),
     ...(accountReceipt?.refundState === undefined ? {} : { receiptRefundState: accountReceipt.refundState }),
     considerationAmount,
-    considerationNetUnits: quote.buyerRevenueUnits,
-    considerationGstUnits: quote.buyerTaxUnits,
+    considerationNetUnits: purchasedAmounts?.revenueUnits ?? quote.buyerRevenueUnits,
+    considerationGstUnits: purchasedAmounts?.taxUnits ?? quote.buyerTaxUnits,
     providerObligationAmount,
     resolvedAt,
   })

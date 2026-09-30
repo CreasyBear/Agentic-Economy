@@ -15,6 +15,30 @@ async function loadRows(ctx: MutationCtx, callRef: string) {
   return quote === null ? null : { call, quote }
 }
 
+// A lease grants permission to retry; it never establishes absence of an old write.
+export const claimReservationAttemptArgs = v.object({ callRef: v.string(), initialAdmission: v.boolean() })
+export const claimReservationAttemptResult = v.union(
+  v.object({ kind: v.literal('claimed'), generation: v.number() }),
+  v.object({ kind: v.literal('busy') }),
+)
+export const claimReservationAttemptHandler = async (ctx: MutationCtx, args: Infer<typeof claimReservationAttemptArgs>) => {
+  const rows = await loadRows(ctx, args.callRef)
+  if (rows === null || rows.call.formanceReservationRefs !== undefined
+    || rows.call.workId !== undefined || rows.call.authority !== undefined
+    || (rows.call.formanceFinancialState !== 'reservation_pending'
+      && rows.call.formanceFinancialState !== undefined && rows.call.formanceFinancialState !== 'outcome_unknown')) {
+    return { kind: 'busy' as const }
+  }
+  const now = Date.now()
+  const prior = rows.call.formanceReservationAttempt
+  if (prior !== undefined && prior.leaseUntil > now) return { kind: 'busy' as const }
+  const generation = (prior?.generation ?? 0) + 1
+  await ctx.db.patch(rows.call._id, { formanceReservationAttempt: {
+    generation, leaseUntil: now + 30_000, ambiguous: !args.initialAdmission || prior !== undefined || rows.call.formanceFinancialState === 'outcome_unknown',
+  } })
+  return { kind: 'claimed' as const, generation }
+}
+
 export const attachReservationArgs = v.object({ callRef: v.string(), transactionRefs: transactionRefsValue })
 export const attachReservationResult = v.union(
     v.object({ kind: v.literal('attached'), replayed: v.boolean() }),
@@ -22,7 +46,7 @@ export const attachReservationResult = v.union(
   )
 export const attachReservationHandler = async (ctx: MutationCtx, args: Infer<typeof attachReservationArgs>) => {
     const rows = await loadRows(ctx, args.callRef)
-    if (rows === null || args.transactionRefs.length !== 3) {
+    if (rows === null || args.transactionRefs.length !== 3 + (rows.call.promotionalCreditAllocation?.grants.length ?? 0)) {
       return { kind: 'refused' as const, code: 'formance_reservation_invalid' }
     }
     const digest = canonicalDigest({
@@ -35,7 +59,11 @@ export const attachReservationHandler = async (ctx: MutationCtx, args: Infer<typ
         ? { kind: 'attached' as const, replayed: true }
         : { kind: 'refused' as const, code: 'formance_reservation_conflict' }
     }
-    if (rows.call.state !== 'pending' || rows.quote.state !== 'consumed') {
+    const recoveringReservation = rows.call.state === 'reconciliation_required'
+      && rows.call.formanceFinancialState === 'outcome_unknown'
+      && rows.call.formanceReservationRefs === undefined && rows.call.workId === undefined
+      && rows.call.authority === undefined
+    if ((rows.call.state !== 'pending' && !recoveringReservation) || rows.quote.state !== 'consumed') {
       return { kind: 'refused' as const, code: 'formance_reservation_state_conflict' }
     }
     const booking = bookingFromRows(rows.call, rows.quote)
@@ -82,6 +110,8 @@ export const attachReservationHandler = async (ctx: MutationCtx, args: Infer<typ
       })
     }
     await ctx.db.patch(rows.call._id, {
+      ...(recoveringReservation ? { state: 'pending' as const, dispatchState: undefined, result: undefined,
+        formanceUnknownReference: undefined, formanceUnknownStatusRef: undefined } : {}),
       formanceFinancialState: 'reserved',
       formanceReservationRefs: [...args.transactionRefs],
       formanceReservationDigest: digest,
@@ -94,7 +124,8 @@ export const markReservationUnknownArgs = v.object({ callRef: v.string(), refere
 export const markReservationUnknownResult = v.boolean()
 export const markReservationUnknownHandler = async (ctx: MutationCtx, args: Infer<typeof markReservationUnknownArgs>) => {
     const rows = await loadRows(ctx, args.callRef)
-    if (rows === null) return false
+    if (rows === null || rows.call.formanceReservationDigest !== undefined
+      || (rows.call.state !== 'pending' && rows.call.formanceFinancialState !== 'outcome_unknown')) return false
     await ctx.db.patch(rows.call._id, {
       formanceFinancialState: 'outcome_unknown',
       formanceUnknownReference: args.reference,

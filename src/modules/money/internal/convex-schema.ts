@@ -170,6 +170,33 @@ export const x402PaymentAuthorizationFailureDetailValue = v.union(
   v.literal('authority_read_failed'),
 )
 export const moneyTables = {
+  moneyPromotionalGrants: defineTable({
+    grantRef: v.string(),
+    accountRef: v.string(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    amountUnits: v.string(),
+    availableUnits: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    operationKey: v.string(),
+    actorRef: v.string(),
+    correlationId: v.string(),
+    commandDigest: v.string(),
+    reasonCode: v.union(v.literal('onboarding'), v.literal('correction')),
+    evidenceRefs: v.array(v.string()),
+    auditEventRef: v.optional(v.string()),
+    bookingState: v.union(v.literal('pending'), v.literal('booked')),
+    transactionRef: v.optional(v.string()),
+    nextWorkAt: v.optional(v.number()),
+    expiryRevision: v.number(),
+    pendingExpiry: v.optional(v.object({
+      revision: v.number(), amountUnits: v.string(), commandRef: v.string(),
+    })),
+  })
+    .index('by_grantRef', ['grantRef'])
+    .index('by_accountRef_and_environment_and_expiresAt', ['accountRef', 'environment', 'expiresAt'])
+    .index('by_environment_and_nextWorkAt', ['environment', 'nextWorkAt']),
   moneyReferenceRates: defineTable({
     pair: v.literal('USDC/AUD'),
     rate: v.string(),

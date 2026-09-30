@@ -9,6 +9,7 @@ import {
   createFormanceContext,
   executeFormanceMoneyBulk,
   FORMANCE_SCHEMA,
+  PERIOD_FORMANCE_SCHEMA,
   formanceMonetaryVariable,
   formanceSafeUnitsFromSdk,
   mapFormanceWriteError,
@@ -43,7 +44,7 @@ afterEach(() => {
 
 describe('Package 4 official Formance boundary', () => {
   it('locks the immutable schema to the approved named machine templates', () => {
-    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.4.0')
+    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.5.0')
     expect(PACKAGE4_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
     expect(Object.keys(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})).toEqual(
       PACKAGE4_FORMANCE_TEMPLATE_NAMES,
@@ -68,6 +69,7 @@ describe('Package 4 official Formance boundary', () => {
       configuration: { environment: 'sandbox', gatewayUrl: 'https://formance.example', ledger: 'existing-ledger', requestTimeoutMs: 10_000 },
       sdk: { ledger: { v2: {
         getSchema: vi.fn(async ({ version }: { version: string }) => {
+          if (version === 'v1.4.0') return { v2SchemaResponse: { data: { version, ...PERIOD_FORMANCE_SCHEMA } } }
           if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
           if (currentInstalled) return { v2SchemaResponse: { data: { version, ...FORMANCE_SCHEMA } } }
           throw Object.assign(new Error('schema absent'), { statusCode: 404 })
@@ -89,7 +91,7 @@ describe('Package 4 official Formance boundary', () => {
     await expect(installPackage4FormanceSchema(context)).resolves.toMatchObject({
       kind: 'completed',
       ledger: 'existing-ledger',
-      schemaVersion: 'v1.4.0',
+      schemaVersion: 'v1.5.0',
       replayed: false,
     })
     expect(insertSchema).toHaveBeenCalledTimes(1)
@@ -101,6 +103,7 @@ describe('Package 4 official Formance boundary', () => {
       configuration: { environment: 'sandbox', gatewayUrl: 'https://formance.example', ledger: 'existing-ledger', requestTimeoutMs: 10_000 },
       sdk: { ledger: { v2: {
         getSchema: vi.fn(async ({ version }: { version: string }) => {
+          if (version === 'v1.4.0') return { v2SchemaResponse: { data: { version, ...PERIOD_FORMANCE_SCHEMA } } }
           if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
           throw Object.assign(new Error('schema absent'), { statusCode: 404 })
         }),
@@ -142,7 +145,7 @@ describe('Package 4 official Formance boundary', () => {
     expect(settlement).toMatchObject({
       kind: 'prepared',
       command: {
-        schemaVersion: 'v1.4.0',
+        schemaVersion: 'v1.5.0',
         template: 'FUNDING_SETTLED',
         variables: {
           principal_amount: 'AUD/6 100000000',

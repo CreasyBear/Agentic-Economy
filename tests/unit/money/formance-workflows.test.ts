@@ -4,12 +4,16 @@ import {
   FORMANCE_SCHEMA,
   FORMANCE_SCHEMA_VERSION,
   LEGACY_FORMANCE_SCHEMA_VERSION,
+  PERIOD_FORMANCE_SCHEMA_VERSION,
   readFormanceAccount,
+  validateFormanceMoneyCommand,
   type FormanceContext,
 } from '@/modules/money/formance'
 import {
   adjustFormanceSpendingPeriod,
   formanceSpendingPeriodAccount,
+  prepareFormancePromotionalCreditGrant,
+  prepareFormancePromotionalCreditExpiry,
   prepareFormanceManagedCallRelease,
   prepareFormanceManagedCallReservation,
   prepareFormanceManagedCallSettlement,
@@ -180,7 +184,7 @@ describe('native Formance spending-period workflows', () => {
     expect(reserved.kind).toBe('prepared')
     if (reserved.kind !== 'prepared') throw new Error(reserved.code)
     expect(reserved.bulk.commands).toHaveLength(3)
-    expect(reserved.bulk.commands[0]?.schemaVersion).toBe(FORMANCE_SCHEMA_VERSION)
+    expect(reserved.bulk.commands[0]?.schemaVersion).toBe(PERIOD_FORMANCE_SCHEMA_VERSION)
     expect(new Set(reserved.bulk.commands.map(({ commandRef }) => commandRef)).size).toBe(3)
     expect(reserved.bulk.commands[0]?.variables).toMatchObject({
       daily_available: formanceSpendingPeriodAccount('principal:one', 'day', day.periodStartAt).available,
@@ -330,5 +334,53 @@ describe('native Formance spending-period workflows', () => {
       kind: 'setup_required',
       code: 'formance_unsafe_integer',
     })
+  })
+})
+
+
+describe('promotional funding ledger commands', () => {
+  it.each(['0', '40', '100'])('books only purchased consideration when promotional units are %s', promo => {
+    const purchased = (100n - BigInt(promo)).toString()
+    const booking = { ...managedCallBooking(spendingPeriods()), promotionalCreditAllocation: {
+      version: 'ae.promotional-credit-allocation:v1' as const, purchasedUnits: purchased,
+      grants: promo === '0' ? [] : [{ grantRef: 'promo:one', amountUnits: promo, expiresAt: periodAt + 1 }],
+    } }
+    const reserve = prepareFormanceManagedCallReservation(booking)
+    const settle = prepareFormanceManagedCallSettlement({ booking, externalEvidenceDigest: DIGEST_A })
+    const release = prepareFormanceManagedCallRelease({ booking, externalEvidenceDigest: DIGEST_A, submissionProvenAbsent: true })
+    if (reserve.kind !== 'prepared' || settle.kind !== 'prepared' || release.kind !== 'prepared') throw new Error('promo_command_refused')
+    for (const prepared of [reserve, settle, release]) {
+      expect(prepared.bulk.commands.every(command => validateFormanceMoneyCommand(command) === undefined)).toBe(true)
+      expect(prepared.bulk.commands.every(command => command.schemaVersion === 'v1.5.0')).toBe(true)
+    }
+    expect(reserve.bulk.commands[0]?.variables).toMatchObject({ buyer_amount: `AUD/6 ${purchased}`, daily_amount: 'AUD/6 100', monthly_amount: 'AUD/6 100', exposure_amount: 'AUD/6 100' })
+    const expectedTax = purchased === '100' ? '1' : '0'
+    expect(settle.bulk.commands[0]?.variables).toMatchObject({ revenue_amount: `AUD/6 ${BigInt(purchased) - BigInt(expectedTax)}`, tax_amount: `AUD/6 ${expectedTax}`, exposure_amount: 'AUD/6 100' })
+    expect(settle.bulk.commands[1]?.template).toBe('PROVIDER_SETTLED')
+    if (promo !== '0') {
+      expect(reserve.bulk.commands[3]?.variables).toMatchObject({ amount: `AUD/6 ${promo}` })
+      expect(settle.bulk.commands[2]?.variables).toMatchObject({ amount: `AUD/6 ${promo}`, destination: 'platform:expense:marketing' })
+      expect(release.bulk.commands[2]?.variables.destination).toBe(reserve.bulk.commands[3]?.variables.source)
+      expect(release.bulk.commands[2]?.variables.source).toBe(reserve.bulk.commands[3]?.variables.destination)
+    }
+    expect(prepareFormanceManagedCallRelease({ booking, externalEvidenceDigest: DIGEST_A, submissionProvenAbsent: true })).toEqual(release)
+  })
+
+  it('binds grant and expiry amounts to stable references and prevents another issuance revision', () => {
+    const input = { grantRef: 'promo:one', accountRef: 'account:one', amountUnits: '100', expiresAt: periodAt + 1, commandDigest: DIGEST_A }
+    const issued = prepareFormancePromotionalCreditGrant(input)
+    const changed = prepareFormancePromotionalCreditGrant({ ...input, amountUnits: '200' })
+    const expired = prepareFormancePromotionalCreditExpiry({ ...input, revision: 1 })
+    if (issued.kind !== 'prepared' || changed.kind !== 'prepared' || expired.kind !== 'prepared') throw new Error('promo_grant_refused')
+    expect(validateFormanceMoneyCommand(issued.command)).toBeUndefined()
+    expect(issued.command.commandRef).toBe(changed.command.commandRef)
+    expect(issued.command.metadata.command_digest).not.toBe(changed.command.metadata.command_digest)
+    expect(issued.command.variables.destination).toBe(expired.command.variables.source)
+    expect(issued.command.variables).not.toHaveProperty('source')
+    expect(expired.command.variables).not.toHaveProperty('destination')
+    expect(FORMANCE_SCHEMA.transactions?.PROMO_GRANTED?.script).toContain('source = @world')
+    expect(FORMANCE_SCHEMA.transactions?.PROMO_EXPIRED?.script).toContain('destination = @world')
+    expect(prepareFormancePromotionalCreditGrant({ ...input, revision: 2 })).toMatchObject({ kind: 'refused' })
+    expect(prepareFormancePromotionalCreditExpiry({ ...input, revision: 2 })).not.toEqual(expired)
   })
 })

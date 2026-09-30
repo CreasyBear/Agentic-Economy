@@ -8,7 +8,7 @@ import { workloadCronNameValue, workloadCronSnapshotValue } from './lib/platform
 import {
   cleanupExpiredAgentAccessOAuthGrantsHandler, cleanupExpiredSourceWriteNoncesHandler,
   expireStalePendingApprovalsHandler, observeX402TreasuryHandler,
-  reconcileBusinessSupplyProjectionsHandler,
+  reconcileBusinessSupplyProjectionsHandler, reconcilePromotionalCreditHandler,
   reconcileDueFacilitatorInvocationsHandler, refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler, refreshMarketFlowHandler,
@@ -128,4 +128,8 @@ export const snapshotMarketplaceMetricsDay = internalAction({
   args: {},
   returns: v.null(),
   handler: snapshotMarketplaceMetricsDayHandler,
+})
+
+export const reconcilePromotionalCredit = internalAction({
+  args: {}, returns: v.null(), handler: reconcilePromotionalCreditHandler,
 })

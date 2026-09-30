@@ -75,6 +75,9 @@ export type AccountFundingBalance =
       kind: 'available'
       accountRef: string
       balance: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
+      totalBalance?: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
+      promotionalBalance?: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
+      nextPromotionalExpiryAt?: number | null
       locked: boolean
       version: number
       updatedAt?: number | undefined

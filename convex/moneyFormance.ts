@@ -9,11 +9,12 @@ import {
   readAccountHistoryArgs, readPeriodSpendArgs, readStatementPageArgs,
   releaseExpiredUnusedCallArgs, releaseManagedCallArgs, reverseProviderSettlementArgs,
   spendingPeriodAdjustmentValue, spendingPeriodArgs, spendingPeriodResult,
+  promotionalCreditArgs, readCreditBalanceArgs, accountCreditBalanceValue,
   statementPageResult,
 } from './lib/money/formance/contracts'
 import { healthHandler, installSchemaHandler } from './lib/money/formance/gateway'
 import {
-  readAccountHistoryHandler,
+  readAccountHistoryHandler, readCreditBalanceHandler,
   readDisplayBalanceHandler, readPeriodSpendHandler, readSpendingPeriodHandler,
   readStatementPageHandler,
 } from './lib/money/formance/reads'
@@ -22,6 +23,7 @@ import {
   bookFundingSettlementHandler, releaseExpiredUnusedCallHandler, releaseManagedCallHandler,
   remedyPaidCallHandler, reserveManagedCallHandler, reverseProviderSettlementHandler,
   settleManagedCallHandler, syncCapacityHandler,
+  grantPromotionalCreditHandler, expirePromotionalCreditHandler,
 } from './lib/money/formance/postings'
 
 export const health = internalAction({ args: {}, returns: healthResult, handler: healthHandler })
@@ -73,4 +75,15 @@ export const remedyPaidCall = internalAction({
 })
 export const reverseProviderSettlement = internalAction({
   args: reverseProviderSettlementArgs, returns: moneyResult, handler: reverseProviderSettlementHandler,
+})
+
+export const grantPromotionalCredit = internalAction({
+  args: promotionalCreditArgs, returns: moneyResult, handler: grantPromotionalCreditHandler,
+})
+export const expirePromotionalCredit = internalAction({
+  args: promotionalCreditArgs, returns: moneyResult, handler: expirePromotionalCreditHandler,
+})
+
+export const readCreditBalance = internalAction({
+  args: readCreditBalanceArgs, returns: accountCreditBalanceValue, handler: readCreditBalanceHandler,
 })

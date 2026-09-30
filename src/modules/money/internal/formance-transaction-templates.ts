@@ -5,6 +5,7 @@ import {
   canonicalFormanceUnits,
   formanceMonetaryVariable,
   LEGACY_FORMANCE_SCHEMA_VERSION,
+  PERIOD_FORMANCE_SCHEMA_VERSION,
   FORMANCE_SCHEMA_VERSION,
   type FormanceMoneyCommand,
   type FormanceMoneyBulkCommand,
@@ -12,6 +13,7 @@ import {
 import { refused } from '../formance-result'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from './commercial-policy'
 import { spendingPeriodAdjustmentReference } from './spending-period-values'
+import { MAX_PROMOTIONAL_GRANTS_PER_CALL, promotionalPurchasedAmounts, type PromotionalCreditAllocation } from '../promotional-credit-contracts'
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/u
 const BOUNDED_REFERENCE = /^[\u0020-\u007e]{1,500}$/u
@@ -73,6 +75,7 @@ export type FormanceManagedCallBooking = Readonly<{
   treasuryEvidenceDigest: string
   x402RequirementDigest: string
   spendingPeriods?: FormanceManagedCallSpendingPeriods
+  promotionalCreditAllocation?: PromotionalCreditAllocation
 }>
 
 export type FormanceManagedCallSpendingPeriod = Readonly<{
@@ -155,7 +158,7 @@ export function prepareFormanceManagedCallReservation(
       call_reserved: accounts.callReserved,
       legal_available: accounts.legalAvailable,
       legal_reserved: accounts.legalReserved,
-      buyer_amount: amounts.buyer,
+      buyer_amount: amounts.purchased,
       exposure_amount: amounts.buyer,
       ...managedCallGenerationBudgetVariables(input, accounts, amounts, 'reserve'),
       ...managedCallPeriodVariables(input, accounts, amounts, 'reserve'),
@@ -170,6 +173,7 @@ export function prepareFormanceManagedCallReservation(
       obligation: accounts.obligationAccrued,
       amount: amounts.provider,
     }),
+    ...promotionalCallCommands(input, 'reserve'),
   ])
 }
 
@@ -190,7 +194,7 @@ export function prepareFormanceManagedCallRelease(
       call_reserved: accounts.callReserved,
       legal_available: accounts.legalAvailable,
       legal_reserved: accounts.legalReserved,
-      buyer_amount: amounts.buyer,
+      buyer_amount: amounts.purchased,
       exposure_amount: amounts.buyer,
       ...managedCallGenerationBudgetVariables(input.booking, accounts, amounts, 'release'),
       ...managedCallPeriodVariables(input.booking, accounts, amounts, 'release'),
@@ -202,6 +206,7 @@ export function prepareFormanceManagedCallRelease(
       expense: 'platform:expense:providers',
       amount: amounts.provider,
     }, input.externalEvidenceDigest),
+    ...promotionalCallCommands(input.booking, 'release', input.externalEvidenceDigest),
   ])
 }
 
@@ -220,8 +225,8 @@ export function prepareFormanceManagedCallSettlement(
       tax: 'platform:tax:gst',
       legal_reserved: accounts.legalReserved,
       legal_settled: accounts.legalSettled,
-      revenue_amount: amounts.revenue,
-      tax_amount: amounts.tax,
+      revenue_amount: amounts.purchasedRevenue,
+      tax_amount: amounts.purchasedTax,
       exposure_amount: amounts.buyer,
       ...managedCallGenerationBudgetVariables(input.booking, accounts, amounts, 'settle'),
       ...managedCallPeriodVariables(input.booking, accounts, amounts, 'settle'),
@@ -233,6 +238,7 @@ export function prepareFormanceManagedCallSettlement(
       obligation_settled: accounts.obligationSettled,
       amount: amounts.provider,
     }, input.externalEvidenceDigest),
+    ...promotionalCallCommands(input.booking, 'settle', input.externalEvidenceDigest),
   ])
 }
 
@@ -260,12 +266,13 @@ export function prepareFormancePaidCallRemedy(
       call_reserved: accounts.callReserved,
       legal_available: accounts.legalAvailable,
       legal_reserved: accounts.legalReserved,
-      buyer_amount: amounts.buyer,
+      buyer_amount: amounts.purchased,
       exposure_amount: amounts.buyer,
       ...managedCallGenerationBudgetVariables(input.booking, accounts, amounts, 'release'),
       ...managedCallPeriodVariables(input.booking, accounts, amounts, 'release'),
     }, input.externalEvidenceDigest),
     provider,
+    ...promotionalCallCommands(input.booking, 'release', input.externalEvidenceDigest),
   ])
 }
 
@@ -602,15 +609,69 @@ export function managedCallAccounts(input: FormanceManagedCallBooking) {
   })
 }
 
+export function promotionalGrantAccount(accountRef: string, grantRef: string): string {
+  return `accounts:${digestReference('account', accountRef)}:promo:${digestReference('promotional_grant', grantRef)}:available`
+}
+
+export function promotionalCallCommands(
+  input: FormanceManagedCallBooking,
+  stage: 'reserve' | 'release' | 'settle',
+  externalEvidenceDigest = input.x402RequirementDigest,
+): readonly FormanceMoneyCommand[] {
+  const allocation = input.promotionalCreditAllocation
+  if (allocation === undefined) return []
+  const reserved = `calls:${digestReference('call', input.callRef)}:buyer_promo_reserved`
+  return allocation.grants.map((grant) => {
+    const grantAccount = promotionalGrantAccount(input.accountRef, grant.grantRef)
+    const template = stage === 'reserve' ? 'CALL_PROMO_RESERVED'
+      : stage === 'release' ? 'CALL_PROMO_RELEASED' : 'CALL_PROMO_SETTLED'
+    const destination = stage === 'reserve' ? reserved
+      : stage === 'release' ? grantAccount : 'platform:expense:marketing'
+    const source = stage === 'reserve' ? grantAccount : reserved
+    return managedCallCommand(input, `${stage}-promo`, template, {
+      source, destination, amount: `AUD/6 ${grant.amountUnits}`,
+    }, externalEvidenceDigest, grant.grantRef)
+  })
+}
+
 export function managedCallAmounts(input: FormanceManagedCallBooking) {
   if (!managedCallSemantic(input)) return undefined
   const buyer = formanceMonetaryVariable('AUD', input.buyerAmountUnits)
   const revenue = formanceMonetaryVariable('AUD', input.buyerRevenueUnits)
   const tax = formanceMonetaryVariable('AUD', input.buyerTaxUnits, true)
   const provider = formanceMonetaryVariable('USDC', input.providerAmountUnits)
+  const purchased = input.promotionalCreditAllocation?.purchasedUnits ?? input.buyerAmountUnits
+  const apportioned = promotionalPurchasedAmounts(input.buyerAmountUnits, input.buyerTaxUnits, purchased)
+  const purchasedAmount = formanceMonetaryVariable('AUD', purchased, true)
+  const purchasedRevenue = apportioned === undefined ? undefined : formanceMonetaryVariable('AUD', apportioned.revenueUnits, true)
+  const purchasedTax = apportioned === undefined ? undefined : formanceMonetaryVariable('AUD', apportioned.taxUnits, true)
   return buyer === undefined || revenue === undefined || tax === undefined || provider === undefined
+    || purchasedAmount === undefined || purchasedRevenue === undefined || purchasedTax === undefined
     ? undefined
-    : Object.freeze({ buyer, revenue, tax, provider })
+    : Object.freeze({ buyer, revenue, tax, provider,
+      purchased: purchasedAmount, purchasedRevenue, purchasedTax })
+}
+
+/** Frozen split is checked before any command can be constructed. */
+export function validPromotionalCreditAllocation(input: FormanceManagedCallBooking): boolean {
+  const allocation = input.promotionalCreditAllocation
+  if (allocation === undefined) return true
+  if (allocation.version !== 'ae.promotional-credit-allocation:v1'
+    || canonicalFormanceUnits(allocation.purchasedUnits, false) === undefined
+    || !Array.isArray(allocation.grants)
+    || allocation.grants.length > MAX_PROMOTIONAL_GRANTS_PER_CALL) return false
+  let sum = BigInt(allocation.purchasedUnits)
+  const seen = new Set<string>()
+  for (const grant of allocation.grants) {
+    if (!boundedReference(grant.grantRef)
+      || seen.has(grant.grantRef)
+      || canonicalFormanceUnits(grant.amountUnits) === undefined
+      || !Number.isSafeInteger(grant.expiresAt)
+      || grant.expiresAt <= 0) return false
+    seen.add(grant.grantRef)
+    sum += BigInt(grant.amountUnits)
+  }
+  return sum === BigInt(input.buyerAmountUnits)
 }
 
 export function managedCallSemantic(input: FormanceManagedCallBooking): boolean {
@@ -652,6 +713,8 @@ export function managedCallSemantic(input: FormanceManagedCallBooking): boolean 
     && canonicalFormanceUnits(input.buyerTaxUnits, false) !== undefined
     && BigInt(input.buyerRevenueUnits) + BigInt(input.buyerTaxUnits)
       === BigInt(input.buyerAmountUnits)
+    && validPromotionalCreditAllocation(input)
+    && (input.promotionalCreditAllocation === undefined || input.spendingPeriods !== undefined)
     && (input.spendingPeriods === undefined || validManagedCallSpendingPeriods(input))
 }
 
@@ -661,27 +724,34 @@ export function managedCallCommand(
   template: FormanceMoneyCommand['template'],
   variables: Readonly<Record<string, string>>,
   externalEvidenceDigest = input.x402RequirementDigest,
+  promotionalGrantRef?: string,
 ): FormanceMoneyCommand {
-  const identity = { callRef: input.callRef, quoteRef: input.quoteRef, stage }
+  const identity = { callRef: input.callRef, quoteRef: input.quoteRef, stage,
+    ...(promotionalGrantRef === undefined ? {} : { promotionalGrantRef }),
+  }
   const idempotencyDigest = digestValue('managed-call-idempotency', {
     idempotencyKey: input.idempotencyKey,
     ...identity,
   })
   return Object.freeze({
-    commandRef: formanceReference(identity, stage),
+    commandRef: formanceReference(identity, stage.includes('-promo-') ? 'promo-call' : stage),
     idempotencyKey: idempotencyDigest,
-    schemaVersion: input.spendingPeriods === undefined
-      ? LEGACY_FORMANCE_SCHEMA_VERSION
-      : FORMANCE_SCHEMA_VERSION,
+    schemaVersion: input.promotionalCreditAllocation !== undefined
+      ? FORMANCE_SCHEMA_VERSION
+      : input.spendingPeriods === undefined
+        ? LEGACY_FORMANCE_SCHEMA_VERSION
+        : PERIOD_FORMANCE_SCHEMA_VERSION,
     template,
     variables: Object.freeze({ ...variables }),
     metadata: Object.freeze({
       account_digest: digestReference('account', input.accountRef),
       call_digest: digestReference('call', input.callRef),
       command_digest: digestValue('managed-call-command', {
-        format: input.spendingPeriods === undefined
-          ? 'ae.formance-managed-call:v1'
-          : 'ae.formance-managed-call:v2',
+        format: input.promotionalCreditAllocation !== undefined
+          ? 'ae.formance-managed-call:v3'
+          : input.spendingPeriods === undefined
+            ? 'ae.formance-managed-call:v1'
+            : 'ae.formance-managed-call:v2',
         // The legacy branch intentionally receives the original object shape;
         // adding a missing optional property would change accepted digests.
         input,

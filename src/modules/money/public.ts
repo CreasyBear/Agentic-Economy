@@ -162,6 +162,9 @@ export type CreditAccountView = Readonly<{
   principalId: string;
   accountId: string;
   balance: ExactAmount;
+  purchasedBalance?: ExactAmount;
+  promotionalBalance?: ExactAmount;
+  nextPromotionalExpiryAt?: number | null;
   pendingTopup?: Readonly<{
     commandRef: string
     amount: ExactAmount
@@ -210,6 +213,9 @@ const strictChargeStateSchema = z.enum([
 export const CreditAccountViewSchema = z.strictObject({
   principalId: moneyRefSchema,
   balance: exactAmountSchema,
+  purchasedBalance: exactAmountSchema.optional(),
+  promotionalBalance: exactAmountSchema.optional(),
+  nextPromotionalExpiryAt: z.number().int().nonnegative().nullable().optional(),
   pendingTopup: z
     .strictObject({
       commandRef: moneyRefSchema,
@@ -388,3 +394,7 @@ export type {
   SpendingPeriods,
   SpendingPeriodAdjustment,
 } from './internal/spending-period-values'
+
+export { promotionalCreditReference, promotionalPurchasedAmounts, promotionalCreditAllocationValue, MAX_PROMOTIONAL_GRANTS_PER_CALL, type PromotionalCreditAllocation } from './promotional-credit-contracts'
+
+export { accountCreditBalanceValue, eligiblePromotionalGrantValue, type AccountCreditBalance, type EligiblePromotionalGrant } from './promotional-credit-contracts'

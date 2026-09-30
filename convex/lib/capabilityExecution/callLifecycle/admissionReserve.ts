@@ -1,3 +1,5 @@
+import { claimPromotionalCredit } from '../../money/promotionalCredit/allocation'
+import type { PromotionalCreditAllocation } from '@/modules/money/public'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { activeChatTurnForMoney } from '../../chat/threads/ownership'
@@ -144,12 +146,16 @@ async function persistReservedCall(
   reservation: CallIdempotencyReservation,
   commitment: CommitmentRow | null,
   formanceFinancialState?: 'reservation_pending',
+  promotionalCreditAllocation?: PromotionalCreditAllocation,
 ): Promise<void> {
   await ctx.db.insert('capabilityCalls', {
     ...reservation,
     ...(args.toolJson === undefined ? {} : { toolJson: args.toolJson }),
     ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
     ...(formanceFinancialState === undefined ? {} : { formanceFinancialState }),
+    ...(promotionalCreditAllocation === undefined ? {} : {
+      promotionalCreditAllocation: { ...promotionalCreditAllocation, grants: [...promotionalCreditAllocation.grants] },
+    }),
     ownerId: args.ownerId,
     state: 'pending',
     createdAt: args.now,
@@ -230,12 +236,22 @@ export async function reserveHandler(
   const paidPeriodAwareCall = commitment !== null
     && commitment.decisionAudUnits !== '0'
     && commitment.spendingPeriods !== undefined
+  const promotion = paidPeriodAwareCall && commitment.formanceSchemaVersion === 'v1.5.0'
+    ? await claimPromotionalCredit(ctx, {
+      accountRef: args.ownerId, environment: args.environment,
+      amountUnits: commitment.decisionAudUnits, now: Date.now(),
+    }) : undefined
+  if (promotion?.kind === 'refused') return {
+    kind: 'refused', code: 'commercial_policy_unavailable', retryable: false,
+    nextAction: 'Credit allocation is unavailable. Contact support before retrying.',
+  }
   await persistReservedCall(
     ctx,
     args,
     reservation,
     commitment,
     paidPeriodAwareCall ? 'reservation_pending' : undefined,
+    promotion?.allocation,
   )
   if (turn !== null) await attachCallToTurn(ctx, turn, reservation.callRef)
   await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.callRef, args.now, {

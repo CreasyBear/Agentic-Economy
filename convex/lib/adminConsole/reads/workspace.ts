@@ -1,8 +1,10 @@
 import { v } from 'convex/values'
 
 import { accountLifecycleValue, type AccountRef } from '@/modules/principal-account/account/public'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import type { AdminWorkspaceView } from '@/lib/operator/admin-console/views'
 import type { QueryCtx } from '../../../_generated/server'
+import { env } from '../../../_generated/server'
 
 export const adminWorkspaceViewValue = v.object({
   kind: v.literal('workspace'),
@@ -13,6 +15,7 @@ export const adminWorkspaceViewValue = v.object({
   createdAt: v.number(),
   externalOrganizationBound: v.boolean(),
   hasActiveSpendingPolicy: v.boolean(),
+  paymentEnvironment: v.union(v.literal('sandbox'), v.literal('production'), v.null()),
 })
 
 export async function readAdminWorkspaceView(
@@ -54,5 +57,6 @@ export async function readAdminWorkspaceView(
     hasActiveSpendingPolicy: activeAgents.some(
       (agent) => agent.authorityMode === 'spending_policy',
     ),
+    paymentEnvironment: deploymentPaymentEnvironment(env) ?? null,
   }
 }

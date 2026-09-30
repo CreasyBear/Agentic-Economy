@@ -97,6 +97,7 @@ import type * as lib_actionExecution_control_transaction from "../lib/actionExec
 import type * as lib_adminConsole_actions_adminMembership from "../lib/adminConsole/actions/adminMembership.js";
 import type * as lib_adminConsole_actions_businessSuppression from "../lib/adminConsole/actions/businessSuppression.js";
 import type * as lib_adminConsole_actions_commercialPolicy from "../lib/adminConsole/actions/commercialPolicy.js";
+import type * as lib_adminConsole_actions_promotionalCredit from "../lib/adminConsole/actions/promotionalCredit.js";
 import type * as lib_adminConsole_actions_removalDispute from "../lib/adminConsole/actions/removalDispute.js";
 import type * as lib_adminConsole_actions_sourceAuthority from "../lib/adminConsole/actions/sourceAuthority.js";
 import type * as lib_adminConsole_approvals_approvals from "../lib/adminConsole/approvals/approvals.js";
@@ -510,6 +511,9 @@ import type * as lib_money_managedCall_x402Proof from "../lib/money/managedCall/
 import type * as lib_money_monthlyBudget_configure from "../lib/money/monthlyBudget/configure.js";
 import type * as lib_money_monthlyBudget_read from "../lib/money/monthlyBudget/read.js";
 import type * as lib_money_monthlyBudget_readOrganization from "../lib/money/monthlyBudget/readOrganization.js";
+import type * as lib_money_promotionalCredit_allocation from "../lib/money/promotionalCredit/allocation.js";
+import type * as lib_money_promotionalCredit_balance from "../lib/money/promotionalCredit/balance.js";
+import type * as lib_money_promotionalCredit_lifecycle from "../lib/money/promotionalCredit/lifecycle.js";
 import type * as lib_money_providerObligations_contracts from "../lib/money/providerObligations/contracts.js";
 import type * as lib_money_providerObligations_finalize from "../lib/money/providerObligations/finalize.js";
 import type * as lib_money_providerObligations_prepare from "../lib/money/providerObligations/prepare.js";
@@ -631,6 +635,7 @@ import type * as marketMetrics from "../marketMetrics.js";
 import type * as marketPresence from "../marketPresence.js";
 import type * as marketSavedTools from "../marketSavedTools.js";
 import type * as migrations from "../migrations.js";
+import type * as moneyAccountCreditBalance from "../moneyAccountCreditBalance.js";
 import type * as moneyAccountFunding from "../moneyAccountFunding.js";
 import type * as moneyAccountFundingFormance from "../moneyAccountFundingFormance.js";
 import type * as moneyCommercialPolicy from "../moneyCommercialPolicy.js";
@@ -646,6 +651,7 @@ import type * as moneyManagedCallRemedy from "../moneyManagedCallRemedy.js";
 import type * as moneyManagedCallRemedyActions from "../moneyManagedCallRemedyActions.js";
 import type * as moneyMonthlySpendBudget from "../moneyMonthlySpendBudget.js";
 import type * as moneyOwnerSpend from "../moneyOwnerSpend.js";
+import type * as moneyPromotionalCredit from "../moneyPromotionalCredit.js";
 import type * as moneyProviderObligations from "../moneyProviderObligations.js";
 import type * as moneyReconciliationCases from "../moneyReconciliationCases.js";
 import type * as moneyStripeEvents from "../moneyStripeEvents.js";
@@ -788,6 +794,7 @@ declare const fullApi: ApiFromModules<{
   "lib/adminConsole/actions/adminMembership": typeof lib_adminConsole_actions_adminMembership;
   "lib/adminConsole/actions/businessSuppression": typeof lib_adminConsole_actions_businessSuppression;
   "lib/adminConsole/actions/commercialPolicy": typeof lib_adminConsole_actions_commercialPolicy;
+  "lib/adminConsole/actions/promotionalCredit": typeof lib_adminConsole_actions_promotionalCredit;
   "lib/adminConsole/actions/removalDispute": typeof lib_adminConsole_actions_removalDispute;
   "lib/adminConsole/actions/sourceAuthority": typeof lib_adminConsole_actions_sourceAuthority;
   "lib/adminConsole/approvals/approvals": typeof lib_adminConsole_approvals_approvals;
@@ -1201,6 +1208,9 @@ declare const fullApi: ApiFromModules<{
   "lib/money/monthlyBudget/configure": typeof lib_money_monthlyBudget_configure;
   "lib/money/monthlyBudget/read": typeof lib_money_monthlyBudget_read;
   "lib/money/monthlyBudget/readOrganization": typeof lib_money_monthlyBudget_readOrganization;
+  "lib/money/promotionalCredit/allocation": typeof lib_money_promotionalCredit_allocation;
+  "lib/money/promotionalCredit/balance": typeof lib_money_promotionalCredit_balance;
+  "lib/money/promotionalCredit/lifecycle": typeof lib_money_promotionalCredit_lifecycle;
   "lib/money/providerObligations/contracts": typeof lib_money_providerObligations_contracts;
   "lib/money/providerObligations/finalize": typeof lib_money_providerObligations_finalize;
   "lib/money/providerObligations/prepare": typeof lib_money_providerObligations_prepare;
@@ -1322,6 +1332,7 @@ declare const fullApi: ApiFromModules<{
   marketPresence: typeof marketPresence;
   marketSavedTools: typeof marketSavedTools;
   migrations: typeof migrations;
+  moneyAccountCreditBalance: typeof moneyAccountCreditBalance;
   moneyAccountFunding: typeof moneyAccountFunding;
   moneyAccountFundingFormance: typeof moneyAccountFundingFormance;
   moneyCommercialPolicy: typeof moneyCommercialPolicy;
@@ -1337,6 +1348,7 @@ declare const fullApi: ApiFromModules<{
   moneyManagedCallRemedyActions: typeof moneyManagedCallRemedyActions;
   moneyMonthlySpendBudget: typeof moneyMonthlySpendBudget;
   moneyOwnerSpend: typeof moneyOwnerSpend;
+  moneyPromotionalCredit: typeof moneyPromotionalCredit;
   moneyProviderObligations: typeof moneyProviderObligations;
   moneyReconciliationCases: typeof moneyReconciliationCases;
   moneyStripeEvents: typeof moneyStripeEvents;

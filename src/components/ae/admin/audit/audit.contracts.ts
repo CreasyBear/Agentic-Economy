@@ -120,6 +120,7 @@ export const AUDIT_EVENT_TYPES = AuditEventTypeValues
 export const ADMIN_APPROVAL_ACTION_LABELS = {
   set_business_suppression: 'Set Business suppression',
   change_commercial_policy: 'Change commercial policy',
+  grant_promotional_credit: 'Grant promotional credit',
   grant_admin_membership: 'Grant Admin membership',
   revoke_admin_membership: 'Revoke Admin membership',
 } satisfies Record<AdminProposableAction, string>

@@ -116,6 +116,9 @@ export const AUDIT_EVENT_LABELS = {
   'billing.reconciliation_repaired': 'Billing reconciliation repaired',
   'billing.no_repair_marked': 'Billing no repair marked',
   'billing.monthly_spend_ceiling_configured': 'Billing monthly spend ceiling configured',
+  'money.promotional_credit_requested': 'Promotional credit requested',
+  'money.promotional_credit_granted': 'Promotional credit granted',
+  'money.promotional_credit_expired': 'Promotional credit expired',
 } satisfies Record<AuditEventType, string>
 const knownLabels: Readonly<Partial<Record<string, string>>> = AUDIT_EVENT_LABELS
 

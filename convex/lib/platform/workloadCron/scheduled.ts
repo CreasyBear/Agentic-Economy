@@ -131,3 +131,7 @@ export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActi
   await ctx.runAction(internal.adminConsoleMetrics.snapshotMarketplaceMetricsDay, {})
   return null
 }
+
+export async function reconcilePromotionalCreditHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'reconcile promotional credit', internal.moneyPromotionalCredit.sweep, {})
+}

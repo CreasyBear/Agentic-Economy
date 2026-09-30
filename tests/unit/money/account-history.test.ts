@@ -57,6 +57,25 @@ describe('booked Account history', () => {
     })
   })
 
+  it('distinguishes promotional issuance, use and expiry while omitting internal holds and zero purchased sales', async () => {
+    const grant = `accounts:${accountDigest}:promo:${'d'.repeat(64)}:available`
+    const held = `calls:${callDigest}:buyer_promo_reserved`
+    const { context } = boundary(page([
+      transaction(6n, 'PROMO_GRANTED', [posting('world', grant, 100n)]),
+      transaction(5n, 'CALL_PROMO_RESERVED', [posting(grant, held, 60n)]),
+      transaction(4n, 'CALL_PROMO_SETTLED', [posting(held, 'platform:expense:marketing', 60n)]),
+      transaction(3n, 'CALL_PROMO_RELEASED', [posting(held, grant, 10n)]),
+      transaction(2n, 'PROMO_EXPIRED', [posting(grant, 'world', 50n)]),
+      transaction(1n, 'BUYER_SALE_SETTLED', [posting('agents:one:reserved', 'agents:one:spent', 60n)]),
+    ]))
+    const result = accountHistoryResultSchema.parse(await readFormanceAccountHistory(context, input))
+    expect(result).toMatchObject({ kind: 'available', coverage: 'complete' })
+    if (result.kind !== 'available') throw new Error(result.code)
+    expect(result.entries.map(entry => [entry.kind, entry.accountEffect.units])).toEqual([
+      ['promotional_grant', '100'], ['promotional_use', '-60'], ['promotional_expiry', '-50'],
+    ])
+  })
+
   it('uses the official cursor once per identity, including equal and backdated timestamps', async () => {
     const { context, listTransactions } = boundary(
       page([transaction(4n), { ...transaction(3n), timestamp: new Date(500) }], 'official:next'),

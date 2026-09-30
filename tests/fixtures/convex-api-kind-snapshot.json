@@ -2166,6 +2166,18 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "moneyAccountCreditBalance",
+    "method": "read",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountCreditBalance",
+    "method": "readEligible",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "moneyAccountFunding",
     "method": "bind",
@@ -2474,6 +2486,18 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "expirePromotionalCredit",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "grantPromotionalCredit",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "health",
     "kind": "action"
   },
@@ -2487,6 +2511,12 @@
     "visibility": "internal",
     "module": "moneyFormance",
     "method": "readAccountHistory",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readCreditBalance",
     "kind": "action"
   },
   {
@@ -2595,6 +2625,12 @@
     "visibility": "internal",
     "module": "moneyManagedCall",
     "method": "attachReservation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCall",
+    "method": "claimReservationAttempt",
     "kind": "mutation"
   },
   {
@@ -2721,6 +2757,42 @@
     "visibility": "public",
     "module": "moneyOwnerSpend",
     "method": "readOwnerSpend",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyPromotionalCredit",
+    "method": "claimWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyPromotionalCredit",
+    "method": "due",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyPromotionalCredit",
+    "method": "finishWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyPromotionalCredit",
+    "method": "grant",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyPromotionalCredit",
+    "method": "process",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyPromotionalCredit",
+    "method": "sweep",
     "kind": "action"
   },
   {
@@ -3219,6 +3291,12 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "reconcileDueFacilitatorInvocations",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "reconcilePromotionalCredit",
     "kind": "action"
   },
   {

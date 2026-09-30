@@ -50,6 +50,7 @@ export const reserveResult = v.union(
   v.object({ kind: v.literal('refused'), code: reserveRefusalCode, retryable: v.boolean(), nextAction: v.optional(v.string()) }),
 )
 export const abandonArgs = {
+  reservationAttemptGeneration: v.optional(v.number()),
   quoteRef: v.string(), callRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
   applicationRef: v.string(), grantRef: v.string(), environment, toolRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
@@ -111,7 +112,7 @@ export type ReserveResult =
       nextAction?: string
     }
 
-export type AbandonArgs = Omit<ReserveArgs, 'toolJson' | 'inputJson' | 'now'>
+export type AbandonArgs = Omit<ReserveArgs, 'toolJson' | 'inputJson' | 'now'> & { reservationAttemptGeneration?: number }
 
 export type AbandonResult =
   | { kind: 'abandoned' }

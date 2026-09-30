@@ -35,6 +35,7 @@ const grantAdminMembership = sourceMutation<AdminWireArgs<'grant_admin_membershi
 const revokeAdminMembership = sourceMutation<AdminWireArgs<'revoke_admin_membership'>, AdminCommandReceipt<'revoke_admin_membership'>>('security:revokeAdminMembership')
 const verifySourceAuthority = sourceMutation<AdminWireArgs<'verify_capability_source_authority'>, AdminCommandReceipt<'verify_capability_source_authority'>>('capabilitySupply:verifyCapabilitySourceAuthority')
 const changeCommercialPolicy = sourceMutation<AdminWireArgs<'change_commercial_policy'>, AdminCommandReceipt<'change_commercial_policy'>>('moneyCommercialPolicy:change')
+const grantPromotionalCredit = sourceMutation<AdminWireArgs<'grant_promotional_credit'>, AdminCommandReceipt<'grant_promotional_credit'>>('moneyPromotionalCredit:grant')
 
 export const submitAdminCommandServer = createServerFn({ method: 'POST' })
   .validator((data) => adminCommandRequestSchema.parse(data))
@@ -95,6 +96,9 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
           break
         case 'change_commercial_policy':
           receipt = await callSourceMutation(changeCommercialPolicy, { ...data, proof, sourceWrite, sourceWriteRequest })
+          break
+        case 'grant_promotional_credit':
+          receipt = await callSourceMutation(grantPromotionalCredit, { ...data, proof, sourceWrite, sourceWriteRequest })
           break
       }
       captureAdminCommand(actor.principalRef, receipt)

@@ -43,6 +43,12 @@ export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
         beforeState: string
         afterState: string
       }
+    | {
+        kind: 'pending'
+        effectRefs: string[]
+        beforeState: string
+        afterState: string
+      }
     | { kind: 'refused'; code: AdminActionRefusalCodes[A] }
   >
 }>
@@ -115,7 +121,7 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (operation.kind === 'replay') {
     if (
       operation.requestHash === requestHash
-      && (operation.status === 'succeeded' || operation.status === 'failed_terminal')
+      && (operation.status === 'in_progress' || operation.status === 'succeeded' || operation.status === 'failed_terminal')
       && operation.resultJson !== null
     ) {
       return parseAdminOperationReceipt(
@@ -215,6 +221,15 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (!audit.valid) throw new Error(`admin_command_audit_invalid:${audit.reason}`)
   await persistAuditEvent(ctx.db, audit.event)
 
+  if (applied.kind === 'pending') {
+    const receipt: AdminCommandReceipt<A> = {
+      kind: 'pending', action: args.action, effectRefs: applied.effectRefs,
+      auditEventRef: eventId, correlationId: args.correlationId,
+    }
+    await persistReceipt(ctx, actorRef, operationName, args.operationKey, requestHash, 'in_progress', receipt)
+    return receipt
+  }
+
   const receipt: AdminCommandReceipt<A> = {
     kind: 'completed',
     action: args.action,
@@ -226,4 +241,3 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   await persistReceipt(ctx, actorRef, operationName, args.operationKey, requestHash, 'succeeded', receipt)
   return receipt
 }
-

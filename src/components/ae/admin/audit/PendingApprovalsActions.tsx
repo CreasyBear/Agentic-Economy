@@ -8,6 +8,7 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { formatExactAmount } from '@/modules/money/public'
 import { AUDIT_COPY, type PendingApprovalsActionsProps } from './audit.contracts'
 
 export function PendingApprovalsActions({ proposals, now, role, actorRef, paginationStatus, onLoadMore }: PendingApprovalsActionsProps) {
@@ -72,6 +73,12 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetLabels.businessId, value: command.input.businessId }]} />
     case 'change_commercial_policy':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetLabels.policyRef, value: command.input.policyRef }]} />
+    case 'grant_promotional_credit':
+      return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[
+        { label: 'Workspace', value: command.input.accountRef },
+        { label: 'Promotional credit', value: `A$${formatExactAmount({ currency: 'AUD', units: command.input.amountUnits, exponent: 6 }) ?? command.input.amountUnits}` },
+        { label: 'Expires', value: new Date(command.input.expiresAt).toLocaleString('en-AU', { timeZone: 'Australia/Perth' }) },
+      ]} />
     case 'grant_admin_membership':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetClerkUserId, value: command.input.targetClerkUserId }]} />
     case 'revoke_admin_membership':

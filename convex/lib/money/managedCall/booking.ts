@@ -3,7 +3,7 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '../../../../src/modules/common/freshness'
-import { PACKAGE4_FORMANCE_REQUIREMENTS, spendingPeriodsValue, validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence } from '../../../../src/modules/money/public'
+import { PACKAGE4_FORMANCE_REQUIREMENTS, spendingPeriodsValue, promotionalCreditAllocationValue, validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence } from '../../../../src/modules/money/public'
 import { parsePublishedToolSnapshot } from '../../../../src/modules/capability-supply/public'
 
 export const transactionRefsValue = v.array(v.string())
@@ -33,6 +33,7 @@ const bookingValue = v.object({
   treasuryEvidenceDigest: v.string(),
   x402RequirementDigest: v.string(),
   spendingPeriods: v.optional(spendingPeriodsValue),
+  promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
 })
 
 function validStoredSpendingPeriods(
@@ -81,8 +82,11 @@ export function bookingFromRows(
     || call.principalId !== quote.principalId
     || call.toolRef !== quote.toolRef
     || (periodAware
-      ? quote.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+      ? (quote.formanceSchemaVersion !== 'v1.4.0'
+          && quote.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion)
       : quote.formanceSchemaVersion !== 'v1.3.0')
+    || (quote.formanceSchemaVersion === 'v1.5.0' && call.promotionalCreditAllocation === undefined)
+    || (quote.formanceSchemaVersion !== 'v1.5.0' && call.promotionalCreditAllocation !== undefined)
     || quote.sourceUsdcUnits === undefined
     || quote.x402RequirementDigest === undefined
     || quote.rateEvidenceDigest === undefined
@@ -121,6 +125,7 @@ export function bookingFromRows(
     rateEvidenceDigest: quote.rateEvidenceDigest,
     treasuryEvidenceDigest: quote.treasuryEvidenceDigest,
     x402RequirementDigest: quote.x402RequirementDigest,
+    ...(call.promotionalCreditAllocation === undefined ? {} : { promotionalCreditAllocation: call.promotionalCreditAllocation }),
     ...(quote.spendingPeriods === undefined ? {} : { spendingPeriods: quote.spendingPeriods }),
   }
 }

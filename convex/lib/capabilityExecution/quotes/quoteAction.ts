@@ -168,8 +168,8 @@ async function evaluateQuoteAction(
   const periodSnapshot = spendingPeriods
   if (periodSnapshot === undefined) return refuse(args, 'inspection_unavailable', true)
   const [account, dailyPeriod, monthlyPeriod, exposure, treasury] = await Promise.all([
-    ctx.runAction(internal.moneyFormance.readDisplayBalance, {
-      balanceKind: 'account_aud', subjectRef: subjects.accountRef,
+    ctx.runAction(internal.moneyAccountCreditBalance.read, {
+      accountRef: subjects.accountRef,
     }),
     ctx.runAction(internal.moneyFormance.readSpendingPeriod, {
       principalRef: subjects.principalRef,

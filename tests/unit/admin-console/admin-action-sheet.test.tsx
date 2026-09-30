@@ -124,6 +124,22 @@ describe('Admin action sheet', () => {
     expect(mocks.execute.mock.calls[1]?.[0].operationKey).toBe(mocks.execute.mock.calls[0]?.[0].operationKey)
   })
 
+  it('checks a pending grant using the same operation, payload and evidence', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.execute.mockResolvedValueOnce({ kind: 'pending', action: 'grant_promotional_credit', effectRefs: ['grant:one'], auditEventRef: 'audit:pending', correlationId: 'correlation:1' })
+      .mockResolvedValueOnce({ kind: 'completed', action: 'grant_promotional_credit', code: 'promotional_credit_granted', effectRefs: ['grant:one'], auditEventRef: 'audit:booked', correlationId: 'correlation:1' })
+    render(<AdminActionSheet action="grant_promotional_credit"
+      input={{ accountRef: 'account:one', environment: 'sandbox', amountUnits: '10000000', expiresAt: 2_000_000_000_000 }}
+      targetRefs={[{ label: 'Workspace', value: 'account:one' }]} initialReasonCode="onboarding" open onOpenChange={() => undefined} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    expect(await screen.findByText('Credit grant pending')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check grant status' }))
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2))
+    expect(mocks.execute.mock.calls[1]?.[0]).toEqual(mocks.execute.mock.calls[0]?.[0])
+    expect(screen.queryByText('Credit grant pending')).toBeNull()
+  })
+
   it('leaves a stalled submission without starting a second command', async () => {
     mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
     mocks.execute.mockReturnValue(new Promise(() => {}))

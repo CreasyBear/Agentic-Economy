@@ -23,6 +23,7 @@ import {
   cleanupExpiredSourceWriteNoncesHandler,
   expireStalePendingApprovalsHandler,
   reconcileDueFacilitatorInvocationsHandler,
+  reconcilePromotionalCreditHandler,
   refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler,
   refreshCurrentMarketPresenceHandler,
@@ -67,6 +68,7 @@ const EXPECTED_BINDINGS = {
   'cleanup expired source write nonces': 'workloadCron:cleanupExpiredSourceWriteNonces',
   'expire stale pending approvals': 'workloadCron:expireStalePendingApprovals',
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
+  'reconcile promotional credit': 'workloadCron:reconcilePromotionalCredit',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'reconcile business supply projections': 'workloadCron:reconcileBusinessSupplyProjections',
@@ -80,6 +82,7 @@ const EXPECTED_BINDINGS = {
 
 const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
+  reconcilePromotionalCreditHandler,
   refreshFacilitatorDiscoveryHandler,
   refreshReferenceRateHandler,
   refreshAgenticEconomyApiRegistryHandler,
@@ -90,6 +93,7 @@ const ACTION_HANDLERS = [
 
 const ACTION_HANDLER_WORKLOAD_NAMES = [
   'reconcile due facilitator invocations',
+  'reconcile promotional credit',
   'refresh facilitator discovery',
   'refresh USDC/AUD reference rate',
   'refresh Agentic Economy API registry',
@@ -398,8 +402,8 @@ describe('System workload cron boundary', () => {
 
     expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
     // Business projection reconciliation dispatches two mutations under one admission.
-    expect(context.dispatches).toHaveLength(14)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 13 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
+    expect(context.dispatches).toHaveLength(ACTION_HANDLERS.length + MUTATION_HANDLERS.length + 1)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: ACTION_HANDLERS.length + MUTATION_HANDLERS.length }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 

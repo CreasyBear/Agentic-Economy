@@ -11,7 +11,7 @@ import type { AdminAction } from '@/modules/security/public'
 type AdminCommandEventProperties = Readonly<{
   ae_action: AdminCommandAction
   ae_permission: AdminAction
-  ae_outcome: 'completed' | 'proposed' | 'refused'
+  ae_outcome: 'completed' | 'pending' | 'proposed' | 'refused'
   $process_person_profile: false
 }>
 
@@ -36,7 +36,7 @@ export function buildAdminEventProperties(
   input: Readonly<{
     action: AdminCommandAction
     permission: AdminAction
-    outcome: 'completed' | 'proposed' | 'refused'
+    outcome: 'completed' | 'pending' | 'proposed' | 'refused'
   }>,
 ): AdminEventProperties
 export function buildAdminEventProperties(
@@ -52,7 +52,7 @@ export function buildAdminEventProperties(
     | readonly [event: 'admin_command', input: Readonly<{
       action: AdminCommandAction
       permission: AdminAction
-      outcome: 'completed' | 'proposed' | 'refused'
+      outcome: 'completed' | 'pending' | 'proposed' | 'refused'
     }>]
     | readonly [event: 'admin_lookup', input: Readonly<{
       refKind: AdminObjectKind

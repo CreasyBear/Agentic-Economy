@@ -1,3 +1,4 @@
+import { restorePromotionalCredit } from '../../money/promotionalCredit/allocation'
 import type { MutationCtx } from '../../../_generated/server'
 import type { AbandonArgs, AbandonResult } from './admissionReservation'
 import type { CallRow } from './contracts'
@@ -10,10 +11,16 @@ export async function abandonHandler(
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
     .unique()
   if (row === null || !abandonmentIdentityMatches(row, args)) return { kind: 'not_found' as const }
+  if (row.formanceReservationAttempt !== undefined && (row.formanceReservationAttempt.ambiguous
+    || row.formanceReservationAttempt.generation !== args.reservationAttemptGeneration)) return { kind: 'dispatch_started' as const }
   if (dispatchHasStarted(row)) return { kind: 'dispatch_started' as const }
   const commitment = await ctx.db.query('capabilityQuotes')
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
     .unique()
+  if (row.promotionalCreditAllocation !== undefined) {
+    const restored = await restorePromotionalCredit(ctx, row.promotionalCreditAllocation, row.ownerId, row.environment, Date.now())
+    if (restored.kind !== 'restored') throw new Error('promotional_credit_restore_failed')
+  }
   await ctx.db.delete(row._id)
   const turnRef = args.turnRef
   if (turnRef !== undefined) {
@@ -69,6 +76,7 @@ function abandonmentIdentityMatches(row: CallRow, args: AbandonArgs): boolean {
 function dispatchHasStarted(row: CallRow): boolean {
   return [
     row.state !== 'pending',
+    row.formanceFinancialState !== undefined && row.formanceFinancialState !== 'reservation_pending',
     row.result !== undefined,
     row.workId !== undefined,
     row.authority !== undefined,

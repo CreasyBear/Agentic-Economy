@@ -1,3 +1,4 @@
+import { restorePromotionalCredit } from './lib/money/promotionalCredit/allocation'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation, type QueryCtx } from './_generated/server'
@@ -71,7 +72,7 @@ export const finish = internalMutation({
       || call.formanceFinancialState !== 'outcome_unknown'
       || !call.reconciliation?.leaseOwner?.startsWith('expired-unused:')
       || call.result?.kind !== 'reconciliation_required' || call.result.receipt?.commercialModel !== 'account_aud'
-      || args.transactionRefs.length !== 2) return { kind: 'refused' as const }
+      || args.transactionRefs.length !== 2 + (call.promotionalCreditAllocation?.grants.length ?? 0)) return { kind: 'refused' as const }
     const { attemptRef, effectGeneration } = call.result.evidence
     const attempt = await ctx.db.query('moneyX402PaymentAttempts')
       .withIndex('by_attemptRef_and_effectGeneration', q => q.eq('attemptRef', attemptRef).eq('effectGeneration', effectGeneration)).unique()
@@ -83,6 +84,10 @@ export const finish = internalMutation({
     const transactionRef = args.transactionRefs[0]
     if (transactionRef === undefined) return { kind: 'refused' as const }
     const now = Date.now()
+    if (call.promotionalCreditAllocation !== undefined) {
+      const restored = await restorePromotionalCredit(ctx, call.promotionalCreditAllocation, call.ownerId, call.environment, now)
+      if (restored.kind !== 'restored') throw new Error('promotional_credit_restore_failed')
+    }
     const result = {
       kind: 'refused' as const, toolRef: call.toolRef, code: 'source_unavailable' as const, retryable: false,
       nextAction: 'The service did not complete and payment expired unused. Your credit has been restored. You can make a new request from the Tool page.',

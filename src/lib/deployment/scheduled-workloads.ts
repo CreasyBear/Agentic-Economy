@@ -18,6 +18,7 @@ export type ScheduledWorkload = Readonly<{
 }>
 
 export const SCHEDULED_WORKLOADS = [
+  { name: 'reconcile promotional credit', workloadKind: 'reconciliation', handler: 'reconcilePromotionalCredit', interval: { minutes: 1 } },
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
   { name: 'expire stale pending approvals', workloadKind: 'reconciliation', handler: 'expireStalePendingApprovals', interval: { minutes: 5 } },
   { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery', interval: { hours: 6 } },
@@ -49,6 +50,7 @@ export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'observe x402 treasury',
   'reconcile business supply projections',
   'reconcile due facilitator invocations',
+  'reconcile promotional credit',
   'refresh Agentic Economy API registry',
   'refresh capability supply readiness',
   'refresh current market presence',

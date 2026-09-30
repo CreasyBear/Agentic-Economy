@@ -22,6 +22,7 @@ const AdminActionMatrix = {
     register_capability_supply: true,
     control_kernel_incidents: true,
     manage_commercial_policy: true,
+    grant_promotional_credit: true,
     suppress_business: true,
   },
   support: {
@@ -35,6 +36,7 @@ const AdminActionMatrix = {
     register_capability_supply: false,
     control_kernel_incidents: false,
     manage_commercial_policy: false,
+    grant_promotional_credit: false,
     suppress_business: false,
   },
   reviewer: {
@@ -48,6 +50,7 @@ const AdminActionMatrix = {
     register_capability_supply: false,
     control_kernel_incidents: false,
     manage_commercial_policy: false,
+    grant_promotional_credit: false,
     suppress_business: false,
   },
 } satisfies Record<AdminRole, Record<AdminAction, boolean>>

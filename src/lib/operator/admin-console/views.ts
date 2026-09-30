@@ -53,6 +53,7 @@ export type AdminWorkspaceView = {
   createdAt: number
   externalOrganizationBound: boolean
   hasActiveSpendingPolicy: boolean
+  paymentEnvironment: 'sandbox' | 'production' | null
 }
 
 export type AdminAgentView = {

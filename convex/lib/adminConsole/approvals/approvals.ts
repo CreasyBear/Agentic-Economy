@@ -22,6 +22,7 @@ const PROPOSABLE_BY_ACTION = {
   revoke_admin_membership: true,
   verify_capability_source_authority: false,
   change_commercial_policy: true,
+  grant_promotional_credit: true,
 } satisfies Record<AdminCommandAction, boolean>
 
 export type ApprovalResolution<A extends AdminCommandAction> =

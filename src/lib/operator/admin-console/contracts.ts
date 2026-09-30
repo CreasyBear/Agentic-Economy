@@ -53,6 +53,7 @@ export type AdminCommandAction =
   | 'revoke_admin_membership'
   | 'verify_capability_source_authority'
   | 'change_commercial_policy'
+  | 'grant_promotional_credit'
 
 export const ADMIN_ACTION_PERMISSION = {
   set_business_suppression: 'suppress_business',
@@ -61,6 +62,7 @@ export const ADMIN_ACTION_PERMISSION = {
   revoke_admin_membership: 'manage_admin_membership',
   verify_capability_source_authority: 'register_capability_supply',
   change_commercial_policy: 'manage_commercial_policy',
+  grant_promotional_credit: 'grant_promotional_credit',
 } as const satisfies Record<AdminCommandAction, AdminAction>
 
 export type AdminProposableAction =
@@ -68,6 +70,7 @@ export type AdminProposableAction =
   | 'change_commercial_policy'
   | 'grant_admin_membership'
   | 'revoke_admin_membership'
+  | 'grant_promotional_credit'
 
 export type AdminReasonCodeByAction = {
   set_business_suppression:
@@ -81,6 +84,7 @@ export type AdminReasonCodeByAction = {
   revoke_admin_membership: 'offboarding' | 'role_change' | 'compromise_suspected'
   verify_capability_source_authority: 'evidence_verified' | 'evidence_insufficient'
   change_commercial_policy: 'pricing_update' | 'correction'
+  grant_promotional_credit: 'onboarding' | 'correction'
 }
 
 export type AdminActionInput = {
@@ -122,6 +126,12 @@ export type AdminActionInput = {
     expiresAt: number
     control: CommercialPolicyControl
   }
+  grant_promotional_credit: {
+    accountRef: string
+    environment: 'sandbox' | 'production'
+    amountUnits: string
+    expiresAt: number
+  }
 }
 
 export type AdminSuccessCodeByAction = {
@@ -131,6 +141,7 @@ export type AdminSuccessCodeByAction = {
   revoke_admin_membership: 'membership_revoked'
   verify_capability_source_authority: 'source_authority_verified' | 'source_authority_insufficient'
   change_commercial_policy: 'commercial_policy_changed'
+  grant_promotional_credit: 'promotional_credit_granted'
 }
 
 export type AdminAuthorityDenialReason = Extract<
@@ -155,6 +166,7 @@ export type AdminActionRefusalCodes = {
   revoke_admin_membership: 'membership_not_found' | 'last_owner_admin'
   verify_capability_source_authority: 'publication_not_found' | 'source_authority_not_reviewable'
   change_commercial_policy: 'policy_not_found' | 'proof_stale' | 'proof_replayed' | 'authority_mismatch'
+  grant_promotional_credit: 'account_not_found' | 'promotional_credit_invalid' | 'environment_mismatch'
 }
 
 export type AdminApprovalRefusalCode =
@@ -203,6 +215,13 @@ export type AdminCommandReceipt<A extends AdminCommandAction> =
       kind: 'completed'
       action: A
       code: AdminSuccessCodeByAction[A]
+      effectRefs: string[]
+      auditEventRef: string
+      correlationId: string
+    }
+  | {
+      kind: 'pending'
+      action: A
       effectRefs: string[]
       auditEventRef: string
       correlationId: string

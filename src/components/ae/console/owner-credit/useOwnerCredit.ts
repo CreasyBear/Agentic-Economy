@@ -79,6 +79,13 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     }
   }, [readAccountBalance])
 
+  useEffect(() => {
+    const expiry = accountBalance?.kind === 'available' ? accountBalance.nextPromotionalExpiryAt : undefined
+    if (expiry == null) return
+    const timer = window.setTimeout(() => { void loadBalance() }, Math.min(2_147_483_647, Math.max(0, expiry - Date.now())))
+    return () => window.clearTimeout(timer)
+  }, [accountBalance, loadBalance])
+
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
     try {

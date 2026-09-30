@@ -23,7 +23,7 @@ type AdminOperationKeyWrite = Readonly<{
   operationName: string
   key: string
   requestHash: string
-  status: 'succeeded' | 'failed_terminal'
+  status: 'in_progress' | 'succeeded' | 'failed_terminal'
   resultJson: string
   resultHash: string
 }>
@@ -92,6 +92,11 @@ function isAdminCommandReceipt<A extends AdminCommandAction>(
   if (value.kind === 'completed') {
     return typeof value.code === 'string'
       && typeof value.auditEventRef === 'string'
+      && Array.isArray(value.effectRefs)
+      && value.effectRefs.every((ref) => typeof ref === 'string')
+  }
+  if (value.kind === 'pending') {
+    return typeof value.auditEventRef === 'string'
       && Array.isArray(value.effectRefs)
       && value.effectRefs.every((ref) => typeof ref === 'string')
   }

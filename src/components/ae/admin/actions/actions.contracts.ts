@@ -88,6 +88,7 @@ export const ADMIN_ACTION_COPY = {
   revoke_admin_membership: 'Revoke Admin membership',
   verify_capability_source_authority: 'Verify source authority',
   change_commercial_policy: 'Change commercial policy',
+  grant_promotional_credit: 'Grant promotional credit',
 } satisfies Record<AdminCommandAction, string>
 
 export const ADMIN_REASON_OPTIONS = {
@@ -97,6 +98,7 @@ export const ADMIN_REASON_OPTIONS = {
   revoke_admin_membership: ['offboarding', 'role_change', 'compromise_suspected'],
   verify_capability_source_authority: ['evidence_verified', 'evidence_insufficient'],
   change_commercial_policy: ['pricing_update', 'correction'],
+  grant_promotional_credit: ['onboarding', 'correction'],
 } as const satisfies { [A in AdminCommandAction]: readonly AdminReasonCodeByAction[A][] }
 export const ADMIN_REASON_LABELS: Record<AdminReasonCodeByAction[AdminCommandAction], string> = {
   policy_violation: 'Policy violation',
@@ -147,6 +149,7 @@ export const adminCommandRequestSchema = z.discriminatedUnion('action', [
   z.strictObject({ ...sharedCommand, action: z.literal('revoke_admin_membership'), input: z.strictObject({ targetClerkUserId: z.string().min(1), targetTokenIdentifier: z.string().optional() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.revoke_admin_membership) }),
   z.strictObject({ ...sharedCommand, action: z.literal('verify_capability_source_authority'), input: z.strictObject({ publicationRef: z.string().min(1), expectedRevision: z.number().int(), expectedSourceDigest: z.string().min(1) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.verify_capability_source_authority) }),
   z.strictObject({ ...sharedCommand, action: z.literal('change_commercial_policy'), input: z.strictObject({ changeKind: z.enum(['activate', 'replace', 'suspend']), family: z.enum(['commercial_perimeter', 'tax', 'accounting_client_money', 'privacy_retention', 'treasury_custody', 'operations']), environment: z.enum(['sandbox', 'production']), policyRef: z.string().min(1), expectedCurrentPolicyRef: z.string().optional(), revision: z.number().int(), effectiveAt: z.number(), expiresAt: z.number(), control: commercialControlSchema }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.change_commercial_policy) }),
+  z.strictObject({ ...sharedCommand, action: z.literal('grant_promotional_credit'), input: z.strictObject({ accountRef: z.string().min(1), environment: z.enum(['sandbox', 'production']), amountUnits: z.string().regex(/^[1-9]\d*$/u), expiresAt: z.number().int() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.grant_promotional_credit) }),
 ])
 
 export function parseAdminProposalCommand(action: AdminCommandAction, commandJson: string): AdminCommandRequest | null {
@@ -183,6 +186,7 @@ export const ADMIN_SUCCESS_COPY = {
   source_authority_verified: 'Source authority verified',
   source_authority_insufficient: 'Source authority not verified',
   commercial_policy_changed: 'Commercial policy changed',
+  promotional_credit_granted: 'Promotional credit granted',
 } satisfies Record<AdminSuccessCodeByAction[AdminCommandAction], string>
 
 export const ADMIN_ACTION_SHEET_COPY = {

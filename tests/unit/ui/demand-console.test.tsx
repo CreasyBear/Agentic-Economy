@@ -157,6 +157,21 @@ function openLedger() {
   fireEvent.click(screen.getByRole('tab', { name: 'Ledger' }))
 }
 
+describe('promotional credit presentation', () => {
+  it('shows total and its funding sources without substituting total for purchased credit', () => {
+    render(<AeOwnerCredit accountBalance={{ kind: 'available', accountRef: 'account:promo',
+      balance: { currency: 'AUD', units: '5000000', exponent: 6 },
+      totalBalance: { currency: 'AUD', units: '15000000', exponent: 6 },
+      promotionalBalance: { currency: 'AUD', units: '10000000', exponent: 6 },
+      nextPromotionalExpiryAt: Date.UTC(2027, 0, 1), locked: false, version: 1,
+    }} />)
+    expect(screen.getAllByText('A$15.00').length).toBeGreaterThan(0)
+    expect(screen.getByText('Purchased credit')).toBeTruthy()
+    expect(screen.getByText('Promotional credit')).toBeTruthy()
+    expect(screen.getByText(/Next promotional credit expiry:/)).toBeTruthy()
+  })
+})
+
 describe('owner credit target', () => {
   it('renders booked Account transactions instead of Agent activity approximations', () => {
     render(<AeOwnerCredit

@@ -6,8 +6,10 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   LEGACY_FORMANCE_SCHEMA_VERSION,
+  PERIOD_FORMANCE_SCHEMA_VERSION,
   FORMANCE_SCHEMA_VERSION,
   FORMANCE_TEMPLATE_NAMES,
+  PERIOD_FORMANCE_TEMPLATE_NAMES,
   LEGACY_FORMANCE_TEMPLATE_NAMES,
   type FormanceMoneyTemplate,
 } from '../formance-schema'
@@ -261,12 +263,15 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
   if (!COMMAND_REFERENCE_PATTERN.test(command.commandRef)) return 'formance_command_reference_invalid'
   if (!DIGEST_PATTERN.test(command.idempotencyKey)) return 'formance_idempotency_key_invalid'
   if (command.schemaVersion !== FORMANCE_SCHEMA_VERSION
+    && command.schemaVersion !== PERIOD_FORMANCE_SCHEMA_VERSION
     && command.schemaVersion !== LEGACY_FORMANCE_SCHEMA_VERSION) {
     return 'formance_schema_version_invalid'
   }
   const allowedTemplates = command.schemaVersion === LEGACY_FORMANCE_SCHEMA_VERSION
     ? LEGACY_FORMANCE_TEMPLATE_NAMES
-    : FORMANCE_TEMPLATE_NAMES
+    : command.schemaVersion === PERIOD_FORMANCE_SCHEMA_VERSION
+      ? PERIOD_FORMANCE_TEMPLATE_NAMES
+      : FORMANCE_TEMPLATE_NAMES
   if (!allowedTemplates.some((template) => template === command.template)) {
     return 'formance_template_invalid'
   }
@@ -279,8 +284,11 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
       || value !== value.trim()
       || !validFormanceVariableValue(
         value,
-        command.template === 'BUYER_SALE_SETTLED'
-          && key === 'tax_amount',
+        (command.template === 'BUYER_SALE_SETTLED' && key === 'tax_amount')
+          || (command.schemaVersion === FORMANCE_SCHEMA_VERSION && (
+            (['CALL_RESERVED_AUD', 'CALL_RELEASED_AUD'].includes(command.template) && key === 'buyer_amount')
+            || (command.template === 'BUYER_SALE_SETTLED' && key === 'revenue_amount')
+          )),
       )) return 'formance_variables_invalid'
   }
   if (!validFormanceMetadata(command.metadata)

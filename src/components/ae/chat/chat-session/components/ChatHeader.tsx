@@ -21,6 +21,7 @@ export function ChatHeader({
   copied,
   ownerChatEnabled,
   balanceLabel,
+  balanceDescription,
   enableProblem,
   onEnableSpending,
   mobileHistory,
@@ -82,10 +83,13 @@ export function ChatHeader({
           variant="outline"
           size="sm"
           className="min-h-touch rounded-full px-3"
-          render={<a href="/owner/credit" aria-label={`Balance ${balanceLabel}`} />}
+          render={<a href="/owner/credit" aria-label={`Available credit ${balanceLabel}`} aria-describedby={balanceDescription === undefined ? undefined : 'chat-credit-balance-description'} />}
         >
           {balanceLabel}
         </Button>
+      )}
+      {balanceLabel === undefined || balanceDescription === undefined ? null : (
+        <span id="chat-credit-balance-description" className="sr-only">{balanceDescription}</span>
       )}
       {authenticated && threadId !== null ? (
         <div className="hidden items-center gap-intra sm:flex">

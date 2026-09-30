@@ -1,11 +1,17 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { getFunctionName } from 'convex/server'
+import type { ActionCtx } from '../../../convex/_generated/server'
+import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import type { FormanceMoneyResult } from '@/modules/money/public'
+import { reserveFormanceBackedInvocation } from '../../../convex/lib/capabilityExecution/callLifecycle/callFinancialReservation'
 
 import schema from '../../../convex/schema'
 import { api, internal } from '../../../convex/_generated/api'
 import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import { callResultSchema } from '../../../src/modules/capability-execution/call-contracts'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '../../../src/modules/common/freshness'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import { createPublicToolRef } from '../../../src/modules/capability-supply/public'
 import { quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
@@ -308,6 +314,157 @@ describe('paid Call with a lost response', () => {
       })
     })
     expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, { callRef, transactionHash })).toBeNull()
+  })
+})
+
+describe('promotional Call allocation recovery', () => {
+  async function fixture() {
+    const backend = convexTest(schema, convexModules)
+    const allocation = {
+      version: 'ae.promotional-credit-allocation:v1' as const,
+      purchasedUnits: '2000000',
+      grants: [{ grantRef: 'promo:managed', amountUnits: '4000000', expiresAt: now + 10 }],
+    }
+    await backend.run(async ctx => {
+      await ctx.db.insert('capabilityQuotes', {
+        ...commitment(), formanceSchemaVersion: 'v1.5.0', spendingPeriods: {
+          version: 'ae.spending-periods:v1',
+          daily: { ...currentUtcDayBounds(now), revision: 1, limitUnits: '10000000' },
+          monthly: { ...currentUtcMonthBounds(now), revision: 1, limitUnits: '10000000' },
+        },
+      })
+      await ctx.db.insert('capabilityCalls', { ...call(), promotionalCreditAllocation: allocation })
+      await ctx.db.insert('moneyPromotionalGrants', {
+        grantRef: 'promo:managed', accountRef, environment: 'sandbox',
+        amountUnits: '4000000', availableUnits: '0', expiresAt: now + 10,
+        createdAt: now - 10, updatedAt: now, operationKey: 'promo:managed',
+        actorRef: 'admin:test', correlationId: 'promo:managed', commandDigest: canonicalDigest('promo'),
+        reasonCode: 'onboarding', evidenceRefs: ['evidence:promo'], bookingState: 'booked', transactionRef: 'formance:promo', expiryRevision: 0,
+      })
+    })
+    return { backend, allocation }
+  }
+
+  it('serializes concurrent reservation attempts while preserving its frozen claim', async () => {
+    const { backend, allocation } = await fixture()
+    let complete: ((result: FormanceMoneyResult) => void) | undefined
+    const firstPosting = new Promise<FormanceMoneyResult>(resolve => { complete = resolve })
+    const post = vi.fn().mockReturnValueOnce(firstPosting)
+      .mockResolvedValueOnce({ kind: 'unavailable', code: 'formance_write_unavailable' })
+    const ctx = {
+      runQuery: (reference: Parameters<typeof backend.query>[0], args: never) => backend.query(reference, args),
+      runMutation: (reference: Parameters<typeof backend.mutation>[0], args: never) => backend.mutation(reference, args),
+      runAction: (reference: Parameters<ActionCtx['runAction']>[0], args: unknown) => {
+        expect(getFunctionName(reference)).toBe('moneyFormance:reserveManagedCall')
+        return post(args)
+      },
+    } as unknown as ActionCtx
+    const row = call()
+    const reservation = {
+      quoteRef, callRef, principalId: principalRef, credentialId: row.credentialId,
+      applicationRef: row.applicationRef, grantRef: row.grantRef, grantGeneration: row.grantGeneration,
+      policyDigest: row.policyDigest, grantExpiresAt: row.grantExpiresAt, environment: row.environment,
+      toolRef, idempotencyKey: row.idempotencyKey, inputDigest: row.inputDigest, requestDigest: row.requestDigest,
+    }
+    const principal = { ownerId: accountRef } as AgentAccessPrincipal
+    const first = reserveFormanceBackedInvocation(ctx, principal, reservation, row.toolJson, {})
+    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    expect(await reserveFormanceBackedInvocation(ctx, principal, reservation, row.toolJson, {}))
+      .toMatchObject({ kind: 'refused', retryable: true })
+    expect(await backend.run(ctx => ctx.db.query('moneyPromotionalGrants').first()))
+      .toMatchObject({ availableUnits: '0' })
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef }))
+      .toMatchObject({ financialState: 'reservation_pending', booking: { promotionalCreditAllocation: allocation } })
+    complete!({ kind: 'completed', transactionRefs: [...reservationRefs, 'formance:reserve-promo'], replayed: true })
+    expect(await first).toMatchObject({ kind: 'replayed' })
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post.mock.calls[0]?.[0]).toMatchObject({ promotionalCreditAllocation: allocation })
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef })).toMatchObject({ financialState: 'reserved' })
+    expect(await backend.run(ctx => ctx.db.query('moneyProviderObligations').collect())).toHaveLength(1)
+  })
+
+  it('never restores a taken-over attempt, and permits exact booking after the lease expires', async () => {
+    const { backend } = await fixture()
+    const claim = await backend.mutation(internal.moneyManagedCall.claimReservationAttempt, { callRef, initialAdmission: true })
+    expect(claim).toEqual({ kind: 'claimed', generation: 1 })
+    expect(await backend.mutation(internal.moneyManagedCall.claimReservationAttempt, { callRef, initialAdmission: false }))
+      .toEqual({ kind: 'busy' })
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row?.formanceReservationAttempt === undefined) throw new Error('attempt_missing')
+      await ctx.db.patch(row._id, { formanceReservationAttempt: { ...row.formanceReservationAttempt, leaseUntil: Date.now() - 1 }, dispatchState: undefined })
+    })
+    expect(await backend.mutation(internal.moneyManagedCall.claimReservationAttempt, { callRef, initialAdmission: false }))
+      .toEqual({ kind: 'claimed', generation: 2 })
+    const row = call()
+    const abandon = {
+      quoteRef, callRef, principalId: principalRef, ownerId: accountRef, credentialId: row.credentialId,
+      applicationRef: row.applicationRef, grantRef: row.grantRef, grantGeneration: row.grantGeneration,
+      policyDigest: row.policyDigest, grantExpiresAt: row.grantExpiresAt, environment: row.environment,
+      toolRef, idempotencyKey: row.idempotencyKey, inputDigest: row.inputDigest, requestDigest: row.requestDigest,
+    }
+    for (const generation of [1, 2]) expect(await backend.mutation(internal.capabilityCalls.abandon, {
+      ...abandon, reservationAttemptGeneration: generation,
+    })).toEqual({ kind: 'dispatch_started' })
+    expect(await backend.run(ctx => ctx.db.query('moneyPromotionalGrants').first())).toMatchObject({ availableUnits: '0' })
+    expect(await backend.mutation(internal.moneyManagedCall.attachReservation, {
+      callRef, transactionRefs: [...reservationRefs, 'formance:reserve-promo'],
+    })).toEqual({ kind: 'attached', replayed: false })
+  })
+
+  it('recovers only initial reservation uncertainty and rejects a late unknown result after attachment', async () => {
+    const { backend } = await fixture()
+    expect(await backend.mutation(internal.moneyManagedCall.markReservationUnknown, {
+      callRef, reference: 'formance:reserve', statusRef: 'status:reserve',
+    })).toBe(true)
+    expect(await backend.mutation(internal.moneyManagedCall.attachReservation, {
+      callRef, transactionRefs: [...reservationRefs, 'formance:reserve-promo'],
+    })).toEqual({ kind: 'attached', replayed: false })
+    expect(await backend.run(ctx => ctx.db.query('capabilityCalls').first()))
+      .toMatchObject({ state: 'pending', formanceFinancialState: 'reserved' })
+    expect(await backend.mutation(internal.moneyManagedCall.markReservationUnknown, {
+      callRef, reference: 'formance:reserve', statusRef: 'status:reserve',
+    })).toBe(false)
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef })).toMatchObject({ financialState: 'reserved' })
+  })
+
+  it('freezes all grant references and restores a late release once under concurrent replay', async () => {
+    const { backend, allocation } = await fixture()
+    expect(await backend.mutation(internal.moneyManagedCall.attachReservation, {
+      callRef, transactionRefs: reservationRefs,
+    })).toEqual({ kind: 'refused', code: 'formance_reservation_invalid' })
+    expect(await backend.mutation(internal.moneyManagedCall.attachReservation, {
+      callRef, transactionRefs: [...reservationRefs, 'formance:reserve-promo'],
+    })).toEqual({ kind: 'attached', replayed: false })
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef }))
+      .toMatchObject({ kind: 'available', booking: { promotionalCreditAllocation: allocation } })
+    const refs = [...releaseRefs, 'formance:release-promo']
+    const results = await Promise.all([0, 1].map(offset => backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef, transactionRefs: refs, now: now + 20 + offset,
+    })))
+    expect(results).toContainEqual({ kind: 'accepted', state: 'released', replayed: false })
+    expect(results).toContainEqual({ kind: 'accepted', state: 'released', replayed: true })
+    const promo = await backend.run(ctx => ctx.db.query('moneyPromotionalGrants').first())
+    expect(promo).toMatchObject({ availableUnits: '4000000', expiresAt: now + 10 })
+    expect(promo?.nextWorkAt).toBeGreaterThanOrEqual(now + 20)
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef }))
+      .toMatchObject({ financialState: 'released', releaseRefs: refs, booking: { promotionalCreditAllocation: allocation } })
+  })
+
+  it('keeps an uncertain grant held and allows the original Call to settle after grant expiry', async () => {
+    const { backend } = await fixture()
+    await backend.mutation(internal.moneyManagedCall.attachReservation, {
+      callRef, transactionRefs: [...reservationRefs, 'formance:reserve-promo'],
+    })
+    await backend.mutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, { callRef, evidenceDigest: canonicalDigest('unknown'), now: now + 1 })
+    expect(await backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef, transactionRefs: [...releaseRefs, 'formance:release-promo'], now: now + 20,
+    })).toEqual({ kind: 'refused', code: 'managed_call_state_conflict' })
+    expect(await backend.mutation(internal.moneyManagedCallLifecycle.finalizeSettlement, {
+      callRef, transactionRefs: [...settlementRefs, 'formance:spend-promo'], now: now + 20,
+    })).toEqual({ kind: 'accepted', state: 'settled', replayed: false })
+    expect(await backend.run(ctx => ctx.db.query('moneyPromotionalGrants').first()))
+      .toMatchObject({ availableUnits: '0' })
   })
 })
 

@@ -8,6 +8,9 @@ export const readBalanceResult = v.union(
     kind: v.literal('available'),
     accountRef: v.string(),
     balance: v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) }),
+    totalBalance: v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) }),
+    promotionalBalance: v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) }),
+    nextPromotionalExpiryAt: v.union(v.number(), v.null()),
     locked: v.boolean(),
     version: v.number(),
     updatedAt: v.optional(v.number()),
@@ -26,10 +29,10 @@ export async function readBalanceHandler(ctx: ActionCtx): Promise<BalanceResult>
     > = await ctx.runQuery(internal.moneyAccountFunding.readBalanceSubject, {})
     if (subject.kind === 'refused') return subject
     const balance: Readonly<
-      | { kind: 'available'; units: string; observedAt: number }
+      | { kind: 'available'; units: string; purchasedUnits: string; promotionalUnits: string; nextPromotionalExpiryAt: number | null; observedAt: number }
       | { kind: 'setup_required' | 'unavailable'; code: string }
-    > = await ctx.runAction(internal.moneyFormance.readDisplayBalance, {
-      balanceKind: 'account_aud', subjectRef: subject.accountRef,
+    > = await ctx.runAction(internal.moneyAccountCreditBalance.read, {
+      accountRef: subject.accountRef,
     })
     if (balance.kind !== 'available') {
       return { kind: 'refused' as const, code: balance.code, retryable: true }
@@ -40,7 +43,10 @@ export async function readBalanceHandler(ctx: ActionCtx): Promise<BalanceResult>
     return {
       kind: 'available' as const,
       accountRef: subject.accountRef,
-      balance: { currency: 'AUD' as const, units: balance.units, exponent: 6 as const },
+      balance: { currency: 'AUD' as const, units: balance.purchasedUnits, exponent: 6 as const },
+      totalBalance: { currency: 'AUD' as const, units: balance.units, exponent: 6 as const },
+      promotionalBalance: { currency: 'AUD' as const, units: balance.promotionalUnits, exponent: 6 as const },
+      nextPromotionalExpiryAt: balance.nextPromotionalExpiryAt,
       locked: subject.locked,
       version: balance.observedAt,
       updatedAt: balance.observedAt,

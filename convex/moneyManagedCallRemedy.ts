@@ -1,3 +1,4 @@
+import { restorePromotionalCredit } from './lib/money/promotionalCredit/allocation'
 import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
@@ -112,7 +113,7 @@ export const finish = internalMutation({
       || call.reconciliation?.leaseOwner !== remedyOwner(args.transactionHash, args.failureKind)
       || call.result?.kind !== 'reconciliation_required'
       || call.result.receipt?.commercialModel !== 'account_aud'
-      || args.transactionRefs.length !== 2) return { kind: 'refused' as const }
+      || args.transactionRefs.length !== 2 + (call.promotionalCreditAllocation?.grants.length ?? 0)) return { kind: 'refused' as const }
     const [buyerRef, providerRef] = args.transactionRefs
     if (buyerRef === undefined || providerRef === undefined) return { kind: 'refused' as const }
     const { attemptRef, effectGeneration } = call.result.evidence
@@ -129,6 +130,10 @@ export const finish = internalMutation({
       || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined
       || !responseEligibleForRemedy(call, attempt, args.failureKind)) return { kind: 'refused' as const }
     const now = Date.now()
+    if (call.promotionalCreditAllocation !== undefined) {
+      const restored = await restorePromotionalCredit(ctx, call.promotionalCreditAllocation, call.ownerId, call.environment, now)
+      if (restored.kind !== 'restored') throw new Error('promotional_credit_restore_failed')
+    }
     const result = {
       kind: 'refused' as const, toolRef: call.toolRef,
       code: args.failureKind === 'http_error' ? 'provider_refused' as const : 'result_invalid' as const,
@@ -156,7 +161,7 @@ export const finish = internalMutation({
     })
     await ctx.db.patch(call._id, {
       state: 'refused', dispatchState: 'failed', result, evidenceHash: args.evidenceDigest,
-      formanceFinancialState: 'released', formanceReleaseRefs: [buyerRef],
+      formanceFinancialState: 'released', formanceReleaseRefs: [buyerRef, ...args.transactionRefs.slice(2)],
       formanceSettlementRefs: [providerRef], reconciliation: undefined, updatedAt: now,
     })
     await materializePurchaseResolutionRecord(ctx, call, {

@@ -30,13 +30,15 @@ export const balance = actionGeneric({
     const balance: Readonly<{
       kind: 'available'
       units: string
+      purchasedUnits: string
+      promotionalUnits: string
+      nextPromotionalExpiryAt: number | null
       observedAt: number
     }> | Readonly<{
       kind: 'setup_required' | 'unavailable'
       code: string
-    }> = await ctx.runAction(internal.moneyFormance.readDisplayBalance, {
-      balanceKind: 'account_aud',
-      subjectRef: admission.accountRef,
+    }> = await ctx.runAction(internal.moneyAccountCreditBalance.read, {
+      accountRef: admission.accountRef,
     })
     if (balance.kind !== 'available') {
       return { kind: 'error' as const, code: 'source_unavailable' as const }
@@ -46,6 +48,9 @@ export const balance = actionGeneric({
       principalRef: admission.principalRef,
       accountRef: admission.accountRef,
       balance: { currency: 'AUD' as const, exponent: 6 as const, units: balance.units },
+      purchasedBalance: { currency: 'AUD' as const, exponent: 6 as const, units: balance.purchasedUnits },
+      promotionalBalance: { currency: 'AUD' as const, exponent: 6 as const, units: balance.promotionalUnits },
+      nextPromotionalExpiryAt: balance.nextPromotionalExpiryAt,
       accountState: 'active' as const,
       version: balance.observedAt,
       updatedAt: balance.observedAt,

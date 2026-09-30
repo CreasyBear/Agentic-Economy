@@ -12,7 +12,11 @@ const convexModules = Object.fromEntries(
 )
 
 describe('purchaseResolutionRecords materialization', () => {
-  it('materializes once from terminal dispatch facts with distinct commercial parties', async () => {
+  it.each([
+    { purchased: undefined, amount: '6000000', revenue: '5454545', gst: '545455' },
+    { purchased: '3000000', amount: '3000000', revenue: '2727273', gst: '272727' },
+    { purchased: '0', amount: '0', revenue: '0', gst: '0' },
+  ])('materializes purchased consideration once without promotional GST: $purchased', async ({ purchased, amount, revenue, gst }) => {
     const backend = convexTest(schema, convexModules)
     const operation = buildDevelopmentPublishedToolEvidence().tool
     const now = Date.UTC(2026, 8, 17, 4, 0, 0)
@@ -94,6 +98,11 @@ describe('purchaseResolutionRecords materialization', () => {
         updatedAt: now - 500,
       })
       await ctx.db.insert('capabilityCalls', {
+        ...(purchased === undefined ? {} : { promotionalCreditAllocation: {
+          version: 'ae.promotional-credit-allocation:v1' as const,
+          purchasedUnits: purchased,
+          grants: [{ grantRef: 'promo:test', amountUnits: (6000000n - BigInt(purchased)).toString(), expiresAt: now + 60_000 }],
+        } }),
         quoteRef,
         callRef,
         principalId: 'principal:agent',
@@ -168,9 +177,9 @@ describe('purchaseResolutionRecords materialization', () => {
       providerRef: operation.identity.businessId,
       paymentRecipientRef: operation.identity.paymentRecipient,
       terminalState: 'completed',
-      considerationAmount: { currency: 'AUD', units: '6000000', exponent: 6 },
-      considerationNetUnits: '5454545',
-      considerationGstUnits: '545455',
+      considerationAmount: { currency: 'AUD', units: amount, exponent: 6 },
+      considerationNetUnits: revenue,
+      considerationGstUnits: gst,
       providerObligationAmount: { currency: 'USDC', units: '1500000', exponent: 6 },
     })
     expect(records[0]?.sellerRef).toMatch(/^ae\.seller:/)

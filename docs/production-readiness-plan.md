@@ -113,8 +113,69 @@ Design review synthesis: the thesis is one bounded purchase that remains financi
 - **Independent acceptance:** the separate reviewer found and root fixed receipt classification and public refusal parsing; final review found no remaining defect in the subsequent Purchase resolution, replay and 402 changes. A separate evaluator proved that a paid 200 echoing its payment signature into a response header creates no response checkpoint, invokes no settlement verification, exposes no secret and remains unknown (one focused probe; temporary test removed).
 - **Runtime limit / handover:** no Formance service is listening at the maintained default loopback endpoint `127.0.0.1:3069`. Three additional existing-harness smoke cases are prepared for malformed/invalid paid 200 and settled 500 with ledger/replay/ranking assertions, but their external ledger behavior has not run. They do not move real money; Provider signing/RPC boundaries are test fixtures. The Formance smoke, deployed development paid Call and authorized live-money drills remain outstanding. Continue unblocked source work at #272; do not close #271's runtime acceptance or claim production readiness from this checkpoint.
 
+### Promotional-credit implementation contract — #272
+
+The AFK issue fixes the product decision: explicit expiry per grant, promo first,
+and purchased credit remains separate. The design review therefore uses that
+decision directly. Implementation is split at the ledger/allocation boundary,
+then operator issuance and balance presentation; neither slice alone closes #272.
+
+**Requires:** a positive bounded AUD amount, an existing Account in the admitted
+environment, future explicit expiry, owner-admin authority, fresh MFA, reason and
+evidence, and an exact second approval where the existing owner-count policy
+requires it. Paid Call admission requires an immutable Quote and atomically
+claims unexpired grants in expiry order before submitting the ledger reservation.
+
+**Ensures:** issuance is spendable only after exact ledger confirmation. A Call
+stores purchased units and every grant contribution before external submission;
+retry, settlement and release reuse that allocation. Purchased revenue/GST is
+proportional to purchased consideration; redeemed promo transfers to marketing
+expense. Issuance and expiry create neither sales/GST nor marketing expense.
+
+**Reservation recovery:** a Call stores one bounded attempt record (generation,
+lease deadline, ambiguity). Only its current first attempt may abandon after an
+explicit absent/refused ledger result. A takeover marks ambiguity permanently;
+lease expiry permits exact-command retry but never proves that the old write is
+absent. Confirmed reference readback attaches once. This small record preserves
+ordinary insufficient-funds cleanup without allowing a concurrent failure to
+restore another attempt's grant. Reusing only the existing pending flag either
+stranded interrupted Calls or made release unsafe; keep the attempt record.
+
+**Invariant:** the ledger remains the money authority. The transactional grant
+counter controls eligibility and concurrent allocation, never creates funds.
+Budget, legal exposure and Provider obligations retain the full accepted Call
+value. Legacy v1.3/v1.4 schemas and command identities remain unchanged. Expiry
+filters apply during admission and reads, independently of cleanup. A returned
+expired contribution cannot be spent; its original grant receives the fixed
+ledger return and a separately frozen expiry operation removes it.
+
+**On violation:** invalid authority/input refuses without issuance; uncertain
+external writes retain the immutable pending operation and claimed funds for
+exact-reference recovery. Definitively absent reservations may restore claims.
+At most 100 grant contributions fit one atomic Call; if more are required,
+admission refuses without substituting purchased credit or partially claiming.
+
+**Complexity decision:** retain the existing native atomic bulk, adding one
+templated transfer per grant and a frozen allocation on Call. This adds a bounded
+array and indexed grant lifecycle, but avoids a second ledger, variable script
+generation, a new queue, or a recomputed refund policy. A shared allocation
+contract isolates the common wire shape; grant eligibility belongs beside the
+existing money concerns. Expiry uses the existing admitted workload framework.
+Verification must cover mixed/all-promo posting, duplicate and concurrent
+admission, exact replay, unknown writes, late returns and old schema recovery.
+The operator form adds amount/expiry to the existing audited action flow; the
+customer sees total, purchased, promo and next expiry, without another decision.
+
+### Promotional-credit source checkpoint — #272
+
+- **Implemented locally:** audited owner-admin grants with fresh MFA, explicit expiry and exact second approval where required; pending receipts until confirmed native-ledger issuance; earliest-expiry allocation frozen on each Call; separate purchased and promotional ledger pools, balances and history; bounded expiry/retry through the existing admitted workload. Buyer sale/GST tracks purchased consideration, and only redeemed promo becomes marketing expense.
+- **Integrity and recovery:** native atomic reservation prevents overdraft. Transactional grant claims prevent concurrent over-allocation. A generation/lease record serializes external reservation attempts; ambiguity retains claims until the same command is confirmed. Expired grant returns never become spendable. Interrupted initial Call reservations currently require a same-key caller retry; there is no autonomous sweep for those pending Call reservations.
+- **Verified:** final `npm run check` passes with zero cycles, including generated API/string-reference fences. Anonymous Convex generation passed all seven files. The full unit run passed 6,449 tests before finding 17 compatibility/fixture failures; the fixes and affected cron assertions then passed all 143 tests across seven suites. Additional focused tests cover grant authority/approval/receipts, bounded expiry, balance eligibility and ledger readback, mixed/all-promo history, concurrent admission and reservation takeover. Two native Formance promotional-credit integration tests pass, including exact replay, expiry and concurrent atomic no-overdraft behavior.
+- **Independent acceptance:** separate implementation, review and evaluation packets covered ledger/allocation, admin lifecycle and balance presentation. Review findings on reservation ambiguity, expiry scheduling and attribution were resolved and reviewed. No new service, dependency or customer decision was added.
+- **Runtime handover:** the maintained local Formance 2.4.12/PostgreSQL stack is now available for test-only proof. Native paid-Call tests pass treasury exhaustion and paid invalid/malformed 200 settlement. Twelve remaining runtime failures concern MCP/CLI fixtures, mainnet admission/clock fixtures and the settled-500 remedy. Carry these into the next acceptance stage; #271 runtime acceptance and deployed development paid-Call proof remain open. Nothing was deployed and no live money moved.
+
 ## Honest status
-The five isolation source stages above are implemented locally, with passing evidence for every source-gate stage. Remaining money features, provisioning, deployed proof and the final release gate are still required.
+The isolation, settled-response and promotional-credit source stages above are implemented locally. Paid-Call runtime acceptance, remaining operator work, provisioning, deployed proof and the final release gate are still required.
 - **Real:** the money code paths exist (AUD ledger in Formance, CDP custody signing, x402 payment, 2-RPC settlement verification, receipts) and the chat journey is built in source. None of it has run with real money. No paid Call has been proven end to end, even on testnet.
 - **Unproven in deployment:** #266–#270 close the original ten production-isolation findings in source. The checkpoints above supersede their pre-fix code descriptions; deployed proof remains open.
 - **Unprovisioned:** the last production env snapshot (`.vercel/prod-debug.env`, 4 August 2026) contains **no** Stripe, Formance, CDP, RPC or Sentry configuration. It still carries legacy integrations (Autumn billing, Meilisearch, Novu, Resend) and `AE_SANDBOX_PROVIDER_KEY`. The browser build loads Clerk **development** keys.

@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 
 import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
-import { spendingPeriodsValue } from '@/modules/money/public'
+import { spendingPeriodsValue, promotionalCreditAllocationValue } from '@/modules/money/public'
 
 export const identifier = v.string()
 export const accountHistoryResultValue = v.union(
@@ -11,7 +11,7 @@ export const accountHistoryResultValue = v.union(
       transactionId: v.string(), transactionRef: v.union(v.string(), v.null()),
       occurredAt: v.number(), recordedAt: v.union(v.number(), v.null()),
       kind: v.union(v.literal('funding'), v.literal('funding_reversal'), v.literal('call_spend'),
-        v.literal('document_adjustment'), v.literal('unmapped')),
+        v.literal('document_adjustment'), v.literal('promotional_grant'), v.literal('promotional_use'), v.literal('promotional_expiry'), v.literal('unmapped')),
       accountEffect: v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) }),
       documentEffectUnits: v.string(), reverted: v.boolean(), revertedAt: v.union(v.number(), v.null()),
       sourceRef: v.union(v.string(), v.null()), sourceDigest: v.union(v.string(), v.null()),
@@ -90,6 +90,7 @@ export const managedCallBookingArgs = {
   treasuryEvidenceDigest: v.string(),
   x402RequirementDigest: v.string(),
   spendingPeriods: v.optional(spendingPeriodsValue),
+  promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
 }
 export const checkoutEventArg = v.object({
   kind: v.literal('checkout'),

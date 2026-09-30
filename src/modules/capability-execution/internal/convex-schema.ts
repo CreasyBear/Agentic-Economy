@@ -4,7 +4,7 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
-import { spendingPeriodsValue } from '@/modules/money/public'
+import { spendingPeriodsValue, promotionalCreditAllocationValue } from '@/modules/money/public'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
@@ -350,6 +350,10 @@ export const capabilityCallTables = {
       v.literal('released'),
       v.literal('settled'),
     )),
+    promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
+    formanceReservationAttempt: v.optional(v.object({
+      generation: v.number(), leaseUntil: v.number(), ambiguous: v.boolean(),
+    })),
     formanceReservationRefs: v.optional(v.array(v.string())),
     formanceReservationDigest: v.optional(v.string()),
     formanceReleaseRefs: v.optional(v.array(v.string())),

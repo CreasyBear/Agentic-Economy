@@ -64,6 +64,13 @@ export function adminCommandReceiptValue<
       correlationId: v.string(),
     }),
     v.object({
+      kind: v.literal('pending'),
+      action,
+      effectRefs: v.array(v.string()),
+      auditEventRef: v.string(),
+      correlationId: v.string(),
+    }),
+    v.object({
       kind: v.literal('proposed'),
       action,
       proposalRef: v.string(),

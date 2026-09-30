@@ -26,7 +26,7 @@ export const resolveBuyerSaleSourcesHandler = async (
     sources.push(call !== undefined
       && call.formanceFinancialState === 'settled'
       && call.formanceSettlementRefs?.[0] === sale.transactionRef
-      && call.formanceSettlementRefs.length === 2
+      && call.formanceSettlementRefs.length === 2 + (call.promotionalCreditAllocation?.grants.length ?? 0)
       && parsed?.kind === 'valid' && parsed.ref === call.callRef
       && digestReference('call', call.callRef) === sale.sourceDigest
       ? parsed.ref : null)
@@ -84,7 +84,7 @@ export const readOwnerHistoryHandler = async (
       entries[candidate.index] = { ...entry, sourceRef: commandRef }
     }
   }
-  const callSpendCount = history.entries.filter((entry) => entry.kind === 'call_spend').length
+  const callSpendCount = history.entries.filter((entry) => entry.kind === 'call_spend' || entry.kind === 'promotional_use').length
   const sourceLinkCoverage = candidates.length === 0
     ? history.sourceLinkCoverage
     : linked === 0 ? 'unavailable' as const

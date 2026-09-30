@@ -121,6 +121,17 @@ export const ADMIN_REFUSAL_PRESENTATION = {
   publication_not_found: noLongerActionable,
   source_authority_not_reviewable: noLongerActionable,
   policy_not_found: noLongerActionable,
+  account_not_found: noLongerActionable,
+  promotional_credit_invalid: {
+    certainty: 'not_applied', retry: 'no',
+    copy: 'The promotional credit amount or expiry is invalid.',
+    nextStep: 'Check the amount and choose a future expiry before creating a new command.',
+  },
+  environment_mismatch: {
+    certainty: 'not_applied', retry: 'no',
+    copy: 'This workspace is not in the current payment environment.',
+    nextStep: 'Review the deployment and workspace before creating a new command.',
+  },
   proof_stale: stalePolicyProof,
   proof_replayed: refusedPolicyProof,
   authority_mismatch: refusedPolicyProof,

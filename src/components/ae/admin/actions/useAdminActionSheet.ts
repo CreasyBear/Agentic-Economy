@@ -143,7 +143,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     try {
       const receipt = await execute(validated.data)
       if (generation.current !== ticket) return
-      if (receipt == null || (receipt.kind !== 'completed' && receipt.kind !== 'proposed' && receipt.kind !== 'refused')) {
+      if (receipt == null || (receipt.kind !== 'completed' && receipt.kind !== 'pending' && receipt.kind !== 'proposed' && receipt.kind !== 'refused')) {
         setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
         return
       }
@@ -176,6 +176,10 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   async function retry(newKey: boolean) {
+    if (state.receipt?.kind === 'pending') {
+      await submit()
+      return
+    }
     if (state.receipt?.kind !== 'refused') return
     const presentation = ADMIN_REFUSAL_PRESENTATION[state.receipt.code]
     if (presentation.retry === 'no') return

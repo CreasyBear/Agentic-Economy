@@ -1,10 +1,14 @@
 "use node"
 
+import type { AccountCreditBalance, EligiblePromotionalGrant } from '@/modules/money/public'
+
 import {
   configuredContext,
+  withFormanceContext,
   formanceAccountMetadataDigest,
   readFormanceAccountHistory,
   readFormanceDisplayBalance,
+  readFormanceAccountCreditBalance,
   readFormancePeriodSpend,
   readFormanceSpendingPeriod,
   readFormanceStatementPage,
@@ -89,4 +93,8 @@ export async function readDisplayBalanceHandler(_ctx: unknown, args: {
   return context.kind === 'setup_required'
     ? context
     : await readFormanceDisplayBalance(context.context, args)
+}
+
+export async function readCreditBalanceHandler(_ctx: unknown, args: { accountRef: string; grants: EligiblePromotionalGrant[] }): Promise<AccountCreditBalance> {
+  return await withFormanceContext(context => readFormanceAccountCreditBalance(context, args))
 }

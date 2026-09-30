@@ -34,6 +34,9 @@ export const creditAccountResultValue = v.union(
     principalId: v.string(),
     accountId: v.string(),
     balance: exactAmount,
+    purchasedBalance: exactAmount,
+    promotionalBalance: exactAmount,
+    nextPromotionalExpiryAt: v.union(v.number(), v.null()),
     pendingTopup: v.optional(v.object({
       commandRef: v.string(),
       amount: exactAmount,
@@ -95,4 +98,3 @@ export type FormancePeriodSpendRead = Readonly<
   | { kind: 'empty' }
   | { kind: 'setup_required' | 'unavailable' }
 >
-
