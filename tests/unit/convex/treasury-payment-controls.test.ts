@@ -1,5 +1,7 @@
 import { makeFunctionReference } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sealTreasurySnapshot } from '@/modules/money/treasury-report'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import { internal } from '../../../convex/_generated/api'
 import type { AdminCommandWireArgs } from '../../../convex/lib/adminConsole/commands/contracts'
@@ -7,7 +9,7 @@ import { readTreasuryControlState } from '../../../convex/lib/adminConsole/actio
 import { readAgentPaymentAdmission } from '../../../convex/lib/money/treasury/paymentAdmission'
 import { convexTestWithMarketComponents, ownerAdmin, type ConvexFixtureBackend } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
-import { observeHealthyReadiness, publishCurrentTool, seedAgent, seedCommercialPolicies, testRef } from '../../helpers/quote-fixtures'
+import { observeHealthyReadiness, publishCurrentTool, seedAgent, seedCommercialPolicies, testRef, validCustodyEnvironment, recordTreasuryObservation } from '../../helpers/quote-fixtures'
 
 const pauseRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
 
@@ -143,6 +145,7 @@ describe('independent treasury control transaction evaluation', () => {
 
   it('duplicate proposals and competing second owners resume once to the saved everyone audience', async () => {
     const backend = convexTestWithMarketComponents()
+    await seedHealthyTreasury(backend)
     const proposer = await ownerAdmin(backend, 'user_independent-resume-proposer')
     const approver = await ownerAdmin(backend, 'user_independent-resume-approver')
     const peer = await ownerAdmin(backend, 'user_independent-resume-peer')
@@ -236,3 +239,35 @@ describe('independent production paid preparation authority evaluation', () => {
     expect(await fixture.purchases()).toEqual(before)
   })
 })
+
+// The approval-race test exercises a resume that is otherwise ready. Health
+// refusal behavior is independently covered through the registered snapshot API.
+async function seedHealthyTreasury(backend: ConvexFixtureBackend) {
+  for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
+  vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
+  vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '10000')
+  await recordTreasuryObservation(backend, 'resume-race', { totalUnits: '110000', bufferUnits: '10000' })
+  const now = Date.now()
+  const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: now })
+  if (context.kind !== 'available') throw new Error(context.code)
+  const zero = { kind: 'matched' as const, checkedCount: 0, expectedUnits: '0', observedUnits: '0', differenceUnits: '0' }
+  const snapshot = sealTreasurySnapshot({
+    snapshotAt: now, environment: 'production', custodyRef: context.identity.custodyRef,
+    custodyGeneration: context.identity.custodyGeneration, custodyIdentityDigest: canonicalDigest(context.identity),
+    ledger: { kind: 'available', observedAt: now, availableUnits: '100000', committedUnits: '0', bufferUnits: '10000',
+      payments24hUnits: '0', payments7dUnits: '0', paymentBasis: 'gross_provider_payments',
+      purchasedAvailableAudUnits: '0', purchasedReservedAudUnits: '0', promotionalAvailableAudUnits: '0', promotionalReservedAudUnits: '0' },
+    chain: { kind: 'available', observedAt: now, blockTimestamp: now, blockNumber: '100',
+      blockHash: `0x${'a'.repeat(64)}`, totalUnits: '110000', caughtUp: true },
+    referenceRate: { kind: 'unavailable', code: 'not_needed_for_payment_resume' },
+    spending: { kind: 'available', observedAt: now, windowStartsAt: now - 86_400_000,
+      settledUnits: '0', liabilityUnits: '0', maximumUnits: '100000' },
+    inFlight: { kind: 'available', observedAt: now, count: 0, amountUnits: '0', oldestAt: null,
+      overdueCount: 0, overdueUnits: '0', calls: [], listedCallsComplete: true },
+    checks: { cash: { ...zero, checkedCount: 1, expectedUnits: '110000', observedUnits: '110000' },
+      settlements: zero, funding: zero, reservations: zero },
+    rawCashDifferenceUnits: '0', cashTimingAdjustmentUnits: '0', historyStartedAt: now,
+    deposits: [], depositsComplete: true, alerts: [],
+  })
+  expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })).toMatchObject({ kind: 'published' })
+}

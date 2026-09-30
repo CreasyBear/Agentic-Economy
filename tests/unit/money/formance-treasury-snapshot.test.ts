@@ -73,6 +73,22 @@ function harness(accounts: AccountVersion[] = [], transactions: Transaction[] = 
 }
 
 describe('native treasury snapshot', () => {
+  it('returns unavailable rather than partial burn when native pagination exceeds its elapsed budget', async () => {
+    const fixture = harness([], Array.from({ length: 16 }, (_, index) => settlement(index + 1)))
+    let now = snapshotAt + 20_000
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const list = fixture.listTransactions.getMockImplementation()!
+    fixture.listTransactions.mockImplementation(async request => {
+      const response = await list(request)
+      now += 30_001
+      return response
+    })
+    try {
+      expect(await readFormanceTreasurySnapshot(fixture.context, input)).toEqual({ kind: 'unavailable', code: 'formance_treasury_snapshot_read_budget_exceeded' })
+      expect(fixture.listTransactions).toHaveBeenCalledTimes(1)
+    } finally { clock.mockRestore() }
+  })
+
   it('separates cash/buffer and purchased/promotional liability at the same PIT, excluding other account families', async () => {
     const version = (address: string, asset: string, units: bigint, at = snapshotAt - 1): AccountVersion => ({ address, asset, units, at })
     const fixture = harness([

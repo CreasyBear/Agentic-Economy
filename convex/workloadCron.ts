@@ -13,7 +13,7 @@ import {
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler, refreshMarketFlowHandler,
   refreshReferenceRateHandler,
-  snapshotMarketplaceMetricsDayHandler,
+  snapshotMarketplaceMetricsDayHandler, reconcileTreasuryBalancesHandler,
 } from './lib/platform/workloadCron/scheduled'
 
 export const admit = internalQuery({
@@ -137,3 +137,5 @@ export const reconcilePromotionalCredit = internalAction({
 export const reconcilePaidCallReports = internalAction({
   args: {}, returns: v.null(), handler: reconcilePaidCallReportsHandler,
 })
+
+export const reconcileTreasuryBalances = internalAction({ args: {}, returns: v.null(), handler: reconcileTreasuryBalancesHandler })

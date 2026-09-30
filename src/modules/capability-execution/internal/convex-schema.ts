@@ -403,6 +403,7 @@ export const capabilityCallTables = {
     createdAt: v.number(),
   })
     .index('by_callRef', ['callRef'])
+    .index('by_environment_and_createdAt', ['environment', 'createdAt'])
     .index('by_ownerId_and_buyerSaleTransactionRef', ['ownerId', 'buyerSaleTransactionRef'])
     // Idempotency is keyed by the stable Principal, never by the rotating
     // credential: a replaced credential must replay, not mint a second Call.

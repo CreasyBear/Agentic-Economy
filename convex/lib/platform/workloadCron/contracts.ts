@@ -13,6 +13,7 @@ export const CONSEQUENCE_OPERATIONS = [
   'moneyTreasury:recordObservation',
   'moneyTreasuryReconciliation:beginBatch',
   'moneyTreasuryReconciliation:finishBatch',
+  'moneyTreasuryReconciliation:publishSnapshot',
   'moneyPromotionalCredit:claimWork',
   'moneyPromotionalCredit:finishWork',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',

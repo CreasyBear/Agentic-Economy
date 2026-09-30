@@ -122,6 +122,11 @@ export const ADMIN_REFUSAL_PRESENTATION = {
   source_authority_not_reviewable: noLongerActionable,
   policy_not_found: noLongerActionable,
   account_not_found: noLongerActionable,
+  treasury_configuration_unavailable: { certainty: 'not_applied', retry: 'new_key', copy: 'Treasury configuration needs attention.', nextStep: 'Restore the treasury configuration before reviewing resume again.' },
+  treasury_observation_stale: { certainty: 'not_applied', retry: 'new_key', copy: 'The wallet observation is too old to resume payments.', nextStep: 'Wait for a fresh wallet observation, then review resume again.' },
+  treasury_reconciliation_stale: { certainty: 'not_applied', retry: 'new_key', copy: 'Treasury reconciliation is too old to resume payments.', nextStep: 'Wait for a completed reconciliation, then review resume again.' },
+  treasury_reconciliation_required: { certainty: 'not_applied', retry: 'new_key', copy: 'Treasury reconciliation must be resolved before payments resume.', nextStep: 'Review the treasury checks and unresolved Calls, then try again.' },
+  treasury_capacity_unavailable: { certainty: 'not_applied', retry: 'new_key', copy: 'Treasury funds or the rolling spend limit cannot support new payments.', nextStep: 'Refill the treasury or wait for spend capacity, then review resume again.' },
   treasury_thresholds_invalid: {
     certainty: 'not_applied', retry: 'no',
     copy: 'The treasury thresholds are invalid.',

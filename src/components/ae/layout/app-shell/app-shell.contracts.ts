@@ -42,6 +42,7 @@ export const APP_NAVIGATION_ICONS: Readonly<Record<AppDestinationId, LucideIcon>
 
 export const ADMIN_NAVIGATION: readonly AppSidebarItem[] = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboardIcon },
+  { href: '/admin/treasury', label: 'Treasury', icon: CreditCardIcon },
   { href: '/admin/search', label: 'Search', icon: SearchIcon },
   { href: '/admin/exceptions', label: 'Exceptions', icon: InboxIcon },
   { href: '/admin/providers', label: 'Providers', icon: StoreIcon },

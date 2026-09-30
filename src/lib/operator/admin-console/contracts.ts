@@ -171,7 +171,7 @@ export type SharedAdminRefusalCode =
   | 'admin_missing_evidence'
 
 export type AdminActionRefusalCodes = {
-  set_payments_paused: 'environment_mismatch'
+  set_payments_paused: 'environment_mismatch' | import('@/modules/money/treasury-report').TreasuryResumeRefusalCode
   change_treasury_thresholds: 'environment_mismatch' | 'treasury_thresholds_invalid'
   set_business_suppression: 'business_not_found' | 'suppression_unchanged'
   close_removal_dispute: 'dispute_not_found' | 'dispute_already_closed'

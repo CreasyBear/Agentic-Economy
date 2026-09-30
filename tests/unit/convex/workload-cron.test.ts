@@ -31,6 +31,7 @@ import {
   refreshFacilitatorDiscoveryHandler,
   refreshReferenceRateHandler,
   observeX402TreasuryHandler,
+  reconcileTreasuryBalancesHandler,
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
   reconcileBusinessSupplyProjectionsHandler,
@@ -78,6 +79,7 @@ const EXPECTED_BINDINGS = {
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
   'refresh USDC/AUD reference rate': 'workloadCron:refreshReferenceRate',
   'observe x402 treasury': 'workloadCron:observeX402Treasury',
+  'reconcile treasury balances': 'workloadCron:reconcileTreasuryBalances',
   'refresh market flow': 'workloadCron:refreshMarketFlow',
   'snapshot marketplace metrics day': 'workloadCron:snapshotMarketplaceMetricsDay',
 } as const
@@ -90,6 +92,7 @@ const ACTION_HANDLERS = [
   refreshReferenceRateHandler,
   refreshAgenticEconomyApiRegistryHandler,
   observeX402TreasuryHandler,
+  reconcileTreasuryBalancesHandler,
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
 ] as const
@@ -102,6 +105,7 @@ const ACTION_HANDLER_WORKLOAD_NAMES = [
   'refresh USDC/AUD reference rate',
   'refresh Agentic Economy API registry',
   'observe x402 treasury',
+  'reconcile treasury balances',
   'refresh market flow',
   'snapshot marketplace metrics day',
 ] as const

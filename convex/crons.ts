@@ -19,6 +19,7 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
   'cleanup expired source write nonces': internal.workloadCron.cleanupExpiredSourceWriteNonces,
   'cleanup expired agent access oauth grants': internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants,
   'expire stale pending approvals': internal.workloadCron.expireStalePendingApprovals,
+  'reconcile treasury balances': internal.workloadCron.reconcileTreasuryBalances,
   'observe x402 treasury': internal.workloadCron.observeX402Treasury,
   'snapshot marketplace metrics day': internal.workloadCron.snapshotMarketplaceMetricsDay,
   'refresh market flow': internal.workloadCron.refreshMarketFlow,

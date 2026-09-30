@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useQuery } from 'convex/react'
+import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import {
   ADMIN_ACTION_COPY, ADMIN_ACTION_SHEET_COPY, ADMIN_AUDIT_ACTION_COPY,
@@ -70,7 +72,7 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
   }
   switch (command.action) {
     case 'set_payments_paused':
-      return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: 'Payment environment', value: command.input.environment }, { label: 'Payments', value: command.input.paused ? 'Paused' : 'Resume saved audience' }]} />
+      return <TreasuryPaymentApproval key={proposalRef} command={command} proposalRef={proposalRef} onOpenChange={onOpenChange} />
     case 'change_treasury_thresholds':
       return null
     case 'set_business_suppression':
@@ -88,4 +90,34 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
     case 'revoke_admin_membership':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetClerkUserId, value: command.input.targetClerkUserId }]} />
   }
+}
+
+/**
+ * Requires a protected current audience matching the proposal's reviewed digest.
+ * Ensures the second owner sees exactly who can spend after approval.
+ * Invariant: a stale audience cannot be approved from this review; the command
+ * envelope rechecks the same digest when applying the change.
+ * On violation: keep the proposal intact and direct the owner to review it again.
+ * One local component owns this query lifetime; no new proposal or storage model.
+ */
+function TreasuryPaymentApproval({ command, proposalRef, onOpenChange }: {
+  command: Extract<AdminCommandRequest, { action: 'set_payments_paused' }>
+  proposalRef: string
+  onOpenChange: (open: boolean) => void
+}) {
+  const view = useQuery(api.adminConsoleTreasury.read, {})
+  if (view === undefined) return <p role="status">Loading the payment audience for review…</p>
+  if (view.kind !== 'ready' || view.environment !== command.input.environment
+    || view.controls.launchStateDigest !== command.expectedStateDigest) {
+    return <Alert role="alert" variant="destructive"><AlertDescription>
+      The payment state has changed or is unavailable. <a className="underline underline-offset-4" href="/admin/treasury">Review Treasury before proposing resume again.</a>
+    </AlertDescription></Alert>
+  }
+  const audience = view.controls.paymentsOpenTo === 'none'
+    ? view.controls.resumePaymentsOpenTo : view.controls.paymentsOpenTo
+  return <AdminActionSheet open onOpenChange={onOpenChange} action={command.action} input={command.input}
+    approval={{ kind: 'approve', proposalRef }} initialEvidenceRefs={command.evidenceRefs}
+    currentStateDigest={view.controls.launchStateDigest} initialReasonCode={command.reasonCode}
+    targetRefs={[{ label: 'Payment environment', value: command.input.environment },
+      { label: 'Payments after approval', value: command.input.paused ? 'Paused' : audience === 'admins' ? 'Open to admins' : 'Open to everyone' }]} />
 }

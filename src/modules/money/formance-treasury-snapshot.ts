@@ -68,6 +68,7 @@ export async function readFormanceTreasurySnapshot(
     || !Number.isSafeInteger(input.snapshotAt) || input.snapshotAt < 0 || input.snapshotAt > Date.now()) {
     return invalid('formance_treasury_snapshot_input_invalid')
   }
+  const deadline = Date.now() + 30_000
   const availableAddress = capacityAccount('treasury_usdc', input.custodyRef, input.custodyGeneration)
   const committedAddress = availableAddress.replace(/:available$/u, ':committed')
   // Formance's empty segment matches ONE segment, not an arbitrary descendant:
@@ -97,7 +98,7 @@ export async function readFormanceTreasurySnapshot(
   const purchasedTotalUnits = formanceSafeUnitsFromSdk(BigInt(purchasedAvailable.units) + BigInt(purchasedReserved.units))
   const promotionalTotalUnits = formanceSafeUnitsFromSdk(BigInt(promotionalAvailable.units) + BigInt(promotionalReserved.units))
   if (purchasedTotalUnits === undefined || promotionalTotalUnits === undefined) return invalid('formance_unsafe_integer')
-  const payments = await readSettledProviderPayments(context, input.snapshotAt, committedAddress)
+  const payments = await readSettledProviderPayments(context, input.snapshotAt, committedAddress, deadline)
   if (payments.kind !== 'available') return payments
   return {
     kind: 'available', snapshotAt: input.snapshotAt, source: 'formance_pit_read', authoritativeForConsequences: false,
@@ -115,7 +116,7 @@ async function readAggregate(context: FormanceContext, snapshotAt: number, addre
     const response = await context.sdk.ledger.v2.getBalancesAggregated({
       ledger: context.configuration.ledger, pit: new Date(snapshotAt), useInsertionDate: true,
       query: { $match: { address } },
-    }, NO_RETRY)
+    }, { ...NO_RETRY, timeoutMs: 5_000 })
     const data = response.v2AggregateBalancesResponse?.data
     if (data === undefined || data === null || typeof data !== 'object' || Array.isArray(data)) {
       return unavailable('formance_treasury_snapshot_response_invalid')
@@ -133,7 +134,7 @@ async function readAggregate(context: FormanceContext, snapshotAt: number, addre
   }
 }
 
-async function readSettledProviderPayments(context: FormanceContext, snapshotAt: number, committedAddress: string): Promise<
+async function readSettledProviderPayments(context: FormanceContext, snapshotAt: number, committedAddress: string, deadline: number): Promise<
   SnapshotFailure | Readonly<{ kind: 'available'; value: Extract<FormanceTreasurySnapshotResult, { kind: 'available' }>['settledUsdc'] }>
 > {
   const windowStart = Math.max(0, snapshotAt - 7 * DAY_MS)
@@ -148,6 +149,7 @@ async function readSettledProviderPayments(context: FormanceContext, snapshotAt:
   let last7d = 0n
   try {
     do {
+      if (Date.now() >= deadline) return unavailable('formance_treasury_snapshot_read_budget_exceeded')
       const response = await context.sdk.ledger.v2.listTransactions(cursor === undefined ? {
         ledger: context.configuration.ledger, pit: new Date(snapshotAt), pageSize: PAGE_SIZE, sort: 'id:asc',
         query: { $and: [
@@ -157,7 +159,7 @@ async function readSettledProviderPayments(context: FormanceContext, snapshotAt:
           // Ledger 2.4.12 transaction PIT bounds effective time, not later backdated inserts.
           { $lte: { inserted_at: new Date(snapshotAt).toISOString() } },
         ] },
-      } : { ledger: context.configuration.ledger, cursor }, NO_RETRY)
+      } : { ledger: context.configuration.ledger, cursor }, { ...NO_RETRY, timeoutMs: 5_000 })
       const page = response.v2TransactionsCursorResponse?.cursor
       if (page === undefined || !Array.isArray(page.data) || page.data.length > PAGE_SIZE || typeof page.hasMore !== 'boolean') {
         return unavailable('formance_treasury_snapshot_response_invalid')

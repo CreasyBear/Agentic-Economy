@@ -2966,8 +2966,62 @@
   {
     "visibility": "internal",
     "module": "moneyTreasuryReconciliation",
+    "method": "publishSnapshot",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readAttemptSources",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readBatchSources",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readCallSources",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readFundingSources",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
     "method": "readProgress",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readSnapshotContext",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readSpendExposure",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readSpendReservationSources",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasurySnapshot",
+    "method": "reconcile",
+    "kind": "action"
   },
   {
     "visibility": "internal",
@@ -3411,6 +3465,12 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "reconcilePromotionalCredit",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "reconcileTreasuryBalances",
     "kind": "action"
   },
   {

@@ -1,3 +1,4 @@
+import { treasuryResumeRefusal } from '../../money/treasury/health'
 import type { Doc } from '../../../_generated/dataModel'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import type { AdminCommandSpec } from '../commands/commandEnvelope'
@@ -75,6 +76,10 @@ export function paymentsPausedSpec(
     apply: async () => {
       if (!treasuryCommandEnvironmentMatches(environment)) return { kind: 'refused', code: 'environment_mismatch' }
       const { launch } = await readTreasuryControlState(ctx, environment)
+      if (!paused && launch.paymentsOpenTo === 'none') {
+        const refusal = await treasuryResumeRefusal(ctx, environment, Date.now())
+        if (refusal !== undefined) return { kind: 'refused', code: refusal }
+      }
       const paymentsOpenTo = paused ? 'none'
         : launch.paymentsOpenTo === 'none' ? launch.resumePaymentsOpenTo : launch.paymentsOpenTo
       const resumePaymentsOpenTo = paused && launch.paymentsOpenTo !== 'none'

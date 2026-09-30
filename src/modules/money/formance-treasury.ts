@@ -210,10 +210,9 @@ export function treasuryBufferAccount(subject: FormanceTreasuryBalanceSubject): 
  * Retry uses the same native identities and exact posting readback. On ambiguity,
  * retain the pending range. Existing v1.5 chart/templates suffice; no ledger fork.
  */
-export async function bookFormanceTreasuryBatch(context: FormanceContext,
-  identity: TreasuryIdentity, batch: TreasuryBatch): Promise<FormanceMoneyResult> {
-  if (context.configuration.environment !== identity.environment
-    || identity.custodyRef !== batch.custodyRef || identity.custodyGeneration !== batch.custodyGeneration
+export function prepareFormanceTreasuryBatch(identity: TreasuryIdentity, batch: TreasuryBatch):
+  Readonly<{ kind: 'prepared'; commands: readonly FormanceMoneyCommand[] }> | FormanceRefused {
+  if (identity.custodyRef !== batch.custodyRef || identity.custodyGeneration !== batch.custodyGeneration
     || !validSubject(identity) || canonicalFormanceUnits(identity.bufferTargetUnits, false) === undefined
     || canonicalFormanceUnits(batch.previousBufferUnits, false) === undefined
     || canonicalFormanceUnits(batch.bufferIncreaseUnits, false) === undefined
@@ -256,6 +255,15 @@ export async function bookFormanceTreasuryBatch(context: FormanceContext,
       metadata: { command_digest: digest, idempotency_digest: digest },
     })
   }
+  return { kind: 'prepared', commands }
+}
+
+export async function bookFormanceTreasuryBatch(context: FormanceContext,
+  identity: TreasuryIdentity, batch: TreasuryBatch): Promise<FormanceMoneyResult> {
+  if (context.configuration.environment !== identity.environment) return refused('formance_treasury_environment_mismatch')
+  const prepared = prepareFormanceTreasuryBatch(identity, batch)
+  if (prepared.kind !== 'prepared') return prepared
+  const commands = prepared.commands
   if (batch.previousCheckpoint === null) {
     // Empty accounts alone do not prove the ledger exists: unknown 404s can be
     // gateway/ledger failures. Validate health/schema before a zero checkpoint.

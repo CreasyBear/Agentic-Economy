@@ -90,6 +90,7 @@ import { Route as OperatorOwnerMarketRouteImport } from './routes/_operator/owne
 import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
 import { Route as OperatorCallsCallRefRouteImport } from './routes/_operator/calls.$callRef'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
+import { Route as OperatorAdminTreasuryRouteImport } from './routes/_operator/admin.treasury'
 import { Route as OperatorAdminSearchRouteImport } from './routes/_operator/admin.search'
 import { Route as OperatorAdminMetricsRouteImport } from './routes/_operator/admin.metrics'
 import { Route as OperatorAdminExceptionsRouteImport } from './routes/_operator/admin.exceptions'
@@ -575,6 +576,11 @@ const OperatorAgentAccessAuthorizeRoute =
     path: '/authorize',
     getParentRoute: () => OperatorAgentAccessRoute,
   } as any)
+const OperatorAdminTreasuryRoute = OperatorAdminTreasuryRouteImport.update({
+  id: '/admin/treasury',
+  path: '/admin/treasury',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorAdminSearchRoute = OperatorAdminSearchRouteImport.update({
   id: '/admin/search',
   path: '/admin/search',
@@ -1022,6 +1028,7 @@ export interface FileRoutesByFullPath {
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/metrics': typeof OperatorAdminMetricsRoute
   '/admin/search': typeof OperatorAdminSearchRoute
+  '/admin/treasury': typeof OperatorAdminTreasuryRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
@@ -1175,6 +1182,7 @@ export interface FileRoutesByTo {
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/metrics': typeof OperatorAdminMetricsRoute
   '/admin/search': typeof OperatorAdminSearchRoute
+  '/admin/treasury': typeof OperatorAdminTreasuryRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
@@ -1330,6 +1338,7 @@ export interface FileRoutesById {
   '/_operator/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/_operator/admin/metrics': typeof OperatorAdminMetricsRoute
   '/_operator/admin/search': typeof OperatorAdminSearchRoute
+  '/_operator/admin/treasury': typeof OperatorAdminTreasuryRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
@@ -1485,6 +1494,7 @@ export interface FileRouteTypes {
     | '/admin/exceptions'
     | '/admin/metrics'
     | '/admin/search'
+    | '/admin/treasury'
     | '/agent-access/authorize'
     | '/calls/$callRef'
     | '/owner/credit'
@@ -1638,6 +1648,7 @@ export interface FileRouteTypes {
     | '/admin/exceptions'
     | '/admin/metrics'
     | '/admin/search'
+    | '/admin/treasury'
     | '/agent-access/authorize'
     | '/calls/$callRef'
     | '/owner/credit'
@@ -1792,6 +1803,7 @@ export interface FileRouteTypes {
     | '/_operator/admin/exceptions'
     | '/_operator/admin/metrics'
     | '/_operator/admin/search'
+    | '/_operator/admin/treasury'
     | '/_operator/agent-access/authorize'
     | '/_operator/calls/$callRef'
     | '/_operator/owner/credit'
@@ -2560,6 +2572,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAgentAccessAuthorizeRouteImport
       parentRoute: typeof OperatorAgentAccessRoute
     }
+    '/_operator/admin/treasury': {
+      id: '/_operator/admin/treasury'
+      path: '/admin/treasury'
+      fullPath: '/admin/treasury'
+      preLoaderRoute: typeof OperatorAdminTreasuryRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/admin/search': {
       id: '/_operator/admin/search'
       path: '/admin/search'
@@ -3141,6 +3160,7 @@ interface OperatorRouteChildren {
   OperatorAdminExceptionsRoute: typeof OperatorAdminExceptionsRoute
   OperatorAdminMetricsRoute: typeof OperatorAdminMetricsRoute
   OperatorAdminSearchRoute: typeof OperatorAdminSearchRoute
+  OperatorAdminTreasuryRoute: typeof OperatorAdminTreasuryRoute
   OperatorCallsCallRefRoute: typeof OperatorCallsCallRefRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerMarketRoute: typeof OperatorOwnerMarketRoute
@@ -3168,6 +3188,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAdminExceptionsRoute: OperatorAdminExceptionsRoute,
   OperatorAdminMetricsRoute: OperatorAdminMetricsRoute,
   OperatorAdminSearchRoute: OperatorAdminSearchRoute,
+  OperatorAdminTreasuryRoute: OperatorAdminTreasuryRoute,
   OperatorCallsCallRefRoute: OperatorCallsCallRefRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerMarketRoute: OperatorOwnerMarketRoute,
@@ -3438,13 +3459,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

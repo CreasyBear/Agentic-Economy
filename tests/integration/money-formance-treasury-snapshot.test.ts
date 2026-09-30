@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createFormanceContext, installPackage4FormanceSchema, PROMOTIONAL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/formance'
 import { readFormanceTreasurySnapshot } from '@/modules/money/formance-treasury-snapshot'
+import { readFormanceTreasuryAudit } from '@/modules/money/formance-treasury-audit'
 
 const DAY = 86_400_000
 const digest = (value: string) => canonicalDigest(value).slice(7)
@@ -79,6 +80,14 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
     expect(new Set(read.settledUsdc.settlements.map(row => row.commandRef)).size).toBe(17)
     expect(read.settledUsdc.settlements).toContainEqual({ commandRef: `ae-p4:${digest('recent')}:settle-provider`,
       settledAt: effectiveNow - 1_000, amountUnits: '30', callDigest: digest('recent'), externalEvidenceDigest: digest('evidence:recent') })
+    const audit = await readFormanceTreasuryAudit(context, { custodyRef, custodyGeneration, snapshotAt })
+    expect(audit.kind).toBe('available')
+    if (audit.kind !== 'available') throw new Error(audit.code)
+    expect(audit.transactions).toHaveLength(18)
+    expect(audit.transactions.filter(row => row.template === 'PROVIDER_SETTLED')).toHaveLength(17)
+    expect(audit.transactions.every(row => row.insertedAt <= snapshotAt)).toBe(true)
+    expect(audit.transactions.some(row => row.commandRef === 'fixture:later-funding')).toBe(false)
+    expect(audit.transactions.some(row => row.commandRef === `ae-p4:${digest('later-payment')}:settle-provider`)).toBe(false)
     const recentId = recent.v2CreateTransactionResponse?.data.id
     if (recentId === undefined) throw new Error('missing native recent transaction')
     await context.sdk.ledger.v2.revertTransaction({ ledger: context.configuration.ledger, id: recentId,
@@ -88,5 +97,9 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
     const afterRevert = await readFormanceTreasurySnapshot(context, { custodyRef, custodyGeneration, snapshotAt })
     if (afterRevert.kind === 'available') expect(afterRevert).toEqual(read)
     else expect(afterRevert.kind).toBe('unavailable')
+    // The complete audit exposes the current native revert marker and must
+    // refuse its post-cutoff mutation rather than losing original evidence.
+    const auditAfterRevert = await readFormanceTreasuryAudit(context, { custodyRef, custodyGeneration, snapshotAt })
+    expect(auditAfterRevert).toEqual({ kind: 'unavailable', code: 'formance_treasury_audit_cutoff_invalid' })
   })
 })

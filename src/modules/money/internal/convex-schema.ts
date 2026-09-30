@@ -4,6 +4,7 @@ import { v } from 'convex/values'
 import { x402PayeeScreeningDecisionValue, x402SpendAdmissionRefusalCodeValue } from '../x402-spend-admission'
 import { paymentsAudienceValue, treasuryEnvironmentValue, treasuryThresholdsValue,
   treasuryChainCheckpointValue, treasuryChainObservationValue, treasuryCursorStateValue } from '../treasury'
+import { treasuryAlertCodeValue, treasurySnapshotValue } from '../treasury-report'
 
 const currency = v.string()
 const exponent = v.number()
@@ -477,6 +478,7 @@ export const moneyTables = {
     .index('by_idempotencyKey', ['idempotencyKey'])
     .index('by_externalRef', ['externalRef'])
     .index('by_paymentId', ['paymentId'])
+    .index('by_environment_and_createdAt', ['environment', 'createdAt'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
     .index('by_accountRef_and_state', ['accountRef', 'state'])
     .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state'])
@@ -588,6 +590,18 @@ export const moneyTables = {
       'custodyGeneration',
       'observedAt',
     ]),
+  moneyTreasurySnapshots: defineTable(treasurySnapshotValue)
+    .index('by_snapshotRef', ['snapshotRef'])
+    .index('by_environment_and_snapshotAt', ['environment', 'snapshotAt']),
+  moneyTreasuryAlerts: defineTable({
+    alertRef: identifier, environment: treasuryEnvironmentValue,
+    custodyIdentityDigest: identifier, code: treasuryAlertCodeValue,
+    severity: v.union(v.literal('warning'), v.literal('critical')),
+    state: v.union(v.literal('open'), v.literal('resolved')),
+    firstSeenAt: v.number(), lastSeenAt: v.number(), resolvedAt: v.optional(v.number()),
+    snapshotRef: identifier, evidenceRefs,
+  }).index('by_scope_and_code', ['environment', 'custodyIdentityDigest', 'code'])
+    .index('by_scope_and_state', ['environment', 'custodyIdentityDigest', 'state']),
   moneyProviderObligations: defineTable({
     obligationRef: identifier,
     callRef: identifier,
@@ -729,6 +743,8 @@ export const moneyTables = {
   })
     .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
     .index('by_custodyRef', ['custodyRef'])
+    .index('by_custodyBudgetRef_and_preparedAt', ['custodyBudgetRef', 'preparedAt'])
+    .index('by_dispatchRef', ['dispatchRef'])
     .index('by_network_and_spendReservationRef', ['network', 'spendReservationRef'])
     .index('by_authorizationDigest', ['authorizationDigest'])
     .index('by_paymentIdentifier', ['paymentIdentifier'])
@@ -781,6 +797,7 @@ export const moneyTables = {
     .index('by_reservationRef', ['reservationRef'])
     .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
     .index('by_platformBudgetRef_and_state_and_settledAt', ['platformBudgetRef', 'state', 'settledAt'])
+    .index('by_platformBudgetRef_and_state_and_resolvedAt', ['platformBudgetRef', 'state', 'resolvedAt'])
     .index('by_platformBudgetRef_and_normalizedPayTo_and_reservedAt', ['platformBudgetRef', 'normalizedPayTo', 'reservedAt'])
     .index('by_dispatchRef', ['dispatchRef']),
   moneyStripeEvents: defineTable({

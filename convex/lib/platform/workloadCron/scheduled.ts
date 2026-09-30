@@ -139,3 +139,7 @@ export async function reconcilePromotionalCreditHandler(ctx: WorkloadCronActionC
 export async function reconcilePaidCallReportsHandler(ctx: WorkloadCronActionContext): Promise<null> {
   return await runAdmittedAction(ctx, 'reconcile paid Call reports', internal.capabilityCallReports.sweep, {})
 }
+
+export async function reconcileTreasuryBalancesHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'reconcile treasury balances', internal.moneyTreasurySnapshot.reconcile, {})
+}
