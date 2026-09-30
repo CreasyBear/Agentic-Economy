@@ -5,8 +5,10 @@ import { accountRef } from '../../../../src/modules/principal-account/account/pu
 import { principalRef } from '../../../../src/modules/principal-account/principal/public'
 import { checkWorkspaceFences } from './decommissionFences'
 import { InteractiveAuthorityError, requireAccessFactForAccount, resolveActiveAccountRefForPrincipal } from '../../../interactiveAuthority'
-import { assertStepUpForSensitiveAction } from '../workspaceSecurity/stepUp'
-import { requireCurrentOwnership, resolveClosedWorkspaceActorAccountRef, type AccountActionContext } from './accountContext'
+import { assertStepUpForSensitiveAction, consumeWorkspaceActionProof, requireWorkspaceActionReplay, requireWorkspaceActionSource, workspaceActionDigest } from '../workspaceSecurity/stepUp'
+import { clerkMfaConsequenceProofValue } from '../../authority/consequence/proof'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
+import { requireCurrentOwnership, type AccountActionContext } from './accountContext'
 import { recordWorkspaceAuditEvent } from './audit'
 import { mfaReverificationRefusalValue } from './contracts'
 import { requireAccountInteractiveHumanPrincipal } from './identity'
@@ -26,53 +28,51 @@ const closeWorkspaceReceiptValue = v.union(
 )
 
 export const closeWorkspaceArgs = v.object({
+    expectedAccountRef: v.string(),
     confirmationName: v.string(),
     expectedAccountRevision: v.number(),
     expectedOwnershipRevision: v.number(),
     correlationRef: v.string(),
     idempotencyRef: v.string(),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    proof: v.optional(clerkMfaConsequenceProofValue),
+    ...sourceWriteArgs,
   })
 
 export const closeWorkspaceResult = closeWorkspaceReceiptValue
 
 export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof closeWorkspaceArgs>) => {
+    await requireWorkspaceActionSource(args)
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
     const principal = await requireAccountInteractiveHumanPrincipal(ctx.db, identity)
     const canonicalPrincipalRef = principalRef(principal.principalRef)
 
-    let canonicalAccountRef: ReturnType<typeof accountRef>
-    try {
-      const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
-      canonicalAccountRef = accountRef(activeAccountRef)
-    } catch (error) {
-      if (!(error instanceof InteractiveAuthorityError) || error.code !== 'account_access_missing') {
-        throw error
+    // A terminal retry names the original Account even if the caller has
+    // since switched to another active workspace. It cannot authorize a close.
+    const requestedAccount = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', q => q.eq('accountRef', args.expectedAccountRef)).unique()
+    if (requestedAccount?.lifecycle === 'closed') {
+      if (requestedAccount.lastAction?.actorPrincipalRef !== canonicalPrincipalRef) {
+        throw new InteractiveAuthorityError('ownership_mismatch')
       }
-      const closedAccountRef = await resolveClosedWorkspaceActorAccountRef(ctx.db, canonicalPrincipalRef)
-      if (closedAccountRef === null) throw error
-      canonicalAccountRef = closedAccountRef
+      if (requestedAccount.lastAction.idempotencyRef !== args.idempotencyRef) {
+        throw new InteractiveAuthorityError('workspace_already_closed')
+      }
+      if (args.confirmationName !== requestedAccount.displayName) throw new InteractiveAuthorityError('idempotency_conflict')
+      const targetRef = accountRef(requestedAccount.accountRef)
+      await requireWorkspaceActionReplay(ctx.db, { action: 'closed', idempotencyRef: args.idempotencyRef,
+        commandDigest: workspaceActionDigest('close', args, canonicalPrincipalRef, targetRef),
+        actorPrincipalRef: canonicalPrincipalRef, activeAccountRef: targetRef })
+      return { kind: 'replayed' as const, accountRef: targetRef, accountRevision: requestedAccount.revision }
     }
-
-    const account = await ctx.db
-      .query('accounts')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', canonicalAccountRef))
-      .unique()
+    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
+    const canonicalAccountRef = accountRef(activeAccountRef)
+    if (args.expectedAccountRef !== canonicalAccountRef) throw new InteractiveAuthorityError('authority_mismatch')
+    const account = requestedAccount
     if (account === null) throw new InteractiveAuthorityError('account_missing')
-
-    if (account.lifecycle === 'closed') {
-      if (account.lastAction?.idempotencyRef === args.idempotencyRef) {
-        if (args.confirmationName === account.displayName) {
-          return {
-            kind: 'replayed' as const,
-            accountRef: canonicalAccountRef,
-            accountRevision: account.revision,
-          }
-        }
-        throw new InteractiveAuthorityError('idempotency_conflict')
-      }
-      throw new InteractiveAuthorityError('workspace_already_closed')
-    }
+    const actionDigest = workspaceActionDigest('close', args, canonicalPrincipalRef, canonicalAccountRef)
 
     if (account.lifecycle !== 'active') throw new InteractiveAuthorityError('account_inactive')
 
@@ -88,7 +88,7 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
     }
 
     const stepUp = await assertStepUpForSensitiveAction(ctx.db, identity, {
-      accountRef: canonicalAccountRef,
+      accountRef: canonicalAccountRef, ...(args.proof === undefined ? {} : { proof: args.proof }),
     })
     if (stepUp.kind === 'refused') return stepUp
 
@@ -103,6 +103,11 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
     if (args.expectedOwnershipRevision !== currentOwnership.revision) {
       throw new InteractiveAuthorityError('ownership_revision_conflict')
     }
+
+    const consumed = await consumeWorkspaceActionProof(ctx, identity, { ...(args.proof === undefined ? {} : { proof: args.proof }),
+      actorPrincipalRef: canonicalPrincipalRef, activeAccountRef: canonicalAccountRef,
+      commandDigest: actionDigest, correlationRef: args.correlationRef, idempotencyRef: args.idempotencyRef }, args)
+    if (consumed.kind === 'refused') return consumed
 
     const now = Date.now()
     const actionContext: AccountActionContext = {
@@ -175,6 +180,7 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
       beforeState: 'active',
       outcome: 'closed',
       createdAt: now,
+      redactedPayload: { actionDigest },
     })
 
     return {

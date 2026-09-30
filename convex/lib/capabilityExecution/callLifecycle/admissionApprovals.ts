@@ -180,12 +180,14 @@ function replayedApprovalDecision(
     ].every(Boolean)
     return replayed ? { kind: 'replayed', callRef: row.callRef } : null
   }
-  const replayed = [
-    row.state === 'pending',
-    result?.kind === 'pending',
-    row.workId !== undefined,
-    row.authority !== undefined,
-  ].every(Boolean)
+  // Approval is a committed decision, independent of the Call's later delivery
+  // or recovery state. Cancellation may clear workId but retains this authority.
+  const authority = row.authority
+  const replayed = authority?.acceptedBasis.kind === 'approval_required'
+    && authority.callRef === row.callRef
+    && authority.reference === `owner-approval:${canonicalDigest({
+      callRef: row.callRef, ownerId: row.ownerId,
+    }).slice(7)}`
   return replayed ? { kind: 'replayed', callRef: row.callRef } : null
 }
 
@@ -445,6 +447,7 @@ async function approvePendingInvocation(
   row: PendingApprovalRow,
   runtime: ApprovalRuntime,
   now: number,
+  beforeApproval?: (row: CallRow, now: number) => Promise<ApprovalDecisionResult | null>,
 ): Promise<ApprovalDecisionResult> {
   const grant = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', row.grantRef))
@@ -462,6 +465,8 @@ async function approvePendingInvocation(
     now,
   })
   if (authority === undefined) return { kind: 'refused', code: 'invocation_invalid' }
+  const admission = await beforeApproval?.(row, now)
+  if (admission != null) return admission
   const dispatched = await enqueueCallDispatch(ctx, row, authority, now)
   if (dispatched.kind === 'replayed') return { kind: 'replayed', callRef: row.callRef }
   return dispatched.kind === 'refused'
@@ -472,6 +477,7 @@ async function approvePendingInvocation(
 export async function decideCallApprovalHandler(
   ctx: MutationCtx,
   args: { callRef: string; decision: 'approve' | 'deny' },
+  beforeApproval?: (row: CallRow, now: number) => Promise<ApprovalDecisionResult | null>,
 ): Promise<ApprovalDecisionResult> {
   const ownerRef = await authenticatedOwnerRef(ctx)
   if (ownerRef === null) return { kind: 'refused', code: 'authentication_required' }
@@ -483,7 +489,10 @@ export async function decideCallApprovalHandler(
   if (replay !== null) return replay
   if (!pendingApprovalRow(row)) return { kind: 'refused', code: 'authority_not_pending' }
   if (!pendingApprovalIsClean(row)) return { kind: 'refused', code: 'invocation_invalid' }
-  if (args.decision === 'deny') return await denyPendingApproval(ctx, row)
+  if (args.decision === 'deny') {
+    const admission = await beforeApproval?.(row, Date.now())
+    return admission ?? await denyPendingApproval(ctx, row)
+  }
   if (approvalIsExpired(row.createdAt, Date.now())) {
     const expired = await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
     return expired.kind === 'denied' ? { kind: 'refused', code: 'authority_not_pending' } : expired
@@ -508,5 +517,5 @@ export async function decideCallApprovalHandler(
   const now = Date.now()
   const runtime = await loadApprovalRuntime(ctx, row, material, now)
   if (runtime === null) return { kind: 'refused', code: 'invocation_invalid' }
-  return await approvePendingInvocation(ctx, row, runtime, now)
+  return await approvePendingInvocation(ctx, row, runtime, now, beforeApproval)
 }

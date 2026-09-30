@@ -41,7 +41,6 @@ export type AdminActionSheetState = Readonly<{
 export type AdminActionSheetController = AdminActionSheetState & Readonly<{
   role: AdminRole | null
   allowed: boolean
-  clerkFvaAbsent: boolean
   pending: boolean
   setReason: (value: string) => void
   setEvidence: (value: string, selected: boolean) => void
@@ -208,7 +207,7 @@ export const ADMIN_ACTION_SHEET_COPY = {
   selectReason: 'Select a reason',
   confirmEffect: 'This command cannot be undone from this page. Check the target before confirming.',
   proofNotice: 'Clerk will request reverification if your session needs it.',
-  fvaUnavailable: 'This session has no current MFA claim. Set up or reverify MFA in Account security, then retry this command. No change was made.',
+  mfaRequired: 'Verify with two-factor authentication to complete this command. You can set it up in Account security.',
   noEvidence: 'Add a verified evidence reference before continuing.',
   proposalUnavailable: 'This proposal cannot be reviewed because its command material is unavailable.',
   evidence: 'Evidence references',

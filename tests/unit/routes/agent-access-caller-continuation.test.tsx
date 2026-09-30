@@ -50,6 +50,10 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
   useServerFn: (reference: unknown) => routeHarness.serverFns.get(reference) ?? (async () => undefined),
 }))
 
+vi.mock('@clerk/tanstack-react-start', () => ({
+  useReverification: (request: (...args: unknown[]) => Promise<unknown>) => request,
+}))
+
 vi.mock('@/components/ae/console/agent-operator-console/AeAgentOperatorConsole', () => ({
   AeAgentOperatorConsole: (props: Record<string, unknown>) => {
     routeHarness.consoleProps = props

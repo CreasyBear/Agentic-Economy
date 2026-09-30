@@ -2,7 +2,11 @@ import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { readClerkMfaConsequenceProof, type ClerkMfaConsequenceProofInput } from '@/lib/server/clerk-consequence-proof'
+import { sourceWriteAdmissionFromContext, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
+import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
+import type { WorkspaceCloseCommand, WorkspaceCloseResult, WorkspaceTransferCommand, WorkspaceTransferResult } from '@/modules/principal-account/workspace-decommission.view-model'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { unboundWorkspaceDefaultName } from '@/lib/workspace-label'
 
@@ -84,3 +88,36 @@ export const renameWorkspaceServer = createServerFn({ method: 'POST' })
       return { kind: 'refused', code: 'source_unavailable' }
     }
   })
+
+type WorkspaceActionWire = Readonly<{
+  operationKey: string; correlationId: string; proof?: ClerkMfaConsequenceProofInput
+  sourceWrite: SourceWriteAdmission; sourceWriteRequest: SourceWriteAdmissionRequest
+}>
+const closeWorkspaceMutation = sourceMutation<WorkspaceCloseCommand & WorkspaceActionWire, WorkspaceCloseResult>('workspaceAccounts:closeWorkspace')
+const transferWorkspaceMutation = sourceMutation<WorkspaceTransferCommand & WorkspaceActionWire, WorkspaceTransferResult>('workspaceAccounts:transferWorkspaceOwnership')
+const workspaceActionFields = {
+  expectedAccountRef: z.string().min(1).max(200),
+  expectedAccountRevision: z.number().int().nonnegative(), expectedOwnershipRevision: z.number().int().nonnegative(),
+  correlationRef: z.string().min(1).max(200), idempotencyRef: z.string().min(1).max(200),
+}
+
+async function workspaceActionWire<T extends WorkspaceCloseCommand | WorkspaceTransferCommand>(
+  data: T, context: unknown,
+): Promise<T & WorkspaceActionWire> {
+  const proof = await readClerkMfaConsequenceProof()
+  const command = { ...data, operationKey: data.idempotencyRef, correlationId: data.correlationRef,
+    ...(proof === undefined ? {} : { proof }) }
+  const sourceWrite = await sourceWriteAdmissionFromContext({ context, command,
+    scope: 'protected_action', operationKey: command.operationKey, correlationId: command.correlationId })
+  return { ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite) }
+}
+
+export const closeWorkspaceServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({ ...workspaceActionFields, confirmationName: z.string().min(1).max(200) }).parse(data))
+  .handler(async ({ data, context }): Promise<WorkspaceCloseResult> =>
+    await callSourceMutation(closeWorkspaceMutation, await workspaceActionWire(data, context)))
+
+export const transferWorkspaceOwnershipServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({ ...workspaceActionFields, successorPrincipalRef: z.string().min(1).max(200) }).parse(data))
+  .handler(async ({ data, context }): Promise<WorkspaceTransferResult> =>
+    await callSourceMutation(transferWorkspaceMutation, await workspaceActionWire(data, context)))

@@ -10,8 +10,11 @@ import { accountRef, ownershipRef, principalRef } from '../../../../src/modules/
 import {
   consumeConsequenceProof,
   deriveStrictConsequenceProof,
+  deriveMfaConsequenceProof,
   isValidClerkFactorEvidence,
+  isValidClerkMfaEvidence,
   type ClerkConsequenceProofInput,
+  type ClerkMfaConsequenceProofInput,
 } from './proof'
 import {
   admitAuthorityCredentialChangeRate,
@@ -51,7 +54,8 @@ export async function admitInteractiveOwnerConsequence(
     command: unknown
     correlationRef: string
     idempotencyRef: string
-    proof?: ClerkConsequenceProofInput
+    proof?: ClerkConsequenceProofInput | ClerkMfaConsequenceProofInput
+    requireMfaForSubject?: string
     now: number
   }>,
 ): Promise<
@@ -126,7 +130,9 @@ export async function admitInteractiveOwnerConsequence(
   if (admission.proofPolicy.preset !== 'strict'
     || admission.proofPolicy.uniquePerCommand !== true
     || input.proof === undefined
-    || !isValidClerkFactorEvidence(input.proof)) {
+    || !isValidClerkFactorEvidence(input.proof)
+    || (input.requireMfaForSubject !== undefined
+      && !isValidClerkMfaEvidence(input.proof, input.requireMfaForSubject))) {
     return { kind: 'refused', code: 'reauthentication_required' }
   }
 
@@ -138,13 +144,16 @@ export async function admitInteractiveOwnerConsequence(
       || existingProof.activeAccountRef !== admission.activeAccountRef) {
       return { kind: 'refused', code: 'proof_replayed' }
     }
-    if (existingProof.commandDigest !== admission.descriptor.commandDigest) {
+    if (existingProof.commandDigest !== admission.descriptor.commandDigest
+      || existingProof.idempotencyRef !== admission.idempotencyRef) {
       return { kind: 'refused', code: 'command_changed' }
     }
     return { kind: 'admitted', admission, proofUse: 'replayed' }
   }
 
-  const proof = deriveStrictConsequenceProof({ ...input.proof, now: input.now })
+  const proof = input.requireMfaForSubject === undefined
+    ? deriveStrictConsequenceProof({ ...input.proof, now: input.now })
+    : deriveMfaConsequenceProof({ proof: input.proof, subject: input.requireMfaForSubject, now: input.now })
   if (proof.kind === 'refused') return proof
   const rate = input.action === 'payout.transfer'
     ? await admitPayoutTransferRate(ctx, admission.activeAccountRef)

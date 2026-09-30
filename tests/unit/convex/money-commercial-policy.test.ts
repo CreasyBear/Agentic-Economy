@@ -12,7 +12,7 @@ import {
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
 } from '../../../src/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
-import { ownerAdmin, testConsequenceProof } from '../../helpers/convex-fixtures'
+import { ownerAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const convexModules = Object.fromEntries(
@@ -65,7 +65,7 @@ function command(
     input, evidenceRefs, reasonCode, action,
     operationKey, correlationId: operationKey,
     approval: { kind: 'execute' },
-    proof: testConsequenceProof({ subject }, digest),
+    proof: testMfaConsequenceProof({ subject }, digest),
   }
 }
 

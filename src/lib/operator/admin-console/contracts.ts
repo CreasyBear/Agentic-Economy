@@ -204,6 +204,8 @@ export type ClerkConsequenceProof = Readonly<{
   reverificationId: string
   firstFactorAgeMinutes: number
   secondFactorAgeMinutes: number
+  subject: string
+  evidenceObservedAt: number
 }>
 
 export type AdminApprovalIntent =

@@ -7,7 +7,7 @@ import { internal } from '../../../convex/_generated/api'
 import type { AdminCommandWireArgs } from '../../../convex/lib/adminConsole/commands/contracts'
 import { readTreasuryControlState } from '../../../convex/lib/adminConsole/actions/treasury'
 import { readAgentPaymentAdmission } from '../../../convex/lib/money/treasury/paymentAdmission'
-import { convexTestWithMarketComponents, ownerAdmin, type ConvexFixtureBackend } from '../../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, ownerAdmin, type ConvexFixtureBackend, type ConvexFixtureAdmin } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 import { seedPaymentReadiness } from '../../helpers/payment-readiness-fixture'
 import { observeHealthyReadiness, publishCurrentTool, seedAgent, seedCommercialPolicies, testRef, validCustodyEnvironment, recordTreasuryObservation,
@@ -23,18 +23,20 @@ beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 async function pauseCommand(
-  backend: ConvexFixtureBackend,
+  admin: ConvexFixtureAdmin,
   key: string,
   paused: boolean,
   overrides: Partial<AdminCommandArgs<'set_payments_paused'>> = {},
 ) {
-  const state = await backend.run(ctx => readTreasuryControlState(ctx, 'production'))
+  const state = await admin.run(ctx => readTreasuryControlState(ctx, 'production'))
+  const identity = await admin.run(ctx => ctx.auth.getUserIdentity())
+  if (identity === null) throw new Error('fixture_admin_identity_missing')
   return await withSourceWrite('admin_operator', {
     action: 'set_payments_paused' as const, input: { environment: 'production' as const, paused },
     reasonCode: paused ? 'operational_pause' as const : 'operational_resume' as const,
     operationKey: key, correlationId: `${key}:correlation`, evidenceRefs: ['evidence:independent-treasury-controls'],
     expectedStateDigest: state.launchStateDigest, approval: { kind: 'execute' as const },
-    proof: { reverificationId: `${key}:proof`, firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0 },
+    proof: { reverificationId: `${key}:proof`, firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0, subject: identity.subject, evidenceObservedAt: Date.now() },
     ...overrides,
   })
 }
@@ -119,7 +121,7 @@ describe('independent treasury control transaction evaluation', () => {
     const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_independent-pause-duplicate')
     await ownerAdmin(backend, 'user_independent-pause-peer')
-    const command = await pauseCommand(backend, 'independent:pause-duplicate', true)
+    const command = await pauseCommand(admin, 'independent:pause-duplicate', true)
     const retry = await withSourceWrite('admin_operator', command)
     const [first, second] = await Promise.all([admin.mutation(pauseRef, command), admin.mutation(pauseRef, retry)])
     expect(first).toMatchObject({ kind: 'completed', code: 'payments_paused' })
@@ -135,8 +137,8 @@ describe('independent treasury control transaction evaluation', () => {
     const backend = convexTestWithMarketComponents()
     const firstOwner = await ownerAdmin(backend, 'user_independent-pause-first')
     const secondOwner = await ownerAdmin(backend, 'user_independent-pause-second')
-    const first = await pauseCommand(backend, 'independent:pause-first', true)
-    const second = await pauseCommand(backend, 'independent:pause-second', true)
+    const first = await pauseCommand(firstOwner, 'independent:pause-first', true)
+    const second = await pauseCommand(secondOwner, 'independent:pause-second', true)
     const receipts = await Promise.all([firstOwner.mutation(pauseRef, first), secondOwner.mutation(pauseRef, second)])
     expect(receipts.filter(receipt => receipt.kind === 'completed')).toHaveLength(1)
     expect(receipts.filter(receipt => receipt.kind === 'refused')).toMatchObject([{ code: 'target_changed' }])
@@ -155,17 +157,17 @@ describe('independent treasury control transaction evaluation', () => {
     await backend.run(ctx => ctx.db.insert('platformLaunch', {
       environment: 'production', paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'admins', revision: 4, updatedAt: 1,
     }))
-    expect(await proposer.mutation(pauseRef, await pauseCommand(backend, 'independent:resume-stop', true)))
+    expect(await proposer.mutation(pauseRef, await pauseCommand(proposer, 'independent:resume-stop', true)))
       .toMatchObject({ kind: 'completed', code: 'payments_paused' })
-    const command = await pauseCommand(backend, 'independent:resume-propose', false, { approval: { kind: 'propose' } })
+    const command = await pauseCommand(proposer, 'independent:resume-propose', false, { approval: { kind: 'propose' } })
     const proposals = await Promise.all([proposer.mutation(pauseRef, command), proposer.mutation(pauseRef, await withSourceWrite('admin_operator', command))])
     expect(proposals[0]).toMatchObject({ kind: 'proposed' })
     expect(proposals[1]).toEqual(proposals[0])
     const proposal = proposals[0]
     if (proposal?.kind !== 'proposed') throw new Error('proposal_expected')
     expect((await controlsSnapshot(backend)).proposals).toHaveLength(1)
-    const first = await pauseCommand(backend, 'independent:resume-approve', false, { approval: { kind: 'approve', proposalRef: proposal.proposalRef } })
-    const second = await pauseCommand(backend, 'independent:resume-peer', false, { approval: { kind: 'approve', proposalRef: proposal.proposalRef } })
+    const first = await pauseCommand(approver, 'independent:resume-approve', false, { approval: { kind: 'approve', proposalRef: proposal.proposalRef } })
+    const second = await pauseCommand(peer, 'independent:resume-peer', false, { approval: { kind: 'approve', proposalRef: proposal.proposalRef } })
     const receipts = await Promise.all([approver.mutation(pauseRef, first), peer.mutation(pauseRef, second)])
     expect(receipts.filter(receipt => receipt.kind === 'completed')).toHaveLength(1)
     expect(receipts.filter(receipt => receipt.kind === 'refused')).toMatchObject([{ code: 'target_changed' }])
@@ -184,13 +186,13 @@ describe('independent treasury control transaction evaluation', () => {
     const admin = await ownerAdmin(backend, 'user_independent-refusal-first')
     await ownerAdmin(backend, 'user_independent-refusal-second')
     const before = await controlsSnapshot(backend)
-    const fresh = await pauseCommand(backend, 'independent:refusal-control', true)
-    const staleProof = await pauseCommand(backend, 'independent:refusal-mfa', false, {
+    const fresh = await pauseCommand(admin, 'independent:refusal-control', true)
+    const staleProof = await pauseCommand(admin, 'independent:refusal-mfa', false, {
       approval: { kind: 'propose' },
-      proof: { reverificationId: 'independent:stale-proof', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 10 },
+      proof: { reverificationId: 'independent:stale-proof', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 10, subject: 'user_independent-refusal-first', evidenceObservedAt: Date.now() },
     })
     expect(await admin.mutation(pauseRef, staleProof)).toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
-    const staleState = await pauseCommand(backend, 'independent:refusal-state', false, {
+    const staleState = await pauseCommand(admin, 'independent:refusal-state', false, {
       expectedStateDigest: 'sha256:' + '0'.repeat(64), approval: { kind: 'propose' },
     })
     expect(await admin.mutation(pauseRef, staleState)).toMatchObject({ kind: 'refused', code: 'target_changed' })
@@ -326,10 +328,10 @@ describe('production readiness cannot block emergency pause', () => {
           base_rpc: failed, reference_rate: failed, sanctions: failed, commercial_policy: failed, treasury: failed } })
       }
       if (fault === 'configuration_rotated') vi.stubEnv('CDP_API_KEY_SECRET', 'rotated-controls-fixture')
-      expect(await admin.mutation(pauseRef, await pauseCommand(backend, `readiness:${fault}:pause`, true)))
+      expect(await admin.mutation(pauseRef, await pauseCommand(admin, `readiness:${fault}:pause`, true)))
         .toMatchObject({ kind: 'completed', code: 'payments_paused' })
       const before = await controlsSnapshot(backend)
-      expect(await admin.mutation(pauseRef, await pauseCommand(backend, `readiness:${fault}:resume`, false)))
+      expect(await admin.mutation(pauseRef, await pauseCommand(admin, `readiness:${fault}:resume`, false)))
         .toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
       const after = await controlsSnapshot(backend)
       expect(after.state).toEqual(before.state)

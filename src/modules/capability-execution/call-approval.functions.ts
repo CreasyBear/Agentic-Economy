@@ -25,6 +25,6 @@ export const listPendingCallApprovalsServer = createServerFn({ method: 'GET' })
 
 export const decideCallApprovalServer = createServerFn({ method: 'POST' })
   .validator((data) => decisionInputSchema.parse(data))
-  .handler(async ({ data }): Promise<CallApprovalDecisionResult> => {
-    return decideCallApprovalThroughSource(data)
+  .handler(async ({ data, context }): Promise<CallApprovalDecisionResult> => {
+    return decideCallApprovalThroughSource(data, context)
   })

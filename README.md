@@ -165,6 +165,14 @@ URL and user code; approve in the browser as the owner. Consent approval require
 Clerk's strict reverification, so there is no headless approval path anywhere.
 Use `--provider` to bind a provider credential the same way.
 
+In each Clerk instance, add
+`{"reverification_id":"{{session.reverification_id}}"}` to the customized
+**session token** claims, following [Clerk's action correlation guide](https://clerk.com/docs/guides/secure/reverification#correlate-a-reverification-with-a-specific-action).
+Operator commands, spending-limit increases, workspace closure/ownership transfer
+and owner-chat approvals require fresh verification of both factors. The web
+server signs the verified session evidence for Convex; adding `fva` to a Convex
+JWT template cannot establish this check. Spending reductions need no MFA prompt.
+
 For a **Clerk development instance only**, use a dedicated test owner for
 inbox-free local consent: create a Clerk user with an address such as
 `owner+clerk_test@example.com`, set `AE_E2E_OWNER_EMAIL` to that same address

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 
 import { readAgentDirectoryPageServer, readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -18,6 +19,7 @@ import type {
 } from '@/modules/agent-access/spending-policy-update'
 import type { ExactAmount } from '@/modules/money/public'
 import { createRuntimeId } from '@/modules/common/runtime-id'
+import { useTypedReverification } from '@/lib/client/useTypedReverification'
 import {
   decideCallApprovalServer,
   listPendingCallApprovalsServer,
@@ -40,6 +42,7 @@ function operationApprovalErrorCopy(
   code: Extract<CallApprovalDecisionResult, { kind: 'refused' }>['code'],
 ): string {
   if (code === 'authentication_required') return 'Sign in as the access owner, then try again.'
+  if (code === 'mfa_reverification_required') return 'Verify with two-factor authentication to continue.'
   if (code === 'grant_not_current') return 'This agent grant changed. Review current access before trying again.'
   if (code === 'invocation_not_found') return 'This waiting operation is no longer available. Refresh the list.'
   if (code === 'authority_not_pending') return 'This operation no longer needs a decision. Refresh the list.'
@@ -59,9 +62,14 @@ export function useAeAgentAccessHome({
   const disconnectConnection = useServerFn(revokeOwnerConnectionServer)
   const renameAgent = useServerFn(renameAgentServer)
   const updateSpendingLimits = useServerFn(updateAgentSpendingLimitsServer)
+  const verifiedSpendingUpdate = useTypedReverification(updateSpendingLimits,
+    result => result.kind === 'refused' && result.code === 'mfa_reverification_required' ? 'strict_mfa' : null)
+  const spendingCommand = useRef<{ material: string; idempotencyKey: string } | undefined>(undefined)
   const readSpendingLimits = useServerFn(readAgentSpendingLimitsServer)
   const readApprovals = useServerFn(listPendingCallApprovalsServer)
   const decideApproval = useServerFn(decideCallApprovalServer)
+  const verifiedApproval = useTypedReverification(decideApproval,
+    result => result.kind === 'refused' && result.code === 'mfa_reverification_required' ? 'strict_mfa' : null)
 
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
@@ -236,23 +244,34 @@ export function useAeAgentAccessHome({
     maximumDailySpend: ExactAmount
     maximumMonthlySpend: ExactAmount
   }): Promise<AgentSpendingLimitsResult> => {
-    const idempotencyKey = createRuntimeId('limit')
+    const material = JSON.stringify(params)
+    if (spendingCommand.current?.material !== material) {
+      spendingCommand.current = { material, idempotencyKey: createRuntimeId('limit') }
+    }
+    const idempotencyKey = spendingCommand.current.idempotencyKey
     try {
-      const result = await updateSpendingLimits({
+      // The key is allocated outside the reverification callback: Clerk retries
+      // this same command rather than issuing another monetary policy update.
+      const result = await verifiedSpendingUpdate({
         data: {
           ...params,
           idempotencyKey,
         },
       })
+      if (result == null) return { kind: 'refused', code: 'mfa_reverification_required', correlationRef: idempotencyKey }
       if (result.kind === 'completed' || result.kind === 'replayed') {
+        spendingCommand.current = undefined
         await load()
       }
       return result
     } catch (cause) {
+      if (isReverificationCancelledError(cause)) {
+        return { kind: 'refused', code: 'mfa_reverification_required', correlationRef: idempotencyKey }
+      }
       captureClientExceptionOnClient(cause)
       return { kind: 'refused', code: 'source_unavailable', correlationRef: 'error' }
     }
-  }, [load, updateSpendingLimits])
+  }, [load, verifiedSpendingUpdate])
 
   const readSpendingLimitsHandler = useCallback(async (principalRef: string): Promise<AgentSpendingLimitsReadResult> => {
     try {
@@ -269,7 +288,8 @@ export function useAeAgentAccessHome({
     setApprovalsError(undefined)
     setApprovalStatus(undefined)
     try {
-      const result = await decideApproval({ data: { callRef, decision } })
+      const result = await verifiedApproval({ data: { callRef, decision } })
+      if (result == null) return
       if (result.kind === 'refused') {
         setApprovalsError(operationApprovalErrorCopy(result.code))
         return
@@ -281,12 +301,13 @@ export function useAeAgentAccessHome({
           : `${toolRef} declined.`)
       await loadApprovals()
     } catch (cause) {
+      if (isReverificationCancelledError(cause)) return
       captureClientExceptionOnClient(cause)
       setApprovalsError('Your decision could not be confirmed. Refresh the waiting approvals before deciding again.')
     } finally {
       setApprovalDecision(undefined)
     }
-  }, [approvalDecision, decideApproval, loadApprovals])
+  }, [approvalDecision, verifiedApproval, loadApprovals])
 
   const currentPaginationIssue = directoryPaginationIssue?.source === directory
     && directoryPaginationIssue.cursor === directory.nextCursor

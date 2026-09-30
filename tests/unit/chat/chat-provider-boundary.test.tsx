@@ -388,6 +388,10 @@ describe('Tool chat provider boundary', () => {
 
     runtime.factorVerificationAge = [0, 0]
     view.rerender(<SignedInConvexProvider><Child /></SignedInConvexProvider>)
+    // MFA is verified by the server; factor ages do not fabricate a new Convex session.
+    expect(runtime.getToken).toHaveBeenCalledTimes(1)
+    runtime.sessionId = 'session-2'
+    view.rerender(<SignedInConvexProvider><Child /></SignedInConvexProvider>)
     await waitFor(() => expect(runtime.getToken).toHaveBeenCalledTimes(2))
 
     expect(mounted).toHaveBeenCalledTimes(1)

@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   callSourceMutation: vi.fn(),
   setResponseHeader: vi.fn(),
   sourceWriteAdmissionFromContext: vi.fn(),
-  requireStrictClerkConsequenceProof: vi.fn(),
+  readClerkMfaConsequenceProof: vi.fn(),
   sourceWriteRequestFromAdmission: vi.fn(),
 }))
 
@@ -25,7 +25,7 @@ vi.mock('@/lib/server/source-write-admission', () => ({
   sourceWriteRequestFromAdmission: mocks.sourceWriteRequestFromAdmission,
 }))
 vi.mock('@/lib/server/clerk-consequence-proof', () => ({
-  requireStrictClerkConsequenceProof: mocks.requireStrictClerkConsequenceProof,
+  readClerkMfaConsequenceProof: mocks.readClerkMfaConsequenceProof,
 }))
 
 import { reviewSourceAuthorityServer } from '@/modules/capability-supply/source-authority-review.functions'
@@ -38,15 +38,16 @@ const review = {
 }
 
 afterEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
 })
 
 describe('source authority review server boundary', () => {
   it('confirms one exact publication through the canonical admin mutation', async () => {
     mocks.sourceWriteAdmissionFromContext.mockResolvedValue({ signature: 'source-write' })
     mocks.sourceWriteRequestFromAdmission.mockReturnValue({ method: 'POST' })
-    mocks.requireStrictClerkConsequenceProof.mockResolvedValue({
-      reverificationId: 'test:source-review', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1,
+    mocks.readClerkMfaConsequenceProof.mockResolvedValue({
+      reverificationId: 'test:source-review', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0,
+      subject: 'user_reviewer', evidenceObservedAt: Date.now(),
     })
     mocks.callSourceMutation.mockResolvedValue({
       kind: 'completed', action: 'verify_capability_source_authority',
@@ -78,6 +79,27 @@ describe('source authority review server boundary', () => {
         sourceWriteRequest: { method: 'POST' },
       }),
     )
+  })
+
+  it('returns the source MFA requirement when verified evidence is unavailable', async () => {
+    mocks.readClerkMfaConsequenceProof.mockResolvedValue(undefined)
+    mocks.sourceWriteAdmissionFromContext.mockResolvedValue({ signature: 'source-write' })
+    mocks.callSourceMutation.mockResolvedValue({ kind: 'refused', code: 'mfa_reverification_required' })
+    await expect(reviewSourceAuthorityServer({ data: review }))
+      .resolves.toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
+    expect(mocks.sourceWriteAdmissionFromContext.mock.calls[0]?.[0].command).not.toHaveProperty('proof')
+    expect(mocks.callSourceMutation).toHaveBeenCalledOnce()
+  })
+
+  it('permits an exact source receipt retry without demanding fresh MFA', async () => {
+    mocks.readClerkMfaConsequenceProof.mockResolvedValue(undefined)
+    mocks.sourceWriteAdmissionFromContext.mockResolvedValue({ signature: 'source-write:retry' })
+    const receipt = { kind: 'completed', action: 'verify_capability_source_authority',
+      code: 'source_authority_verified', effectRefs: [review.publicationRef],
+      auditEventRef: 'audit:original', correlationId: 'source-review:original' }
+    mocks.callSourceMutation.mockResolvedValue(receipt)
+    await expect(reviewSourceAuthorityServer({ data: review })).resolves.toEqual(receipt)
+    expect(mocks.callSourceMutation.mock.calls[0]?.[1]).not.toHaveProperty('proof')
   })
 
   it('fails closed without exposing source failures as approval', async () => {

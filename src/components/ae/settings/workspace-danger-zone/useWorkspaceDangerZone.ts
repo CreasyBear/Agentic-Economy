@@ -1,5 +1,7 @@
+import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { makeFunctionReference } from 'convex/server'
-import { useMutation, useQuery } from 'convex/react'
+import { useQuery } from 'convex/react'
+import { closeWorkspaceServer, transferWorkspaceOwnershipServer } from '@/lib/server/workspace-profile.functions'
 import { useMemo, useRef, useState } from 'react'
 
 import { useTypedReverification } from '@/lib/client/useTypedReverification'
@@ -10,11 +12,9 @@ import {
   fenceMessagesFor,
   isWorkspaceMfaReverificationRefusal,
   type WorkspaceCloseCommand,
-  type WorkspaceCloseResult,
   type WorkspaceDangerDiagnostic,
   type WorkspaceDecommissionEligibilityView,
   type WorkspaceTransferCommand,
-  type WorkspaceTransferResult,
 } from '@/modules/principal-account/workspace-decommission.view-model'
 
 import {
@@ -36,18 +36,6 @@ const readWorkspaceDecommissionEligibilityRef = makeFunctionReference<
   WorkspaceDecommissionEligibilityView
 >('workspaceAccounts:readWorkspaceDecommissionEligibility')
 
-const closeWorkspaceRef = makeFunctionReference<
-  'mutation',
-  WorkspaceCloseCommand,
-  WorkspaceCloseResult
->('workspaceAccounts:closeWorkspace')
-
-const transferWorkspaceOwnershipRef = makeFunctionReference<
-  'mutation',
-  WorkspaceTransferCommand,
-  WorkspaceTransferResult
->('workspaceAccounts:transferWorkspaceOwnership')
-
 const CLOSE_MFA_DIAGNOSTIC: WorkspaceDangerDiagnostic = {
   ...CLOSE_FAILURE_DIAGNOSTIC,
   nextStep: WORKSPACE_MFA_REVERIFICATION_COPY,
@@ -60,14 +48,12 @@ const TRANSFER_MFA_DIAGNOSTIC: WorkspaceDangerDiagnostic = {
 
 export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
   const eligibility = useQuery(readWorkspaceDecommissionEligibilityRef)
-  const closeWorkspaceMutation = useMutation(closeWorkspaceRef)
-  const transferOwnershipMutation = useMutation(transferWorkspaceOwnershipRef)
   const closeWorkspace = useTypedReverification(
-    closeWorkspaceMutation,
+    (data: WorkspaceCloseCommand) => closeWorkspaceServer({ data }),
     (result) => isWorkspaceMfaReverificationRefusal(result) ? 'strict_mfa' : null,
   )
   const transferWorkspaceOwnership = useTypedReverification(
-    transferOwnershipMutation,
+    (data: WorkspaceTransferCommand) => transferWorkspaceOwnershipServer({ data }),
     (result) => isWorkspaceMfaReverificationRefusal(result) ? 'strict_mfa' : null,
   )
 
@@ -143,6 +129,7 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
         setCloseDiagnostic(null)
         try {
           const result = await closeWorkspace({
+            expectedAccountRef: eligibility.accountRef,
             confirmationName,
             expectedAccountRevision: eligibility.accountRevision,
             expectedOwnershipRevision: eligibility.ownershipRevision,
@@ -157,7 +144,7 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
           toast.success('Workspace closed')
           setShowCloseConfirmDialog(false)
         } catch (cause) {
-          void cause
+          if (isReverificationCancelledError(cause)) return
           setCloseDiagnostic(CLOSE_FAILURE_DIAGNOSTIC)
           toast.error('Workspace was not closed')
         } finally {
@@ -191,6 +178,7 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
         setTransferDiagnostic(null)
         try {
           const result = await transferWorkspaceOwnership({
+            expectedAccountRef: eligibility.accountRef,
             successorPrincipalRef: selectedSuccessor,
             expectedAccountRevision: eligibility.accountRevision,
             expectedOwnershipRevision: eligibility.ownershipRevision,
@@ -205,7 +193,7 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
           toast.success('Workspace ownership transferred')
           setShowTransferConfirmDialog(false)
         } catch (cause) {
-          void cause
+          if (isReverificationCancelledError(cause)) return
           setTransferDiagnostic(TRANSFER_FAILURE_DIAGNOSTIC)
           toast.error('Ownership was not transferred')
         } finally {

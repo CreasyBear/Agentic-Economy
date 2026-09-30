@@ -17,7 +17,7 @@ import { createX402ProviderConnection } from '@/modules/capability-supply/provid
 import { toRow } from '../../convex/lib/capabilitySupply/providerConnections/codecs'
 import { declareDiscoveryExtension, bazaarResourceServerExtension, type DiscoveryExtension } from '@x402/extensions/bazaar'
 import { z } from 'zod'
-import { convexTestWithMarketComponents, ownerAdmin, testConsequenceProof } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, ownerAdmin, testMfaConsequenceProof } from '../helpers/convex-fixtures'
 import { withSourceWrite, withoutSourceWrite } from '../helpers/source-write-admission'
 import { createPublishedBusinessOwner } from './capability-supply-owner-funnel-harness'
 const verifySourceAuthority = makeFunctionReference<
@@ -236,7 +236,7 @@ describe('first native Tool admission', () => {
     const sourceReviewCommand = (subject: string): AdminCommandArgs<'verify_capability_source_authority'> => ({
       action, input, reasonCode, evidenceRefs,
       operationKey: 'native:review', correlationId: 'native:review',
-      approval: { kind: 'execute' }, proof: testConsequenceProof({ subject }, digest),
+      approval: { kind: 'execute' }, proof: testMfaConsequenceProof({ subject }, digest),
     })
     await expect(owner.mutation(verifySourceAuthority,
       await withSourceWrite('admin_operator', sourceReviewCommand('user_native_owner'))))

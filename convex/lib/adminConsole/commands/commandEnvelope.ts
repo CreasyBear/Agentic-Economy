@@ -19,7 +19,7 @@ import {
 import { readCurrentActiveAdminMembership, resolveAdminAuthority } from '../../../authz'
 import {
   consumeConsequenceProof,
-  deriveStrictConsequenceProof,
+  deriveMfaConsequenceProof,
 } from '../../authority/consequence/proof'
 import { persistAdminAuthorityMutation } from '../../security/admin/persistence'
 import { persistAuditEvent } from '../../security/audit/persistence'
@@ -55,6 +55,11 @@ export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
 }>
 
 
+/** Requires verified source-write material and current Admin authority. Ensures
+ * new commands use both fresh Clerk factors anchored to signed JWT time and the
+ * authenticated subject. Invariant: exact operation replay precedes freshness,
+ * and proof consumption, approvals and effects remain one transaction. On
+ * violation: return the existing MFA refusal before consuming proof or effects. */
 export async function runAdminCommand<A extends AdminCommandAction>(
   ctx: MutationCtx,
   args: AdminCommandWireArgs<A>,
@@ -149,7 +154,9 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (!validEvidenceRefs(args.evidenceRefs)) return refused(args, 'admin_missing_evidence')
 
   if (args.proof === undefined) return refused(args, 'mfa_reverification_required')
-  const proof = deriveStrictConsequenceProof({ ...args.proof, now: Date.now() })
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null) return refused(args, 'mfa_reverification_required')
+  const proof = deriveMfaConsequenceProof({ proof: args.proof, subject: identity.subject, now: Date.now() })
   if (proof.kind === 'refused') return refused(args, proofFailure(args.action, proof.code))
   if (
     (spec.requireExpectedStateDigest === true && args.expectedStateDigest === undefined)

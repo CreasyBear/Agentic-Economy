@@ -1,5 +1,5 @@
 import type { MutationCtx } from '../../../_generated/server'
-import type { ObjectType } from 'convex/values'
+import { v, type ObjectType } from 'convex/values'
 import {
   agentSpendingLimitsUpdateArgs, agentSpendingLimitsUpdateSchema,
   type AgentSpendingLimitsResult, createAgentAccessGrant,
@@ -16,6 +16,18 @@ import { agentAuditOpaqueRef } from '@/modules/agent-access/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { upsertGrantHandler } from '../policy/writes'
 import { loadOwnedAgent, mapLoadFailure, type OwnerAuthority } from './material'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
+import { clerkMfaConsequenceProofValue } from '../../authority/consequence/proof'
+import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
+
+export const updateForServerArgs = {
+  ...agentSpendingLimitsUpdateArgs,
+  ...sourceWriteArgs,
+  operationKey: v.optional(v.string()),
+  correlationId: v.optional(v.string()),
+  proof: v.optional(clerkMfaConsequenceProofValue),
+}
 
 const INVALID_CORRELATION_REF = 'invalid-correlation-reference'
 
@@ -106,7 +118,9 @@ function replayResult(
  * CONTRACT: updateForServer
  *   Requires: an authenticated current Account owner, one active Agent chain,
  *   an active canonical delegation, valid AUD/6 limits, the current access
- *   generation, and a canonical idempotency/correlation identity.
+ *   generation, signed exact-command source admission, and a canonical
+ *   idempotency/correlation identity. Any increased monetary bound requires
+ *   fresh, subject-bound server Clerk MFA; reductions require no MFA.
  *   Ensures: one immutable v2 access grant and canonical delegation carry the
  *   new monetary policy; the Agent admission projection and one policy audit
  *   event advance in the same transaction. A replay returns the original
@@ -120,7 +134,7 @@ function replayResult(
  */
 export async function updateForServerHandler(
   ctx: MutationCtx,
-  args: ObjectType<typeof agentSpendingLimitsUpdateArgs>,
+  args: ObjectType<typeof updateForServerArgs>,
 ): Promise<AgentSpendingLimitsResult> {
   let parsed: ReturnType<typeof agentSpendingLimitsUpdateSchema.parse>
   try {
@@ -139,6 +153,12 @@ export async function updateForServerHandler(
   if (!validOpaqueCommandRef(parsed.idempotencyKey, 'idempotencyRef')
     || !validOpaqueCommandRef(args.correlationRef, 'correlationRef')) {
     return invalidCommand(args.correlationRef)
+  }
+
+  if (args.operationKey === undefined || args.correlationId === undefined
+    || (await requireSourceRead({ ...args, operationKey: args.operationKey,
+      correlationId: args.correlationId }, 'protected_action')).kind === 'rejected') {
+    return { kind: 'refused', code: 'authentication_required', correlationRef: args.correlationRef }
   }
 
   const identity = await ctx.auth.getUserIdentity()
@@ -252,6 +272,34 @@ export async function updateForServerHandler(
   })
   if (grantDecision.kind !== 'accepted') {
     return { kind: 'conflict', code: 'policy_invalid', correlationRef: args.correlationRef }
+  }
+
+  // All typed validation failures precede proof consumption. These writes and
+  // the grant/delegation below share one transaction; an unexpected failure
+  // rolls them all back. Replay returned above needs no new proof or nonce.
+  const source = await requireSourceWrite(ctx, args, 'protected_action')
+  if (source.kind === 'rejected') {
+    return { kind: 'refused', code: 'authentication_required', correlationRef: args.correlationRef }
+  }
+  const increases = (['maximumSpendPerCall', 'maximumDailySpend', 'maximumMonthlySpend'] as const)
+    .some(bound => BigInt(parsed[bound].units) > BigInt(currentPolicy.budget[bound].units))
+  if (increases) {
+    const consequence = await admitInteractiveOwnerConsequence(ctx, {
+      actor: { kind: 'authenticated_owner', canonicalPrincipalRef: owner.principalRef,
+        canonicalAccountRef: owner.accountRef, authorityRevision: owner.revision,
+        authorityProvenance: owner.provenance },
+      action: 'agent_access.increase_authority',
+      target: { targetType: 'agent', targetRef: parsed.principalRef, targetRevision: grant.generation },
+      requiredScopes: ['agent:manage'], resourceRefs: [parsed.principalRef], budgetAmount: 0,
+      consequenceSummary: 'Increase Agent spending limits',
+      statusReadbackRef: `agentSpendingPolicy:readCurrent:${parsed.principalRef}`,
+      command: parsed, correlationRef: args.correlationRef, idempotencyRef: commandNamespace,
+      ...(args.proof === undefined ? {} : { proof: args.proof }),
+      requireMfaForSubject: identity.subject, now,
+    })
+    if (consequence.kind === 'refused') {
+      return { kind: 'refused', code: 'mfa_reverification_required', correlationRef: args.correlationRef }
+    }
   }
 
   const action = {

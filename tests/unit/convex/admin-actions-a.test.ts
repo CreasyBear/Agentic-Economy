@@ -13,7 +13,7 @@ import {
   publishedBusinessOwner,
   reviewerAdmin,
   supportAdmin,
-  testConsequenceProof,
+  testMfaConsequenceProof,
   type ConvexFixtureBackend,
 } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
@@ -48,7 +48,7 @@ async function signed<A extends Action>(subject: string, base: Command<A>, nonce
   })
   return await withSourceWrite('admin_operator', {
     ...base,
-    proof: testConsequenceProof({ subject, tokenIdentifier: subject.replace(/^user_/u, 'token_') }, commandDigest),
+    proof: testMfaConsequenceProof({ subject, tokenIdentifier: subject.replace(/^user_/u, 'token_') }, commandDigest),
   }, { nonce })
 }
 

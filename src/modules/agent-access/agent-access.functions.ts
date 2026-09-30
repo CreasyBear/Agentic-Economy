@@ -12,7 +12,9 @@ import {
   sourceQuery,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
-import { hasStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
+import { hasStrictClerkConsequenceProof, readClerkMfaConsequenceProof, type ClerkMfaConsequenceProofInput } from '@/lib/server/clerk-consequence-proof'
+import { sourceWriteAdmissionFromContext, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
+import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
 import { degrade } from '@/lib/observability/degrade'
@@ -237,7 +239,14 @@ export type RenameAgentResult =
 const renameAgentMutation = sourceMutation<RenameAgentCommand, Exclude<RenameAgentResult, { kind: 'refused'; code: 'source_unavailable' }>>(
   'agentAccessPrincipals:renameAgentForServer',
 )
-type AgentSpendingLimitsUpdateCommand = AgentSpendingLimitsUpdate & Readonly<{ correlationRef: string }>
+type AgentSpendingLimitsUpdateCommand = AgentSpendingLimitsUpdate & Readonly<{
+  correlationRef: string
+  operationKey: string
+  correlationId: string
+  proof?: ClerkMfaConsequenceProofInput
+  sourceWrite: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+}>
 const updateAgentSpendingLimitsMutation = sourceMutation<AgentSpendingLimitsUpdateCommand, AgentSpendingLimitsResult>(
   'agentSpendingPolicy:updateForServer',
 )
@@ -683,7 +692,9 @@ export const renameAgentServer = createServerFn({ method: 'POST' })
  * Requires: authenticated owner authority and a complete, strictly validated
  * spending-limit update with a caller-supplied idempotency key.
  * Ensures: one source mutation receives every validated field unchanged plus
- * one correlation reference, and its canonical result is returned unchanged.
+ * one correlation reference and server-only MFA evidence signed into the exact
+ * command. Convex decides whether current limits require MFA, so reductions
+ * and completed retries never demand an unnecessary prompt.
  * Invariant: this boundary never derives a prior generation or replaces the
  * idempotency key, and it performs no provider-side effects.
  * On violation: source transport failures become a typed source_unavailable
@@ -691,11 +702,20 @@ export const renameAgentServer = createServerFn({ method: 'POST' })
  */
 export const updateAgentSpendingLimitsServer = createServerFn({ method: 'POST' })
   .validator((data) => agentSpendingLimitsUpdateSchema.parse(data))
-  .handler(async ({ data }): Promise<AgentSpendingLimitsResult> => {
+  .handler(async ({ data, context }): Promise<AgentSpendingLimitsResult> => {
     const correlationRef = lifecycleCorrelationRef()
     try {
       await requireCanonicalOwnerAuthorityServer()
-      return await callSourceMutation(updateAgentSpendingLimitsMutation, { ...data, correlationRef })
+      const proof = await readClerkMfaConsequenceProof()
+      const command = { ...data, correlationRef, correlationId: correlationRef,
+        operationKey: `agent-spending-limits:${data.idempotencyKey}`,
+        ...(proof === undefined ? {} : { proof }) }
+      const sourceWrite = await sourceWriteAdmissionFromContext({ context, command,
+        scope: 'protected_action', operationKey: command.operationKey,
+        correlationId: command.correlationId })
+      return await callSourceMutation(updateAgentSpendingLimitsMutation, {
+        ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      })
     } catch (cause) {
       return degrade(cause, { kind: 'refused', code: 'source_unavailable', correlationRef } as const, {
         site: 'updateAgentSpendingLimitsServer',

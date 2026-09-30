@@ -31,6 +31,7 @@ import { components, api, internal } from '../../convex/_generated/api'
 import {
   convexTestWithWorkers,
   publishedBusinessOwner,
+  testMfaConsequenceProof,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import {
@@ -1229,11 +1230,12 @@ describe('capability Call Workpool lifecycle', () => {
     if (original.kind !== 'available') throw new Error('policy_original_booking_missing')
     await expectAgentPeriodBalances(formance, original.booking, '24000')
     const amount = (units: string) => ({ currency: 'AUD', exponent: 6, units })
-    const update = (expectedGeneration: number, units: string, key: string) => owner.mutation(api.agentSpendingPolicy.updateForServer, {
+    const update = async (expectedGeneration: number, units: string, key: string, withMfa = false) => owner.mutation(api.agentSpendingPolicy.updateForServer, await withSourceWrite('protected_action', {
       principalRef: buyer.principal.principalId, expectedGeneration, idempotencyKey: key,
       maximumSpendPerCall: amount('12000'), maximumDailySpend: amount(units), maximumMonthlySpend: amount(units),
-      correlationRef: `policy-update:${key}`,
-    })
+      correlationRef: `policy-update:${key}`, operationKey: `agent-spending-limits:${key}`, correlationId: `policy-update:${key}`,
+      ...(withMfa ? { proof: testMfaConsequenceProof({ subject: registered!.subject }, `policy-update:${key}`) } : {}),
+    }))
     expect(await owner.query(api.agentSpendingPolicy.readCurrent, { principalRef: buyer.principal.principalId }))
       .toMatchObject({ kind: 'known', generation: 1, maximumDailySpend: amount('36000') })
     const lowered = await update(1, '12000', 'lower')
@@ -1256,14 +1258,14 @@ describe('capability Call Workpool lifecycle', () => {
 
     // A real native increase succeeds before its source acknowledgement. A newer
     // owner decision must recover that exact pending command, then only its delta.
-    expect(await update(2, '24000', 'intermediate')).toMatchObject({ kind: 'completed', generation: 3 })
+    expect(await update(2, '24000', 'intermediate', true)).toMatchObject({ kind: 'completed', generation: 3 })
     const pending = await backend.mutation(internal.capabilityQuotes.prepareSpendingPeriods, {
       principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, toolRef: published.toolRef,
     })
     if (pending.kind !== 'prepared' || pending.commands.length !== 2) throw new Error('policy_pending_delta_missing')
     const submitted = await backend.action(internal.moneyFormance.adjustSpendingPeriod, pending.commands[0]!)
     expect(submitted).toMatchObject({ kind: 'completed', replayed: false })
-    expect(await update(3, '36000', 'latest')).toMatchObject({ kind: 'completed', generation: 4 })
+    expect(await update(3, '36000', 'latest', true)).toMatchObject({ kind: 'completed', generation: 4 })
     const latest = await quote('latest-after-lost-ack')
     expect(latest).toMatchObject({ kind: 'committed' })
     await expectAgentPeriodBalances(formance, original.booking, '24000')
@@ -1469,13 +1471,15 @@ describe('capability Call Workpool lifecycle', () => {
     let revocationGrantRef = buyer.grantRef
     const updatePolicyForAcceptedCall = async () => {
       if (registered === undefined) throw new Error('policy_worker_owner_missing')
-      const updated = await registered.owner.mutation(api.agentSpendingPolicy.updateForServer, {
+      const updated = await registered.owner.mutation(api.agentSpendingPolicy.updateForServer, await withSourceWrite('protected_action', {
         principalRef: buyer.principal.principalId, expectedGeneration: 1,
         idempotencyKey: 'policy-before-worker', correlationRef: 'policy-before-worker',
+        operationKey: 'agent-spending-limits:policy-before-worker', correlationId: 'policy-before-worker',
+        proof: testMfaConsequenceProof({ subject: registered.subject }, 'policy-before-worker'),
         maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '1200000' },
         maximumDailySpend: { currency: 'AUD', exponent: 6, units: '3600000' },
         maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '3600000' },
-      })
+      }))
       if (updated.kind !== 'completed') throw new Error('policy_worker_update_failed')
       revocationGrantRef = updated.grantRef
     }

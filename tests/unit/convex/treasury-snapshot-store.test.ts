@@ -83,12 +83,14 @@ async function seedObservation(backend: ConvexFixtureBackend, at = clock) {
 async function command(admin: ConvexFixtureAdmin, key: string, paused: boolean) {
   const view = await admin.query(api.adminConsoleTreasury.read, {})
   if (view.kind !== 'ready') throw new Error('fixture_admin_read_denied')
+  const identity = await admin.run(ctx => ctx.auth.getUserIdentity())
+  if (identity === null) throw new Error('fixture_admin_identity_missing')
   return await withSourceWrite('admin_operator', {
     action: 'set_payments_paused' as const, input: { environment: 'sandbox' as const, paused },
     reasonCode: paused ? 'operational_pause' as const : 'operational_resume' as const,
     operationKey: key, correlationId: key, evidenceRefs: ['evidence:snapshot-store-control'],
     expectedStateDigest: view.controls.launchStateDigest, approval: { kind: 'execute' as const },
-    proof: { reverificationId: `reverification:${key}`, firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0 },
+    proof: { reverificationId: `reverification:${key}`, firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0, subject: identity.subject, evidenceObservedAt: Date.now() },
   })
 }
 

@@ -37,7 +37,7 @@ async function signed(subject: string, args: SuppressionCommand, nonce: string) 
     ...args,
     proof: {
       reverificationId: `test:${canonicalDigest({ subject, digest })}`,
-      firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1,
+      firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0, subject, evidenceObservedAt: Date.now(),
     },
   }, { nonce })
 }

@@ -26,6 +26,7 @@ export type WorkspaceDecommissionEligibilityView = Readonly<{
 }>
 
 export type WorkspaceCloseCommand = Readonly<{
+  expectedAccountRef: string
   confirmationName: string
   expectedAccountRevision: number
   expectedOwnershipRevision: number
@@ -34,6 +35,7 @@ export type WorkspaceCloseCommand = Readonly<{
 }>
 
 export type WorkspaceTransferCommand = Readonly<{
+  expectedAccountRef: string
   successorPrincipalRef: string
   expectedAccountRevision: number
   expectedOwnershipRevision: number

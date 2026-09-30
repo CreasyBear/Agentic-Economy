@@ -6,7 +6,7 @@ import {
 } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
-import type { ClerkFactorEvidence } from '../../../convex/lib/authority/consequence/proof'
+import type { ClerkMfaConsequenceProofInput, ClerkFactorEvidence } from '../../../convex/lib/authority/consequence/proof'
 import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
 import { assertStepUpForSensitiveAction } from '../../../convex/lib/principalAccount/workspaceSecurity/stepUp'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
@@ -117,10 +117,11 @@ async function runAssertStepUp(
   backend: InteractiveAuthorityBackend,
   presentedIdentity: UserIdentity,
   account = ACCOUNT_REF,
+  proof?: ClerkMfaConsequenceProofInput,
 ): Promise<StepUpAdmission> {
   return await backend.run(async (ctx) =>
     assertStepUpForSensitiveAction(ctx.db, presentedIdentity, {
-      accountRef: account,
+      accountRef: account, ...(proof === undefined ? {} : { proof }),
     }))
 }
 
@@ -381,11 +382,12 @@ describe('workspaceSecurity policy', () => {
     )
   })
 
-  it('S16: assertStepUp admits fresh signed Clerk fva when workspace MFA policy is off', async () => {
+  it('S16: server MFA proof admits without Convex fva when workspace policy is off', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
 
-    await expect(runAssertStepUp(backend, identity({ fva: [1, 1] }))).resolves.toEqual({
+    await expect(runAssertStepUp(backend, identity(), ACCOUNT_REF, { reverificationId: 'proof:workspace-security',
+      firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1, subject: identity().subject, evidenceObservedAt: Date.now() })).resolves.toEqual({
       kind: 'allowed',
       requireMfaForMembers: false,
     })

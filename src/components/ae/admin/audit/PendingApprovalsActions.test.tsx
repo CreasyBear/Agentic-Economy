@@ -25,7 +25,6 @@ beforeEach(() => {
     const name = getFunctionName(reference)
     if (name === 'adminConsoleTreasury:read') return treasury
     if (name === 'adminConsoleAudit:readAdminAuditAccess') return { kind: 'allowed', role: 'owner_admin', actorRef: 'owner:two' }
-    if (name === 'adminConsoleOverview:readAdminOverview') return { clerkFva: 'present' }
     throw new Error(`unexpected_query:${name}`)
   })
   external.execute.mockResolvedValue({ kind: 'refused', action: 'set_payments_paused', code: 'target_changed', correlationId: 'review:resume' })

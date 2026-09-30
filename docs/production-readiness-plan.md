@@ -390,3 +390,67 @@ Then: the trust centre and credits terms page, and alpha invites (20 users, A$10
   - Production config is absent.
   - One operator with no runbooks.
   - The first alpha user must not arrive before the Join 2 exit.
+
+## Step-up authentication implementation contract — 2026-10-01 (#289)
+
+Sluice: deep, bounded to the server→Convex sensitive-action boundary. Root owns
+the shared proof contract, operator integration and acceptance; discrete workers
+own Agent spending updates and workspace/owner-Call actions respectively.
+
+- Requires: a current authenticated owner/operator, exact validated command,
+  current target revision, and server-verified Clerk MFA for authority increases,
+  workspace closure/ownership transfer and owner-chat Call approval. MFA requires
+  both factors within ten minutes; Clerk's first-factor fallback is insufficient.
+- Ensures: the server signs the command plus Clerk subject, genuine
+  `reverification_id`, factor ages and the session token's `iat`. Convex verifies
+  the existing source-write envelope, matches the authenticated subject, checks
+  elapsed time from that signed token timestamp and consumes the existing proof
+  record atomically with the consequence. No Convex `identity.fva` dependency.
+- Invariant: current ownership, revisions, commercial limits, accepted Calls and
+  recovery remain authoritative. Exact completed retries return the original
+  result; changed commands or competing revisions cannot reuse proof or create
+  duplicate grants/effects. Spending reductions and denials need no MFA prompt.
+- On violation: missing, stale, forged, wrong-user or reused evidence refuses
+  before authority changes; the existing Clerk reverification UI retries the
+  same command once. Storage failures roll back the complete mutation.
+
+Complexity: add one stronger proof shape and MFA derivation in the existing
+server/backend proof modules, reused by the three real caller groups. This buys
+one definition of subject/freshness semantics and removes ineffective JWT-refresh
+workarounds and misleading operator guidance. Reuse source-write HMAC, consequence
+proof-use storage, current transaction/revision checks and Clerk's maintained UI;
+no new table, dependency, authentication service or general framework. Keep this
+bounded extension; reject per-feature proof engines and client-authoritative MFA.
+
+Verification must demonstrate fresh-MFA acceptance without Convex `fva`, refusal
+of first-factor-only/stale/wrong-user/modified proofs, same-command retry, competing
+commands, lower-limit/no-MFA behavior and rollback/no extra authority. Root runs
+the affected tests and `npm run check`, then the release gate before acceptance.
+Live Clerk configuration and an interactive development session remain runtime
+evidence requirements; configure the documented session claim
+`{"reverification_id":"{{session.reverification_id}}"}` before claiming them.
+Sources: [Convex claims](https://docs.convex.dev/auth/functions-auth),
+[Clerk reverification](https://clerk.com/docs/guides/secure/reverification),
+[Clerk token claims](https://clerk.com/docs/guides/sessions/session-tokens).
+
+Source acceptance — 2026-10-01: the server-derived, signed MFA proof now covers
+operator actions, workspace closure/transfer, owner Call approval and spending
+increases. Tests establish acceptance without Convex `fva`, subject and exact
+command binding, token-anchored expiry, first-factor-only refusal, transactional
+proof consumption, concurrent-command exclusion and proof-free completed replay.
+Limit reductions retain their existing flow. Clerk cancellation preserves the
+reviewed command; approval replay remains valid after the Call later completes,
+refuses or is cancelled.
+
+`npm run check` and the full `npm run gate` passed: 7,068 unit tests, 2,446
+integration tests, 4 type tests, 74 import checks, the TypeScript standards check,
+31 SEO tests, 16 browser journeys, 18 accessibility tests and reproducible CLI
+packaging. The separate `AE_FORMANCE_INTEGRATION=true` Workpool run passed all 25
+tests against pinned native Ledger v2.4.14, including accepted-Call recovery after
+spending-policy changes. The ordinary gate still has 44 optional integration
+skips and 3 todos; mandatory native-money CI is the next #277 packet. React Doctor
+reported zero errors and one existing action-sheet complexity advisory.
+
+This completes #289's source requirement. Genuine session-claim rotation,
+interactive MFA and the deployed Clerk configuration remain unverified under
+#281. No production deployment, live payment or public launch was performed.

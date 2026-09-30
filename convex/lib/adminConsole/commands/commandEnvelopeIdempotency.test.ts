@@ -13,7 +13,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   convexModules,
   ownerAdmin,
-  testConsequenceProof,
+  testMfaConsequenceProof,
   type ConvexFixtureBackend,
 } from '../../../../tests/helpers/convex-fixtures'
 import { withSourceWrite } from '../../../../tests/helpers/source-write-admission'
@@ -102,7 +102,7 @@ async function signedCommand(
   const base = baseCommand(subject, operationKey, reasonCode)
   return await withSourceWrite('admin_operator', {
     ...base,
-    proof: testConsequenceProof(identity(subject), effectDigest(base)),
+    proof: testMfaConsequenceProof(identity(subject), effectDigest(base)),
   }, { nonce })
 }
 
@@ -159,5 +159,32 @@ describe('admin command idempotency', () => {
     const rows = await adminRows(backend)
     expect(rows.applyAudits).toHaveLength(1)
     expect(rows.operationKeys).toHaveLength(1)
+  })
+
+  it('replays an accepted operation after proof expiry but refuses its proof under a new operation key', async () => {
+    const backend = convexTest(schema, convexModules)
+    const subject = 'user_admin-command-proof-operation'
+    const admin = await ownerAdmin(backend, subject)
+    const first = await signedCommand(subject, 'admin:test:proof-operation', 'nonce:admin:proof-operation:1')
+    const receipt = await admin.run(ctx => runAdminCommand(ctx, first, spec(ctx, 'proof-operation')))
+    expect(receipt).toMatchObject({ kind: 'completed' })
+    const proof = first.proof
+    if (proof === undefined) throw new Error('fixture_proof_missing')
+    const staleReplay = await withSourceWrite('admin_operator', {
+      ...first, proof: { ...proof, evidenceObservedAt: Date.now() - 600_000 },
+    }, { nonce: 'nonce:admin:proof-operation:2' })
+    expect(await admin.run(ctx => runAdminCommand(ctx, staleReplay, spec(ctx, 'proof-operation')))).toEqual(receipt)
+    const proofFreeReplay = await withSourceWrite('admin_operator',
+      baseCommand(subject, first.operationKey), { nonce: 'nonce:admin:proof-operation:without-proof' })
+    expect(await admin.run(ctx => runAdminCommand(ctx, proofFreeReplay, spec(ctx, 'proof-operation')))).toEqual(receipt)
+    const reused = await withSourceWrite('admin_operator', {
+      ...first, operationKey: 'admin:test:proof-operation:new', correlationId: 'admin:test:proof-operation:new',
+    }, { nonce: 'nonce:admin:proof-operation:3' })
+    expect(await admin.run(ctx => runAdminCommand(ctx, reused, spec(ctx, 'proof-operation'))))
+      .toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
+    const rows = await adminRows(backend)
+    expect(rows.applyAudits).toHaveLength(1)
+    expect(rows.operationKeys).toHaveLength(1)
+    expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(1)
   })
 })

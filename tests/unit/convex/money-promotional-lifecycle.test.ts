@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { promotionalCreditReference } from '@/modules/money/public'
 import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
-import { convexTestWithMarketComponents, ownerAdmin, supportAdmin, testConsequenceProof } from '../../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, ownerAdmin, supportAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 import { claimPromotionalCredit, restorePromotionalCredit } from '../../../convex/lib/money/promotionalCredit/allocation'
 
@@ -20,14 +20,14 @@ function command(actor: string, accountRef: string, key: string, changes: Partia
   const base: AdminCommandArgs<'grant_promotional_credit'> = {
     action: 'grant_promotional_credit', input: { accountRef, environment: 'sandbox', amountUnits: '1000000', expiresAt: expiresAt() },
     reasonCode: 'onboarding', evidenceRefs: ['evidence:promotional-grant'], operationKey: key, correlationId: key,
-    approval: { kind: 'execute' }, proof: { reverificationId: 'placeholder', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1 },
+    approval: { kind: 'execute' },
     ...changes,
   }
   const digest = canonicalDigest({ scope: 'admin_operator', action: base.action, input: base.input,
     reasonCode: base.reasonCode, evidenceRefs: base.evidenceRefs,
     ...(base.expectedStateDigest === undefined ? {} : { expectedStateDigest: base.expectedStateDigest }),
   })
-  return { ...base, proof: testConsequenceProof({ subject: actor }, digest) }
+  return { ...base, proof: testMfaConsequenceProof({ subject: actor }, digest) }
 }
 
 async function setup(subject = 'user_promo_owner') {

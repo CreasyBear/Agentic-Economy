@@ -46,7 +46,7 @@ export const agentSpendingLimitsResultValue = v.union(
     v.literal('revision_conflict'), v.literal('idempotency_conflict'),
     v.literal('credential_replacement_pending'), v.literal('authority_unavailable'),
   ), correlationRef: v.string() }),
-  v.object({ kind: v.literal('refused'), code: v.union(v.literal('authentication_required'), v.literal('source_unavailable')),
+  v.object({ kind: v.literal('refused'), code: v.union(v.literal('authentication_required'), v.literal('source_unavailable'), v.literal('mfa_reverification_required')),
     correlationRef: v.string() }),
 )
 export type AgentSpendingLimitsResult = Infer<typeof agentSpendingLimitsResultValue>

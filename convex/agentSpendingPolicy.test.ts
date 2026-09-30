@@ -21,18 +21,22 @@ import {
 import type { AgentOwnerPolicyReadback } from '../src/modules/agent-access/agent-operator-view-model'
 import { issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
+import { withSourceWrite } from '../tests/helpers/source-write-admission'
+import type { ClerkMfaConsequenceProofInput } from './lib/authority/consequence/proof'
+import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import schema from './schema'
 import { api } from './_generated/api'
 
 const modules = import.meta.glob('./**/*.ts')
-const NOW = 10_000
+const NOW = 1_000_000
 const SERVICE_KEY = 'agent-spending-policy-server-key-at-least-32-bytes'
 const REGISTER_OPERATION = 'agentAccessPrincipals.registerIssuedAgentBindingForServer'
 const PREPARE_REPLACEMENT_OPERATION = 'agentAccessPrincipals.prepareCredentialReplacementForServer'
 
 const updatePolicy = makeFunctionReference<
   'mutation',
-  AgentSpendingLimitsUpdate & Readonly<{ correlationRef: string }>,
+  AgentSpendingLimitsUpdate & Readonly<{ correlationRef: string; operationKey?: string; correlationId?: string;
+    proof?: ClerkMfaConsequenceProofInput; sourceWrite?: SourceWriteAdmission; sourceWriteRequest?: SourceWriteAdmissionRequest }>,
   AgentSpendingLimitsResult
 >('agentSpendingPolicy:updateForServer')
 const readPolicy = makeFunctionReference<
@@ -60,7 +64,7 @@ const identity = (subject: string): UserIdentity => ({
   subject,
   issuer: 'https://clerk.example.test',
   tokenIdentifier: `https://clerk.example.test|${subject}`,
-  exp: 1_000,
+  exp: (NOW + 3_600_000) / 1_000,
 })
 
 const amount = (units: string): AgentSpendingLimitsUpdate['maximumSpendPerCall'] => ({
@@ -145,6 +149,24 @@ function command(principalRef: string, overrides: Partial<AgentSpendingLimitsUpd
   }
 }
 
+function mfaProof(key: string): ClerkMfaConsequenceProofInput {
+  return { reverificationId: `rev:${key}`, firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0,
+    subject: 'user_owner', evidenceObservedAt: NOW }
+}
+
+async function signedPolicy(
+  input: ReturnType<typeof command>,
+  proof: ClerkMfaConsequenceProofInput | null = mfaProof(input.idempotencyKey),
+) {
+  return await withSourceWrite('protected_action', { ...input,
+    operationKey: `agent-spending-limits:${input.idempotencyKey}`, correlationId: input.correlationRef,
+    ...(proof === null ? {} : { proof }) })
+}
+
+async function submitPolicy(owner: Owner | Backend, input: ReturnType<typeof command>) {
+  return await owner.mutation(updatePolicy, await signedPolicy(input))
+}
+
 describe('owner Agent spending policy mutation', () => {
   const previousKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
 
@@ -158,6 +180,100 @@ describe('owner Agent spending policy mutation', () => {
     vi.useRealTimers()
     if (previousKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousKey
+  })
+
+  it.each(['maximumSpendPerCall', 'maximumDailySpend', 'maximumMonthlySpend'] as const)(
+    'requires MFA when only %s increases, with no Convex fva claim', async bound => {
+      const backend = convexTest(schema, modules)
+      const { owner, principalRef } = await provisionAgent(backend)
+      const values = { maximumSpendPerCall: amount('1000000'), maximumDailySpend: amount('5000000'),
+        maximumMonthlySpend: amount('20000000') }
+      const next = command(principalRef, { ...values, [bound]: amount(bound === 'maximumSpendPerCall'
+        ? '1100000' : bound === 'maximumDailySpend' ? '6000000' : '21000000') })
+      await expect(owner.mutation(updatePolicy, await signedPolicy(next, null)))
+        .resolves.toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
+      expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(0)
+      await expect(submitPolicy(owner, next)).resolves.toMatchObject({ kind: 'completed', generation: 2 })
+      expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(1)
+      // Changed correlation and absent MFA do not mint another grant on replay.
+      await expect(owner.mutation(updatePolicy, await signedPolicy({ ...next, correlationRef: 'corr-replay-new' }, null)))
+        .resolves.toMatchObject({ kind: 'replayed', generation: 2 })
+      expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(1)
+    },
+  )
+
+  it.each([
+    { label: 'first factor only', patch: { secondFactorAgeMinutes: -1 } },
+    { label: 'stale second factor', patch: { secondFactorAgeMinutes: 10 } },
+    { label: 'stale first factor', patch: { firstFactorAgeMinutes: 10 } },
+    { label: 'different subject', patch: { subject: 'user_someone_else' } },
+    { label: 'expired token evidence', patch: { evidenceObservedAt: NOW - 600_001 } },
+  ])('refuses $label without consuming proof or changing grants', async ({ patch }) => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef } = await provisionAgent(backend)
+    const next = command(principalRef, { maximumMonthlySpend: amount('21000000') })
+    const grants = await backend.run(ctx => ctx.db.query('agentAccessGrants').collect())
+    await expect(owner.mutation(updatePolicy, await signedPolicy(next, { ...mfaProof(next.idempotencyKey), ...patch })))
+      .resolves.toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
+    expect(await backend.run(ctx => ctx.db.query('agentAccessGrants').collect())).toEqual(grants)
+    expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(0)
+  })
+
+  it('rejects unsigned and modified proof before changing authority', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef } = await provisionAgent(backend)
+    const next = command(principalRef, { maximumMonthlySpend: amount('21000000') })
+    await expect(owner.mutation(updatePolicy, next)).resolves.toMatchObject({ kind: 'refused', code: 'authentication_required' })
+    const signed = await signedPolicy(next)
+    await expect(owner.mutation(updatePolicy, { ...signed, proof: { ...mfaProof(next.idempotencyKey), secondFactorAgeMinutes: 1 } }))
+      .resolves.toMatchObject({ kind: 'refused', code: 'authentication_required' })
+    expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(0)
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toMatchObject({ generation: 1 })
+  })
+
+  it('allows lower and unchanged limits without MFA or proof consumption', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef } = await provisionAgent(backend)
+    const lower = command(principalRef)
+    await expect(owner.mutation(updatePolicy, await signedPolicy(lower, null)))
+      .resolves.toMatchObject({ kind: 'completed', generation: 2 })
+    const unchanged = { ...lower, expectedGeneration: 2, idempotencyKey: 'unchanged-limits', correlationRef: 'corr-unchanged' }
+    await expect(owner.mutation(updatePolicy, await signedPolicy(unchanged, null)))
+      .resolves.toMatchObject({ kind: 'completed', generation: 3 })
+    expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(0)
+  })
+
+  it('consumes exactly one proof for competing increases and none on stale validation', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef } = await provisionAgent(backend)
+    const left = command(principalRef, { maximumMonthlySpend: amount('21000000') })
+    const right = command(principalRef, { idempotencyKey: 'increase-right', correlationRef: 'corr-right',
+      maximumMonthlySpend: amount('22000000') })
+    const results = await Promise.all([submitPolicy(owner, left), submitPolicy(owner, right)])
+    expect(results.map(result => result.kind).sort()).toEqual(['completed', 'conflict'])
+    expect(results.find(result => result.kind === 'conflict')).toMatchObject({ code: 'revision_conflict' })
+    expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(1)
+    const winner = results[0]?.kind === 'completed' ? left : right
+    await expect(submitPolicy(owner, winner)).resolves.toMatchObject({ kind: 'replayed', generation: 2 })
+    expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(1)
+    const reused = command(principalRef, { expectedGeneration: 2, idempotencyKey: 'reused-proof',
+      maximumMonthlySpend: amount('23000000') })
+    await expect(owner.mutation(updatePolicy, await signedPolicy(reused, mfaProof(winner.idempotencyKey))))
+      .resolves.toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toMatchObject({ generation: 2 })
+  })
+
+  it('converges concurrent identical increased commands to one grant and one proof use', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef } = await provisionAgent(backend)
+    const next = command(principalRef, { maximumMonthlySpend: amount('21000000') })
+    const results = await Promise.all([submitPolicy(owner, next), submitPolicy(owner, next)])
+    expect(results.map(result => result.kind).sort()).toEqual(['completed', 'replayed'])
+    const refs = results.flatMap(result => result.kind === 'completed' || result.kind === 'replayed' ? [result.grantRef] : [])
+    expect(new Set(refs).size).toBe(1)
+    expect(await backend.run(ctx => ctx.db.query('consequenceProofUses').collect())).toHaveLength(1)
+    const events = await backend.run(ctx => ctx.db.query('auditEvents').collect())
+    expect(events.filter(event => event.eventType === 'agent.policy_updated')).toHaveLength(1)
   })
 
   it('reads the current owner policy, updates limits once, and replays the original revision', async () => {
@@ -190,12 +306,12 @@ describe('owner Agent spending policy mutation', () => {
     })
 
     const first = command(principalRef)
-    await expect(owner.mutation(updatePolicy, first)).resolves.toMatchObject({
+    await expect(submitPolicy(owner, first)).resolves.toMatchObject({
       kind: 'completed',
       principalRef,
       generation: 2,
     })
-    const completed = await owner.mutation(updatePolicy, first)
+    const completed = await submitPolicy(owner, first)
     expect(completed).toMatchObject({ kind: 'replayed', principalRef, generation: 2 })
 
     const afterFirst = await backend.run(async (ctx) => {
@@ -278,7 +394,7 @@ describe('owner Agent spending policy mutation', () => {
       maximumMonthlySpend: amount('9000000'),
     })
 
-    await expect(owner.mutation(updatePolicy, {
+    await expect(submitPolicy(owner, {
       ...first,
       maximumMonthlySpend: amount('10000000'),
       correlationRef: 'corr-spending-policy-conflict',
@@ -287,7 +403,7 @@ describe('owner Agent spending policy mutation', () => {
       code: 'idempotency_conflict',
       correlationRef: 'corr-spending-policy-conflict',
     })
-    await expect(owner.mutation(updatePolicy, {
+    await expect(submitPolicy(owner, {
       ...first,
       idempotencyKey: 'spending-policy-update-stale',
       correlationRef: 'corr-spending-policy-stale',
@@ -305,10 +421,10 @@ describe('owner Agent spending policy mutation', () => {
       maximumMonthlySpend: amount('10000000'),
       correlationRef: 'corr-spending-policy-2',
     })
-    await expect(owner.mutation(updatePolicy, second)).resolves.toMatchObject({
+    await expect(submitPolicy(owner, second)).resolves.toMatchObject({
       kind: 'completed', generation: 3,
     })
-    await expect(owner.mutation(updatePolicy, first)).resolves.toMatchObject({
+    await expect(submitPolicy(owner, first)).resolves.toMatchObject({
       kind: 'replayed', generation: 2, grantRef: afterFirst.activeGrants[0]?.grantRef,
     })
     const finalEvents = await backend.run(async (ctx) => await ctx.db.query('auditEvents')
@@ -339,7 +455,7 @@ describe('owner Agent spending policy mutation', () => {
       principalRef, spendingPolicy: { kind: 'unavailable' },
     }])
     await expect(sibling.query(listOwnerPolicies, { principalRefs: [principalRef] })).resolves.toEqual([])
-    await expect(owner.mutation(updatePolicy, command(principalRef))).resolves.toMatchObject({
+    await expect(submitPolicy(owner, command(principalRef))).resolves.toMatchObject({
       kind: 'conflict', code: 'authority_unavailable',
     })
   })
@@ -378,7 +494,7 @@ describe('owner Agent spending policy mutation', () => {
     await expect(owner.query(readPolicy, { principalRef })).resolves.toEqual({
       kind: 'expired', expiresAt: NOW,
     })
-    await expect(owner.mutation(updatePolicy, command(principalRef))).resolves.toMatchObject({
+    await expect(submitPolicy(owner, command(principalRef))).resolves.toMatchObject({
       kind: 'conflict', code: 'authority_unavailable',
     })
   })
@@ -386,7 +502,7 @@ describe('owner Agent spending policy mutation', () => {
   it('keeps an explicitly zero policy known and paused rather than unset', async () => {
     const backend = convexTest(schema, modules)
     const { owner, principalRef } = await provisionAgent(backend)
-    await expect(owner.mutation(updatePolicy, command(principalRef, {
+    await expect(submitPolicy(owner, command(principalRef, {
       maximumSpendPerCall: amount('0'),
       maximumDailySpend: amount('0'),
       maximumMonthlySpend: amount('0'),
@@ -437,7 +553,7 @@ describe('owner Agent spending policy mutation', () => {
       await ctx.db.delete(grant._id)
     })
     await expect(owner.query(readPolicy, { principalRef })).resolves.toEqual({ kind: 'unavailable' })
-    await expect(owner.mutation(updatePolicy, command(principalRef))).resolves.toMatchObject({
+    await expect(submitPolicy(owner, command(principalRef))).resolves.toMatchObject({
       kind: 'conflict', code: 'authority_unavailable',
     })
   })
@@ -456,30 +572,30 @@ describe('owner Agent spending policy mutation', () => {
 
     const sibling = backend.withIdentity(identity('user_sibling'))
     await sibling.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
-    await expect(sibling.mutation(updatePolicy, first)).resolves.toEqual({
+    await expect(submitPolicy(sibling, first)).resolves.toEqual({
       kind: 'conflict', code: 'agent_not_found', correlationRef: first.correlationRef,
     })
-    await expect(backend.mutation(updatePolicy, first)).resolves.toEqual({
+    await expect(submitPolicy(backend, first)).resolves.toEqual({
       kind: 'refused', code: 'authentication_required', correlationRef: first.correlationRef,
     })
 
-    await expect(owner.mutation(updatePolicy, {
+    await expect(submitPolicy(owner, {
       ...first,
       idempotencyKey: 'spending-policy-invalid-units',
       maximumSpendPerCall: { currency: 'AUD', units: 'oops', exponent: 6 },
     })).resolves.toEqual({ kind: 'conflict', code: 'policy_invalid', correlationRef: first.correlationRef })
-    await expect(owner.mutation(updatePolicy, {
+    await expect(submitPolicy(owner, {
       ...first,
       idempotencyKey: 'spending-policy-invalid-order',
       maximumSpendPerCall: amount('4000000'),
       maximumDailySpend: amount('3000000'),
     })).resolves.toEqual({ kind: 'conflict', code: 'policy_invalid', correlationRef: first.correlationRef })
-    await expect(owner.mutation(updatePolicy, {
+    await expect(submitPolicy(owner, {
       ...first,
       idempotencyKey: 'spending-policy-invalid-range',
       maximumMonthlySpend: amount('90000000000000000'),
     })).resolves.toEqual({ kind: 'conflict', code: 'policy_invalid', correlationRef: first.correlationRef })
-    await expect(owner.mutation(updatePolicy, {
+    await expect(submitPolicy(owner, {
       ...first,
       idempotencyKey: 'spending-policy-invalid-correlation',
       correlationRef: 'sk_live_should_not_be_accepted',
@@ -539,7 +655,7 @@ describe('owner Agent spending policy mutation', () => {
         toolRefs: [...replacement.toolRefs],
       }),
     })).resolves.toMatchObject({ kind: 'recorded' })
-    await expect(owner.mutation(updatePolicy, command(principalRef))).resolves.toEqual({
+    await expect(submitPolicy(owner, command(principalRef))).resolves.toEqual({
       kind: 'conflict',
       code: 'credential_replacement_pending',
       correlationRef: 'corr-spending-policy-1',
@@ -562,8 +678,8 @@ describe('owner Agent spending policy mutation', () => {
       correlationRef: 'corr-spending-policy-right',
     })
     const [leftResult, rightResult] = await Promise.all([
-      concurrent.owner.mutation(updatePolicy, left),
-      concurrent.owner.mutation(updatePolicy, right),
+      submitPolicy(concurrent.owner, left),
+      submitPolicy(concurrent.owner, right),
     ])
     expect([leftResult.kind, rightResult.kind].sort()).toEqual(['completed', 'conflict'])
     expect([leftResult, rightResult].find((result) => result.kind === 'conflict')).toMatchObject({

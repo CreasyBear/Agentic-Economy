@@ -1,14 +1,21 @@
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import { hasFreshMfaFactorVerification } from '../../principalAccount/workspaceSecurity/factorVerification'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { clerkMfaConsequenceProofValue, consumeConsequenceProof, deriveMfaConsequenceProof } from '../../authority/consequence/proof'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { decideCallApprovalHandler, listPendingCallApprovalsHandler } from './admissionApprovals'
 import { cancelOwnerCallHandler, readOwnerCallStatusHandler, reconcileOwnerCallHandler } from './callRecoveryActions'
 import { agentRecoveryNotFound, agentStatusNotFound } from './agentCallExecution'
 import { approvalDecision, pendingApprovalView } from './admissionApproval'
 
 export const listPendingCallApprovalsArgs = {}
-export const decideCallApprovalArgs = { callRef: v.string(), decision: approvalDecision }
+const decideCallApprovalCommandValue = v.object({
+  callRef: v.string(), decision: approvalDecision, operationKey: v.string(), correlationId: v.string(),
+  proof: v.optional(clerkMfaConsequenceProofValue), ...sourceWriteArgs,
+})
+export const decideCallApprovalArgs = decideCallApprovalCommandValue.fields
 export const listPendingCallApprovalsResult = v.array(pendingApprovalView)
 
 type CanonicalOwner = Extract<Awaited<ReturnType<typeof resolveBusinessActor>>, { kind: 'authenticated_owner' }>
@@ -52,22 +59,46 @@ export async function canonicalOwnerApprovalListHandler(ctx: QueryCtx) {
 
 export async function canonicalOwnerApprovalDecisionHandler(
   ctx: MutationCtx,
-  args: Parameters<typeof decideCallApprovalHandler>[1],
+  args: Infer<typeof decideCallApprovalCommandValue>,
 ) {
+  const commandRef = `call-approval:${args.callRef}:${args.decision}`
+  if (args.operationKey !== commandRef || args.correlationId !== commandRef
+    || (await requireSourceRead(args, 'protected_action')).kind === 'rejected') {
+    return { kind: 'refused' as const, code: 'invocation_invalid' as const }
+  }
   const canonical = await canonicalOwnerActor(ctx)
   if (canonical === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
-  if (args.decision === 'approve') {
-    const row = await canonical.ctx.db.query('capabilityCalls')
-      .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
-    if (row?.ownerId === canonical.actor.canonicalAccountRef
-      && row.applicationRef === 'ae-owner-chat') {
-      const identity = await ctx.auth.getUserIdentity()
-      if (!hasFreshMfaFactorVerification(identity?.fva)) {
-        return { kind: 'refused' as const, code: 'mfa_reverification_required' as const }
-      }
+  const identity = await ctx.auth.getUserIdentity()
+  return await decideCallApprovalHandler(canonical.ctx, args, async (row, now) => {
+    if (args.decision === 'deny' || row.applicationRef !== 'ae-owner-chat') {
+      return (await requireSourceWrite(ctx, args, 'protected_action')).kind === 'rejected'
+        ? { kind: 'refused', code: 'invocation_invalid' } : null
     }
-  }
-  return await decideCallApprovalHandler(canonical.ctx, args)
+    if (identity === null || args.proof === undefined) return { kind: 'refused', code: 'mfa_reverification_required' }
+    const derived = deriveMfaConsequenceProof({ proof: args.proof, subject: identity.subject, now })
+    if (derived.kind === 'refused') return { kind: 'refused', code: 'mfa_reverification_required' }
+    const commandDigest = canonicalDigest({ action: 'owner-chat:approve-call', idempotencyRef: commandRef,
+        callRef: row.callRef, quoteRef: row.quoteRef ?? null, toolRef: row.toolRef,
+        inputDigest: row.inputDigest, requestDigest: row.requestDigest, grantRef: row.grantRef,
+        grantGeneration: row.grantGeneration, policyDigest: row.policyDigest,
+        actorPrincipalRef: canonical.actor.canonicalPrincipalRef, accountRef: canonical.actor.canonicalAccountRef })
+    const existing = await ctx.db.query('consequenceProofUses').withIndex('by_reverificationId', q =>
+      q.eq('reverificationId', args.proof!.reverificationId)).unique()
+    if (existing !== null && (existing.actorPrincipalRef !== canonical.actor.canonicalPrincipalRef
+      || existing.activeAccountRef !== canonical.actor.canonicalAccountRef || existing.commandDigest !== commandDigest
+      || existing.idempotencyRef !== commandRef)) return { kind: 'refused', code: 'mfa_reverification_required' }
+    if ((await requireSourceWrite(ctx, args, 'protected_action')).kind === 'rejected') {
+      return { kind: 'refused', code: 'invocation_invalid' }
+    }
+    const consumed = await consumeConsequenceProof(ctx, {
+      reverificationId: args.proof.reverificationId, actorPrincipalRef: canonical.actor.canonicalPrincipalRef,
+      activeAccountRef: canonical.actor.canonicalAccountRef, commandDigest,
+      proof: derived.proof, correlationRef: args.correlationId, idempotencyRef: args.operationKey,
+    })
+    // Throwing rolls back the nonce, proof consumption and effects on reuse.
+    if (consumed.kind === 'refused') throw new Error('call_approval_proof_replayed')
+    return null
+  })
 }
 
 export async function canonicalOwnerStatusHandler(
@@ -99,4 +130,3 @@ export async function canonicalOwnerReconcileHandler(
     ? agentRecoveryNotFound(args.callRef)
     : await reconcileOwnerCallHandler(canonical.ctx, args)
 }
-

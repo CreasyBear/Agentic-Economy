@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sourceWriteRequestFromRequest } from '@/lib/server/source-write-admission'
 
 const serverMocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -448,6 +449,16 @@ describe('owner agent-access issuance policy', () => {
 })
 
 describe('owner spending policy limits', () => {
+  const context = { sourceWriteRequest: sourceWriteRequestFromRequest({
+    request: new Request('https://ae.example.test/api/spending-test', { method: 'POST',
+      headers: { Origin: 'https://ae.example.test' } }), body: '{}',
+  }) }
+  // The framework mock exposes the server handler, whose context is supplied
+  // by middleware rather than by the browser-facing fetcher signature.
+  const updateHandler = updateAgentSpendingLimitsServer as unknown as (input: {
+    data: unknown; context: typeof context
+  }) => ReturnType<typeof updateAgentSpendingLimitsServer>
+  beforeEach(() => { vi.stubEnv('AE_SOURCE_WRITE_SECRET', 'test-spending-source-write-key-at-least-32') })
   const update = {
     principalRef: 'prn_agent_a',
     expectedGeneration: 3,
@@ -475,7 +486,7 @@ describe('owner spending policy limits', () => {
       }
     })
 
-    await expect(updateAgentSpendingLimitsServer({ data: update })).resolves.toMatchObject({
+    await expect(updateHandler({ data: update, context })).resolves.toMatchObject({
       kind: 'completed',
       principalRef: update.principalRef,
       grantRef: 'agt_grant_a',
@@ -494,7 +505,7 @@ describe('owner spending policy limits', () => {
       correlationRef: 'corr-owner-refused',
     })
 
-    await expect(updateAgentSpendingLimitsServer({ data: update })).resolves.toEqual({
+    await expect(updateHandler({ data: update, context })).resolves.toEqual({
       kind: 'refused',
       code: 'authentication_required',
       correlationRef: 'corr-owner-refused',
@@ -508,7 +519,7 @@ describe('owner spending policy limits', () => {
   it('degrades a source transport failure to one correlated unavailable refusal', async () => {
     serverMocks.callSourceMutation.mockRejectedValue(new Error('source_down'))
 
-    await expect(updateAgentSpendingLimitsServer({ data: update })).resolves.toEqual({
+    await expect(updateHandler({ data: update, context })).resolves.toEqual({
       kind: 'refused',
       code: 'source_unavailable',
       correlationRef: expect.any(String),
@@ -517,5 +528,33 @@ describe('owner spending policy limits', () => {
       { name: 'agentSpendingPolicy:updateForServer' },
       expect.objectContaining({ idempotencyKey: update.idempotencyKey, correlationRef: expect.any(String) }),
     )
+  })
+
+  it('sends only server-observed MFA evidence and signs the full immutable command', async () => {
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    serverMocks.auth.mockResolvedValue({ isAuthenticated: true, userId: 'user_123', has: serverMocks.has,
+      sessionClaims: { reverification_id: 'rev_spending_real_shape', iat: nowSeconds },
+      factorVerificationAge: [0, 0] })
+    serverMocks.callSourceMutation.mockImplementation(async (_ref, wire) => {
+      expect(wire).toMatchObject({ ...update, operationKey: `agent-spending-limits:${update.idempotencyKey}`,
+        proof: { subject: 'user_123', reverificationId: 'rev_spending_real_shape',
+          firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0, evidenceObservedAt: nowSeconds * 1000 },
+        sourceWrite: { scope: 'protected_action' } })
+      return { kind: 'refused', code: 'mfa_reverification_required', correlationRef: wire.correlationRef }
+    })
+    await expect(updateHandler({ data: update, context }))
+      .resolves.toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
+    expect(serverMocks.callSourceMutation).toHaveBeenCalledOnce()
+  })
+
+  it('does not prompt for missing MFA before the backend compares current monetary bounds', async () => {
+    serverMocks.auth.mockResolvedValue({ isAuthenticated: true, userId: 'user_123', has: serverMocks.has,
+      factorVerificationAge: [0, -1], sessionClaims: { reverification_id: 'rev_first_only', iat: Math.floor(Date.now() / 1000) } })
+    serverMocks.callSourceMutation.mockImplementation(async (_ref, wire) => {
+      expect(wire).not.toHaveProperty('proof')
+      return { kind: 'completed', principalRef: update.principalRef, grantRef: 'grt_lower', generation: 4,
+        spendingPolicyDigest: 'sha256:lower', correlationRef: wire.correlationRef }
+    })
+    await expect(updateHandler({ data: update, context })).resolves.toMatchObject({ kind: 'completed' })
   })
 })

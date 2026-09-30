@@ -9,7 +9,6 @@ import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessChecks, type Payment
 const mocks = vi.hoisted(() => ({
   overview: {
     paymentReadiness: null,
-    clerkFva: 'absent' as const,
   } as Record<string, unknown>,
   exceptions: [] as Array<{ kind: string; partition: string; observed: number; complete: boolean; unavailable: boolean }> | Error,
   metrics: {
@@ -53,7 +52,7 @@ function passingReadiness(expiresAt: number): PaymentReadinessView {
 }
 
 beforeEach(() => {
-  mocks.overview = { paymentReadiness: null, clerkFva: 'absent' }
+  mocks.overview = { paymentReadiness: null }
   mocks.exceptions = []
   mocks.metrics = {
     days: [], latestDay: null,
@@ -124,7 +123,7 @@ describe('admin overview route', () => {
     const failed = { kind: 'failed' as const, code: 'readiness_evidence_missing' }
     const checks: PaymentReadinessChecks = { web_configuration: failed, formance: failed, cdp_custody: failed,
       base_rpc: failed, reference_rate: failed, sanctions: failed, commercial_policy: failed, treasury: failed }
-    mocks.overview = { clerkFva: 'present', paymentReadiness: { kind: 'not_ready', environment: 'sandbox',
+    mocks.overview = { paymentReadiness: { kind: 'not_ready', environment: 'sandbox',
       checkedAt: null, expiresAt: null, code: 'readiness_evidence_missing', checks } }
     render(<AdminOverviewPage />)
     expect(screen.getByText('Environment: Sandbox · Base Sepolia')).toBeTruthy()
@@ -136,7 +135,7 @@ describe('admin overview route', () => {
   it('shows a failed screening reason alongside proven provider checks without exposing machine codes', () => {
     const readiness = passingReadiness(Date.now() + 60_000)
     readiness.checks.sanctions = { kind: 'failed', code: 'trm_tenant_contract_unavailable' }
-    mocks.overview = { clerkFva: 'present', paymentReadiness: { ...readiness, kind: 'not_ready', code: 'trm_tenant_contract_unavailable' } }
+    mocks.overview = { paymentReadiness: { ...readiness, kind: 'not_ready', code: 'trm_tenant_contract_unavailable' } }
     render(<AdminOverviewPage />)
     expect(screen.getAllByText('Passed')).toHaveLength(7)
     expect(screen.getAllByText('Failed')).toHaveLength(1)
@@ -151,7 +150,7 @@ describe('admin overview route', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-01T00:00:00Z'))
     const readiness = passingReadiness(Date.now() + 1_000)
-    mocks.overview = { clerkFva: 'present', paymentReadiness: readiness }
+    mocks.overview = { paymentReadiness: readiness }
     render(<AdminOverviewPage />)
     expect(screen.getByText('Ready')).toBeTruthy()
     expect(screen.getAllByText('Passed')).toHaveLength(PAYMENT_READINESS_CHECK_KEYS.length)
@@ -167,10 +166,10 @@ describe('admin overview route', () => {
   it('replaces an old expiry timer when fresh backend evidence arrives', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-01T00:00:00Z'))
-    mocks.overview = { clerkFva: 'present', paymentReadiness: passingReadiness(Date.now() + 1_000) }
+    mocks.overview = { paymentReadiness: passingReadiness(Date.now() + 1_000) }
     const view = render(<AdminOverviewPage />)
     act(() => vi.advanceTimersByTime(500))
-    mocks.overview = { clerkFva: 'present', paymentReadiness: passingReadiness(Date.now() + 2_000) }
+    mocks.overview = { paymentReadiness: passingReadiness(Date.now() + 2_000) }
     view.rerender(<AdminOverviewPage />)
     act(() => vi.advanceTimersByTime(500))
     expect(screen.getByText('Ready')).toBeTruthy()
@@ -181,7 +180,7 @@ describe('admin overview route', () => {
   it('rechecks expiry when a suspended tab regains focus', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-01T00:00:00Z'))
-    mocks.overview = { clerkFva: 'present', paymentReadiness: passingReadiness(Date.now() + 1_000) }
+    mocks.overview = { paymentReadiness: passingReadiness(Date.now() + 1_000) }
     render(<AdminOverviewPage />)
     vi.setSystemTime(new Date('2026-10-01T00:00:02Z'))
     act(() => window.dispatchEvent(new Event('focus')))

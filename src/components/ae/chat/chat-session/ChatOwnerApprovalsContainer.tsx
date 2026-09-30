@@ -1,5 +1,8 @@
+import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useQuery } from 'convex/react'
+import { useTypedReverification } from '@/lib/client/useTypedReverification'
+import { decideCallApprovalServer } from '@/modules/capability-execution/call-approval.functions'
 
 import { api } from '../../../../../convex/_generated/api'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -10,7 +13,10 @@ import { RecoveryNotice } from '../recovery/RecoveryNotice'
 
 export function ChatOwnerApprovalsContainer({ threadId, now, onFreshQuote }: ChatOwnerApprovalsContainerProps) {
   const serverCards = useQuery(api.chatCall.readOwnerChatCards, { threadId })
-  const decideApproval = useMutation(api.capabilityCalls.decideCallApproval)
+  const decideApproval = useTypedReverification(
+    (data: { callRef: string; decision: 'approve' | 'deny' }) => decideCallApprovalServer({ data }),
+    result => result.kind === 'refused' && result.code === 'mfa_reverification_required' ? 'strict_mfa' : null,
+  )
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState(false)
   const [problemCallRef, setProblemCallRef] = useState<string | null>(null)
@@ -33,6 +39,7 @@ export function ChatOwnerApprovalsContainer({ threadId, now, onFreshQuote }: Cha
       }
       if (decision === 'deny') document.getElementById('tool-chat-prompt')?.focus()
     } catch (cause) {
+      if (isReverificationCancelledError(cause)) return
       captureClientExceptionOnClient(cause)
       setProblem(true)
       setProblemCallRef(callRef)
