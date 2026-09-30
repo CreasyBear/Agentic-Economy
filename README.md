@@ -146,7 +146,11 @@ Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
 `npm run dev:local` starts the local Convex deployment, verifies its URL, and
-starts Vite with real Clerk identity. Once Vite is ready, it independently
+starts Vite with real Clerk identity. It explicitly sets
+`AE_DEPLOYMENT_ENVIRONMENT=development` in both runtimes. Hosted Vercel and
+Convex deployments must each declare the same `development` or `production`
+value; missing or mismatched declarations refuse new money operations.
+Once Vite is ready, it independently
 starts optional owner-authority seeding, directory scan kickoff (unless a
 complete catalogue generation exists), sandbox Tool publication, and FX refresh;
 failure of one optional stage does not stop the app. `ae doctor` reports

@@ -37,6 +37,7 @@ function anonymousEnvironment(isolatedRoot: string): NodeJS.ProcessEnv {
     CI: '1',
     NO_COLOR: '1',
     CONVEX_AGENT_MODE: 'anonymous',
+    AE_DEPLOYMENT_ENVIRONMENT: 'development',
     CLERK_JWT_ISSUER_DOMAIN: anonymousClerkJwtIssuerDomain,
     npm_config_audit: 'false',
     npm_config_cache: resolve(isolatedRoot, '.npm-cache'),
@@ -175,6 +176,7 @@ async function run(): Promise<void> {
       rmSync(resolve(isolatedRoot, generatedDirectory, name))
     }
     await runConvex(isolatedRoot, ['init'])
+    await runConvex(isolatedRoot, ['env', 'set', 'AE_DEPLOYMENT_ENVIRONMENT', 'development'])
     await runConvex(isolatedRoot, [
       'env',
       'set',

@@ -66,6 +66,7 @@ describe('MCP host adapter supply', () => {
     const response = await postMcp(body, {
       authenticate: authenticateWithScopes(['market_supply:manage']),
       supplyManagementService: supplyService,
+      rolloutEnvironment: { AE_DEPLOYMENT_ENVIRONMENT: 'development' },
     }, {
       authorization: 'Bearer supply-boundary',
     })
@@ -240,7 +241,7 @@ describe('MCP host adapter supply', () => {
     const options = {
       authenticate: authenticateWithScopes(['market_supply:manage']),
       supplyManagementService: supplyService,
-      rolloutEnvironment: { NODE_ENV: 'production' },
+      rolloutEnvironment: { NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production' },
     }
     const writeResponse = await postMcp({
       jsonrpc: '2.0', id: 'disabled-supply-write', method: 'tools/call',

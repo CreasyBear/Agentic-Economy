@@ -199,7 +199,7 @@ describe('Provider action HTTP adapter', () => {
 
   it('fails Package 5 writes closed in production while preserving source preview', async () => {
     const withdraw = vi.fn().mockResolvedValue({ kind: 'refused', reason: 'must-not-run' })
-    const rolloutEnvironment = { NODE_ENV: 'production' }
+    const rolloutEnvironment = { NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production' }
     const writeResponse = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/withdraw', {
         method: 'POST',
@@ -273,7 +273,7 @@ describe('Provider action HTTP adapter', () => {
         authenticate,
         resolvePrincipal,
         supplyManagementService: service({ connectionConnect }),
-        rolloutEnvironment: { NODE_ENV: 'production', ...enabled },
+        rolloutEnvironment: { NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production', ...enabled },
       },
     )
 

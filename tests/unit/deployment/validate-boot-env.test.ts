@@ -14,6 +14,7 @@ describe('ensureBootEnvironmentValidated', () => {
   it('does not demand production secrets on a Vercel Preview', () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('VERCEL_ENV', 'preview')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', 'preview-source-write-secret-that-is-long-enough')
     delete process.env.AE_CANONICAL_BASE_URL
     delete process.env.CLERK_SECRET_KEY
@@ -24,6 +25,7 @@ describe('ensureBootEnvironmentValidated', () => {
   it('keeps hosted production fail-closed and repeats the same error', () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('VERCEL_ENV', 'production')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     delete process.env.AE_CANONICAL_BASE_URL
 
     expect(() => ensureBootEnvironmentValidated()).toThrow(/AE_CANONICAL_BASE_URL: required in production but missing/)
@@ -33,6 +35,7 @@ describe('ensureBootEnvironmentValidated', () => {
   it('does not gate public boot on missing or malformed operation-only configuration', () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('VERCEL_ENV', 'production')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://ae.example')
     vi.stubEnv('CONVEX_URL', 'https://convex.example')
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'source-token')
@@ -50,4 +53,41 @@ describe('ensureBootEnvironmentValidated', () => {
 
     expect(() => ensureBootEnvironmentValidated()).not.toThrow()
   })
+
+  it('rejects a missing declaration on preview repeatedly until corrected and reset', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('VERCEL_ENV', 'preview')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
+
+    expect(() => ensureBootEnvironmentValidated()).toThrow(
+      /AE_DEPLOYMENT_ENVIRONMENT: must be exactly production or development/,
+    )
+    expect(() => ensureBootEnvironmentValidated()).toThrow(
+      /AE_DEPLOYMENT_ENVIRONMENT: must be exactly production or development/,
+    )
+
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    resetBootEnvironmentValidationForTests()
+    expect(() => ensureBootEnvironmentValidated()).not.toThrow()
+  })
+
+  it.each(['', 'preview', ' production ', 'Production', 'sandbox'])(
+    'rejects malformed deployment declaration %j without echoing it',
+    (declaration) => {
+      vi.stubEnv('NODE_ENV', 'production')
+      vi.stubEnv('VERCEL_ENV', 'preview')
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+
+      let message = ''
+      try {
+        ensureBootEnvironmentValidated()
+      } catch (error) {
+        message = (error as Error).message
+      }
+      expect(message).toBe('Invalid environment configuration:\nAE_DEPLOYMENT_ENVIRONMENT: must be exactly production or development')
+      expect(() => ensureBootEnvironmentValidated()).toThrow(
+        /AE_DEPLOYMENT_ENVIRONMENT: must be exactly production or development/,
+      )
+    },
+  )
 })

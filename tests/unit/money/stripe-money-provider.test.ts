@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import {
   createStripeMoneyProvider,
@@ -10,9 +10,14 @@ import {
 } from '../../../src/lib/server/stripe-money-provider'
 import { isMoneyRefusal, type ExactAmount } from '../../../src/modules/money/public'
 import type { StripeMoneyProviderConfig } from '../../../src/lib/server/stripe-money-provider'
+import {
+  expectedStripeMoneyModeForDeployment,
+  readStripeMoneyReadbackProviderConfig,
+  validateStripeMoneyProviderConfig,
+} from '../../../src/lib/server/stripe-money-provider-config'
 
 const config: StripeMoneyProviderConfig = {
-  secretKey: 'sk_test_adapter',
+  secretKey: 'rk_test_adapter',
   webhookSecret: 'whsec_adapter',
   v2WebhookSecret: 'whsec_v2_adapter',
   mode: 'test',
@@ -47,6 +52,8 @@ const hostedRequest = {
 }
 
 describe('Stripe money provider adapter', () => {
+  beforeEach(() => { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development') })
+  afterEach(() => { vi.unstubAllEnvs() })
   it('creates one hosted Checkout handoff with the quoted credit, fee, and added GST', async () => {
     const create = vi.fn().mockResolvedValue({ data: hostedCheckoutSession() })
     const provider = createStripeMoneyProvider({
@@ -274,14 +281,16 @@ describe('Stripe money provider adapter', () => {
     })).toMatchObject({ code: 'stripe_setup_required' })
     expect(readStripeMoneyProviderConfig({ STRIPE_SECRET_KEY: 'sk_test_only' })).toMatchObject({ code: 'stripe_setup_required' })
     expect(readStripeMoneyProviderConfig({
-      STRIPE_SECRET_KEY: 'sk_test_secret',
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      STRIPE_SECRET_KEY: 'rk_test_secret',
       STRIPE_WEBHOOK_SECRET: 'whsec_secret',
     }, 'live')).toMatchObject({ code: 'stripe_setup_required' })
 
     const create = vi.fn()
     const provider = createStripeMoneyProvider({
       env: {
-        STRIPE_SECRET_KEY: 'sk_test_secret',
+        AE_DEPLOYMENT_ENVIRONMENT: 'development',
+        STRIPE_SECRET_KEY: 'rk_test_secret',
         STRIPE_WEBHOOK_SECRET: 'whsec_secret',
       },
       mode: 'live',
@@ -289,6 +298,46 @@ describe('Stripe money provider adapter', () => {
     })
     const result = await provider.createOrRecoverCreditPayment(hostedRequest)
     expect(result).toMatchObject({ code: 'stripe_setup_required' })
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{}, undefined],
+    [{ AE_DEPLOYMENT_ENVIRONMENT: 'preview' }, undefined],
+    [{ AE_DEPLOYMENT_ENVIRONMENT: 'development' }, 'test'],
+    [{ AE_DEPLOYMENT_ENVIRONMENT: 'production' }, 'live'],
+  ] as const)('derives Stripe mode only from an exact declaration', (env, expected) => {
+    expect(expectedStripeMoneyModeForDeployment(env)).toBe(expected)
+    expect(expectedStripeMoneyModeForDeployment(env, expected === 'test' ? 'live' : 'test'))
+      .toBeUndefined()
+  })
+
+  it('refuses missing, invalid, override, and unrestricted keys before provider I/O', async () => {
+    const valid = { STRIPE_SECRET_KEY: 'rk_test_secret', STRIPE_WEBHOOK_SECRET: 'whsec_secret' }
+    const refusal = { kind: 'refused', code: 'stripe_setup_required', retryable: false }
+    expect(readStripeMoneyProviderConfig(valid, 'test')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'preview' }, 'test')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'development' }, 'live')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'production' }, 'test')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk_test_secret' })).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'production', STRIPE_SECRET_KEY: 'sk_live_secret' })).toEqual(refusal)
+    expect(readStripeMoneyReadbackProviderConfig({ STRIPE_READBACK_KEY: 'rk_test_secret' }, 'test')).toEqual(refusal)
+    expect(readStripeMoneyReadbackProviderConfig({ AE_DEPLOYMENT_ENVIRONMENT: 'production', STRIPE_READBACK_KEY: 'rk_test_secret' })).toEqual(refusal)
+    expect(validateStripeMoneyProviderConfig(config)).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'development' })).toMatchObject({ mode: 'test' })
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'production', STRIPE_SECRET_KEY: 'rk_live_secret' })).toMatchObject({ mode: 'live' })
+    expect(readStripeMoneyReadbackProviderConfig({ AE_DEPLOYMENT_ENVIRONMENT: 'development', STRIPE_READBACK_KEY: 'rk_test_secret' })).toMatchObject({ mode: 'test' })
+    expect(validateStripeMoneyProviderConfig(config, 'test')).toEqual(config)
+    const create = vi.fn()
+    const provider = createStripeMoneyProvider({ env: valid, mode: 'test', client: fakeClient({ create }) })
+    await expect(provider.createOrRecoverCreditPayment(hostedRequest)).resolves.toEqual(refusal)
+    const injectedMissing = createStripeMoneyProvider({ env: valid, mode: 'test', config, client: fakeClient({ create }) })
+    await expect(injectedMissing.createOrRecoverCreditPayment(hostedRequest)).resolves.toEqual(refusal)
+    const injectedOverride = createStripeMoneyProvider({
+      env: { AE_DEPLOYMENT_ENVIRONMENT: 'production' }, mode: 'test', config,
+      client: fakeClient({ create }),
+    })
+    await expect(injectedOverride.createOrRecoverCreditPayment(hostedRequest)).resolves.toEqual(refusal)
     expect(create).not.toHaveBeenCalled()
   })
 

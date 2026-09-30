@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '../../../_generated/api'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
@@ -14,7 +14,9 @@ import {
 } from '../../../../tests/helpers/interactive-authority-seed'
 
 describe('owner invoice history tax admission', () => {
+  afterEach(() => { vi.unstubAllEnvs() })
   it('reports an ungenerated invoice when persisted owner tax facts and production policy admit issuance', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = await seededInteractiveAuthorityBackend()
     const now = Date.now()
     const owner = backend.withIdentity(samIdentity(INTERACTIVE_TOKEN_IDENTIFIER))

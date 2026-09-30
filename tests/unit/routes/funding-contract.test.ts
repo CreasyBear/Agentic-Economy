@@ -39,11 +39,13 @@ describe('public funding preflight', () => {
   let restorePublicSource: (() => void) | undefined
 
   beforeEach(() => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     restorePublicSource = installPlatformFundingQuery()
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     setHttpRateLimitAdmissionForTests(undefined)
     restorePublicSource?.()
     restorePublicSource = undefined

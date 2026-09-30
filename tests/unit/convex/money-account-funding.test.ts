@@ -182,22 +182,37 @@ async function publishedOwnerFixture(slug: string) {
 
 describe('Account AUD funding through Formance', () => {
   const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
-  beforeEach(() => { process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY })
+  beforeEach(() => {
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+  })
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
     if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
   })
 
-  it('refuses production funding when deployment is hosted_alpha', async () => {
-    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
-    const { backend, fixture } = await publishedOwnerFixture('funding-hosted-alpha-fence')
-    await expect(ownerReserve(fixture, 'account-funding:hosted-alpha-fence', {
-      environment: 'production',
-      expectedPolicyDigest: sha256('production-policy'),
-    })).resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'preview'],
+    ['opposite', 'production'],
+  ] as const)('refuses owner and agent funding for %s deployment declaration before commands', async (name, declaration) => {
+    if (reserveAgentHandoff === undefined) throw new Error('Agent funding handoff function missing')
+    const { backend, fixture } = await publishedOwnerFixture(`funding-${name}-environment-fence`)
+    const agent = await fundingBuyerAgent(backend, fixture.owner, `user_funding-${name}-environment-fence`)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+    await expect(ownerReserve(fixture, `account-funding:${name}-environment-fence`))
+      .resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
+    await expect(backend.mutation(reserveAgentHandoff, await withSourceWrite('billing', {
+      principalAmountUnits: '5000000', environment: 'sandbox', idempotencyKey: `caller-${name}`,
+      successReturnRef: 'https://ae.test/fund/{CHECKOUT_SESSION_ID}',
+      cancelReturnRef: 'https://ae.test/fund/cancelled',
+      checkoutExpiresAt: (Math.floor(Date.now() / 1000) + 3600) * 1000,
+      agentPrincipal: agent, operationKey: 'moneyAccountFunding:reserveAgentHandoff',
+      correlationId: `funding-agent-${name}`,
+    }))).resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
     await expect(backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())).resolves.toEqual([])
-    vi.unstubAllEnvs()
   })
 
   it('refuses a changed funding policy before creating a funding command', async () => {
@@ -1233,4 +1248,3 @@ describe('Account AUD funding through Formance', () => {
     ])
   })
 })
-

@@ -1,5 +1,5 @@
 import { getFunctionName } from 'convex/server'
-import { beforeEach, expect, vi } from 'vitest'
+import { afterEach, beforeEach, expect, vi } from 'vitest'
 type ActionExecutionModule = Record<string, unknown>
 type SignRouteTransportCall = typeof import('@/modules/capability-supply/server').signRouteTransportCall
 const mocks = vi.hoisted(() => {
@@ -1424,6 +1424,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
 }
 
 beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
   mocks.claimCanonicalExecution.mockReset()
   mocks.persistCanonicalReleaseFence.mockReset()
   mocks.persistCanonicalTerminalOutcome.mockReset()
@@ -1451,5 +1452,7 @@ beforeEach(() => {
   vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
   vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', '')
 })
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 export { mocks }

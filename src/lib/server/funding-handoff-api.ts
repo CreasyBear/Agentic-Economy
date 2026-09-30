@@ -1,3 +1,4 @@
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { degrade } from '@/lib/observability/degrade'
 import { authRefusalProblem, authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessAuthenticationOptions, type AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
@@ -62,12 +63,14 @@ export function createFundingHandoffService(
   providerOverride?: CreditPaymentPort,
 ): FundingHandoffService {
   const providerContext = () => {
-    if (providerOverride !== undefined) return { provider: providerOverride, environment: 'sandbox' as const }
+    const environment = deploymentPaymentEnvironment(process.env)
+    if (environment === undefined) return { kind: 'refused', code: 'stripe_setup_required', retryable: false } as const
+    if (providerOverride !== undefined) return { provider: providerOverride, environment }
     const config = readStripeMoneyProviderConfig(process.env)
     if (isMoneyRefusal(config)) return config
     return {
       provider: createStripeMoneyProvider({ config }),
-      environment: config.mode === 'live' ? 'production' as const : 'sandbox' as const,
+      environment,
     }
   }
   async function mutate(
@@ -132,6 +135,9 @@ export function createFundingHandoffService(
     create: async ({ input, principal, correlationId }) => {
       const context = providerContext()
       if (isMoneyRefusal(context)) return refusal(context, correlationId)
+      if (principal.environment !== context.environment) {
+        return refusal({ kind: 'refused', code: 'stripe_setup_required', retryable: false }, correlationId)
+      }
       const checkoutExpiresAt = (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
       const baseUrl = resolveCanonicalBaseUrl(request).baseUrl
       const operationKey = 'moneyAccountFunding:reserveAgentHandoff'
@@ -196,6 +202,7 @@ export function createFundingHandoffService(
       }
       const context = providerContext()
       if (isMoneyRefusal(context)) return unavailable(correlationId, context.code)
+      if (command.environment !== context.environment) return unavailable(correlationId, 'stripe_setup_required')
       const payment = await context.provider.readCreditPayment({
         ...fundingPaymentRequest(command), externalRef: input.fundingSessionId,
       })

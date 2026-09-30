@@ -18,7 +18,6 @@ export {
   commercialPolicyRefusalReasonSchema,
   evaluateCommercialPolicyGate,
   PACKAGE4_FORMANCE_REQUIREMENTS,
-  PACKAGE4_SYNTHETIC_VPS_CONTROLS,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   validCommercialPolicyControl,
 } from './internal/commercial-policy'
@@ -44,7 +43,6 @@ export type {
   CommercialPolicyRefusalReason,
   CommercialPolicyLifecycle,
   CommercialPolicySandboxFixture,
-  Package4SandboxDeploymentProfile,
 } from './internal/commercial-policy'
 export {
   AUD_EXPONENT,
@@ -390,4 +388,3 @@ export type {
   SpendingPeriods,
   SpendingPeriodAdjustment,
 } from './internal/spending-period-values'
-

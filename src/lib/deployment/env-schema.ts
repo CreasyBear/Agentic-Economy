@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import { deploymentPaymentEnvironment } from './environment'
 import { DEPLOYMENT_MANIFEST, fieldRules, type FieldRule } from './manifest'
 
 export type EnvValidationProblem = Readonly<{ name: string; reason: string }>
@@ -55,6 +56,10 @@ export function validateEnvironment(
   }
 
   const { requiredProduction, forbiddenProduction } = DEPLOYMENT_MANIFEST.configuration
+
+  if (deploymentPaymentEnvironment(env) === undefined) {
+    addProblem('AE_DEPLOYMENT_ENVIRONMENT', 'must be exactly production or development')
+  }
 
   if (environment === 'production') {
     for (const group of requiredProduction) {

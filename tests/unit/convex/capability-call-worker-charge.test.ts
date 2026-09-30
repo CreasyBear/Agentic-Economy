@@ -52,6 +52,7 @@ describe('capability operation invocation worker charge/x402', () => {
   ])('preserves contract-valid $label without inference or duplicate effects', async ({ data }) => {
     inference.mockClear()
     const output = { data }
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       outputSchema: advisoryOutputSchema,
@@ -130,6 +131,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.qualifiedUse).toEqual([])
   })
   it('brokers production x402 with a buyer reservation and exact external payment', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
 
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
@@ -179,6 +181,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({ state: 'completed' })
   })
   it('continues after atomically reclaiming an expired bare signing claim', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       paymentSigningClaim: 'expired',
@@ -193,6 +196,7 @@ describe('capability operation invocation worker charge/x402', () => {
   it('leaves an unexpired signing claim pending without minting a second intent', async () => {
     vi.useFakeTimers()
     try {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
       const worker = createWorker('x402', {
         environment: 'production',
         paymentSigningClaim: 'unexpired',
@@ -211,6 +215,7 @@ describe('capability operation invocation worker charge/x402', () => {
   })
   it('refuses managed x402 without custody configuration before either persistence write', async () => {
     mocks.cdpX402CustodyConfigurationFromEnvironment.mockImplementationOnce(() => undefined as never)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
 
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
@@ -220,6 +225,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.payment.prepare).toBeUndefined()
   })
   it('releases the reservation when the Provider requirement changes before payment', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
     mocks.invokePreparedRouteTransport.mockResolvedValueOnce({
       transport: 'x402', disposition: 'refused', releaseStarted: false,
@@ -240,6 +246,7 @@ describe('capability operation invocation worker charge/x402', () => {
   })
 
   it('releases the managed reservation when signing fails before submission', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       failPaymentSignature: true,
@@ -259,6 +266,7 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
   it('releases a definite no-authorization refusal only after proving no payment attempt exists', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       failPaymentSignature: true,
@@ -287,6 +295,7 @@ describe('capability operation invocation worker charge/x402', () => {
       releaseBeforeSubmissionRefused: true,
     }],
   ])('retains the reservation when %s', async (_label, options) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       failPaymentSignature: true,
@@ -306,6 +315,7 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
   it('requires proof reconciliation when the grant is revoked after the submission fence', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       signingBoundaryGrant: null,
@@ -338,6 +348,7 @@ describe('capability operation invocation worker charge/x402', () => {
     ['invalid', 'connection_not_found'],
     ['throw', 'authority_read_failed'],
   ] as const)('records and releases a %s provider authority failure before signing', async (mode, detail) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       signingBoundaryProviderAuthority: mode,
@@ -357,6 +368,7 @@ describe('capability operation invocation worker charge/x402', () => {
   })
 
   it('records a managed authorization that returns no header after the signing claim', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
     mocks.createCdpEvmX402PaymentSignature.mockImplementationOnce(async () => undefined as never)
 
@@ -373,6 +385,7 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
   it('retains the managed reservation after a post-submit timeout', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       observation: {
@@ -395,6 +408,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
   })
   it('routes verified paid invalid delivery to the buyer-credit remedy without capturing AUD', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production', observation: invalidPaidOutputObservation })
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
@@ -408,6 +422,7 @@ describe('capability operation invocation worker charge/x402', () => {
   })
 
   it.each(['refused', 'throw'] as const)('keeps invalid delivery uncharged when its remedy is %s', async (invalidResultRemedyResult) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production', observation: invalidPaidOutputObservation, invalidResultRemedyResult })
     try { await handler(worker.ctx, { callRef: invocationRef }) } catch (error) {
       expect(invalidResultRemedyResult).toBe('throw')
@@ -419,6 +434,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.transportCalls).toBe(1)
   })
   it('retains the managed reservation after any possible submission even when the Provider reports not settled', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       observation: {
@@ -448,6 +464,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(1)
   })
   it('replays a managed Call without a second settlement or transport', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
     mocks.claimCanonicalExecution.mockReset()
     mocks.claimCanonicalExecution
@@ -468,6 +485,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.transportCalls).toBe(1)
   })
   it('replays an invalid-output terminal result without a second managed settlement', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       observation: invalidPaidOutputObservation,

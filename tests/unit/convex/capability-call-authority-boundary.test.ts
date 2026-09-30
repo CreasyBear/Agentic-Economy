@@ -530,8 +530,8 @@ async function expectResolveAgentAllowed(
   )).resolves.toEqual(canonicalPrincipal)
 }
 
-async function withHostedAlpha(run: () => Promise<void>) {
-  vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+async function withDevelopmentEnvironment(run: () => Promise<void>) {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
   try {
     await run()
   } finally {
@@ -551,6 +551,7 @@ function revokedParentDelegation(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
   vi.clearAllMocks()
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
   mocks.actor = {
@@ -565,22 +566,24 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
 })
 
 describe('capability operation canonical authority boundary', () => {
-  it('refuses a new production Call in hosted alpha before inspection or dispatch', async () => {
-    await withHostedAlpha(async () => {
+  it.each([undefined, '', 'invalid', 'development'])(
+    'refuses a new production Call with declaration %j before inspection or dispatch', async (declaration) => {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
       const ctx = { ...agentContext(), runAction: vi.fn() }
       await expect(callBoundary(ctx, agentArgs())).resolves.toMatchObject({
         kind: 'refused', code: 'environment_mismatch', retryable: false,
       })
       expect(ctx.runAction).not.toHaveBeenCalled()
       expect(mocks.call).not.toHaveBeenCalled()
-    })
-  })
+    },
+  )
 
-  it('allows a sandbox Call through the canonical boundary in hosted alpha', async () => {
-    await withHostedAlpha(async () => {
+  it('allows a sandbox Call through the canonical boundary in development', async () => {
+    await withDevelopmentEnvironment(async () => {
       const principal = { ...canonicalPrincipal, environment: 'sandbox' as const }
       const ctx = agentContext(principal)
       await expect(callBoundary(ctx, { ...agentArgs(), principal })).resolves.toEqual(principal)
@@ -588,8 +591,9 @@ describe('capability operation canonical authority boundary', () => {
     })
   })
 
-  it('replays a previously consumed production Call after switching to hosted alpha', async () => {
-    await withHostedAlpha(async () => {
+  it.each([undefined, 'development'])(
+    'replays a consumed production Call with declaration %j without a new effect', async (declaration) => {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
       const consumedCallRef = 'invocation:already-consumed'
       const ctx = {
         ...agentContext(),
@@ -607,8 +611,8 @@ describe('capability operation canonical authority boundary', () => {
       })
       expect(mocks.call).not.toHaveBeenCalled()
       expect(ctx.runAction).not.toHaveBeenCalled()
-    })
-  })
+    },
+  )
 
   it.each(ISOLATION_MATRIX)(
     'reads $label status through current agent authority without consuming a mutation',

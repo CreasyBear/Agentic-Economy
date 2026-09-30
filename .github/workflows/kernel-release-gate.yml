@@ -110,6 +110,7 @@ jobs:
       # only credential this job receives.
       - name: Run the full local release gate
         env:
+          AE_DEPLOYMENT_ENVIRONMENT: development
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
@@ -167,6 +168,7 @@ jobs:
       - name: Start local stack (anonymous Convex, authenticated Clerk)
         env:
           CONVEX_AGENT_MODE: anonymous
+          AE_DEPLOYMENT_ENVIRONMENT: development
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
@@ -349,6 +351,7 @@ jobs:
     environment: production
     env:
       NODE_ENV: production
+      AE_DEPLOYMENT_ENVIRONMENT: production
       VERCEL_ENV: production
       AE_CANONICAL_BASE_URL: https://agentic-economy-phi.vercel.app
       AE_CANONICAL_HOST_ALLOWLIST: agentic-economy-phi.vercel.app

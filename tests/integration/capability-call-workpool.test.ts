@@ -1868,6 +1868,7 @@ describe('capability Call Workpool lifecycle', () => {
   )
 
   it('executes once, replays without another effect, and refuses a revoked grant before claim', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const signingSecretSentinel = 'call-workpool-signing-secret-sentinel-32-bytes'
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', signingSecretSentinel)
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
@@ -2209,6 +2210,7 @@ describe('capability Call Workpool lifecycle', () => {
   }, 15_000)
 
   it('runs the installed CLI through served routes and one real durable backend receipt', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
     installTestSourceWriteSecret()

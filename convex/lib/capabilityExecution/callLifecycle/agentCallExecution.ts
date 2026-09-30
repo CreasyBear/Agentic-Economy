@@ -1,5 +1,5 @@
 import type { Infer } from 'convex/values'
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { internal } from '../../../_generated/api'
 import { env, type ActionCtx } from '../../../_generated/server'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
@@ -82,7 +82,8 @@ export async function canonicalAgentCallCore(
     if (replay.result !== undefined) return projectCallResult(callResultSchema.parse(replay.result))
     return { kind: 'pending', callRef: material.consumedCallRef, toolRef: material.toolRef, retryAfterMs: 1_000 }
   }
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), principal.environment)) {
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
+  if (deploymentEnvironment === undefined || deploymentEnvironment !== principal.environment) {
     return { kind: 'refused', toolRef: material.toolRef, code: 'environment_mismatch', retryable: false }
   }
   if (material.x402RequirementDigest !== undefined && principal.authorityMode !== 'approval_required') {
@@ -148,5 +149,4 @@ export async function canonicalAgentReconcileHandler(
   if (principal === null) return agentRecoveryNotFound(args.callRef)
   return await reconcileCallHandler(ctx, { ...args, principal })
 }
-
 

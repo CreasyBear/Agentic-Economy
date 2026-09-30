@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ConvexSourceModule from "@/lib/server/convex-source";
 import type * as TanstackReactStartModule from "@tanstack/react-start";
 
@@ -97,8 +97,11 @@ describe("owner supply source read failures", () => {
 });
 
 describe("Package 5 owner connection rollout", () => {
+  beforeEach(() => { sourceMocks.startOwnerSupplySourceConnection.mockReset(); });
+  afterEach(() => { vi.unstubAllEnvs(); });
   it("does not reserve a static-credential ceremony when production rollout is disabled", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
     vi.stubEnv("AE_PACKAGE5_WRITES_ENABLED", "true");
     vi.stubEnv("AE_SUPPLY_HTTP_CREDENTIALS_ENABLED", undefined);
     sourceMocks.callSourceQuery.mockReset();
@@ -125,11 +128,11 @@ describe("Package 5 owner connection rollout", () => {
       },
     });
     expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled();
-    vi.unstubAllEnvs();
   });
 
   it("lets supported x402 follow its own guards while static HTTP credentials remain disabled", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
     vi.stubEnv("AE_PACKAGE5_WRITES_ENABLED", "true");
     vi.stubEnv("AE_SUPPLY_HTTP_CREDENTIALS_ENABLED", undefined);
     sourceMocks.startOwnerSupplySourceConnection.mockResolvedValue({
@@ -163,6 +166,5 @@ describe("Package 5 owner connection rollout", () => {
 
     expect(result).toMatchObject({ kind: "action_required", requiredAction: { title: "Connect service" } });
     expect(sourceMocks.startOwnerSupplySourceConnection).toHaveBeenCalledTimes(1);
-    vi.unstubAllEnvs();
   });
 });

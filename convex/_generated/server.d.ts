@@ -34,10 +34,10 @@ type Env = {
   readonly AE_CHAT_SHARE_KEY_ID: string | undefined;
   readonly AE_CHAT_SHARE_SECRET: string | undefined;
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
+  readonly AE_DEPLOYMENT_ENVIRONMENT: "production" | "development";
   readonly AE_JEV_DISCOVERY_ENABLED: "true" | "false" | undefined;
   readonly AE_LLM_MODEL: string | undefined;
   readonly AE_OPENROUTER_API_BASE_URL: string | undefined;
-  readonly AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: string | undefined;
   readonly AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN: string | undefined;
   readonly AE_PACKAGE5_FIXTURE_X402_PAY_TO: string | undefined;
   readonly AE_PACKAGE5_WRITES_ENABLED: string | undefined;
@@ -48,7 +48,6 @@ type Env = {
   readonly AE_ROUTE_CALL_SIGNING_KEY_ID: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SECRET_LIFECYCLE_RPC_TOKEN: string | undefined;
-  readonly AE_SERVICE_MODE: "hosted_alpha" | undefined;
   readonly AE_SITE_URL: string | undefined;
   readonly AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: string | undefined;
   readonly AE_SUPPLY_MCP_OAUTH_ENABLED: string | undefined;

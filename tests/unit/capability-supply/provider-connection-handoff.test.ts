@@ -280,6 +280,7 @@ describe('Provider connection owner handoff', () => {
 
   it('does not start a new Provider MCP OAuth ceremony when its production rollout is disabled', async () => {
     vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.stubEnv('AE_PACKAGE5_WRITES_ENABLED', 'true')
     vi.stubEnv('AE_SUPPLY_MCP_OAUTH_ENABLED', undefined)
     const beginAuth = vi.fn()

@@ -1,4 +1,5 @@
 import { isRecord } from '@/modules/common/is-record'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 
 import { readTrimmedEnv, type StringEnvironment } from './read-trimmed-env'
 
@@ -30,8 +31,8 @@ const PACKAGE5_WRITE_ACTIONS = new Set([
 ])
 
 /**
- * Local development remains frictionless. Explicit false values and controlled
- * deployments without an explicit true fail closed. Recovery, callback,
+ * Explicit development defaults on. Production requires true for each flag;
+ * missing or invalid deployment declarations fail closed. Recovery, callback,
  * readback, and revocation paths deliberately do not call this helper.
  */
 export function package5RolloutDecision(
@@ -74,12 +75,9 @@ export function package5SupplyActionRolloutDecision(
 }
 
 function rolloutFlagEnabled(name: string, environment: StringEnvironment): boolean {
+  const paymentEnvironment = deploymentPaymentEnvironment(environment)
+  if (paymentEnvironment === undefined) return false
   const configured = readTrimmedEnv(environment, name)
   if (configured !== undefined) return configured === 'true'
-  return !isControlledDeployment(environment)
-}
-
-function isControlledDeployment(environment: StringEnvironment): boolean {
-  return readTrimmedEnv(environment, 'NODE_ENV') === 'production'
-    || readTrimmedEnv(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
+  return paymentEnvironment === 'sandbox'
 }

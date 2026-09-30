@@ -48,7 +48,7 @@ function clientRequest(body: BodyInit | null, headers: Record<string, string> = 
 }
 function productionReadinessEnvironment(): Record<string, string> {
   return {
-    NODE_ENV: 'production',
+    NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production',
     CONVEX_URL: 'https://convex.example',
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     AE_CANONICAL_BASE_URL: 'https://ae.example',
@@ -207,7 +207,7 @@ describe('operational diagnostics routes', () => {
     const response = await handleReadyRequest(
       new Request('https://ae.example/api/ready'),
       {
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' },
         fetch: vi.fn(async () => new Response(null, { status: 200 })),
       },
     )
@@ -232,7 +232,7 @@ describe('operational diagnostics routes', () => {
       headers: { 'x-ae-request-id': correlationId },
     })
     const options = (status: number) => ({
-      env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+      env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' },
       fetch: vi.fn(async () => new Response(null, { status })),
     })
 
@@ -254,7 +254,7 @@ describe('operational diagnostics routes', () => {
   it('projects config diagnostics as names and booleans only', () => {
     const configuredSecret = 'openrouter-test-secret-value'
     const diagnostics = readNamesOnlyReadinessDiagnostics({
-      NODE_ENV: 'production',
+      NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production',
       CONVEX_URL: 'https://convex.example',
       OPENROUTER_API_KEY: configuredSecret,
     }, 22)
@@ -276,7 +276,7 @@ describe('operational diagnostics routes', () => {
   it('fails closed for deployment mode conflicts and credential-bearing Convex URLs', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
     await expect(readServerReadiness({
-      env: { NODE_ENV: 'test', VERCEL_ENV: 'production', CONVEX_URL: 'https://convex.example' },
+      env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', VERCEL_ENV: 'production', CONVEX_URL: 'https://convex.example' },
       fetch: fetchImpl,
     })).resolves.toMatchObject({
       status: 'not_ready',
@@ -285,7 +285,7 @@ describe('operational diagnostics routes', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
 
     await expect(readServerReadiness({
-      env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example?token=secret' },
+      env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example?token=secret' },
       fetch: fetchImpl,
     })).resolves.toMatchObject({
       status: 'not_ready',
@@ -295,9 +295,22 @@ describe('operational diagnostics routes', () => {
   })
 
 
+  it.each([undefined, '', 'sandbox', ' production'])('refuses readiness before probing with declaration %s', async (declaration) => {
+    const fetch = vi.fn()
+    const env = { ...productionReadinessEnvironment(), AE_DEPLOYMENT_ENVIRONMENT: declaration }
+    await expect(readServerReadiness({ env, fetch })).resolves.toMatchObject({
+      status: 'not_ready',
+      checks: { config: { status: 'failed', code: 'deployment_manifest_invalid' } },
+    })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(readNamesOnlyReadinessDiagnostics(env, 22).configuration.required).toContainEqual(
+      expect.objectContaining({ scope: 'environment', status: declaration === undefined || declaration === '' ? 'missing' : 'invalid' }),
+    )
+  })
+
   it('fails readiness closed for missing config and Convex probe failure', async () => {
     const skippedFetch = vi.fn()
-    await expect(readServerReadiness({ env: {}, fetch: skippedFetch })).resolves.toMatchObject({
+    await expect(readServerReadiness({ env: { AE_DEPLOYMENT_ENVIRONMENT: 'development' }, fetch: skippedFetch })).resolves.toMatchObject({
       status: 'not_ready',
       checks: { config: { status: 'failed', code: 'convex_url_missing' } },
     })
@@ -306,7 +319,7 @@ describe('operational diagnostics routes', () => {
     const failedFetch = vi.fn(async () => new Response(null, { status: 503 }))
     const routeResponse = await handleReadyRequest(
       new Request('https://ae.example/api/ready', { headers: { 'x-ae-request-id': 'corr_ready_1' } }),
-      { env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: failedFetch },
+      { env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: failedFetch },
     )
     expect(routeResponse.status).toBe(503)
     expect(routeResponse.headers.get('content-type')).toBe('application/problem+json')
@@ -449,7 +462,7 @@ describe('operational diagnostics routes', () => {
     }
     const stripeOnlyEnv = () => {
       const env = productionReadinessEnvironment()
-      return { STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET }
+      return { STRIPE_SECRET_KEY: 'rk_test_command_example', STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET }
     }
     const readyToolSearchResult = {
       kind: 'ok' as const,
@@ -474,7 +487,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('absent')
     })
@@ -486,7 +499,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('fresh')
     })
@@ -498,7 +511,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('stale')
     })
@@ -510,7 +523,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('failed')
     })
@@ -524,7 +537,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('absent')
     })
@@ -532,14 +545,14 @@ describe('operational diagnostics routes', () => {
     it('reports quoting ready when at least one routeable Tool is discoverable', async () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.quoting).toBe('ready')
       expect(toolSearchMocks.readCapabilityToolSearch).toHaveBeenCalledWith({ query: '', limit: 1 })
     })
 
     it('reports quoting unavailable when no routeable Tool is found', async () => {
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.quoting).toBe('unavailable')
     })
@@ -547,7 +560,7 @@ describe('operational diagnostics routes', () => {
     it('degrades quoting to unavailable when the search probe throws', async () => {
       toolSearchMocks.readCapabilityToolSearch.mockRejectedValueOnce(new Error('search unreachable'))
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.quoting).toBe('unavailable')
     })
@@ -556,7 +569,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce(() => new Promise(() => {}))
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' },
         fetch: readyFetch(),
         timeoutMs: 5,
       })
@@ -566,7 +579,7 @@ describe('operational diagnostics routes', () => {
 
     it('reports funding configured from a valid Stripe money provider config alone', async () => {
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -575,7 +588,7 @@ describe('operational diagnostics routes', () => {
 
     it('reports funding configured from the CDP/x402 custody bundle alone', async () => {
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...cdpCustodyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...cdpCustodyEnv() },
         fetch: readyFetch(),
       })
 
@@ -583,7 +596,7 @@ describe('operational diagnostics routes', () => {
     })
 
     it('reports funding missing when neither money rail is configured', async () => {
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.funding).toBe('missing')
     })
@@ -597,7 +610,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -613,7 +626,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -629,7 +642,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -644,7 +657,7 @@ describe('operational diagnostics routes', () => {
       } as never)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -659,7 +672,7 @@ describe('operational diagnostics routes', () => {
       } as never)
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'missing', sellable: false })
     })
@@ -674,7 +687,7 @@ describe('operational diagnostics routes', () => {
 
       const response = await handleReadyRequest(
         new Request('https://ae.example/api/ready'),
-        { env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() }, fetch: readyFetch() },
+        { env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() }, fetch: readyFetch() },
       )
 
       expect(response.status).toBe(200)

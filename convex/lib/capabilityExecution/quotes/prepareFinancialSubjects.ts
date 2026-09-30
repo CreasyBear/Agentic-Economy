@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { isBoundedJsonValue, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import {
   normalizeStoredAgentAccessGrant,
@@ -68,6 +68,7 @@ export async function prepareFinancialSubjectsCore(
   args: QuoteArgs,
 ): Promise<FinancialSubjectsResult> {
   const now = Date.now()
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
   const authority = await resolveCurrentAgentAuthority(
     ctx,
     args.principal,
@@ -75,7 +76,7 @@ export async function prepareFinancialSubjectsCore(
     { kind: 'new_operation', toolRef: args.toolRef },
   )
   if (authority === null) return { kind: 'refused', code: 'grant_not_found' }
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), authority.principal.environment)) {
+  if (deploymentEnvironment === undefined || deploymentEnvironment !== authority.principal.environment) {
     return { kind: 'refused', code: 'tool_unsupported', reason: 'This deployment does not admit purchases in this environment.' }
   }
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
@@ -84,7 +85,8 @@ export async function prepareFinancialSubjectsCore(
   const operation = await readCurrentPublishedTool(ctx, args.toolRef, now)
     ?? await readManagedX402InspectionTarget(ctx, args.toolRef, now)
   if (operation === undefined) return { kind: 'refused', code: 'tool_not_found' }
-  if (operation.runtimeEnvironment !== authority.principal.environment) return {
+  if (operation.runtimeEnvironment !== deploymentEnvironment
+    || operation.runtimeEnvironment !== authority.principal.environment) return {
     kind: 'refused', code: 'tool_unsupported',
     reason: `This Tool uses the ${operation.runtimeEnvironment} environment; your agent uses ${authority.principal.environment}. Connect an agent for ${operation.runtimeEnvironment} before calling it.`,
   }

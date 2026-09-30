@@ -35,7 +35,8 @@ export const LOOPBACK_DOCTOR_COMMAND = 'ae doctor --base-url <hosted origin> --j
 export const FRESH_CATALOGUE_CHECK = { id: 'catalogue', group: 'discovery', state: 'pass', summary: 'Market catalogue coverage is fresh.' }
 
 export const TIER1_ENV: NodeJS.ProcessEnv = {
-  STRIPE_SECRET_KEY: 'sk_test_FIXTURE',
+  AE_DEPLOYMENT_ENVIRONMENT: 'development',
+  STRIPE_SECRET_KEY: 'rk_test_FIXTURE',
   STRIPE_WEBHOOK_SECRET: 'whsec_FIXTURE',
   STRIPE_V2_WEBHOOK_SECRET: 'whsec_FIXTURE_V2',
   STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_doctor00000000000000000000000',

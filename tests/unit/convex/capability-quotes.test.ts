@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader } from '@x402/core/http'
 import * as networkServer from '@/modules/network-guard/server'
 import * as networkPublic from '@/modules/network-guard/public'
@@ -35,6 +35,9 @@ import {
   type QuotePrincipal,
   formanceSnapshot,
 } from '../../helpers/quote-fixtures'
+
+beforeEach(() => { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
+afterEach(() => { vi.unstubAllEnvs() })
 
 describe('legal customer binding refusals', () => {
   it('forwards legal_customer_required when the legal customer cannot be bound', async () => {
@@ -351,7 +354,11 @@ describe('direct Quote handlers', () => {
     expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
   })
 
-  it('refuses production Quote preparation and issuance in hosted alpha before upstream actions', async () => {
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'preview'],
+    ['opposite', 'development'],
+  ] as const)('refuses production Quote preparation and issuance for %s deployment declaration before upstream actions', async (_case, declaration) => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'quote-hosted-alpha'
     const fixture = await publishCurrentTool(backend, suffix)
@@ -363,7 +370,7 @@ describe('direct Quote handlers', () => {
     const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
     const upstream = vi.fn(async () => { throw new Error('production_quote_upstream_released') })
     const handler = (quote as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
-    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
     try {
       const args = { principal: agent.principal, toolRef: fixture.toolRef, input,
         operationKey: `${suffix}:blocked`, correlationId: `${suffix}:blocked` }
@@ -375,7 +382,8 @@ describe('direct Quote handlers', () => {
         ...args, formance: formanceSnapshot(subjects),
       })).resolves.toMatchObject({ kind: 'refused', code: 'tool_unsupported', retryable: false })
       expect(upstream).not.toHaveBeenCalled()
-    } finally { vi.unstubAllEnvs() }
+      expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+    } finally { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') }
   })
 
   it('refuses issuance when the current Tool environment changes after Quote preparation', async () => {

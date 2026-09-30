@@ -5,11 +5,7 @@ import type { FunctionReturnType } from 'convex/server'
 import type { NormalizedStoredAgentAccessGrant } from '@/modules/agent-access/policy'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import {
-  resolveServiceMode,
-  serviceModeAllowsEnvironment,
-  type ServiceMode,
-} from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   parsePublishedToolSnapshot,
   type PublishedTool,
@@ -79,8 +75,8 @@ export async function gateEnvironmentBeforeClaim(
 ): Promise<WorkerResult | null> {
   switch (input.phase) {
     case 'dispatch': {
-      const serviceMode = resolveServiceMode(env)
-      if (!serviceModeAllowsEnvironment(serviceMode, input.dispatch.environment)) {
+      const deploymentEnvironment = deploymentPaymentEnvironment(env)
+      if (deploymentEnvironment === undefined || deploymentEnvironment !== input.dispatch.environment) {
         return await refuseBeforeClaim(
           ctx,
           input.dispatch,
@@ -92,10 +88,11 @@ export async function gateEnvironmentBeforeClaim(
       return null
     }
     case 'published_tools': {
-      const serviceMode = resolveServiceMode(env)
+      const deploymentEnvironment = deploymentPaymentEnvironment(env)
       if (
-        !serviceModeAllowsEnvironment(serviceMode, input.reservedOperation.runtimeEnvironment)
-        || !serviceModeAllowsEnvironment(serviceMode, input.currentOperation.runtimeEnvironment)
+        deploymentEnvironment === undefined
+        || deploymentEnvironment !== input.reservedOperation.runtimeEnvironment
+        || deploymentEnvironment !== input.currentOperation.runtimeEnvironment
       ) {
         return await refuseBeforeClaim(
           ctx,
@@ -370,4 +367,4 @@ export async function gateCurrentOperationBeforeRelease(
   return currentOperation
 }
 
-export type { GrantValidityExpectation, ServiceMode }
+export type { GrantValidityExpectation }

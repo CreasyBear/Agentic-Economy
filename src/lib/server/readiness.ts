@@ -1,4 +1,4 @@
-import { resolveDeploymentMode } from '@/lib/deployment/environment'
+import { deploymentPaymentEnvironment, resolveDeploymentMode } from '@/lib/deployment/environment'
 import {
   DEPLOYMENT_MANIFEST,
   validateDeploymentManifest,
@@ -285,6 +285,9 @@ type DeploymentConfig =
     }>
 
 function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): DeploymentConfig {
+  if (deploymentPaymentEnvironment(env) === undefined) {
+    return { kind: 'failed', code: 'deployment_manifest_invalid' }
+  }
   const convexValue = readTrimmedEnv(env, 'CONVEX_URL') ?? readTrimmedEnv(env, 'VITE_CONVEX_URL')
   if (convexValue === undefined) return { kind: 'failed', code: 'convex_url_missing' }
   const convexUrl = readHttpUrl(convexValue)
@@ -325,7 +328,7 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
       sharedScopes.includes(finding.scope)
       || finding.names.some((name) => name === 'CLERK_JWT_ISSUER_DOMAIN' || name === 'AE_CANONICAL_HOST_ALLOWLIST')
       || finding.kind === 'forbidden'
-      || finding.code === 'service_mode_invalid'
+      || finding.code === 'deployment_environment_invalid'
       || finding.code === 'convex_source_ambiguous'
     )) return { kind: 'failed', code: 'deployment_manifest_invalid' }
   }

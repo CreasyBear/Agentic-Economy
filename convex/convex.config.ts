@@ -8,7 +8,7 @@ import workpool from '@convex-dev/workpool/convex.config'
 import workflow from '@convex-dev/workflow/convex.config'
 
 const app = defineApp({
-  // Required = needed in every environment, including a fresh anonymous local deployment with nothing set.
+  // Every deployment declares its money environment, including anonymous local development.
   // Everything else is environment-specific (Clerk/Stripe/CDP/OpenRouter/x402/feature flags), stays optional, and is surfaced by `ae doctor`.
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
@@ -21,7 +21,7 @@ const app = defineApp({
     AE_CHAT_PROXY_SECRET: v.optional(v.string()),
     AE_SITE_URL: v.optional(v.string()),
     AE_RELEASE_SOURCE_REVISION: v.optional(v.string()),
-    AE_SERVICE_MODE: v.optional(v.literal('hosted_alpha')),
+    AE_DEPLOYMENT_ENVIRONMENT: v.union(v.literal('production'), v.literal('development')),
     CLERK_JWT_ISSUER_DOMAIN: v.optional(v.string()),
     RESEND_API_KEY: v.optional(v.string()),
     NOTIFICATION_FROM_EMAIL: v.optional(v.string()),
@@ -48,7 +48,6 @@ const app = defineApp({
     AE_X402_CUSTODY_ENABLED: v.optional(v.string()),
     AE_X402_CUSTODY_MAX_ATOMIC: v.optional(v.string()),
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: v.optional(v.string()),
-    AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: v.optional(v.string()),
     AE_PACKAGE5_WRITES_ENABLED: v.optional(v.string()),
     AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: v.optional(v.string()),
     AE_SUPPLY_MCP_OAUTH_ENABLED: v.optional(v.string()),

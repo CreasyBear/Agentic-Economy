@@ -26,7 +26,7 @@ export default defineConfig({
     webServer: {
       command: 'npm run dev -- --port 3020 --strictPort --host 127.0.0.1',
       // This source proof has no backend. Use PLAYWRIGHT_BASE_URL for the real local/hosted stack.
-      env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: '', CONVEX_URL: '', VITE_CONVEX_URL: '' },
+      env: { AE_DEPLOYMENT_ENVIRONMENT: 'development', AE_CONVEX_SERVER_FUNCTION_TOKEN: '', CONVEX_URL: '', VITE_CONVEX_URL: '' },
       url: 'http://127.0.0.1:3020',
       reuseExistingServer: false,
       timeout: 120_000,

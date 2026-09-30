@@ -248,6 +248,7 @@ describe('narrow owner Tools inventory read', () => {
 
   it('does not start Provider offboarding when its production rollout is disabled', async () => {
     vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.stubEnv('AE_PACKAGE5_WRITES_ENABLED', 'true')
     vi.stubEnv('AE_PROVIDER_OFFBOARDING_ENABLED', undefined)
 

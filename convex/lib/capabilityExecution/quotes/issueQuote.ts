@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currentToolDigest } from '@/modules/capability-execution/current-tool-quote'
@@ -62,6 +62,7 @@ export async function issueQuoteHandler(
   // The coordinating action has already consumed this source-write admission in
   // prepareFinancialSubjects. Internal mutations must not consume the same nonce twice.
   const now = Date.now()
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
   const authority = await resolveCurrentAgentAuthority(
     ctx,
     args.principal,
@@ -83,7 +84,7 @@ export async function issueQuoteHandler(
       return refuse(args, 'grant_not_found', false)
     }
   }
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), authority.principal.environment)) {
+  if (deploymentEnvironment === undefined || deploymentEnvironment !== authority.principal.environment) {
     return refuse(args, 'tool_unsupported', false, { reason: 'This deployment does not admit purchases in this environment.' })
   }
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
@@ -91,7 +92,7 @@ export async function issueQuoteHandler(
   }
   const operation = await readCurrentPublishedTool(ctx, args.toolRef, now)
   if (operation === undefined) return refuse(args, 'tool_not_found', false)
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), operation.runtimeEnvironment)
+  if (operation.runtimeEnvironment !== deploymentEnvironment
     || operation.runtimeEnvironment !== authority.principal.environment) {
     return refuse(args, 'tool_unsupported', false, { reason: 'The current Tool environment is not permitted for this purchase.' })
   }

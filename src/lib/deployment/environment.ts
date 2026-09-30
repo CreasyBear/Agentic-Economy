@@ -1,6 +1,19 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
-import type { DeploymentEnvironment } from './manifest'
+
+export type DeploymentEnvironment = 'production' | 'preview' | 'development' | 'test'
+
+export type PaymentEnvironment = 'production' | 'sandbox'
+
+/** Returns undefined unless the deployment explicitly declares a supported payment environment. */
+export function deploymentPaymentEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+): PaymentEnvironment | undefined {
+  const deploymentEnvironment = env.AE_DEPLOYMENT_ENVIRONMENT
+  if (deploymentEnvironment === 'production') return 'production'
+  if (deploymentEnvironment === 'development') return 'sandbox'
+  return undefined
+}
 
 export function resolveDeploymentMode(env: StringEnvironment): DeploymentEnvironment {
   const nodeEnvironment = readTrimmedEnv(env, 'NODE_ENV')

@@ -631,6 +631,7 @@ export function gatewaySmokeEnvironment(
   const runId = `ae-release-smoke:${sourceRevision}:run-1`;
   return {
     AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND: "true",
+    AE_DEPLOYMENT_ENVIRONMENT: "production",
     AE_GATEWAY_SMOKE_RUN_ID: runId,
     AE_GATEWAY_SMOKE_BASE_URL: "https://gateway.example",
     AE_GATEWAY_SMOKE_JOB_QUERY: "paid",
@@ -653,7 +654,7 @@ export function gatewaySmokeEnvironment(
     AE_RELEASE_CONVEX_DEPLOYMENT_ID: "convex:smoke",
     AE_RELEASE_CONVEX_URL: "https://convex.example",
     CLERK_SECRET_KEY: "sk_test_smoke",
-    STRIPE_SECRET_KEY: "sk_live_smoke",
+    STRIPE_SECRET_KEY: "rk_live_smoke",
     STRIPE_WEBHOOK_SECRET: "whsec_smoke",
     STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: "txr_au_gst_10_inclusive",
     AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID: "sess_smoke",

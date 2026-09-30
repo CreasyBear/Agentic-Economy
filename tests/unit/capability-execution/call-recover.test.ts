@@ -1,7 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 
-import { toolEnvironmentMismatchNextAction } from '@/modules/capability-execution/call-contracts'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { run } from '../../../convex/capabilityCallWorker'
 import { projectOuterResult } from '../../../convex/lib/capabilityExecution/callProjection/outerResult'
@@ -14,6 +13,7 @@ import {
 } from './call-harness'
 
 describe('operation.invoke recover/reconcile', () => {
+  afterEach(() => { vi.unstubAllEnvs() })
   it('keeps a valid partial response reconcilable instead of completing it', async () => {
     const { operation, operationRef, descriptor } = fixture()
     const snapshot = canonicalProjectionSnapshot(operationRef, operation.operationId, operation.identity.contractVersion)
@@ -101,6 +101,7 @@ describe('operation.invoke recover/reconcile', () => {
     )
   })
   it('refuses persisted production dispatch before worker provider readers for development evidence', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     const { operation, operationRef } = fixture()
     const productionPrincipal: AgentAccessPrincipal = { ...principal, environment: 'production' }
     const dispatch = {
@@ -170,7 +171,7 @@ describe('operation.invoke recover/reconcile', () => {
       credentialId: productionPrincipal.credentialId,
       code: 'environment_mismatch',
       retryable: false,
-      nextAction: toolEnvironmentMismatchNextAction,
+      nextAction: 'This deployment does not admit purchases in this environment.',
     })
   })
 })
