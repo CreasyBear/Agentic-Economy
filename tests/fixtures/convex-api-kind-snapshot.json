@@ -121,6 +121,18 @@
   },
   {
     "visibility": "public",
+    "module": "adminTreasuryCommands",
+    "method": "changeThresholds",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "adminTreasuryCommands",
+    "method": "setPaymentsPaused",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
     "module": "agentAccessOAuth",
     "method": "claimRefreshFamily",
     "kind": "mutation"
@@ -2941,6 +2953,24 @@
   },
   {
     "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "beginBatch",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "finishBatch",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryReconciliation",
+    "method": "readProgress",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
     "module": "moneyX402Expiry",
     "method": "claim",
     "kind": "mutation"
@@ -3142,6 +3172,12 @@
     "module": "personalAccount",
     "method": "retirePersonalAccountForServer",
     "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "platformLaunch",
+    "method": "readOwnerPaymentAccess",
+    "kind": "query"
   },
   {
     "visibility": "internal",

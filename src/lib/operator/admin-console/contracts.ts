@@ -54,6 +54,8 @@ export type AdminCommandAction =
   | 'verify_capability_source_authority'
   | 'change_commercial_policy'
   | 'grant_promotional_credit'
+  | 'set_payments_paused'
+  | 'change_treasury_thresholds'
 
 export const ADMIN_ACTION_PERMISSION = {
   set_business_suppression: 'suppress_business',
@@ -63,9 +65,12 @@ export const ADMIN_ACTION_PERMISSION = {
   verify_capability_source_authority: 'register_capability_supply',
   change_commercial_policy: 'manage_commercial_policy',
   grant_promotional_credit: 'grant_promotional_credit',
+  set_payments_paused: 'manage_commercial_policy',
+  change_treasury_thresholds: 'manage_commercial_policy',
 } as const satisfies Record<AdminCommandAction, AdminAction>
 
 export type AdminProposableAction =
+  | 'set_payments_paused'
   | 'set_business_suppression'
   | 'change_commercial_policy'
   | 'grant_admin_membership'
@@ -85,9 +90,13 @@ export type AdminReasonCodeByAction = {
   verify_capability_source_authority: 'evidence_verified' | 'evidence_insufficient'
   change_commercial_policy: 'pricing_update' | 'correction'
   grant_promotional_credit: 'onboarding' | 'correction'
+  set_payments_paused: 'operational_pause' | 'operational_resume' | 'correction'
+  change_treasury_thresholds: 'threshold_update' | 'correction'
 }
 
 export type AdminActionInput = {
+  set_payments_paused: { environment: 'sandbox' | 'production'; paused: boolean }
+  change_treasury_thresholds: { environment: 'sandbox' | 'production'; lowWaterUnits: string; targetFloatUnits: string }
   set_business_suppression: {
     businessId: string
     intent: 'suppress' | 'unsuppress'
@@ -135,6 +144,8 @@ export type AdminActionInput = {
 }
 
 export type AdminSuccessCodeByAction = {
+  set_payments_paused: 'payments_paused' | 'payments_resumed'
+  change_treasury_thresholds: 'treasury_thresholds_changed'
   set_business_suppression: 'business_suppressed' | 'business_unsuppressed'
   close_removal_dispute: 'dispute_closed'
   grant_admin_membership: 'membership_granted'
@@ -160,6 +171,8 @@ export type SharedAdminRefusalCode =
   | 'admin_missing_evidence'
 
 export type AdminActionRefusalCodes = {
+  set_payments_paused: 'environment_mismatch'
+  change_treasury_thresholds: 'environment_mismatch' | 'treasury_thresholds_invalid'
   set_business_suppression: 'business_not_found' | 'suppression_unchanged'
   close_removal_dispute: 'dispute_not_found' | 'dispute_already_closed'
   grant_admin_membership: 'principal_not_found' | 'membership_already_active'

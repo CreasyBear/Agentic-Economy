@@ -76,10 +76,31 @@ beforeEach(() => {
     scopes: ['market_tools:call'],
   })
   serverMocks.callSourceQuery.mockImplementation(async (reference: { name: string }) =>
-    reference.name === 'agentAccessPrincipals:readLegacyOwnerChatPrincipal' ? null : [])
+    reference.name === 'platformLaunch:readOwnerPaymentAccess' ? { kind: 'allowed' }
+      : reference.name === 'agentAccessPrincipals:readLegacyOwnerChatPrincipal' ? null : [])
 })
 
 describe('owner chat environment cutover', () => {
+  it.each(['payments_paused', 'payments_admins_only'] as const)('refuses %s before legacy cleanup or issuing credentials', async (code) => {
+    serverMocks.callSourceQuery.mockImplementation(async (reference: { name: string }) =>
+      reference.name === 'platformLaunch:readOwnerPaymentAccess' ? { kind: 'refused', code } : [])
+    await expect(enableOwnerChatSpendingServer()).resolves.toEqual({ kind: 'refused', code })
+    expect(serverMocks.callSourceQuery).not.toHaveBeenCalledWith({ name: 'agentAccessPrincipals:readLegacyOwnerChatPrincipal' }, expect.anything())
+    expect(serverMocks.callSourceMutation).not.toHaveBeenCalled()
+    expect(clerkApi.create).not.toHaveBeenCalled()
+    expect(clerkApi.revoke).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unavailable payment gate before legacy cleanup or issuing credentials', async () => {
+    serverMocks.callSourceQuery.mockImplementation(async (reference: { name: string }) => {
+      if (reference.name === 'platformLaunch:readOwnerPaymentAccess') throw new Error('source unavailable')
+      return []
+    })
+    await expect(enableOwnerChatSpendingServer()).resolves.toEqual({ kind: 'refused', code: 'issuance_unavailable', retryable: true })
+    expect(serverMocks.callSourceMutation).not.toHaveBeenCalled()
+    expect(clerkApi.create).not.toHaveBeenCalled()
+  })
+
   it.each([['production', 'production'], ['development', 'sandbox']] as const)(
     'issues a secretless %s credential with bounded spending and an environment-specific retry key', async (deployment, environment) => {
       vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
@@ -115,7 +136,8 @@ describe('owner chat environment cutover', () => {
   it('finishes a failed legacy provider revocation before creating the replacement', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     serverMocks.callSourceQuery.mockImplementation(async (reference: { name: string }) =>
-      reference.name === 'agentAccessPrincipals:readLegacyOwnerChatPrincipal' ? 'prn_legacy' : [])
+      reference.name === 'platformLaunch:readOwnerPaymentAccess' ? { kind: 'allowed' }
+        : reference.name === 'agentAccessPrincipals:readLegacyOwnerChatPrincipal' ? 'prn_legacy' : [])
     const canonical = {
       kind: 'completed', principalRef: 'prn_legacy', correlationRef: 'legacy-cutover',
       providerTargets: [{ credentialRef: 'crd_legacy', providerCredentialId: 'key_legacy' }],

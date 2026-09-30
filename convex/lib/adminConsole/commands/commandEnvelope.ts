@@ -34,6 +34,7 @@ export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
   targetType: string
   targetRef: string
   auditEventType: AuditEventType
+  requireExpectedStateDigest?: boolean
   currentStateDigest(): Promise<string | null>
   apply(actor: AllowedAdminAuthority): Promise<
     | {
@@ -151,8 +152,9 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   const proof = deriveStrictConsequenceProof({ ...args.proof, now: Date.now() })
   if (proof.kind === 'refused') return refused(args, proofFailure(args.action, proof.code))
   if (
-    args.expectedStateDigest !== undefined
-    && args.expectedStateDigest !== await spec.currentStateDigest()
+    (spec.requireExpectedStateDigest === true && args.expectedStateDigest === undefined)
+    || (args.expectedStateDigest !== undefined
+      && args.expectedStateDigest !== await spec.currentStateDigest())
   ) {
     return await persistTerminalRefusal(ctx, args, actorRef, operationName, requestHash, 'target_changed')
   }

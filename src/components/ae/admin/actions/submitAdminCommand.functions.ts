@@ -37,6 +37,9 @@ const verifySourceAuthority = sourceMutation<AdminWireArgs<'verify_capability_so
 const changeCommercialPolicy = sourceMutation<AdminWireArgs<'change_commercial_policy'>, AdminCommandReceipt<'change_commercial_policy'>>('moneyCommercialPolicy:change')
 const grantPromotionalCredit = sourceMutation<AdminWireArgs<'grant_promotional_credit'>, AdminCommandReceipt<'grant_promotional_credit'>>('moneyPromotionalCredit:grant')
 
+const setPaymentsPaused = sourceMutation<AdminWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
+const changeTreasuryThresholds = sourceMutation<AdminWireArgs<'change_treasury_thresholds'>, AdminCommandReceipt<'change_treasury_thresholds'>>('adminTreasuryCommands:changeThresholds')
+
 export const submitAdminCommandServer = createServerFn({ method: 'POST' })
   .validator((data) => adminCommandRequestSchema.parse(data))
   .handler(async ({ data, context }): Promise<AdminActionSheetReceipt> => {
@@ -79,6 +82,12 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
       const sourceWriteRequest = sourceWriteRequestFromAdmission(sourceWrite)
       let receipt: AdminActionSheetReceipt
       switch (data.action) {
+        case 'set_payments_paused':
+          receipt = await callSourceMutation(setPaymentsPaused, { ...data, proof, sourceWrite, sourceWriteRequest })
+          break
+        case 'change_treasury_thresholds':
+          receipt = await callSourceMutation(changeTreasuryThresholds, { ...data, proof, sourceWrite, sourceWriteRequest })
+          break
         case 'set_business_suppression':
           receipt = await callSourceMutation(setBusinessSuppression, { ...data, proof, sourceWrite, sourceWriteRequest })
           break

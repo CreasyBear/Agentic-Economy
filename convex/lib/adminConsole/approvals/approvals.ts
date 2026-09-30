@@ -23,6 +23,8 @@ const PROPOSABLE_BY_ACTION = {
   verify_capability_source_authority: false,
   change_commercial_policy: true,
   grant_promotional_credit: true,
+  set_payments_paused: true,
+  change_treasury_thresholds: false,
 } satisfies Record<AdminCommandAction, boolean>
 
 export type ApprovalResolution<A extends AdminCommandAction> =
@@ -205,6 +207,7 @@ async function needsSecondApproval(
   args: Readonly<{ action: AdminCommandAction; input: AdminActionInput[AdminCommandAction] }>,
 ): Promise<boolean> {
   if (!isProposableAction(args.action)) return false
+  if (args.action === 'set_payments_paused' && 'paused' in args.input) return !args.input.paused
   if (args.action === 'grant_admin_membership' && 'role' in args.input
     && args.input.role === 'owner_admin') return true
   if (args.action !== 'grant_admin_membership' && args.action !== 'revoke_admin_membership') return true

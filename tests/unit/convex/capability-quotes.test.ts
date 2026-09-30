@@ -39,6 +39,67 @@ import {
 beforeEach(() => { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
 afterEach(() => { vi.unstubAllEnvs() })
 
+describe('live payment pause at Quote and new Call admission', () => {
+  async function paidQuoteFixture(suffix: string) {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('platformLaunch').withIndex('by_environment', (q) => q.eq('environment', 'production')).unique()
+      if (row === null) await ctx.db.insert('platformLaunch', { environment: 'production', paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone', revision: 1, updatedAt: 1 })
+      else await ctx.db.patch(row._id, { paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone' })
+    })
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const issueArgs = { operationKey: `quote:pause:${suffix}`, correlationId: `quote:pause:${suffix}`, principal: agent.principal, toolRef: fixture.toolRef, input, formance: formanceSnapshot(subjects) }
+    const pause = async () => await backend.run(async (ctx) => {
+      const row = await ctx.db.query('platformLaunch').withIndex('by_environment', (q) => q.eq('environment', 'production')).unique()
+      if (row === null) throw new Error('launch_missing')
+      await ctx.db.patch(row._id, { paymentsOpenTo: 'none' })
+    })
+    return { backend, fixture, agent, input, issueArgs, pause }
+  }
+
+  it('refuses final Quote issuance if payments pause after preparation and before issuance', async () => {
+    const { backend, issueArgs, pause } = await paidQuoteFixture('payment-pause-between-stages')
+    await pause()
+    expect(await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs)).toMatchObject({ kind: 'refused', code: 'payments_paused', retryable: false })
+    expect(await backend.run((ctx) => ctx.db.query('capabilityQuotes').collect())).toEqual([])
+  })
+
+  it('refuses an unused paid Quote after pause but still replays an already accepted Call', async () => {
+    const { backend, issueArgs, pause } = await paidQuoteFixture('payment-pause-new-call')
+    const issued = await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs)
+    if (issued.kind !== 'committed') throw new Error(`quote_refused:${issued.code}`)
+    const row = await backend.run((ctx) => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', (q) => q.eq('quoteRef', issued.quoteRef)).unique())
+    if (row === null) throw new Error('quote_missing')
+    const reservation = {
+      quoteRef: row.quoteRef, callRef: 'call:payment-pause-new', principalId: row.principalId, ownerId: row.accountRef,
+      credentialId: row.credentialId, applicationRef: row.applicationRef, grantRef: row.grantRef,
+      grantGeneration: row.grantGeneration, policyDigest: row.grantPolicyDigest, grantExpiresAt: row.grantExpiresAt,
+      environment: row.environment, toolRef: row.toolRef, idempotencyKey: 'payment-pause-unused',
+      inputDigest: row.inputDigest, requestDigest: canonicalDigest({ quoteRef: row.quoteRef }),
+      toolJson: row.toolJson, inputJson: row.normalizedInputJson, now: Date.now(), organizationMonthlySpend: { enabled: false },
+    }
+    await pause()
+    expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'refused', code: 'operation_not_ready', nextAction: expect.stringContaining('temporarily paused') })
+    expect(await backend.run((ctx) => ctx.db.query('capabilityCalls').collect())).toEqual([])
+    expect((await backend.run((ctx) => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', (q) => q.eq('quoteRef', issued.quoteRef)).unique()))?.state).toBe('issued')
+    await backend.run(async (ctx) => {
+      const launch = await ctx.db.query('platformLaunch').withIndex('by_environment', (q) => q.eq('environment', 'production')).unique()
+      if (launch === null) throw new Error('launch_missing')
+      await ctx.db.patch(launch._id, { paymentsOpenTo: 'everyone' })
+    })
+    expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'reserved' })
+    await pause()
+    expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'replayed', reservation: { callRef: reservation.callRef } })
+    expect(await backend.run((ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+  })
+})
+
 describe('legal customer binding refusals', () => {
   it('forwards legal_customer_required when the legal customer cannot be bound', async () => {
     const backend = convexTestWithMarketComponents()
@@ -831,6 +892,30 @@ describe('direct Quote handlers', () => {
       evidenceRef: `cdp-balance:quote:${suffix}-new`,
     })
   })
+
+  it.each(['missing', 'opening', 'wrong-generation', 'wrong-wallet'] as const)(
+    'does not make fresh observed money spendable with a %s ledger checkpoint', async defect => {
+      const backend = convexTestWithMarketComponents()
+      const suffix = `treasury-checkpoint-${defect}`
+      const fixture = await publishCurrentTool(backend, suffix)
+      await seedCommercialPolicies(backend, suffix, Date.now())
+      const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+      await backend.finishAllScheduledFunctions(() => undefined)
+      await observeHealthyReadiness(backend, fixture, suffix)
+      await recordTreasuryObservation(backend, suffix)
+      await backend.run(async ctx => {
+        const row = await ctx.db.query('moneyTreasuryCursors').withIndex('by_custody', query =>
+          query.eq('environment', 'production').eq('custodyRef', activeCustodyRef)).unique()
+        if (row === null) throw new Error('checkpoint_fixture_missing')
+        if (defect === 'missing') await ctx.db.delete(row._id)
+        else if (defect === 'opening') await ctx.db.patch(row._id, { state: { kind: 'opening', batchRef: 'pending-opening' } })
+        else if (defect === 'wrong-generation') await ctx.db.patch(row._id, { custodyGeneration: row.custodyGeneration + 1 })
+        else await ctx.db.patch(row._id, { address: `0x${'9'.repeat(40)}` })
+      })
+      const subjects = await withCustodyEnvironment(() => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+      expect(subjects.treasury).toBeUndefined()
+    },
+  )
 
   it.each([
     { label: 'exactly 30 minutes old', ageMs: 30 * 60_000, accepted: true },

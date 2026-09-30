@@ -64,6 +64,8 @@ const copies = {
   grant_not_found: { message: 'Your account needs access before this Tool can run. Review account access.', actions: [reviewAccess] },
   budget_exceeded: { message: 'This Tool is over your current spending limit. Review account access before trying again.', actions: [reviewAccess] },
   insufficient_balance: { message: 'There is not enough credit to run this Tool. Add credit, then try again.', actions: [addCredit] },
+  payments_paused: { message: 'Paid Tool purchases are temporarily paused. You can keep searching and comparing Tools.', actions: [browseTools] },
+  payments_admins_only: { message: 'Paid Tool purchases are currently available to Admins only. You can keep searching and comparing Tools.', actions: [browseTools] },
   treasury_capacity_unavailable: { message: 'This Tool cannot be run right now. Try another Tool.', actions: [browseTools] },
   pricing_setup_required: { message: 'This Tool is not ready to run right now. Try another Tool.', actions: [browseTools] },
   commercial_policy_unavailable: { message: 'This Tool cannot be run right now. Try another Tool.', actions: [browseTools] },

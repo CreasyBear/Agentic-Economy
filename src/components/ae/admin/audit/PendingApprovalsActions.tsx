@@ -69,6 +69,10 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
     ...(command.expectedStateDigest === undefined ? {} : { currentStateDigest: command.expectedStateDigest }),
   }
   switch (command.action) {
+    case 'set_payments_paused':
+      return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: 'Payment environment', value: command.input.environment }, { label: 'Payments', value: command.input.paused ? 'Paused' : 'Resume saved audience' }]} />
+    case 'change_treasury_thresholds':
+      return null
     case 'set_business_suppression':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetLabels.businessId, value: command.input.businessId }]} />
     case 'change_commercial_policy':

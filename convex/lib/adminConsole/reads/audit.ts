@@ -42,6 +42,7 @@ export const adminApprovalProposalValue = v.object({
   action: v.union(
     v.literal('set_business_suppression'),
     v.literal('change_commercial_policy'),
+    v.literal('set_payments_paused'),
     v.literal('grant_promotional_credit'),
     v.literal('grant_admin_membership'),
     v.literal('revoke_admin_membership'),

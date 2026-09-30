@@ -122,6 +122,11 @@ export const ADMIN_REFUSAL_PRESENTATION = {
   source_authority_not_reviewable: noLongerActionable,
   policy_not_found: noLongerActionable,
   account_not_found: noLongerActionable,
+  treasury_thresholds_invalid: {
+    certainty: 'not_applied', retry: 'no',
+    copy: 'The treasury thresholds are invalid.',
+    nextStep: 'Use nonnegative USDC amounts with a positive target at least as high as the low-water mark.',
+  },
   promotional_credit_invalid: {
     certainty: 'not_applied', retry: 'no',
     copy: 'The promotional credit amount or expiry is invalid.',

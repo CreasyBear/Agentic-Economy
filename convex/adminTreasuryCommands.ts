@@ -1,0 +1,33 @@
+import { v } from 'convex/values'
+import { mutation } from './_generated/server'
+import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
+import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
+import { refused } from './lib/adminConsole/commands/commandEnvelopeSteps'
+import { paymentsPausedSpec, treasuryThresholdsSpec, treasuryCommandEnvironmentMatches } from './lib/adminConsole/actions/treasury'
+import { treasuryEnvironmentValue } from '@/modules/money/treasury'
+
+const pauseArgs = adminCommandArgsValue(
+  v.literal('set_payments_paused'),
+  v.object({ environment: treasuryEnvironmentValue, paused: v.boolean() }),
+  v.union(v.literal('operational_pause'), v.literal('operational_resume'), v.literal('correction')),
+)
+export const setPaymentsPaused = mutation({
+  args: pauseArgs.fields,
+  returns: adminCommandReceiptValue(v.literal('set_payments_paused'), v.union(v.literal('payments_paused'), v.literal('payments_resumed')), v.string()),
+  handler: (ctx, args) => treasuryCommandEnvironmentMatches(args.input.environment)
+    ? runAdminCommand(ctx, args, paymentsPausedSpec(ctx, args))
+    : refused(args, 'environment_mismatch'),
+})
+
+const thresholdsArgs = adminCommandArgsValue(
+  v.literal('change_treasury_thresholds'),
+  v.object({ environment: treasuryEnvironmentValue, lowWaterUnits: v.string(), targetFloatUnits: v.string() }),
+  v.union(v.literal('threshold_update'), v.literal('correction')),
+)
+export const changeThresholds = mutation({
+  args: thresholdsArgs.fields,
+  returns: adminCommandReceiptValue(v.literal('change_treasury_thresholds'), v.literal('treasury_thresholds_changed'), v.string()),
+  handler: (ctx, args) => treasuryCommandEnvironmentMatches(args.input.environment)
+    ? runAdminCommand(ctx, args, treasuryThresholdsSpec(ctx, args))
+    : refused(args, 'environment_mismatch'),
+})

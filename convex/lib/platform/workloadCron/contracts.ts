@@ -11,6 +11,8 @@ export const CONSEQUENCE_OPERATIONS = [
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
   'moneyTreasury:recordObservation',
+  'moneyTreasuryReconciliation:beginBatch',
+  'moneyTreasuryReconciliation:finishBatch',
   'moneyPromotionalCredit:claimWork',
   'moneyPromotionalCredit:finishWork',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
@@ -41,4 +43,3 @@ export function consequenceJsonValueAtDepth(depth: number): Validator<JsonValue,
 // caps nesting before dispatching through the declared operation switch below.
 export const consequenceJsonValue = consequenceJsonValueAtDepth(12)
 export const consequencePayloadValue = v.record(v.string(), consequenceJsonValue)
-

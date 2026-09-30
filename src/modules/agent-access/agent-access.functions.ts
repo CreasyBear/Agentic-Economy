@@ -468,6 +468,11 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     })
   })
 
+type OwnerPaymentAccess =
+  | Readonly<{ kind: 'allowed' }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'environment_mismatch' | 'payments_paused' | 'payments_admins_only' }>
+const readOwnerPaymentAccessQuery = sourceQuery<{ environment: PaymentEnvironment }, OwnerPaymentAccess>('platformLaunch:readOwnerPaymentAccess')
+
 /** A dedicated owner-chat grant never delivers its bearer secret to the browser. */
 export const enableOwnerChatSpendingServer = createServerFn({ method: 'POST' })
   .handler(async () => {
@@ -478,6 +483,13 @@ export const enableOwnerChatSpendingServer = createServerFn({ method: 'POST' })
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
     await requireCanonicalOwnerAuthorityServer()
+    try {
+      const paymentAccess = await callSourceQuery(readOwnerPaymentAccessQuery, { environment })
+      if (paymentAccess.kind === 'refused') return paymentAccess
+      if (paymentAccess.kind !== 'allowed') return { kind: 'refused' as const, code: 'issuance_unavailable' as const, retryable: true }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused' as const, code: 'issuance_unavailable' as const, retryable: true }, { site: 'enableOwnerChatSpendingServer.paymentAccess', reason: 'source_unavailable' })
+    }
     // Retain the old canonical record so a interrupted provider cleanup can be
     // retried. No new credential is issued until that cleanup has completed.
     try {

@@ -690,7 +690,7 @@ describe('Formance managed Call evidence', () => {
       .resolves.toMatchObject({ kind: 'available', entryRefusalCode: 'financial_scope_locked' })
   })
 
-  it('binds a Provider settlement reversal to owner proof, exact evidence, and one append-only reference', async () => {
+  it('refuses new buyer-directed treasury reversal and preserves exact historical reversal evidence', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'provider-settlement-reversal')
     const settledAt = now + 4
@@ -759,11 +759,22 @@ describe('Formance managed Call evidence', () => {
         operationKey: prepareArgs.operationKey,
         correlationId: prepareArgs.correlationId,
       }),
-    )).resolves.toEqual({ kind: 'prepared' })
+    )).resolves.toEqual({ kind: 'refused', code: 'provider_settlement_evidence_invalid', retryable: false })
     await expect(fixture.owner.mutation(
       internal.moneyProviderObligations.prepareOwnerReversal,
       prepareArgs,
-    )).resolves.toEqual({ kind: 'prepared' })
+    )).resolves.toEqual({ kind: 'refused', code: 'provider_settlement_evidence_invalid', retryable: false })
+
+    // Historical native posting recovery can still finalize exact evidence;
+    // the buyer-facing preparation path no longer creates this pending state.
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyProviderObligations')
+        .withIndex('by_obligationRef', q => q.eq('obligationRef', obligationRef)).unique()
+      if (row === null) throw new Error('missing historical obligation fixture')
+      expect(row.reversalState).toBeUndefined()
+      await ctx.db.patch(row._id, { reversalState: 'pending', reversalCommandRef: commandRef,
+        reversalIdempotencyKey: commandRef, reversalEvidenceDigest: evidenceDigest })
+    })
 
     const reversalRef = 'formance:provider-reversal'
     const finalizeArgs = {
@@ -818,7 +829,7 @@ describe('Formance managed Call evidence', () => {
     await expect(backend.run(async (ctx) => await ctx.db.query('moneyProviderObligations')
       .withIndex('by_obligationRef', (query) => query.eq('obligationRef', obligationRef)).unique()))
       .resolves.toMatchObject({
-        state: 'disputed',
+        state: 'reversed',
         payoutEligibility: 'ineligible_x402',
         reversalTransactionRef: reversalRef,
       })

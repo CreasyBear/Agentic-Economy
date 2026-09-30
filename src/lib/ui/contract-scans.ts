@@ -318,6 +318,10 @@ function isAllowedModulePublicSeam(violation: ScanViolation): boolean {
 
 function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
   if (violation.rule !== "forbidden-handshake-import") return false;
+  // Read-only finalized ERC-20 observation adapter; ABI encoding only, no signer.
+  if (violation.file === "convex/lib/money/treasury/chainObservation.ts") {
+    return /from\s+['"]viem['"]/.test(violation.excerpt);
+  }
   if (
     violation.file ===
     "src/modules/capability-supply/internal/facilitator-discovery-client.ts"

@@ -164,6 +164,22 @@ export async function recordTreasuryObservation(
     kind: 'accepted',
     replayed: false,
   })
+  // This fixture represents an already reconciled treasury. Production creates
+  // this checkpoint only after the observer proves the native ledger opening.
+  await backend.run(async ctx => {
+    const existing = await ctx.db.query('moneyTreasuryCursors').withIndex('by_custody', query =>
+      query.eq('environment', 'production').eq('custodyRef', activeCustodyRef)).unique()
+    if (existing === null) await ctx.db.insert('moneyTreasuryCursors', {
+      environment: 'production', custodyRef: activeCustodyRef, custodyGeneration: activeCustodyGeneration,
+      bufferTargetUnits: validCustodyEnvironment.AE_X402_CUSTODY_MAX_ATOMIC, bufferUnits: validCustodyEnvironment.AE_X402_CUSTODY_MAX_ATOMIC,
+      network: activeCustodyNetwork,
+      asset: x402PaymentProfileForEnvironment('production')!.asset.toLowerCase(),
+      address: validCustodyEnvironment.AE_X402_CDP_EXPECTED_EVM_ADDRESS.toLowerCase(),
+      state: { kind: 'ready', checkpoint: { blockNumber: '100', blockHash: `0x${'1'.repeat(64)}`,
+        balanceUnits: '10000000' }, blockTimestamp: observedAt },
+      createdAt: observedAt, updatedAt: observedAt,
+    })
+  })
 }
 
 export async function insertMalformedTreasuryObservation(
@@ -343,6 +359,12 @@ export async function seedAgent(
     idempotencyRef: `idempotency:quote:${suffix}`,
   }
   await backend.run(async (ctx: MutationCtx) => {
+    // Unrelated Quote scenarios run on an explicitly open lane. Launch-gate
+    // tests separately exercise absent/default and real human-admin delegation.
+    const launch = await ctx.db.query('platformLaunch').withIndex('by_environment', query => query.eq('environment', environment)).unique()
+    if (launch === null) await ctx.db.insert('platformLaunch', {
+      environment, paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone', revision: 1, updatedAt: now,
+    })
     await ctx.db.insert('externalIdentityBindings', {
       bindingRef: testRef('eib', suffix),
       principalRef: principalId,

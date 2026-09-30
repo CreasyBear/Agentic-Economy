@@ -13,6 +13,8 @@ import { materializeRuntimePublishedTool } from '@/modules/capability-supply/pub
 import { jsonObject } from '@/modules/capability-execution/convex'
 
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
+import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
+import { normalizePricingConfig } from '@/modules/money/public'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
@@ -109,6 +111,17 @@ export async function issueQuoteHandler(
   if (currentDigest === undefined) return refuse(args, 'tool_not_current', false, {
     capabilityId: operation.contract.ref.capabilityId,
   })
+
+  // Re-read after the coordinating action's external inspection; a mid-request pause must win.
+  const paymentPricing = normalizePricingConfig(operation.pricingConfig)
+  if (paymentPricing.kind !== 'valid') return refuse(args, 'tool_unsupported', false)
+  if (paymentPricing.config.kind !== 'fixed_aud' || paymentPricing.config.amountUnits !== '0') {
+    const paymentAccess = await readAgentPaymentAdmission(ctx, {
+      environment: authority.principal.environment, accountRef: authority.principal.ownerId,
+      grantRef: authority.grantRef, grantGeneration: authority.grantGeneration,
+    }, now)
+    if (paymentAccess.kind === 'refused') return refuse(args, paymentAccess.code, false)
+  }
 
   const policyGate = await readCommercialPolicyGate(ctx.db, {
     environment: operation.runtimeEnvironment,

@@ -2,6 +2,8 @@ import { spendingPeriodAdjustmentValue } from './spending-period-values'
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 import { x402PayeeScreeningDecisionValue, x402SpendAdmissionRefusalCodeValue } from '../x402-spend-admission'
+import { paymentsAudienceValue, treasuryEnvironmentValue, treasuryThresholdsValue,
+  treasuryChainCheckpointValue, treasuryChainObservationValue, treasuryCursorStateValue } from '../treasury'
 
 const currency = v.string()
 const exponent = v.number()
@@ -522,6 +524,47 @@ export const moneyTables = {
     updatedAt: v.number(),
   }).index('by_accountRef', ['accountRef']),
 
+  platformLaunch: defineTable({
+    environment: treasuryEnvironmentValue,
+    paymentsOpenTo: v.union(v.literal('none'), paymentsAudienceValue),
+    resumePaymentsOpenTo: paymentsAudienceValue,
+    revision: v.number(),
+    updatedAt: v.number(),
+  }).index('by_environment', ['environment']),
+  moneyTreasurySettings: defineTable({
+    environment: treasuryEnvironmentValue,
+    thresholds: treasuryThresholdsValue,
+    revision: v.number(),
+    updatedAt: v.number(),
+  }).index('by_environment', ['environment']),
+  moneyTreasuryCursors: defineTable({
+    environment: treasuryEnvironmentValue,
+    custodyRef: identifier,
+    custodyGeneration: v.number(),
+    network: identifier,
+    asset: identifier,
+    address: identifier,
+    bufferTargetUnits: units,
+    bufferUnits: units,
+    state: treasuryCursorStateValue,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_custody', ['environment', 'custodyRef']),
+  moneyTreasuryBatches: defineTable({
+    batchRef: identifier,
+    custodyRef: identifier,
+    custodyGeneration: v.number(),
+    previousCheckpoint: v.union(v.null(), treasuryChainCheckpointValue),
+    observation: treasuryChainObservationValue,
+    previousBufferUnits: units,
+    bufferIncreaseUnits: units,
+    state: v.union(
+      v.object({ kind: v.literal('pending') }),
+      v.object({ kind: v.literal('booked'), transactionRefs: v.array(identifier), completedAt: v.number() }),
+    ),
+    createdAt: v.number(),
+  }).index('by_batchRef', ['batchRef'])
+    .index('by_custody_and_createdAt', ['custodyRef', 'createdAt']),
   moneyTreasuryObservations: defineTable({
     observationRef: identifier,
     environment: v.union(v.literal('sandbox'), v.literal('production')),

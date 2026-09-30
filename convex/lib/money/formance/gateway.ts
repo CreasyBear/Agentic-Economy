@@ -12,7 +12,9 @@ export {
   readFormanceAccountHistory,
   readFormancePeriodSpend,
   readFormanceStatementPage,
+  type FormanceContext,
 } from '../../../../src/modules/money/formance'
+export { bookFormanceTreasuryBatch } from '../../../../src/modules/money/formance-treasury'
 export {
   readFormanceAccountCreditBalance,
   prepareFormancePromotionalCreditGrant,

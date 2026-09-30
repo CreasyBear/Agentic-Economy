@@ -15,7 +15,7 @@ import { env, type MutationCtx } from '../../../_generated/server'
 import { loadByCustody } from './attempt'
 import { canonicalUnsignedMaterialJson, isPaymentSigningIdempotencyKey, paymentAuthorizationExpiryFromMaterial } from './authorizationMaterial'
 import type { AttemptRow } from './contracts'
-import { persistedCallAuthorityIsCurrent } from '../billingAuthorization/persistedCall'
+import { reconcilePersistedCallAuthority } from '../../capabilityExecution/callLifecycle/persistedCallAuthority'
 
 export const recordScreeningAndReserveSigningArgs = {
   purpose: v.union(v.literal('sign'), v.literal('forensic_replay')),
@@ -141,6 +141,25 @@ function attemptMaySign(row: AttemptRow, purpose: RecordScreeningAndReserveSigni
         && row.reconciliationEvidenceDigest !== undefined))
 }
 
+/** Requires an exact, unresolved accepted Call. Ensures only its frozen authority
+ * can authorize this signing intent, including the existing monetary-update
+ * exception. Current revocation, credential and delegation checks remain live.
+ * On violation, the caller records refusal without releasing existing liability. */
+async function acceptedCallMaySign(ctx: MutationCtx, row: AttemptRow, now: number): Promise<boolean> {
+  if (row.toolRef === undefined || row.inputDigest === undefined) return false
+  const call = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (q) => q.eq('callRef', row.dispatchRef)).unique()
+  if (call === null || (call.state !== 'pending' && call.state !== 'reconciliation_required')
+    || call.toolRef !== row.toolRef || call.inputDigest !== row.inputDigest
+    || call.attemptRef !== row.attemptRef) return false
+  const authority = await reconcilePersistedCallAuthority(ctx, call.callRef, now)
+  return authority !== null
+    && authority.principalId === call.principalId && authority.accountRef === call.ownerId
+    && authority.credentialId === call.credentialId && authority.grantRef === call.grantRef
+    && authority.grantGeneration === call.grantGeneration && authority.policyDigest === call.policyDigest
+    && authority.expiresAt === call.grantExpiresAt
+}
+
 function sameExposure(row: Reservation, attempt: AttemptRow, policy: X402SpendPolicy, typedDataDigest: string): boolean {
   return row.reservationRef === attempt.spendReservationRef && row.platformBudgetRef === policy.platformBudgetRef
     && row.custodyRef === attempt.custodyRef && row.custodyBudgetRef === attempt.custodyBudgetRef
@@ -246,9 +265,7 @@ export async function recordScreeningAndReserveSigningHandler(
     || !isPaymentSigningIdempotencyKey(args.paymentSigningIdempotencyKey)) code = 'spend_identity_conflict'
   else if (row.spendReservationRef === undefined) code = 'spend_history_incomplete'
   else if (row.spendReservationRef !== x402SpendReservationRef({ custodyRef: row.custodyRef, attemptRef: row.attemptRef, effectGeneration: row.effectGeneration, paymentIdentityDigest: row.paymentIdentityDigest })) code = 'spend_identity_conflict'
-  else if (row.toolRef === undefined || row.inputDigest === undefined || !(await persistedCallAuthorityIsCurrent(ctx, {
-    callRef: row.dispatchRef, toolRef: row.toolRef, inputDigest: row.inputDigest, attemptRef: row.attemptRef,
-  }))) code = 'spend_authority_invalid'
+  else if (!(await acceptedCallMaySign(ctx, row, now))) code = 'spend_authority_invalid'
   else {
     expected = expectedMaterial(row, trusted.payer, now, args.purpose)
     if (expected === undefined) code = 'spend_identity_conflict'

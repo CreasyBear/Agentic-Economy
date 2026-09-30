@@ -1,3 +1,4 @@
+import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
 import { claimPromotionalCredit } from '../../money/promotionalCredit/allocation'
 import type { PromotionalCreditAllocation } from '@/modules/money/public'
 import type { Doc } from '../../../_generated/dataModel'
@@ -224,6 +225,20 @@ export async function reserveHandler(
   const grantDecision = await loadReservationGrant(ctx, args)
   if (grantDecision.kind === 'refused') return grantDecision
   const normalizedGrant = grantDecision.grant
+
+  // A previously accepted Call replays above; an unused Quote still needs current purchase admission.
+  if (commitment !== null && commitment.decisionAudUnits !== '0') {
+    const paymentAccess = await readAgentPaymentAdmission(ctx, {
+      environment: args.environment, accountRef: args.ownerId,
+      grantRef: args.grantRef, grantGeneration: normalizedGrant.generation,
+    }, Date.now())
+    if (paymentAccess.kind === 'refused') return {
+      kind: 'refused', code: 'operation_not_ready', retryable: false,
+      nextAction: paymentAccess.code === 'payments_paused'
+        ? 'Paid Tool purchases are temporarily paused. You can keep searching and comparing Tools.'
+        : 'Paid Tool purchases are currently available to Admins only. You can keep searching and comparing Tools.',
+    }
+  }
 
   const periodRefusal = await spendingPeriodAdmissionRefusal(ctx, args, commitment, normalizedGrant)
   if (periodRefusal !== null) return periodRefusal

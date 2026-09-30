@@ -49,6 +49,8 @@ const toolQuoteRefusalCodeValues = [
   'budget_exceeded',
   'insufficient_balance',
   'treasury_capacity_unavailable',
+  'payments_paused',
+  'payments_admins_only',
   'pricing_setup_required',
   'commercial_policy_unavailable',
   'inspection_unavailable',
@@ -234,6 +236,10 @@ export function projectToolQuoteRefusal(input: Readonly<{
           'AE could not complete this Quote request. Contact support before trying again.',
           '/support',
         )] }
+    case 'payments_paused':
+      return { ...base, retryable: false, reason: 'Paid Tool purchases are temporarily paused. You can keep searching and comparing Tools.' }
+    case 'payments_admins_only':
+      return { ...base, retryable: false, reason: 'Paid Tool purchases are currently available to Admins only. You can keep searching and comparing Tools.' }
     case 'treasury_capacity_unavailable':
       return { ...base, continuation: inspect(30000) }
     case 'input_invalid':

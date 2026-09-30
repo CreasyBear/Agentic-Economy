@@ -143,18 +143,6 @@ async function evaluateQuoteAction(
       policyDigest: subjects.policyDigest,
       externalEvidenceDigest: subjects.policyDigest,
     },
-    ...(live.kind === 'observed' && subjects.treasury !== undefined
-      ? [{
-          commandRef: `capacity:treasury:${subjects.treasury.custodyRef}:${subjects.treasury.custodyGeneration}`,
-          idempotencyKey: `capacity:treasury:${subjects.treasury.custodyRef}:${subjects.treasury.custodyGeneration}`,
-          kind: 'treasury_usdc' as const,
-          subjectRef: subjects.treasury.custodyRef,
-          generation: subjects.treasury.custodyGeneration,
-          targetUnits: subjects.treasury.targetUnits,
-          policyDigest: subjects.policyDigest,
-          externalEvidenceDigest: subjects.treasury.evidenceDigest,
-        }]
-      : []),
   ]
   if (live.kind === 'observed' && subjects.treasury === undefined) {
     return refuse(args, 'treasury_capacity_unavailable', true)

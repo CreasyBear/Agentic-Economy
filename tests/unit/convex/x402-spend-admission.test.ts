@@ -4,6 +4,7 @@ import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
+import { agentAccessPolicyDigest, agentAccessPolicySchema } from '@/modules/agent-access/policy'
 import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/convex'
 import { x402SpendPolicyFromEnvironment, x402SpendReservationRef, X402_SPEND_HISTORY_LIMIT, X402_SPEND_WINDOW_MS } from '@/modules/money/x402-spend-admission'
 import schema from '../../../convex/schema'
@@ -33,15 +34,15 @@ const sourceEnvironment = {
   AE_X402_CDP_POLICY_RULES_DIGEST: canonicalDigest({ policy: 'fixture' }), AE_X402_CDP_CREDENTIAL_GENERATION: '1',
 }
 const spendPolicy = x402SpendPolicyFromEnvironment(sourceEnvironment, { environment: 'sandbox', network: NETWORK, asset: ASSET })!
-const accessPolicy = {
+const accessPolicy = agentAccessPolicySchema.parse({
   format: 'ae.agent-access-policy:v2' as const, toolAccess: 'all_admitted' as const, toolRefs: [], environment: 'sandbox' as const,
   budget: { budgetPolicyRef: 'budget:fixture', generation: 1, currency: 'AUD', exponent: 6,
     maximumSpendPerCall: { currency: 'AUD', units: '1000', exponent: 6 },
     maximumDailySpend: { currency: 'AUD', units: '10000', exponent: 6 },
     maximumMonthlySpend: { currency: 'AUD', units: '100000', exponent: 6 }, maximumConcurrentCalls: 10 },
   rate: { ratePolicyRef: 'rate:fixture', generation: 1, maximumCallsPerMinute: 100, maximumCallsPerHour: 1000 },
-}
-const policyDigest = canonicalDigest(accessPolicy)
+})
+const policyDigest = agentAccessPolicyDigest(accessPolicy)
 const expiresAt = NOW + 10 * X402_SPEND_WINDOW_MS
 type Backend = TestConvex<typeof schema>
 type Payment = Omit<Doc<'moneyX402PaymentAttempts'>, '_id' | '_creationTime'>
@@ -55,15 +56,17 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs() })
 async function fixture(): Promise<Backend> {
   const backend = convexTest(schema, modules)
   await backend.run(async ctx => {
-    const action = { actorPrincipalRef: 'principal:fixture', activeAccountRef: 'account:fixture', correlationRef: 'correlation:fixture', idempotencyRef: 'idempotency:fixture' }
-    await ctx.db.insert('principals', { principalRef: 'principal:fixture', kind: 'agent', displayName: 'Agent', lifecycle: 'active', revision: 1, createdAt: NOW - 1000, updatedAt: NOW - 1000 })
-    await ctx.db.insert('accounts', { accountRef: 'account:fixture', displayName: 'Account', lifecycle: 'active', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, creationActorPrincipalRef: action.actorPrincipalRef, creationIdempotencyRef: action.idempotencyRef, initialOwnershipRef: 'ownership:fixture', currentOwnershipRef: 'ownership:fixture', revision: 1, createdAt: NOW - 1000, updatedAt: NOW - 1000, lastAction: action })
-    await ctx.db.insert('memberships', { membershipRef: 'membership:fixture', accountRef: 'account:fixture', memberPrincipalRef: 'principal:fixture', lifecycle: 'active', revision: 1, createdAt: NOW - 1000, createdBy: action })
-    await ctx.db.insert('externalIdentityBindings', { bindingRef: 'binding:fixture', principalRef: 'principal:fixture', providerNamespace: 'clerk/api-key', providerIdentifier: 'credential:fixture', providerState: { kind: 'known', value: 'active' }, lifecycle: 'active', credentialGeneration: 1, bindIdempotencyRef: 'bind:fixture', revision: 1, createdAt: NOW - 1000, updatedAt: NOW - 1000 })
-    await ctx.db.insert('credentials', { credentialRef: 'credential:stored', bindingRef: 'binding:fixture', principalRef: 'principal:fixture', type: 'api_key', lifecycle: 'active', generation: 1, issueIdempotencyRef: 'issue:fixture', revision: 1, issuedAt: NOW - 1000, expiresAt, updatedAt: NOW - 1000 })
-    await ctx.db.insert('agentAccessPrincipals', { principalId: 'principal:fixture', ownerId: 'account:fixture', credentialId: 'credential:fixture', applicationRef: 'application:fixture', environment: 'sandbox', scopes: ['market_tools:call'], authorityMode: 'spending_policy', grantGeneration: 1, spendingPolicyDigest: policyDigest, lifecycle: 'active', expiresAt, recordedAt: NOW - 1000, lastSeenAt: NOW - 1000 })
-    await ctx.db.insert('agentAccessGrants', { format: 'ae.agent-access-grant:v2', grantRef: 'grant:fixture', principalId: 'principal:fixture', ownerId: 'account:fixture', credentialId: 'credential:fixture', applicationRef: 'application:fixture', environment: 'sandbox', toolAccess: 'all_admitted', toolRefs: [], authorityMode: 'spending_policy', budgetPolicyRef: 'budget:fixture', ratePolicyRef: 'rate:fixture', lifecycle: 'active', generation: 1, spendingPolicyDigest: policyDigest, spendingPolicy: accessPolicy, createdAt: NOW - 1000, updatedAt: NOW - 1000, expiresAt })
-    await ctx.db.insert('authorityDelegationGrants', { grantRef: 'grant:fixture', accountRef: 'account:fixture', actorPrincipalRef: 'principal:fixture', subjectPrincipalRef: 'principal:fixture', scopes: ['market_tools:call'], resourceRefs: ['*'], budgetLimit: 1000, budgetUsed: 0, expiresAt, generation: 1, revision: 1, lifecycle: 'active', createdAt: NOW - 1000, createdBy: action })
+    const action = { actorPrincipalRef: 'prn_22222222222222222222222222222222', activeAccountRef: 'acc_33333333333333333333333333333333', correlationRef: 'correlation:fixture', idempotencyRef: 'idempotency:fixture' }
+    await ctx.db.insert('principals', { principalRef: 'prn_22222222222222222222222222222222', kind: 'human', displayName: 'Owner', lifecycle: 'active', revision: 1, createdAt: NOW - 1000, updatedAt: NOW - 1000 })
+    await ctx.db.insert('principals', { principalRef: 'prn_11111111111111111111111111111111', kind: 'agent', displayName: 'Agent', lifecycle: 'active', revision: 1, createdAt: NOW - 1000, updatedAt: NOW - 1000 })
+    await ctx.db.insert('accounts', { accountRef: 'acc_33333333333333333333333333333333', displayName: 'Account', lifecycle: 'active', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, creationActorPrincipalRef: action.actorPrincipalRef, creationIdempotencyRef: action.idempotencyRef, initialOwnershipRef: 'ownership:fixture', currentOwnershipRef: 'ownership:fixture', revision: 1, createdAt: NOW - 1000, updatedAt: NOW - 1000, lastAction: action })
+    await ctx.db.insert('memberships', { membershipRef: 'membership:fixture', accountRef: 'acc_33333333333333333333333333333333', memberPrincipalRef: 'prn_11111111111111111111111111111111', lifecycle: 'active', revision: 1, createdAt: NOW - 1000, createdBy: action })
+    await ctx.db.insert('accountOwnerships', { ownershipRef: 'ownership:fixture', accountRef: 'acc_33333333333333333333333333333333', ownerPrincipalRef: 'prn_22222222222222222222222222222222', lifecycle: 'active', changeKind: 'creation', revision: 1, createdAt: NOW - 1000, createdBy: action })
+    await ctx.db.insert('externalIdentityBindings', { bindingRef: 'binding:fixture', principalRef: 'prn_11111111111111111111111111111111', providerNamespace: 'clerk/api-key', providerIdentifier: 'credential:fixture', providerState: { kind: 'known', value: 'active' }, lifecycle: 'active', credentialGeneration: 1, bindIdempotencyRef: 'bind:fixture', revision: 1, createdAt: NOW - 1000, updatedAt: NOW - 1000 })
+    await ctx.db.insert('credentials', { credentialRef: 'credential:stored', bindingRef: 'binding:fixture', principalRef: 'prn_11111111111111111111111111111111', type: 'api_key', lifecycle: 'active', generation: 1, issueIdempotencyRef: 'issue:fixture', revision: 1, issuedAt: NOW - 1000, expiresAt, updatedAt: NOW - 1000 })
+    await ctx.db.insert('agentAccessPrincipals', { principalId: 'prn_11111111111111111111111111111111', ownerId: 'acc_33333333333333333333333333333333', credentialId: 'credential:fixture', applicationRef: 'application:fixture', environment: 'sandbox', scopes: ['market_tools:call'], authorityMode: 'spending_policy', grantGeneration: 1, spendingPolicyDigest: policyDigest, lifecycle: 'active', expiresAt, recordedAt: NOW - 1000, lastSeenAt: NOW - 1000 })
+    await ctx.db.insert('agentAccessGrants', { format: 'ae.agent-access-grant:v2', grantRef: 'grt_44444444444444444444444444444444', principalId: 'prn_11111111111111111111111111111111', ownerId: 'acc_33333333333333333333333333333333', credentialId: 'credential:fixture', applicationRef: 'application:fixture', environment: 'sandbox', toolAccess: 'all_admitted', toolRefs: [], authorityMode: 'spending_policy', budgetPolicyRef: 'budget:fixture', ratePolicyRef: 'rate:fixture', lifecycle: 'active', generation: 1, spendingPolicyDigest: policyDigest, spendingPolicy: accessPolicy, createdAt: NOW - 1000, updatedAt: NOW - 1000, expiresAt })
+    await ctx.db.insert('authorityDelegationGrants', { grantRef: 'grt_44444444444444444444444444444444', accountRef: 'acc_33333333333333333333333333333333', actorPrincipalRef: 'prn_22222222222222222222222222222222', subjectPrincipalRef: 'prn_11111111111111111111111111111111', scopes: ['market_tools:call'], resourceRefs: ['*'], budgetLimit: 1000, budgetUsed: 0, expiresAt, generation: 1, revision: 1, lifecycle: 'active', createdAt: NOW - 1000, createdBy: action })
   })
   return backend
 }
@@ -100,8 +103,8 @@ async function seed(backend: Backend, row: Payment): Promise<void> {
     await ctx.db.insert('moneyX402PaymentAttempts', row)
     await ctx.db.insert('capabilityCalls', {
       callRef: row.dispatchRef, toolRef: row.toolRef!, inputDigest: row.inputDigest!, attemptRef: row.attemptRef,
-      principalId: 'principal:fixture', ownerId: 'account:fixture', credentialId: 'credential:fixture', applicationRef: 'application:fixture',
-      environment: 'sandbox', idempotencyKey: row.dispatchRef, grantRef: 'grant:fixture', grantGeneration: 1, policyDigest,
+      principalId: 'prn_11111111111111111111111111111111', ownerId: 'acc_33333333333333333333333333333333', credentialId: 'credential:fixture', applicationRef: 'application:fixture',
+      environment: 'sandbox', idempotencyKey: row.dispatchRef, grantRef: 'grt_44444444444444444444444444444444', grantGeneration: 1, policyDigest,
       grantExpiresAt: expiresAt, requestDigest: row.requestFingerprint!, state: 'pending', dispatchState: 'running', createdAt: NOW - 1000, updatedAt: NOW - 1000,
     })
   })

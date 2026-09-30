@@ -687,7 +687,10 @@ export function createX402PaymentCallbacks(
           asset: request.selectedRequirement.asset,
           payTo: request.selectedRequirement.payTo,
           amountUnits: request.paymentAmount.units,
-          currency: request.paymentAmount.currency,
+          // Managed custody admits only the canonical USDC6 profile. Preserve
+          // the Tool's USD denomination in its request/Quote; the payment
+          // attempt and its later events identify the token actually spent.
+          currency: input.useCustodySigner === true ? 'USDC' : request.paymentAmount.currency,
           exponent: request.paymentAmount.exponent,
           ...(reservationRef === undefined ? {} : { reservationRef }),
         }
@@ -738,7 +741,7 @@ export function createX402PaymentCallbacks(
         effectGeneration: input.effectGeneration,
         ...paymentEvent,
         amountUnits: amount.units,
-        currency: amount.currency,
+        currency: input.useCustodySigner === true ? 'USDC' : amount.currency,
         exponent: amount.exponent,
       })
       input.onPaymentPossiblySubmitted?.()
@@ -774,7 +777,7 @@ export function createX402PaymentCallbacks(
           : 'observed',
         evidenceRefs: [...event.evidenceRefs],
         amountUnits: amount.units,
-        currency: amount.currency,
+        currency: input.useCustodySigner === true ? 'USDC' : amount.currency,
         exponent: amount.exponent,
       })
     },

@@ -89,6 +89,8 @@ export const ADMIN_ACTION_COPY = {
   verify_capability_source_authority: 'Verify source authority',
   change_commercial_policy: 'Change commercial policy',
   grant_promotional_credit: 'Grant promotional credit',
+  set_payments_paused: 'Pause or resume payments',
+  change_treasury_thresholds: 'Change treasury thresholds',
 } satisfies Record<AdminCommandAction, string>
 
 export const ADMIN_REASON_OPTIONS = {
@@ -99,6 +101,8 @@ export const ADMIN_REASON_OPTIONS = {
   verify_capability_source_authority: ['evidence_verified', 'evidence_insufficient'],
   change_commercial_policy: ['pricing_update', 'correction'],
   grant_promotional_credit: ['onboarding', 'correction'],
+  set_payments_paused: ['operational_pause', 'operational_resume', 'correction'],
+  change_treasury_thresholds: ['threshold_update', 'correction'],
 } as const satisfies { [A in AdminCommandAction]: readonly AdminReasonCodeByAction[A][] }
 export const ADMIN_REASON_LABELS: Record<AdminReasonCodeByAction[AdminCommandAction], string> = {
   policy_violation: 'Policy violation',
@@ -117,6 +121,9 @@ export const ADMIN_REASON_LABELS: Record<AdminReasonCodeByAction[AdminCommandAct
   evidence_insufficient: 'Evidence insufficient',
   pricing_update: 'Pricing update',
   correction: 'Correction',
+  operational_pause: 'Operational pause',
+  operational_resume: 'Operational resume',
+  threshold_update: 'Treasury threshold update',
 }
 
 const commercialControlSchema = z.discriminatedUnion('family', [
@@ -143,6 +150,8 @@ const sharedCommand = {
 }
 
 export const adminCommandRequestSchema = z.discriminatedUnion('action', [
+  z.strictObject({ ...sharedCommand, expectedStateDigest: z.string().min(1), action: z.literal('set_payments_paused'), input: z.strictObject({ environment: z.enum(['sandbox', 'production']), paused: z.boolean() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.set_payments_paused) }),
+  z.strictObject({ ...sharedCommand, expectedStateDigest: z.string().min(1), action: z.literal('change_treasury_thresholds'), input: z.strictObject({ environment: z.enum(['sandbox', 'production']), lowWaterUnits: z.string(), targetFloatUnits: z.string() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.change_treasury_thresholds) }),
   z.strictObject({ ...sharedCommand, action: z.literal('set_business_suppression'), input: z.strictObject({ businessId: z.string().min(1), intent: z.enum(['suppress', 'unsuppress']) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.set_business_suppression) }),
   z.strictObject({ ...sharedCommand, action: z.literal('close_removal_dispute'), input: z.strictObject({ disputeId: z.string().min(1) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.close_removal_dispute) }),
   z.strictObject({ ...sharedCommand, action: z.literal('grant_admin_membership'), input: z.strictObject({ targetClerkUserId: z.string().min(1), targetTokenIdentifier: z.string().min(1), role: z.enum(['owner_admin', 'support', 'reviewer']) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.grant_admin_membership) }),
@@ -187,6 +196,9 @@ export const ADMIN_SUCCESS_COPY = {
   source_authority_insufficient: 'Source authority not verified',
   commercial_policy_changed: 'Commercial policy changed',
   promotional_credit_granted: 'Promotional credit granted',
+  payments_paused: 'Payments paused',
+  payments_resumed: 'Payments resumed',
+  treasury_thresholds_changed: 'Treasury thresholds changed',
 } satisfies Record<AdminSuccessCodeByAction[AdminCommandAction], string>
 
 export const ADMIN_ACTION_SHEET_COPY = {

@@ -23,6 +23,7 @@ import { jsonObject } from '@/modules/capability-execution/convex'
 
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { readManagedX402InspectionTarget } from '../../capabilitySupply/currentTool/inspection'
+import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
@@ -96,6 +97,13 @@ export async function prepareFinancialSubjectsCore(
   if (!isBoundedJsonValue(args.input) || descriptor.validateInput(args.input).kind !== 'valid') return { kind: 'refused', code: 'input_invalid' }
   const pricing = normalizePricingConfig(operation.pricingConfig)
   if (pricing.kind !== 'valid') return { kind: 'refused', code: 'tool_unsupported' }
+  if (pricing.config.kind !== 'fixed_aud' || pricing.config.amountUnits !== '0') {
+    const paymentAccess = await readAgentPaymentAdmission(ctx, {
+      environment: authority.principal.environment, accountRef: authority.principal.ownerId,
+      grantRef: authority.grantRef, grantGeneration: authority.grantGeneration,
+    }, now)
+    if (paymentAccess.kind === 'refused') return paymentAccess
+  }
   const managedApprovalQuote = pricing.config.kind === 'managed_x402'
     && authority.principal.authorityMode === 'approval_required'
   if (pricing.config.kind === 'managed_x402'
@@ -145,6 +153,9 @@ export async function prepareFinancialSubjectsCore(
     ? undefined
     : cdpX402CustodyBudgetRef(custodyConfiguration, environment)
   const custodyGeneration = custodyConfiguration?.credentialGeneration
+  const treasuryCursor = custodyRef === undefined ? null
+    : await ctx.db.query('moneyTreasuryCursors').withIndex('by_custody', query =>
+        query.eq('environment', environment).eq('custodyRef', custodyRef)).unique()
   const observation = custodyRef === undefined || custodyGeneration === undefined
     ? undefined
     : (await ctx.db.query('moneyTreasuryObservations')
@@ -155,6 +166,12 @@ export async function prepareFinancialSubjectsCore(
         .order('desc')
         .take(1))[0]
   const treasuryTarget = observation === undefined
+    || treasuryCursor === null || treasuryCursor.state.kind === 'opening'
+    || treasuryCursor.custodyGeneration !== custodyGeneration
+    || treasuryCursor.bufferTargetUnits !== custodyConfiguration?.maxAtomic.toString()
+    || treasuryCursor.address !== custodyConfiguration?.expectedEvmAddress.toLowerCase()
+    || treasuryCursor.network !== paymentProfile?.network
+    || treasuryCursor.asset !== paymentProfile?.asset.toLowerCase()
     || custodyRef === undefined
     || custodyGeneration === undefined
     || paymentProfile === undefined

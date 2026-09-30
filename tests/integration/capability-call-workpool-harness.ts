@@ -5,6 +5,7 @@ import type { PaymentRequired } from '@x402/core/types'
 import { privateKeyToAccount } from 'viem/accounts'
 
 import { api, internal } from '../../convex/_generated/api'
+import { reconcileTreasuryDeposits } from '../../convex/lib/money/treasury/deposits'
 import {
   convexTestWithWorkers,
   createTestAgentPrincipal,
@@ -187,7 +188,7 @@ async function prepareFundedBuyer(options: PrepareBuyerOptions & {
   const accountPolicy = { id: accountPolicyId, scope: 'account' as const, rules: [{ action: 'accept', operation: 'signEvmTypedData', criteria: [
     { type: 'evmTypedDataVerifyingContract', addresses: [asset], operator: 'in' },
     { type: 'evmTypedDataField', types: typedData, conditions: [
-      { path: 'from', operator: 'in', addresses: [payer.address] }, { path: 'value', operator: '<=', value: '1000000' },
+      { path: 'from', operator: 'in', addresses: [payer.address] }, { path: 'value', operator: '<=', value: '10000' },
     ] },
   ] }] }
   const projectPolicy = { id: projectPolicyId, scope: 'project' as const, rules: [
@@ -195,13 +196,14 @@ async function prepareFundedBuyer(options: PrepareBuyerOptions & {
       { type: 'evmTypedDataVerifyingContract', addresses: [asset], operator: 'not in' },
     ] },
     { action: 'reject', operation: 'signEvmTypedData', criteria: [
-      { type: 'evmTypedDataField', types: typedData, conditions: [{ path: 'value', operator: '>', value: '1000000' }] },
+      { type: 'evmTypedDataField', types: typedData, conditions: [{ path: 'value', operator: '>', value: '10000' }] },
     ] },
   ] }
   const policyDigest = cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)
   if (policyDigest === undefined) throw new Error('buyer_policy_fixture_invalid')
   for (const [name, value] of Object.entries({
-    AE_X402_CUSTODY_ENABLED: 'true', AE_X402_CUSTODY_MAX_ATOMIC: '1000000', AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '10000000',
+    AE_X402_CUSTODY_ENABLED: 'true', AE_X402_CUSTODY_MAX_ATOMIC: '10000', AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '10000000',
+    AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: '5000000', AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: '1000000',
     CDP_API_KEY_ID: 'test-key-id', CDP_API_KEY_SECRET: 'test-key-secret', CDP_WALLET_SECRET: 'test-wallet-secret',
     AE_X402_CDP_ACCOUNT_NAME: 'buyer-source-integration', AE_X402_CDP_EXPECTED_EVM_ADDRESS: payer.address,
     AE_X402_CDP_ACCOUNT_POLICY_ID: accountPolicyId, AE_X402_CDP_PROJECT_POLICY_ID: projectPolicyId,
@@ -225,7 +227,21 @@ async function prepareFundedBuyer(options: PrepareBuyerOptions & {
   const backend = convexTestWithWorkers()
   await backend.run(async (ctx) => {
     await ctx.db.insert('moneyReferenceRates', { pair: 'USDC/AUD', rate: '1.2', fetchedAt: Date.now() })
+    await ctx.db.insert('platformLaunch', { environment, paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone',
+      revision: 1, updatedAt: Date.now() })
   })
+  // The real observer/controller now owns the native opening; Quotes cannot
+  // create treasury money. Only the external finalized chain read is a fixture.
+  const treasuryOpening = await reconcileTreasuryDeposits({ runQuery: backend.query, runMutation: backend.mutation } as unknown as Parameters<typeof reconcileTreasuryDeposits>[0], {
+    formance, admit: async () => true,
+    chainRead: async () => ({ kind: 'observed', environment, network, asset: asset.toLowerCase(),
+      address: payer.address.toLowerCase(), fromBlock: '100',
+      checkpoint: { blockNumber: '100', blockHash: `0x${'1'.repeat(64)}`,
+        balanceUnits: options.treasuryTotalUnits ?? '10000000' },
+      blockTimestamp: Date.now() - 1_000, transfers: [], caughtUp: true, observedAt: Date.now(),
+    }),
+  })
+  expect(treasuryOpening, JSON.stringify(treasuryOpening)).toMatchObject({ kind: 'completed' })
   if (environment === 'production') {
     const discovered = await admitDiscoveredToolFixture(backend)
     const paymentRequired = structuredClone(discovered.paymentRequired) as PaymentRequired

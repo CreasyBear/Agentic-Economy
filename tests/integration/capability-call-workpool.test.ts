@@ -89,6 +89,14 @@ import {
 
 const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
 const external = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn() }))
+// External vendor result only: canonical audit, current authority and all four
+// durable spend ceilings still run through the registered production path.
+vi.mock('@/modules/money/x402-payee-screening.server', () => ({
+  screenX402Payee: async (request: Record<string, unknown>) => ({ ...request,
+    provider: 'trm-wallet-screening', outcome: 'clear', startedAt: Date.now(), checkedAt: Date.now(),
+    reason: 'native_journey_external_provider_fixture',
+  }),
+}))
 vi.mock('@coinbase/cdp-sdk', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   CdpClient: class { constructor() { return external.cdpClient() } },
@@ -647,7 +655,13 @@ describe('capability Call Workpool lifecycle', () => {
       if (pending.kind !== 'pending') throw new Error(`production_call_missing:${JSON.stringify(pending)}`)
       await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
       const completed = await readEvidence(backend, pending.callRef)
-      expect(completed.call).toMatchObject({
+      const signingEvidence = await backend.run(async ctx => ({
+        screening: (await ctx.db.query('moneyX402PayeeScreeningChecks').collect()).map(row => ({
+          admission: row.admission, code: row.refusalCode, provider: row.decision.outcome })),
+        attempts: (await ctx.db.query('moneyX402PaymentAttempts').collect()).map(row => ({
+          state: row.state, code: row.authorizationFailureCode, detail: row.authorizationFailureDetail })),
+      }))
+      expect(completed.call, JSON.stringify(signingEvidence)).toMatchObject({
         state: 'completed',
         environment: 'production',
         quoteRef: quote.quoteRef,
@@ -1148,7 +1162,17 @@ describe('capability Call Workpool lifecycle', () => {
     if (pending.kind !== 'pending') throw new Error(`report_call_missing:${JSON.stringify(pending)}`)
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     const original = (await readEvidence(backend, pending.callRef)).call
-    expect(original).toMatchObject({ state: 'completed', formanceFinancialState: 'settled', result: { kind: 'completed' } })
+    const signingEvidence = await backend.run(async ctx => ({
+      screening: (await ctx.db.query('moneyX402PayeeScreeningChecks').collect()).map(row => ({
+        admission: row.admission, code: row.refusalCode, provider: row.decision.outcome })),
+      attempts: (await ctx.db.query('moneyX402PaymentAttempts').collect()).map(row => ({
+        state: row.state, code: row.authorizationFailureCode, detail: row.authorizationFailureDetail,
+        currency: row.currency, exponent: row.exponent,
+      })),
+    }))
+    expect(original, JSON.stringify(signingEvidence)).toMatchObject({ state: 'completed', formanceFinancialState: 'settled', result: { kind: 'completed' } })
+    expect(signingEvidence.screening).toEqual([{ admission: 'admitted', code: undefined, provider: 'clear' }])
+    expect(signingEvidence.attempts).toEqual([expect.objectContaining({ currency: 'USDC', exponent: 6 })])
     expect(await owner.query(api.capabilityCallReports.readOwner, { callRef: pending.callRef }))
       .toMatchObject({ kind: 'eligible', amountUnits: '12000', remainingToday: 3 })
     expect(await backend.action(api.capabilityCallReports.reportOwner, { callRef: pending.callRef }))
