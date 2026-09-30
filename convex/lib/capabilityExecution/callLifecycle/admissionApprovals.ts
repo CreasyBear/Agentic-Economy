@@ -1,5 +1,6 @@
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import { recordCallTerminal } from '@/lib/observability/journey'
+import { internal } from '../../../_generated/api'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { enqueueCallDispatch } from './dispatchEnqueue'
@@ -27,6 +28,13 @@ import {
 } from '@/modules/agent-access/policy'
 import type { ApprovalDecisionResult, PendingApprovalView } from './admissionApproval'
 import type { CallRow, GrantRow } from './contracts'
+import {
+  financialStateHasReleaseUncertainty,
+  isBuyerFormanceReservation,
+  refundReconciliation,
+} from './dispatchRefusal'
+
+export const AUTHORITY_REQUEST_TTL_MS = 60 * 60 * 1000
 
 function parseJsonObject(value: string): Record<string, unknown> | undefined {
   try {
@@ -187,7 +195,14 @@ function pendingApprovalIsClean(row: PendingApprovalRow): boolean {
   return row.workId === undefined && row.authority === undefined
 }
 
-async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): Promise<ApprovalDecisionResult> {
+async function refusePendingApproval(
+  ctx: MutationCtx,
+  row: PendingApprovalRow,
+  nextAction: string,
+): Promise<ApprovalDecisionResult> {
+  if (financialStateHasReleaseUncertainty(row)) return { kind: 'refused', code: 'invocation_invalid' }
+  const now = Date.now()
+  const releaseRequired = isBuyerFormanceReservation(row)
   recordCallTerminal(row.state, 'refused')
   await ctx.db.patch(row._id, {
     state: 'refused',
@@ -197,11 +212,40 @@ async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): P
       toolRef: row.toolRef,
       code: 'authority_denied',
       retryable: false,
-      nextAction: 'The owner declined this operation.',
+      nextAction,
     },
-    updatedAt: Date.now(),
+    ...(releaseRequired ? { reconciliation: refundReconciliation(now) } : {}),
+    updatedAt: now,
   })
+  if (releaseRequired) {
+    await ctx.scheduler.runAfter(0, internal.capabilityCallWorker.reconcilePreClaimRefund, {
+      callRef: row.callRef,
+    })
+  }
   return { kind: 'denied', callRef: row.callRef }
+}
+
+async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): Promise<ApprovalDecisionResult> {
+  return await refusePendingApproval(ctx, row, 'The owner declined this operation.')
+}
+
+export async function expireStalePendingApprovalsHandler(
+  ctx: MutationCtx,
+): Promise<{ scanned: number; expired: number }> {
+  const cutoff = Date.now() - AUTHORITY_REQUEST_TTL_MS
+  const rows = await ctx.db.query('capabilityCalls')
+    .withIndex('by_state_and_result_kind_and_createdAt', (query) => query
+      .eq('state', 'pending')
+      .eq('result.kind', 'needs_authority')
+      .lte('createdAt', cutoff))
+    .take(200)
+  let expired = 0
+  for (const row of rows) {
+    if (!pendingApprovalRow(row) || !pendingApprovalIsClean(row)) continue
+    const result = await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
+    if (result.kind === 'denied') expired += 1
+  }
+  return { scanned: rows.length, expired }
 }
 
 function loadApprovalMaterial(row: PendingApprovalRow): ApprovalMaterial | null {
@@ -377,6 +421,10 @@ export async function decideCallApprovalHandler(
   if (!pendingApprovalRow(row)) return { kind: 'refused', code: 'authority_not_pending' }
   if (!pendingApprovalIsClean(row)) return { kind: 'refused', code: 'invocation_invalid' }
   if (args.decision === 'deny') return await denyPendingApproval(ctx, row)
+  if (Date.now() - row.createdAt > AUTHORITY_REQUEST_TTL_MS) {
+    await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
+    return { kind: 'refused', code: 'authority_not_pending' }
+  }
   if (row.applicationRef === 'ae-owner-chat') {
     const quoteRef = row.quoteRef
     const quote = quoteRef === undefined ? null : await ctx.db.query('capabilityQuotes')

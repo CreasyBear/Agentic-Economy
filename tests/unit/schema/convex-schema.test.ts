@@ -270,6 +270,7 @@ const requiredIndexes = {
     'by_principalId_and_callRef',
     'by_toolRef_and_state',
     'by_ownerId_and_state_and_createdAt',
+    'by_state_and_result_kind_and_createdAt',
     'by_createdAt',
   ],
   capabilityCallProjections: [

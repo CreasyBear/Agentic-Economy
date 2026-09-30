@@ -1,3 +1,4 @@
+import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
   cancelBeforeClaimArgs, dispatchArgs, dispatchResult, finalizeDispatchArgs,
@@ -6,6 +7,7 @@ import {
   reconciledCallAuthorityResult, recordArgs, recordResult, workCompletionArgs,
 } from './lib/capabilityExecution/callLifecycle/contracts'
 import { approvalDecisionResult } from './lib/capabilityExecution/callLifecycle/admissionApproval'
+import { expireStalePendingApprovalsHandler } from './lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { abandonArgs, abandonResult, reserveArgs, reserveResult } from './lib/capabilityExecution/callLifecycle/admissionReservation'
 import { callArgs, admitArgs, admitResult, admitHandler } from './lib/capabilityExecution/callLifecycle/admission'
 import { reserveHandler } from './lib/capabilityExecution/callLifecycle/admissionReserve'
@@ -100,6 +102,11 @@ export const listPendingCallApprovals = query({
 })
 export const decideCallApproval = mutation({
   args: decideCallApprovalArgs, returns: approvalDecisionResult, handler: canonicalOwnerApprovalDecisionHandler,
+})
+export const expireStalePendingApprovals = internalMutation({
+  args: {},
+  returns: v.object({ scanned: v.number(), expired: v.number() }),
+  handler: expireStalePendingApprovalsHandler,
 })
 export const openDispatch = internalQuery({ args: openDispatchArgs, returns: openDispatchResult, handler: openDispatchHandler })
 export const readPreClaimRefund = internalQuery({

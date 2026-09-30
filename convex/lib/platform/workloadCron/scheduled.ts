@@ -34,6 +34,14 @@ export async function reconcileDueFacilitatorInvocationsHandler(ctx: WorkloadCro
     {},
   )
 }
+export async function expireStalePendingApprovalsHandler(ctx: WorkloadCronMutationContext): Promise<null> {
+  return await runAdmittedMutation(
+    ctx,
+    'expire stale pending approvals',
+    internal.capabilityCalls.expireStalePendingApprovals,
+    {},
+  )
+}
 
 export async function refreshFacilitatorDiscoveryHandler(ctx: WorkloadCronActionContext): Promise<null> {
   return await runAdmittedAction(

@@ -41,7 +41,9 @@ import {
   call,
   listPendingCallApprovals,
   reserve,
+  expireStalePendingApprovals,
 } from '../../../convex/capabilityCalls'
+import { AUTHORITY_REQUEST_TTL_MS } from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { canonicalOwnerApprovalDecisionHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/ownerCallAuthority'
 import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import {
@@ -65,6 +67,14 @@ type Query = {
   first: () => Promise<Row | null>
   unique: () => Promise<Row | null>
   take: (limit: number) => Promise<Row[]>
+}
+function readField(row: Row, path: string): unknown {
+  let value: unknown = row
+  for (const segment of path.split('.')) {
+    if (value === null || typeof value !== 'object') return undefined
+    value = Reflect.get(value, segment)
+  }
+  return value
 }
 
 class MemoryDb {
@@ -90,7 +100,7 @@ class MemoryDb {
       withIndex: (_name, build) => {
         const builder: QueryBuilder = {
           eq: (field, value) => {
-            filters.push((row) => row[field] === value)
+            filters.push((row) => readField(row, field) === value)
             return builder
           },
           gt: (field, value) => {
@@ -156,6 +166,7 @@ type AuthIdentity = Readonly<{ subject: string; tokenIdentifier: string; fva?: n
 const approvalHandler = (decideCallApproval as unknown as { _handler: Handler })._handler
 const listHandler = (listPendingCallApprovals as unknown as { _handler: Handler })._handler
 const callHandler = (call as unknown as { _handler: Handler })._handler
+const expiryHandler = (expireStalePendingApprovals as unknown as { _handler: Handler })._handler
 const reserveHandler = (reserve as unknown as { _handler: Handler })._handler
 
 const evidence = buildDevelopmentPublishedToolEvidence()
@@ -284,8 +295,8 @@ function invocation(overrides: Record<string, unknown> = {}): Row {
     toolJson: JSON.stringify(operation),
     inputJson: JSON.stringify(input),
     result: needsAuthorityResult(callRef),
-    createdAt: 100,
-    updatedAt: 100,
+    createdAt: now - 100,
+    updatedAt: now - 100,
     ...overrides,
   }
 }
@@ -338,6 +349,7 @@ function context(options: Readonly<{
     db,
     auth: { getUserIdentity: async () => identity },
     runQuery,
+    scheduler: { runAfter: vi.fn(async (..._args: unknown[]) => undefined) },
     runMutation: vi.fn(async () => ({ ok: true as const })),
   }
 }
@@ -353,8 +365,8 @@ describe('capability operation approval Convex handlers', () => {
     ctx.db.seed('capabilityCalls', invocation({
       _id: 'capabilityCalls:older',
       callRef: 'operation-invocation:v1:older',
-      createdAt: 90,
-      updatedAt: 90,
+      createdAt: now - 200,
+      updatedAt: now - 200,
       inputJson: JSON.stringify({ secret: 'must-not-project' }),
       result: needsAuthorityResult('operation-invocation:v1:older'),
     }))
@@ -362,24 +374,24 @@ describe('capability operation approval Convex handlers', () => {
       _id: 'capabilityCalls:expired',
       callRef: 'operation-invocation:v1:expired',
       grantExpiresAt: 1_000_000,
-      createdAt: 110,
-      updatedAt: 110,
+      createdAt: now - 300,
+      updatedAt: now - 300,
       result: needsAuthorityResult('operation-invocation:v1:expired'),
     }))
     ctx.db.seed('capabilityCalls', invocation({
       _id: 'capabilityCalls:other-owner',
       callRef: 'operation-invocation:v1:other-owner',
       ownerId: 'owner:other',
-      createdAt: 120,
-      updatedAt: 120,
+      createdAt: now - 400,
+      updatedAt: now - 400,
       result: needsAuthorityResult('operation-invocation:v1:other-owner'),
     }))
 
     const result = await listHandler(ctx, {})
 
     expect(result).toEqual([
-      expect.objectContaining({ callRef: 'operation-invocation:v1:approval', createdAt: 100 }),
-      expect.objectContaining({ callRef: 'operation-invocation:v1:older', createdAt: 90 }),
+      expect.objectContaining({ callRef: 'operation-invocation:v1:approval', createdAt: now - 100 }),
+      expect.objectContaining({ callRef: 'operation-invocation:v1:older', createdAt: now - 200 }),
     ])
     expect(JSON.stringify(result)).not.toContain('must-not-project')
     expect((result as Array<Record<string, unknown>>).every((item) => Object.keys(item).sort().join(',') === 'authorityRequest,callRef,createdAt,decisionContext,toolRef')).toBe(true)
@@ -580,6 +592,8 @@ describe('capability operation approval Convex handlers', () => {
       dispatchState: 'failed',
       result: { kind: 'refused', code: 'authority_denied' },
     })
+    expect(ctx.db.row('capabilityCalls', row._id)?.reconciliation).toBeUndefined()
+    expect(ctx.scheduler.runAfter).not.toHaveBeenCalled()
     const nextInput = { next: true }
     const nextInputDigest = canonicalDigest(nextInput)
     ctx.db.seed('capabilityQuotes', {
@@ -623,8 +637,81 @@ describe('capability operation approval Convex handlers', () => {
     })
     expect(next).toMatchObject({ kind: 'reserved' })
   })
-})
+  it('reconciles a reserved hold after denial, but never refuses an uncertain hold', async () => {
+    const reserved = invocation({
+      formanceFinancialState: 'reserved',
+      formanceReservationRefs: ['reservation:1', 'reservation:2', 'reservation:3'],
+    })
+    const ctx = context({ invocation: reserved })
+    expect(await approvalHandler(ctx, { callRef: reserved.callRef, decision: 'deny' }))
+      .toEqual({ kind: 'denied', callRef: reserved.callRef })
+    expect(ctx.db.row('capabilityCalls', reserved._id)).toMatchObject({
+      state: 'refused', dispatchState: 'failed',
+      result: { kind: 'refused', code: 'authority_denied' },
+      reconciliation: { reason: 'refund_pending', nextAttemptAt: now },
+    })
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
+    const [delay, reference, args] = ctx.scheduler.runAfter.mock.calls[0] ?? []
+    expect(delay).toBe(0)
+    expect(reference === undefined ? undefined : functionPath(reference))
+      .toBe('capabilityCallWorker:reconcilePreClaimRefund')
+    expect(args).toEqual({ callRef: reserved.callRef })
+    expect(await approvalHandler(ctx, { callRef: reserved.callRef, decision: 'deny' }))
+      .toEqual({ kind: 'replayed', callRef: reserved.callRef })
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
 
+    const uncertain = invocation({ formanceFinancialState: 'possibly_submitted' })
+    const uncertainCtx = context({ invocation: uncertain })
+    expect(await approvalHandler(uncertainCtx, { callRef: uncertain.callRef, decision: 'deny' }))
+      .toEqual({ kind: 'refused', code: 'invocation_invalid' })
+    expect(uncertainCtx.db.row('capabilityCalls', uncertain._id)).toMatchObject({
+      state: 'pending', dispatchState: 'pending', result: { kind: 'needs_authority' },
+    })
+    expect(uncertainCtx.scheduler.runAfter).not.toHaveBeenCalled()
+  })
+})
+describe('approval request expiry', () => {
+
+  it('expires stale approvals once, preserving young requests and releasing reserved funds', async () => {
+    const stale = invocation({
+      createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
+      formanceFinancialState: 'reserved',
+      formanceReservationRefs: ['reservation:1', 'reservation:2', 'reservation:3'],
+    })
+    const young = invocation({
+      _id: 'capabilityCalls:young',
+      callRef: 'operation-invocation:v1:young',
+      createdAt: now - AUTHORITY_REQUEST_TTL_MS + 1,
+      result: needsAuthorityResult('operation-invocation:v1:young'),
+    })
+    const ctx = context({ invocation: stale })
+    ctx.db.seed('capabilityCalls', young)
+
+    await expect(expiryHandler(ctx, {})).resolves.toEqual({ scanned: 1, expired: 1 })
+    expect(ctx.db.row('capabilityCalls', stale._id)).toMatchObject({
+      state: 'refused',
+      dispatchState: 'failed',
+      result: { kind: 'refused', code: 'authority_denied' },
+      reconciliation: { reason: 'refund_pending', nextAttemptAt: now },
+    })
+    expect(ctx.db.row('capabilityCalls', young._id)).toMatchObject({ state: 'pending' })
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
+    await expect(expiryHandler(ctx, {})).resolves.toEqual({ scanned: 0, expired: 0 })
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses an approval decision after its pending authority expires', async () => {
+    const expired = invocation({ createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1 })
+    const ctx = context({ invocation: expired, grant: grant() })
+    await expect(approvalHandler(ctx, { callRef: expired.callRef, decision: 'approve' }))
+      .resolves.toEqual({ kind: 'refused', code: 'authority_not_pending' })
+    expect(ctx.db.row('capabilityCalls', expired._id)).toMatchObject({
+      state: 'refused',
+      dispatchState: 'failed',
+      result: { kind: 'refused', code: 'authority_denied' },
+    })
+  })
+})
 describe('bounded mandate invocation dispatch', () => {
   it('dispatches with the active grant standing mandate and grant expiry', async () => {
     const boundedPrincipal = { ...principal, authorityMode: 'spending_policy' as const }
