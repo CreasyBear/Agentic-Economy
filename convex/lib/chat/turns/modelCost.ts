@@ -8,7 +8,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { chatThreadBelongsToPrincipal } from '../threads/ownership'
 
-const reconcile = makeFunctionReference<'action', { requestRef: string; attempt: number }, null>('chatModelCost.actions:reconcile')
+const reconcile = makeFunctionReference<'action', { requestRef: string; attempt: number }, null>('chatModelCostActions:reconcile')
 type Request = Doc<'chatModelCostRequests'>
 
 /** Requires canonical turn/thread/prompt and bounded identifiers. Ensures one

@@ -121,6 +121,7 @@ const durableTables = [
   'disputes',
   'chatThreads',
   'chatTurns',
+  'chatModelCostRequests',
   'chatThreadShares',
   'actionExecutionControls',
   'actionExecutionAttempts',

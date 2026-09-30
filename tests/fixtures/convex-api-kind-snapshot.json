@@ -1819,7 +1819,7 @@
   },
   {
     "visibility": "internal",
-    "module": "chatModelCost.actions",
+    "module": "chatModelCostActions",
     "method": "reconcile",
     "kind": "action"
   },

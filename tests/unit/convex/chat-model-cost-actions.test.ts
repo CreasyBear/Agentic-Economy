@@ -30,7 +30,7 @@ describe('OpenRouter generation-cost metadata', () => {
       requestRef: 'request:metadata', providerGenerationId: input.generationId,
       accounting: { status: 'unpriced', reason: 'missing_usage' } })
     external.fetch.mockResolvedValue(response({ total_cost: 0.003, model: 'actual/model', tokens_prompt: 9, tokens_completion: 3 }))
-    await Promise.all([1, 1].map(attempt => backend.action(internal['chatModelCost.actions'].reconcile, { requestRef: 'request:metadata', attempt })))
+    await Promise.all([1, 1].map(attempt => backend.action(internal['chatModelCostActions'].reconcile, { requestRef: 'request:metadata', attempt })))
     expect(external.fetch).toHaveBeenCalledTimes(1)
     await backend.mutation(internal.chatTurns.finishTurn, { turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'completed' })
     expect(await backend.query(internal.chatModelCost.readTurn, { turnRef: turn.turnRef })).toMatchObject({
@@ -38,7 +38,7 @@ describe('OpenRouter generation-cost metadata', () => {
       requests: [{ model: 'actual/model', inputTokens: 9, outputTokens: 3,
         accounting: { status: 'priced', source: 'generation_stats', amountUsd: '0.003' } }],
     })
-    await backend.action(internal['chatModelCost.actions'].reconcile, { requestRef: 'request:metadata', attempt: 2 })
+    await backend.action(internal['chatModelCostActions'].reconcile, { requestRef: 'request:metadata', attempt: 2 })
     expect(external.fetch).toHaveBeenCalledTimes(1)
   })
 
