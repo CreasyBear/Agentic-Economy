@@ -10,7 +10,7 @@ import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { createChatAgent } from '../tools/agent'
 import { catalogueFact, explanationUsable, immediateSearchToolName, retrieveImmediateTools } from '../tools/immediate'
 import { quoteThenCallFromCard } from '../tools/purchase'
-import { parseOwnerQuoteRequest } from '../tools/quoteRequest'
+import { parseOwnerQuoteRequest, parseOwnerRunRequest } from '../tools/quoteRequest'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 import { completedChatFacts } from './completedFacts'
 
@@ -213,8 +213,10 @@ export async function streamDurableChatResponse(
       })
       return purchased.call?.kind === 'needs_authority'
     }
+    // A Run from a card needs the purchase tools, so it skips the tool-less immediate search.
+    const runRequest = args.trustedChatAuthority?.kind === 'agent_key' ? parseOwnerRunRequest(promptText) : null
     let catalogue: Awaited<ReturnType<typeof retrieveImmediateTools>> = null
-    if (promptText.trim().length > 0) {
+    if (runRequest === null && promptText.trim().length > 0) {
       try { catalogue = await retrieveImmediateTools(ctx, promptText, args.searchTurn, args.ownerId) } catch { catalogue = null }
     }
     if (catalogue !== null) {

@@ -12,3 +12,12 @@ export function parseOwnerQuoteRequest(text: string): { toolRef: string; input: 
     return null
   }
 }
+
+const RUN_PROMPT = /^Use (.+) \((operation:v1:[0-9a-f]{64}|registry:[0-9a-f]+)\) to answer: "([\s\S]*)"\. Fill its input from that, run it, and give me the answer\.$/u
+
+/** The card's Run button submits this exact sentence; the model then fills input, quotes and calls. */
+export function parseOwnerRunRequest(text: string): { title: string; toolRef: string; ask: string } | null {
+  const match = RUN_PROMPT.exec(text.trim())
+  if (match === null) return null
+  return { title: match[1] ?? '', toolRef: match[2] ?? '', ask: match[3] ?? '' }
+}
