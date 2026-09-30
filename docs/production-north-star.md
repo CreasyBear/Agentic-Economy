@@ -49,7 +49,7 @@ Deliver the isolation plan in full:
 **Exit:** all 10 P0 findings are closed, and one isolation test (with production set, every door refuses) is green and stays in the gate.
 
 ### M2: Production infrastructure
-Provision the following, then run a restore drill:
+Provision the following, then run a restore drill. Admin Treasury design: `docs/designs/2026-09-30-admin-treasury.md` (float page, automatic deposit booking, reconciler, pause payments):
 - Convex production deployment and Vercel production.
 - Production Clerk.
 - Secrets:
