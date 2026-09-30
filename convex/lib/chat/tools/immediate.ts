@@ -10,7 +10,7 @@ import {
   type ToolSearchResult,
 } from '@/modules/capability-supply/public'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
-import { compactDirectoryRows } from '@/modules/registry/internal/compact-directory-search'
+import { compactDirectoryRows } from '@/modules/registry/public'
 import {
   projectToolSearchChoices,
   type SearchResult,
