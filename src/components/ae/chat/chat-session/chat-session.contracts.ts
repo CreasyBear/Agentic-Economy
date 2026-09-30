@@ -144,8 +144,9 @@ export type ChatSessionModel = Readonly<{
   composer: ChatComposerProps
   transcript: ChatTranscriptViewProps
   lastUserText(): string | undefined
-  submitText(text: string): void
-  onRunTool(toolRef: string, title: string, ask?: string): void
+  /** newThread: start a fresh thread, e.g. right after paying turns on (owner-chat turns need their own thread). */
+  submitText(text: string, newThread?: boolean): void
+  onRunTool(toolRef: string, title: string, ask?: string, newThread?: boolean): void
   retryLastRequest(): void
   pageBusy: boolean
 }>

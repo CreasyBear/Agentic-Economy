@@ -369,8 +369,8 @@ export function useChatSession({
     const text = textFromParts(visibleMessages.findLast(message => message.role === 'user')?.parts ?? []).trim()
     return text || undefined
   }
-  function submitText(text: string): void {
-    void submit(false, text)
+  function submitText(text: string, newThread = false): void {
+    void submit(newThread, text)
   }
   function retryLastRequest(): void {
     const lastRequest = lastUserText()
@@ -474,8 +474,8 @@ export function useChatSession({
     pageBusy: busy,
     lastUserText,
     submitText,
-    onRunTool: (toolRef, title, ask) => {
-      submitText(`Use ${title} (${toolRef}) to answer: "${ask ?? lastUserText() ?? ''}". Fill its input from that, run it, and give me the answer.`)
+    onRunTool: (toolRef, title, ask, newThread = false) => {
+      submitText(`Use ${title} (${toolRef}) to answer: "${ask ?? lastUserText() ?? ''}". Describe it to read its input, fill the input from that, run it, and give me the answer.`, newThread)
     },
     retryLastRequest,
   }

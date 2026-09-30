@@ -13,7 +13,7 @@ export function parseOwnerQuoteRequest(text: string): { toolRef: string; input: 
   }
 }
 
-const RUN_PROMPT = /^Use (.+) \((operation:v1:[0-9a-f]{64}|registry:[0-9a-f]+)\) to answer: "([\s\S]*)"\. Fill its input from that, run it, and give me the answer\.$/u
+const RUN_PROMPT = /^Use (.+) \((operation:v1:[0-9a-f]{64}|registry:[0-9a-f]+)\) to answer: "([\s\S]*)"\. Describe it to read its input, fill the input from that, run it, and give me the answer\.$/u
 
 /** The card's Run button submits this exact sentence; the model then fills input, quotes and calls. */
 export function parseOwnerRunRequest(text: string): { title: string; toolRef: string; ask: string } | null {

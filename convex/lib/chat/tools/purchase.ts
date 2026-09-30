@@ -3,7 +3,6 @@ import type { ActionCtx } from '../../../_generated/server'
 import { makeFunctionReference } from 'convex/server'
 import type { Value } from 'convex/values'
 import { z } from 'zod'
-import { api } from '../../../_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { toolQuoteInputSchema, type ToolQuoteInput } from '@/modules/capability-execution/quote'
@@ -13,6 +12,7 @@ import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import type { QuoteResult } from '../../capabilityExecution/quotes/contracts'
 import { contractFor, descriptionFor, failure, type ReserveChatTool } from './contracts'
 import { projectedModelFacingOutput } from './output'
+import { callableToolRef } from './callableRef'
 
 const quoteRef = makeFunctionReference<'action', {
   authority: TrustedChatAuthority; operationKey: string; correlationId: string;
@@ -25,17 +25,6 @@ const callRef = makeFunctionReference<'action', {
 const payableAdmissionRef = makeFunctionReference<'query', {
   authority: TrustedChatAuthority; toolRef: string
 }, boolean>('chatTurns:authorizePayableTool')
-
-async function callableToolRef(ctx: ToolCtx | ActionCtx, ref: string): Promise<string | null> {
-  if (/^operation:v1:[0-9a-f]{64}$/u.test(ref)) return ref
-  if (!ref.startsWith('registry:')) return null
-  const detail = await ctx.runQuery(api.x402DirectoryIndex.detailById, { id: ref })
-  if (detail.kind !== 'found') return null
-  const resolved = await ctx.runAction(api.x402Directory.resolve, {
-    resource: detail.item.entry.resource,
-  })
-  return resolved.kind === 'ready' ? resolved.toolRef : null
-}
 
 const chatToolQuoteInputSchema = z.strictObject({
   toolRef: z.string().min(1).max(200),

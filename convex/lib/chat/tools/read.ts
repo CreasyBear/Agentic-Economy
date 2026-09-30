@@ -1,12 +1,13 @@
 import { createTool, type ToolCtx } from '@convex-dev/agent'
 import type { FunctionArgs } from 'convex/server'
 import { z } from 'zod'
-import { deserializeToolCompareResult, deserializeToolDetailResult, type ToolCompareInput, type ToolDetailInput } from '@/modules/capability-supply/public'
+import { deserializeToolCompareResult, deserializeToolDetailResult, type ToolCompareInput } from '@/modules/capability-supply/public'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { projectToolCompareChoices, projectToolDescription } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsCompareContract, registryToolsDescribeContract } from '@/modules/registry/tool-action-contracts'
 import { internal } from '../../../_generated/api'
-import { descriptionFor, type ReserveChatTool } from './contracts'
+import { descriptionFor, failure, type ReserveChatTool } from './contracts'
+import { callableToolRef } from './callableRef'
 import { projectedModelFacingOutput } from './output'
 
 export function createReadTools(reserve: ReserveChatTool) {
@@ -15,11 +16,15 @@ export function createReadTools(reserve: ReserveChatTool) {
   return {
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']]: createTool({
       description: descriptionFor(describeContract),
-      inputSchema: describeContract.schema as z.ZodType<ToolDetailInput>,
-      execute: async (ctx: ToolCtx, input: ToolDetailInput) => {
+      // Chat also accepts a directory listing id; it resolves to the operation so the
+      // model can read the listing's input schema before it quotes.
+      inputSchema: z.strictObject({ toolRef: z.string().min(1).max(200) }),
+      execute: async (ctx: ToolCtx, input: { toolRef: string }) => {
         const denied = reserve('registry.tools.describe')
         if (denied !== null) return denied
-        const result = await ctx.runAction(internal.capabilityToolCatalog.detailInternal, input)
+        const toolRef = await callableToolRef(ctx, input.toolRef)
+        if (toolRef === null) return failure('registry.tools.describe', 'tool_unavailable')
+        const result = await ctx.runAction(internal.capabilityToolCatalog.detailInternal, { toolRef })
         return projectedModelFacingOutput(
           'registry.tools.describe',
           describeContract.outputSchema,

@@ -34,8 +34,10 @@ export function Chat(props: ChatProps) {
     pendingRef.current = null
     resumedPendingRef.current = true
     setCreditOpen(false)
-    if (pending.run !== undefined) model.onRunTool(pending.run.toolRef, pending.run.title, pending.ask)
-    else if (pending.ask !== undefined) model.submitText(pending.ask)
+    // Paying may have just turned on, which moves the person to a new owner-chat thread;
+    // resume there explicitly instead of racing the navigation to /t/new.
+    if (pending.run !== undefined) model.onRunTool(pending.run.toolRef, pending.run.title, pending.ask, true)
+    else if (pending.ask !== undefined) model.submitText(pending.ask, true)
   }
   const resumePendingAfterPayingOn = useEffectEvent((funded: boolean) => resumePending(funded))
   useEffect(() => {
