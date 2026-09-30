@@ -1,6 +1,6 @@
 # aecon production north star
 
-Owner: Joel. Last revised: 30 September 2026. Companion: `docs/production-premortem-and-measurement.md` (inverse premortem, the metric tree, and seven layers of checks). This document says where we are going and how we will know we have arrived. Every wave of work should move a milestone below forward. If it doesn't, don't do it.
+Owner: Joel. Last revised: 30 September 2026. Companion: `docs/production-premortem-and-measurement.md` (inverse premortem, the metric tree, and seven layers of checks). Operating model: `docs/operating-model.md` (OpenRouter-style AUD credits, alpha and beta phases, tax, Stripe, custody). This document says where we are going and how we will know we have arrived. Every wave of work should move a milestone below forward. If it doesn't, don't do it.
 
 ## Destination
 aecon runs one production deployment with real money on. A person, or their agent, asks for something the x402 directory sells. aecon picks a ranked listing, pays the seller in USDC from the person's prepaid AUD balance, within limits they set, and shows the answer along with what it cost. It is secure, safe, intuitive and antifragile: a failure demotes one listing or one Call, never the journey.
