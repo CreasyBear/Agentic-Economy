@@ -53,8 +53,13 @@ describe('owner capability publication admission', () => {
     const canonical = await backend.run(async ctx => ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', fixture.published.publicationRef).eq('revision', fixture.published.publicationRevision)).unique())
     expect(canonical?.disposition).toBe('current')
+    expect(canonical?.networkId).toBe('ae:public')
+    const sourceNetwork = JSON.parse(canonical?.pricingConfigJson ?? '{}').sourceRequirement?.network
+    expect(sourceNetwork).toBe('eip155:84532')
+    const providerRows = await backend.run(async ctx => ctx.db.query('marketDirectorySearchEntries').collect())
+    expect(providerRows.map(row => row.network).sort()).toEqual(['*', sourceNetwork])
     const result = await backend.query(api.x402DirectoryIndex.searchCompact, {
-      query: 'Paid lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+      query: 'Owner lookup', network: 'eip155:84532', paginationOpts: { cursor: null, numItems: 8 },
     })
     expect(result).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Owner lookup' }] })
   })

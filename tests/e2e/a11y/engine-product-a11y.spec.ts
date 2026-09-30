@@ -9,7 +9,10 @@ test.describe('market product accessibility', () => {
     await skip.press('Enter')
     await expect(page.locator('#main-content')).toBeFocused()
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    await expect(page.getByLabel('Search Tools').first()).toBeVisible()
+    const search = page.getByRole('searchbox', { name: 'Ask about any tool or service' })
+    await expect(search).toBeVisible()
+    await page.keyboard.press('Tab')
+    await expect(search).toBeFocused()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     const primary = compact
       ? page.getByRole('dialog', { name: 'Public navigation' }).getByRole('navigation', { name: 'Primary' })

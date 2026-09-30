@@ -78,7 +78,7 @@ async function removeProviderDirectoryRow(ctx: MutationCtx, generation: string, 
  * lastSeenRunAt index would be the only way to instead *exclude* them from
  * that scan, at the cost of a new index on a large table for one field).
  */
-export type ProviderDirectoryPublicationInput = Readonly<Pick<Doc<'capabilityPublications'>, 'disposition' | 'authorityMode' | 'sourceRouteRef' | 'businessId' | 'offeringId' | 'networkId' | 'sourceKind'> & { bindingId?: string }>
+export type ProviderDirectoryPublicationInput = Readonly<Pick<Doc<'capabilityPublications'>, 'disposition' | 'authorityMode' | 'sourceRouteRef' | 'businessId' | 'offeringId' | 'networkId' | 'sourceKind' | 'pricingConfigJson'> & { bindingId?: string }>
 
 export async function upsertProviderDirectoryRows(
   ctx: MutationCtx,
@@ -104,6 +104,9 @@ export async function upsertProviderDirectoryRows(
   const providerKey = providerKeyForBusiness(business)
   const resource = providerResourceKey(routeRef)
   const entry = providerDirectoryEntry(resource, providerKey, business, offering, publication)
+  const networks = publication.sourceKind === 'x402'
+    ? [...new Set(entry.prices.map(price => price.network))]
+    : [publication.networkId]
   const category = entry.category ?? 'uncategorized'
   const classes = classifyDirectoryEntry(entry)
   const slug = await resolveDirectorySlug(ctx, generation.generation, providerKey, resource, undefined, binding.endpointUrl)
@@ -124,7 +127,7 @@ export async function upsertProviderDirectoryRows(
     sourceUrl: resource, endpointUrl: resource,
     name: entry.title, summary: entry.description, provider: providerKey, category,
     ...classes,
-    tags: [], networks: [publication.networkId],
+    tags: [], networks,
     access: 'provider_account' as const, authority: 'source_metadata_only' as const,
     sourceDigest, searchText, updatedAt: now,
     directoryEntryJson: JSON.stringify({ ...entry, metadataJson: '' }),
@@ -140,7 +143,7 @@ export async function upsertProviderDirectoryRows(
     .withIndex('by_generation_and_resource', q => q.eq('generation', generation.generation).eq('resource', resource)).take(130)
   const previousEligible = oldSearch[0]?.eligible === true
   for (const old of oldSearch) await ctx.db.delete(old._id)
-  for (const network of ['*', publication.networkId]) {
+  for (const network of ['*', ...networks]) {
     await ctx.db.insert('marketDirectorySearchEntries', {
       generation: generation.generation, resource, entryId, network, category,
       provider: providerKey, providerKey, eligible: true, source: 'provider' as const,
@@ -151,7 +154,7 @@ export async function upsertProviderDirectoryRows(
     })
   }
   const asIndexedSource: IndexedSource = { resource, entry, sourceJson: row.directorySourceJson, sourceDigest }
-  await writeFacetMembership(ctx, generation.generation, resource, asIndexedSource, category, [publication.networkId], true, existing, previousEligible)
+  await writeFacetMembership(ctx, generation.generation, resource, asIndexedSource, category, networks, true, existing, previousEligible)
   await writeAnalytics(ctx, generation.generation, resource, entry, existing === null ? undefined : storedDirectoryEntry(existing))
   await refreshProviderLead(ctx, generation.generation, providerKey)
 }

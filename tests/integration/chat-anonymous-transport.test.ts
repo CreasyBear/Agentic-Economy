@@ -87,6 +87,8 @@ const admitHttp = makeFunctionReference<'mutation', {
 
 describe('anonymous operation chat transport', () => {
   it('does not turn unsupported lookup results into a verified Tool recommendation', async () => {
+    // Exercise model-led recovery when immediate catalogue lookup cannot run.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       ...Array.from({ length: 5 }, (_, index) => [{
@@ -125,6 +127,8 @@ describe('anonymous operation chat transport', () => {
   })
 
   it('streams a single fallback message when the required lookup yields no answer', async () => {
+    // Exercise model-led recovery when immediate catalogue lookup cannot run.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       [{ type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
@@ -143,6 +147,8 @@ describe('anonymous operation chat transport', () => {
     expect(body.match(/"type":"finish"/gu)).toHaveLength(1)
   })
   it('does not present exploratory planning as the guest answer', async () => {
+    // Exercise model-led recovery when immediate catalogue lookup cannot run.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       [
@@ -200,7 +206,16 @@ describe('anonymous operation chat transport', () => {
       return original(options)
     })
     const body = await backend.action(async ctx => {
-      const response = await streamAnonymousChatResponse(ctx,
+      const observedCtx = new Proxy(ctx, {
+        get(target, property, receiver) {
+          if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) =>
+            getFunctionName(args[0]) === 'capabilityToolCatalog:searchInternal'
+              ? Promise.reject(new Error('catalogue_unavailable'))
+              : Reflect.apply(target.runAction, target, args)
+          return Reflect.get(target, property, receiver) as unknown
+        },
+      }) as ActionCtx
+      const response = await streamAnonymousChatResponse(observedCtx,
         [{ role: 'user', content: 'Describe the timezone Tool' }], model)
       return await response.text()
     })
@@ -275,7 +290,7 @@ describe('anonymous operation chat transport', () => {
     ]))
 
     expect(streamed.body).not.toContain('A weather Operation is available.')
-    expect(streamed.queries).toEqual([])
+    expect(streamed.queries).toEqual(['x402DirectoryIndex:searchCompactInternal'])
     expect(streamed.mutations).toEqual([])
     expect(anonymousThreads.page).toEqual([])
     expect(sentinelThreads.page).toEqual([])

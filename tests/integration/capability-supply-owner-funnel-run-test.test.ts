@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { encodePaymentRequiredHeader } from '@x402/core/http'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import { api, internal } from '../../convex/_generated/api'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { probeRequestDigest } from '@/modules/capability-supply/public'
+import { runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import {
   createPublishedBusinessOwner,
@@ -16,7 +17,7 @@ describe('owner supply test', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('does not turn an exact fresh no-payment challenge into publication authority', async () => {
+  it.each([false, true])('publishes an owner-authorized Tool only when the 402 payment challenge is valid: %s', async (validChallenge) => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
@@ -82,23 +83,37 @@ describe('owner supply test', () => {
     )
     if (targetResult.kind !== 'available')
       throw new Error(`owner_x402_target_failed:${targetResult.reason}`)
+    const source = x402Source('sandbox', endpoint)
+    if (typeof source.resource !== 'object' || source.resource === null
+      || !('paymentRequired' in source.resource)) throw new Error('payment_challenge_missing')
+    const paymentRequired = validatePaymentRequired(source.resource.paymentRequired)
+    if (paymentRequired.x402Version !== 2) throw new Error('payment_challenge_v2_required')
+    const send = vi.fn(async () => new Response(null, {
+      status: 402,
+      headers: validChallenge ? {
+        'Payment-Required': encodePaymentRequiredHeader(
+          paymentRequired as Parameters<typeof encodePaymentRequiredHeader>[0],
+        ),
+      } : {},
+    }))
+    const observed = await runCapabilityReadinessProbe(targetResult.target, {
+      resolveProviderConnectionCredential: async () => undefined,
+      validateTarget: async () => true,
+      send,
+      now: () => now,
+    })
+    expect(send).toHaveBeenCalledOnce()
+    expect(observed.responseStatus).toBe(402)
+    expect(observed.outcome).toBe(validChallenge ? 'healthy' : 'response_invalid')
+    expect(observed.evidenceRefs).toContain(validChallenge
+      ? 'probe:x402_payment_required_valid' : 'probe:x402_payment_required_invalid')
+    expect(observed.evidenceRefs).not.toContain(validChallenge
+      ? 'probe:x402_payment_required_invalid' : 'probe:x402_payment_required_valid')
     const observation = {
       publicationRef: published.publicationRef,
       expectedRevision: published.publicationRevision,
-      targetDigest: targetResult.target.targetDigest,
-      requestDigest: probeRequestDigest(targetResult.target),
-      responseStatus: 402,
-      responseDigest: canonicalDigest(''),
-      outcome: 'healthy' as const,
-      credentialState: 'ready' as const,
-      healthState: 'healthy' as const,
-      observedAt: now,
-      validUntil: now + 60_000,
-      evidenceRefs: [
-        'probe:credential_not_required',
-        'probe:target_public',
-        'probe:x402_payment_required_valid',
-      ],
+      ...observed,
+      evidenceRefs: [...observed.evidenceRefs],
       resourceAuthority: targetResult.target.resourceAuthority,
     }
     await expect(
@@ -126,7 +141,7 @@ describe('owner supply test', () => {
         .collect()
     ))
     expect(admissionCases).toHaveLength(1)
-    expect(admissionCases[0]?.terminalDecision).not.toBe('published')
+    expect(admissionCases[0]?.terminalDecision).toBe(validChallenge ? 'published' : 'action_required')
 
     const readTestState = async () => {
       const readback = await owner.query(
@@ -154,8 +169,5 @@ describe('owner supply test', () => {
       step: 'test',
       state: 'refused',
     })
-    await expect(
-      backend.run(async () => []),
-    ).resolves.toEqual([])
   })
 })

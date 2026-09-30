@@ -22,7 +22,7 @@ The active execution queue is [Wayfinder #256](https://github.com/CreasyBear/Age
 4. A different reviewer inspects the implementation against that contract and reports concrete defects. The orchestrator adjudicates findings and issues bounded corrections.
 5. An evaluator exercises unresolved behavioral or runtime claims. The orchestrator inspects the decisive code and evidence, integrates the result, and accepts it or replays only the affected dependency cone.
 
-Combine roles for small changes when separation adds no useful evidence. Keep at most three child lanes active; parallelize only independent light work with settled interfaces. Refill available lanes from useful bounded backlog. No recursive delegation. The root alone runs heavy checks, publishes changes and accepts completion.
+Keep execution, independent review and behavioral evaluation in separate agents. An implementer's self-check does not substitute for either independent role. Keep at most three child lanes active; parallelize only independent light work with settled interfaces. Refill available lanes from useful bounded backlog. No recursive delegation. The root alone runs heavy checks, publishes changes and accepts completion.
 
 Each packet names its parent issue, outcome, contract, owned files, protected files, dependencies, existing reference pattern, selected skill conclusions and observable checks. Handoffs are compact; they report changed behavior, evidence and literal blockers. The existing Wayfinder queue remains the plan, with no duplicate status system.
 
@@ -85,10 +85,21 @@ Design review synthesis: the thesis is one bounded purchase that remains financi
 - **Integration baseline:** the full run passed 1,989 tests and failed 38 before fixture correction. Eleven new failures came from existing mainnet fixtures using the development default; all now pass in their affected reruns. The original 27 failures across eight chat/provider files remain. The complete gate is not green and no browser, deployed or live-money claim is made.
 - **Handover:** #270 consolidates the cross-boundary production refusal proof and resolves the inherited gate failures. Preserve the identity A-then-B deployment order and provision matching declarations in both runtimes. This checkpoint is local source work; nothing has been deployed and no live payment has run.
 
+### Integrated isolation checkpoint — 30 September 2026
+
+#270 establishes the production refusal proof across valid stored authority, Quotes, Tools, funding, configuration, discovery, chat and development entry points. The four focused integration files are included in the existing release gate.
+
+- **Contract:** valid opposite-environment inputs must reach the relevant fence and refuse before creating a Quote, consuming a Quote, recording a Call/Provider obligation, funding command, publication or provider/signing request. Same-environment controls establish that an earlier parser or unrelated fixture failure cannot satisfy the proof. Treasury capacity expires immediately beyond the agreed inclusive 30-minute boundary.
+- **Source correction:** provider directory projection now translates the managed pricing requirement's payment network into directory prices, search rows and facets. The canonical publication namespace remains `ae:public`; missing or malformed x402 pricing creates no chain-specific projection. Existing non-x402 projection behavior is preserved. This changes two existing production files and adds no service, dependency, index or buyer step.
+- **Independent evidence:** a separate evaluator passed all 19 isolation cases, temporarily disabled the sandbox-route guard, observed the expected 200-versus-404 failure, restored the exact source bytes and passed the restored case. A separate reviewer inspected the implementation and resulting fixes. Execution, review and evaluation remain separate roles.
+- **Inherited failures:** all 27 integration failures are resolved. Fixtures now use supported x402 owner flows, current immediate-catalogue chat behavior and persisted terminal outcomes. OAuth cancellation and late-callback refusal remain covered. Actual readiness probing distinguishes a valid encoded 402 challenge (`published`) from a malformed challenge (`action_required`) and preserves one admission case on replay.
+- **Verified:** final `npm run check` passes with zero dependency cycles. The full gate passed anonymous Convex generation, public build integrity, 6,398 unit tests (one skipped), 2,048 integration tests (30 skipped, three todo), four type tests, 74 import checks, TypeScript standards, 31 SEO tests and 16 browser tests. It then stopped on two stale accessibility selectors. After correcting the selector and adding a keyboard-focus assertion, `npm run test:e2e:a11y` passed all 18 tests and `npm run test:cli-package` passed reproducible packaging. Thus every source-gate stage has passing evidence across the full run and its focused continuation; an uninterrupted final gate remains required before merge/release. Browser checks here use the configured source-only server, not an authenticated deployed backend.
+- **Handover:** isolation source work is locally accepted. Continue with #271's settled-2xx accounting rule and retained-response recovery, preserving the existing canonical-safe-block proof for expired unused authorizations. Deployed isolation, the full paid development Call and live-money drills remain unproven. No deployment, production configuration change or live payment has occurred.
+
 ## Honest status
-The four isolation source stages above are implemented locally. The integrated release gate, remaining money features, provisioning and deployed proof are still required.
+The five isolation source stages above are implemented locally, with passing evidence for every source-gate stage. Remaining money features, provisioning, deployed proof and the final release gate are still required.
 - **Real:** the money code paths exist (AUD ledger in Formance, CDP custody signing, x402 payment, 2-RPC settlement verification, receipts) and the chat journey is built in source. None of it has run with real money. No paid Call has been proven end to end, even on testnet.
-- **Unproven in deployment:** the original ten production-isolation findings are being closed through #266–#270. The source checkpoints above supersede their pre-fix code descriptions; the consolidated gate and deployed proof remain open.
+- **Unproven in deployment:** #266–#270 close the original ten production-isolation findings in source. The checkpoints above supersede their pre-fix code descriptions; deployed proof remains open.
 - **Unprovisioned:** the last production env snapshot (`.vercel/prod-debug.env`, 4 August 2026) contains **no** Stripe, Formance, CDP, RPC or Sentry configuration. It still carries legacy integrations (Autumn billing, Meilisearch, Novu, Resend) and `AE_SANDBOX_PROVIDER_KEY`. The browser build loads Clerk **development** keys.
 
 ## Operating-model concerns still open
@@ -170,7 +181,7 @@ Then: the trust centre and credits terms page, and alpha invites (20 users, A$10
 - **Comfortable:** the model is coherent (principal, OpenRouter-style credits, own float). The regulatory posture is defensible. Alpha exposure is capped at about A$200 of seller payments. Every money path already refuses when config is missing, rather than guessing.
 - **Not yet:**
   - Nothing has run with real money.
-  - Isolation is unsafe.
+  - Production isolation has source evidence but has not been verified on the deployed pair.
   - Formance hosting is undecided and it is the money authority.
   - Production config is absent.
   - One operator with no runbooks.

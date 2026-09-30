@@ -1,4 +1,6 @@
 import { listUIMessages, mockModel, saveMessage, saveMessages } from '@convex-dev/agent'
+import { getFunctionName } from 'convex/server'
+import type { ActionCtx } from '../../convex/_generated/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
@@ -47,6 +49,14 @@ async function startManuallyGeneratedTurn<T extends { promptMessageId: string }>
           && 'promptMessageId' in arg && arg.promptMessageId === turn.promptMessageId))
       if (scheduled === undefined) throw new Error('manual_chat_generation_schedule_missing')
       await ctx.scheduler.cancel(scheduled._id)
+      // Manual generation also owns this turn's deadline; draining every timer would expire it first.
+      for (const job of jobs) {
+        if (job.name === 'chatTurns:finishTurn' && job.state.kind === 'pending'
+          && job.args.some(arg => typeof arg === 'object' && arg !== null && !Array.isArray(arg)
+            && 'promptMessageId' in arg && arg.promptMessageId === turn.promptMessageId)) {
+          await ctx.scheduler.cancel(job._id)
+        }
+      }
     })
     await backend.finishAllScheduledFunctions(vi.runAllTimers)
     return turn
@@ -171,6 +181,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   })
 
   it.each([false, true])('persists a final response and settles stream deltas (extended lookup=%s)', async extended => {
+    // Keep this case on the model-led recovery path; immediate retrieval has separate coverage.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, {
@@ -317,6 +329,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(cards).toEqual([])
   })
   it('forces authenticated and guest page-two searches without giving the model a cursor', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
     const workload = await backend.query(internal.workloadCron.admit, { name: 'refresh Agentic Economy API registry' })
@@ -369,10 +382,25 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         input: JSON.stringify({ query: 'weather', source: 'coinbase', limit: 1 }) }],
       [{ type: 'text', text: 'Search results are in the card. Next: inspect the card.' }],
     ] })
-    await backend.action(ctx => streamDurableChatResponse(ctx, {
+    await backend.action(ctx => {
+      let immediateAttempted = false
+      const unavailableImmediateCatalogue = new Proxy(ctx, {
+        get(target, property, receiver) {
+          if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) => {
+            if (!immediateAttempted && getFunctionName(args[0]) === 'capabilityToolCatalog:searchInternal') {
+              immediateAttempted = true
+              return Promise.reject(new Error('catalogue_unavailable'))
+            }
+            return Reflect.apply(target.runAction, target, args)
+          }
+          return Reflect.get(target, property, receiver) as unknown
+        },
+      }) as ActionCtx
+      return streamDurableChatResponse(unavailableImmediateCatalogue, {
       threadId: first.threadId, ownerId: canonicalAccountRef, promptMessageId: first.promptMessageId,
       searchTurn: { turnRef: first.turnRef, threadId: first.threadId, promptMessageId: first.promptMessageId },
-    }, firstModel))
+    }, firstModel)
+    })
     const firstMessages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
       threadId: first.threadId, paginationOpts: { cursor: null, numItems: 20 },
     }))
@@ -478,6 +506,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   })
 
   it('halts at clarification and reports an input-required stream outcome', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-clarify-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Clarification' })
@@ -795,7 +824,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
               title: `Tool ${index + 1}`,
               provider: 'Provider',
               price: 'A$0.01',
-              readiness: 'Operational',
+              readiness: 'ready',
             })),
             count: 5,
           },

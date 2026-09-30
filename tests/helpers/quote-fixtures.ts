@@ -39,7 +39,7 @@ export type QuotePrincipal = Readonly<{
   ownerId: string
   credentialId: string
   applicationRef: string
-  environment: 'production'
+  environment: 'production' | 'sandbox'
   scopes: string[]
   authorityMode: 'spending_policy'
 }>
@@ -197,19 +197,18 @@ export function testRef(kind: string, material: string): string {
 export async function publishCurrentTool(
   backend: ConvexFixtureBackend,
   suffix: string,
+  environment: 'production' | 'sandbox' = 'production',
 ): Promise<PublishedQuoteTool> {
   const { businessId, owner, canonicalAccountRef } = await publishedBusinessOwner(backend, suffix)
   await seedCatalogOffering(backend, businessId, suffix, '/lookup', 'POST')
   const source = capabilityPublicationInput(businessId, suffix)
+  const { sourceWrite: _sourceWrite, sourceWriteRequest: _sourceWriteRequest, ...publication } = await preparedPublicationArgs(backend, {
+    ...source,
+    binding: { ...source.binding, authority: { kind: 'public_upstream' } },
+  })
   const published = await owner.mutation(
     api.capabilitySupply.publishPreparedCapability,
-    await preparedPublicationArgs(backend, {
-      ...source,
-      binding: {
-        ...source.binding,
-        authority: { kind: 'public_upstream' },
-      },
-    }),
+    await withSourceWrite('catalog_publish', { ...publication, runtimeEnvironment: environment }),
   )
   if ('reason' in published) throw new Error(`quote_publication_refused:${published.reason}`)
   await admitPublication(backend, published, suffix)
@@ -293,6 +292,7 @@ export async function seedAgent(
   toolRef: string,
   suffix: string,
   maximumSpendPerCallUnits: string,
+  environment: 'production' | 'sandbox' = 'production',
 ): Promise<QuoteAgent> {
   const now = Date.now()
   const principalId = testRef('prn', suffix)
@@ -304,13 +304,13 @@ export async function seedAgent(
     ownerId: owner.canonicalAccountRef,
     credentialId,
     applicationRef: 'agentic-economy',
-    environment: 'production',
+    environment,
     scopes: [MARKET_TOOLS_CALL_SCOPE],
     authorityMode: 'spending_policy',
   }
   const amount = (units: string) => ({ currency: 'AUD' as const, units, exponent: 6 as const })
   const policy = buildAgentAccessPolicy({
-    environment: 'production',
+    environment,
     currency: 'AUD',
     exponent: 6,
     maximumSpendPerCall: amount(maximumSpendPerCallUnits),
