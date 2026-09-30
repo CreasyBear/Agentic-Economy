@@ -7,7 +7,9 @@ import {
   reconciledCallAuthorityResult, recordArgs, recordResult, workCompletionArgs,
 } from './lib/capabilityExecution/callLifecycle/contracts'
 import { approvalDecisionResult } from './lib/capabilityExecution/callLifecycle/admissionApproval'
-import { expireStalePendingApprovalsHandler } from './lib/capabilityExecution/callLifecycle/admissionApprovals'
+import {
+  continueApprovalExpiryHandler, expireStaleApprovalHandler, expireStalePendingApprovalsHandler,
+} from './lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import { abandonArgs, abandonResult, reserveArgs, reserveResult } from './lib/capabilityExecution/callLifecycle/admissionReservation'
 import { callArgs, admitArgs, admitResult, admitHandler } from './lib/capabilityExecution/callLifecycle/admission'
@@ -104,10 +106,21 @@ export const listPendingCallApprovals = query({
 export const decideCallApproval = mutation({
   args: decideCallApprovalArgs, returns: approvalDecisionResult, handler: canonicalOwnerApprovalDecisionHandler,
 })
+const approvalExpiryPageValue = v.object({ scanned: v.number(), scheduled: v.number(), blocked: v.number() })
 export const expireStalePendingApprovals = internalMutation({
   args: { workload: workloadCronSnapshotValue },
-  returns: v.object({ scanned: v.number(), expired: v.number() }),
+  returns: approvalExpiryPageValue,
   handler: expireStalePendingApprovalsHandler,
+})
+export const continueApprovalExpiry = internalMutation({
+  args: { afterCreatedAt: v.number() },
+  returns: approvalExpiryPageValue,
+  handler: continueApprovalExpiryHandler,
+})
+export const expireStaleApproval = internalMutation({
+  args: { callRef: v.string() },
+  returns: v.null(),
+  handler: expireStaleApprovalHandler,
 })
 export const openDispatch = internalQuery({ args: openDispatchArgs, returns: openDispatchResult, handler: openDispatchHandler })
 export const readPreClaimRefund = internalQuery({
