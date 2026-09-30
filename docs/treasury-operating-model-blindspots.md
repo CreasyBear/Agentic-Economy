@@ -62,3 +62,29 @@ Companion to `docs/production-north-star.md`. Sources: code facts from the ledge
 | M4 | Legal: AUSTRAC, stored value and withdrawals, segregation of customer funds, consumer terms. Accountant: GST as merchant of record, crypto disposals, liability and breakage. Stripe: use-case confirmation. |
 | M5 | A float policy (hot vs cold, target runway in days), an on-ramp runbook (exchange, cadence, owner), and an FX spread or buffer policy. |
 | M6 | A second signer or custody exit plan. Revisit a withdrawal of unused balance based on legal advice. |
+
+## Resolution plan (30 September 2026)
+Owner key: **E** engineering, **J** Joel (operations), **L** lawyer, **A** accountant.
+
+| # | Item | How we address it | Owner | Milestone |
+|---|---|---|---|---|
+| 1 | Paid-200 rule vs code | Charge the buyer on **verified settlement + 2xx**, whatever the output validity. Output validity becomes a delivery fact for ranking, not a charge gate. Settled + non-2xx: not charged, booked as a provider write-off to `platform:expense:providers`, the seller demoted, the Call closed automatically | E | M1 |
+| 2 | Chain↔ledger capacity | Deposits booked automatically from observations; a 15-minute reconciler; red alert on any unexplained fall | E | M2 |
+| 3 | Signed but never broadcast | After `validBefore`, read USDC `authorizationState(nonce)`. If unused, release the AUD reservation and the committed capacity automatically | E | M3 |
+| 4 | Reconciliation queue with no owner | Close every terminal outcome automatically. The queue holds only truly ambiguous cases (RPC disagreement), has a time bound, and is shown on `/admin/treasury` | E, J | M3 |
+| 5 | Sanctions | Screen `payTo` at resolve and before signing with a sanctions screening API (e.g. Chainalysis's free sanctions API; verify the terms). Cache the result, refuse on a hit, record the check | E, L | M3 |
+| 6 | Seller fraud and cash-out | Per-`payTo` daily USDC cap and new-payee exposure cap; alert on concentration | E | M3 |
+| 7 | Hot wallet | Separate production CDP account; secrets only in production env with named holders; quarterly rotation runbook; policy caps sized to the daily float; hot wallet = N days of runway, reserve kept elsewhere; no outbound transfer from the app | E, J | M1-M2 |
+| 8 | FX and depeg | Price = USD × reference rate × (1 + buffer), rounded up to the cent. The buffer covers FX drift and card fees (the % is Joel's call). Pause payments automatically if USDC/USD deviates by more than 1% | E, J | M3 |
+| 9 | On-ramp | Runbook: AUD from bank → business exchange account → buy USDC → withdraw on Base to the production address. Weekly cadence sized by runway. Automate through the exchange API later | J | M3 |
+| 10 | Working capital | Float = target days × daily burn. Watch the coverage ratio. In early alpha, cap total top-ups against the float | J | M5 |
+| 11 | Chargebacks | Radar with 3DS required; A$20 first top-up cap; velocity limits; a dispute freezes the account's spending; losses booked | E, J | M3 |
+| 12 | Stripe restricted business | Written confirmation from Stripe of the model: prepaid credit for API services, aecon as merchant of record, crypto used only internally by aecon. Identify a backup payment processor | J | before M5 |
+| 13 | AML/CTF, stored value, withdrawals, segregation | One engagement with a fintech lawyer, with fixed questions: (a) DCE status when aecon buys USDC for its own use; (b) purchased payment facility / low-value exemption; (c) whether a refund-on-request of unused balance is required or advisable; (d) whether customer funds must be segregated; (e) ACL-compliant liability wording; (f) disclosure that queries are shared with sellers | L | M4 |
+| 14 | GST and crypto tax | Ask the accountant: (a) is AUD credit a face-value voucher, making GST payable on redemption (the Call), not the top-up? That would change R2. (b) The treatment of USDC as trading stock, with settlement records exported to a crypto accounting tool. (c) The liability and breakage policy | A | M4 |
+| 15 | Unit economics | Capture model cost per turn now. Per-answer margin = AUD charged − USDC cost − model cost − card fee share | E | M0 |
+| 16 | Prompt injection | Tool output is data in the instructions; at most 1 Call per turn (built); only a user action can start a Call; eval cases with injected output | E | M3 |
+| 17 | Wrong pick or wrong input | Show the chosen Tool and the exact input on the receipt; track the eval replay and the `input_invalid` rate | E | M3 |
+| 18 | Vendor dependence | PayAI as second discovery source (ingested) plus the cached index; a documented custody exit (an alternative signer) | E | M6 |
+| 19 | Bus factor and support | Runbooks for the top 5 incidents (float low, drift, Stripe webhook, CDP outage, sanctions hit); a support contact on every receipt; a response target | J | M5 |
+| 20 | Listings without an input schema | Accept a free JSON object filled by the model from the description (consistent with paid-200 and buyer diligence) | E | M3 |
