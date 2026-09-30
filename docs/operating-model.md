@@ -1,6 +1,6 @@
 # aecon operating model v1 (30 September 2026)
 
-Decided by Joel. Consensus researched from primary sources (links inline). Items marked **[confirm]** need a lawyer or accountant before open beta; alpha does not depend on them.
+Decided by Joel. Consensus researched from primary sources (links inline). Stress test of the principal model, pricing, and evolution: `docs/commercial-model-stress-test.md`. Items marked **[confirm]** need a lawyer or accountant before open beta; alpha does not depend on them.
 
 ## The model in one paragraph
 aecon is a routing service for paid agent Tools, on the OpenRouter pattern. Users hold **AUD credits**, an account-based claim usable only on aecon's own service. Credits are not cash, not transferable, and never crypto held for the user. Each successful Call (settled, HTTP 200) draws credits at the displayed price. aecon, as principal, buys each seller's service by paying USDC from **its own** float in a business Coinbase CDP server wallet.
