@@ -139,16 +139,6 @@ describe('personalAccount retirePersonalAccountForServer (W-09)', () => {
     expect(memberships.every((row) => row.lifecycle === 'ended')).toBe(true)
   })
 
-  it('R5: interactiveSessionSelections deleted for that principal', async () => {
-    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedSessionSelection(backend)
-    await retire(backend, retireCommand(TOKEN_IDENTIFIER))
-
-    expect(await listSessionSelections(backend)).toEqual([])
-  })
-
   it('R6: notification PII scrubbed', async () => {
     process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
     const backend = createBackend()
@@ -411,23 +401,6 @@ async function listMemberships(backend: InteractiveAuthorityBackend) {
   })
 }
 
-async function seedSessionSelection(backend: InteractiveAuthorityBackend): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef: ACCOUNT_REF,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: 'test:session-selection',
-    })
-  })
-}
-
-async function listSessionSelections(backend: InteractiveAuthorityBackend) {
-  return await backend.run(async (ctx) => await ctx.db.query('interactiveSessionSelections')
-    .filter((filter) => filter.eq(filter.field('principalRef'), PRINCIPAL_REF))
-    .collect())
-}
 
 async function seedNotificationEmail(backend: InteractiveAuthorityBackend): Promise<void> {
   await backend.run(async (ctx) => {

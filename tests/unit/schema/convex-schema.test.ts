@@ -40,8 +40,6 @@ const durableTables = [
   'accountSecurityPolicies',
   'memberships',
   'externalIdentityBindings',
-  'interactiveSessionSelections',
-  'interactiveOnboardingCompletions',
   'credentials',
   'consequenceProofUses',
   'authorityDelegationGrants',

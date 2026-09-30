@@ -35,8 +35,6 @@ export {
   accountSecurityPolicyValue,
   accountTables,
   accountValue,
-  interactiveOnboardingCompletionValue,
-  interactiveSessionSelectionValue,
   lowCreditThresholdCentsValue,
   membershipLifecycleValue,
   membershipValue,

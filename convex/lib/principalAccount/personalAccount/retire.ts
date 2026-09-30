@@ -146,13 +146,6 @@ export const retirePersonalAccountForServerHandler = async (ctx: MutationCtx, ar
       })
     }
 
-    const sessionSelections = await ctx.db.query('interactiveSessionSelections')
-      .filter((filter) => filter.eq(filter.field('principalRef'), principal.principalRef))
-      .collect()
-    for (const row of sessionSelections) {
-      await ctx.db.delete(row._id)
-    }
-
     const notificationEmails = await ctx.db.query('principalNotificationEmails')
       .filter((filter) => filter.eq(filter.field('principalRef'), principal.principalRef))
       .collect()

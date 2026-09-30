@@ -24,8 +24,6 @@ export type InteractiveAuthorityErrorCode =
   | 'ownership_ambiguous'
   | 'ownership_mismatch'
   | 'correlation_ref_invalid'
-  | 'display_name_invalid'
-  | 'onboarding_already_complete'
   | 'policy_revision_conflict'
   | 'preference_revision_conflict'
   | 'threshold_invalid'

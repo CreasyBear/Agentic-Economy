@@ -81,23 +81,6 @@ export const membershipValue = v.object({
   endedBy: v.optional(accountActionContextValue),
 })
 
-export const interactiveSessionSelectionValue = v.object({
-  principalRef: v.string(),
-  activeAccountRef: v.string(),
-  revision: v.number(),
-  selectedAt: v.number(),
-  lastCorrelationRef: v.string(),
-})
-
-export const interactiveOnboardingCompletionValue = v.object({
-  accountRef: v.string(),
-  principalRef: v.string(),
-  roleIntent: v.union(v.literal('buyer'), v.literal('supplier')),
-  workspaceName: v.string(),
-  revision: v.number(),
-  completedAt: v.number(),
-  correlationRef: v.string(),
-})
 
 export const accountSecurityPolicyValue = v.object({
   accountRef: v.string(),
@@ -248,12 +231,6 @@ export const accountTables = {
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
     .index('by_memberPrincipalRef_and_lifecycle', ['memberPrincipalRef', 'lifecycle'])
     .index('by_accountRef_and_memberPrincipalRef_and_lifecycle', ['accountRef', 'memberPrincipalRef', 'lifecycle']),
-  interactiveSessionSelections: defineTable(interactiveSessionSelectionValue)
-    .index('by_principalRef', ['principalRef'])
-    .index('by_principalRef_and_activeAccountRef', ['principalRef', 'activeAccountRef']),
-  interactiveOnboardingCompletions: defineTable(interactiveOnboardingCompletionValue)
-    .index('by_accountRef', ['accountRef'])
-    .index('by_principalRef', ['principalRef']),
   accountExternalOrganizationBindings: defineTable(accountExternalOrganizationBindingValue)
     .index('by_providerNamespace_and_providerIdentifier', ['providerNamespace', 'providerIdentifier'])
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle']),

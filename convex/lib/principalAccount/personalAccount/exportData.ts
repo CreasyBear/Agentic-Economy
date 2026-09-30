@@ -32,11 +32,6 @@ export const exportUserDataResult = v.object({
       displayName: v.string(),
       lifecycle: v.string(),
     })),
-    sessionSelection: v.union(v.null(), v.object({
-      activeAccountRef: v.string(),
-      selectedAt: v.number(),
-      revision: v.number(),
-    })),
     notificationPreferences: v.array(v.object({
       accountRef: v.string(),
       lowCreditBalance: v.boolean(),
@@ -99,16 +94,6 @@ export const exportUserDataHandler = async (ctx: QueryCtx) => {
       })
     }
 
-    const sessionRows = await ctx.db.query('interactiveSessionSelections')
-      .filter((filter) => filter.eq(filter.field('principalRef'), principal.principalRef))
-      .collect()
-    const sessionSelection = sessionRows[0] === undefined
-      ? null
-      : {
-        activeAccountRef: sessionRows[0].activeAccountRef,
-        selectedAt: sessionRows[0].selectedAt,
-        revision: sessionRows[0].revision,
-      }
 
     const notificationPreferences = await ctx.db.query('userNotificationPreferences')
       .filter((filter) => filter.eq(filter.field('principalRef'), principal.principalRef))
@@ -173,7 +158,6 @@ export const exportUserDataHandler = async (ctx: QueryCtx) => {
         createdAt: row.createdAt,
       })),
       linkedAccounts,
-      sessionSelection,
       notificationPreferences,
       securityHistory,
     }

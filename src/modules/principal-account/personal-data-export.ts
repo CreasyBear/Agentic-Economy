@@ -26,11 +26,6 @@ export type PersonalAccountExportRead = Readonly<{
     displayName: string
     lifecycle: string
   }>[]
-  sessionSelection: Readonly<{
-    activeAccountRef: string
-    selectedAt: number
-    revision: number
-  }> | null
   notificationPreferences: readonly Readonly<{
     accountRef: string
     lowCreditBalance: boolean
@@ -135,7 +130,6 @@ export type PersonalDataExport = Readonly<{
     kind: string
     lifecycle: string
     displayName: string
-    activeAccountRef: string | null
   }>
   sections: Readonly<{
     workspaceProfile: PersonalAccountExportRead['linkedAccounts']
@@ -164,10 +158,7 @@ export function assemblePersonalDataExport(sources: PersonalDataExportSources): 
   const { personal } = sources
   return {
     exportedAt: new Date(personal.exportedAt).toISOString(),
-    account: {
-      ...personal.principal,
-      activeAccountRef: personal.sessionSelection?.activeAccountRef ?? null,
-    },
+    account: personal.principal,
     sections: {
       workspaceProfile: personal.linkedAccounts,
       memberships: [

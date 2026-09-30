@@ -280,29 +280,6 @@ async function seedTeammateInteractiveAuthority(backend: InteractiveAuthorityBac
       expiresAt: NOW + 60_000,
       updatedAt: NOW,
     })
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: TEAMMATE_PRINCIPAL_REF,
-      activeAccountRef: ACCOUNT_REF,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: correlationRef('teammate-selection'),
-    })
-  })
-}
-
-async function seedSessionSelection(
-  backend: InteractiveAuthorityBackend,
-  principalRef: string,
-  activeAccountRef: string,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef,
-      activeAccountRef,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: correlationRef('session'),
-    })
   })
 }
 
@@ -553,11 +530,6 @@ async function listMemberships(backend: InteractiveAuthorityBackend) {
     .collect())
 }
 
-async function listSessionSelectionsForAccount(backend: InteractiveAuthorityBackend) {
-  return await backend.run(async (ctx) => await ctx.db.query('interactiveSessionSelections')
-    .filter((filter) => filter.eq(filter.field('activeAccountRef'), ACCOUNT_REF))
-    .collect())
-}
 
 async function readOrgBinding(backend: InteractiveAuthorityBackend) {
   return await backend.run(async (ctx) => {
@@ -774,10 +746,9 @@ describe('workspaceAccounts readWorkspaceDecommissionEligibility (W-14)', () => 
     await expectRefusal(() => backend.query(readEligibilityRef, {}), 'identity_invalid')
   })
 
-  it('E15: closed account as active selection refuses account_inactive', async () => {
+  it('E15: closed account refuses account_inactive', async () => {
     const backend = createBackend()
     await seedAuthority(backend, { accountLifecycle: 'closed' })
-    await seedSessionSelection(backend, PRINCIPAL_REF, ACCOUNT_REF)
 
     await expectRefusal(() => readEligibility(backend), 'account_inactive')
   })
@@ -800,18 +771,6 @@ describe('workspaceAccounts closeWorkspace (W-14)', () => {
 
     const memberships = await listMemberships(backend)
     expect(memberships.every((row) => row.lifecycle === 'ended')).toBe(true)
-  })
-
-  it('C2: session selections for closed account are removed', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedTeammateMembership(backend)
-    await seedSessionSelection(backend, PRINCIPAL_REF, ACCOUNT_REF)
-    await seedSessionSelection(backend, TEAMMATE_PRINCIPAL_REF, ACCOUNT_REF)
-
-    await closeWorkspace(backend)
-
-    expect(await listSessionSelectionsForAccount(backend)).toEqual([])
   })
 
   it('C3: active agent grant and delegation are revoked', async () => {
@@ -983,7 +942,6 @@ describe('workspaceAccounts closeWorkspace (W-14)', () => {
   it('C17: interactive authority on closed account throws account_inactive', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await seedSessionSelection(backend, PRINCIPAL_REF, ACCOUNT_REF)
     await closeWorkspace(backend)
 
     await expect(backend.run(async (ctx) =>

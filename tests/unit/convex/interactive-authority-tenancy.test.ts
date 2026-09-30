@@ -8,7 +8,6 @@ import {
   vi,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
 import { accountRef } from '../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../src/modules/principal-account/principal/public'
 import {
@@ -44,16 +43,10 @@ const CLERK_ORG_A = 'org_test_workspace_a'
 const CLERK_ORG_B = 'org_test_workspace_b'
 const CLERK_ORG_INACCESSIBLE = 'org_test_inaccessible'
 
-const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
-
-
 type RunCtx = Parameters<Parameters<InteractiveAuthorityBackend['run']>[0]>[0]
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)
-
-const correlationRef = (label: string) => `test:tenancy:${label}`
-
 
 async function insertOrgBinding(
   backend: InteractiveAuthorityBackend,
@@ -172,6 +165,7 @@ async function seedOwnedAccountB(backend: InteractiveAuthorityBackend): Promise<
       ownershipRef: OWNERSHIP_B,
       displayName: 'Workspace B',
       ownerPrincipalRef: PRINCIPAL_REF,
+      createdAt: NOW + 1,
     })
   })
 }
@@ -237,7 +231,8 @@ describe('interactive authority tenancy (W-10)', () => {
     vi.useRealTimers()
   })
 
-  describe('Section A: auto-select (single Account)', () => {
+
+  describe('Section A: single-Account resolution', () => {
     it('A1: single ownership resolves Account A', async () => {
       const backend = await seededBackend()
       const context = await resolveContext(backend)
@@ -269,24 +264,6 @@ describe('interactive authority tenancy (W-10)', () => {
       })
     })
 
-    it('A4: an inaccessible saved workspace falls back to the sole accessible Account', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithMemberB(backend)
-      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_B,
-        correlationRef: correlationRef('a4'),
-      })
-      await backend.run(async (ctx) => {
-        const membership = await ctx.db.query('memberships')
-          .withIndex('by_membershipRef', (query) => query.eq('membershipRef', MEMBERSHIP_B))
-          .unique()
-        if (membership === null) throw new Error('membership B missing')
-        await ctx.db.patch(membership._id, { lifecycle: 'ended' })
-      })
-
-      await expect(resolveContext(backend)).resolves.toMatchObject({ accountRef: ACCOUNT_A })
-    })
-
     it('A5: zero access facts throws account_access_missing', async () => {
       const backend = await seededBackend({ omit: 'access' })
       await expect(resolveContext(backend)).rejects.toEqual(
@@ -296,26 +273,18 @@ describe('interactive authority tenancy (W-10)', () => {
   })
 
   describe('Section B: deterministic multi-Account resolution', () => {
-    it('B1: a saved workspace does not override the deterministic choice', async () => {
+    it('B1: oldest principal-created Account resolves deterministically', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
-      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_B,
-        correlationRef: correlationRef('b1'),
-      })
 
       const context = await resolveContext(backend)
       expect(context.accountRef).toBe(ACCOUNT_A)
       expect(context.provenance.accessKind).toBe('ownership')
     })
 
-    it('B2: a saved membership workspace does not override the personal Account', async () => {
+    it('B2: deterministic resolution prefers the personal Account over a member Account', async () => {
       const backend = createBackend()
       await seedCanonicalWithMemberB(backend)
-      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_B,
-        correlationRef: correlationRef('b2'),
-      })
 
       const context = await resolveContext(backend)
       expect(context.accountRef).toBe(ACCOUNT_A)
@@ -339,23 +308,9 @@ describe('interactive authority tenancy (W-10)', () => {
       expect(context.provenance.accessKind).toBe('ownership')
     })
 
-    it('B4: setting an inaccessible workspace throws account_access_missing', async () => {
+    it('B5: an org claim resolves its accessible org Account', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
-
-      await expect(backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_C,
-        correlationRef: correlationRef('b4'),
-      })).rejects.toEqual(new InteractiveAuthorityError('account_access_missing'))
-    })
-
-    it('B5: an org claim overrides a saved workspace when its Account is accessible', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      await backend.withIdentity(identity()).mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_A,
-        correlationRef: correlationRef('b5'),
-      })
       await insertOrgBinding(backend, {
         bindingRef: ORG_BINDING_B_REF,
         accountRef: ACCOUNT_B,
@@ -366,7 +321,7 @@ describe('interactive authority tenancy (W-10)', () => {
       expect(context.accountRef).toBe(ACCOUNT_B)
     })
 
-    it('B6: selecting a suspended Account still throws account_inactive', async () => {
+    it('B6: deterministic resolution to a suspended Account throws account_inactive', async () => {
       const backend = createBackend()
       await seedAuthority(backend)
       await backend.run(async (ctx) => {
@@ -510,80 +465,15 @@ describe('interactive authority tenancy (W-10)', () => {
         requireAccessFactForAccount(ctx.db, principalRef(PRINCIPAL_REF), accountRef(ACCOUNT_C))))
         .rejects.toEqual(new InteractiveAuthorityError('account_access_missing'))
     })
-  })
 
-  describe('Section E: setActiveWorkspace', () => {
-    it('E1: switching to an owned Account returns revision 1', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      const session = backend.withIdentity(identity())
-
-      const result = await session.mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_A,
-        correlationRef: correlationRef('e1'),
-      })
-
-      expect(result).toMatchObject({
-        principalRef: PRINCIPAL_REF,
-        activeAccountRef: ACCOUNT_A,
-        revision: 1,
-        selectedAt: NOW,
-      })
-    })
-
-    it('E2: switching again to the same Account is idempotent', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      const session = backend.withIdentity(identity())
-      const args = { accountRef: ACCOUNT_A, correlationRef: correlationRef('e2') }
-
-      await session.mutation(setActiveWorkspaceRef, args)
-      const second = await session.mutation(setActiveWorkspaceRef, args)
-
-      expect(second.revision).toBe(1)
-    })
-
-    it('E3: switching to another accessible Account bumps revision and selectedAt', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      const session = backend.withIdentity(identity())
-
-      await session.mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_A,
-        correlationRef: correlationRef('e3-first'),
-      })
-
-      vi.setSystemTime(NOW + 5_000)
-      const result = await session.mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_B,
-        correlationRef: correlationRef('e3-second'),
-      })
-
-      expect(result).toMatchObject({
-        activeAccountRef: ACCOUNT_B,
-        revision: 2,
-        selectedAt: NOW + 5_000,
-      })
-    })
-
-    it('E4: switching to inaccessible Account throws account_access_missing', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      const session = backend.withIdentity(identity())
-
-      await expect(session.mutation(setActiveWorkspaceRef, {
-        accountRef: ACCOUNT_C,
-        correlationRef: correlationRef('e4'),
-      })).rejects.toEqual(new InteractiveAuthorityError('account_access_missing'))
-    })
-
-    it('E5: materialize succeeds with two Accounts (identity armed)', async () => {
+    it('D4: materialize succeeds with two Accounts (identity armed)', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
       const session = backend.withIdentity(identity())
 
       await expectMaterialize(session, true)
     })
+
   })
 
 })

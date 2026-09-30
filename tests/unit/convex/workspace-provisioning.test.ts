@@ -129,41 +129,6 @@ async function readOrgBindingForClerkOrg(
       .unique())
 }
 
-async function readSessionSelection(
-  backend: InteractiveAuthorityBackend,
-): Promise<Doc<'interactiveSessionSelections'> | null> {
-  return await backend.run(async (ctx) =>
-    ctx.db.query('interactiveSessionSelections')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', PRINCIPAL_REF))
-      .unique())
-}
-
-async function insertSessionSelection(
-  backend: InteractiveAuthorityBackend,
-  activeAccountRef: string,
-  revision = 1,
-  selectedAt = NOW,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef,
-      revision,
-      selectedAt,
-      lastCorrelationRef: correlationRef('seed-selection'),
-    })
-  })
-}
-
-async function deleteSessionSelection(backend: InteractiveAuthorityBackend): Promise<void> {
-  await backend.run(async (ctx) => {
-    const row = await ctx.db.query('interactiveSessionSelections')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', PRINCIPAL_REF))
-      .unique()
-    if (row !== null) await ctx.db.delete(row._id)
-  })
-}
-
 async function readPersonalAccount(
   backend: InteractiveAuthorityBackend,
 ): Promise<Doc<'accounts'> | null> {
@@ -207,7 +172,7 @@ describe('workspace provisioning (W-11)', () => {
   })
 
   describe('provisionOrganizationWorkspaceForServer', () => {
-    it('P1: first provision creates org account and ownership without writing a session selection', async () => {
+    it('P1: first provision creates org account and ownership with creator as owner', async () => {
       const backend = createBackend()
       await seedCreatorWithPersonalAccount(backend)
       const before = await collectAuthorityTables(backend)
@@ -241,8 +206,8 @@ describe('workspace provisioning (W-11)', () => {
         changeKind: 'creation',
       })
 
-      expect(await readSessionSelection(backend)).toBeNull()
     })
+
     it('rejects a public provisioning call without a valid service assertion', async () => {
       const backend = createBackend()
       await seedCreatorWithPersonalAccount(backend)
@@ -445,26 +410,10 @@ describe('workspace provisioning (W-11)', () => {
       })
     })
 
-    it('P10: provisioning leaves an existing session selection unchanged', async () => {
-      const backend = createBackend()
-      await seedCreatorWithPersonalAccount(backend)
-      await insertSessionSelection(backend, PERSONAL_ACCOUNT_REF)
-      const selectionBefore = await readSessionSelection(backend)
-
-      await provisionOrganizationWorkspaceForServer(backend, {
-        clerkOrgId: CLERK_ORG_ID,
-        displayName: WORKSPACE_DISPLAY_NAME,
-        creatorTokenIdentifier: TOKEN_IDENTIFIER,
-        correlationRef: correlationRef('p10'),
-      })
-
-      expect(await readSessionSelection(backend)).toEqual(selectionBefore)
-    })
   })
 
-
   describe('post-provision active account resolution', () => {
-    it('P13: org_id resolves to the provisioned account after binding exists (inverts W-10 C3)', async () => {
+    it('P13: org_id resolves the provisioned account after binding exists', async () => {
       const backend = createBackend()
       await seedCreatorWithPersonalAccount(backend)
 
@@ -475,14 +424,11 @@ describe('workspace provisioning (W-11)', () => {
         correlationRef: correlationRef('p13'),
       })
 
-      await deleteSessionSelection(backend)
-
       const resolution = await backend.run(async (ctx) =>
         resolveActiveAccountRefForPrincipal(ctx.db, principalRef(PRINCIPAL_REF), identity({ org_id: CLERK_ORG_ID })))
 
       expect(resolution).toMatchObject({
         activeAccountRef: provisioned.accountRef,
-        selectionState: 'org_bound',
       })
     })
   })

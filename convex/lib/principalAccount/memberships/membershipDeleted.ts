@@ -94,16 +94,6 @@ export const recordOrganizationMembershipDeletedForServerHandler = async (ctx: M
       return { kind: 'accepted', status: 'ignored' }
     }
 
-    const sessionSelections = await ctx.db
-      .query('interactiveSessionSelections')
-      .withIndex('by_principalRef_and_activeAccountRef', (query) => query
-        .eq('principalRef', principal.principalRef)
-        .eq('activeAccountRef', account.accountRef))
-      .collect()
-    for (const row of sessionSelections) {
-      await ctx.db.delete(row._id)
-    }
-
     const digestValue = command.deliveryRefHash.slice('sha256:'.length)
     const toolRef = `clerk-org-membership:${digestValue}`
     const beforeState = membership.role ?? 'unspecified'

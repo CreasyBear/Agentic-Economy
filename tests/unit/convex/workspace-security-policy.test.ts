@@ -124,6 +124,7 @@ async function runAssertStepUp(
     }))
 }
 
+// Keep the personal account first under deterministic fallback.
 async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Promise<void> {
   await backend.run(async (ctx) => {
     await ctx.db.insert('accounts', {
@@ -136,7 +137,7 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
       initialOwnershipRef: OWNERSHIP_B,
       currentOwnershipRef: OWNERSHIP_B,
       revision: 1,
-      createdAt: NOW,
+      createdAt: NOW + 1,
       updatedAt: NOW,
       lastAction: {
         actorPrincipalRef: PRINCIPAL_REF,
@@ -152,20 +153,13 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
       lifecycle: 'active',
       changeKind: 'creation',
       revision: 1,
-      createdAt: NOW,
+      createdAt: NOW + 1,
       createdBy: {
         actorPrincipalRef: PRINCIPAL_REF,
         activeAccountRef: ACCOUNT_B,
         correlationRef: `ownership:${OWNERSHIP_B}`,
         idempotencyRef: `ownership:${OWNERSHIP_B}`,
       },
-    })
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef: ACCOUNT_REF,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: `session:${ACCOUNT_REF}`,
     })
   })
 }

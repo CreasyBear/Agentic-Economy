@@ -3,7 +3,6 @@ import type { MutationCtx } from '../../../_generated/server'
 type WorkspaceProvisioningErrorCode =
   | 'creator_binding_missing'
   | 'creator_principal_inactive'
-  | 'display_name_invalid'
   | 'clerk_org_id_invalid'
   | 'active_organization_mismatch'
   | 'identity_invalid'

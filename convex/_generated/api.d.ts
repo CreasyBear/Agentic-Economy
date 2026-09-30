@@ -90,8 +90,6 @@ import type * as facilitatorDiscoveryAction from "../facilitatorDiscoveryAction.
 import type * as http from "../http.js";
 import type * as interactiveAuthority from "../interactiveAuthority.js";
 import type * as interactiveCredentialLifecycle from "../interactiveCredentialLifecycle.js";
-import type * as interactiveOnboarding from "../interactiveOnboarding.js";
-import type * as interactiveSession from "../interactiveSession.js";
 import type * as lib_actionExecution_control_contracts from "../lib/actionExecution/control/contracts.js";
 import type * as lib_actionExecution_control_observation from "../lib/actionExecution/control/observation.js";
 import type * as lib_actionExecution_control_reads from "../lib/actionExecution/control/reads.js";
@@ -573,7 +571,6 @@ import type * as lib_principalAccount_notifications_delivery from "../lib/princi
 import type * as lib_principalAccount_notifications_enqueue from "../lib/principalAccount/notifications/enqueue.js";
 import type * as lib_principalAccount_notifications_preferences from "../lib/principalAccount/notifications/preferences.js";
 import type * as lib_principalAccount_notifications_resendOutcome from "../lib/principalAccount/notifications/resendOutcome.js";
-import type * as lib_principalAccount_onboarding_authority from "../lib/principalAccount/onboarding/authority.js";
 import type * as lib_principalAccount_personalAccount_eligibility from "../lib/principalAccount/personalAccount/eligibility.js";
 import type * as lib_principalAccount_personalAccount_exportData from "../lib/principalAccount/personalAccount/exportData.js";
 import type * as lib_principalAccount_personalAccount_identity from "../lib/principalAccount/personalAccount/identity.js";
@@ -582,7 +579,6 @@ import type * as lib_principalAccount_personalAccount_retireDependents from "../
 import type * as lib_principalAccount_provisioning_contracts from "../lib/principalAccount/provisioning/contracts.js";
 import type * as lib_principalAccount_provisioning_identity from "../lib/principalAccount/provisioning/identity.js";
 import type * as lib_principalAccount_provisioning_provision from "../lib/principalAccount/provisioning/provision.js";
-import type * as lib_principalAccount_provisioning_selection from "../lib/principalAccount/provisioning/selection.js";
 import type * as lib_principalAccount_provisioning_serviceAuth from "../lib/principalAccount/provisioning/serviceAuth.js";
 import type * as lib_principalAccount_workspace_accountContext from "../lib/principalAccount/workspace/accountContext.js";
 import type * as lib_principalAccount_workspace_audit from "../lib/principalAccount/workspace/audit.js";
@@ -782,8 +778,6 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   interactiveAuthority: typeof interactiveAuthority;
   interactiveCredentialLifecycle: typeof interactiveCredentialLifecycle;
-  interactiveOnboarding: typeof interactiveOnboarding;
-  interactiveSession: typeof interactiveSession;
   "lib/actionExecution/control/contracts": typeof lib_actionExecution_control_contracts;
   "lib/actionExecution/control/observation": typeof lib_actionExecution_control_observation;
   "lib/actionExecution/control/reads": typeof lib_actionExecution_control_reads;
@@ -1265,7 +1259,6 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/notifications/enqueue": typeof lib_principalAccount_notifications_enqueue;
   "lib/principalAccount/notifications/preferences": typeof lib_principalAccount_notifications_preferences;
   "lib/principalAccount/notifications/resendOutcome": typeof lib_principalAccount_notifications_resendOutcome;
-  "lib/principalAccount/onboarding/authority": typeof lib_principalAccount_onboarding_authority;
   "lib/principalAccount/personalAccount/eligibility": typeof lib_principalAccount_personalAccount_eligibility;
   "lib/principalAccount/personalAccount/exportData": typeof lib_principalAccount_personalAccount_exportData;
   "lib/principalAccount/personalAccount/identity": typeof lib_principalAccount_personalAccount_identity;
@@ -1274,7 +1267,6 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/provisioning/contracts": typeof lib_principalAccount_provisioning_contracts;
   "lib/principalAccount/provisioning/identity": typeof lib_principalAccount_provisioning_identity;
   "lib/principalAccount/provisioning/provision": typeof lib_principalAccount_provisioning_provision;
-  "lib/principalAccount/provisioning/selection": typeof lib_principalAccount_provisioning_selection;
   "lib/principalAccount/provisioning/serviceAuth": typeof lib_principalAccount_provisioning_serviceAuth;
   "lib/principalAccount/workspace/accountContext": typeof lib_principalAccount_workspace_accountContext;
   "lib/principalAccount/workspace/audit": typeof lib_principalAccount_workspace_audit;

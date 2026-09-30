@@ -137,14 +137,6 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
       await ctx.db.patch(membership._id, { lifecycle: 'ended', endedAt: now })
     }
 
-    const sessionSelections = await ctx.db
-      .query('interactiveSessionSelections')
-      .filter((filter) => filter.eq(filter.field('activeAccountRef'), canonicalAccountRef))
-      .collect()
-    for (const row of sessionSelections) {
-      await ctx.db.delete(row._id)
-    }
-
     const agentGrants = await ctx.db
       .query('agentAccessGrants')
       .withIndex('by_ownerId_and_updatedAt', (query) => query.eq('ownerId', canonicalAccountRef))
