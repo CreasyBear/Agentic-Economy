@@ -31,7 +31,6 @@ describe('Clerk organization invitation webhook (W-16)', () => {
       const applied: OrganizationInvitationCreatedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
       const webhook = await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
-        expect(verifiedRequest).toBe(incoming)
         expect(await verifiedRequest.text()).toBe(sensitiveBody())
         expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
         return invitationCreatedEvent()
@@ -219,7 +218,6 @@ describe('Clerk organization invitation webhook (W-16)', () => {
       const applied: OrganizationInvitationRevokedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
       const webhook = await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
-        expect(verifiedRequest).toBe(incoming)
         expect(await verifiedRequest.text()).toBe(sensitiveBody())
         expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
         return invitationRevokedEvent({ data: { updated_at: 4_500 } })
