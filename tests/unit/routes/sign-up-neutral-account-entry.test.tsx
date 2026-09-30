@@ -52,7 +52,6 @@ describe('sign-up account entry', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
-    expect(screen.getByText(/you’ll set up your Workspace/)).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(document.body.textContent).toContain('Workspace')

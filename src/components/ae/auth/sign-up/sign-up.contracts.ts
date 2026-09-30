@@ -53,7 +53,7 @@ export function projectSignUpCopy(redirect: string | undefined): SignUpCopy {
   if (redirect === undefined) {
     return {
       heading,
-      body: 'After you create your account, you’ll set up your Workspace.',
+      body: 'Your Workspace is set up when you create your account.',
     }
   }
   return {

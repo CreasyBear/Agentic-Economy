@@ -5,7 +5,6 @@ import {
   it,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
@@ -21,6 +20,8 @@ import {
 
 const ACCOUNT_B = `acc_${'b'.repeat(32)}`
 const OWNERSHIP_B = `own_${'b'.repeat(32)}`
+const CLERK_ORG_B = 'org_tax_facts_workspace_b'
+const ORG_BINDING_B = `eob_${'b'.repeat(32)}`
 
 
 type CustomerTaxFactsRead =
@@ -95,7 +96,6 @@ const upsertCustomerTaxFactsRef = makeFunctionReference<
   UpsertCustomerTaxFactsReceipt
 >('moneyCustomerTaxFacts:upsertCustomerTaxFacts')
 
-const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)
@@ -163,12 +163,12 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
       displayName: 'Workspace B',
       lifecycle: 'active',
       recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-      creationActorPrincipalRef: PRINCIPAL_REF,
+      creationActorPrincipalRef: `prn_${'8'.repeat(32)}`,
       creationIdempotencyRef: `account:${ACCOUNT_B}`,
       initialOwnershipRef: OWNERSHIP_B,
       currentOwnershipRef: OWNERSHIP_B,
       revision: 1,
-      createdAt: NOW,
+      createdAt: NOW - 1_000,
       updatedAt: NOW,
       lastAction: {
         actorPrincipalRef: PRINCIPAL_REF,
@@ -192,25 +192,6 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
         idempotencyRef: `ownership:${OWNERSHIP_B}`,
       },
     })
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef: ACCOUNT_REF,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: `session:${ACCOUNT_REF}`,
-    })
-  })
-}
-
-async function setActiveWorkspace(
-  backend: InteractiveAuthorityBackend,
-  accountRef: string,
-  presentedIdentity: UserIdentity = identity(),
-): Promise<void> {
-  const session = backend.withIdentity(presentedIdentity)
-  await session.mutation(setActiveWorkspaceRef, {
-    accountRef,
-    correlationRef: correlationRef(`workspace:${accountRef}`),
   })
 }
 
@@ -488,7 +469,7 @@ describe('moneyCustomerTaxFacts', () => {
     )
   })
 
-  it('C15: upserts bind strictly to the active account selection', async () => {
+  it('C15: no org claim picks the principal-created Account; the bound org claim picks its Account', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedSecondOwnedAccount(backend)
@@ -498,14 +479,35 @@ describe('moneyCustomerTaxFacts', () => {
       correlationRef: correlationRef('c15-a'),
       idempotencyRef: idempotencyRef('c15-a'),
     }))
+    await expect(readCustomerTaxFacts(backend)).resolves.toMatchObject({
+      kind: 'available',
+      accountRef: ACCOUNT_REF,
+      legalName: 'Workspace A Tax Profile',
+    })
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('accountExternalOrganizationBindings', {
+        bindingRef: ORG_BINDING_B,
+        accountRef: ACCOUNT_B,
+        providerNamespace: 'clerk/organization',
+        providerIdentifier: CLERK_ORG_B,
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    })
 
-    await setActiveWorkspace(backend, ACCOUNT_B)
-
+    const orgIdentity = identity({ org_id: CLERK_ORG_B })
     await upsertCustomerTaxFacts(backend, upsertPayload({
       legalName: 'Workspace B Tax Profile',
       correlationRef: correlationRef('c15-b'),
       idempotencyRef: idempotencyRef('c15-b'),
-    }))
+    }), orgIdentity)
+    await expect(readCustomerTaxFacts(backend, orgIdentity)).resolves.toMatchObject({
+      kind: 'available',
+      accountRef: ACCOUNT_B,
+      legalName: 'Workspace B Tax Profile',
+    })
 
     const rows = await listTaxFactsRows(backend)
     expect(rows).toHaveLength(2)

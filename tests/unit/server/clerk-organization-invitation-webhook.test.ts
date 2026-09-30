@@ -331,7 +331,7 @@ describe('Clerk organization invitation webhook (W-16)', () => {
   })
 
   describe('handleClerkWebhookRequest', () => {
-    it.each(['session.removed', 'organization.created'] as const)(
+    it.each(['session.removed', 'organization.updated'] as const)(
       'H13: verified unsupported %s returns ignored without applying invitation command',
       async (type) => {
         const apply = vi.fn()
