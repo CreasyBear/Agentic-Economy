@@ -20,7 +20,6 @@ export type ScheduledWorkload = Readonly<{
 export const SCHEDULED_WORKLOADS = [
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
   { name: 'expire stale pending approvals', workloadKind: 'reconciliation', handler: 'expireStalePendingApprovals', interval: { minutes: 5 } },
-  { name: 'deliver owner notifications', workloadKind: 'cron', handler: 'deliverOwnerNotifications', interval: { minutes: 1 } },
   { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery', interval: { hours: 6 } },
   { name: 'refresh USDC/AUD reference rate', workloadKind: 'cron', handler: 'refreshReferenceRate', interval: { hours: 6 } },
   // 7 days (168h), not 24h: refreshAgenticEconomyApiRegistry rewrites ~14,541
@@ -46,7 +45,6 @@ export type ScheduledWorkloadName = typeof SCHEDULED_WORKLOADS[number]['name']
 export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'cleanup expired agent access oauth grants',
   'cleanup expired source write nonces',
-  'deliver owner notifications',
   'expire stale pending approvals',
   'observe x402 treasury',
   'reconcile business supply projections',

@@ -21,7 +21,7 @@ export const recordOrganizationMembershipCreatedForServerHandler = async (ctx: M
     }
     const [binding] = bindingsResolution
     if (binding === undefined || binding.lifecycle !== 'active') {
-      return { kind: 'accepted', status: 'ignored' }
+      return { kind: 'refused', code: 'organization_unbound' }
     }
 
     const account = await ctx.db

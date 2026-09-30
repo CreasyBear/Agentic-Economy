@@ -123,7 +123,7 @@ export function AeAppHeader({
           <div className="ms-auto flex min-w-0 shrink-0 items-center justify-end gap-0.5 sm:gap-intra">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><AeCommandPanel /></div>
-            <div className={chatFrame ? 'hidden sm:block' : ''}><OrganizationSwitcher hidePersonal={false} afterSelectOrganizationUrl="/owner/settings/team" /></div>
+            <div className={chatFrame ? 'hidden sm:block' : ''}><OrganizationSwitcher hidePersonal={false} /></div>
             <div className={chatFrame ? 'hidden sm:block' : ''}><OperatorWorkspaceMenu operatorRole={operatorRole} /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle /></div>
             <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />

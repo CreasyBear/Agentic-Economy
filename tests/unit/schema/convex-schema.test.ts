@@ -142,6 +142,7 @@ const requiredIndexes = {
     'by_accountRef',
     'by_creationActorPrincipalRef_and_creationIdempotencyRef',
     'by_lifecycle_and_updatedAt',
+    'by_lastAction_actorPrincipalRef_and_lifecycle',
   ],
   accountOwnerships: [
     'by_ownershipRef',
@@ -169,7 +170,6 @@ const requiredIndexes = {
     'by_predecessorCredentialRef',
   ],
   notificationDeliveries: [
-    'by_state_and_nextAttemptAt',
     'by_recipient_account_event_source',
   ],
   consequenceProofUses: ['by_reverificationId'],

@@ -43,14 +43,6 @@ export async function expireStalePendingApprovalsHandler(ctx: WorkloadCronMutati
   )
 }
 
-export async function deliverOwnerNotificationsHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  return await runAdmittedAction(
-    ctx,
-    'deliver owner notifications',
-    internal.notificationDelivery.deliverDueOwnerNotifications,
-    {},
-  )
-}
 
 export async function refreshFacilitatorDiscoveryHandler(ctx: WorkloadCronActionContext): Promise<null> {
   return await runAdmittedAction(

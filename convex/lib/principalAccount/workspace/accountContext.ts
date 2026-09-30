@@ -3,7 +3,12 @@ import type { UserIdentity } from 'convex/server'
 import { accountRef } from '../../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../../src/modules/principal-account/principal/public'
 import type { Doc } from '../../../_generated/dataModel'
-import { InteractiveAuthorityError, requireAccessFactForAccount, resolveActiveAccountRefForPrincipal } from '../../../interactiveAuthority'
+import {
+  InteractiveAuthorityError,
+  requireAccessFactForAccount,
+  resolveActiveAccountRefForPrincipal,
+  resolveClosedWorkspaceActorAccountRef as resolveClosedActorAccountRef,
+} from '../../../interactiveAuthority'
 import { requireAccountInteractiveHumanPrincipal, type WorkspaceDb } from './identity'
 
 export type AccountActionContext = Readonly<{
@@ -17,16 +22,8 @@ export async function resolveClosedWorkspaceActorAccountRef(
   db: WorkspaceDb,
   canonicalPrincipalRef: ReturnType<typeof principalRef>,
 ): Promise<ReturnType<typeof accountRef> | null> {
-  const closedAccounts = await db
-    .query('accounts')
-    .filter((filter) => filter.and(
-      filter.eq(filter.field('lifecycle'), 'closed'),
-      filter.eq(filter.field('lastAction.actorPrincipalRef'), canonicalPrincipalRef),
-    ))
-    .collect()
-  if (closedAccounts.length !== 1) return null
-  const [row] = closedAccounts
-  return row === undefined ? null : accountRef(row.accountRef)
+  const closedAccountRef = await resolveClosedActorAccountRef(db, canonicalPrincipalRef)
+  return closedAccountRef === null ? null : accountRef(closedAccountRef)
 }
 
 export async function requireAuthenticatedAccountContext(

@@ -1,5 +1,7 @@
 'use client'
 
+import { isReverificationCancelledError } from '@clerk/shared/error'
+
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { degrade } from '@/lib/observability/degrade'
@@ -301,6 +303,7 @@ export function useConnectAgentWizard({
         setDiagnostic(mapUnexpectedDiagnostic())
       }
     } catch (cause) {
+      if (isReverificationCancelledError(cause)) return
       degrade(cause, undefined, {
         site: 'AeConnectAgentWizardDialog.submit',
         reason: 'source_unavailable',

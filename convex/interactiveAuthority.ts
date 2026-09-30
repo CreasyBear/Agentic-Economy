@@ -1,6 +1,5 @@
 import { internalAction, internalQuery, mutation } from './_generated/server'
 
-import type { InteractiveAccountSelectionState } from './lib/principalAccount/interactiveAuthority/clerk'
 import { clerkActiveOrganizationId } from './lib/principalAccount/interactiveAuthority/clerk'
 import type { InteractiveAuthorityErrorCode } from './lib/principalAccount/interactiveAuthority/errors'
 import { InteractiveAuthorityError } from './lib/principalAccount/interactiveAuthority/errors'
@@ -18,7 +17,10 @@ import {
   type OwnerIdentityProvisioningRefs,
 } from './lib/principalAccount/interactiveAuthority/provisioning'
 import { requireAccessFactForAccount } from './lib/principalAccount/interactiveAuthority/accessFacts'
-import { resolveActiveAccountRefForPrincipal } from './lib/principalAccount/interactiveAuthority/accountResolution'
+import {
+  resolveActiveAccountRefForPrincipal,
+  resolveClosedWorkspaceActorAccountRef,
+} from './lib/principalAccount/interactiveAuthority/accountResolution'
 import {
   readCurrentInteractiveAuthorityFactsArgs,
   readCurrentInteractiveAuthorityFactsHandler,
@@ -41,7 +43,6 @@ import { interactiveAuthorityContextValue } from './lib/principalAccount/interac
 // -- convex/lib/principalAccount/interactiveAuthority/*, grouped by concern. --
 // -- preserve existing import paths for convex modules, tests, and src. --------
 
-export type { InteractiveAccountSelectionState }
 export { clerkActiveOrganizationId }
 export type { InteractiveAuthorityErrorCode }
 export { InteractiveAuthorityError }
@@ -53,7 +54,7 @@ export {
 export type { OwnerIdentityProvisioningRefs }
 export { ensureOwnerIdentityForAuthenticatedIdentity }
 export { requireAccessFactForAccount }
-export { resolveActiveAccountRefForPrincipal }
+export { resolveActiveAccountRefForPrincipal, resolveClosedWorkspaceActorAccountRef }
 export { resolveScheduledInteractiveAuthorityContext }
 
 /**

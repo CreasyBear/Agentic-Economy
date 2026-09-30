@@ -231,26 +231,84 @@ async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): P
   return await refusePendingApproval(ctx, row, 'The owner declined this operation.')
 }
 
+const APPROVAL_EXPIRY_PAGE_SIZE = 200
+
+export type ApprovalExpiryPage = Readonly<{ scanned: number; scheduled: number; blocked: number }>
+
+function approvalIsExpired(createdAt: number, now: number): boolean {
+  return now - createdAt >= AUTHORITY_REQUEST_TTL_MS
+}
+
+function approvalCanBeRefused(row: PendingApprovalRow): boolean {
+  return pendingApprovalIsClean(row) && !financialStateHasReleaseUncertainty(row)
+}
+
+async function scheduleStaleApprovalPage(
+  ctx: MutationCtx,
+  afterCreatedAt: number | undefined,
+): Promise<ApprovalExpiryPage> {
+  const cutoff = Date.now() - AUTHORITY_REQUEST_TTL_MS
+  const rows = await ctx.db.query('capabilityCalls')
+    .withIndex('by_state_and_result_kind_and_createdAt', (query) => {
+      const stale = query.eq('state', 'pending').eq('result.kind', 'needs_authority')
+      return afterCreatedAt === undefined
+        ? stale.lte('createdAt', cutoff)
+        : stale.gt('createdAt', afterCreatedAt).lte('createdAt', cutoff)
+    })
+    .take(APPROVAL_EXPIRY_PAGE_SIZE)
+  let scheduled = 0
+  let blocked = 0
+  for (const row of rows) {
+    if (!pendingApprovalRow(row)) continue
+    if (!approvalCanBeRefused(row)) {
+      blocked += 1
+      continue
+    }
+    await ctx.scheduler.runAfter(0, internal.capabilityCalls.expireStaleApproval, { callRef: row.callRef })
+    scheduled += 1
+  }
+  const last = rows.at(-1)
+  if (rows.length === APPROVAL_EXPIRY_PAGE_SIZE && last !== undefined) {
+    await ctx.scheduler.runAfter(0, internal.capabilityCalls.continueApprovalExpiry, {
+      afterCreatedAt: last.createdAt,
+    })
+  }
+  if (blocked > 0) {
+    degradeBackend(new Error('approval_expiry_blocked'), undefined, {
+      site: 'expireStalePendingApprovals',
+      reason: 'invalid_response',
+    })
+  }
+  return { scanned: rows.length, scheduled, blocked }
+}
+
 export async function expireStalePendingApprovalsHandler(
   ctx: MutationCtx,
   args: Readonly<{ workload: unknown }>,
-): Promise<{ scanned: number; expired: number }> {
+): Promise<ApprovalExpiryPage> {
   const workload = parseWorkloadCronSnapshot(args.workload)
   await reconcileWorkloadCronSnapshot(ctx, 'expire stale pending approvals', workload)
-  const cutoff = Date.now() - AUTHORITY_REQUEST_TTL_MS
-  const rows = await ctx.db.query('capabilityCalls')
-    .withIndex('by_state_and_result_kind_and_createdAt', (query) => query
-      .eq('state', 'pending')
-      .eq('result.kind', 'needs_authority')
-      .lte('createdAt', cutoff))
-    .take(200)
-  let expired = 0
-  for (const row of rows) {
-    if (!pendingApprovalRow(row) || !pendingApprovalIsClean(row)) continue
-    const result = await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
-    if (result.kind === 'denied') expired += 1
-  }
-  return { scanned: rows.length, expired }
+  return await scheduleStaleApprovalPage(ctx, undefined)
+}
+
+export async function continueApprovalExpiryHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ afterCreatedAt: number }>,
+): Promise<ApprovalExpiryPage> {
+  return await scheduleStaleApprovalPage(ctx, args.afterCreatedAt)
+}
+
+export async function expireStaleApprovalHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ callRef: string }>,
+): Promise<null> {
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+    .unique()
+  if (row === null || !pendingApprovalRow(row)) return null
+  if (!approvalIsExpired(row.createdAt, Date.now()) || !approvalCanBeRefused(row)) return null
+  await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
+  return null
 }
 
 function loadApprovalMaterial(row: PendingApprovalRow): ApprovalMaterial | null {
@@ -426,9 +484,9 @@ export async function decideCallApprovalHandler(
   if (!pendingApprovalRow(row)) return { kind: 'refused', code: 'authority_not_pending' }
   if (!pendingApprovalIsClean(row)) return { kind: 'refused', code: 'invocation_invalid' }
   if (args.decision === 'deny') return await denyPendingApproval(ctx, row)
-  if (Date.now() - row.createdAt > AUTHORITY_REQUEST_TTL_MS) {
-    await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
-    return { kind: 'refused', code: 'authority_not_pending' }
+  if (approvalIsExpired(row.createdAt, Date.now())) {
+    const expired = await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
+    return expired.kind === 'denied' ? { kind: 'refused', code: 'authority_not_pending' } : expired
   }
   if (row.applicationRef === 'ae-owner-chat') {
     const quoteRef = row.quoteRef

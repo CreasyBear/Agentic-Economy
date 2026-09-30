@@ -1,6 +1,7 @@
 import type { Infer } from 'convex/values'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import { upsertCallProjection } from './dispatchProjection'
+import { internal } from '../../../_generated/api'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import { recordCallTerminal } from '@/lib/observability/journey'
 import type { MutationCtx } from '../../../_generated/server'
@@ -40,6 +41,13 @@ export async function recordHandler(
   ) return { kind: 'recorded' as const }
   recordCallTerminal(row.state, args.state)
   await ctx.db.patch(row._id, recordPatch(args))
+  if (args.state === 'pending' && args.result?.kind === 'needs_authority') {
+    try {
+      await ctx.runMutation(internal.notifications.enqueueAgentApprovalRequested, { callRef: args.callRef })
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'enqueueAgentApprovalRequested', reason: 'source_unavailable' })
+    }
+  }
   return { kind: 'recorded' as const }
 }
 

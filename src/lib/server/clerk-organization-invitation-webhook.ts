@@ -1,10 +1,14 @@
-import { verifyWebhook } from '@clerk/tanstack-react-start/webhooks'
-
-import { kindForStatus } from '@/lib/errors'
 import { degrade } from '@/lib/observability/degrade'
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import {
+  CLERK_WEBHOOK_RETRY_AFTER_SECONDS,
+  clerkWebhookDeliveryRefHash,
+  clerkWebhookIgnoredResponse,
+  clerkWebhookProblem,
+  isValidClerkWebhookDeliveryRef,
+  safeClerkWebhookError,
+  type VerifiedClerkWebhook,
+} from '@/lib/server/clerk-webhook-core'
 import { response as jsonResponse } from '@/lib/server/no-store-response'
-import { problem } from '@/lib/server/problem'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import {
@@ -18,17 +22,6 @@ import type {
   OrganizationInvitationRole,
 } from '@/modules/workspace-invitation/organization-invitation-observation'
 
-const MAX_CLERK_WEBHOOK_BODY_BYTES = 256 * 1024
-const RETRY_AFTER_SECONDS = 5
-
-type VerifiedWebhookEvent = Readonly<{
-  type: string
-  object: string
-  data: unknown
-  event_attributes?: unknown
-}>
-
-type WebhookVerifier = (request: Request) => Promise<VerifiedWebhookEvent>
 type ObservationApplier = (
   command: OrganizationInvitationCreatedObservation,
 ) => Promise<OrganizationInvitationCreatedObservationResult>
@@ -37,63 +30,35 @@ type RevokedObservationApplier = (
 ) => Promise<OrganizationInvitationCreatedObservationResult>
 
 export type InvitationWebhookDependencies = Readonly<{
-  verify?: WebhookVerifier
   apply?: ObservationApplier
   applyRevoked?: RevokedObservationApplier
   issuer?: string
 }>
 
 export async function handleClerkOrganizationInvitationWebhookRequest(
-  request: Request,
+  webhook: VerifiedClerkWebhook,
   dependencies: InvitationWebhookDependencies = {},
 ): Promise<Response> {
-  const declaredContentLength = Number(request.headers.get('content-length'))
-  if (Number.isFinite(declaredContentLength) && declaredContentLength > MAX_CLERK_WEBHOOK_BODY_BYTES) {
-    return problem({ status: 413, kind: kindForStatus(413), code: 'request_too_large', detail: 'request_too_large' })
-  }
-  const bounded = await readBoundedRequestText(request.clone(), MAX_CLERK_WEBHOOK_BODY_BYTES)
-  if (!bounded.ok) {
-    return problem({ status: 413, kind: kindForStatus(413), code: 'request_too_large', detail: 'request_too_large' })
-  }
-
-  let verified: unknown
-  try {
-    verified = await (dependencies.verify ?? verifyWebhook)(request)
-  } catch (cause) {
-    return degrade(cause, problem({ status: 400, kind: kindForStatus(400), code: 'clerk_webhook_invalid', detail: 'clerk_webhook_invalid' }), { site: 'handleClerkOrganizationInvitationWebhookRequest', reason: 'forbidden' })
-  }
-
   const projection = invitationObservationFromVerifiedEvent({
-    event: verified,
-    deliveryRef: request.headers.get('svix-id'),
+    event: webhook.event,
+    deliveryRef: webhook.deliveryRef,
   })
-  if (projection.kind === 'ignored') {
-    return jsonResponse({ kind: 'accepted', status: 'ignored' }, 200)
-  }
-  if (projection.kind === 'invalid') {
-    return problem({ status: 400, kind: kindForStatus(400), code: 'clerk_webhook_invalid', detail: 'clerk_webhook_invalid' })
-  }
+  if (projection.kind === 'ignored') return clerkWebhookIgnoredResponse()
+  if (projection.kind === 'invalid') return clerkWebhookProblem(400, 'clerk_webhook_invalid')
 
   let applied: OrganizationInvitationCreatedObservationResult
   try {
-    if (projection.eventKind === 'revoked') {
-      applied = await (dependencies.applyRevoked ?? recordOrganizationInvitationRevokedThroughSource)(
-        projection.command,
-      )
-    } else {
-      applied = await (dependencies.apply ?? recordOrganizationInvitationCreatedThroughSource)(projection.command)
-    }
+    applied = projection.eventKind === 'revoked'
+      ? await (dependencies.applyRevoked ?? recordOrganizationInvitationRevokedThroughSource)(projection.command)
+      : await (dependencies.apply ?? recordOrganizationInvitationCreatedThroughSource)(projection.command)
   } catch (cause) {
-    return degrade(cause, problem(
-      { status: 503, kind: kindForStatus(503), code: 'workspace_invitation_unavailable', detail: 'workspace_invitation_unavailable' },
-      { 'Retry-After': String(RETRY_AFTER_SECONDS) },
-    ), { site: 'handleClerkOrganizationInvitationWebhookRequest', reason: 'source_unavailable' })
-  }
-  if (applied.kind === 'refused') {
-    return problem(
-      { status: 409, kind: kindForStatus(409), code: applied.code, detail: applied.code },
+    return degrade(
+      safeClerkWebhookError(cause),
+      clerkWebhookProblem(503, 'workspace_invitation_unavailable', CLERK_WEBHOOK_RETRY_AFTER_SECONDS),
+      { site: 'handleClerkOrganizationInvitationWebhookRequest', reason: 'source_unavailable' },
     )
   }
+  if (applied.kind === 'refused') return clerkWebhookProblem(409, applied.code)
   return jsonResponse({ kind: 'accepted', status: applied.status }, 200)
 }
 
@@ -123,9 +88,7 @@ function invitationObservationFromVerifiedEvent(input: Readonly<{
   if (eventKind === null) {
     return { kind: 'ignored' }
   }
-  if (input.deliveryRef === null || input.deliveryRef.trim().length === 0 || input.deliveryRef.length > 300) {
-    return { kind: 'invalid' }
-  }
+  if (!isValidClerkWebhookDeliveryRef(input.deliveryRef)) return { kind: 'invalid' }
   if (!isRecord(input.event.data)) return { kind: 'invalid' }
 
   const data = input.event.data
@@ -165,10 +128,7 @@ function invitationObservationFromVerifiedEvent(input: Readonly<{
 
   const command = {
     clerkOrgId: organizationId,
-    deliveryRefHash: canonicalDigest({
-      contract: 'ae.clerk-webhook-delivery:v1',
-      deliveryRef: input.deliveryRef,
-    }),
+    deliveryRefHash: clerkWebhookDeliveryRefHash(input.deliveryRef),
     invitationRefHash: canonicalDigest({
       contract: 'ae.clerk-organization-invitation-ref:v1',
       invitationRef: id,

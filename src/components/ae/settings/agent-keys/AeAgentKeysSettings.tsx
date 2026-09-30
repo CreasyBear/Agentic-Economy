@@ -1,6 +1,4 @@
-import { reverificationError } from '@clerk/shared/authorization-errors'
-import { useRef, useState } from 'react'
-import { useReverification } from '@clerk/tanstack-react-start'
+import { useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { Link } from '@tanstack/react-router'
 
@@ -13,6 +11,7 @@ import {
 } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useTypedReverification } from '@/lib/client/useTypedReverification'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { issueAgentAccessKeyServer } from '@/modules/agent-access/agent-access.functions'
@@ -39,20 +38,11 @@ export function AeAgentKeysSettings({
   onWizardOpenChange,
 }: AeAgentKeysSettingsProps) {
   const vm = useAgentKeysSettings(initialDirectory)
-  const reverificationAttempted = useRef(false)
   const issueRequest = useServerFn(issueAgentAccessKeyServer)
-  const submitIssueRequest = useReverification(async (args: { data: Record<string, unknown> }) => {
-    const result = await issueRequest(args)
-    if (result.kind === 'refused' && result.code === 'reverification_required' && !reverificationAttempted.current) {
-      reverificationAttempted.current = true
-      return reverificationError('strict')
-    }
-    return result
-  })
-  const issueKey = async (args: { data: Record<string, unknown> }) => {
-    reverificationAttempted.current = false
-    return await submitIssueRequest(args)
-  }
+  const issueKey = useTypedReverification(
+    issueRequest,
+    (result) => result.kind === 'refused' && result.code === 'reverification_required' ? 'strict' : null,
+  )
   const [uncontrolledWizardOpen, setUncontrolledWizardOpen] = useState(openIssueDialog)
   const wizardOpen = onWizardOpenChange === undefined ? uncontrolledWizardOpen : openIssueDialog
   const setWizardOpen = (open: boolean) => {
@@ -94,15 +84,16 @@ export function AeAgentKeysSettings({
       {activeKeys.map(({ detail, credential }) => <SettingsRow
         key={credential.credentialRef}
         label={`${detail.agent.displayName} · ${environmentLabel(detail.agent.environment)}`}
-        description={credential.credentialRef === detail.currentCredentialRef ? 'In use' : 'Older key'}
+        description={`Created ${formatTimestamp(credential.issuedAt)} · ${credential.credentialRef === detail.currentCredentialRef ? 'In use' : 'Older key'}`}
       >
-        <Button type="button" variant="destructive" className="min-h-touch" disabled={vm.revoking || vm.refreshRequired} aria-label={`Revoke key for ${detail.agent.displayName}`} onClick={(event) => vm.requestRevoke({
+        <Button type="button" variant="destructive" className="min-h-touch" disabled={vm.revoking || vm.refreshRequired} aria-label={`Revoke key created ${formatTimestamp(credential.issuedAt)} for ${detail.agent.displayName}`} onClick={(event) => vm.requestRevoke({
           credentialRef: credential.credentialRef,
           generation: credential.generation,
           name: detail.agent.displayName,
           principalRef: detail.agent.principalRef,
           environment: detail.agent.environment,
           current: credential.credentialRef === detail.currentCredentialRef,
+          issuedAt: credential.issuedAt,
         }, event.currentTarget)}>Revoke key</Button>
       </SettingsRow>)}
     </SettingsDangerZone>}
@@ -119,7 +110,7 @@ export function AeAgentKeysSettings({
       open={vm.revokeTarget !== undefined}
       onOpenChange={vm.closeRevoke}
       title="Revoke this key?"
-      description={vm.revokeTarget === undefined ? '' : `Revoke this key for ${vm.revokeTarget.name}? Requests using it stop being authorized. The Agent and its history remain.${vm.revokeTarget.current ? ' If no other key is active the Agent must reconnect.' : ''}`}
+      description={vm.revokeTarget === undefined ? '' : `Revoke the key created ${formatTimestamp(vm.revokeTarget.issuedAt)} for ${vm.revokeTarget.name}? Requests using it stop being authorized. The Agent and its history remain.${vm.revokeTarget.current ? ' If no other key is active the Agent must reconnect.' : ''}`}
       confirmLabel="Revoke this key"
       confirmVariant="destructive"
       pending={vm.revoking}

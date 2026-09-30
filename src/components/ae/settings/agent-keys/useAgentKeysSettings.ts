@@ -13,6 +13,7 @@ type RevokeTarget = Readonly<{
   name: string
   environment: 'sandbox' | 'production'
   current: boolean
+  issuedAt: number
 }>
 
 export function useAgentKeysSettings(initialDirectory: AgentDirectoryProjection) {

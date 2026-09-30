@@ -570,7 +570,6 @@ import type * as lib_principalAccount_memberships_membershipUpdated from "../lib
 import type * as lib_principalAccount_notifications_delivery from "../lib/principalAccount/notifications/delivery.js";
 import type * as lib_principalAccount_notifications_enqueue from "../lib/principalAccount/notifications/enqueue.js";
 import type * as lib_principalAccount_notifications_preferences from "../lib/principalAccount/notifications/preferences.js";
-import type * as lib_principalAccount_notifications_resendOutcome from "../lib/principalAccount/notifications/resendOutcome.js";
 import type * as lib_principalAccount_personalAccount_eligibility from "../lib/principalAccount/personalAccount/eligibility.js";
 import type * as lib_principalAccount_personalAccount_exportData from "../lib/principalAccount/personalAccount/exportData.js";
 import type * as lib_principalAccount_personalAccount_identity from "../lib/principalAccount/personalAccount/identity.js";
@@ -657,6 +656,7 @@ import type * as moneyX402ExpiryActions from "../moneyX402ExpiryActions.js";
 import type * as moneyX402PaymentAttempts from "../moneyX402PaymentAttempts.js";
 import type * as moneyX402ResponseActions from "../moneyX402ResponseActions.js";
 import type * as notificationDelivery from "../notificationDelivery.js";
+import type * as notificationWorkpool from "../notificationWorkpool.js";
 import type * as notifications from "../notifications.js";
 import type * as operatorContext from "../operatorContext.js";
 import type * as personalAccount from "../personalAccount.js";
@@ -1258,7 +1258,6 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/notifications/delivery": typeof lib_principalAccount_notifications_delivery;
   "lib/principalAccount/notifications/enqueue": typeof lib_principalAccount_notifications_enqueue;
   "lib/principalAccount/notifications/preferences": typeof lib_principalAccount_notifications_preferences;
-  "lib/principalAccount/notifications/resendOutcome": typeof lib_principalAccount_notifications_resendOutcome;
   "lib/principalAccount/personalAccount/eligibility": typeof lib_principalAccount_personalAccount_eligibility;
   "lib/principalAccount/personalAccount/exportData": typeof lib_principalAccount_personalAccount_exportData;
   "lib/principalAccount/personalAccount/identity": typeof lib_principalAccount_personalAccount_identity;
@@ -1345,6 +1344,7 @@ declare const fullApi: ApiFromModules<{
   moneyX402PaymentAttempts: typeof moneyX402PaymentAttempts;
   moneyX402ResponseActions: typeof moneyX402ResponseActions;
   notificationDelivery: typeof notificationDelivery;
+  notificationWorkpool: typeof notificationWorkpool;
   notifications: typeof notifications;
   operatorContext: typeof operatorContext;
   personalAccount: typeof personalAccount;
@@ -1407,6 +1407,7 @@ export declare const internal: FilterApi<
 export declare const components: {
   workpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"workpool">;
   stripeWebhookWorkpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"stripeWebhookWorkpool">;
+  notificationWorkpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"notificationWorkpool">;
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;

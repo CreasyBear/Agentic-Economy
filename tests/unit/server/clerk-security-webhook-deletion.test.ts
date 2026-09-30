@@ -2,20 +2,23 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { handleClerkSecurityWebhookRequest } from '@/lib/server/clerk-security-webhook'
 import type { ClerkSecurityObservation } from '@/modules/security/account-security'
+import { verifiedClerkWebhook } from '../../helpers/clerk-webhook'
 
 const issuer = 'https://clerk.example.test'
 
 describe('Clerk security webhook user.deleted (W-09)', () => {
   it('D1: maps user.deleted to retire_personal_account with envelope observedAt', async () => {
     const applied: ClerkSecurityObservation[] = []
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_d1', sensitiveBody()), {
-      issuer,
-      verify: async () => userDeletedEvent(),
-      apply: async (command) => {
-        applied.push(command)
-        return { kind: 'accepted', status: 'applied', eventRef: 'audit:clerk:deleted' }
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d1', sensitiveBody()), async () => userDeletedEvent()),
+      {
+        issuer,
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied', eventRef: 'audit:clerk:deleted' }
+        },
       },
-    })
+    )
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
@@ -34,20 +37,23 @@ describe('Clerk security webhook user.deleted (W-09)', () => {
 
   it('D2: serialized command contains no sensitive tokens, raw email, or raw svix-id', async () => {
     const applied: ClerkSecurityObservation[] = []
-    await handleClerkSecurityWebhookRequest(request('delivery_d2_sensitive', sensitiveBody()), {
-      issuer,
-      verify: async () => userDeletedEvent({
-        data: {
-          id: 'user_owner_1',
-          deleted: true,
-          email_addresses: [{ email_address: 'owner@example.test' }],
+    await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d2_sensitive', sensitiveBody()), async () =>
+        userDeletedEvent({
+          data: {
+            id: 'user_owner_1',
+            deleted: true,
+            email_addresses: [{ email_address: 'owner@example.test' }],
+          },
+        })),
+      {
+        issuer,
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
         },
-      }),
-      apply: async (command) => {
-        applied.push(command)
-        return { kind: 'accepted', status: 'applied' }
       },
-    })
+    )
 
     const serialized = JSON.stringify(applied[0])
     expect(serialized).not.toContain('delivery_d2_sensitive')
@@ -57,39 +63,45 @@ describe('Clerk security webhook user.deleted (W-09)', () => {
 
   it('D3: Clerk subject is data.id', async () => {
     const applied: ClerkSecurityObservation[] = []
-    await handleClerkSecurityWebhookRequest(request('delivery_d3'), {
-      issuer,
-      verify: async () => userDeletedEvent({ data: { id: 'user_subject_abc', deleted: true } }),
-      apply: async (command) => {
-        applied.push(command)
-        return { kind: 'accepted', status: 'applied' }
+    await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d3'), async () =>
+        userDeletedEvent({ data: { id: 'user_subject_abc', deleted: true } })),
+      {
+        issuer,
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
       },
-    })
+    )
 
     expect(applied[0]?.providerIdentifier).toBe(`${issuer}|user_subject_abc`)
   })
 
   it('D4: observedAt comes from envelope timestamp', async () => {
     const applied: ClerkSecurityObservation[] = []
-    await handleClerkSecurityWebhookRequest(request('delivery_d4'), {
-      issuer,
-      verify: async () => userDeletedEvent({ timestamp: 12_345 }),
-      apply: async (command) => {
-        applied.push(command)
-        return { kind: 'accepted', status: 'applied' }
+    await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d4'), async () =>
+        userDeletedEvent({ timestamp: 12_345 })),
+      {
+        issuer,
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
       },
-    })
+    )
 
     expect(applied[0]?.observedAt).toBe(12_345)
   })
 
   it('D5: missing envelope timestamp returns 400 without apply', async () => {
     const apply = vi.fn()
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_d5'), {
-      issuer,
-      verify: async () => userDeletedEvent({ omitTimestamp: true }),
-      apply,
-    })
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d5'), async () =>
+        userDeletedEvent({ omitTimestamp: true })),
+      { issuer, apply },
+    )
 
     expect(response.status).toBe(400)
     expect(apply).not.toHaveBeenCalled()
@@ -97,11 +109,11 @@ describe('Clerk security webhook user.deleted (W-09)', () => {
 
   it('D6: deleted !== true returns 400 without apply', async () => {
     const apply = vi.fn()
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_d6'), {
-      issuer,
-      verify: async () => userDeletedEvent({ data: { id: 'user_owner_1', deleted: false } }),
-      apply,
-    })
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d6'), async () =>
+        userDeletedEvent({ data: { id: 'user_owner_1', deleted: false } })),
+      { issuer, apply },
+    )
 
     expect(response.status).toBe(400)
     expect(apply).not.toHaveBeenCalled()
@@ -109,11 +121,11 @@ describe('Clerk security webhook user.deleted (W-09)', () => {
 
   it('D7: missing data.id returns 400 without apply', async () => {
     const apply = vi.fn()
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_d7'), {
-      issuer,
-      verify: async () => userDeletedEvent({ data: { deleted: true } }),
-      apply,
-    })
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d7'), async () =>
+        userDeletedEvent({ data: { deleted: true } })),
+      { issuer, apply },
+    )
 
     expect(response.status).toBe(400)
     expect(apply).not.toHaveBeenCalled()
@@ -121,11 +133,10 @@ describe('Clerk security webhook user.deleted (W-09)', () => {
 
   it('D8: user.deleted is recognized and not ignored', async () => {
     const apply = vi.fn(async () => ({ kind: 'accepted' as const, status: 'applied' as const }))
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_d8'), {
-      issuer,
-      verify: async () => userDeletedEvent(),
-      apply,
-    })
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_d8'), async () => userDeletedEvent()),
+      { issuer, apply },
+    )
 
     expect(response.status).toBe(200)
     expect(await response.json()).not.toEqual({ kind: 'accepted', status: 'ignored' })

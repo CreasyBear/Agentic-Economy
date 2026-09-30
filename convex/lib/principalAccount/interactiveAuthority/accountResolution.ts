@@ -1,30 +1,27 @@
 import type { UserIdentity } from 'convex/server'
 
-import { degradeBackend } from '@/lib/observability/degrade-backend'
-
 import type { PrincipalRef } from '../../../../src/modules/principal-account/public'
 import {
   ACCESS_FACT_QUERY_LIMIT,
   CLERK_ORGANIZATION_PROVIDER_NAMESPACE,
 } from './constants'
-import { clerkActiveOrganizationId, type InteractiveAccountSelectionState } from './clerk'
+import { clerkActiveOrganizationId } from './clerk'
 import { InteractiveAuthorityError } from './errors'
 import type { AuthorityDb } from './shared'
 
-async function resolveClosedWorkspaceActorAccountRef(
+/** The one Account a principal last acted on after it was closed, or null when that is ambiguous. */
+export async function resolveClosedWorkspaceActorAccountRef(
   db: AuthorityDb,
   canonicalPrincipalRef: PrincipalRef,
 ): Promise<string | null> {
   const closedAccounts = await db
     .query('accounts')
-    .filter((filter) => filter.and(
-      filter.eq(filter.field('lifecycle'), 'closed'),
-      filter.eq(filter.field('lastAction.actorPrincipalRef'), canonicalPrincipalRef),
-    ))
-    .collect()
-  if (closedAccounts.length !== 1) return null
+    .withIndex('by_lastAction_actorPrincipalRef_and_lifecycle', (query) => query
+      .eq('lastAction.actorPrincipalRef', canonicalPrincipalRef)
+      .eq('lifecycle', 'closed'))
+    .take(2)
   const [account] = closedAccounts
-  return account?.accountRef ?? null
+  return closedAccounts.length === 1 ? account?.accountRef ?? null : null
 }
 
 async function collectAccessibleAccountRefs(
@@ -51,16 +48,11 @@ export async function resolveActiveAccountRefForPrincipal(
   db: AuthorityDb,
   canonicalPrincipalRef: PrincipalRef,
   identity: UserIdentity | undefined,
-): Promise<Readonly<{
-  activeAccountRef: string
-  selectionState: InteractiveAccountSelectionState
-}>> {
-  const accounts = await collectAccessibleAccountRefs(db, canonicalPrincipalRef)
-  if (accounts.length === 0) {
+): Promise<Readonly<{ activeAccountRef: string }>> {
+  const accountRefs = await collectAccessibleAccountRefs(db, canonicalPrincipalRef)
+  if (accountRefs.length === 0) {
     const closedAccountRef = await resolveClosedWorkspaceActorAccountRef(db, canonicalPrincipalRef)
-    if (closedAccountRef !== null) {
-      return { activeAccountRef: closedAccountRef, selectionState: 'unique' }
-    }
+    if (closedAccountRef !== null) return { activeAccountRef: closedAccountRef }
     throw new InteractiveAuthorityError('account_access_missing')
   }
 
@@ -78,56 +70,43 @@ export async function resolveActiveAccountRefForPrincipal(
     const [orgBinding] = orgBindings
     if (orgBinding !== undefined
       && orgBinding.lifecycle === 'active'
-      && accounts.includes(orgBinding.accountRef)) {
-      return { activeAccountRef: orgBinding.accountRef, selectionState: 'org_bound' }
+      && accountRefs.includes(orgBinding.accountRef)) {
+      return { activeAccountRef: orgBinding.accountRef }
     }
   }
 
-  if (accounts.length === 1) {
-    const [activeAccountRef] = accounts
-    if (activeAccountRef === undefined) {
-      throw new InteractiveAuthorityError('account_access_missing')
-    }
-    return { activeAccountRef, selectionState: 'unique' }
-  }
+  const [onlyAccountRef] = accountRefs
+  if (accountRefs.length === 1 && onlyAccountRef !== undefined) return { activeAccountRef: onlyAccountRef }
 
-  const candidates = await Promise.all(accounts.map(async (accountRef) => {
-    const accountRows = await db
+  // Two or more Accounts and no usable organization claim: a total order, never an error.
+  // Active Accounts win over suspended or pending ones; then personal before organization-bound,
+  // then the Account this principal created, then the oldest.
+  const accounts = await Promise.all(accountRefs.map(async (accountRef) => {
+    const rows = await db
       .query('accounts')
       .withIndex('by_accountRef', (query) => query.eq('accountRef', accountRef))
       .take(2)
-    if (accountRows.length > 1) {
-      throw new InteractiveAuthorityError('account_ambiguous')
-    }
-    const [account] = accountRows
-    if (account === undefined) {
-      throw new InteractiveAuthorityError('account_missing')
-    }
+    if (rows.length > 1) throw new InteractiveAuthorityError('account_ambiguous')
+    const [account] = rows
+    if (account === undefined) throw new InteractiveAuthorityError('account_missing')
+    return account
+  }))
+  const active = accounts.filter((account) => account.lifecycle === 'active')
+  const candidates = await Promise.all((active.length > 0 ? active : accounts).map(async (account) => {
     const activeOrgBindings = await db
       .query('accountExternalOrganizationBindings')
       .withIndex('by_accountRef_and_lifecycle', (query) =>
-        query.eq('accountRef', accountRef).eq('lifecycle', 'active'))
+        query.eq('accountRef', account.accountRef).eq('lifecycle', 'active'))
       .take(1)
-    return {
-      accountRef,
-      hasActiveOrgBinding: activeOrgBindings.length > 0,
-      createdByPrincipal: account.creationActorPrincipalRef === canonicalPrincipalRef,
-      createdAt: account.createdAt,
-    }
+    return { account, hasActiveOrgBinding: activeOrgBindings.length > 0 }
   }))
   candidates.sort((left, right) =>
     Number(left.hasActiveOrgBinding) - Number(right.hasActiveOrgBinding)
-    || Number(!left.createdByPrincipal) - Number(!right.createdByPrincipal)
-    || left.createdAt - right.createdAt
-    || (left.accountRef < right.accountRef ? -1 : left.accountRef > right.accountRef ? 1 : 0))
-
-  degradeBackend(new Error('ambiguous_account'), undefined, {
-    site: 'resolveActiveAccount',
-    reason: 'invalid_response',
-  })
-  const [selectedAccount] = candidates
-  if (selectedAccount === undefined) {
-    throw new InteractiveAuthorityError('account_access_missing')
-  }
-  return { activeAccountRef: selectedAccount.accountRef, selectionState: 'personal' }
+    || Number(left.account.creationActorPrincipalRef !== canonicalPrincipalRef)
+      - Number(right.account.creationActorPrincipalRef !== canonicalPrincipalRef)
+    || left.account.createdAt - right.account.createdAt
+    || (left.account.accountRef < right.account.accountRef ? -1 : left.account.accountRef > right.account.accountRef ? 1 : 0))
+  const [selected] = candidates
+  if (selected === undefined) throw new InteractiveAuthorityError('account_access_missing')
+  return { activeAccountRef: selected.account.accountRef }
 }

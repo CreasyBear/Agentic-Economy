@@ -7,7 +7,7 @@ import { consequenceJsonValue, consequenceOperationValue, consequencePayloadValu
 import { workloadCronNameValue, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import {
   cleanupExpiredAgentAccessOAuthGrantsHandler, cleanupExpiredSourceWriteNoncesHandler,
-  deliverOwnerNotificationsHandler, expireStalePendingApprovalsHandler, observeX402TreasuryHandler,
+  expireStalePendingApprovalsHandler, observeX402TreasuryHandler,
   reconcileBusinessSupplyProjectionsHandler,
   reconcileDueFacilitatorInvocationsHandler, refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
@@ -63,11 +63,6 @@ export const expireStalePendingApprovals = internalMutation({
   handler: expireStalePendingApprovalsHandler,
 })
 
-export const deliverOwnerNotifications = internalAction({
-  args: {},
-  returns: v.null(),
-  handler: deliverOwnerNotificationsHandler,
-})
 
 export const refreshFacilitatorDiscovery = internalAction({
   args: {},

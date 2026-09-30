@@ -42,6 +42,7 @@ import {
   call,
   listPendingCallApprovals,
   reserve,
+  expireStaleApproval,
   expireStalePendingApprovals,
 } from '../../../convex/capabilityCalls'
 import { AUTHORITY_REQUEST_TTL_MS } from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
@@ -176,6 +177,7 @@ const approvalHandler = (decideCallApproval as unknown as { _handler: Handler })
 const listHandler = (listPendingCallApprovals as unknown as { _handler: Handler })._handler
 const callHandler = (call as unknown as { _handler: Handler })._handler
 const expiryHandler = (expireStalePendingApprovals as unknown as { _handler: Handler })._handler
+const expireOneHandler = (expireStaleApproval as unknown as { _handler: Handler })._handler
 const reserveHandler = (reserve as unknown as { _handler: Handler })._handler
 
 const evidence = buildDevelopmentPublishedToolEvidence()
@@ -227,9 +229,11 @@ const approvalPolicy = {
 }
 const approvalPolicyDigest = canonicalDigest(approvalPolicy as never)
 beforeEach(() => {
-  vi.spyOn(Date, 'now').mockReturnValue(now)
+  vi.useFakeTimers()
+  vi.setSystemTime(now)
 })
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   mocks.readCurrentPublishedTool.mockResolvedValue(operation)
 })
@@ -684,33 +688,191 @@ describe('capability operation approval Convex handlers', () => {
   })
 })
 describe('approval request expiry', () => {
+  function scheduledApprovalDocument(callRef: string, createdAt: number, overrides: Record<string, unknown> = {}) {
+    return {
+      callRef,
+      principalId: principal.principalId,
+      ownerId: owner,
+      credentialId: principal.credentialId,
+      applicationRef: principal.applicationRef,
+      toolRef,
+      idempotencyKey: `idempotency:${callRef}`,
+      environment: 'sandbox' as const,
+      grantRef: 'grant:approval',
+      grantGeneration: 1,
+      policyDigest: approvalPolicyDigest,
+      grantExpiresAt,
+      inputDigest: canonicalDigest(input),
+      requestDigest: canonicalDigest({ toolRef, input }),
+      state: 'pending' as const,
+      result: {
+        ...needsAuthorityResult(callRef),
+        authorityRequest: {
+          ...authorityRequest(),
+          maximumSpend: { currency: 'AUD', units: '1000000', exponent: 6 },
+        },
+      },
+      createdAt,
+      updatedAt: createdAt,
+      ...overrides,
+    }
+  }
 
-  it('expires stale approvals once, preserving young requests and releasing reserved funds', async () => {
+  it('drains 201 clean stale approvals through the scheduled continuation', async () => {
+    const backend = convexTest(schema, convexModules)
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const cutoff = now - AUTHORITY_REQUEST_TTL_MS
+    const refs = await backend.run(async ({ db }) => {
+      const callRefs: string[] = []
+      for (let index = 0; index < 201; index += 1) {
+        const callRef = `operation-invocation:v1:expiry-drain-${index}`
+        callRefs.push(callRef)
+        await db.insert('capabilityCalls', scheduledApprovalDocument(callRef, cutoff - 201 + index))
+      }
+      return callRefs
+    })
+    await backend.mutation(internal.workloadCron.expireStalePendingApprovals, {})
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    const rows = await backend.run(async ({ db }) => db.query('capabilityCalls').collect())
+    expect(rows).toHaveLength(201)
+    expect(rows.every((row) => row.state === 'refused'
+      && row.result?.kind === 'refused' && row.result.code === 'authority_denied')).toBe(true)
+    expect(new Set(rows.map((row) => row.callRef))).toEqual(new Set(refs))
+  })
+
+  it('continues past a full page of blocked approvals to expire newer clean rows', async () => {
+    const backend = convexTest(schema, convexModules)
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const cutoff = now - AUTHORITY_REQUEST_TTL_MS
+    await backend.run(async ({ db }) => {
+      for (let index = 0; index < 200; index += 1) {
+        const callRef = `operation-invocation:v1:expiry-blocked-${index}`
+        await db.insert('capabilityCalls', scheduledApprovalDocument(callRef, cutoff - 200 + index, {
+          workId: `workpool:${index}`,
+        }))
+      }
+      await db.insert('capabilityCalls', scheduledApprovalDocument(
+        'operation-invocation:v1:expiry-after-blocked-page', cutoff,
+      ))
+    })
+    await backend.mutation(internal.workloadCron.expireStalePendingApprovals, {})
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    const rows = await backend.run(async ({ db }) => db.query('capabilityCalls').collect())
+    const blocked = rows.filter((row) => row.workId !== undefined)
+    const clean = rows.find((row) => row.callRef === 'operation-invocation:v1:expiry-after-blocked-page')
+    expect(blocked).toHaveLength(200)
+    expect(blocked.every((row) => row.state === 'pending')).toBe(true)
+    expect(clean).toMatchObject({ state: 'refused', result: { kind: 'refused', code: 'authority_denied' } })
+  })
+
+
+  it('schedules only clean stale approvals, not blocked or young requests', async () => {
     const stale = invocation({
       createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
       formanceFinancialState: 'reserved',
       formanceReservationRefs: ['reservation:1', 'reservation:2', 'reservation:3'],
     })
+    const blockedRef = 'operation-invocation:v1:blocked'
+    const blocked = invocation({
+      _id: 'capabilityCalls:blocked', callRef: blockedRef,
+      createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
+      result: needsAuthorityResult(blockedRef), workId: 'workpool:blocked',
+    })
+    const youngRef = 'operation-invocation:v1:young'
     const young = invocation({
-      _id: 'capabilityCalls:young',
-      callRef: 'operation-invocation:v1:young',
+      _id: 'capabilityCalls:young', callRef: youngRef,
       createdAt: now - AUTHORITY_REQUEST_TTL_MS + 1,
-      result: needsAuthorityResult('operation-invocation:v1:young'),
+      result: needsAuthorityResult(youngRef),
     })
     const ctx = context({ invocation: stale })
+    ctx.db.seed('capabilityCalls', blocked)
     ctx.db.seed('capabilityCalls', young)
     const workload = await expiryWorkload(ctx)
-    await expect(expiryHandler(ctx, { workload })).resolves.toEqual({ scanned: 1, expired: 1 })
+    await expect(expiryHandler(ctx, { workload }))
+      .resolves.toEqual({ scanned: 2, scheduled: 1, blocked: 1 })
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
+    const [delay, reference, args] = ctx.scheduler.runAfter.mock.calls[0] ?? []
+    expect(delay).toBe(0)
+    expect(reference === undefined ? undefined : functionPath(reference)).toBe('capabilityCalls:expireStaleApproval')
+    expect(args).toEqual({ callRef: stale.callRef })
+    expect(ctx.db.row('capabilityCalls', stale._id)).toMatchObject({ state: 'pending' })
+    await expireOneHandler(ctx, { callRef: stale.callRef })
     expect(ctx.db.row('capabilityCalls', stale._id)).toMatchObject({
-      state: 'refused',
-      dispatchState: 'failed',
+      state: 'refused', dispatchState: 'failed',
       result: { kind: 'refused', code: 'authority_denied' },
       reconciliation: { reason: 'refund_pending', nextAttemptAt: now },
     })
+    expect(ctx.db.row('capabilityCalls', blocked._id)).toMatchObject({ state: 'pending' })
     expect(ctx.db.row('capabilityCalls', young._id)).toMatchObject({ state: 'pending' })
+  })
+
+  it('rechecks expiry and funds when executing a scheduled refusal, and replays safely', async () => {
+    const stale = invocation({
+      createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
+      formanceFinancialState: 'reserved',
+      formanceReservationRefs: ['reservation:1', 'reservation:2', 'reservation:3'],
+    })
+    const ctx = context({ invocation: stale })
+    await expect(expireOneHandler(ctx, { callRef: stale.callRef })).resolves.toBeNull()
+    const refused = ctx.db.row('capabilityCalls', stale._id)
+    expect(refused).toMatchObject({
+      state: 'refused', result: { kind: 'refused', code: 'authority_denied' },
+      reconciliation: { reason: 'refund_pending' },
+    })
+    await expect(expireOneHandler(ctx, { callRef: stale.callRef })).resolves.toBeNull()
+    expect(ctx.db.row('capabilityCalls', stale._id)).toEqual(refused)
     expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
-    await expect(expiryHandler(ctx, { workload })).resolves.toEqual({ scanned: 0, expired: 0 })
-    expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
+    for (const overrides of [
+      { createdAt: now - AUTHORITY_REQUEST_TTL_MS + 1 },
+      { createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1, formanceFinancialState: 'possibly_submitted' },
+    ]) {
+      const row = invocation(overrides)
+      const pendingCtx = context({ invocation: row })
+      await expect(expireOneHandler(pendingCtx, { callRef: row.callRef })).resolves.toBeNull()
+      expect(pendingCtx.db.row('capabilityCalls', row._id)).toEqual(row)
+      expect(pendingCtx.scheduler.runAfter).not.toHaveBeenCalled()
+    }
+  })
+
+  it('expires at the exact TTL in both the sweep and approval decision', async () => {
+    const row = invocation({ createdAt: now - AUTHORITY_REQUEST_TTL_MS })
+    const ctx = context({ invocation: row, grant: grant() })
+    const workload = await expiryWorkload(ctx)
+    await expect(expiryHandler(ctx, { workload }))
+      .resolves.toEqual({ scanned: 1, scheduled: 1, blocked: 0 })
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledWith(
+      0, internal.capabilityCalls.expireStaleApproval, { callRef: row.callRef },
+    )
+    await expect(approvalHandler(ctx, { callRef: row.callRef, decision: 'approve' }))
+      .resolves.toEqual({ kind: 'refused', code: 'authority_not_pending' })
+    expect(ctx.db.row('capabilityCalls', row._id)).toMatchObject({
+      state: 'refused', result: { kind: 'refused', code: 'authority_denied' },
+    })
+    await expect(expireOneHandler(ctx, { callRef: row.callRef })).resolves.toBeNull()
+  })
+
+  it('does not refuse expired approvals whose funds may have been submitted', async () => {
+    const row = invocation({
+      createdAt: now - AUTHORITY_REQUEST_TTL_MS - 1,
+      formanceFinancialState: 'possibly_submitted',
+    })
+    const ctx = context({ invocation: row, grant: grant() })
+    await expect(approvalHandler(ctx, { callRef: row.callRef, decision: 'approve' }))
+      .resolves.toEqual({ kind: 'refused', code: 'invocation_invalid' })
+    expect(ctx.db.row('capabilityCalls', row._id)).toEqual(row)
+    expect(ctx.scheduler.runAfter).not.toHaveBeenCalled()
+  })
+
+  it('a denial never dispatches an approval', async () => {
+    mocks.enqueueAction.mockClear()
+    const row = invocation()
+    const ctx = context({ invocation: row, grant: grant() })
+    await expect(approvalHandler(ctx, { callRef: row.callRef, decision: 'deny' }))
+      .resolves.toEqual({ kind: 'denied', callRef: row.callRef })
+    expect(ctx.db.row('capabilityCalls', row._id)).toMatchObject({
+      state: 'refused', result: { kind: 'refused', code: 'authority_denied' },
+    })
+    expect(mocks.enqueueAction).not.toHaveBeenCalled()
   })
 
   it('refuses an approval decision after its pending authority expires', async () => {
@@ -761,6 +923,7 @@ describe('approval request expiry', () => {
 
     await expect(backend.mutation(internal.workloadCron.expireStalePendingApprovals, {}))
       .resolves.toBeNull()
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
     const row = await backend.run(async ({ db }) => db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique())
     expect(row).toMatchObject({

@@ -1,30 +1,21 @@
-import { verifyWebhook } from '@clerk/tanstack-react-start/webhooks'
-
-import { kindForStatus } from '@/lib/errors'
 import { degrade } from '@/lib/observability/degrade'
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import {
+  clerkWebhookDeliveryRefHash,
+  clerkWebhookIgnoredResponse,
+  clerkWebhookProblem,
+  isValidClerkWebhookDeliveryRef,
+  safeClerkWebhookError,
+  type VerifiedClerkWebhook,
+} from '@/lib/server/clerk-webhook-core'
 import { callPublicSourceMutation, createConvexServerFunctionAssertion, sourceMutation, type ConvexServerFunctionAssertion } from '@/lib/server/convex-source'
 import { response as jsonResponse } from '@/lib/server/no-store-response'
-import { problem } from '@/lib/server/problem'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { clerkUserProviderIdentifier } from '@/modules/principal-account/external-identity/public'
 
-const MAX_CLERK_WEBHOOK_BODY_BYTES = 256 * 1024
-const RETRY_AFTER_SECONDS = 5
 const PROVISION_OPERATION = 'workspaceProvisioning.provisionOrganizationWorkspaceForServer'
 const PROVISION_SCOPE = 'workspace:provision_organization'
 const CLERK_ORG_ID_PATTERN = /^org_[A-Za-z0-9_-]{1,195}$/u
-
-type VerifiedWebhookEvent = Readonly<{
-  type: string
-  object: string
-  data: unknown
-  event_attributes?: unknown
-}>
-
-type WebhookVerifier = (request: Request) => Promise<VerifiedWebhookEvent>
 
 export type OrganizationProvisioningCommand = Readonly<{
   clerkOrgId: string
@@ -33,19 +24,24 @@ export type OrganizationProvisioningCommand = Readonly<{
   correlationRef: string
 }>
 
-type OrganizationProvisioningResult = Readonly<{
-  kind: 'created' | 'replayed'
-  accountRef: string
-  ownershipRef: string
-  bindingRef: string
-}>
+type OrganizationProvisioningResult = Readonly<
+  | {
+    kind: 'created' | 'replayed'
+    accountRef: string
+    ownershipRef: string
+    bindingRef: string
+  }
+  | {
+    kind: 'refused'
+    code: 'creator_binding_missing' | 'creator_principal_inactive' | 'authority_conflict' | 'clerk_org_id_invalid' | 'workspace_closed'
+  }
+>
 
 type OrganizationProvisioner = (
   command: OrganizationProvisioningCommand,
 ) => Promise<OrganizationProvisioningResult>
 
 export type OrganizationWebhookDependencies = Readonly<{
-  verify?: WebhookVerifier
   provision?: OrganizationProvisioner
   issuer?: string
 }>
@@ -60,69 +56,42 @@ const provisionOrganizationWorkspaceMutation = sourceMutation<
 >('workspaceProvisioning:provisionOrganizationWorkspaceForServer')
 
 export async function handleClerkOrganizationWebhookRequest(
-  request: Request,
+  webhook: VerifiedClerkWebhook,
   dependencies: OrganizationWebhookDependencies = {},
 ): Promise<Response> {
-  const declaredContentLength = Number(request.headers.get('content-length'))
-  if (Number.isFinite(declaredContentLength) && declaredContentLength > MAX_CLERK_WEBHOOK_BODY_BYTES) {
-    return problem({ status: 413, kind: kindForStatus(413), code: 'request_too_large', detail: 'request_too_large' })
-  }
-  const bounded = await readBoundedRequestText(request.clone(), MAX_CLERK_WEBHOOK_BODY_BYTES)
-  if (!bounded.ok) {
-    return problem({ status: 413, kind: kindForStatus(413), code: 'request_too_large', detail: 'request_too_large' })
-  }
-
-  let verified: unknown
-  try {
-    verified = await (dependencies.verify ?? verifyWebhook)(request)
-  } catch (cause) {
-    return degrade(cause, problem(
-      { status: 400, kind: kindForStatus(400), code: 'clerk_webhook_invalid', detail: 'clerk_webhook_invalid' },
-    ), { site: 'handleClerkOrganizationWebhookRequest', reason: 'forbidden' })
-  }
-
   const projection = organizationProvisioningFromVerifiedEvent({
-    event: verified,
-    deliveryRef: request.headers.get('svix-id'),
+    event: webhook.event,
+    deliveryRef: webhook.deliveryRef,
     issuer: dependencies.issuer ?? readTrimmedEnv(process.env, 'CLERK_JWT_ISSUER_DOMAIN') ?? '',
   })
-  if (projection.kind === 'ignored') {
-    return jsonResponse({ kind: 'accepted', status: 'ignored' }, 200)
-  }
+  if (projection.kind === 'ignored') return clerkWebhookIgnoredResponse()
   if (projection.kind === 'creator_missing') {
     return degrade(
       new Error('clerk_organization_creator_missing'),
-      problem({ status: 409, kind: kindForStatus(409), code: 'clerk_organization_creator_missing', detail: 'clerk_organization_creator_missing' }),
+      clerkWebhookProblem(409, 'clerk_organization_creator_missing'),
       { site: 'handleClerkOrganizationWebhookRequest', reason: 'invalid_response' },
     )
   }
-  if (projection.kind === 'invalid') {
-    return problem({ status: 400, kind: kindForStatus(400), code: 'clerk_webhook_invalid', detail: 'clerk_webhook_invalid' })
-  }
+  if (projection.kind === 'invalid') return clerkWebhookProblem(400, 'clerk_webhook_invalid')
 
+  let applied: OrganizationProvisioningResult
   try {
-    const applied = await (dependencies.provision ?? provisionOrganizationWorkspaceThroughSource)(projection.command)
-    return jsonResponse({ kind: 'accepted', status: applied.kind }, 200)
+    applied = await (dependencies.provision ?? provisionOrganizationWorkspaceThroughSource)(projection.command)
   } catch (cause) {
-    const code = workspaceProvisioningErrorCode(cause)
-    if (code === 'creator_binding_missing') {
-      return problem(
-        { status: 503, kind: kindForStatus(503), code, detail: code },
-        { 'Retry-After': String(RETRY_AFTER_SECONDS) },
-      )
-    }
-    if (
-      code === 'creator_principal_inactive'
-      || code === 'authority_conflict'
-      || code === 'clerk_org_id_invalid'
-    ) {
-      return problem({ status: 409, kind: kindForStatus(409), code, detail: code })
-    }
-    return degrade(cause, problem(
-      { status: 503, kind: kindForStatus(503), code: 'workspace_provisioning_unavailable', detail: 'workspace_provisioning_unavailable' },
-      { 'Retry-After': String(RETRY_AFTER_SECONDS) },
-    ), { site: 'handleClerkOrganizationWebhookRequest', reason: 'source_unavailable' })
+    return degrade(
+      safeClerkWebhookError(cause),
+      clerkWebhookProblem(503, 'workspace_provisioning_unavailable', 5),
+      { site: 'handleClerkOrganizationWebhookRequest', reason: 'source_unavailable' },
+    )
   }
+  if (applied.kind === 'refused') {
+    if (applied.code === 'creator_binding_missing') {
+      return clerkWebhookProblem(503, applied.code, 5)
+    }
+    if (applied.code === 'workspace_closed') return clerkWebhookIgnoredResponse()
+    return clerkWebhookProblem(409, applied.code)
+  }
+  return jsonResponse({ kind: 'accepted', status: applied.kind }, 200)
 }
 
 type OrganizationProvisioningProjection =
@@ -140,9 +109,7 @@ function organizationProvisioningFromVerifiedEvent(input: Readonly<{
   if (input.event.type !== 'organization.created') return { kind: 'ignored' }
 
   const deliveryRef = input.deliveryRef
-  if (deliveryRef === null || deliveryRef.trim().length === 0 || deliveryRef.length > 300) {
-    return { kind: 'invalid' }
-  }
+  if (!isValidClerkWebhookDeliveryRef(deliveryRef)) return { kind: 'invalid' }
   if (!isRecord(input.event.data)) return { kind: 'invalid' }
 
   const data = input.event.data
@@ -165,10 +132,7 @@ function organizationProvisioningFromVerifiedEvent(input: Readonly<{
       clerkOrgId: data.id,
       displayName: data.name,
       creatorTokenIdentifier,
-      correlationRef: canonicalDigest({
-        contract: 'ae.clerk-webhook-delivery:v1',
-        deliveryRef,
-      }),
+      correlationRef: clerkWebhookDeliveryRefHash(deliveryRef),
     },
   }
 }
@@ -185,18 +149,4 @@ async function provisionOrganizationWorkspaceThroughSource(
     ...command,
     serviceAuth,
   })
-}
-
-function workspaceProvisioningErrorCode(cause: unknown): string | undefined {
-  if (!isRecord(cause)) return undefined
-  if (typeof cause.code === 'string') return cause.code
-  if (isRecord(cause.data) && typeof cause.data.code === 'string') return cause.data.code
-  const message = typeof cause.message === 'string' ? cause.message : undefined
-  if (message === undefined) return undefined
-  return [
-    'creator_binding_missing',
-    'creator_principal_inactive',
-    'authority_conflict',
-    'clerk_org_id_invalid',
-  ].find((code) => message === code || message.endsWith(`: ${code}`))
 }

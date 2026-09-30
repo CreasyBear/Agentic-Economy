@@ -1,9 +1,8 @@
-import { reverificationError } from '@clerk/shared/authorization-errors'
-import { useReverification } from '@clerk/tanstack-react-start'
 import { makeFunctionReference } from 'convex/server'
 import { useMutation, useQuery } from 'convex/react'
 import { useMemo, useRef, useState } from 'react'
 
+import { useTypedReverification } from '@/lib/client/useTypedReverification'
 import { toast } from '@/lib/ui/toast'
 import {
   CLOSE_FAILURE_DIAGNOSTIC,
@@ -63,32 +62,14 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
   const eligibility = useQuery(readWorkspaceDecommissionEligibilityRef)
   const closeWorkspaceMutation = useMutation(closeWorkspaceRef)
   const transferOwnershipMutation = useMutation(transferWorkspaceOwnershipRef)
-  const closeReverificationAttempted = useRef(false)
-  const transferReverificationAttempted = useRef(false)
-  const closeWorkspace = useReverification(async (command: WorkspaceCloseCommand) => {
-    const result = await closeWorkspaceMutation(command)
-    if (
-      isWorkspaceMfaReverificationRefusal(result)
-      && !closeReverificationAttempted.current
-    ) {
-      closeReverificationAttempted.current = true
-      return reverificationError('strict_mfa')
-    }
-    return result
-  })
-  const transferWorkspaceOwnership = useReverification(async (
-    command: WorkspaceTransferCommand,
-  ) => {
-    const result = await transferOwnershipMutation(command)
-    if (
-      isWorkspaceMfaReverificationRefusal(result)
-      && !transferReverificationAttempted.current
-    ) {
-      transferReverificationAttempted.current = true
-      return reverificationError('strict_mfa')
-    }
-    return result
-  })
+  const closeWorkspace = useTypedReverification(
+    closeWorkspaceMutation,
+    (result) => isWorkspaceMfaReverificationRefusal(result) ? 'strict_mfa' : null,
+  )
+  const transferWorkspaceOwnership = useTypedReverification(
+    transferOwnershipMutation,
+    (result) => isWorkspaceMfaReverificationRefusal(result) ? 'strict_mfa' : null,
+  )
 
   const [confirmationName, setConfirmationName] = useState('')
   const [successorPrincipalRef, setSuccessorPrincipalRef] = useState('')
@@ -160,7 +141,6 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
         const attemptRef = closeAttemptIdempotencyRef.current ?? idempotencyRef(`close:${crypto.randomUUID()}`)
         setClosePending(true)
         setCloseDiagnostic(null)
-        closeReverificationAttempted.current = false
         try {
           const result = await closeWorkspace({
             confirmationName,
@@ -209,7 +189,6 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
           transferAttemptIdempotencyRef.current ?? idempotencyRef(`transfer:${crypto.randomUUID()}`)
         setTransferPending(true)
         setTransferDiagnostic(null)
-        transferReverificationAttempted.current = false
         try {
           const result = await transferWorkspaceOwnership({
             successorPrincipalRef: selectedSuccessor,

@@ -498,6 +498,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "continueApprovalExpiry",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "capabilityCalls",
     "method": "decideCallApproval",
@@ -507,6 +513,12 @@
     "visibility": "internal",
     "module": "capabilityCalls",
     "method": "dispatch",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "expireStaleApproval",
     "kind": "mutation"
   },
   {
@@ -2912,25 +2924,19 @@
   {
     "visibility": "internal",
     "module": "notificationDelivery",
-    "method": "deliverDueOwnerNotifications",
+    "method": "sendApprovalEmail",
     "kind": "action"
   },
   {
     "visibility": "internal",
     "module": "notifications",
-    "method": "claimDueNotificationDeliveries",
+    "method": "completeDelivery",
     "kind": "mutation"
   },
   {
     "visibility": "internal",
     "module": "notifications",
     "method": "enqueueAgentApprovalRequested",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "notifications",
-    "method": "finishNotificationDelivery",
     "kind": "mutation"
   },
   {
@@ -3154,12 +3160,6 @@
     "module": "workloadCron",
     "method": "cleanupExpiredSourceWriteNonces",
     "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "workloadCron",
-    "method": "deliverOwnerNotifications",
-    "kind": "action"
   },
   {
     "visibility": "internal",

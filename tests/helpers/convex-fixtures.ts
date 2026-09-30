@@ -75,12 +75,16 @@ export function convexTestWithWorkers(
   const backend = convexTestWithMarketComponents()
   registerWorkpool(backend)
   registerWorkpool(backend, 'stripeWebhookWorkpool')
+  registerWorkpool(backend, 'notificationWorkpool')
   if (options.pauseWorkpool === true) {
     void backend.run(async (ctx) => {
       await ctx.runMutation(components.workpool.config.update, {
         maxParallelism: 0,
       })
       await ctx.runMutation(components.stripeWebhookWorkpool.config.update, {
+        maxParallelism: 0,
+      })
+      await ctx.runMutation(components.notificationWorkpool.config.update, {
         maxParallelism: 0,
       })
     })
