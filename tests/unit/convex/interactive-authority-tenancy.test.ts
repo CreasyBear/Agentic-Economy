@@ -14,6 +14,7 @@ import { principalRef } from '../../../src/modules/principal-account/principal/p
 import {
   InteractiveAuthorityError,
   requireAccessFactForAccount,
+  resolveActiveAccountRefForPrincipal,
 } from '../../../convex/interactiveAuthority'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
@@ -84,7 +85,7 @@ async function insertAccountWithOwnership(
     ownershipRef: string
     displayName: string
     ownerPrincipalRef: string
-    lifecycle?: 'active' | 'suspended'
+    lifecycle?: 'active' | 'suspended' | 'pending_activation'
     creationActorPrincipalRef?: string
     createdAt?: number
   }>,
@@ -165,6 +166,16 @@ async function ensureOtherOwnerPrincipal(ctx: RunCtx): Promise<void> {
   })
 }
 
+async function suspendAccount(backend: InteractiveAuthorityBackend, accountRef: string): Promise<void> {
+  await backend.run(async (ctx) => {
+    const account = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', accountRef))
+      .unique()
+    if (account === null) throw new Error(`account ${accountRef} missing`)
+    await ctx.db.patch(account._id, { lifecycle: 'suspended' })
+  })
+}
+
 async function seedOwnedAccountB(backend: InteractiveAuthorityBackend): Promise<void> {
   await backend.run(async (ctx) => {
     await insertAccountWithOwnership(ctx, {
@@ -181,6 +192,7 @@ async function seedMemberAccountB(
   input: Readonly<{
     createdAt?: number
     creationActorPrincipalRef?: string
+    lifecycle?: 'active' | 'suspended' | 'pending_activation'
   }> = {},
 ): Promise<void> {
   await backend.run(async (ctx) => {
@@ -192,6 +204,7 @@ async function seedMemberAccountB(
       ownerPrincipalRef: OTHER_OWNER_PRINCIPAL,
       creationActorPrincipalRef: input.creationActorPrincipalRef ?? OTHER_OWNER_PRINCIPAL,
       createdAt: input.createdAt ?? NOW,
+      ...(input.lifecycle === undefined ? {} : { lifecycle: input.lifecycle }),
     })
     await insertMembershipForPrincipal(ctx, {
       membershipRef: MEMBERSHIP_B,
@@ -213,6 +226,7 @@ async function seedCanonicalWithMemberB(
   input: Readonly<{
     createdAt?: number
     creationActorPrincipalRef?: string
+    lifecycle?: 'active' | 'suspended' | 'pending_activation'
   }> = {},
 ): Promise<void> {
   await seedAuthority(backend)
@@ -293,6 +307,19 @@ describe('interactive authority tenancy (W-10)', () => {
         new InteractiveAuthorityError('account_access_missing'),
       )
     })
+
+    it('A6: a closed-only workspace remains the selected account', async () => {
+      const backend = createBackend()
+      await seedAuthority(backend, {
+        accountLifecycle: 'closed',
+        currentOwnershipLifecycle: 'ended',
+      })
+
+      const resolution = await backend.run(async (ctx) =>
+        await resolveActiveAccountRefForPrincipal(ctx.db, principalRef(PRINCIPAL_REF), identity()))
+
+      expect(resolution).toEqual({ activeAccountRef: ACCOUNT_A })
+    })
   })
 
   describe('Section B: deterministic multi-Account resolution', () => {
@@ -339,6 +366,21 @@ describe('interactive authority tenancy (W-10)', () => {
       expect(context.provenance.accessKind).toBe('ownership')
     })
 
+    it.each(['suspended', 'pending_activation'] as const)(
+      'B3a: active Account outranks a %s Account in the deterministic choice',
+      async (lifecycle) => {
+        const backend = createBackend()
+        await seedCanonicalWithMemberB(backend, {
+          lifecycle,
+          createdAt: NOW - 1,
+          creationActorPrincipalRef: PRINCIPAL_REF,
+        })
+
+        const context = await resolveContext(backend)
+        expect(context.accountRef).toBe(ACCOUNT_A)
+      },
+    )
+
     it('B4: setting an inaccessible workspace throws account_access_missing', async () => {
       const backend = createBackend()
       await seedCanonicalWithExtraOwnedB(backend)
@@ -366,17 +408,20 @@ describe('interactive authority tenancy (W-10)', () => {
       expect(context.accountRef).toBe(ACCOUNT_B)
     })
 
-    it('B6: selecting a suspended Account still throws account_inactive', async () => {
+    it('B6: a suspended Account never outranks an accessible active Account', async () => {
       const backend = createBackend()
       await seedAuthority(backend)
-      await backend.run(async (ctx) => {
-        const account = await ctx.db.query('accounts')
-          .withIndex('by_accountRef', (query) => query.eq('accountRef', ACCOUNT_A))
-          .unique()
-        if (account === null) throw new Error('account A missing')
-        await ctx.db.patch(account._id, { lifecycle: 'suspended' })
-      })
+      await suspendAccount(backend, ACCOUNT_A)
       await seedOwnedAccountB(backend)
+
+      const context = await resolveContext(backend)
+      expect(context.accountRef).toBe(ACCOUNT_B)
+    })
+
+    it('B7: a lone suspended Account still throws account_inactive', async () => {
+      const backend = createBackend()
+      await seedAuthority(backend)
+      await suspendAccount(backend, ACCOUNT_A)
 
       await expect(resolveContext(backend)).rejects.toEqual(
         new InteractiveAuthorityError('account_inactive'),

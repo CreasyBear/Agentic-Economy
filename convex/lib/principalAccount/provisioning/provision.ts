@@ -12,12 +12,34 @@ const CLERK_ORG_ID_PATTERN = /^org_[A-Za-z0-9_-]{1,195}$/u
 const CORRELATION_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 const WORKSPACE_NAME_PATTERN = /^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]+$/u
 
-export const provisionOrganizationWorkspaceForServerResult = v.object({
-  kind: v.union(v.literal('created'), v.literal('replayed')),
-  accountRef: v.string(),
-  ownershipRef: v.string(),
-  bindingRef: v.string(),
-})
+const PROVISION_REFUSAL_CODES = [
+  'creator_binding_missing',
+  'creator_principal_inactive',
+  'authority_conflict',
+  'clerk_org_id_invalid',
+  'workspace_closed',
+] as const
+
+type ProvisionRefusalCode = typeof PROVISION_REFUSAL_CODES[number]
+
+export const provisionOrganizationWorkspaceForServerResult = v.union(
+  v.object({
+    kind: v.union(v.literal('created'), v.literal('replayed')),
+    accountRef: v.string(),
+    ownershipRef: v.string(),
+    bindingRef: v.string(),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    code: v.union(
+      v.literal('creator_binding_missing'),
+      v.literal('creator_principal_inactive'),
+      v.literal('authority_conflict'),
+      v.literal('clerk_org_id_invalid'),
+      v.literal('workspace_closed'),
+    ),
+  }),
+)
 
 type ProvisionSuccess = Readonly<{
   kind: 'created' | 'replayed'
@@ -25,6 +47,12 @@ type ProvisionSuccess = Readonly<{
   ownershipRef: string
   bindingRef: string
 }>
+
+type ProvisionResult = ProvisionSuccess | Readonly<{ kind: 'refused'; code: ProvisionRefusalCode }>
+
+function isProvisionRefusalCode(code: string): code is ProvisionRefusalCode {
+  return (PROVISION_REFUSAL_CODES as readonly string[]).includes(code)
+}
 
 function validateClerkOrgId(value: string): void {
   if (!CLERK_ORG_ID_PATTERN.test(value)) {
@@ -72,7 +100,12 @@ async function provisionOrganizationWorkspace(
     throw new WorkspaceProvisioningError('authority_conflict')
   }
   const [existingOrgBinding] = orgBindings
-  if (existingOrgBinding !== undefined && existingOrgBinding.lifecycle === 'active') {
+  // A closed Business keeps its revoked binding as a tombstone: a late or replayed
+  // organization.created must never resurrect it or add a second binding row.
+  if (existingOrgBinding !== undefined && existingOrgBinding.lifecycle !== 'active') {
+    throw new WorkspaceProvisioningError('workspace_closed')
+  }
+  if (existingOrgBinding !== undefined) {
     const account = await ctx.db
       .query('accounts')
       .withIndex('by_accountRef', (query) => query.eq('accountRef', existingOrgBinding.accountRef))
@@ -163,7 +196,19 @@ export const provisionOrganizationWorkspaceForServerArgs = v.object({
   serviceAuth: serviceAssertion,
 })
 
-export const provisionOrganizationWorkspaceForServerHandler = async (ctx: MutationCtx, args: Infer<typeof provisionOrganizationWorkspaceForServerArgs>): Promise<ProvisionSuccess> => {
+export const provisionOrganizationWorkspaceForServerHandler = async (
+  ctx: MutationCtx,
+  args: Infer<typeof provisionOrganizationWorkspaceForServerArgs>,
+): Promise<ProvisionResult> => {
   await verifyProvisionServiceAuth(args)
-  return await provisionOrganizationWorkspace(ctx, args)
+  try {
+    return await provisionOrganizationWorkspace(ctx, args)
+  } catch (cause) {
+    // Expected refusals are values: Convex redacts thrown messages in production. Every refusal
+    // throws before the first insert, so returning here leaves no partial write.
+    if (cause instanceof WorkspaceProvisioningError && isProvisionRefusalCode(cause.code)) {
+      return { kind: 'refused', code: cause.code }
+    }
+    throw cause
+  }
 }

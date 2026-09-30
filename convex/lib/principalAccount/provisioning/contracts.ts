@@ -9,6 +9,7 @@ type WorkspaceProvisioningErrorCode =
   | 'identity_invalid'
   | 'authority_conflict'
   | 'correlation_ref_invalid'
+  | 'workspace_closed'
 
 export class WorkspaceProvisioningError extends Error {
   readonly code: WorkspaceProvisioningErrorCode
