@@ -1,6 +1,6 @@
 # aecon production north star
 
-Owner: Joel. Last revised: 30 September 2026. Companion: `docs/production-premortem-and-measurement.md` (inverse premortem, the metric tree, and seven layers of checks). This document says where we are going and how we will know we have arrived. Every wave of work should move a milestone below forward. If it doesn't, don't do it.
+Owner: Joel. Last revised: 30 September 2026. Companion: `docs/production-premortem-and-measurement.md` (inverse premortem, the metric tree, and seven layers of checks). Execution plan and infrastructure: `docs/production-readiness-plan.md`. Operating model: `docs/operating-model.md` (OpenRouter-style AUD credits, alpha and beta phases, tax, Stripe, custody). This document says where we are going and how we will know we have arrived. Every wave of work should move a milestone below forward. If it doesn't, don't do it.
 
 ## Destination
 aecon runs one production deployment with real money on. A person, or their agent, asks for something the x402 directory sells. aecon picks a ranked listing, pays the seller in USDC from the person's prepaid AUD balance, within limits they set, and shows the answer along with what it cost. It is secure, safe, intuitive and antifragile: a failure demotes one listing or one Call, never the journey.
@@ -156,6 +156,14 @@ aecon's own services on a Browse shelf, saved jobs, multi-Tool plans (the only p
   - No starter credit.
   - Default limits are A$1 per Call, A$5 a day and A$20 a month.
 - 2026-09-30: production-first. No user-facing test mode; one money world per deployment.
+- 2026-09-30: operate like OpenRouter.
+  - aecon is principal, reselling Tool results.
+  - Prices pass through at list price, plus a 5.5% top-up fee.
+  - Credits: promotional credit is spent first; purchased credit never expires and is refunded on account closure.
+  - "Report this answer" refunds with a daily limit.
+- 2026-09-30: alpha = 20 invited users with A$10 promotional credit each; Joel funds the float in the production CDP wallet.
+- 2026-09-30: open beta = Australian consumers and businesses funding by card (after written Stripe pre-approval); company-funded CDP float.
+- 2026-09-30: chat is acquisition and showcase, and a potential sticky service line. Agents and developers are the volume line.
 
 ## Open decisions
 1. `AE_DEPLOYMENT_ENVIRONMENT` (a new required variable), or derive from `AE_FORMANCE_ENVIRONMENT`. Recommended: the new variable.

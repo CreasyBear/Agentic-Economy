@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { projectToolCard, CHAT_TOOL_NAME_MAP, serializeToolCard } from '@/modules/chat/tool-card'
 import { ToolCard } from '../ToolCard'
@@ -179,7 +179,7 @@ describe('generative chat leaves', () => {
     expect(onContinueSearch).toHaveBeenCalledExactlyOnceWith(next)
     expect(onRepeatSearch).not.toHaveBeenCalled()
   })
-  it('shows current AUD and preserves buyer-entered JSON if a Quote request is not accepted', async () => {
+  it('reviews a single callable Tool before running and removes the old edit-input action', () => {
     const toolRef = `operation:v1:${'a'.repeat(64)}`
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
@@ -190,33 +190,12 @@ describe('generative chat leaves', () => {
       }] },
     })
     if (card === null) throw new Error('missing search card')
-    const onQuoteTool = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
-    const onRunTool = vi.fn()
-    render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [
-      { type: 'text', text: 'Currency exchange is available.' }, serializeToolCard(card),
-    ] }]} ownerChatThreadId="owned-thread" ownerChatEnabled onQuoteTool={onQuoteTool} onRunTool={onRunTool} />)
-    expect(screen.getByText('A$0.01 per Call')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Run · A$0.01 per Call' }))
-    expect(onRunTool).toHaveBeenCalledExactlyOnceWith(toolRef, 'Currency exchange')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit input' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('exact input')
-    expect(onQuoteTool).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' }), {
-      target: { value: '["not an object"]' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
-    expect(onQuoteTool).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' }), {
-      target: { value: '{"base":"USD","quote":"AUD"}' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Check input and price' })).toBeEnabled())
-    expect(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' })).toHaveValue('{"base":"USD","quote":"AUD"}')
-    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
-    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Exact Tool input (JSON object)' })).toBeNull())
-    expect(onQuoteTool).toHaveBeenCalledTimes(2)
-    expect(onQuoteTool).toHaveBeenLastCalledWith(toolRef, { base: 'USD', quote: 'AUD' })
+    const onReview = vi.fn()
+    render(<OptionsGrid view={{ ...projectOptionsFromCard(card), comparedIds: [] }} onReview={onReview} />)
+    expect(screen.getByRole('button', { name: 'Review and run' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Review and run' }))
+    expect(onReview).toHaveBeenCalledExactlyOnceWith(toolRef)
+    expect(screen.queryByText(['Edit', 'input'].join(' '))).not.toBeInTheDocument()
   })
   it('does not retain an expired AUD estimate from chat history', () => {
     const toolRef = `operation:v1:${'b'.repeat(64)}`

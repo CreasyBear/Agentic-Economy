@@ -1,5 +1,5 @@
 import { listMessages, saveMessages } from '@convex-dev/agent'
-import { components } from '../../../_generated/api'
+import { components, internal } from '../../../_generated/api'
 import type { ModelMessage } from 'ai'
 import type { JSONValue, LanguageModelV4 } from '@ai-sdk/provider'
 import type { Value } from 'convex/values'
@@ -8,11 +8,23 @@ import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { createChatAgent } from '../tools/agent'
-import { catalogueFact, explanationUsable, immediateSearchToolName, retrieveImmediateTools } from '../tools/immediate'
+import { streamImmediateCatalogue } from './immediateTurn'
 import { quoteThenCallFromCard } from '../tools/purchase'
-import { parseOwnerQuoteRequest, parseOwnerRunRequest } from '../tools/quoteRequest'
+import { parseRunRequest } from '@/modules/chat/run-request'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 import { completedChatFacts } from './completedFacts'
+
+const MAX_ABORT_TIMEOUT_MS = 2_147_483_647
+
+function chatGenerationSignal(deadlineAt: number | undefined): AbortSignal | undefined {
+  if (deadlineAt === undefined) return undefined
+  if (!Number.isFinite(deadlineAt)) throw new RangeError('chat_generation_deadline_invalid')
+  const remaining = deadlineAt - Date.now()
+  if (remaining <= 0) return AbortSignal.abort(new Error('chat_generation_deadline_exceeded'))
+  if (remaining > MAX_ABORT_TIMEOUT_MS) throw new RangeError('chat_generation_deadline_invalid')
+  return AbortSignal.timeout(Math.ceil(remaining))
+}
+
 
 export async function streamDurableChatResponse(
   ctx: ActionCtx,
@@ -24,9 +36,11 @@ export async function streamDurableChatResponse(
     trustedChatAuthority?: TrustedChatAuthority
     searchTurn?: Readonly<{ turnRef: string; threadId: string; promptMessageId: string }>
     continuation?: Readonly<{ query: string; cursor: string; inputJson: string }>
+    deadlineAt?: number
   }>,
   languageModel: LanguageModelV4,
 ): Promise<boolean> {
+  const abortSignal = chatGenerationSignal(args.deadlineAt)
   const searchOutputs = new Map<string, unknown>()
   const agent = createChatAgent(
     languageModel, args.continuation === undefined ? args.trustedChatAuthority : undefined,
@@ -84,8 +98,8 @@ export async function streamDurableChatResponse(
     }
   }
   const finishFromFacts = async (): Promise<boolean> => {
-    const answer = completedChatFacts(completedSteps)
-    if (answer === null) throw new Error('chat_generation_answer_missing')
+    if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
+    const answer = completedChatFacts(completedSteps) ?? CHAT_NO_RESULT_ANSWER
     await saveMessages(ctx, components.agent, {
       threadId: args.threadId,
       userId: args.ownerId,
@@ -95,19 +109,25 @@ export async function streamDurableChatResponse(
     })
     return clarificationRequested || ownerApprovalPending
   }
+  let hasPriorSearch = false
   const runInitial = async () => {
     const result = await agent.streamText(
       ctx,
       { threadId: args.threadId, userId: args.ownerId },
     {
       promptMessageId: args.promptMessageId,
-      prepareStep: args.continuation === undefined ? prepareChatToolStep : ({ stepNumber }) =>
+      prepareStep: args.continuation === undefined
+        ? options => options.stepNumber === 0 && hasPriorSearch
+          ? { toolChoice: 'auto' as const }
+          : prepareChatToolStep(options)
+        : ({ stepNumber }) =>
         stepNumber === 0
           ? { toolChoice: { type: 'tool' as const,
             toolName: CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'] } }
           : { toolChoice: 'none' as const },
       timeout: { stepMs: 15_000 },
       maxRetries: 0,
+      ...(abortSignal === undefined ? {} : { abortSignal }),
       onError: event => { modelFailure = event.error },
       onStepEnd: (step) => {
         completedSteps.push({ toolResults: step.toolResults.map(result => ({
@@ -165,15 +185,29 @@ export async function streamDurableChatResponse(
     const history = await listMessages(ctx, components.agent, {
       threadId: args.threadId, paginationOpts: { cursor: null, numItems: 20 },
     })
-    const promptText = history.page.find(row => row._id === args.promptMessageId)?.text ?? ''
-    const quoteRequest = parseOwnerQuoteRequest(promptText)
-    if (quoteRequest !== null && args.trustedChatAuthority?.kind === 'agent_key') {
+    const prompt = history.page.find(row => row._id === args.promptMessageId)
+    const promptText = prompt?.text ?? ''
+    hasPriorSearch = prompt !== undefined && history.page.some(row =>
+      row.order < prompt.order && row.status === 'success'
+      && row.message?.role === 'tool' && Array.isArray(row.message.content)
+      && row.message.content.some(part => part.type === 'tool-result'
+        && part.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']))
+    const runRequest = parseRunRequest(promptText)
+    if (runRequest !== null && args.trustedChatAuthority?.kind === 'agent_key') {
+      if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
+      await ctx.runMutation(internal.capabilitySelectionDecisions.markRunInternal, {
+        threadId: args.threadId,
+        promptMessageId: args.promptMessageId,
+        toolRef: runRequest.toolRef,
+      }).catch(() => undefined)
+      if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
       let purchased: Awaited<ReturnType<typeof quoteThenCallFromCard>> = null
       try {
         purchased = await quoteThenCallFromCard(
-          ctx, args.trustedChatAuthority, quoteRequest.toolRef, quoteRequest.input as Record<string, Value>,
+          ctx, args.trustedChatAuthority, runRequest.toolRef, runRequest.input as Record<string, Value>,
         )
-      } catch {
+      } catch (cause) {
+        if (abortSignal?.aborted) throw cause
         await saveMessages(ctx, components.agent, {
           threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
           messages: [{ role: 'assistant', content: 'The Quote could not be completed. Open the Tool card and try the Quote again.' }],
@@ -181,6 +215,7 @@ export async function streamDurableChatResponse(
         })
         return false
       }
+      if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
       const quoteName = CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']
       const callName = CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call']
       if (purchased === null) {
@@ -201,7 +236,7 @@ export async function streamDurableChatResponse(
         messages: [
           { role: 'assistant', content: toolResults.map((result, index) => ({
             type: 'tool-call' as const, toolCallId: `card-purchase-${index}`, toolName: result.toolName,
-            input: index === 0 ? { toolRef: quoteRequest.toolRef, input: quoteRequest.input } : { quoteRef: purchased.quote.kind === 'committed' ? purchased.quote.quoteRef : '' },
+            input: index === 0 ? { toolRef: runRequest.toolRef, input: runRequest.input } : { quoteRef: purchased.quote.kind === 'committed' ? purchased.quote.quoteRef : '' },
           })) },
           { role: 'tool', content: toolResults.map((result, index) => ({
             type: 'tool-result' as const, toolCallId: `card-purchase-${index}`, toolName: result.toolName,
@@ -214,58 +249,14 @@ export async function streamDurableChatResponse(
       return purchased.call?.kind === 'needs_authority'
     }
     // A Run from a card needs the purchase tools, so it skips the tool-less immediate search.
-    const runRequest = args.trustedChatAuthority?.kind === 'agent_key' ? parseOwnerRunRequest(promptText) : null
-    let catalogue: Awaited<ReturnType<typeof retrieveImmediateTools>> = null
-    if (runRequest === null && promptText.trim().length > 0) {
-      try { catalogue = await retrieveImmediateTools(ctx, promptText, args.searchTurn, args.ownerId) } catch { catalogue = null }
-    }
-    if (catalogue !== null) {
-      const toolName = immediateSearchToolName()
-      completedSteps.push({ toolResults: [{ toolName, output: catalogue }] })
-      await saveMessages(ctx, components.agent, {
-        threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
-        messages: [
-          { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'immediate-search', toolName, input: { query: promptText, limit: 8 } }] },
-          { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'immediate-search', toolName, output: { type: 'json', value: catalogue as JSONValue } }] },
-          { role: 'assistant', content: catalogueFact(catalogue) },
-        ],
-        agentName: 'Agentic Economy Operation Market',
-      })
-      try {
-        const explanation = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
-          promptMessageId: args.promptMessageId,
-          tools: {},
-          timeout: { totalMs: 8_000 },
-          maxRetries: 0,
-          instructions: `${agent.options.instructions} Tool cards are already shown. Explain only those cards. Never invent an operation id.`,
-        }, {
-          storageOptions: { saveMessages: 'promptAndOutput' },
-          saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
-        })
-        const text = (await explanation.text).trim()
-        if (!explanationUsable(text, catalogue)) {
-          const saved = explanation.savedMessages?.findLast(message => message.message?.role === 'assistant')
-          const fact = catalogueFact(catalogue)
-          if (saved === undefined) {
-            await saveMessages(ctx, components.agent, {
-              threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
-              messages: [{ role: 'assistant', content: fact }],
-              agentName: 'Agentic Economy Operation Market',
-            })
-          } else {
-            await agent.updateMessage(ctx, {
-              messageId: saved._id,
-              patch: { message: { role: 'assistant', content: fact }, status: 'success' },
-            })
-          }
-        }
-      } catch {
-        await saveMessages(ctx, components.agent, {
-          threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
-          messages: [{ role: 'assistant', content: catalogueFact(catalogue) }],
-          agentName: 'Agentic Economy Operation Market',
-        })
-      }
+    // Prior search results are already in the agent's context; let its tool loop decide what to do next.
+    if (!hasPriorSearch && promptText.trim().length > 0 && await streamImmediateCatalogue(ctx, {
+      agent,
+      args,
+      promptText,
+      completedSteps,
+      ...(abortSignal === undefined ? {} : { signal: abortSignal }),
+    })) {
       await preserveSearchCard()
       return false
     }
@@ -274,12 +265,13 @@ export async function streamDurableChatResponse(
   try {
     initial = await runInitial()
   } catch (error) {
-    if (completedChatFacts(completedSteps) === null) throw error
+    if (abortSignal?.aborted || completedChatFacts(completedSteps) === null) throw error
     return await finishFromFacts()
   }
+  if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
   const { result, steps } = initial
   if (modelFailure !== undefined) {
-    if (completedChatFacts(completedSteps) === null) throw modelFailure
+    if (abortSignal?.aborted || completedChatFacts(completedSteps) === null) throw modelFailure
     return await finishFromFacts()
   }
   const resolution = chatSearchResolution(steps)
@@ -292,6 +284,7 @@ export async function streamDurableChatResponse(
       messageId: assistant._id,
       patch: { message: { role: 'assistant', content: [...toolCalls, { type: 'text', text: resolution ?? CHAT_NO_RESULT_ANSWER }] }, status: 'success' },
     })
+    if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
     await preserveSearchCard()
     return false
   }
@@ -307,21 +300,24 @@ export async function streamDurableChatResponse(
         tools: {},
         timeout: { totalMs: 12_000 },
         maxRetries: 0,
+        ...(abortSignal === undefined ? {} : { abortSignal }),
         instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer, use bullets for one Tool and a table only for two to four distinct Tools, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
       }, {
         storageOptions: { saveMessages: 'promptAndOutput' },
         saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
       })
+      if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
       if ((await final.text).trim().length === 0) {
         const blank = final.savedMessages?.findLast(message => message.message?.role === 'assistant')
         if (blank !== undefined) await agent.deleteMessage(ctx, { messageId: blank._id })
         return await finishFromFacts()
       }
     } catch (error) {
-      if (completedChatFacts(completedSteps) === null) throw error
+      if (abortSignal?.aborted || completedChatFacts(completedSteps) === null) throw error
       return await finishFromFacts()
     }
   }
   await preserveSearchCard()
+  if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
   return clarificationRequested || ownerApprovalPending
 }

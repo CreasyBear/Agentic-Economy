@@ -35,16 +35,24 @@ import {
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
 import { NeedSaveAction } from './need-save-action/NeedSaveAction'
+import { RecoveryNotice } from './recovery/RecoveryNotice'
 import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './presentation'
+import type { RunIntent } from '@/modules/chat/run-request'
+import { readChatRecoveryReason } from './recovery/recovery.view-model'
+import type { ChatRecoveryReason } from './recovery/recovery.contracts'
 
 type ToolCardProps = ToolCardBaseProps & Readonly<{
-  onAddCredit?: ((shortfall?: { units: string; exponent: number }) => void) | undefined
+  onAddCredit?: ((shortfall?: { units: string; exponent: number }, run?: RunIntent) => void) | undefined
 }>
 
 export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
 
 function inspectHref(toolRef: string): string {
   return `/tools/${encodeURIComponent(toolRef)}`
+}
+function safeRecoveryReason(reason: string | undefined, fallback: ChatRecoveryReason): ChatRecoveryReason {
+  const known = readChatRecoveryReason(reason)
+  return known === 'unknown' ? fallback : known
 }
 
 
@@ -163,22 +171,33 @@ export function SearchNext({ next, onContinueSearch, onRepeatSearch, signedThrea
     return <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
       className={buttonVariants({ variant: 'outline', size: 'sm' })}>Browse Tools in the Market</a>
   }
-  if (next.action === 'broaden') return <p className="text-sm">Next: broaden “{next.args.query}” or browse the Market.</p>
-  if (next.action === 'retry') return <p className="text-sm">Next: retry “{next.args.query}”.</p>
+  if (next.action === 'broaden') return (
+    <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
+      className={buttonVariants({ variant: 'outline', size: 'sm' })}>{chatBrowseMarket}</a>
+  )
+  if (next.action === 'retry') return onRepeatSearch === undefined
+    ? <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
+      className={buttonVariants({ variant: 'outline', size: 'sm' })}>{chatBrowseMarket}</a>
+    : <Button type="button" variant="outline" size="sm" className="min-h-touch"
+      onClick={() => onRepeatSearch(next.args.query)}>Try again</Button>
   return null
 }
 
-function CardBody({ projection }: { projection: ToolCardProjection }) {
+function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['onAddCredit']) {
   switch (projection.kind) {
     case 'working':
     case 'clarify':
       return null
-    case 'status':
-      return (
-        <Alert variant={projection.state === 'error' ? 'destructive' : 'default'}>
-          <AlertDescription>{projection.summary}</AlertDescription>
-        </Alert>
-      )
+    case 'status': {
+      if (projection.state === 'attention') {
+        return <Alert><AlertDescription>{projection.summary}</AlertDescription></Alert>
+      }
+      const funding = projection.funding
+      const reason = safeRecoveryReason(projection.recoveryReason, 'tool_unavailable')
+      return <RecoveryNotice reason={reason}
+        {...(reason !== 'insufficient_balance' || onAddCredit === undefined
+          ? {} : { onAddCredit: () => onAddCredit(funding) })} />
+    }
     case 'choices':
       return (
         <div className="grid gap-related">
@@ -197,10 +216,19 @@ function CardBody({ projection }: { projection: ToolCardProjection }) {
     case 'execute':
       return (
         <div className="grid gap-intra">
-          <Alert variant={projection.state === 'reconciliation_required' ? 'destructive' : 'default'}>
-            <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
-            <AlertDescription>{projection.summary}</AlertDescription>
-          </Alert>
+          {projection.state === 'refused' || projection.state === 'reconciliation_required' ? (
+            <RecoveryNotice
+              reason={safeRecoveryReason(projection.recoveryReason, projection.state === 'reconciliation_required' ? 'outcome_unknown' : 'tool_unavailable')}
+              {...(projection.callRef === undefined ? {} : { callRefs: [projection.callRef] })}
+              {...(projection.state !== 'refused' || projection.recoveryReason !== 'insufficient_balance' || onAddCredit === undefined
+                ? {} : { onAddCredit: () => onAddCredit() })}
+            />
+          ) : (
+            <Alert variant="default">
+              <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
+              <AlertDescription>{projection.summary}</AlertDescription>
+            </Alert>
+          )}
           {projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
         </div>
       )
@@ -271,11 +299,10 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
         </CardAction>
       </CardHeader>
       <CardContent>
-        <CardBody projection={projection} />
+        {cardBody(projection, onAddCredit)}
       </CardContent>
       {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
-        || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined
-          || (projection.funding !== undefined && onAddCredit !== undefined))) ? (
+        || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (
         <CardFooter className="grid gap-intra">
           {projection.kind === 'choices' && projection.count !== undefined ? <ChoiceRemainder count={projection.count} shown={projection.choices.length} /> : null}
           {projection.next === undefined ? null : <SearchNext next={projection.next}
@@ -283,12 +310,9 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
             {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
             {...(signedThread === undefined ? {} : { signedThread })} />}
           {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
-          {projection.kind === 'status' && projection.funding !== undefined && onAddCredit !== undefined ? (
-            <Button type="button" variant="outline" size="sm" className="min-h-touch"
-              onClick={() => onAddCredit(projection.funding)}>Add credit</Button>
-          ) : null}
         </CardFooter>
-      ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined ? (
+      ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined
+        && projection.state !== 'reconciliation_required' && projection.state !== 'refused' ? (
         <CardFooter>
           <ExecuteNextAction projection={projection} />
         </CardFooter>

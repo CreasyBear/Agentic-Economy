@@ -11,7 +11,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({
 import { chatComposer, chatHistory, chatSuggestions } from '@/lib/public/chat-ia'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 
-import type { ChatSessionModel } from '../chat-session.contracts'
+import type { ChatRunResult, ChatSessionModel } from '../chat-session.contracts'
 import { ChatLayout } from './ChatLayout'
 afterEach(cleanup)
 
@@ -46,7 +46,7 @@ function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel
       messages: [],
     },
     pageBusy: false,
-    onRunTool: vi.fn(),
+    onRunTool: vi.fn(async (): Promise<ChatRunResult> => ({ kind: 'submitted' })),
     lastUserText: vi.fn(),
     submitText: vi.fn(),
     retryLastRequest: vi.fn(),
@@ -55,6 +55,49 @@ function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel
 }
 
 describe('ChatLayout', () => {
+  it('shows safe recovery actions while preserving the drafted message', () => {
+    const model = buildModel()
+    const retry = vi.fn()
+    render(<ChatLayout model={{
+      ...model,
+      composer: {
+        ...model.composer,
+        prompt: 'Find current weather',
+        error: 'rate_limited',
+        recovery: 'rate_limited',
+        onRetry: retry,
+      },
+    }} />)
+
+    expect((screen.getByRole('textbox', { name: chatComposer.promptLabel }) as HTMLTextAreaElement).value).toBe('Find current weather')
+    expect(screen.getByText('Chat is busy right now. Wait a little, then try again.')).toBeTruthy()
+    expect(screen.queryByText('rate_limited')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(retry).toHaveBeenCalledOnce()
+  })
+  it('hides unknown failure codes and provides a safe route out', () => {
+    const model = buildModel()
+    render(<ChatLayout model={{
+      ...model,
+      composer: { ...model.composer, error: 'private_internal_failure_code', recovery: 'unknown' },
+    }} />)
+
+    expect(screen.getByText('Something went wrong. Try again.')).toBeTruthy()
+    expect(screen.queryByText('private_internal_failure_code')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Start a new chat' }).getAttribute('href')).toBe('/t/new')
+  })
+  it('offers sign-in and a new chat when anonymous messaging is exhausted', () => {
+    const model = buildModel()
+    const onNewChat = vi.fn()
+    render(<ChatLayout model={{
+      ...model,
+      composer: { ...model.composer, anonymousMessageCount: 12, anonymousMessageLimitReached: true, onNewChat },
+    }} />)
+
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/sign-in?redirect_url=%2Ft%2Fnew')
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new chat' }))
+    expect(onNewChat).toHaveBeenCalledOnce()
+  })
   it('keeps the greeting in the message area and suggestions immediately above the docked composer', () => {
     render(<ChatLayout model={buildModel({ transcript: { messages: [], onStarter: vi.fn() } })} />)
     const greeting = screen.getByText('What can I find for you?')
@@ -132,6 +175,9 @@ describe('ChatLayout', () => {
       onSuggest: vi.fn(),
     } })} />)
     expect(screen.queryByRole('region', { name: 'Related questions' })).toBeNull()
+    const marketAction = screen.getByRole('link', { name: 'Browse Market' })
+    expect(marketAction.getAttribute('href')).toBe('/market?query=non-existent%20Tool')
+    expect(marketAction.closest('details')).toBeNull()
   })
 
   it('shows one collapsed work line, answer, choices and compare actions without repeated search cards', () => {

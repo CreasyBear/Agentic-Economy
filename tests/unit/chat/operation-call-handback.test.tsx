@@ -64,9 +64,11 @@ describe('Tool call handback', () => {
       },
     })} />)
 
-    expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Do not retry this call/i)).toBeTruthy()
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Check call status' }).getAttribute('href'))
+      .toBe('/calls/invocation%3Ahandback%3A2')
+    expect(screen.getByRole('link', { name: 'Start a new chat' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()
     expect(screen.queryByText('attempt:handback:2')).toBeNull()
-    expect(screen.getByText('ae help recover')).toBeTruthy()
   })
 })

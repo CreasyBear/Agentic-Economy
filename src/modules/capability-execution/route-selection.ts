@@ -1,15 +1,26 @@
 import { sanitizeText } from '@/modules/common/sanitize-text'
 import { executeDecisionGateway, type DecisionTier, type JevQuestion } from '@/modules/decision-engine/public'
-import type { CatalogToolCandidate } from './procure-engine'
+
+export type SelectionCandidate = Readonly<{
+  toolRef: string
+  name: string
+  description: string
+  inputSchema?: Record<string, unknown>
+}>
 
 export type RouteSelectionOptions = Readonly<{
   disableSecondaryLlm?: boolean
   signal?: AbortSignal
   timeoutMs?: number
+  openrouterApiKey?: string
+  disableJev?: boolean
+  deadlineAt?: number
 }>
 
-export type RouteSelectionResult = Readonly<{
-  tool: CatalogToolCandidate | null
+export const MIN_MODEL_CONFIDENCE = 0.60
+
+export type RouteSelectionResult<T extends SelectionCandidate = SelectionCandidate> = Readonly<{
+  tool: T | null
   modelConfidence: number | null
   tier: DecisionTier
   fit: readonly { toolRef: string; noul: number | null }[]
@@ -34,11 +45,11 @@ function observedFit(value: unknown): number | null {
     : null
 }
 
-export async function routeSelection(
+export async function routeSelection<T extends SelectionCandidate>(
   need: string,
-  candidates: readonly CatalogToolCandidate[],
+  candidates: readonly T[],
   options: RouteSelectionOptions = {},
-): Promise<RouteSelectionResult> {
+): Promise<RouteSelectionResult<T>> {
   // Provider-owned prose stays data, never part of selector instructions or choice criteria.
   const candidateFacts = candidates.map((tool) => {
     const inputFieldNames = candidateInputFieldNames(tool.inputSchema)
@@ -80,6 +91,9 @@ export async function routeSelection(
     disableSecondaryLlm: options.disableSecondaryLlm ?? true,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(options.openrouterApiKey === undefined ? {} : { openrouterApiKey: options.openrouterApiKey }),
+    ...(options.disableJev === undefined ? {} : { disableJev: options.disableJev }),
+    ...(options.deadlineAt === undefined ? {} : { deadlineAt: options.deadlineAt }),
   })
   const fit = candidates.map((candidate, index) => {
     const answer = response.answers[`fit_${index}`]

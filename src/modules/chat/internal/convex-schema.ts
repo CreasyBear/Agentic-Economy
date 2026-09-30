@@ -37,6 +37,11 @@ export const chatTables = {
     ),
     sequence: v.optional(v.number()),
     promptMessageId: v.optional(v.string()),
+    deadlineAt: v.optional(v.number()),
+    failureReason: v.optional(v.union(
+      v.literal('generation_failed'), v.literal('generation_timed_out'), v.literal('outcome_unknown'),
+    )),
+    failureCallRefs: v.optional(v.array(v.string())),
     searchContinuation: v.optional(v.object({ query: v.string(), cursor: v.string(), inputJson: v.string() })),
     issuedSearchContinuations: v.optional(v.array(v.object({ query: v.string(), cursor: v.string(), inputJson: v.string(), token: v.string() }))),
     cancelRequestedAt: v.optional(v.number()),
@@ -47,5 +52,6 @@ export const chatTables = {
   })
     .index('by_principalRef_and_clientTurnId', ['principalRef', 'clientTurnId'])
     .index('by_threadId_and_sequence', ['threadId', 'sequence'])
+    .index('by_promptMessageId', ['promptMessageId'])
     .index('by_turnRef', ['turnRef']),
 } as const

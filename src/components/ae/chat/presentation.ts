@@ -9,6 +9,8 @@ import { captureRouteException } from '@/lib/observability/capture-route-excepti
 import { projectComparison, projectOptionsFromCard, projectSourcesFromCards, projectWorkFromCards } from './generative/generative.view-model'
 import type { ComparisonTableView, FollowUpsView, OptionsGridView, SourcesInlineView, WorkDisclosureView } from './generative/generative.contracts'
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+import type { ChatRecoveryReason } from './recovery/recovery.contracts'
+import { readChatRecoveryReason } from './recovery/recovery.view-model'
 
 export type SearchNextProps = Readonly<{
   next?: RegistryNextAction
@@ -52,6 +54,7 @@ export type ChatStatus =
 
 export type ChatFailurePresentation = Readonly<{
   message: string
+  reason: ChatRecoveryReason | 'unknown'
   reference?: string
   browseMarket: boolean
 }>
@@ -204,13 +207,23 @@ export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
     && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list'))
   const compared = turn.tools.findLast((card): card is Extract<ToolCardProjection, { kind: 'choices' }> =>
     card.kind === 'choices' && card.toolId === 'registry.tools.compare')
+  const searchedOptions = searched.flatMap((card) => card.kind === 'choices'
+    ? [projectOptionsFromCard(card, [], Date.now(), card.recommendation)]
+    : [])
   const named = new Set<string>()
-  const options = {
+  const visibleOptions = searchedOptions.flatMap((view) => view.options).filter((option) => {
+    if (named.has(option.id)) return false
+    named.add(option.id)
+    return true
+  })
+  const recommended = searchedOptions.find((view) => view.recommendedId !== undefined
+    && visibleOptions.some((option) => option.id === view.recommendedId && option.quoteable === true))
+  const options: OptionsGridView = {
     comparedIds: [],
-    options: searched.flatMap(card => projectOptionsFromCard(card).options).filter(option => {
-      if (named.has(option.id)) return false
-      named.add(option.id)
-      return true
+    options: visibleOptions,
+    ...(recommended?.recommendedId === undefined || recommended.recommendedBy === undefined ? {} : {
+      recommendedId: recommended.recommendedId,
+      recommendedBy: recommended.recommendedBy,
     }),
   }
   const comparedOptions = compared === undefined ? [] : projectOptionsFromCard(compared).options.map((option) => {
@@ -311,27 +324,40 @@ export function projectChatFailure(error: unknown): ChatFailurePresentation {
     if (error.code === 'rate_limited') {
       return {
         message: 'You’ve reached the chat limit. Try again later.',
+        reason: 'rate_limited',
         ...(error.reference === undefined ? {} : { reference: error.reference }),
         browseMarket: true,
       }
     }
     return {
       message: 'Chat is unavailable right now. Your message was not added.',
+      reason: readChatRecoveryReason(error.code),
       ...(error.reference === undefined ? {} : { reference: error.reference }),
       browseMarket: true,
     }
   }
   const message = error instanceof Error ? error.message : String(error)
   if (message.includes('rate_limited')) {
-    return { message: 'You’ve reached the chat limit. Try again later.', browseMarket: false }
+    return { message: 'You’ve reached the chat limit. Try again later.', reason: 'rate_limited', browseMarket: false }
   }
   if (message.includes('thread_busy')) {
     return {
       message: 'This conversation is already responding. Wait a moment and try again.',
+      reason: 'thread_busy',
       browseMarket: false,
     }
   }
-  return { message: 'Chat is temporarily unavailable. Try again shortly.', browseMarket: false }
+  if (message.includes('anonymous_message_limit')) {
+    return { message: 'This browser conversation has reached its message limit.', reason: 'anonymous_message_limit', browseMarket: false }
+  }
+  if (message.includes('anonymous_size_limit')) {
+    return { message: 'This browser conversation is full.', reason: 'anonymous_size_limit', browseMarket: false }
+  }
+  return {
+    message: 'Chat is temporarily unavailable. Try again shortly.',
+    reason: readChatRecoveryReason(message),
+    browseMarket: false,
+  }
 }
 
 export function friendlyChatError(error: unknown): string {

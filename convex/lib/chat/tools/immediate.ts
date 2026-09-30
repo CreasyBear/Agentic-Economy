@@ -1,4 +1,5 @@
 import type { ActionCtx } from '../../../_generated/server'
+import { truncateText } from '@/modules/common/truncate-text'
 import { internal } from '../../../_generated/api'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
@@ -97,11 +98,11 @@ export async function retrieveImmediateTools(
       const objectClass = ['web','document','image','location','chain','data','other','unclassified'].includes(row.objectClass) ? row.objectClass : 'unclassified' as const
       return [{
         id: row.id, source: 'coinbase' as const, access: 'external_listing' as const,
-        title: Array.from(row.title).slice(0, 72).join(''),
-        summary: Array.from(row.summary).slice(0, 100).join(''),
-        provider: Array.from(row.provider).slice(0, 48).join(''),
+        title: truncateText(row.title, 72),
+        summary: truncateText(row.summary, 100),
+        provider: truncateText(row.provider, 48),
         actionClass, objectClass,
-        ...(row.category === undefined ? {} : { category: Array.from(row.category).slice(0, 80).join('') }),
+        ...(row.category === undefined ? {} : { category: truncateText(row.category, 80) }),
         readiness: 'unverified' as const, price: { kind: 'unavailable' as const },
         detailRef: row.id,
         next: [{ action: 'describe-external' as const, args: { id: row.id }, authority: 'public' as const }],

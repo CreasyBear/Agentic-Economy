@@ -6,6 +6,7 @@ import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { defineAction } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { truncateText } from '@/modules/common/truncate-text'
 import { publicToolChoiceSchema, toolCatalogFiltersSchema } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsCompareAction, registryToolsSearchAction } from '@/modules/registry/tools.actions'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
@@ -392,9 +393,9 @@ export function createMarketDemandService(request: Request, bodyText: string): M
           const current = byRef.get(prior.toolRef)
           // Search is compact: compare the stable public identity available at
           // search time, then use the live Tool projection for the suggestion.
-          if (current === undefined || Array.from(current.title).slice(0, 72).join('') !== prior.title
-            || Array.from(current.provider.name).slice(0, 48).join('') !== prior.provider
-            || Array.from(current.description).slice(0, 100).join('') !== prior.summary) {
+          if (current === undefined || truncateText(current.title, 72) !== prior.title
+            || truncateText(current.provider.name, 48) !== prior.provider
+            || truncateText(current.description, 100) !== prior.summary) {
             return { kind: 'error', code: 'source_unavailable' }
           }
           tools.push(current)

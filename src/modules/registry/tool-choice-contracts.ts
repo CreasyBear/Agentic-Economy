@@ -18,6 +18,9 @@ import {
 import { exactAmountSchema, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
+import { truncateText } from '@/modules/common/truncate-text'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
+
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
 import { searchVerdict } from './search-verdict'
 import { searchNextActions } from './next-action'
@@ -164,6 +167,7 @@ const searchMetaSchema = {
   query: z.string(),
   partialResults: z.boolean(),
   recipient: z.strictObject({ label: z.string(), host: z.string(), data: z.literal('query and candidate summaries') }).optional(),
+  recommendation: z.strictObject({ toolRef: z.string().refine(isPublicToolRef), by: z.string().min(1).max(80) }).optional(),
   freshness: supplyProjectionFreshnessSchema.optional(),
   assessed: z.strictObject({
     source: z.enum(['current', 'coinbase', 'all']),
@@ -405,9 +409,9 @@ export function projectToolSearchChoices(
       source: 'current',
       access: tool.availability.posture === 'routeable' ? 'ae_callable' : tool.availability.posture,
       toolRef: tool.toolRef,
-      title: Array.from(tool.listing.label).slice(0, 72).join(''),
-      summary: Array.from(tool.summary).slice(0, 100).join(''),
-      provider: Array.from(tool.business.name).slice(0, 48).join(''),
+      title: truncateText(tool.listing.label, 72),
+      summary: truncateText(tool.summary, 100),
+      provider: truncateText(tool.business.name, 48),
       actionClass: 'unclassified',
       objectClass: 'unclassified',
       readiness: projectToolChoiceEvidence(tool).readiness,

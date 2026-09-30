@@ -23,7 +23,7 @@ import {
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import { toolProcureResultSchema, type ToolProcureInput, type ToolProcureResult } from './procure'
-import { routeSelection } from './route-selection'
+import { MIN_MODEL_CONFIDENCE, routeSelection } from './route-selection'
 import { recordSelectionDecision } from './selection-decision-recorder'
 
 /**
@@ -249,7 +249,7 @@ export class CapabilityProcurementEngine {
       latencyMs: routing.latencyMs,
       costAud: routing.costAud,
     }).catch(() => {})
-    if (routing.tool === null || (routing.modelConfidence !== null && routing.modelConfidence < 0.60)) {
+    if (routing.tool === null || (routing.modelConfidence !== null && routing.modelConfidence < MIN_MODEL_CONFIDENCE)) {
       return { ...common, kind: 'refused', status: 'refused', code: 'no_matching_tool', retryable: false, detail: 'No matching published Tool was found.' }
     }
     const schema = routing.tool.inputSchema

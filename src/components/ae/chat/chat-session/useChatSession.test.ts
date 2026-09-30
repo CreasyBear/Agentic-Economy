@@ -2,6 +2,7 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ChatRunResult } from './chat-session.contracts'
 
 const {
   sendMessagesMock,
@@ -146,21 +147,21 @@ describe('useChatSession', () => {
     expect(result.current.composer.prompt).toBe('A draft for another question')
   })
 
-  it('preserves exact Quote input when the signed turn fails before acceptance', async () => {
+  it('preserves exact Run input and marks transport failure as outcome unknown', async () => {
     authStateRef.current = { isAuthenticated: true, isLoading: false }
     sendMessageMutationMock.mockRejectedValueOnce(new Error('chat_transport_unavailable'))
     const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-owned' }))
-    let accepted: boolean | undefined
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const runTool = result.current.transcript.onRunTool
+    if (runTool === undefined) throw new Error('expected owner-chat Run handler')
+    let outcome: ChatRunResult | undefined
     await act(async () => {
-      accepted = await result.current.transcript.onQuoteTool?.(
-        `operation:v1:${'a'.repeat(64)}`, { city: 'Sydney' },
-      )
+      outcome = await runTool(toolRef, { city: 'Sydney' })
     })
-    expect(accepted).toBe(false)
-    expect(result.current.composer.error).not.toBe('')
+    expect(outcome).toEqual({ kind: 'outcome_unknown' })
     expect(sendMessageMutationMock).toHaveBeenCalledWith(expect.objectContaining({
       threadId: 'thread-owned',
-      prompt: expect.stringContaining('\"city\":\"Sydney\"'),
+      prompt: `Run Tool ${toolRef} with this exact JSON input: {\"city\":\"Sydney\"}.`,
     }))
   })
 
