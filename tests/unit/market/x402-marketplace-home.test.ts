@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 const read = vi.hoisted(() => vi.fn())
 vi.mock('@/modules/market/x402-directory-index.server', () => ({ readX402DirectoryCatalogue: read }))
 import { readX402MarketplaceHome } from '@/modules/market/x402-marketplace-home.server'
@@ -16,8 +16,22 @@ const entry = (provider: string, index: number): X402DirectoryEntry => ({
 function catalogue(entries: readonly X402DirectoryEntry[]) {
   return { kind: 'ok', source: 'index', searchMethod: 'native_full_text', isDone: true, page: { kind: 'ok', items: entries, offset: 0, limit: 12, mode: 'browse', appliedFilters: {} } }
 }
-beforeEach(() => read.mockReset())
+beforeEach(() => { read.mockReset(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
+afterEach(() => vi.unstubAllEnvs())
 describe('evidence-based marketplace rails', () => {
+  it('hides all rails when the deployment declaration is missing', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
+    expect(await readX402MarketplaceHome()).toEqual({ rails: [], observedAt: expect.any(String) })
+    expect(read).not.toHaveBeenCalled()
+  })
+  it('requests only Sepolia rails in development', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    read.mockResolvedValue(catalogue([]))
+    await readX402MarketplaceHome()
+    expect(read).toHaveBeenCalledTimes(4)
+    for (const [request] of read.mock.calls) expect(request.network).toBe('eip155:84532')
+  })
+
   it('reads the four browse sorts independently and keeps their evidence order', async () => {
     read.mockImplementation(async (request: { sort?: string } | undefined) => catalogue([entry(`${request?.sort ?? 'missing'}.example.com`, 0)]))
     const home = await readX402MarketplaceHome()
@@ -29,10 +43,10 @@ describe('evidence-based marketplace rails', () => {
       { id: 'price_asc', sort: 'price_asc' },
     ])
     expect(read.mock.calls.map(([request]) => request)).toEqual([
-      { sort: 'adoption' },
-      { sort: 'active' },
-      { sort: 'repeat' },
-      { sort: 'price_asc' },
+      { sort: 'adoption', network: 'eip155:8453' },
+      { sort: 'active', network: 'eip155:8453' },
+      { sort: 'repeat', network: 'eip155:8453' },
+      { sort: 'price_asc', network: 'eip155:8453' },
     ])
     expect(home.rails.map(rail => rail.items[0]?.provider)).toEqual(X402_MARKETPLACE_RAILS.map(rail => `${rail.sort}.example.com`))
   })

@@ -229,6 +229,7 @@ export async function toolRecordProjection(
     operationId,
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
+    runtimeEnvironment: publication.runtimeEnvironment,
     networkId: publication.networkId,
     contract: contractResult.contract,
     business: { businessId: String(business._id), slug: business.slug, name: business.name },

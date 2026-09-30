@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateJsonSchema } from '@/modules/capability-contract/public'
@@ -98,3 +98,6 @@ describe('managed x402 path requests', () => {
     expect(sign).toHaveBeenCalledOnce()
   })
 })
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+afterEach(() => vi.unstubAllEnvs())

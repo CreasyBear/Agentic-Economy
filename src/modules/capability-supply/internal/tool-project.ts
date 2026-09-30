@@ -92,6 +92,7 @@ export function projectCapabilityTool(
   const catalogPrice = projectCatalogPrice(record.price);
   return {
     toolRef,
+    runtimeEnvironment: record.runtimeEnvironment,
     toolId: record.operationId,
     callVia: CURRENT_TOOL_CALL_VIA,
     paymentLane: V1_PAYMENT_LANE,

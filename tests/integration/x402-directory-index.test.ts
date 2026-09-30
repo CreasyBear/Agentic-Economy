@@ -40,8 +40,8 @@ async function seedRefresh(backend: ConvexFixtureBackend, generation: string) {
 }
 
 describe('complete external directory index', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
+  beforeEach(() => { vi.useFakeTimers(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs() })
 
   it('indexes beyond 1,000 resources, publishes only after terminal page, paginates all results and resolves an exact late resource', async () => {
     const { backend, workload } = await setup()
@@ -219,9 +219,9 @@ describe('complete external directory index', () => {
     expect(await backend.query(api.x402DirectoryIndex.analytics, { network: 'base' })).toMatchObject({ kind: 'ok', totalTools: 4, price: { scope: 'whole_generation', totalTools: 4, knownPriceTools: 4, unknownPriceTools: 0, quantiles: { minimum: '0.001', median: '0.01', maximum: '1' } } })
     const browse = (filters: Record<string, unknown>) => backend.query(api.x402DirectoryIndex.browse, { ...filters, paginationOpts: { cursor: null, numItems: 12 } })
     const adoption = await browse({ sort: 'adoption', provider: 'provider.test' })
-    expect(adoption.kind === 'ok' && adoption.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(1).resource, source(3).resource, source(4).resource])
+    expect(adoption.kind === 'ok' && adoption.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(1).resource, source(4).resource])
     const price = await browse({ sort: 'price_asc', provider: 'provider.test' })
-    expect(price.kind === 'ok' && price.page.map(item => item.entry.resource)).toEqual([source(3).resource, source(2).resource, source(4).resource, source(1).resource])
+    expect(price.kind === 'ok' && price.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(4).resource, source(1).resource])
     expect(await browse({ priceBand: '0_01_to_0_03' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(2).resource } }] })
     expect(await browse({ adoptionBand: 'missing', provider: 'provider.test' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(4).resource } }] })
     expect(await browse({ minPayers30d: 1, maxPayers30d: 1, curatedOnly: true, bundleSlugs: ['research-workflow'], tags: ['search'], provider: 'provider.test' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(1).resource } }] })
@@ -390,6 +390,81 @@ describe('complete external directory index', () => {
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 5, runStartedAt: 4, workload, items: [] })
     expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', actionClass: 'transform', objectClass: 'document', paginationOpts: { cursor: null, numItems: 8 } }))
       .toMatchObject({ kind: 'ok', page: [{ actionClass: 'transform', objectClass: 'document' }] })
+  })
+
+  it.each([
+    ['production', 'base', 'base-sepolia', false],
+    ['production', 'base', 'base-sepolia', true],
+    ['development', 'base-sepolia', 'base', false],
+    ['development', 'base-sepolia', 'base', true],
+  ] as const)('fences %s directory reads to its payment network with mixed price order %s', async (deployment, target, opposite, reverseMixed) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    const { backend, workload } = await setup()
+    const generation = `directory-environment-${deployment}-${reverseMixed}`
+    await seedRefresh(backend, generation)
+    const price = (network: string, amount: string) => ({ network, scheme: 'exact', amount, decimalAmount: amount === '1000000' ? '1' : '0.001', symbol: 'USDC' })
+    const targetOnly = source(801, { prices: [price(target, '1000000')] })
+    const oppositeOnly = source(802, { prices: [price(opposite, '1000')] })
+    const mixedPrices = [price(target, '1000000'), price(opposite, '1000')]
+    const mixed = source(803, { prices: reverseMixed ? [...mixedPrices].reverse() : mixedPrices })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 0, reportedTotal: 3, observedAt: 2, runStartedAt: 1, workload,
+      items: [oppositeOnly, mixed, targetOnly],
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 100, reportedTotal: 3, observedAt: 3, runStartedAt: 1, workload, items: [],
+    })
+    const rows = await backend.run(ctx => ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_network_and_resource', q => q.eq('generation', generation).eq('network', target === 'base' ? 'eip155:8453' : 'eip155:84532'))
+      .collect())
+    const mixedRow = rows.find(row => row.resource === mixed.resource)
+    const oppositeRow = await backend.run(ctx => ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_network_and_resource', q => q.eq('generation', generation).eq('network', opposite === 'base' ? 'eip155:8453' : 'eip155:84532').eq('resource', oppositeOnly.resource))
+      .unique())
+    if (mixedRow === undefined || oppositeRow === null || mixedRow.slug === undefined || oppositeRow.slug === undefined
+      || mixedRow.providerKey === undefined || oppositeRow.providerKey === undefined
+      || mixedRow.documentId === undefined || oppositeRow.documentId === undefined) throw new Error('directory environment fixture missing')
+    const browse = await backend.query(api.x402DirectoryIndex.browse, { paginationOpts: { cursor: null, numItems: 12 } })
+    expect(browse.kind).toBe('ok')
+    if (browse.kind === 'ok') {
+      expect(browse.page.map(row => row.entry.resource).sort()).toEqual([targetOnly.resource, mixed.resource].sort())
+      expect(browse.page.find(row => row.entry.resource === mixed.resource)?.entry.prices)
+        .toEqual([expect.objectContaining({ network: target })])
+    }
+    const compact = await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', paginationOpts: { cursor: null, numItems: 12 } })
+    expect(compact.kind).toBe('ok')
+    if (compact.kind === 'ok') expect(compact.page.map(row => row.resource).sort()).toEqual([targetOnly.resource, mixed.resource].sort())
+    expect(await backend.query(api.x402DirectoryIndex.resource, { resource: oppositeOnly.resource })).toEqual({ kind: 'not_found' })
+    expect(await backend.query(api.x402DirectoryIndex.resource, { resource: mixed.resource }))
+      .toMatchObject({ kind: 'found', item: { entry: { prices: [expect.objectContaining({ network: target })] } } })
+    expect(await backend.query(api.x402DirectoryIndex.detailById, { id: oppositeRow.documentId })).toEqual({ kind: 'not_found' })
+    expect(await backend.query(api.x402DirectoryIndex.detailById, { id: mixedRow.documentId }))
+      .toMatchObject({ kind: 'found', item: { entry: { prices: [expect.objectContaining({ network: target })] } } })
+    expect(await backend.query(api.x402DirectoryIndex.bySlug, { providerKey: oppositeRow.providerKey, slug: oppositeRow.slug }))
+      .toEqual({ kind: 'not_found' })
+    expect(await backend.query(api.x402DirectoryIndex.bySlug, { providerKey: mixedRow.providerKey, slug: mixedRow.slug }))
+      .toMatchObject({ kind: 'found', item: { entry: { prices: [expect.objectContaining({ network: target })] } } })
+    expect((await backend.query(internal.x402DirectoryIndex.firstEligiblePage, { generation })).sort())
+      .toEqual([targetOnly.resource, mixed.resource].sort())
+    expect(await backend.query(internal.x402DirectoryIndex.selectedSource, { resource: oppositeOnly.resource }))
+      .toEqual({ kind: 'not_found' })
+    expect(await backend.query(internal.x402DirectoryIndex.selectedSource, { resource: mixed.resource }))
+      .toMatchObject({ kind: 'found', sourceJson: mixed.sourceJson, entry: { prices: [expect.objectContaining({ network: target })] } })
+    expect(await backend.query(api.x402DirectoryIndex.browse, { network: opposite, paginationOpts: { cursor: null, numItems: 12 } }))
+      .toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', network: opposite, paginationOpts: { cursor: null, numItems: 12 } }))
+      .toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(await backend.query(internal.x402DirectoryIndex.selectedSource, { resource: mixed.resource, network: opposite }))
+      .toEqual({ kind: 'unavailable', reason: 'resource_filters_mismatch' })
+    const stored = await backend.run(ctx => ctx.db.query('marketExternalRegistryEntries')
+      .withIndex('by_generation_and_documentId', q => q.eq('generation', generation).eq('documentId', mixedRow.documentId!)).unique())
+    expect(stored?.directorySourceJson).toBe(mixed.sourceJson)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
+    expect(await backend.query(api.x402DirectoryIndex.browse, { paginationOpts: { cursor: null, numItems: 12 } }))
+      .toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', paginationOpts: { cursor: null, numItems: 12 } }))
+      .toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(await backend.query(internal.x402DirectoryIndex.firstEligiblePage, { generation })).toEqual([])
   })
 
 })

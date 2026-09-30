@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../../_generated/api'
 import { upsertProviderDirectoryRows } from './providerRows'
@@ -24,6 +24,8 @@ const COINBASE_RESOURCE = 'https://provider.example.com/v1/lookup'
 /** Well 8 Lane C: exercises upsertProviderDirectoryRows directly - the write
  * path shared by the publish/withdraw hooks and the hourly reconcile sweep. */
 describe('provider directory rows (Well 8 Lane C)', () => {
+  beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+  afterEach(() => vi.unstubAllEnvs())
   it('absorbs a Coinbase row sharing sourceRouteRef, then lets it be restored once the provider row is withdrawn', async () => {
     const backend = backendWithAggregates()
     const { businessId } = await publishedBusinessOwner(backend, 'lane-c-provider')

@@ -1,11 +1,13 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
 import { paginationOptsValidator } from 'convex/server'
 import { filter } from 'convex-helpers/server/filter'
 import { v, type Infer } from 'convex/values'
 import Decimal from 'decimal.js'
 import { directoryNetwork, directoryIndexRangesValid, x402DirectoryIndexInputSchema, type X402DirectoryIndexInput } from '@/modules/market/x402-directory-index'
 import type { Doc } from '../../../_generated/dataModel'
-import type { QueryCtx } from '../../../_generated/server'
+import { env, type QueryCtx } from '../../../_generated/server'
 import { filterArgs, pageValue } from './contracts'
 import { choiceForDirectoryPage, choicesForDirectoryRows } from './choices'
 import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, indexedDirectoryEntry } from './rows'
@@ -21,9 +23,11 @@ const REPEAT_SORT_MIN_PAYERS = 5
  * cached answer would go stale the moment disposition changes underneath it.
  */
 export async function admittedToolRef(ctx: QueryCtx, sourceRouteRef: string | undefined): Promise<string | undefined> {
-  if (sourceRouteRef === undefined) return undefined
+  const environment = deploymentPaymentEnvironment(env)
+  if (sourceRouteRef === undefined || environment === undefined) return undefined
   const publication = await ctx.db.query('capabilityPublications')
     .withIndex('by_sourceRouteRef_and_disposition', q => q.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current'))
+    .filter(q => q.eq(q.field('runtimeEnvironment'), environment))
     .unique()
   return publication?.toolRef
 }
@@ -35,8 +39,8 @@ export async function admittedToolRef(ctx: QueryCtx, sourceRouteRef: string | un
  * filter always reads the un-narrowed indexes. Sorts use their corresponding
  * indexes, narrowed by provider or eligible category where applicable.
  */
-function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402DirectoryIndexInput) {
-  const network = input.network === undefined ? '*' : directoryNetwork(input.network)
+function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402DirectoryIndexInput & { network: string }) {
+  const network = input.network
   const rows = ctx.db.query('marketDirectorySearchEntries')
   // Read the narrowed selectors once: the index builders below are closures, so
   // reading input inside them loses the narrowing these branches established.
@@ -110,9 +114,12 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
     if (!parsed.success || !directoryIndexRangesValid(parsed.data) || paginationOpts.numItems < 1 || paginationOpts.numItems > 50 || !Number.isSafeInteger(paginationOpts.numItems)
       || (alternativeTo !== undefined && (alternativeTo.length < 1 || alternativeTo.length > 8192 || !parsed.data.query))) return { kind: 'unavailable' as const, reason: 'query_invalid' }
     if (parsed.data.query && parsed.data.sort !== undefined && parsed.data.sort !== 'relevance') return { kind: 'unavailable' as const, reason: 'query_sort_unsupported' }
+    const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(env))?.network
+    if (network === undefined) return { kind: 'unavailable' as const, reason: 'source_unavailable' }
+    if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== network) return { kind: 'unavailable' as const, reason: 'query_invalid' }
     const generation = await activeDirectoryGeneration(ctx)
     if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
-    const input = parsed.data
+    const input = { ...parsed.data, network }
     const source = orderedDirectoryRows(ctx, generation.generation, input).filter(q => q.and(
       ...(input.category === undefined ? [] : [q.eq(q.field('category'), input.category)]),
       ...(input.provider === undefined ? [] : [q.eq(q.field('provider'), input.provider)]),
@@ -184,7 +191,7 @@ export const searchCompactReturns = v.union(
         access: v.union(v.literal('external_listing'), v.literal('ae_callable'), v.literal('setup_required'), v.literal('unavailable')),
         sourceRouteRef: v.optional(v.string()), toolRef: v.optional(v.string()),
       })),
-      title: v.string(), summary: v.string(), provider: v.string(),
+      title: v.string(), summary: v.string(), provider: v.string(), network: v.string(),
       actionClass: actionClassValue, objectClass: objectClassValue, category: v.optional(v.string()),
       completedAt: v.number(), minimumUsdPrice: v.optional(v.string()),
       resource: v.optional(v.string()), slug: v.optional(v.string()),
@@ -201,13 +208,16 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
   if (!parsed.success || paginationOpts.numItems < 1 || paginationOpts.numItems > 12 || !Number.isSafeInteger(paginationOpts.numItems)) {
     return { kind: 'unavailable' as const, reason: 'query_invalid' }
   }
+  const networkKey = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(env))?.network
+  if (networkKey === undefined) return { kind: 'unavailable' as const, reason: 'source_unavailable' }
+  if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== networkKey) return { kind: 'unavailable' as const, reason: 'query_invalid' }
   const generation = await activeDirectoryGeneration(ctx)
   if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
   const scope = canonicalDigest([
     'compact-directory:v1', generation.generation, String(generation.completedAt ?? generation.startedAt),
     parsed.data.query ?? '', actionClass ?? '', objectClass ?? '',
     parsed.data.category ?? '', parsed.data.provider ?? '',
-    parsed.data.network === undefined ? '*' : directoryNetwork(parsed.data.network),
+    networkKey,
     parsed.data.priceBand ?? '', access ?? '',
   ])
   const requestedCursor = paginationOpts.cursor
@@ -216,8 +226,7 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
     return { kind: 'unavailable' as const, reason: 'cursor_invalid' }
   }
   const nativeCursor = requestedCursor === null ? null : requestedCursor.slice(separator + 1)
-  const { query, category, provider, network, priceBand } = parsed.data
-  const networkKey = network === undefined ? '*' : directoryNetwork(network)
+  const { query, category, provider, priceBand } = parsed.data
   const source = query
     ? ctx.db.query('marketDirectorySearchEntries')
       .withSearchIndex('search_text_by_generation_network_category_provider', search => {
@@ -265,7 +274,7 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
   const compact = await Promise.all(prepared.map(async ({ row, legacy, id, title, summary, choice: filtered }) => {
     const choice = filtered ?? batched?.get(row.sourceRouteRef ?? String(row._id)) ?? await choiceFor(row)
     return {
-      id, source: row.source ?? legacy?.source ?? 'coinbase',
+      id, source: row.source ?? legacy?.source ?? 'coinbase', network: row.network,
       ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),
       choice,
       ...(choice.access !== 'ae_callable' || choice.toolRef === undefined ? {} : { toolRef: choice.toolRef }),

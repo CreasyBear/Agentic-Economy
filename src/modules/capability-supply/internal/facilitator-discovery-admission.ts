@@ -17,6 +17,7 @@ import {
   type FacilitatorDiscoverySkip,
 } from "./facilitator-discovery-ingest";
 import { degradeBackend } from "@/lib/observability/degrade-backend";
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment';
 
 export async function admitFacilitatorDiscoveryItems(
   items: readonly unknown[],
@@ -27,6 +28,7 @@ export async function admitFacilitatorDiscoveryItems(
 async function admitItems(
   items: readonly unknown[],
 ): Promise<FacilitatorDiscoveryAdmissionResult> {
+  const environment = deploymentPaymentEnvironment(process.env);
   const admitted: FacilitatorDiscoveryAdmittedDraft[] = [];
   const skipped: FacilitatorDiscoverySkip[] = [];
   for (const item of items.slice(0, FACILITATOR_DISCOVERY_MAX_PAGE_SIZE)) {
@@ -38,6 +40,7 @@ async function admitItems(
     const decision = decideFacilitatorDiscoveryItem(
       item,
       admitOfficialBazaarFromPaymentRequired(paymentRequired),
+      environment,
     );
     if (decision.kind === "skip") {
       skipped.push(decision);

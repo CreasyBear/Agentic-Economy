@@ -3,15 +3,17 @@ import type { ModelMessage } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import { z } from 'zod'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { deserializeToolSearchResult, serializeToolSearchResult, PublicToolRegistrySchemaVersion, type PublicToolDescriptor, type ToolSearchResult } from '@/modules/capability-supply/public'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { deserializeToolSearchResult, serializeToolSearchResult, PublicToolRegistrySchemaVersion, x402PaymentProfileForEnvironment, type PublicToolDescriptor, type ToolSearchResult } from '@/modules/capability-supply/public'
 import { latestUserRequest } from '@/modules/chat/search-presentation'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { projectToolListChoices, projectToolSearchChoices, type SearchResult, type ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { lexicalToolMatch } from '@/modules/registry/tool-reranker'
-import { isProductionToolChoice, suitableRankedToolRefs } from '@/modules/registry/public'
+import { isDeploymentToolChoice, suitableRankedToolRefs } from '@/modules/registry/public'
 import { registryToolsListContract, registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
 import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import { api, internal } from '../../../_generated/api'
+import { env } from '../../../_generated/server'
 import { descriptionFor, failure, type ReserveChatSearch, type ReserveChatTool } from './contracts'
 import { projectedModelFacingOutput } from './output'
 
@@ -84,7 +86,7 @@ async function admittedCandidates(ctx: ToolCtx, data: SearchInput, filters: Capa
 }
 
 /** Compact external listings are discovery leads, never unverified recommendations or AE Call targets. */
-async function compactBazaarPage(ctx: ToolCtx, data: SearchInput): Promise<{
+async function compactBazaarPage(ctx: ToolCtx, data: SearchInput, targetNetwork: string | undefined): Promise<{
   rows: SearchResult[]
   examined: number
   available: boolean
@@ -96,22 +98,26 @@ async function compactBazaarPage(ctx: ToolCtx, data: SearchInput): Promise<{
   if (data.source === 'current' || data.filters?.access === 'ae_callable') {
     return { rows: [], examined: 0, available: true, hasMore: false }
   }
+  if (targetNetwork === undefined
+    || (data.filters?.networkId !== undefined && data.filters.networkId !== targetNetwork)) {
+    return { rows: [], examined: 0, available: false, hasMore: false }
+  }
   const page = await ctx.runQuery(internal.x402DirectoryIndex.searchCompactInternal, {
       query: data.query,
+      network: targetNetwork,
       paginationOpts: { cursor: data.cursor?.startsWith('x402:') ? data.cursor.slice(5) || null : null, numItems: data.limit },
       ...(data.filters?.priceBand === undefined ? {} : { priceBand: data.filters.priceBand }),
       ...(data.filters?.actionClass === undefined ? {} : { actionClass: data.filters.actionClass }),
       ...(data.filters?.objectClass === undefined ? {} : { objectClass: data.filters.objectClass }),
       ...(data.filters?.category === undefined ? {} : { category: data.filters.category }),
       ...(data.filters?.provider === undefined ? {} : { provider: data.filters.provider }),
-      ...(data.filters?.networkId === undefined ? {} : { network: data.filters.networkId }),
       access: data.filters?.access ?? 'external_listing',
     }).catch(cause => degradeBackend(cause, { kind: 'unavailable' as const, reason: 'source_unavailable' }, {
       site: 'chatCompactBazaarSearch', reason: 'source_unavailable',
     }))
   if (page.kind === 'unavailable') return { rows: [], examined: 0, available: false, hasMore: false }
   const rows: SearchResult[] = page.page.flatMap(row => {
-    if (row.source !== 'coinbase' || row.toolRef !== undefined) return []
+    if (row.source !== 'coinbase' || row.toolRef !== undefined || row.network !== targetNetwork) return []
     return [{
       id: row.id, source: 'coinbase', access: 'external_listing',
       title: row.title, summary: row.summary, provider: row.provider,
@@ -163,6 +169,8 @@ export function createSearchTools(
         const data = listContract.schema.parse(input)
         const denied = reserve('registry.tools.list')
         if (denied !== null) return denied
+        const environment = deploymentPaymentEnvironment(env)
+        if (environment === undefined) return failure('registry.tools.list', 'source_output_invalid')
         const deniedSearch = reserveSearch('registry.tools.list', 'list', data.cursor, latestUserRequest(options.messages))
         if (deniedSearch !== null) return deniedSearch
         const filters = operationSourceFilters(data.filters)
@@ -176,7 +184,12 @@ export function createSearchTools(
         return projectedModelFacingOutput(
           'registry.tools.list',
           listContract.outputSchema,
-          () => projectToolListChoices(deserializeToolSearchResult(result), data.filters),
+          () => {
+            const decoded = deserializeToolSearchResult(result)
+            return projectToolListChoices(decoded.kind === 'ok'
+              ? { ...decoded, items: decoded.items.filter(tool => isDeploymentToolChoice(tool, environment)) }
+              : decoded, data.filters)
+          },
         )
       },
     }),
@@ -195,6 +208,9 @@ export function createSearchTools(
         })
         const denied = reserve('registry.tools.search')
         if (denied !== null) return denied
+        const environment = deploymentPaymentEnvironment(env)
+        if (environment === undefined) return failure('registry.tools.search', 'source_output_invalid')
+        const targetNetwork = x402PaymentProfileForEnvironment(environment)?.network
         const request = continuation === undefined ? latestUserRequest(options.messages) : `Show more results for ${data.query}`
         const key = data.query.toLowerCase().replace(/\b(?:apis?|for|an?|the|in|of|me)\b/gu, ' ')
           .replace(/\b(\w+)s\b/gu, '$1').split(/\W+/u).filter(Boolean).sort().join(' ')
@@ -226,9 +242,8 @@ export function createSearchTools(
             const ranked = presented?.kind === 'ok' && presented.ranking.length > 0
               && source.kind === 'ok' && source.items.every(tool =>
                 presented.ranking.some(({ toolRef }) => toolRef === tool.toolRef))
-            const explicitNonProduction = /\b(?:testnet|sepolia|degraded|demo|sandbox)\b/iu.test(request ?? '')
             const eligible = (tool: PublicToolDescriptor) =>
-              explicitNonProduction || isProductionToolChoice(tool)
+              isDeploymentToolChoice(tool, environment)
             const suitable = new Set(ranked && presented.kind === 'ok' ? suitableRankedToolRefs(presented.ranking) : [])
             const presentedRefs = new Set(presented?.kind === 'ok'
               ? presented.items.map(tool => tool.toolRef) : [])
@@ -259,7 +274,7 @@ export function createSearchTools(
             const external = source.kind !== 'unavailable'
               && admittedNext === undefined && room > 0
               && (externalLimit === undefined || externalLimit > 0)
-              ? await compactBazaarPage(ctx, { ...data, limit: Math.min(room, externalLimit ?? room) })
+              ? await compactBazaarPage(ctx, { ...data, limit: Math.min(room, externalLimit ?? room) }, targetNetwork)
               : { rows: [] as SearchResult[], examined: 0, available: true, hasMore: false }
             const externalStartsNext = admittedNext === undefined && admittedCount > 0
               && directoryWanted && !externalCursor && (room === 0 || externalLimit === 0)

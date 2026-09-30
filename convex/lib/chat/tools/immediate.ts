@@ -1,4 +1,6 @@
-import type { ActionCtx } from '../../../_generated/server'
+import { env, type ActionCtx } from '../../../_generated/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
 import { truncateText } from '@/modules/common/truncate-text'
 import { internal } from '../../../_generated/api'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -15,7 +17,7 @@ import {
   type SearchResult,
   type ToolChoiceSearchOutput,
 } from '@/modules/registry/tool-choice-contracts'
-import { isProductionToolChoice } from '@/modules/registry/public'
+import { isDeploymentToolChoice } from '@/modules/registry/public'
 import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import { registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
 import { projectedModelFacingOutput } from './output'
@@ -71,14 +73,16 @@ export async function retrieveImmediateTools(
 ): Promise<ToolChoiceSearchOutput | null> {
   const trimmed = query.trim().slice(0, SEARCH_QUERY_MAX_LENGTH)
   if (trimmed.length === 0) return null
+  const environment = deploymentPaymentEnvironment(env)
+  const targetNetwork = x402PaymentProfileForEnvironment(environment)?.network
+  if (targetNetwork === undefined) return null
   try {
     const admitted = deserializeToolSearchResult(await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
       source: 'current', query: trimmed, limit: 8,
     }))
-    const keepDemo = /\b(?:testnet|sepolia|degraded|demo|sandbox)\b/iu.test(trimmed)
     const admittedItems = admitted.kind === 'ok'
       ? admitted.items.filter((tool: PublicToolDescriptor) =>
-        (keepDemo || isProductionToolChoice(tool)) && suitableListing(trimmed, tool.listing.label, tool.summary))
+        isDeploymentToolChoice(tool, environment) && suitableListing(trimmed, tool.listing.label, tool.summary))
       : []
     const narrowed: ToolSearchResult = admitted.kind === 'ok'
       ? { ...admitted, items: admittedItems }
@@ -86,13 +90,14 @@ export async function retrieveImmediateTools(
     const room = Math.max(1, 8 - admittedItems.length)
     const directory = await ctx.runQuery(internal.x402DirectoryIndex.searchCompactInternal, {
       query: trimmed,
+      network: targetNetwork,
       paginationOpts: { cursor: null, numItems: room },
       access: 'external_listing',
     }).catch(cause => degradeBackend(cause, { kind: 'unavailable' as const, reason: 'source_unavailable' }, {
       site: 'chatImmediateBazaar', reason: 'source_unavailable',
     }))
     const external: SearchResult[] = directory.kind === 'unavailable' ? [] : directory.page.flatMap(row => {
-      if (row.source !== 'coinbase' || row.toolRef !== undefined) return []
+      if (row.source !== 'coinbase' || row.toolRef !== undefined || row.network !== targetNetwork) return []
       if (!suitableListing(trimmed, row.title, row.summary)) return []
       const actionClass = ['retrieve','transform','analyze','create','mutate','other','unclassified'].includes(row.actionClass) ? row.actionClass : 'unclassified' as const
       const objectClass = ['web','document','image','location','chain','data','other','unclassified'].includes(row.objectClass) ? row.objectClass : 'unclassified' as const

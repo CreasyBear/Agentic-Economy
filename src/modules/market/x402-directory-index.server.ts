@@ -1,11 +1,13 @@
 import { degrade } from '@/lib/observability/degrade'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
 import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import { readX402Directory } from './x402-directory.server'
 import type { DirectoryChoice, X402DirectoryEntry } from './x402-directory'
-import { directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
+import { directoryNetwork, directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
   x402DirectoryProvidersInputSchema, type X402DirectoryProvidersInput, type X402DirectoryProvidersPage,
@@ -32,6 +34,7 @@ type CompactCardRow = Readonly<{
   title: string
   summary: string
   provider: string
+  network: string
   category?: string
   minimumUsdPrice?: string
   calls30d?: number
@@ -44,7 +47,7 @@ type CompactCardPage = Readonly<{ kind: 'unavailable'; reason: string }> | Reado
   continueCursor: string
   isDone: boolean
 }>
-const compactCards = sourceQuery<{ query: string; paginationOpts: { numItems: number; cursor: string | null } }, CompactCardPage>('x402DirectoryIndex:searchCompact')
+const compactCards = sourceQuery<{ query: string; network: string; paginationOpts: { numItems: number; cursor: string | null } }, CompactCardPage>('x402DirectoryIndex:searchCompact')
 const overview = sourceQuery<Record<string, never>, X402DirectoryCatalogueOverview>('x402DirectoryIndex:overview')
 const resource = sourceQuery<{ resource: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:resource')
 const analytics = sourceQuery<{ network?: string }, X402DirectoryAnalytics>('x402DirectoryIndex:analytics')
@@ -105,7 +108,7 @@ function cardFromCompact(row: CompactCardRow): X402DirectoryEntry | undefined {
     provider: row.provider,
     metadataJson: '',
     prices: row.minimumUsdPrice === undefined ? [] : [{
-      network: 'published', scheme: 'exact', symbol: 'USDC',
+      network: row.network, scheme: 'exact', symbol: 'USDC',
       amount: `${row.minimumUsdPrice} USDC`, decimalAmount: row.minimumUsdPrice,
     }],
     ...(row.slug === undefined ? {} : { slug: row.slug }),
@@ -204,19 +207,23 @@ export async function readDirectoryFreshnessField(now: number = Date.now()): Pro
 export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput): Promise<X402DirectoryCatalogue> {
   const parsed = x402DirectoryCatalogueInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
+  const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(process.env))?.network
+  if (network === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
+  if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== network) return { kind: 'unavailable', reason: 'query_invalid' }
   const { directoryCategory, indexCursor, alternativeTo, offset, ...filters } = parsed.data
   const { query: cardQuery, ...cardFilters } = filters
   if (cardQuery !== undefined && alternativeTo === undefined && indexCursor === undefined && offset === undefined && directoryCategory === undefined && Object.keys(cardFilters).length === 0) {
     try {
-      const compact = await callPublicSourceQuery(compactCards, { query: cardQuery, paginationOpts: { numItems: COMPACT_CARD_PAGE, cursor: null } })
+      const compact = await callPublicSourceQuery(compactCards, { query: cardQuery, network, paginationOpts: { numItems: COMPACT_CARD_PAGE, cursor: null } })
       if (compact.kind === 'unavailable') return compact
       const items = await withAudEstimates(compact.page.flatMap(row => {
+        if (row.network !== network) return []
         const card = cardFromCompact(row)
         return card === undefined ? [] : [card]
       }))
       return {
         kind: 'ok', source: 'index', searchMethod: 'native_full_text',
-        page: { kind: 'ok', items, offset: 0, limit: COMPACT_CARD_PAGE, mode: 'search', appliedFilters: {} },
+        page: { kind: 'ok', items, offset: 0, limit: COMPACT_CARD_PAGE, mode: 'search', appliedFilters: { network } },
         isDone: compact.isDone,
       }
     } catch (reason) {
@@ -236,13 +243,13 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       engineCursor = decoded
     }
     const result = await callPublicSourceQuery(browse, {
-      ...filters, ...(alternativeTo === undefined ? {} : { alternativeTo }),
+      ...filters, network, ...(alternativeTo === undefined ? {} : { alternativeTo }),
       ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
       paginationOpts: { numItems: 24, cursor: engineCursor, maximumRowsRead: 512 },
     })
     if (result.kind === 'unavailable') return result
     if (offset) return { kind: 'unavailable', reason: 'index_cursor_required' }
-    const { network, provider, maxUsdPrice } = filters
+    const { provider, maxUsdPrice } = filters
     const items = await withAudEstimates(result.page.map(item => toDirectoryCardEntry({
       ...item.entry,
       choice: item.choice ?? { access: 'external_listing' as const },
@@ -291,6 +298,7 @@ export async function readX402DirectoryAnalytics(input: { network?: string | und
 export async function readX402DirectoryCatalogueResource(input: { resource: string }): Promise<X402DirectoryCatalogueResource> {
   const parsed = x402DirectoryCatalogueResourceInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
+  if (deploymentPaymentEnvironment(process.env) === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
   try {
     const result = await callPublicSourceQuery(resource, parsed.data)
     if (result.kind !== 'found' && result.kind !== 'found_upstream') return result
@@ -311,6 +319,8 @@ export async function readX402DirectoryCatalogueResource(input: { resource: stri
 /** Canonical `/tools/<providerHost>/<slug>` lookup - the route's synchronous directory metadata plus the admitted toolRef, when already joined. */
 export async function readX402DirectoryCatalogueBySlug(input: { providerKey: string; slug: string }): Promise<X402DirectoryCatalogueResource> {
   if (input.providerKey.length === 0 || input.slug.length === 0) return { kind: 'unavailable', reason: 'query_invalid' }
+  const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(process.env))?.network
+  if (network === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
   let indexed: X402DirectoryCatalogueResource
   try { indexed = await callPublicSourceQuery(bySlug, input) }
   catch (cause) {
@@ -324,7 +334,7 @@ export async function readX402DirectoryCatalogueBySlug(input: { providerKey: str
   // Tool detail is not the market catalogue request. A missing index row still resolves from the
   // same persisted-or-upstream card destination the route already advertised.
   for (let offset = 0, pages = 0; pages < 3; pages += 1) {
-    const page = await readX402Directory({ provider: input.providerKey, ...(offset === 0 ? {} : { offset }) })
+    const page = await readX402Directory({ network, provider: input.providerKey, ...(offset === 0 ? {} : { offset }) })
     if (page.kind !== 'ok') break
     const match = page.items.find(entry => [entry.slug, directorySlugBase(entry.resource), directorySlugWithMethod(entry.resource, entry.method)]
       .filter((slug): slug is string => slug !== undefined).includes(input.slug))
@@ -338,6 +348,7 @@ export async function readX402DirectoryCatalogueBySlug(input: { providerKey: str
 
 /** Reverse lookup for the `/tools/$toolRef` redirect; `null` keeps the caller on that route. */
 export async function readX402DirectoryCanonicalUrlForTool(input: { toolRef: string }): Promise<{ providerHost: string; slug: string } | null> {
+  if (deploymentPaymentEnvironment(process.env) === undefined) return null
   try { return await callPublicSourceQuery(canonicalUrlForTool, input) }
   catch (cause) {
     return degrade(cause, null, {

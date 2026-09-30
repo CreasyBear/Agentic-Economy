@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Agent, fetch as guardedFetch } from 'undici'
 
+import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
@@ -342,9 +343,11 @@ function x402RuntimeFactory(
   origin: string,
   secretOptions: ProductionSecretRuntimeOptions,
   dispatcher: Agent,
+  environment: PaymentEnvironment | undefined,
 ): JitProviderX402RuntimeFactory {
   const signatureCache = new Map<string, string>()
   return ({ ticket, invocation }) => {
+    if (environment !== 'sandbox') throw new TypeError('payment_custody_unavailable')
     const authority = invocation.authority
     const paymentSecret = ticket.paymentSecret
     if (paymentSecret === undefined) throw new TypeError('payment_custody_unavailable')
@@ -465,7 +468,7 @@ function x402RuntimeFactory(
         const authorization = readX402PaymentPayerAndNonce(paymentSignature)
         if (authorization === undefined) return false
         return verifyExactEvmX402Settlement({
-          aeEnvironment: 'production',
+          aeEnvironment: environment,
           response: response as X402SettlementResponse,
           requirement,
           payer: authorization.payer,
@@ -475,7 +478,7 @@ function x402RuntimeFactory(
             requirement.asset,
             response.transaction,
             dispatcher,
-            'production',
+            environment,
             authorization.payer,
             authorization.nonce,
           ),
@@ -560,6 +563,10 @@ export async function handleProviderConsequenceRequest(
 ): Promise<Response> {
   const request = await readRequest(rawRequest)
   if (request === undefined) return noStore({ kind: 'unavailable' }, 400)
+  const paymentEnvironment = deploymentPaymentEnvironment(environment)
+  if (request.ticket.adapterId === 'x402-fetch:v2' && paymentEnvironment !== 'sandbox') {
+    return noStore({ kind: 'unavailable' }, 503)
+  }
   let options: ProductionSecretRuntimeOptions
   let origin: string
   try {
@@ -616,7 +623,7 @@ export async function handleProviderConsequenceRequest(
       journal: journal(request, origin),
       secretRuntime: options,
       send,
-      createCallbackScopedX402Runtime: x402RuntimeFactory(request, origin, options, dispatcher),
+      createCallbackScopedX402Runtime: x402RuntimeFactory(request, origin, options, dispatcher, paymentEnvironment),
     })
     const observation = await boundary.execute({ ticket: request.signedTicket, invocation: request.invocation })
     return noStore(observation, 200)

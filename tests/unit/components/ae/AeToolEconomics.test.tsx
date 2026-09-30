@@ -22,6 +22,7 @@ function economicsTool(
       toolId: 'op_test_a',
       callVia: '/api/v1/tools/call',
       paymentLane: 'brokered',
+      runtimeEnvironment: 'production',
       contract: {
         capabilityId: 'fx.convert',
         version: 1,

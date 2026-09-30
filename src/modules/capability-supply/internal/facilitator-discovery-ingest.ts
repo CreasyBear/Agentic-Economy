@@ -14,6 +14,8 @@ import {
   type X402FetchTransportConfiguration,
 } from "./transport-adapters";
 import { degradeBackend } from "@/lib/observability/degrade-backend";
+import type { PaymentEnvironment } from '@/lib/deployment/environment';
+import { x402PaymentProfileForEnvironment, type X402PaymentProfile } from './x402-payment-profile';
 
 export const FACILITATOR_DISCOVERY_URLS = [
   "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",
@@ -148,7 +150,10 @@ export function parseFacilitatorDiscoveryPage(
 export function decideFacilitatorDiscoveryItem(
   item: unknown,
   bazaar: BazaarAdmission = { kind: "absent" },
+  environment: PaymentEnvironment | undefined,
 ): FacilitatorDiscoveryDecision {
+  const profile = x402PaymentProfileForEnvironment(environment);
+  if (profile === undefined) return { kind: 'skip', reason: 'source_invalid' };
   const paymentRequired = paymentRequiredFromDiscoveryItem(item);
   if (paymentRequired === undefined) return { kind: "skip", reason: "resource_invalid" };
   const resource = isRecord(paymentRequired.resource) ? paymentRequired.resource : undefined;
@@ -170,7 +175,7 @@ export function decideFacilitatorDiscoveryItem(
   // refusal order before parsing payment, then check all signals once priced.
   const payersOrder = discoveryQualityPayersOrder(item) ?? -1;
   if (payersOrder < 2) return { kind: "skip", reason: "resource_invalid" };
-  const accept = firstSupportedAccept(paymentRequired.accepts);
+  const accept = firstSupportedAccept(paymentRequired.accepts, profile);
   if (accept.kind === "refused") return { kind: "skip", reason: accept.reason };
   const price = priceBreakdown(accept.amount, accept.assetExponent);
   if (price === undefined) return { kind: "skip", reason: "amount_invalid" };
@@ -335,7 +340,7 @@ type AcceptResult =
     }>
   | Readonly<{ kind: "refused"; reason: FacilitatorDiscoverySkipReason }>;
 
-function firstSupportedAccept(value: unknown): AcceptResult {
+function firstSupportedAccept(value: unknown, profile: X402PaymentProfile): AcceptResult {
   if (!Array.isArray(value) || value.length > FACILITATOR_DISCOVERY_MAX_ACCEPTS) {
     return { kind: "refused", reason: "payment_terms_invalid" };
   }
@@ -346,10 +351,7 @@ function firstSupportedAccept(value: unknown): AcceptResult {
   for (const candidate of value) {
     if (!isRecord(candidate) || candidate.scheme !== "exact") continue;
     sawExact = true;
-    const profile = FACILITATOR_DISCOVERY_PAYMENT_PROFILES.find(
-      ({ network }) => network === candidate.network,
-    );
-    if (profile === undefined) {
+    if (candidate.network !== profile.network) {
       sawChain = true;
       continue;
     }
@@ -375,7 +377,7 @@ function firstSupportedAccept(value: unknown): AcceptResult {
       payTo: candidate.payTo,
       network: profile.network,
       asset: profile.asset,
-      assetExponent: profile.assetExponent,
+      assetExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
     };
   }
   if (!sawExact) return { kind: "refused", reason: "scheme_unsupported" };

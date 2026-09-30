@@ -11,7 +11,7 @@ import timezonePaymentRequired20260819Fixture from '../../fixtures/x402-bazaar/t
 const searchHandler = (search as unknown as { _handler: (ctx: unknown, args: { source: 'coinbase'; query: string }) => Promise<ToolSearchWireResult> })._handler
 
 describe('SDK-backed catalogue discovery', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
   it('reads source results from the ingested snapshot without a reconciliation mutation', async () => {

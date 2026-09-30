@@ -7,8 +7,11 @@ import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-proje
 import { readX402DirectoryRawPage } from '@/modules/market/x402-directory-source.server'
 import { x402DirectoryResolveInputSchema, type X402DirectoryResolution, type X402DirectoryResolutionReason } from '@/modules/market/x402-directory'
 import { directoryEntryMatchesFilters } from '@/modules/market/x402-directory-index'
+import { directoryNetwork } from '@/modules/market/x402-directory-index'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/convex'
 import { api, internal } from './_generated/api'
-import { action } from './_generated/server'
+import { action, env } from './_generated/server'
 import { reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 
@@ -45,6 +48,11 @@ export const resolve = action({
   handler: async (ctx, args): Promise<X402DirectoryResolution> => {
     const parsed = x402DirectoryResolveInputSchema.safeParse(args)
     if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
+    const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(env))?.network
+    if (network === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
+    if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== network) {
+      return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
+    }
     const { resource, ...context } = parsed.data
     const indexed = await ctx.runQuery(internal.x402DirectoryIndex.selectedSource, {
       resource, ...(context.network === undefined ? {} : { network: context.network }),
@@ -65,7 +73,7 @@ export const resolve = action({
       const candidate = page.items.find(item => item.resource === resource)
       if (candidate === undefined) return { kind: 'unavailable', reason: 'resource_not_found' }
       const candidateEntry = projectX402DirectoryEntry(candidate)
-      if (!directoryEntryMatchesFilters(candidateEntry, context)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
+      if (!directoryEntryMatchesFilters(candidateEntry, { ...context, network })) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
       selected = candidate
     }
     try {

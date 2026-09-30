@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { admitFacilitatorDiscoveryItems as admitOfficialFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
 import {
@@ -77,6 +77,8 @@ const baseSepoliaSyntheticPost = {
   })),
 };
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("facilitator discovery ingest", () => {
   it("rejects unsupported Bazaar HTTP channels and non-JSON output", () => {
     const extension = isRecord(timezonePaymentRequired?.extensions)
@@ -121,6 +123,7 @@ describe("facilitator discovery ingest", () => {
     }
     const url = captured.resource.url;
     expect(typeof url).toBe("string");
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
     const admission = await admitOfficialFacilitatorDiscoveryItems([{
       ...captured,
       resource: url,
@@ -148,7 +151,7 @@ describe("facilitator discovery ingest", () => {
     expect(decideFacilitatorDiscoveryItem({
       ...noBazaarItem,
       resource: "https://example.test/no-bazaar",
-    })).toEqual({ kind: "skip", reason: "bazaar_missing" });
+    }, undefined, "sandbox")).toEqual({ kind: "skip", reason: "bazaar_missing" });
   });
 
   it("names discovered offerings as jobs instead of URL paths", () => {
@@ -168,12 +171,38 @@ describe("facilitator discovery ingest", () => {
         inputExample: {},
         outputSchema: { type: "object" },
       },
+      "production",
     );
     expect(decision.kind).toBe("admit");
     if (decision.kind !== "admit") return;
     expect(decision.import.commercial.offering.presentation.label).toBe("Amazon Search");
     expect(decision.import.contract.name).toBe("Amazon Search");
     expect(decision.import.commercial.offering.searchTerms).toContain("Amazon Search");
+  });
+
+  it.each([
+    { environment: 'production' as const, network: 'eip155:8453', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+    { environment: 'sandbox' as const, network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+  ])('selects the $environment lane from mixed accepts in either order without altering upstream terms', ({ environment, network, asset }) => {
+    const options = [mainnetSyntheticPost.accepts[0], baseSepoliaSyntheticPost.accepts[0]];
+    const bazaar = { kind: 'admitted' as const, method: 'POST' as const, inputSchema: { type: 'object' }, outputSchema: { type: 'object' } };
+    for (const accepts of [options, [...options].reverse()]) {
+      const item = { ...mainnetSyntheticPost, accepts };
+      const decision = decideFacilitatorDiscoveryItem(item, bazaar, environment);
+      expect(decision.kind).toBe('admit');
+      if (decision.kind !== 'admit') continue;
+      expect(decision.import.resource).toMatchObject({ network, asset, paymentRequired: { accepts } });
+      expect(isRecord(decision.import.resource) ? decision.import.resource.paymentRequired : undefined).toEqual(paymentRequiredFromDiscoveryItem(item));
+    }
+  });
+
+  it('skips discovery when the deployment environment is undeclared or unsupported', async () => {
+    const bazaar = { kind: 'admitted' as const, method: 'POST' as const, inputSchema: { type: 'object' }, outputSchema: { type: 'object' } };
+    expect(decideFacilitatorDiscoveryItem(mainnetSyntheticPost, bazaar, undefined)).toEqual({ kind: 'skip', reason: 'source_invalid' });
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined);
+    expect(await admitOfficialFacilitatorDiscoveryItems([mainnetSyntheticPost])).toMatchObject({ admitted: [] });
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'preview');
+    expect(await admitOfficialFacilitatorDiscoveryItems([mainnetSyntheticPost])).toMatchObject({ admitted: [] });
   });
 
   it("allowlists PayAI and CDP REST catalogs only", () => {
@@ -194,10 +223,11 @@ describe("facilitator discovery ingest", () => {
   });
 
   it("admits official Base Sepolia Bazaar HTTP while skipping missing Bazaar and MCP", async () => {
-    expect(decideFacilitatorDiscoveryItem(noBazaarItem)).toEqual({
+    expect(decideFacilitatorDiscoveryItem(noBazaarItem, undefined, "sandbox")).toEqual({
       kind: "skip",
       reason: "bazaar_missing",
     });
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "development");
     const mcpAndTestnet = await admitOfficialFacilitatorDiscoveryItems([mcpItem, baseSepoliaSyntheticPost]);
     expect(mcpAndTestnet.admitted).toHaveLength(1);
     expect(JSON.parse(mcpAndTestnet.admitted[0]?.sourceImportJson ?? "{}")).toMatchObject({
@@ -217,7 +247,11 @@ describe("facilitator discovery ingest", () => {
       items: [timezonePaymentRequired, mainnetSyntheticPost, noBazaarItem, mcpItem],
     });
     expect(page?.items).toHaveLength(4);
-    const result = await admitOfficialFacilitatorDiscoveryItems(page!.items);
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
+    const production = await admitOfficialFacilitatorDiscoveryItems(page!.items);
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "development");
+    const sandbox = await admitOfficialFacilitatorDiscoveryItems(page!.items);
+    const result = { admitted: [...production.admitted, ...sandbox.admitted], skipped: [...production.skipped, ...sandbox.skipped] };
     expect(result.admitted).toHaveLength(2);
     expect(result.skipped.length).toBeGreaterThanOrEqual(2);
     const urls = result.admitted.map(
@@ -270,6 +304,7 @@ describe("facilitator discovery ingest", () => {
       ...mainnetSyntheticPost,
       accepts: Array.from({ length: 21 }, () => mainnetSyntheticPost.accepts[0]),
     };
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
     const result = await admitOfficialFacilitatorDiscoveryItems([tooManyAccepts]);
     expect(result).toMatchObject({
       admitted: [],

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { validatePaymentRequired } from "@x402/core/schemas";
 
 import { admitFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
@@ -717,3 +717,6 @@ describe("capability publication importers", () => {
     },
   );
 });
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+afterEach(() => vi.unstubAllEnvs())

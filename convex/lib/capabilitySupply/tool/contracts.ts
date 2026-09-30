@@ -138,6 +138,7 @@ const publicInputExample = v.object({
 })
 const publicDescriptor = v.object({
   toolRef: v.string(),
+  runtimeEnvironment: v.union(v.literal('sandbox'), v.literal('production')),
   callVia: v.literal(CURRENT_TOOL_CALL_VIA),
   paymentLane: v.literal('brokered'),
   toolId: v.string(),

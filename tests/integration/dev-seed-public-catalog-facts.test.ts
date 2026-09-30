@@ -30,6 +30,9 @@ import { sandboxTestnetToolSpec } from '../../convex/lib/dev/seed/sandboxTestnet
 import { sandboxToolContractDocumentJson } from '../../convex/lib/dev/seed/sandboxFixture'
 import { publicationPorts } from '../../convex/lib/capabilitySupply/publish/prepared'
 
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
+
 type SeedBackend = TestConvex<typeof schema>
 
 type CatalogOffering = {

@@ -45,6 +45,7 @@ const sourceRecord = {
   operationId: 'operation:invoice.extract',
   publicationRef: 'publication:invoice.extract',
   publicationRevision: 4,
+  runtimeEnvironment: 'production',
   networkId: 'ae:public',
   contract: defineCapabilityContract({
     contractFormat: 'ae.capability-contract:v2',

@@ -62,6 +62,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     restoreEnvironment('AE_CHAT_SHARE_SECRET', previousShareSecret)
     restoreEnvironment('AE_CHAT_SHARE_KEY_ID', previousShareKeyId)
   })
@@ -444,6 +445,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   })
 
   it('keeps a completed Tool description when the model fails after the tool step', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const { toolRef } = await admitDiscoveredToolFixture(backend)
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-failed-final-owner')

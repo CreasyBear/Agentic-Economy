@@ -26,6 +26,7 @@ export function deserializeToolDescriptor(
   }
   return {
     toolRef: tool.toolRef,
+    runtimeEnvironment: tool.runtimeEnvironment,
     toolId: tool.toolId,
     callVia: tool.callVia,
     paymentLane: tool.paymentLane,

@@ -126,6 +126,7 @@ export const publicToolDisplayPriceSchema = z.union([
 ])
 
 export const publicToolDescriptorSchema = z.strictObject({
+  runtimeEnvironment: z.enum(['sandbox', 'production']),
   toolRef, toolId: z.string(),
   callVia: z.literal(CURRENT_TOOL_CALL_VIA),
   paymentLane: z.literal('brokered'),

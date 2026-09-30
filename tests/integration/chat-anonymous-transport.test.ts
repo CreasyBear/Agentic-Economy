@@ -2,7 +2,7 @@ import type { LanguageModelV4 } from '@ai-sdk/provider'
 import type { UIMessageChunk } from 'ai'
 import { mockModel } from '@convex-dev/agent'
 import { getFunctionName, makeFunctionReference } from 'convex/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { components, internal } from '../../convex/_generated/api'
 import type { ActionCtx } from '../../convex/_generated/server'
@@ -34,6 +34,8 @@ vi.mock('@/modules/model-gateway/public', async (importOriginal) => {
     },
   }
 })
+
+afterEach(() => vi.unstubAllEnvs())
 
 const ANONYMOUS_CHAT_PROXY_SECRET = 'anonymous-chat-proxy-test-secret-01'
 const anonymousChatAdmissionKey = (salt: string): string =>
@@ -184,6 +186,7 @@ describe('anonymous operation chat transport', () => {
     expect(body).not.toContain('lodash')
   })
   it('returns completed Tool facts when the post-tool model step fails', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const { toolRef } = await admitDiscoveredToolFixture(backend)
     const model = mockModel({ contentSteps: [[{

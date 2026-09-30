@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { validateJsonSchema } from '@/modules/capability-contract/public'
@@ -23,8 +23,25 @@ function postRequest(body: unknown): Request {
 }
 
 describe('sandbox-reference route', () => {
+  beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
   afterEach(() => {
     setHttpRateLimitAdmissionForTests(undefined)
+    vi.unstubAllEnvs()
+  })
+
+  it.each(['production', 'preview', undefined])('returns 404 before admission or body parsing for %s', async (declaration) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+    let admissionCalls = 0
+    setHttpRateLimitAdmissionForTests(async () => {
+      admissionCalls += 1
+      return { ok: true }
+    })
+    const response = await handleSandboxReferenceRequest(new Request('http://ae.test/api/v1/sandbox-reference', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{bad-json',
+    }))
+    expect(response.status).toBe(404)
+    expect((await response.json()).code).toBe('sandbox_reference_unavailable')
+    expect(admissionCalls).toBe(0)
   })
 
   it('returns a deterministic result for an empty body', async () => {

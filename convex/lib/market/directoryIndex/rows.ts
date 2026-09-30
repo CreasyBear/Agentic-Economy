@@ -1,9 +1,12 @@
 import { directorySourceLabels } from '@/modules/market/x402-directory-metadata'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
+import { directoryNetwork } from '@/modules/market/x402-directory-index'
 import { truncateText } from '@/modules/common/truncate-text'
 import { isRecord } from '@/modules/common/is-record'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import type { Doc } from '../../../_generated/dataModel'
-import type { QueryCtx, MutationCtx } from '../../../_generated/server'
+import { env, type QueryCtx, type MutationCtx } from '../../../_generated/server'
 import type { DirectoryDepthBand, DirectoryMomentumBand, DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
 import type { DirectoryEntry, IndexedEntry } from './contracts'
 import type { X402DirectoryIndexCoverage } from '@/modules/market/x402-directory-index'
@@ -108,7 +111,13 @@ export function storedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>):
 
 export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>, search?: Doc<'marketDirectorySearchEntries'>): IndexedEntry {
   const stored = storedDirectoryEntry(row)
-  const entry = search?.slug === undefined ? stored : { ...stored, slug: search.slug }
+  const entry = {
+    ...stored,
+    ...(search?.network === undefined || search.network === '*' ? {} : {
+      prices: stored.prices.filter(price => directoryNetwork(price.network) === search.network),
+    }),
+    ...(search?.slug === undefined ? {} : { slug: search.slug }),
+  }
   // momentumBand/callDelta/payerDelta are no longer computed (Well 8 Lane B
   // dropped the previous-generation comparison they depended on - see
   // x402DirectoryIndexBackfill.ts). They stay optional here so legacy rows
@@ -142,14 +151,17 @@ export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>,
 export async function canonicalSlugForToolRef(
   ctx: Pick<QueryCtx, 'db'>, toolRef: string,
 ): Promise<Readonly<{ providerHost: string; slug: string }> | null> {
+  const environment = deploymentPaymentEnvironment(env)
+  const network = x402PaymentProfileForEnvironment(environment)?.network
+  if (environment === undefined || network === undefined) return null
   const publication = await ctx.db.query('capabilityPublications')
     .withIndex('by_toolRef_and_disposition', (query) => query.eq('toolRef', toolRef).eq('disposition', 'current')).unique()
-  if (publication === null || publication.sourceRouteRef === undefined) return null
+  if (publication === null || publication.sourceRouteRef === undefined || publication.runtimeEnvironment !== environment) return null
   const generation = await activeDirectoryGeneration(ctx)
   if (generation === null) return null
   const row = await ctx.db.query('marketDirectorySearchEntries')
     .withIndex('by_generation_and_sourceRouteRef', (query) => query.eq('generation', generation.generation).eq('sourceRouteRef', publication.sourceRouteRef))
-    .filter((query) => query.eq(query.field('network'), '*'))
+    .filter((query) => query.eq(query.field('network'), network))
     .first()
   return row === null || row.providerKey === undefined || row.slug === undefined ? null : { providerHost: row.providerKey, slug: row.slug }
 }

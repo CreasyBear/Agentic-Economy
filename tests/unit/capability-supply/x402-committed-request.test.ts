@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
@@ -86,3 +86,6 @@ it('executes a real admitted Bazaar binding with USDC authority and the selected
   expect(sign).toHaveBeenCalledWith(expect.objectContaining({ selectedRequirement: expect.objectContaining({ amount: '250' }) }))
   expect(send).toHaveBeenCalledTimes(2)
 })
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+afterEach(() => vi.unstubAllEnvs())

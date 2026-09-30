@@ -6,9 +6,29 @@ import { readX402DirectoryAnalytics, readX402DirectoryCatalogue, readX402Directo
 import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directory-catalogue'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 
-beforeEach(() => { query.mockReset(); upstream.mockReset() })
+beforeEach(() => { query.mockReset(); upstream.mockReset(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('indexed catalogue server boundary', () => {
+  it.each([undefined, 'preview'])('refuses an undeclared money environment %s before querying', async (deployment) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    expect(await readX402DirectoryCatalogue({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(await readX402DirectoryCatalogueResource({ resource: 'https://example.com/tool' })).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(query).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
+  })
+  it.each([['production', 'eip155:8453', 'base-sepolia'], ['development', 'eip155:84532', 'base']])('pins %s compact results to its network', async (deployment, network, opposite) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    expect(await readX402DirectoryCatalogue({ network: opposite })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(query).not.toHaveBeenCalled()
+    query.mockResolvedValue({ kind: 'ok', coverage: { generation: 'g', completedAt: 1 }, isDone: true, continueCursor: '', page: [
+      { id: 'good', source: 'coinbase', resource: 'https://example.com/good', title: 'Good', summary: '', provider: 'example.com', network, minimumUsdPrice: '1' },
+      { id: 'bad', source: 'coinbase', resource: 'https://example.com/bad', title: 'Bad', summary: '', provider: 'example.com', network: opposite, minimumUsdPrice: '1' },
+    ] })
+    const result = await readX402DirectoryCatalogue({ query: 'weather' })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:searchCompact', expect.objectContaining({ network }))
+    expect(result).toMatchObject({ kind: 'ok', page: { items: [{ resource: 'https://example.com/good', prices: [{ network }] }] } })
+  })
+
   it('keeps indexed query order when OpenRouter is blocked', async () => {
     vi.stubEnv('TYPESAFE_API_KEY', '')
     vi.stubEnv('OPENROUTER_API_KEY', 'test-key')
@@ -22,10 +42,10 @@ describe('indexed catalogue server boundary', () => {
     query.mockResolvedValue({ kind: 'ok', coverage, searchMethod: 'native_full_text', page: entries.map(entry => ({ entry })), continueCursor: 'next', isDone: false })
     const result = await readX402DirectoryCatalogue({ query: 'transparent images', network: 'base', maxUsdPrice: 0.1 })
     expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, searchMethod: 'native_full_text', isDone: false, page: {
-      items: entries.map(entry => ({ ...entry, metadataJson: '' })), appliedFilters: { network: 'base', maxUsdPrice: 0.1 },
+      items: entries.map(entry => ({ ...entry, metadataJson: '' })), appliedFilters: { network: 'eip155:8453', maxUsdPrice: 0.1 },
     } })
     expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', {
-      query: 'transparent images', network: 'base', maxUsdPrice: 0.1,
+      query: 'transparent images', network: 'eip155:8453', maxUsdPrice: 0.1,
       paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 },
     })
     if (result.kind !== 'ok') throw new Error('expected catalogue')
@@ -53,7 +73,7 @@ describe('indexed catalogue server boundary', () => {
       provider: 'EXAMPLE.com',
       indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: 'gen-1', cursor: 'previous' }),
     })
-    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { category: 'creative', provider: 'example.com', paginationOpts: { numItems: 24, cursor: 'previous', maximumRowsRead: 512 } })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { category: 'creative', provider: 'example.com', network: 'eip155:8453', paginationOpts: { numItems: 24, cursor: 'previous', maximumRowsRead: 512 } })
     expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, page: { items: [{ ...entry, metadataJson: '' }] }, isDone: false, splitCursor: 'split' })
     if (result.kind === 'ok') {
       expect(result.page.total).toBeUndefined()
@@ -151,7 +171,7 @@ describe('indexed catalogue server boundary', () => {
         kind: 'ok', coverage: { generation: 'gen-1', completedAt: 1 }, isDone: false, continueCursor: 'scope|next',
         page: [{
           id: 'registry:abc', source: 'coinbase', resource: 'https://example.com/tool', slug: 'tool',
-          title: 'Weather', summary: 'Forecasts', provider: 'example.com',
+          title: 'Weather', summary: 'Forecasts', provider: 'example.com', network: 'eip155:8453',
           minimumUsdPrice: '0.01', calls30d: 4, payers30d: 2,
           choice: { access: 'ae_callable', toolRef: 'operation:v1:' + 'ab'.repeat(32) },
         }],
@@ -159,7 +179,7 @@ describe('indexed catalogue server boundary', () => {
     })
     const result = await readX402DirectoryCatalogue({ query: 'weather' })
     expect(query).toHaveBeenCalledWith('x402DirectoryIndex:searchCompact', {
-      query: 'weather', paginationOpts: { numItems: 12, cursor: null },
+      query: 'weather', network: 'eip155:8453', paginationOpts: { numItems: 12, cursor: null },
     })
     expect(query).not.toHaveBeenCalledWith('x402DirectoryIndex:browse', expect.anything())
     if (result.kind !== 'ok') throw new Error('expected compact catalogue')
@@ -201,7 +221,7 @@ it('passes exact explorer bands and metadata filters to the native index and nev
   const filters = { priceBand: '0_01_to_0_03' as const, adoptionBand: '0' as const, tags: ['search', 'a&b'], bundleSlugs: ['image-tools'], hasInputSchema: false, hasOutputExample: true, minUsdPrice: 0, maxUsdPrice: 0.03, minPayers30d: 0, maxPayers30d: 4 };
   query.mockResolvedValue({ kind: 'unavailable', reason: 'index_unavailable' });
   expect(await readX402DirectoryCatalogue(filters)).toEqual({ kind: 'unavailable', reason: 'index_unavailable' });
-  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { ...filters, paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } });
+  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { ...filters, network: 'eip155:8453', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } });
   expect(upstream).not.toHaveBeenCalled();
   query.mockClear();
   for (const input of [{ minUsdPrice: 0.03, maxUsdPrice: 0.01 }, { minPayers30d: 5, maxPayers30d: 4 }]) {
@@ -299,5 +319,5 @@ it('accepts repeat sorting through the shared index schema and forwards it to th
   expect(x402DirectoryCatalogueInputSchema.safeParse({ sort: 'repeat' }).success).toBe(true)
   query.mockResolvedValueOnce({ kind: 'ok', coverage: {}, searchMethod: 'native_index', page: [], continueCursor: 'next', isDone: true })
   expect(await readX402DirectoryCatalogue({ sort: 'repeat' })).toMatchObject({ kind: 'ok', source: 'index', isDone: true })
-  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { sort: 'repeat', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } })
+  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { sort: 'repeat', network: 'eip155:8453', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } })
 })

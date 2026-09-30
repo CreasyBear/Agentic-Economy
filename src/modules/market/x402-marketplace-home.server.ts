@@ -1,9 +1,13 @@
 import { readX402DirectoryCatalogue } from './x402-directory-index.server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
 import { X402_MARKETPLACE_RAILS, type X402MarketplaceHome, type X402MarketplaceRail } from './x402-marketplace-home'
 
 /** Each evidence shelf reads the persisted directory generation independently. */
 export async function readX402MarketplaceHome(): Promise<X402MarketplaceHome> {
-  const results = await Promise.allSettled(X402_MARKETPLACE_RAILS.map(rail => readX402DirectoryCatalogue({ sort: rail.sort })))
+  const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(process.env))?.network
+  if (network === undefined) return { observedAt: new Date().toISOString(), rails: [] }
+  const results = await Promise.allSettled(X402_MARKETPLACE_RAILS.map(rail => readX402DirectoryCatalogue({ sort: rail.sort, network })))
   const rails: X402MarketplaceRail[] = X402_MARKETPLACE_RAILS.flatMap((rail, index) => {
     const result = results[index]
     const page = result?.status === 'fulfilled' ? result.value : undefined

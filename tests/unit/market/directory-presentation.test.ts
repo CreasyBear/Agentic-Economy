@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import { directoryNetworkLabel, directoryPrice, directoryPriceContext, directoryTitle } from '@/components/ae/market/directory-presentation'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
@@ -14,6 +14,7 @@ import { toolCatalogSearchInputSchema } from '@/modules/registry/tool-choice-con
 
 vi.mock('../../../convex/lib/capabilitySupply/tool/projection', () => ({ toolRecord: vi.fn() }))
 
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
 afterEach(() => {
   setPublicSourceTransportForTests(undefined)
   vi.unstubAllGlobals()
@@ -138,7 +139,7 @@ it('does not turn publication identity into callability after readiness expires 
     expect(table).toBe('capabilityPublications')
     return { withIndex: vi.fn((_index: string, select: (query: { eq: typeof eq }) => unknown) => {
       select({ eq })
-      return { unique }
+      return { filter: vi.fn(() => ({ unique })) }
     }) }
   }) } } as never
   vi.mocked(toolRecord).mockResolvedValue({ routeable: true, integrated: true, readiness: { validUntil: now + 60_000 } } as never)
@@ -165,8 +166,8 @@ it('keeps indexed catalogue order and joined ToolRefs without calling Jev', asyn
     query: vi.fn(async () => ({
       kind: 'ok', coverage: { generation: 'g1', completedAt: Date.now() },
       page: [
-        { id: 'exa', source: 'coinbase', resource: entry.resource, title: entry.title, summary: entry.description, provider: entry.provider },
-        { id: 'second', source: 'coinbase', resource: 'https://example.com/second', title: entry.title, summary: entry.description, provider: entry.provider,
+        { id: 'exa', source: 'coinbase', resource: entry.resource, title: entry.title, summary: entry.description, provider: entry.provider, network: 'eip155:8453' },
+        { id: 'second', source: 'coinbase', resource: 'https://example.com/second', title: entry.title, summary: entry.description, provider: entry.provider, network: 'eip155:8453',
           choice: { access: 'ae_callable', toolRef: ref, sourceRouteRef: 'exact-second' } },
       ],
       continueCursor: '', isDone: true,

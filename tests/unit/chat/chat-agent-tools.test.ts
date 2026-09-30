@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { convexToJson, type Value } from 'convex/values'
 import { projectToolCard, serializeToolCard } from '@/modules/chat/tool-card'
 import { chatClarifyInputSchema } from '@/modules/chat/agent-turn.contracts'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, type ChatToolId } from '@/modules/chat/tool-card'
 import { createChatAgent } from '../../../convex/lib/chat/tools/agent'
@@ -20,6 +20,7 @@ import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { serializeToolSearchResult, serializeToolDetailResult, serializeToolCompareResult } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
+import { isDeploymentToolChoice } from '@/modules/registry/public'
 import {
   ERC20_QUERY,
   TOOL_CRYPTO_TX,
@@ -29,6 +30,18 @@ import {
 } from '../../helpers/tool-search-rerank-fixtures'
 
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+afterEach(() => vi.unstubAllEnvs())
+
+it('selects only the declared deployment environment, including native Tools without x402 payment', () => {
+  const native = { ...TOOL_TIMEZONE, provenance: { ...TOOL_TIMEZONE.provenance, sourceKind: 'openapi_http' as const } }
+  const sandbox = { ...native, runtimeEnvironment: 'sandbox' as const }
+  expect(isDeploymentToolChoice(native, 'production')).toBe(true)
+  expect(isDeploymentToolChoice(sandbox, 'sandbox')).toBe(true)
+  expect(isDeploymentToolChoice(native, 'sandbox')).toBe(false)
+  expect(isDeploymentToolChoice(sandbox, 'production')).toBe(false)
+  expect(isDeploymentToolChoice(native, undefined)).toBe(false)
+})
 const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
 const AUTHORITY = {
   kind: 'agent_key',
@@ -438,16 +451,26 @@ describe('Tool chat Agent tools', () => {
     ) as { kind: string; results: readonly { toolRef: string; network: string; verification: string }[] }
     expect(result.kind).toBe('match')
     expect(result.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
+    const explicitTestnet = await invokeTool(
+      createChatAgent(mockModel()), 'registry.tools.search',
+      toolCtx({ runAction: runAction as ToolCtx['runAction'] }),
+      { query: 'weather' }, [{ role: 'user', content: 'Show testnet weather choices' }],
+    ) as { kind: string; results: readonly { toolRef: string }[] }
+    expect(explicitTestnet.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
   })
 
   it('shows compact Bazaar rows as scoped external leads with an exact next page, never an AE Call', async () => {
     const runAction = vi.fn()
-    const runQuery = vi.fn(async (reference) => {
+    const runQuery = vi.fn(async (reference, _args: unknown) => {
       expect(getFunctionName(reference)).toBe('x402DirectoryIndex:searchCompactInternal')
       return {
         kind: 'ok', coverage: { generation: 'bazaar-7', completedAt: 100 },
-        page: [{ id: 'directory-entry-7', source: 'coinbase', title: 'Timezone API', summary: 'Convert timezones',
-          provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100 }],
+        page: [
+          { id: 'directory-entry-7', source: 'coinbase', network: 'eip155:8453', title: 'Timezone API', summary: 'Convert timezones',
+            provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100 },
+          { id: 'wrong-network', source: 'coinbase', network: 'eip155:84532', title: 'Timezone API', summary: 'Convert timezones',
+            provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100 },
+        ],
         continueCursor: 'native-page-2', isDone: false,
       }
     })
@@ -460,6 +483,7 @@ describe('Tool chat Agent tools', () => {
         next: [{ action: 'describe-external', args: { id: 'directory-entry-7' } }] }],
       next: [{ action: 'next-page', args: { query: 'convert timezone', cursor: 'x402:native-page-2' } }],
     })
+    expect(runQuery.mock.calls[0]?.[1]).toMatchObject({ network: 'eip155:8453' })
     expect(runAction).not.toHaveBeenCalled()
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
@@ -492,7 +516,7 @@ describe('Tool chat Agent tools', () => {
     const runAction = vi.fn()
     const runQuery = vi.fn(async (_reference: unknown, _args: unknown) => ({
       kind: 'ok', coverage: { generation: 'bazaar-8', completedAt: 101 },
-      page: [{ id: 'directory-entry-8', source: 'coinbase', title: 'Forecast API', summary: 'City forecasts',
+      page: [{ id: 'directory-entry-8', source: 'coinbase', network: 'eip155:8453', title: 'Forecast API', summary: 'City forecasts',
         provider: 'External provider', actionClass: 'retrieve', objectClass: 'location' }],
       continueCursor: 'native-page-3', isDone: false,
     }))
@@ -573,7 +597,7 @@ describe('Tool chat Agent tools', () => {
       const start = args.paginationOpts.cursor === null ? 0 : Number(args.paginationOpts.cursor.slice('native-'.length))
       const selected = ids.slice(start, start + args.paginationOpts.numItems)
       return {
-        kind: 'ok', page: selected.map(id => ({ id, source: 'coinbase', title: 'Timezone',
+        kind: 'ok', page: selected.map(id => ({ id, source: 'coinbase', network: 'eip155:8453', title: 'Timezone',
           summary: 'Convert timezones', provider: 'External provider',
           actionClass: 'transform', objectClass: 'location', completedAt: 100 })),
         isDone: start + selected.length === ids.length, continueCursor: `native-${start + selected.length}`,
@@ -603,7 +627,7 @@ describe('Tool chat Agent tools', () => {
     const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
       runAction: vi.fn(async () => { throw new Error('Explicit Bazaar source must not read admitted Tools') }) as ToolCtx['runAction'],
       runQuery: vi.fn(async () => ({
-        kind: 'ok', page: [{ id: `entry-${'x'.repeat(7000)}`, source: 'coinbase', title: 'Timezone',
+        kind: 'ok', page: [{ id: `entry-${'x'.repeat(7000)}`, source: 'coinbase', network: 'eip155:8453', title: 'Timezone',
           summary: 'Convert timezones', provider: 'External provider', actionClass: 'transform',
           objectClass: 'location', completedAt: 100 }], isDone: true, continueCursor: '',
         coverage: { generation: 'bazaar-7', completedAt: 100 },

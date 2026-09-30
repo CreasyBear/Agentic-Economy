@@ -16,6 +16,7 @@ const sourceRecord = (operationId: string, summary: string, searchTerms: readonl
   operationId,
   publicationRef: `publication:${operationId}`,
   publicationRevision: 3,
+  runtimeEnvironment: 'sandbox',
   networkId: 'ae:public',
   contract: {
     ref: { capabilityId: operationId, version: 1, contractDigest: `digest:${operationId}` },

@@ -881,6 +881,7 @@ export function detailFixture(toolRef: string = TEST_OPERATION_REF): PublicToolD
       toolId: 'op_test_a',
       callVia: '/api/v1/tools/call',
       paymentLane: 'brokered',
+      runtimeEnvironment: 'production',
       contract: {
         capabilityId: 'fx.convert',
         version: 1,
