@@ -60,6 +60,6 @@ it('renders authoritative members and binding status when Clerk name lookup fail
   const markup = renderToStaticMarkup(<TeamRolesPage {...view} />)
   expect(markup).toContain('user_former_member')
   expect(markup).toContain('Admin')
-  expect(markup).toContain('no active Clerk organization binding')
+  expect(markup).toContain('Invitations become available once your Business is set up.')
   expect(markup).not.toContain('Invite member')
 })

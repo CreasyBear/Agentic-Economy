@@ -8,7 +8,7 @@ import {
   vi,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import {
   InteractiveAuthorityError,
   requireAccessFactForAccount,
@@ -110,7 +110,7 @@ const listDirectoryRef = makeFunctionReference<
   }>
 >('workspaceTeam:listDirectory')
 
-const provisionOrganizationWorkspaceForServerRef = internal.workspaceProvisioning.provisionOrganizationWorkspaceForServer
+const provisionOrganizationWorkspaceForServerRef = api.workspaceProvisioning.provisionOrganizationWorkspaceForServer
 
 const correlationRef = (label: string) => `test:workspace-membership:${label}`
 
@@ -258,7 +258,7 @@ async function countSessionSelections(
 }
 
 async function listDirectoryForOwner(backend: InteractiveAuthorityBackend) {
-  const session = backend.withIdentity(samIdentity(TOKEN_IDENTIFIER))
+  const session = backend.withIdentity(samIdentity(TOKEN_IDENTIFIER, { org_id: CLERK_ORG_ID }))
   return await session.query(listDirectoryRef, {})
 }
 

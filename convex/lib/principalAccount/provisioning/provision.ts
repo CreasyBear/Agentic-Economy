@@ -1,13 +1,11 @@
 import { v, type Infer } from 'convex/values'
 import { generateAccountRef, generateOwnershipRef } from '../../../../src/modules/principal-account/account/public'
 import { generateExternalIdentityBindingRef } from '../../../../src/modules/principal-account/external-identity/public'
-import { principalRef } from '../../../../src/modules/principal-account/principal/public'
 import type { MutationCtx } from '../../../_generated/server'
 import { serviceAssertion } from '../../../serviceAssertion'
 import { CLERK_ORGANIZATION_PROVIDER_NAMESPACE } from '../interactiveAuthority/constants'
 import { WorkspaceProvisioningError, type ProvisionDb } from './contracts'
 import { resolveCreatorPrincipal } from './identity'
-import { upsertSessionSelection } from './selection'
 import { verifyProvisionServiceAuth } from './serviceAuth'
 
 const CLERK_ORG_ID_PATTERN = /^org_[A-Za-z0-9_-]{1,195}$/u
@@ -40,12 +38,11 @@ function validateCorrelationRef(value: string): void {
   }
 }
 
-function validateDisplayName(value: string): string {
+function safeDisplayName(value: string): string {
   const trimmed = value.trim()
-  if (trimmed.length === 0 || trimmed.length > 200 || !WORKSPACE_NAME_PATTERN.test(trimmed)) {
-    throw new WorkspaceProvisioningError('display_name_invalid')
-  }
-  return trimmed
+  return trimmed.length === 0 || trimmed.length > 200 || !WORKSPACE_NAME_PATTERN.test(trimmed)
+    ? 'Business'
+    : trimmed
 }
 
 async function provisionOrganizationWorkspace(
@@ -58,11 +55,10 @@ async function provisionOrganizationWorkspace(
   }>,
 ): Promise<ProvisionSuccess> {
   validateClerkOrgId(input.clerkOrgId)
-  const trimmedDisplayName = validateDisplayName(input.displayName)
+  const trimmedDisplayName = safeDisplayName(input.displayName)
   validateCorrelationRef(input.correlationRef)
 
   const principal = await resolveCreatorPrincipal(ctx.db, input.creatorTokenIdentifier)
-  const canonicalPrincipalRef = principalRef(principal.principalRef)
   const idempotencyRef = `clerk-org:${input.clerkOrgId}`
   const now = Date.now()
 
@@ -94,13 +90,6 @@ async function provisionOrganizationWorkspace(
     if (ownership === null) {
       throw new WorkspaceProvisioningError('authority_conflict')
     }
-    await upsertSessionSelection(
-      ctx.db,
-      canonicalPrincipalRef,
-      existingOrgBinding.accountRef,
-      input.correlationRef,
-      now,
-    )
     return {
       kind: 'replayed',
       accountRef: existingOrgBinding.accountRef,
@@ -157,13 +146,6 @@ async function provisionOrganizationWorkspace(
     createdAt: now,
     updatedAt: now,
   })
-  await upsertSessionSelection(
-    ctx.db,
-    canonicalPrincipalRef,
-    newAccountRef,
-    input.correlationRef,
-    now,
-  )
 
   return {
     kind: 'created',

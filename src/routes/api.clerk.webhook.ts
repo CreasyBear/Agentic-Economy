@@ -3,6 +3,7 @@ import { verifyWebhook } from '@clerk/tanstack-react-start/webhooks'
 
 import { handleClerkOrganizationInvitationWebhookRequest } from '@/lib/server/clerk-organization-invitation-webhook'
 import { handleClerkOrganizationMembershipWebhookRequest } from '@/lib/server/clerk-organization-membership-webhook'
+import { handleClerkOrganizationWebhookRequest } from '@/lib/server/clerk-organization-webhook'
 import { handleClerkSecurityWebhookRequest } from '@/lib/server/clerk-security-webhook'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { isRecord } from '@/modules/common/is-record'
@@ -27,11 +28,15 @@ export async function handleClerkWebhookRequest(
   request: Request,
   dependencies: Parameters<typeof handleClerkSecurityWebhookRequest>[1] &
     Parameters<typeof handleClerkOrganizationInvitationWebhookRequest>[1] &
-    Parameters<typeof handleClerkOrganizationMembershipWebhookRequest>[1] = {},
+    Parameters<typeof handleClerkOrganizationMembershipWebhookRequest>[1] &
+    Parameters<typeof handleClerkOrganizationWebhookRequest>[1] = {},
 ): Promise<Response> {
   try {
     const verified = await (dependencies.verify ?? verifyWebhook)(request.clone())
     if (isRecord(verified) && typeof verified.type === 'string') {
+      if (verified.type === 'organization.created') {
+        return await handleClerkOrganizationWebhookRequest(request, dependencies)
+      }
       if (verified.type.startsWith('organizationMembership.')) {
         return await handleClerkOrganizationMembershipWebhookRequest(request, dependencies)
       }

@@ -8,7 +8,7 @@ import {
   vi,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   ORGANIZATION_INVITATION_CREATED_OPERATION,
@@ -78,7 +78,7 @@ const recordOrganizationInvitationRevokedForServerRef = makeFunctionReference<
   OrganizationInvitationRevokedResult
 >('workspaceInvitations:recordOrganizationInvitationRevokedForServer')
 
-const provisionOrganizationWorkspaceForServerRef = internal.workspaceProvisioning.provisionOrganizationWorkspaceForServer
+const provisionOrganizationWorkspaceForServerRef = api.workspaceProvisioning.provisionOrganizationWorkspaceForServer
 
 const correlationRef = (label: string) => `test:workspace-invitation:${label}`
 
