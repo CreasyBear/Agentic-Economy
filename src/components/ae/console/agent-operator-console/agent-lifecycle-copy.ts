@@ -1,15 +1,9 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 
-import type { LifecycleTarget, RevocationMode } from './agent-operator-console.contracts'
+import type { LifecycleTarget } from './agent-operator-console.contracts'
 
-export function lifecycleConfirmLabel(
-  kind: LifecycleTarget['kind'],
-  mode: RevocationMode,
-): string {
-  if (kind === 'agent') {
-    return mode === 'drain' ? 'Drain then remove' : 'Remove immediately'
-  }
-  return mode === 'drain' ? 'Drain then disconnect' : 'Disconnect immediately'
+export function lifecycleConfirmLabel(kind: LifecycleTarget['kind']): string {
+  return kind === 'agent' ? 'Remove agent' : 'Disconnect connection'
 }
 
 export function lifecycleDialogTitle(target: LifecycleTarget | undefined): string {
@@ -48,19 +42,3 @@ export function lifecycleFailureTriplet(kind: LifecycleTarget['kind']): Rule4Dia
   }
 }
 
-export const revocationModeOptions: readonly Readonly<{
-  id: RevocationMode
-  title: string
-  detail: string
-}>[] = [
-  {
-    id: 'drain',
-    title: 'Graceful drain',
-    detail: 'New admissions stop now. In-flight Calls may finish within 30s.',
-  },
-  {
-    id: 'freeze',
-    title: 'Immediate Freeze',
-    detail: 'Halts immediately. New Calls are refused now.',
-  },
-]

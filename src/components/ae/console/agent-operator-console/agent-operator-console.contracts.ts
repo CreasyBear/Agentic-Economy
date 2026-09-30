@@ -13,8 +13,6 @@ export type LifecycleTarget =
   | Readonly<{ kind: 'connection'; connectionRef: string; revision: number; connectorName: string; name: string }>
   | Readonly<{ kind: 'agent'; principalRef: string; name: string }>
 
-export type RevocationMode = 'drain' | 'freeze'
-
 export type UseAgentSelectionParams = Readonly<{
   directoryItems: readonly AgentDirectoryItem[]
   directoryDetails: AgentDirectoryProjection['details']
@@ -38,7 +36,6 @@ export type UseAgentLifecycleDialogParams = Readonly<{
 
 export type UseAgentLifecycleDialogResult = Readonly<{
   lifecycleTarget: LifecycleTarget | undefined
-  revocationMode: RevocationMode
   revokePending: boolean
   revokeDiagnostic: Rule4Diagnostic | null
   revokeTriggerRef: RefObject<HTMLButtonElement | null>
@@ -50,7 +47,6 @@ export type UseAgentLifecycleDialogResult = Readonly<{
   ) => void
   confirmLifecycle: () => Promise<void>
   handleLifecycleDialogOpenChange: (open: boolean) => void
-  setRevocationMode: (mode: RevocationMode) => void
 }>
 
 export type AgentFactsDisclosureProps = Readonly<{
@@ -84,11 +80,9 @@ export type AgentRecordSheetProps = Readonly<{
 
 export type AgentLifecycleConfirmDialogProps = Readonly<{
   lifecycleTarget: LifecycleTarget | undefined
-  revocationMode: RevocationMode
   revokePending: boolean
   revokeDiagnostic: Rule4Diagnostic | null
   revokeTriggerRef: RefObject<HTMLButtonElement | null>
   onOpenChange: (open: boolean) => void
   onConfirm: () => void | Promise<void>
-  onRevocationModeChange: (mode: RevocationMode) => void
 }>

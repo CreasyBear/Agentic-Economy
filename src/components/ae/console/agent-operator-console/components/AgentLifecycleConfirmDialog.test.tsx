@@ -6,23 +6,20 @@ import { describe, expect, it, vi } from 'vitest'
 import { AgentLifecycleConfirmDialog } from './AgentLifecycleConfirmDialog'
 
 describe('AgentLifecycleConfirmDialog', () => {
-  it('uses revocation mode only for the confirm label', () => {
+  it('shows a plain destructive confirmation', () => {
     const onConfirm = vi.fn()
     render(
       <AgentLifecycleConfirmDialog
         lifecycleTarget={{ kind: 'agent', principalRef: 'prn_test', name: 'Agent A' }}
-        revocationMode="freeze"
         revokePending={false}
         revokeDiagnostic={null}
         revokeTriggerRef={createRef()}
         onOpenChange={() => undefined}
         onConfirm={onConfirm}
-        onRevocationModeChange={() => undefined}
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Remove immediately' })).toBeDefined()
-    expect(screen.queryByRole('button', { name: 'Drain then remove' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove agent' })).toBeDefined()
   })
 
   it('returns focus to the trigger ref after cancel', async () => {
@@ -33,13 +30,11 @@ describe('AgentLifecycleConfirmDialog', () => {
     render(
       <AgentLifecycleConfirmDialog
         lifecycleTarget={{ kind: 'agent', principalRef: 'prn_test', name: 'Agent A' }}
-        revocationMode="drain"
         revokePending={false}
         revokeDiagnostic={null}
         revokeTriggerRef={revokeTriggerRef}
         onOpenChange={onOpenChange}
         onConfirm={vi.fn()}
-        onRevocationModeChange={() => undefined}
       />,
     )
 

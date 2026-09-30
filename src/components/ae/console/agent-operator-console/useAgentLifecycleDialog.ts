@@ -11,7 +11,6 @@ import {
 } from './agent-lifecycle-copy'
 import type {
   LifecycleTarget,
-  RevocationMode,
   UseAgentLifecycleDialogParams,
   UseAgentLifecycleDialogResult,
 } from './agent-operator-console.contracts'
@@ -22,16 +21,13 @@ export function useAgentLifecycleDialog({
 }: UseAgentLifecycleDialogParams): UseAgentLifecycleDialogResult {
   const [lifecycleTarget, setLifecycleTarget] = useState<LifecycleTarget>()
   const [revokePending, setRevokePending] = useState(false)
-  const [revocationMode, setRevocationMode] = useState<RevocationMode>('drain')
   const [revokeDiagnostic, setRevokeDiagnostic] = useState<Rule4Diagnostic | null>(null)
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const revokeInFlightRef = useRef(false)
 
   function resetRevocationDialogState() {
-    setRevocationMode('drain')
     setRevokeDiagnostic(null)
   }
-
 
   function requestDisconnect(item: AgentDetail, trigger: HTMLButtonElement) {
     revokeTriggerRef.current = trigger
@@ -89,7 +85,6 @@ export function useAgentLifecycleDialog({
 
   return {
     lifecycleTarget,
-    revocationMode,
     revokePending,
     revokeDiagnostic,
     revokeTriggerRef,
@@ -97,6 +92,5 @@ export function useAgentLifecycleDialog({
     requestConnectionDisconnect,
     confirmLifecycle,
     handleLifecycleDialogOpenChange,
-    setRevocationMode,
   }
 }

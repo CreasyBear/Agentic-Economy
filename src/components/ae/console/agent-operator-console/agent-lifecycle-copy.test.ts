@@ -25,11 +25,9 @@ describe('agent-lifecycle-copy', () => {
     })).toBe('Remove Agent A everywhere?')
   })
 
-  it('labels confirm actions per kind and drain/freeze mode only', () => {
-    expect(lifecycleConfirmLabel('agent', 'drain')).toBe('Drain then remove')
-    expect(lifecycleConfirmLabel('agent', 'freeze')).toBe('Remove immediately')
-    expect(lifecycleConfirmLabel('connection', 'drain')).toBe('Drain then disconnect')
-    expect(lifecycleConfirmLabel('connection', 'freeze')).toBe('Disconnect immediately')
+  it('labels plain confirm actions per lifecycle kind', () => {
+    expect(lifecycleConfirmLabel('agent')).toBe('Remove agent')
+    expect(lifecycleConfirmLabel('connection')).toBe('Disconnect connection')
   })
 
   it('returns per-kind success toasts and failure triplets', () => {
