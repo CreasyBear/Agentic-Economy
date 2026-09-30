@@ -6,6 +6,7 @@ const serverMocks = vi.hoisted(() => ({
   callSourceQuery: vi.fn(),
   callSourceMutation: vi.fn(),
   createConvexServerFunctionAssertion: vi.fn(),
+  requireStrictClerkConsequenceProof: vi.fn(),
   sourceQuery: vi.fn((name: string) => ({ name })),
   sourceMutation: vi.fn((name: string) => ({ name })),
 }))
@@ -27,6 +28,9 @@ vi.mock('@/lib/server/convex-source', () => ({
   createConvexServerFunctionAssertion: serverMocks.createConvexServerFunctionAssertion,
   sourceQuery: serverMocks.sourceQuery,
   sourceMutation: serverMocks.sourceMutation,
+}))
+vi.mock('@/lib/server/clerk-consequence-proof', () => ({
+  requireStrictClerkConsequenceProof: serverMocks.requireStrictClerkConsequenceProof,
 }))
 
 import {
@@ -52,6 +56,7 @@ const clerkApi = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://clerk.example.test/')
+  serverMocks.requireStrictClerkConsequenceProof.mockResolvedValue({ reverificationId: 'fresh', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0 })
   serverMocks.auth.mockResolvedValue({ isAuthenticated: true, userId: 'user_123' })
   serverMocks.clerkClient.mockReturnValue({ apiKeys: clerkApi })
   clerkApi.list.mockResolvedValue({ data: [] })
@@ -120,6 +125,7 @@ describe('owner agent-access issuance policy', () => {
         idempotencyKey: 'server-12345678',
       },
     })).resolves.toMatchObject({ kind: 'created', keyId: 'key_server' })
+    expect(serverMocks.requireStrictClerkConsequenceProof).toHaveBeenCalledExactlyOnceWith('server-12345678')
 
     expect(serverMocks.callSourceQuery).toHaveBeenCalledWith(
       { name: 'agentAccessPolicy:listOwnerGrantReadbacks' },
@@ -140,6 +146,18 @@ describe('owner agent-access issuance policy', () => {
     expect(serverMocks.callSourceMutation.mock.calls[0]?.[1]).not.toHaveProperty('ownerId')
   })
 
+  it('requires fresh Clerk proof before creating a key and propagates the challenge', async () => {
+    const challenge = new Error('reverification_required')
+    serverMocks.requireStrictClerkConsequenceProof.mockRejectedValue(challenge)
+
+    await expect(issueAgentAccessKeyServer({
+      data: { name: 'Server assistant', idempotencyKey: 'proof-12345678' },
+    })).rejects.toBe(challenge)
+
+    expect(serverMocks.requireStrictClerkConsequenceProof).toHaveBeenCalledExactlyOnceWith('proof-12345678')
+    expect(clerkApi.create).not.toHaveBeenCalled()
+    expect(serverMocks.callSourceMutation).not.toHaveBeenCalled()
+  })
   it('creates no Clerk key when canonical account authority is unavailable', async () => {
     serverMocks.callSourceQuery.mockRejectedValue(new Error('canonical_authority_unavailable'))
 
