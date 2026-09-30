@@ -170,6 +170,10 @@ const requiredIndexes = {
     'by_principalRef_and_issueIdempotencyRef',
     'by_predecessorCredentialRef',
   ],
+  notificationDeliveries: [
+    'by_state_and_nextAttemptAt',
+    'by_recipient_account_event_source',
+  ],
   consequenceProofUses: ['by_reverificationId'],
   authorityDelegationGrants: [
     'by_grantRef',

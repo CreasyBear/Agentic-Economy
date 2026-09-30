@@ -1,11 +1,14 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
-import {
-  describe,
-  expect,
-  it,
-} from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
+import type { MutationCtx, QueryCtx } from '../../../convex/_generated/server'
+import {
+  claimDueNotificationDeliveriesHandler,
+  finishNotificationDeliveryHandler,
+  readNotificationContextHandler,
+} from '../../../convex/lib/principalAccount/notifications/delivery'
+import { enqueueAgentApprovalRequestedHandler } from '../../../convex/lib/principalAccount/notifications/enqueue'
+
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
@@ -18,6 +21,72 @@ import {
   INTERACTIVE_TOKEN_IDENTIFIER as TOKEN_IDENTIFIER,
   seedInteractiveAuthority as seedAuthority,
 } from '../../helpers/interactive-authority-seed'
+const clerkMocks = vi.hoisted(() => ({
+  getUser: vi.fn(async () => ({
+    primaryEmailAddress: {
+      emailAddress: 'owner@example.test',
+      verification: { status: 'verified' },
+    },
+  })),
+}))
+
+vi.mock('@clerk/backend', () => ({
+  createClerkClient: () => ({ users: { getUser: clerkMocks.getUser } }),
+}))
+
+
+async function insertPendingApprovalCall(
+  backend: InteractiveAuthorityBackend,
+  callRef: string,
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('capabilityCalls', {
+      callRef,
+      principalId: PRINCIPAL_REF,
+      ownerId: ACCOUNT_REF,
+      credentialId: 'credential:approval-email-test',
+      applicationRef: 'application:approval-email-test',
+      toolRef: 'operation:v1:approval-email-tool-title',
+      idempotencyKey: `approval-email:${callRef}`,
+      environment: 'production',
+      grantRef: 'grant:approval-email-test',
+      grantGeneration: 1,
+      policyDigest: 'sha256:policy',
+      grantExpiresAt: 100_000,
+      inputDigest: 'sha256:input',
+      requestDigest: 'sha256:request',
+      state: 'pending',
+      result: {
+        kind: 'needs_authority',
+        callRef,
+        toolRef: 'operation:v1:approval-email-tool-title',
+        authorityRequest: {
+          kind: 'approval_required',
+          toolRef: 'operation:v1:approval-email-tool-title',
+          consequence: 'external_effect',
+          retryClass: 'reconcile_before_retry',
+          dataFields: [],
+        },
+      },
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+}
+
+async function enqueueApprovalNotice(
+  backend: InteractiveAuthorityBackend,
+  callRef: string,
+): Promise<{ kind: 'enqueued' | 'exists' | 'skipped' }> {
+  return await backend.run((ctx) => enqueueAgentApprovalRequestedHandler(
+    ctx as unknown as MutationCtx,
+    { callRef },
+  ))
+}
+
+async function listDeliveryRows(backend: InteractiveAuthorityBackend) {
+  return await backend.run((ctx) => ctx.db.query('notificationDeliveries').collect())
+}
 
 const ACCOUNT_B = `acc_${'b'.repeat(32)}`
 const OWNERSHIP_B = `own_${'b'.repeat(32)}`
@@ -31,6 +100,7 @@ type PreferencesView = Readonly<{
   callFailureSpike: boolean
   invoiceReady: boolean
   teamMembershipChanged: boolean
+  agentApprovalRequested: boolean
   revision: number
   updatedAt: number | null
   isVirtualDefault: boolean
@@ -48,6 +118,7 @@ type UpdatePreferencesInput = Readonly<{
   callFailureSpike?: boolean
   invoiceReady?: boolean
   teamMembershipChanged?: boolean
+  agentApprovalRequested?: boolean
   expectedRevision: number
   correlationRef: string
   idempotencyRef: string
@@ -63,6 +134,7 @@ type PreferenceRow = Readonly<{
   callFailureSpike: boolean
   invoiceReady: boolean
   teamMembershipChanged: boolean
+  agentApprovalRequested?: boolean
   revision: number
   idempotencyRef?: string
 }>
@@ -78,9 +150,13 @@ const updatePreferencesRef = makeFunctionReference<
   UpdatePreferencesInput,
   PreferenceUpdateReceipt
 >('notifications:updatePreferences')
+const deliverOwnerNotificationsRef = makeFunctionReference<
+  'action',
+  Record<string, never>,
+  null
+>('notificationDelivery:deliverDueOwnerNotifications')
 
 
-const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 const VIRTUAL_DEFAULTS: Omit<PreferencesView, 'accountRef' | 'principalRef'> = {
   lowCreditBalance: true,
@@ -89,6 +165,7 @@ const VIRTUAL_DEFAULTS: Omit<PreferencesView, 'accountRef' | 'principalRef'> = {
   callFailureSpike: true,
   invoiceReady: true,
   teamMembershipChanged: true,
+  agentApprovalRequested: true,
   revision: 0,
   updatedAt: null,
   isVirtualDefault: true,
@@ -149,7 +226,7 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
       initialOwnershipRef: OWNERSHIP_B,
       currentOwnershipRef: OWNERSHIP_B,
       revision: 1,
-      createdAt: NOW,
+      createdAt: 0,
       updatedAt: NOW,
       lastAction: {
         actorPrincipalRef: PRINCIPAL_REF,
@@ -173,28 +250,9 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
         idempotencyRef: `ownership:${OWNERSHIP_B}`,
       },
     })
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef: ACCOUNT_REF,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: `session:${ACCOUNT_REF}`,
-    })
+
   })
 }
-
-async function setActiveWorkspace(
-  backend: InteractiveAuthorityBackend,
-  accountRef: string,
-  presentedIdentity: UserIdentity = identity(),
-): Promise<void> {
-  const session = backend.withIdentity(presentedIdentity)
-  await session.mutation(setActiveWorkspaceRef, {
-    accountRef,
-    correlationRef: correlationRef(`workspace:${accountRef}`),
-  })
-}
-
 function updatePayload(
   overrides: Partial<UpdatePreferencesInput> = {},
 ): UpdatePreferencesInput {
@@ -260,20 +318,51 @@ describe('notification preferences', () => {
     expect(await listPreferenceRows(backend)).toHaveLength(1)
   })
 
-  it('N5: replaying identical update payload is idempotent', async () => {
+  it('N5: replaying identical approval-request updates is idempotent', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     const payload = updatePayload({
-      lowCreditBalance: false,
+      agentApprovalRequested: false,
       correlationRef: correlationRef('n5'),
       idempotencyRef: idempotencyRef('n5'),
     })
 
-    await updatePreferences(backend, payload)
+    const updated = await updatePreferences(backend, payload)
     const replay = await updatePreferences(backend, payload)
 
+    expect(updated).toEqual({ kind: 'updated', revision: 1 })
     expect(replay).toEqual({ kind: 'replayed', revision: 1 })
+    await expect(readPreferences(backend)).resolves.toMatchObject({
+      agentApprovalRequested: false,
+      revision: 1,
+    })
     expect(await listPreferenceRows(backend)).toHaveLength(1)
+  })
+  it('N17: legacy preference rows default approval email on and replay that default', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const payload = updatePayload({
+      agentApprovalRequested: true,
+      correlationRef: correlationRef('n17'),
+      idempotencyRef: idempotencyRef('n17'),
+    })
+    await updatePreferences(backend, payload)
+
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('userNotificationPreferences').first()
+      if (row !== null) {
+        await ctx.db.patch(row._id, { agentApprovalRequested: undefined })
+      }
+    })
+
+    await expect(readPreferences(backend)).resolves.toMatchObject({
+      agentApprovalRequested: true,
+      revision: 1,
+    })
+    await expect(updatePreferences(backend, payload)).resolves.toEqual({
+      kind: 'replayed',
+      revision: 1,
+    })
   })
 
   it('N6: stale expectedRevision refuses preference_revision_conflict', async () => {
@@ -397,24 +486,26 @@ describe('notification preferences', () => {
     )
   })
 
-  it('N15: preferences on account A do not alter account B virtual defaults', async () => {
+  it('N15: preferences use the oldest self-created account under deterministic resolution', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedSecondOwnedAccount(backend)
 
     await updatePreferences(backend, updatePayload({
       lowCreditBalance: false,
-      correlationRef: correlationRef('n15-a'),
-      idempotencyRef: idempotencyRef('n15-a'),
+      correlationRef: correlationRef('n15-b'),
+      idempotencyRef: idempotencyRef('n15-b'),
     }))
 
-    await setActiveWorkspace(backend, ACCOUNT_B)
-
-    await expect(readPreferences(backend)).resolves.toEqual({
-      ...VIRTUAL_DEFAULTS,
+    await expect(readPreferences(backend)).resolves.toMatchObject({
       accountRef: ACCOUNT_B,
       principalRef: PRINCIPAL_REF,
+      lowCreditBalance: false,
+      isVirtualDefault: false,
     })
+    await expect(listPreferenceRows(backend)).resolves.toMatchObject([
+      { accountRef: ACCOUNT_B, lowCreditBalance: false },
+    ])
   })
 
   it('N16: readPreferences after update does not insert extra preference rows', async () => {
@@ -434,4 +525,240 @@ describe('notification preferences', () => {
     expect(await listPreferenceRows(backend)).toHaveLength(1)
   })
 
+})
+
+describe('approval notification deliveries', () => {
+  it('enqueues a pending approval once for its current owner', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const callRef = 'operation-invocation:v1:notification-idempotency'
+    await insertPendingApprovalCall(backend, callRef)
+
+    await expect(enqueueApprovalNotice(backend, callRef)).resolves.toEqual({ kind: 'enqueued' })
+    await expect(enqueueApprovalNotice(backend, callRef)).resolves.toEqual({ kind: 'exists' })
+    await expect(listDeliveryRows(backend)).resolves.toMatchObject([{
+      recipientPrincipalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF,
+      eventKind: 'agent_approval_requested',
+      sourceEventRef: callRef,
+      state: 'pending',
+      attemptCount: 0,
+    }])
+  })
+
+  it('skips enqueue when the owner has opted out', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await updatePreferences(backend, updatePayload({
+      agentApprovalRequested: false,
+      correlationRef: correlationRef('approval-email-off'),
+      idempotencyRef: idempotencyRef('approval-email-off'),
+    }))
+    const callRef = 'operation-invocation:v1:notification-opt-out'
+    await insertPendingApprovalCall(backend, callRef)
+
+    await expect(enqueueApprovalNotice(backend, callRef)).resolves.toEqual({ kind: 'skipped' })
+    await expect(listDeliveryRows(backend)).resolves.toHaveLength(0)
+  })
+
+  it('leases claimed rows so a second worker waits until the lease expires', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-09-30T12:00:00.000Z'))
+      const backend = createBackend()
+      await seedAuthority(backend)
+      const callRef = 'operation-invocation:v1:notification-lease'
+      await insertPendingApprovalCall(backend, callRef)
+      await enqueueApprovalNotice(backend, callRef)
+
+      const firstClaim = await backend.run((ctx) => claimDueNotificationDeliveriesHandler(
+        ctx as unknown as MutationCtx,
+        { limit: 20 },
+      ))
+      expect(firstClaim).toMatchObject([{ deliveryRef: expect.any(String), attemptCount: 1 }])
+      await expect(backend.run((ctx) => claimDueNotificationDeliveriesHandler(
+        ctx as unknown as MutationCtx,
+        { limit: 20 },
+      ))).resolves.toEqual([])
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      await expect(backend.run((ctx) => claimDueNotificationDeliveriesHandler(
+        ctx as unknown as MutationCtx,
+        { limit: 20 },
+      ))).resolves.toMatchObject([{ attemptCount: 2 }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('applies sent, retry, failed and suppressed finish transitions', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const callRefs = [
+      'operation-invocation:v1:notification-sent',
+      'operation-invocation:v1:notification-retry',
+      'operation-invocation:v1:notification-failed',
+      'operation-invocation:v1:notification-suppressed',
+    ]
+    for (const callRef of callRefs) {
+      await insertPendingApprovalCall(backend, callRef)
+      await enqueueApprovalNotice(backend, callRef)
+    }
+    const rows = await listDeliveryRows(backend)
+    const sent = rows.find((row) => row.sourceEventRef === callRefs[0])
+    const retry = rows.find((row) => row.sourceEventRef === callRefs[1])
+    const failed = rows.find((row) => row.sourceEventRef === callRefs[2])
+    const suppressed = rows.find((row) => row.sourceEventRef === callRefs[3])
+    if (sent === undefined || retry === undefined || failed === undefined || suppressed === undefined) {
+      throw new Error('notification_delivery_fixture_missing')
+    }
+    await backend.run(async (ctx) => {
+      await finishNotificationDeliveryHandler(ctx as unknown as MutationCtx, {
+        deliveryId: sent._id,
+        outcome: 'sent',
+        vendorMessageId: 'resend-message-123',
+      })
+      await finishNotificationDeliveryHandler(ctx as unknown as MutationCtx, {
+        deliveryId: retry._id,
+        outcome: 'retry',
+        code: 'network_error',
+        nextAttemptAt: Date.now() + 60_000,
+      })
+      await finishNotificationDeliveryHandler(ctx as unknown as MutationCtx, {
+        deliveryId: failed._id,
+        outcome: 'failed',
+        code: 'no_verified_email',
+      })
+      await finishNotificationDeliveryHandler(ctx as unknown as MutationCtx, {
+        deliveryId: suppressed._id,
+        outcome: 'suppressed',
+        code: 'no_clerk_identity',
+      })
+    })
+    await expect(listDeliveryRows(backend)).resolves.toMatchObject([
+      { sourceEventRef: callRefs[0], state: 'sent', vendorMessageId: 'resend-message-123' },
+      { sourceEventRef: callRefs[1], state: 'pending', lastFailureCode: 'network_error' },
+      { sourceEventRef: callRefs[2], state: 'failed', lastFailureCode: 'no_verified_email' },
+      { sourceEventRef: callRefs[3], state: 'suppressed', suppressCode: 'no_clerk_identity' },
+    ])
+  })
+
+  it('resolves approval email copy without including a Tool title or Call data', async () => {
+    const previousSiteUrl = process.env.AE_SITE_URL
+    process.env.AE_SITE_URL = 'https://aecon.example.test/'
+    try {
+      const backend = createBackend()
+      await seedAuthority(backend)
+      const callRef = 'operation-invocation:v1:notification-context'
+      await insertPendingApprovalCall(backend, callRef)
+      await enqueueApprovalNotice(backend, callRef)
+      const [delivery] = await listDeliveryRows(backend)
+      if (delivery === undefined) throw new Error('notification_delivery_fixture_missing')
+      const context = await backend.run((ctx) => readNotificationContextHandler(
+        ctx as unknown as QueryCtx,
+        { deliveryId: delivery._id },
+      ))
+
+      if (context.kind !== 'ready') throw new Error(`notification_context_not_ready:${context.code}`)
+      expect(context).toMatchObject({
+        clerkUserId: 'user_sam',
+        subject: 'Sam canonical principal needs your approval',
+      })
+      expect(context.text).toContain('https://aecon.example.test/agent-access')
+      expect(context.text).not.toContain('approval-email-tool-title')
+      expect(context.text).not.toContain('grant:approval-email-test')
+      expect(context.text).not.toContain('sha256:input')
+    } finally {
+      if (previousSiteUrl === undefined) delete process.env.AE_SITE_URL
+      else process.env.AE_SITE_URL = previousSiteUrl
+    }
+  })
+  it('does not claim deliveries when sender credentials are absent', async () => {
+    const previous = {
+      resend: process.env.RESEND_API_KEY,
+      fromEmail: process.env.NOTIFICATION_FROM_EMAIL,
+      clerkSecret: process.env.CLERK_SECRET_KEY,
+    }
+    delete process.env.RESEND_API_KEY
+    delete process.env.NOTIFICATION_FROM_EMAIL
+    delete process.env.CLERK_SECRET_KEY
+    const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const backend = createBackend()
+      await seedAuthority(backend)
+      const callRef = 'operation-invocation:v1:notification-no-credentials'
+      await insertPendingApprovalCall(backend, callRef)
+      await enqueueApprovalNotice(backend, callRef)
+
+      await expect(backend.action(deliverOwnerNotificationsRef, {})).resolves.toBeNull()
+      await expect(listDeliveryRows(backend)).resolves.toMatchObject([{ state: 'pending', attemptCount: 0 }])
+      expect(report).toHaveBeenCalledOnce()
+    } finally {
+      if (previous.resend === undefined) delete process.env.RESEND_API_KEY
+      else process.env.RESEND_API_KEY = previous.resend
+      if (previous.fromEmail === undefined) delete process.env.NOTIFICATION_FROM_EMAIL
+      else process.env.NOTIFICATION_FROM_EMAIL = previous.fromEmail
+      if (previous.clerkSecret === undefined) delete process.env.CLERK_SECRET_KEY
+      else process.env.CLERK_SECRET_KEY = previous.clerkSecret
+      report.mockRestore()
+    }
+  })
+  it('sends a verified approval email through Resend with the stable delivery key', async () => {
+    const previous = {
+      resend: process.env.RESEND_API_KEY,
+      fromEmail: process.env.NOTIFICATION_FROM_EMAIL,
+      clerkSecret: process.env.CLERK_SECRET_KEY,
+      siteUrl: process.env.AE_SITE_URL,
+    }
+    process.env.RESEND_API_KEY = 'resend-secret-test'
+    process.env.NOTIFICATION_FROM_EMAIL = 'no-reply@example.test'
+    process.env.CLERK_SECRET_KEY = 'clerk-secret-test'
+    process.env.AE_SITE_URL = 'https://aecon.example.test'
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+    try {
+      const backend = createBackend()
+      await seedAuthority(backend)
+      const callRef = 'operation-invocation:v1:notification-send'
+      await insertPendingApprovalCall(backend, callRef)
+      await enqueueApprovalNotice(backend, callRef)
+      const [delivery] = await listDeliveryRows(backend)
+      if (delivery === undefined) throw new Error('notification_delivery_fixture_missing')
+
+      await expect(backend.action(deliverOwnerNotificationsRef, {})).resolves.toBeNull()
+      expect(clerkMocks.getUser).toHaveBeenCalledWith('user_sam')
+      expect(sendEmail).toHaveBeenCalledOnce()
+      const [url, request] = sendEmail.mock.calls[0] ?? []
+      if (url === undefined || request === undefined || typeof request.body !== 'string') {
+        throw new Error('resend_request_fixture_missing')
+      }
+      expect(url).toBe('https://api.resend.com/emails')
+      expect(request.headers).toMatchObject({
+        Authorization: 'Bearer resend-secret-test',
+        'Idempotency-Key': delivery.deliveryRef,
+        'User-Agent': 'aecon-notifications/1',
+      })
+      const payload = JSON.parse(request.body) as { to: string[]; subject: string; text: string }
+      expect(payload).toMatchObject({
+        from: 'no-reply@example.test',
+        to: ['owner@example.test'],
+        subject: 'Sam canonical principal needs your approval',
+        text: expect.stringContaining('/agent-access'),
+      })
+      expect(JSON.stringify(payload)).not.toContain('approval-email-tool-title')
+      expect(JSON.stringify(payload)).not.toContain('grant:approval-email-test')
+      await expect(listDeliveryRows(backend)).resolves.toMatchObject([{ state: 'sent', attemptCount: 1 }])
+    } finally {
+      if (previous.resend === undefined) delete process.env.RESEND_API_KEY
+      else process.env.RESEND_API_KEY = previous.resend
+      if (previous.fromEmail === undefined) delete process.env.NOTIFICATION_FROM_EMAIL
+      else process.env.NOTIFICATION_FROM_EMAIL = previous.fromEmail
+      if (previous.clerkSecret === undefined) delete process.env.CLERK_SECRET_KEY
+      else process.env.CLERK_SECRET_KEY = previous.clerkSecret
+      if (previous.siteUrl === undefined) delete process.env.AE_SITE_URL
+      else process.env.AE_SITE_URL = previous.siteUrl
+      vi.unstubAllGlobals()
+      clerkMocks.getUser.mockClear()
+    }
+  })
 })

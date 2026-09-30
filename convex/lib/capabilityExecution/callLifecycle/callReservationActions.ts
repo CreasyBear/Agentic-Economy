@@ -342,6 +342,13 @@ export async function callHandler(
     reservationWasReplayed,
     reservationCleanup,
   })
+  if (projectedResult.kind === 'needs_authority' && reservedCallRef !== undefined) {
+    try {
+      await ctx.runMutation(internal.notifications.enqueueAgentApprovalRequested, { callRef: reservedCallRef })
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'enqueueAgentApprovalRequested', reason: 'source_unavailable' })
+    }
+  }
   return structuredClone(projectedResult)
 }
 
