@@ -16,6 +16,22 @@ aecon is a routing service for paid agent Tools, on the OpenRouter pattern. User
 
 The code path is identical in both phases. Only the source of the float differs, so alpha genuinely validates beta.
 
+## Pricing and operations (decided: operate like OpenRouter)
+- **Tool prices pass through at the seller's list price**, converted from USDC to AUD at the reference rate and rounded up to the cent. No per-Call markup (`buyerPricingMarginBps = 0`, already the default in `commercial-policy.ts:139`).
+- **Top-up fee: 5.5%, matching OpenRouter's standard rate** ([pricing](https://openrouter.ai/pricing)). It covers card fees, FX drift and margin.
+  - Code: `fundingServiceFeeBps` is a commercial-policy control, today 500 (`commercial-policy.ts:138`). Set it to 550 through the admin commercial-policy proposal.
+  - A business rate like OpenRouter's 8% can come later with invoiced billing.
+- **GST** for Australian customers applies to the whole top-up (principal + fee), at top-up, as built. The accountant confirms before beta.
+- **Chat is the acquisition channel and the showcase.** It is also a potential new service line and the sticky surface: saved jobs, history, recurring answers. Its model cost is treated as acquisition cost for now; revisit pricing once usage data exists.
+- **Agents and developers** (API/MCP/CLI search → describe → call) are the volume line. They cost aecon little in model tokens.
+- **"Report this answer" is on.** A clear failure on a paid Call can be reported, and the Call's credits come back.
+  - Limited per user per day (suggested 3; admin-configurable).
+  - Each report penalises the seller's ranking and is recorded as delivery evidence.
+  - This is the consumer-law remedy, turned into a trust feature.
+- **Beta geography:** Australian consumers plus Australian businesses. No overseas consumer sales, so no EU or UK VAT registration yet.
+- **No category filters at launch.** Unlawful content is still removed on complaint, through the takedown and delisting process.
+- **Evolution:** principal over the open directory now. Later, a marketplace lane for sellers who sign with aecon (seller of record, payouts). aecon's own services stay on the principal lane.
+
 ## Credit terms (OpenRouter-style, adapted for Australia)
 - **Name:** "credits". The balance shows purchased and promotional credits separately. Promotional credits are drawn first.
 - **Promotional credits:** no cash value, non-transferable, non-refundable, with an expiry date stated when granted. Precedent: OpenRouter and Anthropic promo terms ([OpenRouter terms §4-5](https://openrouter.ai/terms), [Anthropic credit terms](https://www.anthropic.com/legal/credit-terms)).
@@ -73,3 +89,6 @@ The code path is identical in both phases. Only the source of the float differs,
 | 7 | Depeg circuit breaker | Beta |
 | 8 | Stripe Checkout funding of own-ledger credits with Radar; refund of unused purchased credit on closure | Beta (after Stripe approval) |
 | 9 | Credits terms page and trust centre | Before alpha invites |
+| 10 | Set `fundingServiceFeeBps` to 550 through the commercial-policy proposal | Before beta |
+| 11 | "Report this answer": refund the Call's credits, with a daily limit per user, a seller ranking penalty and a delivery-evidence record | Alpha |
+| 12 | Beta signup limited to Australian customers (country at signup, billing country on Stripe Checkout) | Beta |

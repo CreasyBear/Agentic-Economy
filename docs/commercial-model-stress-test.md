@@ -46,8 +46,10 @@ Companion to `docs/operating-model.md`. The model under test: **aecon acquires t
 2. **Later:** a second, marketplace lane for sellers who sign with aecon: seller of record, payouts, their own support. This mirrors AWS's reseller and marketplace split. Only when there are real partner sellers.
 3. **aecon's own services** sit on the principal lane.
 
-## Decisions for Joel
-1. Top-up fee % (OpenRouter: 5.5%). It must cover the AU card fee plus FX drift plus margin.
-2. "Report this answer" refunds of credits for clear failures: yes, and how many per user per day?
-3. Beta geography: Australian consumers plus business buyers everywhere, or worldwide consumers with VAT registrations.
-4. Production category filters: which categories are off at launch (suggested: adult, gambling, financial advice, medical diagnosis).
+## Decisions (Joel, 30 September 2026)
+1. The top-up fee matches OpenRouter: 5.5%. Tool prices pass through at list price.
+2. "Report this answer" refunds are on, with a daily limit per user.
+3. Beta: Australian consumers plus Australian businesses.
+4. Category filters: none at launch; unlawful content is removed on complaint.
+5. Chat is acquisition and showcase, and a potential sticky service line.
+6. Evolution as described in section 5.
