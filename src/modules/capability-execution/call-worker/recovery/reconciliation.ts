@@ -194,34 +194,38 @@ async function projectAcceptedReconciliation(
   receipt: CallReceipt | undefined,
 ): Promise<RecoveryResult> {
   const attempt = work.x402Attempt
-  // A reconciled payment can finish delivery only from the response already
-  // journalled for this attempt, validated against the admitted Tool contract.
-  // Never request the Provider again or infer delivery from the transfer alone.
+  // Settlement with a retained 2xx closes the financial outcome. Usable delivery
+  // still requires the original journalled output to satisfy the Tool contract.
   if (resolution === 'released' && receipt?.state === 'settled'
     && work.operation.identity.adapterId === 'x402-fetch:v2'
-    && attempt?.quarantinedOutputJson !== undefined
-    && attempt.quarantinedResponseDigest !== undefined) {
+    && attempt?.responseStatus !== undefined && Number.isInteger(attempt.responseStatus)
+    && attempt.responseStatus >= 200 && attempt.responseStatus < 300) {
     const output = parseContractOutput({
       transport: 'x402', disposition: 'succeeded', releaseStarted: true,
       requestDigest: attempt.transportRequestDigest ?? '',
-      outputJson: attempt.quarantinedOutputJson,
-      responseDigest: attempt.quarantinedResponseDigest,
+      ...(attempt.quarantinedOutputJson === undefined ? {} : { outputJson: attempt.quarantinedOutputJson }),
+      ...(attempt.quarantinedResponseDigest === undefined ? {} : { responseDigest: attempt.quarantinedResponseDigest }),
     }, work.descriptor)
-    if (output.valid) {
-      const result = {
+    const evidenceHash = attempt.quarantinedResponseDigest ?? attempt.transportObservationDigest
+    if (evidenceHash !== undefined) {
+      const result = output.valid ? {
         kind: 'completed' as const, callRef: work.recovered.callRef,
         toolRef: work.recovered.toolRef, output: output.output,
-        evidenceHash: attempt.quarantinedResponseDigest, receipt,
+        evidenceHash, receipt,
+      } : {
+        kind: 'refused' as const, toolRef: work.recovered.toolRef,
+        code: 'provider_output_invalid', retryable: false,
+        receipt: { ...receipt, evidenceHash, lossState: 'provider_output_invalid' as const },
       }
       await projectRecoveryOuter(ctx, work.recovered, {
-        kind: 'found', callRef: result.callRef, toolRef: result.toolRef,
+        kind: 'found', callRef: work.recovered.callRef, toolRef: result.toolRef,
         version: work.recovered.updatedAt, state: 'terminal', result, receipt,
         attemptRef: attempt.attemptRef,
-      }, 'completed')
+      }, output.valid ? 'completed' : 'refused')
       const persisted = await ctx.runQuery(internal.capabilityCalls.readRecovery, {
-        callRef: result.callRef, principalId: work.recovered.principalId,
+        callRef: work.recovered.callRef, principalId: work.recovered.principalId,
       })
-      return persisted === null ? recoveryNotFound(result.callRef) : projectPersistedRecovery(persisted)
+      return persisted === null ? recoveryNotFound(work.recovered.callRef) : projectPersistedRecovery(persisted)
     }
   }
   if (resolution === 'released' || status.control !== 'retryable') {

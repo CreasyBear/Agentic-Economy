@@ -133,7 +133,7 @@ export async function runCommittedManagedX402Transport(
 ): Promise<RouteTransportObservation> {
   const observation = await invokePreparedRouteTransport(input.prepared, input.runtime)
   const recordedAt = new Date().toISOString()
-  // Delivery and payment consequences use the declared contract; semantic suspicion is advisory.
+  // Delivery validation cannot decide the financial consequence of a paid HTTP response.
   const output = parseContractOutput(observation, input.descriptor)
   const reservation = await ctx.runQuery(internal.moneyManagedCallLifecycle.readReservation, {
     callRef: input.dispatch.callRef,
@@ -196,12 +196,18 @@ export async function runCommittedManagedX402Transport(
   }
 
   if (recorded.settlementStatus === 'settled' && recorded.settlementRef !== undefined) {
-    if (!output.valid || observation.disposition !== 'succeeded') {
-      // Provider settlement is not successful delivery. Keep buyer AUD reserved
-      // until the evidence-bound remedy releases it and accounts for the Provider.
+    const status = observation.responseStatus
+    if (status === undefined || !Number.isInteger(status) || status < 200 || status > 599) {
       await retainManagedCallUnknown(ctx, input, observation)
       await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
-      await ctx.runAction(internal.moneyManagedCallRemedyActions.resolveInvalidResult, {
+      return observation
+    }
+    if (status >= 300) {
+      // Restore buyer AUD through the exact paid-error remedy, retaining the
+      // Provider expense. No ordinary release can reverse that paid obligation.
+      await retainManagedCallUnknown(ctx, input, observation)
+      await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
+      await ctx.runAction(internal.moneyManagedCallRemedyActions.resolveHttpError, {
         callRef: input.dispatch.callRef, transactionHash: recorded.settlementRef,
       })
       return observation
@@ -327,17 +333,19 @@ async function projectManagedCall(
       : financialState === 'released'
         ? 'released'
         : 'unknown',
-    lossState: financialState === 'settled' ? 'none' : financialState === 'released' ? 'none' : 'unknown',
+    lossState: financialState === 'settled' ? output.valid ? 'none' : 'provider_output_invalid'
+      : financialState === 'released' ? 'none' : 'unknown',
   })
   if (receipt === undefined || receipt.commercialModel !== 'account_aud') throw new Error('managed_call_receipt_invalid')
 
-  if (financialState === 'settled' && output.valid && observation.disposition === 'succeeded') {
-    const usage: CallUsageSummary = {
+  const usage: CallUsageSummary | undefined = financialState === 'settled'
+    ? {
       usageRef: `operation-usage:${input.dispatch.callRef}:${input.durableAttemptRef}`,
       observedAt: Date.parse(recordedAt), chargeState: 'paid',
       amount: receipt.buyerCharge, priceDigest: receipt.priceDigest,
       ...(receipt.transactionRef === undefined ? {} : { transactionRef: receipt.transactionRef }),
-    }
+    } : undefined
+  if (usage !== undefined && output.valid && observation.disposition === 'succeeded') {
     await finalizeCallDispatch(ctx, input.dispatch, snapshot,
       canonicalTerminalOutcome(observation, recordedAt, true, 'released'), {
         state: 'completed',
@@ -403,6 +411,7 @@ async function projectManagedCall(
         receipt,
       },
       evidenceHash,
+      ...(usage === undefined ? {} : { usage }),
       attemptRef: input.durableAttemptRef,
       dispatchState: 'failed',
     }, recordedAt)

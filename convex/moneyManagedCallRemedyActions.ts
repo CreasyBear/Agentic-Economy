@@ -28,19 +28,19 @@ export const resolveLostResult = internalAction({
   handler: async (ctx, args) => await resolvePaidResultFailure(ctx, args),
 })
 
-/** Forward remedy for a verified-paid response that fails the original Tool contract. */
-export const resolveInvalidResult = internalAction({
+/** Restore the buyer after a verified-paid upstream HTTP error. */
+export const resolveHttpError = internalAction({
   args: { callRef: v.string(), transactionHash: v.string() },
   returns: resolvePaidResultFailureResult,
-  handler: async (ctx, args) => await resolvePaidResultFailure(ctx, args, 'invalid_output'),
+  handler: async (ctx, args) => await resolvePaidResultFailure(ctx, args, 'http_error'),
 })
 
 async function resolvePaidResultFailure(ctx: ActionCtx, args: { callRef: string; transactionHash: string },
-  failureKind?: 'invalid_output'): Promise<{ kind: 'completed' } | { kind: 'refused'; code: string }> {
+  failureKind?: 'http_error'): Promise<{ kind: 'completed' } | { kind: 'refused'; code: string }> {
     const transactionHash = args.transactionHash.toLowerCase()
     const call = await ctx.runQuery(internal.capabilityCalls.readOwnerRecovery, { callRef: args.callRef })
     if (call?.result?.kind === 'refused'
-      && call.result.code === (failureKind === 'invalid_output' ? 'provider_output_invalid' : 'result_invalid')
+      && (failureKind === 'http_error' ? call.result.code === 'provider_refused' && call.result.receipt?.lossState === 'provider_http_error' : call.result.code === 'result_invalid')
       && call.result.receipt?.refundState === 'released'
       && call.result.receipt.externalSettlementRef === transactionHash) return { kind: 'completed' }
     if (call?.result?.kind !== 'reconciliation_required'
@@ -54,7 +54,13 @@ async function resolvePaidResultFailure(ctx: ActionCtx, args: { callRef: string;
       || attempt.currency !== 'USDC' || attempt.exponent !== 6
       || (failureKind === undefined
         ? attempt.transportObservationDigest !== undefined || attempt.quarantinedOutputJson !== undefined
-        : attempt.quarantinedOutputJson === undefined || attempt.quarantinedResponseDigest === undefined)) {
+          || attempt.responseStatus !== undefined
+        : !Number.isSafeInteger(attempt.responseStatus) || attempt.responseStatus === undefined
+          || attempt.responseStatus < 300 || attempt.responseStatus > 599
+          || attempt.transportObservationDigest === undefined
+          || attempt.transportRequestDigest === undefined
+          || attempt.paymentObservationDigest === undefined
+          || attempt.settlementStatus === 'not_settled')) {
       return { kind: 'refused', code: 'payment_identity_unavailable' }
     }
     const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
@@ -72,19 +78,19 @@ async function resolvePaidResultFailure(ctx: ActionCtx, args: { callRef: string;
       })
     } finally { await dispatcher.close() }
     if (!verified) return { kind: 'refused', code: 'payment_not_verified' }
-    const responseDigest = attempt.quarantinedResponseDigest
-    const outputJson = attempt.quarantinedOutputJson
-    const invalidEvidence = failureKind === undefined ? {} : responseDigest !== undefined && outputJson !== undefined
-      ? { failureKind, responseDigest, outputDigest: canonicalDigest(outputJson),
-        toolSnapshotDigest: canonicalDigest(call.toolJson ?? '') }
-      : undefined
-    if (invalidEvidence === undefined) return { kind: 'refused', code: 'payment_identity_unavailable' }
+    const responseEvidence = failureKind === undefined ? {} : {
+      failureKind, responseStatus: attempt.responseStatus,
+      transportObservationDigest: attempt.transportObservationDigest,
+      transportRequestDigest: attempt.transportRequestDigest,
+      paymentObservationDigest: attempt.paymentObservationDigest,
+      ...(attempt.quarantinedResponseDigest === undefined ? {} : { responseDigest: attempt.quarantinedResponseDigest }),
+    }
     const evidenceDigest = canonicalDigest({
       kind: 'ae_paid_call_result_loss:v1', callRef: call.callRef, attemptRef, effectGeneration,
       transactionHash, network: attempt.network, asset: attempt.asset, payer: attempt.paymentPayer,
       payTo: attempt.payTo, nonce: attempt.paymentNonce, amountUnits: attempt.amountUnits,
       paymentIdentifier: attempt.paymentIdentifier, inputDigest: call.inputDigest,
-      ...invalidEvidence,
+      ...responseEvidence,
     })
     const remedyIdentity = { callRef: call.callRef, transactionHash,
       ...(failureKind === undefined ? {} : { failureKind }) }
@@ -93,12 +99,19 @@ async function resolvePaidResultFailure(ctx: ActionCtx, args: { callRef: string;
     if (claim.kind === 'completed') return { kind: 'completed' }
     if (claim.attempt.attemptRef !== attemptRef
       || claim.attempt.effectGeneration !== effectGeneration
-      || claim.attempt.paymentIdentityDigest !== attempt.paymentIdentityDigest) {
+      || claim.attempt.paymentIdentityDigest !== attempt.paymentIdentityDigest
+      || (failureKind === 'http_error' && (
+        claim.attempt.responseStatus !== attempt.responseStatus
+        || claim.attempt.transportObservationDigest !== attempt.transportObservationDigest
+        || claim.attempt.transportRequestDigest !== attempt.transportRequestDigest
+        || claim.attempt.paymentObservationDigest !== attempt.paymentObservationDigest
+        || claim.attempt.quarantinedResponseDigest !== attempt.quarantinedResponseDigest
+      ))) {
       return { kind: 'refused', code: 'payment_identity_changed' }
     }
     const material = await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: call.callRef })
     if (material.kind !== 'available' || material.booking.providerAmountUnits !== attempt.amountUnits
-      || (failureKind === 'invalid_output' && material.financialState !== 'outcome_unknown')
+      || (failureKind === 'http_error' && material.financialState !== 'outcome_unknown')
       || claim.call.result?.kind !== 'reconciliation_required'
       || claim.call.result.receipt?.commercialModel !== 'account_aud'
       || material.booking.buyerAmountUnits !== claim.call.result.receipt.totalBuyerCharge.units) {

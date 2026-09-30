@@ -104,6 +104,7 @@ export type RecordObservationArgs = {
   paymentObservationDigest: string
   settlementStatus: 'settled' | 'not_settled' | 'unknown'
   paymentResponseDigest?: string
+  responseStatus?: number
   quarantinedResponseDigest?: string
   quarantinedOutputJson?: string
   observedAt: number

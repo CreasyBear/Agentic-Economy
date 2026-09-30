@@ -17,7 +17,6 @@ import { Agent } from 'undici'
 import type { Infer } from 'convex/values'
 
 import type { ActionCtx } from '../../../../../convex/_generated/server'
-import { parseContractOutput } from '@/modules/capability-execution/call-projection/contract-output'
 import { internal } from '../../../../../convex/_generated/api'
 import { readX402EvmReceipt } from '../x402Route'
 import type { RecoveryWorkContext } from './loading'
@@ -74,8 +73,8 @@ export async function prepareX402RecoveryEvidence(
     recordX402RecoveryStage(submitted, 'submitted_evidence_invalid')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
-  if (submitted.settlementStatus === 'settled' && !retainedDeliveryIsValid(work)) {
-    recordX402RecoveryStage(submitted, 'retained_delivery_invalid')
+  if (submitted.settlementStatus === 'settled' && !retainedResponseIsChargeable(work)) {
+    recordX402RecoveryStage(submitted, 'retained_status_not_chargeable')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
   if (!await verifySettlement(work, submitted)) {
@@ -105,12 +104,9 @@ export async function prepareX402RecoveryEvidence(
   }
 }
 
-function retainedDeliveryIsValid(work: RecoveryWorkContext): boolean {
-  const attempt = work.x402Attempt
-  if (attempt?.quarantinedOutputJson === undefined || attempt.quarantinedResponseDigest === undefined) return false
-  return parseContractOutput({ transport: 'x402', disposition: 'succeeded', releaseStarted: true,
-    requestDigest: attempt.transportRequestDigest ?? '', outputJson: attempt.quarantinedOutputJson,
-    responseDigest: attempt.quarantinedResponseDigest }, work.descriptor).valid
+function retainedResponseIsChargeable(work: RecoveryWorkContext): boolean {
+  const status = work.x402Attempt?.responseStatus
+  return status !== undefined && Number.isInteger(status) && status >= 200 && status < 300
 }
 
 function validCanonicalRecoveryEvidence(work: RecoveryWorkContext, evidence: ReconciliationEvidence): boolean {
@@ -141,7 +137,7 @@ function recordX402RecoveryStage(
   stage:
     | 'payment_facts_unavailable'
     | 'submitted_evidence_invalid'
-    | 'retained_delivery_invalid'
+    | 'retained_status_not_chargeable'
     | 'settlement_verification_failed'
     | 'money_reconciliation_failed'
     | 'prepared',

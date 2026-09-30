@@ -264,23 +264,32 @@ export async function normalizeJsonResponse(
   sensitiveValues: readonly string[] = [],
 ): Promise<RouteTransportObservation> {
   const responseHeaders = toHeaderRecord(response)
+  const responseStatus = Number.isInteger(response.status) &&
+    response.status >= 100 && response.status <= 599
+    ? response.status : undefined
+  const withStatus = (observation: RouteTransportObservation): RouteTransportObservation =>
+    responseStatus === undefined ? observation : { ...observation, responseStatus }
+  if (responseStatus === undefined) {
+    await cancelResponseBody(response)
+    return unknown(transport, requestDigest, releaseStarted, 'response_status_invalid')
+  }
   if (response.status < 200 || response.status >= 300) {
     await cancelResponseBody(response)
-    return refused(
+    return withStatus(refused(
       transport,
       requestDigest,
       releaseStarted,
       `provider_http_${response.status}`,
-    )
+    ))
   }
   if (expectedStatus !== undefined && response.status !== expectedStatus) {
     await cancelResponseBody(response)
-    return unknown(
+    return withStatus(unknown(
       transport,
       requestDigest,
       releaseStarted,
       'response_status_invalid',
-    )
+    ))
   }
   if (
     expectedContentType !== undefined &&
@@ -290,29 +299,39 @@ export async function normalizeJsonResponse(
     )
   ) {
     await cancelResponseBody(response)
-    return unknown(
+    return withStatus(unknown(
       transport,
       requestDigest,
       releaseStarted,
       'response_content_type_invalid',
-    )
+    ))
   }
-  const text = await readBoundedText(response)
-  if (text === undefined)
-    return unknown(
+  let text: string | undefined
+  try {
+    text = await readBoundedText(response)
+  } catch {
+    return withStatus(unknown(
       transport,
       requestDigest,
       releaseStarted,
       'response_unreadable',
-    )
+    ))
+  }
+  if (text === undefined)
+    return withStatus(unknown(
+      transport,
+      requestDigest,
+      releaseStarted,
+      'response_unreadable',
+    ))
   const output = parseBoundedJson(text)
   if (output === undefined)
-    return unknown(
+    return withStatus(unknown(
       transport,
       requestDigest,
       releaseStarted,
       'response_json_invalid',
-    )
+    ))
   const providerReceipt = optionalHeader(
     responseHeaders,
     'provider-receipt',
@@ -324,17 +343,18 @@ export async function normalizeJsonResponse(
     containsSensitiveValue(providerReceipt, sensitiveValues) ||
     containsSensitiveValue(continuation, sensitiveValues)
   ) {
-    return unknown(
+    return withStatus(unknown(
       transport,
       requestDigest,
       releaseStarted,
       'response_output_invalid',
-    )
+    ))
   }
   const common = {
     transport,
     releaseStarted,
     requestDigest,
+    ...(responseStatus === undefined ? {} : { responseStatus }),
     responseDigest: canonicalDigest(text),
     outputJson: JSON.stringify(output),
     ...providerReceipt,

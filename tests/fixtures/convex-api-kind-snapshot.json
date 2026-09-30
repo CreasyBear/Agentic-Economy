@@ -2684,7 +2684,7 @@
   {
     "visibility": "internal",
     "module": "moneyManagedCallRemedyActions",
-    "method": "resolveInvalidResult",
+    "method": "resolveHttpError",
     "kind": "action"
   },
   {

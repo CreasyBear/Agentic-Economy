@@ -792,6 +792,7 @@ describe('JIT provider consequence boundary', () => {
       disposition: 'unknown',
       releaseStarted: true,
       requestDigest: requestDigest(active.routeInvocation),
+      ...(_label === 'raw' ? { responseStatus: 200 } : {}),
       failureCode,
     })
     expectJsonExcludesCredential(result)

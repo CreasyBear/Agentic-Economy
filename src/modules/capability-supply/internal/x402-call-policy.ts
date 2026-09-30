@@ -197,6 +197,7 @@ export function transportObservationDigest(
     settlementEvidence: observation.settlementEvidence ?? null,
     quoteDeliveryStatus: observation.quoteDeliveryStatus ?? null,
     requestDigest: observation.requestDigest,
+    responseStatus: observation.responseStatus ?? null,
     responseDigest: observation.responseDigest ?? null,
     outputDigest:
       observation.outputJson === undefined

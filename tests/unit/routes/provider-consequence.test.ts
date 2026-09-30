@@ -492,6 +492,7 @@ describe('internal provider consequence route', () => {
       'read_authorization',
       'record_signature_digest',
       'mark_possibly_submitted',
+      'checkpoint_response',
       'observe_attempt',
     ])
     expect(convexBodies.join('\n')).not.toContain(CUSTOMER_SECRET)

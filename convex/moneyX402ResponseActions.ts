@@ -8,7 +8,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { loadReadyRecoveryWork, reconcileRecovery, type RecoveryWorkContext } from '@/modules/capability-execution/call-runtime'
 import { readPublicExecutionStatus } from '@/modules/action-execution/runtime'
-import { parseContractOutput, reconciliationResult } from '@/modules/capability-execution/convex'
+import { reconciliationResult } from '@/modules/capability-execution/convex'
 import { projectRecoveryOuter } from './lib/capabilityExecution/callProjection/recovery'
 
 /** Recover the already-paid response; never call the Provider or create a payment. */
@@ -34,8 +34,9 @@ export async function recoverRetainedResponse(ctx: ActionCtx, callRef: string): 
   if (loaded.kind !== 'ready') return { kind: 'stopped' }
   const { work } = loaded
   const attempt = work.x402Attempt
-  if (attempt === null || attempt.quarantinedOutputJson === undefined
-    || attempt.quarantinedResponseDigest === undefined || attempt.reservationRef === undefined
+  if (attempt === null || attempt.responseStatus === undefined
+    || !Number.isInteger(attempt.responseStatus) || attempt.responseStatus < 200 || attempt.responseStatus > 599
+    || attempt.reservationRef === undefined
     || work.operation.binding.authority.kind !== 'provider_connection') return { kind: 'stopped' }
   const control = work.control.control.control
   if (control.state === 'leased') {
@@ -61,24 +62,22 @@ export async function recoverRetainedResponse(ctx: ActionCtx, callRef: string): 
   if (requiredAt === undefined || Date.parse(requiredAt) > Date.now()) return { kind: 'pending' }
   const evidence = await retainedResponseEvidence(ctx, work, requiredAt)
   if (evidence === undefined) return { kind: 'stopped' }
-  const delivery = parseContractOutput({ transport: 'x402', disposition: 'succeeded', releaseStarted: true,
-    requestDigest: evidence.requestDigest, outputJson: attempt.quarantinedOutputJson,
-    responseDigest: attempt.quarantinedResponseDigest }, work.descriptor)
-  if (!delivery.valid) {
-    // The remedy action verifies payment and invalid delivery independently;
-    // recording a response or a transaction locator does not authorize charging.
-    const remedy = await ctx.runAction(internal.moneyManagedCallRemedyActions.resolveInvalidResult, {
+  if (attempt.responseStatus >= 300) {
+    // The remedy verifies exact settlement and the retained HTTP error before
+    // restoring buyer credit; a transaction locator alone proves neither.
+    const remedy = await ctx.runAction(internal.moneyManagedCallRemedyActions.resolveHttpError, {
       callRef, transactionHash: evidence.transactionHash,
     })
     return { kind: remedy.kind === 'completed' ? 'completed' : 'pending' }
   }
   const result = await reconcileRecovery(ctx, { ...identity, evidence })
-  return { kind: result.kind === 'found' && result.result?.kind === 'completed' ? 'completed' : 'pending' }
+  return { kind: result.kind === 'found' && (result.result?.kind === 'completed'
+    || (result.result?.kind === 'refused' && result.result.receipt?.state === 'settled')) ? 'completed' : 'pending' }
 }
 
 async function retainedResponseEvidence(ctx: ActionCtx, work: RecoveryWorkContext, requiredAt: string) {
   const attempt = work.x402Attempt
-  if (attempt === null || attempt.quarantinedResponseDigest === undefined) return undefined
+  if (attempt === null || attempt.responseStatus === undefined) return undefined
   const txPrefix = `chain:${attempt.network}:`
   const transactionHash = attempt.evidenceRefs.find((ref: string) => ref.startsWith(txPrefix))?.slice(txPrefix.length)
   const requestDigest = attempt.transportRequestDigest
@@ -90,7 +89,8 @@ async function retainedResponseEvidence(ctx: ActionCtx, work: RecoveryWorkContex
     || work.operation.binding.authority.kind !== 'provider_connection') return undefined
   // If the worker died before final observation, bind its retained response to this exact payment.
   const transportObservationDigest = attempt.transportObservationDigest ?? canonicalDigest({
-    kind: 'retained_x402_response:v1', requestDigest, responseDigest: attempt.quarantinedResponseDigest, transactionHash,
+    kind: 'retained_x402_response:v2', requestDigest, responseStatus: attempt.responseStatus,
+    ...(attempt.quarantinedResponseDigest === undefined ? {} : { responseDigest: attempt.quarantinedResponseDigest }), transactionHash,
   })
   const paymentObservationDigest = attempt.paymentObservationDigest ?? canonicalDigest({
     kind: 'retained_x402_payment:v1', paymentIdentifier: attempt.paymentIdentifier, paymentResponseDigest, transactionHash,
@@ -102,6 +102,7 @@ async function retainedResponseEvidence(ctx: ActionCtx, work: RecoveryWorkContex
       effectGeneration: attempt.effectGeneration, paymentIdentifier: attempt.paymentIdentifier,
       toolRef: work.recovered.toolRef, inputDigest: work.recovered.inputDigest,
       transportObservationDigest, transportRequestDigest: requestDigest, paymentObservationDigest,
+      responseStatus: attempt.responseStatus,
       settlementStatus: attempt.settlementStatus ?? 'unknown', paymentResponseDigest, observedAt,
     })
   }

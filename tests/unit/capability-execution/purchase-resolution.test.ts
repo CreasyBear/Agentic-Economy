@@ -49,6 +49,16 @@ describe('buildPurchaseResolutionRecord', () => {
     expect(first.record.resolutionRef).toMatch(/^purchase-resolution:[0-9a-f]{64}$/)
   })
 
+  it('closes a paid delivery refusal without reporting successful delivery or inventing a refund', () => {
+    const paidRefusal = { ...baseInput(), callState: 'refused' as const, deliveryState: 'not_delivered' as const }
+    expect(buildPurchaseResolutionRecord(paidRefusal)).toMatchObject({ kind: 'admitted',
+      record: { terminalState: 'completed', deliveryState: 'not_delivered', paymentState: 'settled' } })
+    expect(buildPurchaseResolutionRecord({ ...paidRefusal, receiptRefundState: 'unknown' }))
+      .toEqual({ kind: 'open', reason: 'not_terminal' })
+    expect(buildPurchaseResolutionRecord({ ...paidRefusal, callState: 'reconciliation_required' }))
+      .toEqual({ kind: 'open', reason: 'not_terminal' })
+  })
+
   it('stays open when delivery or payment facts are unknown', () => {
     expect(buildPurchaseResolutionRecord({ ...baseInput(), deliveryState: 'unknown' }))
       .toEqual({ kind: 'open', reason: 'delivery_unknown' })

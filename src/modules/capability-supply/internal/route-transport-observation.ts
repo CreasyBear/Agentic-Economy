@@ -17,6 +17,7 @@ export type RouteTransportObservation = Readonly<{
   settlementEvidence?: X402SettlementEvidence
   quoteDeliveryStatus?: 'not_delivered' | 'delivered' | 'unknown'
   requestDigest: string
+  responseStatus?: number
   responseDigest?: string
   outputJson?: string
   providerReceipt?: string
@@ -121,6 +122,7 @@ export function parseRouteTransportObservationJson(
         .enum(['not_delivered', 'delivered', 'unknown'])
         .exactOptional(),
       requestDigest: bounded(200),
+      responseStatus: z.number().int().min(100).max(599).exactOptional(),
       responseDigest: bounded(MAX_RESPONSE_BYTES).exactOptional(),
       outputJson: bounded(MAX_RESPONSE_BYTES).exactOptional(),
       providerReceipt: bounded(MAX_RESPONSE_BYTES).exactOptional(),

@@ -1,15 +1,13 @@
 import { v } from 'convex/values'
-import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internalMutation } from './_generated/server'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
-import { createPublicToolRef, materializeRuntimePublishedTool, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
-import { isBoundedJsonValue } from '@/modules/capability-contract/public'
+import { createPublicToolRef, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import type { Doc } from './_generated/dataModel'
 import { capabilityCallTables } from '@/modules/capability-execution/schema'
 import { moneyTables } from '@/modules/money/schema'
 
-const identity = { callRef: v.string(), transactionHash: v.string(), failureKind: v.optional(v.literal('invalid_output')) }
+const identity = { callRef: v.string(), transactionHash: v.string(), failureKind: v.optional(v.literal('http_error')) }
 const remedyClaimResult = v.union(
   v.null(),
   v.object({ kind: v.literal('completed') }),
@@ -20,36 +18,31 @@ const remedyClaimResult = v.union(
   }),
 )
 const remedyFinishResult = v.object({ kind: v.union(v.literal('completed'), v.literal('refused')) })
-const remedyOwner = (transactionHash: string, failureKind?: 'invalid_output') =>
-  `paid-result-loss:${failureKind === 'invalid_output' ? 'invalid-output:' : ''}${transactionHash.toLowerCase()}`
+const remedyOwner = (transactionHash: string, failureKind?: 'http_error') =>
+  `paid-result-loss:${failureKind === 'http_error' ? 'http-error:' : ''}${transactionHash.toLowerCase()}`
 
 function responseEligibleForRemedy(call: Doc<'capabilityCalls'>, attempt: Doc<'moneyX402PaymentAttempts'>,
-  failureKind: 'invalid_output' | undefined): boolean {
+  failureKind: 'http_error' | undefined): boolean {
   if (failureKind === undefined) return attempt.transportObservationDigest === undefined
-    && attempt.quarantinedOutputJson === undefined
-  if (attempt.quarantinedOutputJson === undefined || attempt.quarantinedResponseDigest === undefined
-    || attempt.settlementStatus === 'not_settled' || call.toolJson === undefined) return false
-  try {
-    const tool = parsePublishedToolSnapshot(call.toolJson)
-    if (tool === undefined || createPublicToolRef({
-      operationId: tool.operationId,
-      publicationRef: tool.identity.publicationRef,
-      publicationRevision: tool.identity.publicationRevision,
-      contractRef: tool.contract.ref,
-    }) !== call.toolRef) return false
-    const descriptor = materializeRuntimePublishedTool(tool)
-    const output: unknown = JSON.parse(attempt.quarantinedOutputJson)
-    // Only a definite contract failure is remedied here; corrupt metadata is not proof of failed delivery.
-    return isBoundedJsonValue(output) && !descriptor.validateOutput(output)
-  } catch (cause) {
-    return degradeBackend(cause, false, { site: 'responseEligibleForRemedy', reason: 'invalid_response' })
-  }
+    && attempt.quarantinedOutputJson === undefined && attempt.responseStatus === undefined
+  const tool = parsePublishedToolSnapshot(call.toolJson ?? '')
+  if (tool === undefined || createPublicToolRef({ operationId: tool.operationId,
+    publicationRef: tool.identity.publicationRef, publicationRevision: tool.identity.publicationRevision,
+    contractRef: tool.contract.ref }) !== call.toolRef) return false
+  return call.formanceFinancialState === 'outcome_unknown'
+    && Number.isSafeInteger(attempt.responseStatus)
+    && attempt.responseStatus !== undefined
+    && attempt.responseStatus >= 300 && attempt.responseStatus <= 599
+    && attempt.transportObservationDigest !== undefined
+    && attempt.transportRequestDigest !== undefined
+    && attempt.paymentObservationDigest !== undefined
+    && attempt.settlementStatus !== 'not_settled'
 }
 
 /**
  * Requires a stopped managed Call with a still-held buyer reservation and an
  * exact submitted attempt. Lost-result recovery requires no retained result;
- * invalid-output recovery requires retained bytes that fail the original Tool.
+ * HTTP-error recovery requires a retained non-2xx status and exact attribution.
  * Pins one transaction identity across crashes/retries. It does not itself
  * assert settlement, charge the buyer, or call the Provider.
  */
@@ -62,7 +55,7 @@ export const claim = internalMutation({
       .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
     if (call === null) return null
     if (call.state === 'refused' && call.result?.kind === 'refused'
-      && call.result.code === (args.failureKind === 'invalid_output' ? 'provider_output_invalid' : 'result_invalid')
+      && (args.failureKind === 'http_error' ? call.result.code === 'provider_refused' && call.result.receipt?.lossState === 'provider_http_error' : call.result.code === 'result_invalid')
       && call.result.receipt?.refundState === 'released'
       && call.result.receipt.externalSettlementRef === args.transactionHash.toLowerCase()) {
       return { kind: 'completed' as const }
@@ -86,7 +79,7 @@ export const claim = internalMutation({
     const lease = call.reconciliation
     const owner = remedyOwner(args.transactionHash, args.failureKind)
     if (lease?.leaseOwner !== undefined && lease.leaseOwner !== owner
-      && !(args.failureKind === 'invalid_output' && lease.leaseOwner.startsWith('paid-response:'))
+      && !(args.failureKind === 'http_error' && lease.leaseOwner.startsWith('paid-response:'))
       && (lease.leaseExpiresAt ?? 0) > now) return null
     await ctx.db.patch(call._id, { reconciliation: {
       disposition: 'manual_review', reason: 'refund_pending',
@@ -105,6 +98,7 @@ export const finish = internalMutation({
     const call = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
     if (call?.state === 'refused' && call.result?.kind === 'refused'
+      && (args.failureKind === 'http_error' ? call.result.code === 'provider_refused' && call.result.receipt?.lossState === 'provider_http_error' : call.result.code === 'result_invalid')
       && call.result.receipt?.evidenceHash === args.evidenceDigest
       && call.result.receipt.externalSettlementRef === args.transactionHash.toLowerCase()
       && JSON.stringify(call.result.receipt.accountingTransactionRefs) === JSON.stringify(args.transactionRefs)) {
@@ -129,18 +123,22 @@ export const finish = internalMutation({
       .withIndex('by_callRef', q => q.eq('callRef', call.callRef)).unique()
     if (attempt === null || obligation === null
       || attempt.dispatchRef !== call.callRef
+      || attempt.toolRef !== call.toolRef || attempt.inputDigest !== call.inputDigest
+      || attempt.reservationRef === undefined || !call.formanceReservationRefs?.includes(attempt.reservationRef)
+      || attempt.submissionStartedAt === undefined
+      || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined
       || !responseEligibleForRemedy(call, attempt, args.failureKind)) return { kind: 'refused' as const }
     const now = Date.now()
     const result = {
       kind: 'refused' as const, toolRef: call.toolRef,
-      code: args.failureKind === 'invalid_output' ? 'provider_output_invalid' as const : 'result_invalid' as const,
+      code: args.failureKind === 'http_error' ? 'provider_refused' as const : 'result_invalid' as const,
       retryable: false,
-      nextAction: args.failureKind === 'invalid_output'
-        ? 'The service returned a result that did not match its contract. Your credit has been restored. Choose another Tool or start a new request.'
+      nextAction: args.failureKind === 'http_error'
+        ? 'The service returned an HTTP error after payment. Your credit has been restored. Choose another Tool or start a new request.'
         : 'AE could not recover the service response. Your credit has been restored. Start a new request from the Tool page.',
       receipt: {
         ...call.result.receipt, state: 'refunded' as const, refundState: 'released' as const,
-        lossState: 'unknown' as const, evidenceHash: args.evidenceDigest,
+        lossState: args.failureKind === 'http_error' ? 'provider_http_error' as const : 'unknown' as const, evidenceHash: args.evidenceDigest,
         issuedAt: new Date(now).toISOString(), externalSettlementRef: args.transactionHash.toLowerCase(),
         accountingTransactionRefs: [...args.transactionRefs], transactionRef: buyerRef,
         providerSettlement: { ...call.result.receipt.providerSettlement,

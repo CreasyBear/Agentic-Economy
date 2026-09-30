@@ -681,7 +681,7 @@ describe('registered route transport runtime', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it.each([true, false])('never checkpoints or recovers a response missing its required signed receipt (settled=%s)', async (verifiedSettlement) => {
+  it.each([true, false])('checkpoints status without output for a response missing its signed receipt (settled=%s)', async (verifiedSettlement) => {
     const call = signedInvocation()
     const config = JSON.parse(call.binding.configJson)
     const offer = await createOfferEIP712(signedTarget, { acceptIndex: 0, ...signedRequirement, offerValiditySeconds: 60 }, providerSigner)
@@ -700,7 +700,8 @@ describe('registered route transport runtime', () => {
       verifyX402Settlement: async () => verifiedSettlement, checkpointX402Response,
       markX402PaymentPossiblySubmitted: () => undefined, observeX402PaymentAttempt: () => undefined,
     })
-    expect(checkpointX402Response).not.toHaveBeenCalled()
+    expect(checkpointX402Response).toHaveBeenCalledWith(expect.objectContaining({ responseStatus: 200 }))
+    expect(checkpointX402Response.mock.calls[0]?.[0]).not.toHaveProperty('outputJson')
     expect(observed).not.toHaveProperty('outputJson')
     expect(observed).toMatchObject({ failureCode: verifiedSettlement ? 'provider_receipt_invalid' : 'payment_settlement_unverified' })
   })
@@ -718,8 +719,37 @@ describe('registered route transport runtime', () => {
       verifyX402Settlement: async () => false, checkpointX402Response,
       markX402PaymentPossiblySubmitted: () => undefined, observeX402PaymentAttempt: () => undefined,
     })
-    expect(checkpointX402Response).not.toHaveBeenCalled()
+    expect(checkpointX402Response).toHaveBeenCalledWith(expect.objectContaining({ responseStatus: 200 }))
+    expect(checkpointX402Response.mock.calls[0]?.[0]).not.toHaveProperty('outputJson')
     expect(observed.disposition).toBe('unknown')
+    expect(observed).not.toHaveProperty('outputJson')
+  })
+
+  it.each([
+    [200, 'not-json', 'response_json_invalid'],
+    [402, 'payment error after settlement', 'provider_http_402'],
+    [500, 'provider failed', 'provider_http_500'],
+  ] as const)('checkpoints paid HTTP %s before settlement verification with no output', async (status, body, failureCode) => {
+    const lifecycle: string[] = []
+    const checkpointX402Response = vi.fn(async (_response: unknown) => { lifecycle.push('checkpoint') })
+    const observed = await invokeRouteTransport(x402PaidInvocation({ authority: x402LeaseAuthority(
+      `lease:x402:status:${status}`, `invocation:x402:status:${status}`, `operation:x402:status:${status}`,
+    ) }), {
+      send: async () => new Response(body, { status, headers: {
+        'Payment-Response': settlementProofHeader({ transaction: `0x${'c'.repeat(64)}`, payer: 'test:payer' }),
+      } }),
+      resolveCredential: resolveProviderCredential('unused'),
+      ...preparedX402Custody(async () => 'signed-payment-payload'),
+      verifyX402Settlement: async () => { lifecycle.push('verify'); return true },
+      checkpointX402Response,
+      markX402PaymentPossiblySubmitted: () => undefined,
+      observeX402PaymentAttempt: () => undefined,
+    })
+    expect(lifecycle).toEqual(['checkpoint', 'verify'])
+    expect(checkpointX402Response).toHaveBeenCalledWith(expect.objectContaining({ responseStatus: status }))
+    expect(checkpointX402Response.mock.calls[0]?.[0]).not.toHaveProperty('outputJson')
+    expect(checkpointX402Response.mock.calls[0]?.[0]).not.toHaveProperty('responseDigest')
+    expect(observed).toMatchObject({ responseStatus: status, failureCode, settlementEvidence: { kind: 'settled' } })
     expect(observed).not.toHaveProperty('outputJson')
   })
 
@@ -962,6 +992,7 @@ describe('registered route transport runtime', () => {
     expect(observed).toMatchObject({
       transport: 'x402',
       disposition: 'unknown',
+      responseStatus: 200,
       releaseStarted: true,
       failureCode: 'payment_settlement_unverified',
       responseDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),

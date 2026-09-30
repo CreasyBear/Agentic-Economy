@@ -130,7 +130,7 @@ export const checkpointX402Response = internalMutation({
   args: {
     dispatchRef: v.string(), attemptRef: v.string(), effectGeneration: v.number(),
     toolRef: v.string(), inputDigest: v.string(), paymentIdentifier: v.string(),
-    responseDigest: v.string(), outputJson: v.string(),
+    responseStatus: v.number(), responseDigest: v.optional(v.string()), outputJson: v.optional(v.string()),
     settlementTransactionRef: v.optional(v.string()),
     requestDigest: v.string(), paymentResponseDigest: v.optional(v.string()),
   },

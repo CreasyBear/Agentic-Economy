@@ -47,7 +47,7 @@ export type ChargeSettlementResult =
       paymentIdentifier?: string
       accountingTransactionRefs?: readonly string[]
       refundState?: 'released' | 'not_applicable' | 'unknown'
-      lossState?: 'none' | 'provider_output_invalid' | 'unknown'
+      lossState?: 'none' | 'provider_output_invalid' | 'provider_http_error' | 'unknown'
     }>
   | Readonly<{
       kind: 'reconciliation_required'

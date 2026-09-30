@@ -206,6 +206,12 @@ function derivePurchaseTerminalState(
   ) {
     return 'completed'
   }
+  // Requires an explicitly settled receipt on a terminal delivery refusal.
+  // The purchase is complete while delivery remains not_delivered; neither
+  // fact implies the other. Unknown payment/refund evidence stays open.
+  if (input.callState === 'refused' && input.deliveryState === 'not_delivered'
+    && input.paymentState === 'settled' && input.receiptState === 'settled'
+    && input.receiptRefundState === 'not_applicable') return 'completed'
   if (
     input.callState === 'refused'
     && input.deliveryState === 'not_delivered'

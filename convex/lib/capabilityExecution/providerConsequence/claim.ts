@@ -67,6 +67,7 @@ const routeTransportObservationValue: Validator<RouteTransportObservation, 'requ
     v.literal('unknown'),
   )),
   requestDigest: v.string(),
+  responseStatus: v.optional(v.number()),
   responseDigest: v.optional(v.string()),
   outputJson: v.optional(v.string()),
   providerReceipt: v.optional(v.string()),

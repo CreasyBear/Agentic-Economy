@@ -506,7 +506,7 @@ describe('money x402 payment authorization attempt', () => {
       dispatchRef: observation.dispatchRef, attemptRef: observation.attemptRef,
       effectGeneration: observation.effectGeneration, toolRef: observation.toolRef,
       inputDigest: observation.inputDigest, paymentIdentifier: observation.paymentIdentifier,
-      responseDigest: quarantinedResponseDigest, outputJson: quarantinedOutputJson,
+      responseStatus: 200, responseDigest: quarantinedResponseDigest, outputJson: quarantinedOutputJson,
       requestDigest: canonicalDigest('request'),
       settlementTransactionRef: `chain:eip155:8453:0x${'a'.repeat(64)}`,
       paymentResponseDigest: canonicalDigest('payment-response'),
@@ -522,18 +522,64 @@ describe('money x402 payment authorization attempt', () => {
       dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1,
     })
     expect(beforeVerification).toMatchObject({
-      state: 'possibly_submitted', quarantinedOutputJson, quarantinedResponseDigest,
+      state: 'possibly_submitted', responseStatus: 200, quarantinedOutputJson, quarantinedResponseDigest,
     })
     expect(beforeVerification).not.toHaveProperty('settlementStatus')
     await expect(checkpointResponse({ db }, { ...checkpoint, inputDigest: 'wrong' }))
       .rejects.toThrow('x402_payment_observation_attribution_invalid')
     await expect(checkpointResponse({ db }, { ...checkpoint, outputJson: '{"changed":true}' }))
       .rejects.toThrow('x402_payment_quarantined_output_conflict')
+    await expect(checkpointResponse({ db }, { ...checkpoint, responseStatus: 500 }))
+      .rejects.toThrow('x402_payment_response_status_conflict')
+    await expect(checkpointResponse({ db }, { ...checkpoint, requestDigest: canonicalDigest('other-request') }))
+      .rejects.toThrow('x402_payment_observation_attribution_invalid')
+    await expect(checkpointResponse({ db }, { ...checkpoint, paymentResponseDigest: canonicalDigest('other-payment') }))
+      .rejects.toThrow('x402_payment_observation_attribution_invalid')
+    await expect(checkpointResponse({ db }, { ...checkpoint, responseStatus: 600 }))
+      .rejects.toThrow('x402_payment_response_status_invalid')
+    expect(db.patchCalls).toHaveLength(1)
     // A verifier failure can return an observation without a body; it must not erase it.
-    await recordObservation({ db, runMutation: async () => null }, observation)
+    await recordObservation({ db, runMutation: async () => null }, {
+      ...observation,
+      transportRequestDigest: checkpoint.requestDigest,
+      paymentResponseDigest: checkpoint.paymentResponseDigest,
+    })
     expect(await readAttempt({ db }, {
       dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1,
     })).toMatchObject({ settlementStatus: 'settled', quarantinedOutputJson, quarantinedResponseDigest })
+  })
+
+  it('keeps status-only response evidence through retry and a later payment observation', async () => {
+    const db = memoryDbWithPayment({ ...attempt(), toolRef: 'operation:test', inputDigest: 'sha256:input', state: 'possibly_submitted' })
+    const observation = paymentObservationArgs({
+      settlementStatus: 'unknown', responseStatus: 502,
+      quarantinedResponseDigest: undefined, quarantinedOutputJson: undefined,
+      paymentResponseDigest: undefined,
+    })
+    const checkpoint = {
+      dispatchRef: observation.dispatchRef, attemptRef: observation.attemptRef,
+      effectGeneration: observation.effectGeneration, toolRef: observation.toolRef,
+      inputDigest: observation.inputDigest, paymentIdentifier: observation.paymentIdentifier,
+      responseStatus: 502, requestDigest: canonicalDigest('request'),
+      settlementTransactionRef: `chain:eip155:8453:0x${'a'.repeat(64)}`,
+    }
+    const scheduler = { runAfter: vi.fn() }
+    await checkpointResponse({ db, scheduler }, checkpoint)
+    await checkpointResponse({ db, scheduler }, checkpoint)
+    expect(db.patchCalls).toHaveLength(1)
+    expect(scheduler.runAfter).toHaveBeenCalledTimes(1)
+    const attemptIdentity = { dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1 }
+    expect(await readAttempt({ db }, attemptIdentity)).toMatchObject({ responseStatus: 502, state: 'possibly_submitted' })
+    expect(await readAttempt({ db }, attemptIdentity)).not.toHaveProperty('quarantinedOutputJson')
+    await expect(checkpointResponse({ db }, { ...checkpoint, settlementTransactionRef: `chain:eip155:8453:0x${'b'.repeat(64)}` }))
+      .rejects.toThrow('x402_payment_observation_attribution_invalid')
+    await expect(recordObservation({ db, runMutation: async () => null }, { ...observation, responseStatus: 503 }))
+      .rejects.toThrow('x402_payment_response_status_conflict')
+    await recordObservation({ db, runMutation: async () => null }, {
+      ...observation, transportRequestDigest: checkpoint.requestDigest,
+    })
+    expect(await readAttempt({ db }, attemptIdentity)).toMatchObject({ responseStatus: 502, settlementStatus: 'unknown' })
+    expect(db.patchCalls).toHaveLength(2)
   })
 
   it.each([
@@ -649,7 +695,7 @@ describe('money x402 payment authorization attempt', () => {
         targetDigest: 'sha256:target', consequence: 'purchase', limits: {}, expiresAt, acceptedBasis: basis },
     })
     Object.assign(payment, { submissionStartedAt: 3_000, paymentSignatureDigest: firstDigest,
-      paymentPayer, paymentNonce, quarantinedOutputJson, quarantinedResponseDigest })
+      paymentPayer, paymentNonce, responseStatus: 200, quarantinedOutputJson, quarantinedResponseDigest })
     db.seedTable('actionExecutionControls', {
       ...actionControlRow(), sourceRef: `operation-invocation-source:${String(call.callRef)}`,
       preparedMaterialDigest: call.inputDigest, preparedTargetDigest: 'sha256:target',
@@ -683,7 +729,7 @@ describe('money x402 payment authorization attempt', () => {
     ['submission after admission expired', (db: MemoryDb) => { db.rows('moneyX402PaymentAttempts')[0]!.submissionStartedAt = 10_001 }],
     ['different effect generation', (db: MemoryDb) => { db.rows('actionExecutionControls')[0]!.currentEffectGeneration = 2 }],
     ['different original actor', (db: MemoryDb) => { db.rows('actionExecutionAttempts')[0]!.actor = { principalRef: 'other', callerRef: 'other' } }],
-    ['no retained response', (db: MemoryDb) => { delete db.rows('moneyX402PaymentAttempts')[0]!.quarantinedOutputJson }],
+    ['missing retained HTTP status', (db: MemoryDb) => { delete db.rows('moneyX402PaymentAttempts')[0]!.responseStatus }],
   ] as const)('does not broaden historical recovery for %s', async (_label, change) => {
     const db = seedAdmittedPaidConsequence()
     change(db)
@@ -993,23 +1039,23 @@ function expectNoPaymentAttempts(db: MemoryDb): void {
 
 
 describe('retained response recovery watchdog', () => {
-  function claimedInvalidOutputRemedy(attemptCount: number, mismatchedTransaction = false) {
+  function claimedHttpErrorRemedy(attemptCount: number, mismatchedTransaction = false) {
     const db = new MemoryDb()
     const transactionHash = `0x${'a'.repeat(64)}`
-    const owner = `paid-result-loss:invalid-output:${transactionHash}`
+    const owner = `paid-result-loss:http-error:${transactionHash}`
     db.seedTable('capabilityCalls', { _id: 'call:watchdog', callRef: 'call:watchdog', state: 'reconciliation_required',
       toolRef: 'operation:test', inputDigest: 'sha256:input',
       result: { kind: 'reconciliation_required', evidence: { attemptRef: 'attempt:test', effectGeneration: 1 } },
       reconciliation: { leaseOwner: owner, leaseExpiresAt: Number.MAX_SAFE_INTEGER, nextAttemptAt: Date.now(),
         attemptCount, disposition: 'manual_review', reason: 'refund_pending' } })
     db.seed({ ...attempt(), dispatchRef: 'call:watchdog', toolRef: 'operation:test', inputDigest: 'sha256:input',
-      quarantinedOutputJson, quarantinedResponseDigest,
+      responseStatus: 500,
       evidenceRefs: [`chain:eip155:8453:${mismatchedTransaction ? `0x${'b'.repeat(64)}` : transactionHash}`] })
     return { db, owner }
   }
 
-  it.each([0, 1])('resumes an exact invalid-result refund after claim or ledger interruption at watchdog step %s', async step => {
-    const { db, owner } = claimedInvalidOutputRemedy(step)
+  it.each([0, 1])('resumes an exact HTTP-error refund after claim or ledger interruption at watchdog step %s', async step => {
+    const { db, owner } = claimedHttpErrorRemedy(step)
     const scheduler = { runAt: vi.fn(), runAfter: vi.fn() }
     const ctx = { db, scheduler }
     await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: step })).resolves.toBe(true)
@@ -1031,7 +1077,7 @@ describe('retained response recovery watchdog', () => {
   })
 
   it('does not resume a permanent refund claim for a different transaction', async () => {
-    const { db } = claimedInvalidOutputRemedy(1, true)
+    const { db } = claimedHttpErrorRemedy(1, true)
     const scheduler = { runAt: vi.fn(), runAfter: vi.fn() }
     const before = JSON.stringify(db.rows('capabilityCalls'))
     await expect(beginRecovery({ db, scheduler }, { callRef: 'call:watchdog', attempt: 1 })).resolves.toBe(false)
@@ -1040,8 +1086,8 @@ describe('retained response recovery watchdog', () => {
     expect(JSON.stringify(db.rows('capabilityCalls'))).toBe(before)
   })
 
-  it('exhausts invalid-output retries without removing the permanent money fence', async () => {
-    const { db, owner } = claimedInvalidOutputRemedy(4)
+  it('exhausts HTTP-error retries without removing the permanent money fence', async () => {
+    const { db, owner } = claimedHttpErrorRemedy(4)
     const scheduler = { runAt: vi.fn(), runAfter: vi.fn() }
     await expect(beginRecovery({ db, scheduler }, { callRef: 'call:watchdog', attempt: 4 })).resolves.toBe(false)
     expect(db.rows('capabilityCalls')[0]).toMatchObject({ reconciliation: {

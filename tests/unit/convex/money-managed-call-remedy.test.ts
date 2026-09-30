@@ -7,7 +7,7 @@ import type { X402EvmReceipt } from '@/modules/capability-supply/server'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/modules/capability-execution/call-runtime', () => ({ readX402EvmReceipt: rpc }))
-import { resolveLostResult, resolveInvalidResult } from '../../../convex/moneyManagedCallRemedyActions'
+import { resolveLostResult, resolveHttpError } from '../../../convex/moneyManagedCallRemedyActions'
 
 const payer = '0x1111111111111111111111111111111111111111'
 const payTo = '0x2222222222222222222222222222222222222222'
@@ -35,9 +35,11 @@ const handler = (resolveLostResult as unknown as {
   _handler: (ctx: ActionCtx, input: typeof args) => Promise<unknown>
 })._handler
 
-function context(invalid = false, financialState = 'outcome_unknown') {
-  const retainedAttempt = invalid ? { ...attempt, quarantinedOutputJson: '{"unexpected":true}',
-    quarantinedResponseDigest: `sha256:${'f'.repeat(64)}` } : attempt
+function context(httpError = false, financialState = 'outcome_unknown') {
+  const retainedAttempt = httpError ? { ...attempt, responseStatus: 500,
+    transportObservationDigest: `sha256:${'e'.repeat(64)}`,
+    transportRequestDigest: `sha256:${'f'.repeat(64)}`,
+    paymentObservationDigest: `sha256:${'1'.repeat(64)}` } : attempt
   const runQuery = vi.fn(async (ref: never) => {
     const name = getFunctionName(ref)
     if (name === 'capabilityCalls:readOwnerRecovery') return call
@@ -58,6 +60,19 @@ function context(invalid = false, financialState = 'outcome_unknown') {
 beforeEach(() => { rpc.mockReset(); rpc.mockResolvedValue(receipt) })
 
 describe('operator recovery for a paid Call with a lost response', () => {
+  it('cannot use lost-result recovery to refund a retained 2xx status without JSON', async () => {
+    const ctx = context()
+    ctx.runQuery.mockImplementation(async ref => {
+      const name = getFunctionName(ref)
+      if (name === 'capabilityCalls:readOwnerRecovery') return call
+      if (name === 'moneyX402PaymentAttempts:readX402PaymentAttempt') return { ...attempt, responseStatus: 200 }
+      throw new Error(name)
+    })
+    expect(await handler(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'payment_identity_unavailable' })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.runMutation).not.toHaveBeenCalled()
+    expect(ctx.runAction).not.toHaveBeenCalled()
+  })
   it('verifies the exact original transfer and restores credit without calling or paying the Provider again', async () => {
     const ctx = context()
     expect(await handler(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'completed' })
@@ -95,10 +110,44 @@ describe('operator recovery for a paid Call with a lost response', () => {
 })
 
 
-describe('verified paid invalid delivery action', () => {
-  const resolve = (resolveInvalidResult as unknown as {
+describe('verified paid HTTP error action', () => {
+  const resolve = (resolveHttpError as unknown as {
     _handler: (ctx: ActionCtx, input: typeof args) => Promise<unknown>
   })._handler
+  it('accepts a 500 status without quarantined JSON and binds response evidence before ledger work', async () => {
+    const ctx = context(true)
+    expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'completed' })
+    expect(ctx.runAction).toHaveBeenCalledTimes(1)
+    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ failureKind: 'http_error' }))
+  })
+  it.each([200, undefined, 299, 600, 500.5])('refuses ineligible status %s before chain or ledger work', async status => {
+    const ctx = context(true)
+    ctx.runQuery.mockImplementation(async ref => {
+      const name = getFunctionName(ref)
+      if (name === 'capabilityCalls:readOwnerRecovery') return call
+      if (name === 'moneyX402PaymentAttempts:readX402PaymentAttempt') return { ...attempt, responseStatus: status,
+        transportObservationDigest: `sha256:${'e'.repeat(64)}`,
+        transportRequestDigest: `sha256:${'f'.repeat(64)}`,
+        paymentObservationDigest: `sha256:${'1'.repeat(64)}` }
+      throw new Error(name)
+    })
+    expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'payment_identity_unavailable' })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.runAction).not.toHaveBeenCalled()
+  })
+  it('refuses a status changed between proof and claim without ledger work', async () => {
+    const ctx = context(true)
+    ctx.runMutation.mockResolvedValueOnce({ kind: 'claimed', call, attempt: { ...attempt, responseStatus: 503 } })
+    expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'payment_identity_changed' })
+    expect(ctx.runAction).not.toHaveBeenCalled()
+  })
+  it('refuses a foreign chain transaction before claiming or ledger work', async () => {
+    rpc.mockResolvedValue({ ...receipt, transactionHash: `0x${'f'.repeat(64)}` })
+    const ctx = context(true)
+    expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'payment_not_verified' })
+    expect(ctx.runMutation).not.toHaveBeenCalled()
+    expect(ctx.runAction).not.toHaveBeenCalled()
+  })
   it('requires original transaction proof and a still-held booking before the buyer release recipe', async () => {
     const captured = context(true, 'settled')
     expect(await resolve(captured as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'booking_unavailable' })
@@ -127,6 +176,6 @@ describe('verified paid invalid delivery action', () => {
     expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'completed' })
     expect(ctx.runAction.mock.calls[1]).toEqual(ctx.runAction.mock.calls[0])
     expect(getFunctionName(ctx.runAction.mock.calls[0]![0] as never)).toBe('moneyFormance:remedyPaidCall')
-    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ failureKind: 'invalid_output' }))
+    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ failureKind: 'http_error' }))
   })
 })

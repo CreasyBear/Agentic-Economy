@@ -1287,6 +1287,75 @@ describe('capability Call Workpool lifecycle', () => {
   })
 
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each([
+    { status: 200, body: '{"unexpected":true}', label: 'invalid JSON shape' },
+    { status: 200, body: 'not-json', label: 'malformed JSON' },
+    { status: 500, body: 'Provider error', label: 'settled HTTP error' },
+  ])('reconciles $label through the local Formance ledger with one payment and stable replay', async ({ status, body }) => {
+    const { formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer()
+    const transactionHash: Hex = `0x${'6'.repeat(64)}`
+    let paidRequests = 0
+    providerFetch.mockImplementation(async (_url, init) => {
+      const payment = new Headers(init?.headers as HeadersInit).get('payment-signature')
+      if (payment === null) return new UndiciResponse('', { status: 402,
+        headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) } })
+      paidRequests += 1
+      const { authorization } = decodePaymentSignatureHeader(payment).payload as {
+        authorization: { from: Hex; to: Hex; value: string; validAfter: string; validBefore: string; nonce: Hex }
+      }
+      external.receipt.mockResolvedValue({ transactionHash, status: 'success', confirmations: 12n,
+        blockHash: `0x${'7'.repeat(64)}`, blockNumber: 100n,
+        observedBlockTimestamp: BigInt(Math.floor(Date.now() / 1000)), authorizationState: true,
+        transactionTo: BASE_SEPOLIA_USDC_ADDRESS,
+        transactionInput: encodeFunctionData({ abi: eip3009ABI, functionName: 'transferWithAuthorization', args: [
+          authorization.from, authorization.to, BigInt(authorization.value), BigInt(authorization.validAfter),
+          BigInt(authorization.validBefore), authorization.nonce, 27, `0x${'b'.repeat(64)}`, `0x${'c'.repeat(64)}`,
+        ] }),
+        logs: [{ address: BASE_SEPOLIA_USDC_ADDRESS,
+          data: encodeAbiParameters([{ type: 'uint256' }], [BigInt(authorization.value)]),
+          topics: encodeEventTopics({ abi: erc20Abi, eventName: 'Transfer', args: { from: authorization.from, to: authorization.to } }),
+        }],
+      })
+      return new UndiciResponse(body, { status, headers: { 'Content-Type': 'application/json',
+        'Payment-Response': encodePaymentResponseHeader({ success: true, transaction: transactionHash,
+          network: BASE_SEPOLIA_NETWORK, payer: payer.address }),
+      } })
+    })
+    const pending = await invokeCall(backend, buyer.principal, published.toolRef, 'paid-status-proof', 'paid-status-proof')
+    if (pending.kind !== 'pending') throw new Error(`paid_status_call_not_pending:${pending.kind}`)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    const terminal = await readEvidence(backend, pending.callRef)
+    const charged = status < 300
+    expect(terminal.call, JSON.stringify(terminal.call?.result)).toMatchObject({ state: 'refused',
+      formanceFinancialState: charged ? 'settled' : 'released',
+      result: { kind: 'refused', code: charged ? 'provider_output_invalid' : 'provider_refused',
+        receipt: { state: charged ? 'settled' : 'refunded',
+          lossState: charged ? 'provider_output_invalid' : 'provider_http_error',
+          refundState: charged ? 'not_applicable' : 'released' } },
+    })
+    expect(terminal.projection).toMatchObject({ deliveryState: 'not_delivered', paymentState: charged ? 'settled' : 'released' })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: charged ? '9988000' : '10000000' })
+    const accountingRefs = terminal.call?.result && 'receipt' in terminal.call.result
+      ? terminal.call.result.receipt?.accountingTransactionRefs : undefined
+    expect(accountingRefs).toHaveLength(2)
+    const ledger = await Promise.all(accountingRefs!.map(ref => readFormanceTransactionByReference(formance, ref)))
+    expect(ledger).toMatchObject([
+      { kind: 'found', template: charged ? 'BUYER_SALE_SETTLED' : 'CALL_RELEASED_AUD' },
+      { kind: 'found', template: 'PROVIDER_SETTLED' },
+    ])
+    await expect(backend.query(internal.marketListingEvidence.selectionEvidenceInternal, { toolRefs: [published.toolRef] }))
+      .resolves.toMatchObject([{ aeCompleted: 0, aeFailed: 1 }])
+    expect(await backend.action(internal.capabilityCallWorker.run, { callRef: pending.callRef })).toEqual({ kind: 'none' })
+    expect(await invokeCall(backend, buyer.principal, published.toolRef, 'paid-status-proof', 'paid-status-proof'))
+      .toEqual(callResultSchema.parse(terminal.call!.result))
+    const replay = await readEvidence(backend, pending.callRef)
+    expect(replay.call?.formanceSettlementRefs).toEqual(terminal.call?.formanceSettlementRefs)
+    expect(replay.call?.formanceReleaseRefs).toEqual(terminal.call?.formanceReleaseRefs)
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: charged ? '9988000' : '10000000' })
+    expect(paidRequests).toBe(1)
+    expect(signedAuthorizations).toHaveLength(1)
+  }, 60_000)
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each([
     ...['none', 'before_dispatch', 'after_claim'].map(policyUpdatePhase => ({
       policyUpdatePhase, label: 'baseline', providerOutput: { result: 'literal sandbox buyer result' },
     })),

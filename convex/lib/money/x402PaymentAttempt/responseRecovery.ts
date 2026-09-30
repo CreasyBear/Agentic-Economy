@@ -3,9 +3,9 @@ import { internal } from '../../../_generated/api'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 
 /** The permanent refund fence belongs to this retained payment, never a new effect. */
-async function isExactInvalidOutputRemedy(ctx: Pick<QueryCtx, 'db'>, row: Doc<'capabilityCalls'>): Promise<boolean> {
+async function isExactHttpErrorRemedy(ctx: Pick<QueryCtx, 'db'>, row: Doc<'capabilityCalls'>): Promise<boolean> {
   const owner = row.reconciliation?.leaseOwner
-  const prefix = 'paid-result-loss:invalid-output:'
+  const prefix = 'paid-result-loss:http-error:'
   if (owner === undefined || !owner.startsWith(prefix) || row.result?.kind !== 'reconciliation_required') return false
   const transactionHash = owner.slice(prefix.length)
   if (!/^0x[0-9a-f]{64}$/.test(transactionHash)) return false
@@ -14,7 +14,8 @@ async function isExactInvalidOutputRemedy(ctx: Pick<QueryCtx, 'db'>, row: Doc<'c
     .withIndex('by_attemptRef_and_effectGeneration', q => q.eq('attemptRef', attemptRef).eq('effectGeneration', effectGeneration)).unique()
   return payment !== null && payment.dispatchRef === row.callRef
     && payment.toolRef === row.toolRef && payment.inputDigest === row.inputDigest
-    && payment.quarantinedOutputJson !== undefined && payment.quarantinedResponseDigest !== undefined
+    && payment.responseStatus !== undefined && Number.isInteger(payment.responseStatus)
+    && payment.responseStatus >= 300 && payment.responseStatus <= 599
     && payment.evidenceRefs.some(ref => ref.toLowerCase() === `chain:${payment.network}:${transactionHash}`)
 }
 
@@ -25,11 +26,11 @@ export async function beginResponseRecoveryHandler(ctx: MutationCtx, args: { cal
     .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
   if (row === null || (row.state !== 'pending' && row.state !== 'reconciliation_required')) return false
   const owner = row.reconciliation?.leaseOwner
-  const invalidRemedy = await isExactInvalidOutputRemedy(ctx, row)
-  const ownStep = invalidRemedy ? (row.reconciliation?.attemptCount ?? 0) - 1
+  const httpErrorRemedy = await isExactHttpErrorRemedy(ctx, row)
+  const ownStep = httpErrorRemedy ? (row.reconciliation?.attemptCount ?? 0) - 1
     : owner?.startsWith('paid-response:') ? Number(owner.slice('paid-response:'.length)) : -1
   if (ownStep >= args.attempt) return false
-  if (!invalidRemedy && owner !== undefined && ownStep < 0
+  if (!httpErrorRemedy && owner !== undefined && ownStep < 0
     && (row.reconciliation?.leaseExpiresAt ?? 0) > Date.now()) {
     // A status sweep owns no payment effect; wait for it without losing this watchdog.
     if (owner.startsWith('reconciliation-sweep:') && row.reconciliation !== undefined) {
@@ -44,10 +45,10 @@ export async function beginResponseRecoveryHandler(ctx: MutationCtx, args: { cal
   const nextAt = Date.now() + 60_000 * 2 ** args.attempt
   await ctx.db.patch(row._id, { reconciliation: {
     disposition: args.attempt === 4 ? 'manual_review' : 'automatic',
-    reason: invalidRemedy ? 'refund_pending' : 'recovery_failed', attemptCount: args.attempt + 1, nextAttemptAt: nextAt,
+    reason: httpErrorRemedy ? 'refund_pending' : 'recovery_failed', attemptCount: args.attempt + 1, nextAttemptAt: nextAt,
     // Preserve the permanent money fence while only advancing the watchdog.
-    leaseOwner: invalidRemedy ? owner! : `paid-response:${args.attempt}`,
-    leaseExpiresAt: invalidRemedy ? Number.MAX_SAFE_INTEGER : nextAt + 60_000,
+    leaseOwner: httpErrorRemedy ? owner! : `paid-response:${args.attempt}`,
+    leaseExpiresAt: httpErrorRemedy ? Number.MAX_SAFE_INTEGER : nextAt + 60_000,
   } })
   if (args.attempt < 4) {
     await ctx.scheduler.runAt(nextAt, internal.moneyX402PaymentAttempts.beginResponseRecovery, {
@@ -65,5 +66,5 @@ export async function responseRecoveryIsCurrentHandler(ctx: QueryCtx, args: { ca
   return row !== null && (row.state === 'pending' || row.state === 'reconciliation_required')
     && row.reconciliation?.disposition === 'automatic'
     && (row.reconciliation.leaseOwner === `paid-response:${args.attempt}`
-      || (row.reconciliation.attemptCount === args.attempt + 1 && await isExactInvalidOutputRemedy(ctx, row)))
+      || (row.reconciliation.attemptCount === args.attempt + 1 && await isExactHttpErrorRemedy(ctx, row)))
 }

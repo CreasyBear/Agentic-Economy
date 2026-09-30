@@ -619,6 +619,7 @@ export const moneyTables = {
       v.literal('unknown'),
     )),
     paymentResponseDigest: v.optional(identifier),
+    responseStatus: v.optional(v.number()),
     quarantinedResponseDigest: v.optional(identifier),
     quarantinedOutputJson: v.optional(v.string()),
     reconciliationEvidenceRef: v.optional(identifier),

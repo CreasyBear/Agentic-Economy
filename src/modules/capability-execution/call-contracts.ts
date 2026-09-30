@@ -203,7 +203,7 @@ type CallReceiptFields = Readonly<{
   transactionRef?: string
   accountingTransactionRefs?: string[]
   refundState?: 'released' | 'not_applicable' | 'unknown'
-  lossState?: 'none' | 'provider_output_invalid' | 'unknown'
+  lossState?: 'none' | 'provider_output_invalid' | 'provider_http_error' | 'unknown'
   externalSettlementRef?: string
   evidenceHash: string
   issuedAt: string
@@ -233,7 +233,7 @@ const callReceiptFields = {
   transactionRef: z.string().min(1).exactOptional(),
   accountingTransactionRefs: z.array(z.string().min(1)).min(1).exactOptional(),
   refundState: z.enum(['released', 'not_applicable', 'unknown']).exactOptional(),
-  lossState: z.enum(['none', 'provider_output_invalid', 'unknown']).exactOptional(),
+  lossState: z.enum(['none', 'provider_output_invalid', 'provider_http_error', 'unknown']).exactOptional(),
   externalSettlementRef: z.string().min(1).exactOptional(),
   evidenceHash: z.string().min(1),
   issuedAt: z.string().min(1),

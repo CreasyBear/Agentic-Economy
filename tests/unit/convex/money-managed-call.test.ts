@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import schema from '../../../convex/schema'
 import { api, internal } from '../../../convex/_generated/api'
 import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
+import { callResultSchema } from '../../../src/modules/capability-execution/call-contracts'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import { createPublicToolRef } from '../../../src/modules/capability-supply/public'
 import { quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
@@ -174,7 +175,7 @@ describe('paid Call with a lost response', () => {
       if (row?.result?.kind !== 'reconciliation_required' || !row.result.receipt || !attempt) throw new Error('fixture_missing')
       await ctx.db.patch(row._id, { attemptRef: attempt.attemptRef,
         formanceSettlementRefs: ['formance:settle-buyer', 'formance:settle-provider'] })
-      await ctx.db.patch(attempt._id, { settlementStatus: 'settled',
+      await ctx.db.patch(attempt._id, { settlementStatus: 'settled', responseStatus: 200,
         reconciliationEvidenceDigest: evidenceDigest,
         quarantinedOutputJson: JSON.stringify(output), quarantinedResponseDigest: evidenceDigest })
       return { kind: 'completed' as const, callRef, toolRef, output, evidenceHash: evidenceDigest,
@@ -223,6 +224,45 @@ describe('paid Call with a lost response', () => {
       .resolves.toMatchObject([{ completedCalls: 1, latencySamplesMs: [5] }])
     await expect(backend.run(async ctx => await ctx.db.query('marketEvidenceFacts').collect()))
       .resolves.toMatchObject([{ sourceRef: callRef, occurredAt: now + 5, durationMs: 5 }])
+  })
+
+  it.each([undefined, '{"unexpected":true}'])('records paid invalid 2xx delivery once from retained body %s', async outputJson => {
+    const backend = convexTestWithMarketComponents()
+    await seedLostResult(backend)
+    const result = await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      const attempt = await ctx.db.query('moneyX402PaymentAttempts').first()
+      if (row?.result?.kind !== 'reconciliation_required' || !row.result.receipt || !attempt) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { attemptRef: attempt.attemptRef, formanceFinancialState: 'settled',
+        formanceSettlementRefs: settlementRefs })
+      await ctx.db.patch(attempt._id, { settlementStatus: 'settled', responseStatus: 200,
+        reconciliationEvidenceDigest: evidenceDigest, transportObservationDigest: evidenceDigest,
+        ...(outputJson === undefined ? {} : { quarantinedOutputJson: outputJson, quarantinedResponseDigest: evidenceDigest }) })
+      return { kind: 'refused' as const, toolRef, code: 'provider_output_invalid', retryable: false,
+        receipt: { ...row.result.receipt, state: 'settled' as const,
+          evidenceHash: evidenceDigest, refundState: 'not_applicable' as const, lossState: 'provider_output_invalid' as const } }
+    })
+    const args = { callRef, principalId: principalRef, state: 'refused' as const, result,
+      attemptRef: 'attempt:lost', dispatchState: 'failed' as const, now: now + 5,
+      clearResult: false, clearWorkId: false, clearAttemptRef: false,
+      clearEvidenceHash: false, clearDispatchState: false }
+    await backend.mutation(internal.capabilityCalls.projectRecovery, {
+      ...args, result: { ...result, receipt: { ...result.receipt, evidenceHash: canonicalDigest('unrelated') } },
+    })
+    await expect(backend.run(async ctx => (await ctx.db.query('capabilityCalls').first())?.state))
+      .resolves.toBe('reconciliation_required')
+    await backend.mutation(internal.capabilityCalls.projectRecovery, args)
+    await backend.mutation(internal.capabilityCalls.projectRecovery, { ...args, now: now + 1_000 })
+    await expect(backend.query(internal.capabilityCalls.readOwnerRecovery, { callRef }))
+      .resolves.toMatchObject({ state: 'refused', usage: { chargeState: 'paid', transactionRef: settlementRefs[0] },
+        result: { code: 'provider_output_invalid', receipt: { state: 'settled', lossState: 'provider_output_invalid',
+          refundState: 'not_applicable', accountingTransactionRefs: settlementRefs } } })
+    await expect(backend.run(async ctx => await ctx.db.query('purchaseResolutionRecords').collect()))
+      .resolves.toHaveLength(1)
+    await expect(backend.run(async ctx => await ctx.db.query('capabilityCallProjections').collect()))
+      .resolves.toMatchObject([{ state: 'refused', deliveryState: 'not_delivered', paymentState: 'settled' }])
+    await expect(backend.run(async ctx => await ctx.db.query('marketEvidenceFacts').collect()))
+      .resolves.toHaveLength(0)
   })
 
   it('closes buyer credit and Provider settlement once without inventing delivery evidence', async () => {
@@ -629,28 +669,26 @@ describe('Formance managed Call evidence', () => {
 })
 
 
-describe('verified-paid invalid delivery remedy', () => {
+describe('verified-paid HTTP error remedy', () => {
   const publicRef = createPublicToolRef({ operationId: operation.operationId,
     publicationRef: operation.identity.publicationRef, publicationRevision: operation.identity.publicationRevision,
     contractRef: operation.contract.ref })
   const transactionHash = `0x${'d'.repeat(64)}`
-  const identity = { callRef, transactionHash, failureKind: 'invalid_output' as const }
-  const finish = { ...identity, evidenceDigest: canonicalDigest('invalid-output-evidence'),
+  const identity = { callRef, transactionHash, failureKind: 'http_error' as const }
+  const finish = { ...identity, evidenceDigest: canonicalDigest('http-error-evidence'),
     transactionRefs: ['formance:buyer-restored', 'formance:provider-paid'] }
-  const validOutput = { data: { BTC: { symbol: 'BTC', quote: { USD: {
-    price: 10, last_updated: '2026-09-02T02:00:00.000Z',
-  } } } } }
-  async function seedInvalid(backend: ReturnType<typeof convexTest>, output: unknown = { unexpected: true }) {
+  async function seedHttpError(backend: ReturnType<typeof convexTest>, responseStatus = 500) {
     await seedLostResult(backend)
     await backend.run(async ctx => {
       const row = await ctx.db.query('capabilityCalls').first()
       const payment = await ctx.db.query('moneyX402PaymentAttempts').first()
       if (!row?.result || !payment) throw new Error('fixture_missing')
-      await ctx.db.patch(row._id, { toolRef: publicRef,
+      await ctx.db.patch(row._id, { toolRef: publicRef, attemptRef: 'attempt:lost',
         result: { ...row.result, toolRef: publicRef } })
       await ctx.db.patch(payment._id, { toolRef: publicRef, settlementStatus: 'settled',
-        quarantinedOutputJson: JSON.stringify(output), quarantinedResponseDigest: canonicalDigest(output),
-        transportObservationDigest: canonicalDigest('observed-invalid-output') })
+        responseStatus, transportRequestDigest: canonicalDigest('paid-request'),
+        paymentObservationDigest: canonicalDigest('paid-observation'),
+        transportObservationDigest: canonicalDigest('observed-http-error') })
       const quote = await ctx.db.query('capabilityQuotes').first()
       const obligation = await ctx.db.query('moneyProviderObligations').first()
       if (!quote || !obligation) throw new Error('fixture_missing')
@@ -658,9 +696,9 @@ describe('verified-paid invalid delivery remedy', () => {
       await ctx.db.patch(obligation._id, { toolRef: publicRef })
     })
   }
-  it('restores held buyer credit while recording the original paid Provider once and retains invalid evidence', async () => {
+  it('restores held buyer credit while recording the original paid Provider once from a status-only response', async () => {
     const backend = convexTest(schema, convexModules)
-    await seedInvalid(backend)
+    await seedHttpError(backend)
     expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, { callRef, transactionHash })).toBeNull()
     const claims = await Promise.all([backend.mutation(internal.moneyManagedCallRemedy.claim, identity),
       backend.mutation(internal.moneyManagedCallRemedy.claim, identity)])
@@ -674,19 +712,22 @@ describe('verified-paid invalid delivery remedy', () => {
       obligation: await ctx.db.query('moneyProviderObligations').first(),
       activity: await ctx.db.query('capabilityCallProjections').collect(),
     }))
+    expect(callResultSchema.safeParse(records.call?.result).success).toBe(true)
     expect(publicRef).not.toBe(operation.operationId)
     expect(records.call).toMatchObject({ toolRef: publicRef, state: 'refused', formanceFinancialState: 'released',
-      result: { code: 'provider_output_invalid', receipt: { state: 'refunded', refundState: 'released',
+      result: { code: 'provider_refused', receipt: { state: 'refunded', refundState: 'released', lossState: 'provider_http_error',
         externalSettlementRef: transactionHash, accountingTransactionRefs: finish.transactionRefs } } })
     expect(records.payment).toMatchObject({ settlementStatus: 'settled',
-      quarantinedOutputJson: '{"unexpected":true}' })
+      responseStatus: 500 })
     expect(records.obligation).toMatchObject({ state: 'settled', settlementTransactionRef: 'formance:provider-paid' })
     expect(records.activity).toMatchObject([{ state: 'refused', deliveryState: 'not_delivered' }])
+    await expect(backend.query(internal.marketListingEvidence.selectionEvidenceInternal, { toolRefs: [publicRef] }))
+      .resolves.toMatchObject([{ toolRef: publicRef, aeCompleted: 0, aeFailed: 1 }])
     expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, identity)).toEqual({ kind: 'completed' })
   })
   it('rejects a forged public reference even when Call and payment share it', async () => {
     const backend = convexTest(schema, convexModules)
-    await seedInvalid(backend)
+    await seedHttpError(backend)
     await backend.run(async ctx => {
       const row = await ctx.db.query('capabilityCalls').first()
       const payment = await ctx.db.query('moneyX402PaymentAttempts').first()
@@ -696,12 +737,12 @@ describe('verified-paid invalid delivery remedy', () => {
     })
     expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, identity)).toBeNull()
   })
-  it('rejects valid retained delivery and does not release a previously captured buyer Charge', async () => {
+  it('rejects a successful HTTP status and does not release a previously captured buyer Charge', async () => {
     const valid = convexTest(schema, convexModules)
-    await seedInvalid(valid, validOutput)
+    await seedHttpError(valid, 200)
     expect(await valid.mutation(internal.moneyManagedCallRemedy.claim, identity)).toBeNull()
     const captured = convexTest(schema, convexModules)
-    await seedInvalid(captured)
+    await seedHttpError(captured)
     await captured.run(async ctx => {
       const row = await ctx.db.query('capabilityCalls').first()
       if (row) await ctx.db.patch(row._id, { formanceFinancialState: 'settled', formanceSettlementRefs: settlementRefs })
@@ -711,9 +752,9 @@ describe('verified-paid invalid delivery remedy', () => {
     expect(await captured.run(async ctx => await ctx.db.query('capabilityCalls').first()))
       .toMatchObject({ formanceFinancialState: 'settled', formanceSettlementRefs: settlementRefs })
   })
-  it('pins the remedy across interrupted work and revalidates the invalid response before finalizing', async () => {
+  it('pins the remedy across interrupted work and revalidates the response status before finalizing', async () => {
     const backend = convexTest(schema, convexModules)
-    await seedInvalid(backend)
+    await seedHttpError(backend)
     await backend.run(async ctx => {
       const row = await ctx.db.query('capabilityCalls').first()
       if (row) await ctx.db.patch(row._id, { reconciliation: { disposition: 'automatic',
@@ -724,7 +765,7 @@ describe('verified-paid invalid delivery remedy', () => {
     expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, identity)).toMatchObject({ kind: 'claimed' })
     await backend.run(async ctx => {
       const payment = await ctx.db.query('moneyX402PaymentAttempts').first()
-      if (payment) await ctx.db.patch(payment._id, { quarantinedOutputJson: JSON.stringify(validOutput) })
+      if (payment) await ctx.db.patch(payment._id, { responseStatus: 200 })
     })
     expect(await backend.mutation(internal.moneyManagedCallRemedy.finish, finish)).toEqual({ kind: 'refused' })
   })

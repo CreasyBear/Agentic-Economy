@@ -66,7 +66,7 @@ const callReceiptFields = {
   transactionRef: v.optional(v.string()),
   accountingTransactionRefs: v.optional(v.array(v.string())),
   refundState: v.optional(v.union(v.literal('released'), v.literal('not_applicable'), v.literal('unknown'))),
-  lossState: v.optional(v.union(v.literal('none'), v.literal('provider_output_invalid'), v.literal('unknown'))),
+  lossState: v.optional(v.union(v.literal('none'), v.literal('provider_output_invalid'), v.literal('provider_http_error'), v.literal('unknown'))),
   externalSettlementRef: v.optional(v.string()),
   evidenceHash: v.string(),
   issuedAt: v.string(),

@@ -321,6 +321,7 @@ export async function invokeX402(
       ...offerEvidence,
     }, { site: 'invokeX402', reason: 'source_unavailable' })
   }
+  let paidResponseStatus: number | undefined
   try {
     const paid = await runtime.send(target, {
       method: configuration.method,
@@ -331,7 +332,29 @@ export async function invokeX402(
         ? { body: x402RequestBody(target, configuration, invocation.inputJson) }
         : {}),
     })
-    if (paid.status === 402) {
+    paidResponseStatus = Number.isInteger(paid.status) && paid.status >= 100 && paid.status <= 599
+      ? paid.status : undefined
+    // A repeated challenge without payment evidence remains uncertain. A 402
+    // carrying payment evidence follows the same exact-settlement verification
+    // as every other HTTP error before its buyer remedy can run.
+    if (paid.status === 402 && !paid.headers.has('payment-response')) {
+      const retryHeaders = toHeaderRecord(paid)
+      const retryProof = retryHeaders['payment-response']
+      const retryReceipt = retryHeaders['provider-receipt']
+      if (paidResponseStatus !== undefined
+        && (retryProof === undefined || retryProof.length <= 4_096)
+        && (retryReceipt === undefined || retryReceipt.length <= 4_096)
+        && !containsSensitiveValue(retryProof, sensitiveValues)
+        && !containsSensitiveValue(retryReceipt, sensitiveValues)) {
+        await runtime.checkpointX402Response?.({
+          attemptRef: paymentEvent.attemptRef,
+          paymentIdentifier: paymentEvent.paymentIdentifier,
+          responseStatus: paidResponseStatus,
+          requestDigest,
+          custodyRef: paymentEvent.custodyRef,
+          authorizationDigest: paymentEvent.authorizationDigest,
+        })
+      }
       await cancelResponseBody(paid)
       const returnedChallenge = decodeX402Challenge(
         paid.headers.get('payment-required'),
@@ -364,6 +387,7 @@ export async function invokeX402(
       }
       return {
         ...unknown('x402', requestDigest, true, failureCode),
+        ...(paidResponseStatus === undefined ? {} : { responseStatus: paidResponseStatus }),
         paymentChallengeDigest,
         ...offerEvidence,
         queryReleaseStatus: 'released',
@@ -395,7 +419,11 @@ export async function invokeX402(
     )
     const paymentOutputContainsSensitive =
       containsSensitiveValue(paymentProof, sensitiveValues) ||
-      containsSensitiveValue(providerReceiptHeader, sensitiveValues)
+      containsSensitiveValue(providerReceiptHeader, sensitiveValues) ||
+      containsSensitiveValue(paidHeaders['payment-response'], sensitiveValues) ||
+      containsSensitiveValue(paidHeaders['provider-receipt'], sensitiveValues) ||
+      (paidHeaders['payment-response']?.length ?? 0) > 4_096 ||
+      (paidHeaders['provider-receipt']?.length ?? 0) > 4_096
     const providerReceipt =
       verifiedOffer === undefined ? providerReceiptHeader : {}
     const receiptVerification = verifiedOffer === undefined || paymentOutputContainsSensitive
@@ -408,15 +436,16 @@ export async function invokeX402(
         })
     const completeDelivery = normalized.disposition === 'succeeded'
       && (verifiedOffer === undefined || receiptVerification?.kind === 'verified')
-    if (!paymentOutputContainsSensitive && normalized.outputJson !== undefined
-      && normalized.responseDigest !== undefined && completeDelivery) {
+    if (!paymentOutputContainsSensitive && normalized.responseStatus !== undefined) {
       const paymentResponse = paymentProof.paymentProof === undefined
         ? undefined : readX402PaymentResponseHeader(paymentProof.paymentProof)
       await runtime.checkpointX402Response?.({
         attemptRef: paymentEvent.attemptRef,
         paymentIdentifier: paymentEvent.paymentIdentifier,
-        responseDigest: normalized.responseDigest,
-        outputJson: normalized.outputJson,
+        responseStatus: normalized.responseStatus,
+        ...(completeDelivery && normalized.responseDigest !== undefined && normalized.outputJson !== undefined
+          ? { responseDigest: normalized.responseDigest, outputJson: normalized.outputJson }
+          : {}),
         requestDigest,
         custodyRef: paymentEvent.custodyRef,
         authorizationDigest: paymentEvent.authorizationDigest,
@@ -480,6 +509,7 @@ export async function invokeX402(
     if (paymentOutputContainsSensitive) {
       return {
         ...unknown('x402', requestDigest, true, 'response_output_invalid'),
+        ...(normalized.responseStatus === undefined ? {} : { responseStatus: normalized.responseStatus }),
         paymentChallengeDigest,
         ...offerEvidence,
         queryReleaseStatus: 'released',
@@ -515,6 +545,7 @@ export async function invokeX402(
           true,
           settlement.failureCode ?? 'payment_settlement_unknown',
         ),
+        ...(normalized.responseStatus === undefined ? {} : { responseStatus: normalized.responseStatus }),
         paymentChallengeDigest,
         queryReleaseStatus: 'released',
         paymentAuthorizationStatus: 'created',
@@ -626,6 +657,7 @@ export async function invokeX402(
     }
     return {
       ...unknown('x402', requestDigest, true, `network_${errorName(error)}`),
+      ...(paidResponseStatus === undefined ? {} : { responseStatus: paidResponseStatus }),
       paymentChallengeDigest,
       ...offerEvidence,
       queryReleaseStatus: 'released',

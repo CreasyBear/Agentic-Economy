@@ -35,6 +35,7 @@ export const recordX402PaymentObservationArgs = {
   paymentObservationDigest: v.string(),
   settlementStatus: x402PaymentSettlementStatusValue,
   paymentResponseDigest: v.optional(v.string()),
+  responseStatus: v.optional(v.number()),
   quarantinedResponseDigest: v.optional(v.string()),
   quarantinedOutputJson: v.optional(v.string()),
   observedAt: v.number(),
@@ -129,20 +130,24 @@ export async function observeX402PaymentAttemptHandler(
   return null
 }
 
-/** Retain response bytes without claiming payment or delivery has completed. */
+/** Retain HTTP status and optional canonical response output without claiming delivery. */
 export async function checkpointX402ResponseHandler(
   ctx: MutationCtx,
   args: Readonly<{
     dispatchRef: string; attemptRef: string; effectGeneration: number;
     toolRef: string; inputDigest: string; paymentIdentifier: string;
-    responseDigest: string; outputJson: string;
+    responseStatus: number; responseDigest?: string; outputJson?: string;
     settlementTransactionRef?: string;
     requestDigest: string; paymentResponseDigest?: string;
   }>,
 ): Promise<null> {
+  if (!Number.isSafeInteger(args.responseStatus) || args.responseStatus < 100 || args.responseStatus > 599) {
+    throw new Error('x402_payment_response_status_invalid')
+  }
   const output = quarantinedOutputFromArgs({
-    settlementStatus: 'unknown', quarantinedResponseDigest: args.responseDigest,
-    quarantinedOutputJson: args.outputJson,
+    settlementStatus: 'unknown',
+    ...(args.responseDigest === undefined ? {} : { quarantinedResponseDigest: args.responseDigest }),
+    ...(args.outputJson === undefined ? {} : { quarantinedOutputJson: args.outputJson }),
   })
   const row = await loadByAttempt(ctx, args.attemptRef, args.effectGeneration)
   if (row === null || row.dispatchRef !== args.dispatchRef
@@ -153,20 +158,45 @@ export async function checkpointX402ResponseHandler(
   }
   const persisted = quarantinedOutputFromRow(row)
   const txRef = args.settlementTransactionRef
+  if (row.responseStatus !== undefined && row.responseStatus !== args.responseStatus) {
+    throw new Error('x402_payment_response_status_conflict')
+  }
   if (!/^sha256:[0-9a-f]{64}$/.test(args.requestDigest)
     || (args.paymentResponseDigest !== undefined && !/^sha256:[0-9a-f]{64}$/.test(args.paymentResponseDigest))) {
+    throw new Error('x402_payment_observation_attribution_invalid')
+  }
+  if ((row.transportRequestDigest !== undefined && row.transportRequestDigest !== args.requestDigest)
+    || (row.paymentResponseDigest !== undefined && row.paymentResponseDigest !== args.paymentResponseDigest)) {
     throw new Error('x402_payment_observation_attribution_invalid')
   }
   if (txRef !== undefined && (!txRef.startsWith(`chain:${row.network}:`)
     || !/^chain:eip155:\d+:0x[0-9a-fA-F]{64}$/.test(txRef))) {
     throw new Error('x402_payment_observation_attribution_invalid')
   }
-  if (persisted !== undefined) {
-    if (!sameQuarantinedOutput(persisted, output)) throw new Error('x402_payment_quarantined_output_conflict')
-    return null
+  if (persisted !== undefined && output !== undefined && !sameQuarantinedOutput(persisted, output)) {
+    throw new Error('x402_payment_quarantined_output_conflict')
   }
+  const identities: ReadonlyArray<readonly [string, string | undefined]> = [
+    ['response-request:', args.requestDigest],
+    ['response-payment:', args.paymentResponseDigest],
+    [`chain:${row.network}:`, txRef],
+  ]
+  for (const [prefix, supplied] of identities) {
+    const existing = row.evidenceRefs.filter((ref) => ref.startsWith(prefix))
+    const expected = prefix.startsWith('chain:') ? supplied : `${prefix}${supplied}`
+    if (existing.length > 0 && (supplied === undefined || existing.some((ref) => ref !== expected))) {
+      throw new Error('x402_payment_observation_attribution_invalid')
+    }
+  }
+  if (row.responseStatus === args.responseStatus && (persisted !== undefined || output === undefined)
+    && row.evidenceRefs.includes(`response-request:${args.requestDigest}`)
+    && (args.paymentResponseDigest === undefined || row.evidenceRefs.includes(`response-payment:${args.paymentResponseDigest}`))
+    && (txRef === undefined || row.evidenceRefs.includes(txRef))) return null
   await ctx.db.patch(row._id, {
-    quarantinedResponseDigest: args.responseDigest, quarantinedOutputJson: args.outputJson,
+    responseStatus: args.responseStatus,
+    ...(persisted === undefined && output !== undefined ? {
+      quarantinedResponseDigest: output.responseDigest, quarantinedOutputJson: output.outputJson,
+    } : {}),
     evidenceRefs: [...new Set([...row.evidenceRefs, `response-request:${args.requestDigest}`,
       ...(args.paymentResponseDigest === undefined ? [] : [`response-payment:${args.paymentResponseDigest}`]),
       ...(txRef === undefined ? [] : [txRef])])],
@@ -182,6 +212,10 @@ export async function recordX402PaymentObservationHandler(
   args: RecordObservationArgs,
 ): Promise<null> {
   const quarantinedOutput = quarantinedOutputFromArgs(args)
+  if (args.responseStatus !== undefined && (!Number.isSafeInteger(args.responseStatus)
+    || args.responseStatus < 100 || args.responseStatus > 599)) {
+    throw new Error('x402_payment_response_status_invalid')
+  }
   const row = await loadByAttempt(ctx, args.attemptRef, args.effectGeneration)
   if (
     row === null
@@ -204,6 +238,14 @@ export async function recordX402PaymentObservationHandler(
     row.paymentResponseDigest !== undefined
     && row.paymentResponseDigest !== args.paymentResponseDigest
   ) throw new Error('x402_payment_response_identity_conflict')
+  if (args.responseStatus !== undefined && row.responseStatus !== undefined
+    && row.responseStatus !== args.responseStatus) throw new Error('x402_payment_response_status_conflict')
+  if (row.evidenceRefs.some((ref) => ref.startsWith('response-request:')
+    && ref !== `response-request:${args.transportRequestDigest}`)
+    || row.evidenceRefs.some((ref) => ref.startsWith('response-payment:')
+      && ref !== `response-payment:${args.paymentResponseDigest}`)) {
+    throw new Error('x402_payment_observation_attribution_invalid')
+  }
   const persistedQuarantinedOutput = quarantinedOutputFromRow(row)
   const targetState = args.settlementStatus === 'unknown' ? 'reconciliation_required' : 'observed'
   if (row.state === 'observed' || row.state === 'reconciliation_required') {
@@ -233,6 +275,7 @@ export async function recordX402PaymentObservationHandler(
         paymentObservationDigest: args.paymentObservationDigest,
         transportObservationDigest: args.transportObservationDigest,
         transportRequestDigest: args.transportRequestDigest,
+        ...(args.responseStatus === undefined ? {} : { responseStatus: args.responseStatus }),
         ...(persistedQuarantinedOutput === undefined && quarantinedOutput !== undefined
           ? {
               quarantinedResponseDigest: quarantinedOutput.responseDigest,
@@ -253,6 +296,9 @@ export async function recordX402PaymentObservationHandler(
     if (quarantinedOutput !== undefined && !sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)) {
       throw new Error('x402_payment_quarantined_output_conflict')
     }
+    if (row.responseStatus === undefined && args.responseStatus !== undefined) {
+      await ctx.db.patch(row._id, { responseStatus: args.responseStatus })
+    }
     return null
   }
   if (persistedQuarantinedOutput !== undefined && quarantinedOutput !== undefined
@@ -267,6 +313,7 @@ export async function recordX402PaymentObservationHandler(
     transportObservationDigest: args.transportObservationDigest,
     transportRequestDigest: args.transportRequestDigest,
     settlementStatus: args.settlementStatus,
+    ...(args.responseStatus === undefined ? {} : { responseStatus: args.responseStatus }),
     ...(args.paymentResponseDigest === undefined ? {} : { paymentResponseDigest: args.paymentResponseDigest }),
     ...(quarantinedOutput === undefined
       ? {}
