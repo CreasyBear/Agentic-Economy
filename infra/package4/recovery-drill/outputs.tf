@@ -18,3 +18,7 @@ output "source_database_identifier" {
 output "source_k3s_instance_role" {
   value = data.aws_iam_role.k3s.name
 }
+
+output "restore_time" {
+  value = var.restore_time
+}

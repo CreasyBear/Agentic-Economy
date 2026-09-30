@@ -239,9 +239,13 @@ export function readFormanceConfiguration(
 
 export function createFormanceContext(
   configuration: FormanceConfiguration,
-  options: Readonly<{ signal?: AbortSignal }> = {},
+  options: Readonly<{
+    signal?: AbortSignal
+    observeResponse?: (response: Response, request: Request) => Promise<void>
+  }> = {},
 ): FormanceContext {
   const httpClient = new HTTPClient()
+  if (options.observeResponse !== undefined) httpClient.addHook('response', options.observeResponse)
   const gatewayOrigin = new URL(configuration.gatewayUrl).origin
   httpClient.addHook('beforeRequest', (request) => {
     if (new URL(request.url).origin !== gatewayOrigin) {

@@ -626,3 +626,97 @@ and historical coverage remain explicitly excluded from complete totals. Full
 Convex codegen needs deployment configuration, absent in this worktree; the local
 API inventory and registration-kind fixture are updated and checked. The release
 gate must run again before merge/release; this stage does not merge or release.
+
+
+## Stage 20 — a restore proof that cannot pass on partial evidence
+
+Design thesis: a restored Formance ledger must reproduce a recorded, stable
+financial state and retry an original command without creating another posting.
+Sluice routes this as deep cross-boundary recovery work. Apply contract-enforcer,
+error-strategist, idempotency-guardian and complexity-accountant; the narrow
+Terraform change also uses tf-best-practices. No new service or dependency.
+
+Requires: every source ledger writer is quiesced and drained (Calls, funding,
+refund/recovery workers, webhooks and operator writes), an original valid AE
+command already present in that ledger, and an isolated restored target.
+Ensures: two complete source reads agree around a recorded cutoff; verification
+compares the restored target to that saved baseline, then repeats the original
+application and native command and proves the same native transaction ID and
+unchanged complete state. Invariant: every transaction, account/asset with signed
+input/output/balance volumes, schema content and ledger configuration participates;
+unknown account families, zero balances, metadata, templates and reversions are
+not filtered away. On violation: missing/malformed pages, duplicate identities,
+looping cursors, unsupported numeric precision, scan limits, drift, missing replay
+material or any ambiguous response fails the proof. No truncated or null digest
+can produce PASS, and a 409 alone is not successful replay evidence.
+
+The current SDK normalizes timestamps and strips unknown fields. Its maintained
+HTTP response hook will capture bounded raw GET payloads before SDK decoding,
+retaining exact timestamp strings and native schema attribution. Normal SDK
+transport, origin/authentication fences and validation remain in use. Unsafe
+wire numbers are refused rather than silently rounded. No raw bodies or secrets
+are emitted; the private baseline stores only coverage counts/digests, source
+identity, cutoff and the original command digest/transaction identity.
+
+The cloud drill pins an explicit restore time between equal baseline reads and
+waits until RDS reports that time restorable while source writers remain frozen.
+Verification never compares a later live source with an older backup. Two equal
+reads establish observed stability; they do not establish writer quiescence.
+Quiescence and the backup/target identity remain explicit operating prerequisites.
+This stage does not run AWS, deploy Convex or claim full application recovery.
+
+Complexity decision: keep one Node snapshot adapter, a small CLI orchestrating
+baseline/compare/replay, and one opt-in native restore spec using existing Compose
+pins. The adapter absorbs complete pagination, raw SDK evidence and conservative
+failure handling for both operational verification and the native proof. The CLI
+replaces the shell's truncated hashes and synthetic probe. One optional response
+observer on the existing SDK factory avoids a second transport. The cost is two
+full scans per stability check with explicit bounds; no background service, new
+reporting framework, arbitrary SQL production probe or replacement SDK is added.
+
+Root owns CLI/infra/runbook/integration, checks and runtime acceptance. Bounded
+workers own the snapshot adapter/unit evidence and disposable native proof;
+independent review checks the actual false-green failure modes. Native acceptance
+must include more than 1,000 transactions, exact baseline equality after database
+backup/restore, duplicate native retry with a stable ID, and rejection of an old
+row change, same-total account redistribution, schema drift and reversion drift.
+
+### Stage 20 acceptance — 1 October 2026
+
+The disposable PostgreSQL backup/restore passes with more than 1,000 transactions
+and Accounts on Ledger 2.4.14 and Gateway 2.3.1. Complete source and target state
+agrees; application replay and two concurrent native retries preserve the original
+transaction ID and all state digests. A changed original command is refused
+without a posting. An old transaction change beyond the retired 1,000-row window,
+same-total redistribution between Accounts, transaction reversion and schema
+content drift with an unchanged version each fail verification. The final native
+case passes in 10.95 seconds. Its two named Compose projects and volumes are removed.
+
+The cloud script binds its target to the exact private, encrypted, available RDS
+drill instance and its managed secret before reading credentials or creating
+Kubernetes resources. Source and target database identities must differ. Its
+shell fixtures reject substituted endpoints, secrets, source identities and
+malformed AWS results before side effects. Cleanup must succeed before PASS.
+OpenTofu format/validation and the Terraform policy check pass without AWS calls.
+
+The focused restore packet passes 92 tests. `npm run check` passes with zero
+dependency cycles. The full `npm run gate` passes: anonymous Convex code generation,
+public build integrity, clean types, 7,191 unit tests, 2,480 integration tests,
+4 type tests, 75 import checks, TypeScript standards, 31 SEO checks, 16 browser
+journeys, 18 accessibility checks and the reproducible CLI package. The ordinary
+gate retains one unit skip, 54 integration skips and three todos; the opt-in
+native restore evidence above was run separately.
+
+This cumulative gate also found a Stage 19 deployment defect: Convex skips
+`*.actions.ts`, so the model-cost reconciliation registration is now
+`chatModelCostActions.ts`, with its callers and generated API aligned. The
+existing module-path check now rejects registrations in skipped filenames.
+Twenty-eight focused registration/reconciliation checks and ten schema checks
+pass; the schema inventory now includes the already implemented cost table.
+
+Independent restore review findings are resolved. This evidence proves selected
+Formance ledger financial state and original-command replay on the pinned local
+stack. It does not establish production quiescence, cloud PITR/RPO/RTO, Convex
+records/files/jobs, deployed alerts or complete application recovery. Those
+remain #286 runtime work. No cloud provisioning, deployment, provider generation
+or live-money movement was performed.

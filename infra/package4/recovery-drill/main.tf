@@ -66,7 +66,7 @@ resource "aws_db_instance" "drill" {
 
   restore_to_point_in_time {
     source_db_instance_identifier = data.aws_db_instance.source.db_instance_identifier
-    use_latest_restorable_time    = true
+    restore_time                  = var.restore_time
   }
 
   instance_class                  = "db.t4g.medium"
@@ -94,6 +94,16 @@ resource "aws_db_instance" "drill" {
 }
 
 data "aws_iam_policy_document" "drill_secret" {
+  statement {
+    sid     = "VerifyRecoveryDrillDatabaseIdentity"
+    effect  = "Allow"
+    actions = ["rds:DescribeDBInstances"]
+    resources = [
+      data.aws_db_instance.source.db_instance_arn,
+      aws_db_instance.drill.arn,
+    ]
+  }
+
   statement {
     sid    = "ReadRecoveryDrillDatabaseSecret"
     effect = "Allow"
