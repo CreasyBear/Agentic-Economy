@@ -3,9 +3,10 @@ import type { ActionCtx } from '../../../_generated/server'
 import { makeFunctionReference } from 'convex/server'
 import type { Value } from 'convex/values'
 import { z } from 'zod'
+import { api } from '../../../_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import type { ToolQuoteInput } from '@/modules/capability-execution/quote'
+import { toolQuoteInputSchema, type ToolQuoteInput } from '@/modules/capability-execution/quote'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
@@ -25,30 +26,57 @@ const payableAdmissionRef = makeFunctionReference<'query', {
   authority: TrustedChatAuthority; toolRef: string
 }, boolean>('chatTurns:authorizePayableTool')
 
+async function callableToolRef(ctx: ToolCtx | ActionCtx, ref: string): Promise<string | null> {
+  if (/^operation:v1:[0-9a-f]{64}$/u.test(ref)) return ref
+  if (!ref.startsWith('registry:')) return null
+  const detail = await ctx.runQuery(api.x402DirectoryIndex.detailById, { id: ref })
+  if (detail.kind !== 'found') return null
+  const resolved = await ctx.runAction(api.x402Directory.resolve, {
+    resource: detail.item.entry.resource,
+  })
+  return resolved.kind === 'ready' ? resolved.toolRef : null
+}
+
+const chatToolQuoteInputSchema = z.strictObject({
+  toolRef: z.string().min(1).max(200),
+  input: toolQuoteInputSchema.shape.input,
+})
+
+const CALL_ANSWER_WAIT_MS = 25_000
+const CALL_POLL_MS = 750
+
+function pause(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  setTimeout(resolve, ms)
+  return promise
+}
+
 export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'agent_key' }, reserve: ReserveChatTool) {
   const toolQuoteContract = contractFor('tool.quote')
   const callContract = contractFor('tool.call')
   return {
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']]: createTool({
         description: descriptionFor(toolQuoteContract),
-        inputSchema: toolQuoteContract.schema as z.ZodType<ToolQuoteInput>,
+        inputSchema: chatToolQuoteInputSchema as z.ZodType<ToolQuoteInput>,
         execute: async (ctx: ToolCtx, input: ToolQuoteInput) => {
+          const toolRef = await callableToolRef(ctx, input.toolRef)
+          if (toolRef === null) return failure('tool.quote', 'tool_unavailable')
           const denied = reserve('tool.quote')
           if (denied !== null) return denied
-          if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef: input.toolRef })) {
+          if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef })) {
             return failure('tool.quote', 'turn_stopped')
           }
           const commandDigest = canonicalDigest({
             turnRef: authority.turnRef,
             credentialId: authority.credentialLocator,
-            operationRef: input.toolRef,
+            operationRef: toolRef,
             input: input.input,
           } as StableHashValue)
           const result = await ctx.runAction(quoteRef, {
             authority,
             operationKey: commandDigest,
             correlationId: `chat-inspect-corr:${commandDigest}`,
-            toolRef: input.toolRef,
+            toolRef,
             input: structuredClone(input.input) as Record<string, Value>,
           })
           return projectedModelFacingOutput(
@@ -72,13 +100,21 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
             commitmentRef: input.quoteRef,
           } as StableHashValue)
           const idempotencyKey = `chat-invoke:${commandDigest}`
-          const result = await ctx.runAction(callRef, {
+          const callArgs = {
             authority,
             operationKey: input.quoteRef,
             correlationId: `chat-invoke-corr:${commandDigest}`,
             quoteRef: input.quoteRef,
             idempotencyKey,
-          })
+          }
+          // Calls run on the worker. Replaying the same idempotent Call returns its stored
+          // result, so wait briefly for the answer and let the model reply from it.
+          let result = await ctx.runAction(callRef, callArgs)
+          const deadline = Date.now() + CALL_ANSWER_WAIT_MS
+          while (result.kind === 'pending' && Date.now() < deadline) {
+            await pause(CALL_POLL_MS)
+            result = await ctx.runAction(callRef, callArgs)
+          }
           return projectedModelFacingOutput(
             'tool.call',
             callContract.outputSchema,
@@ -96,18 +132,20 @@ export async function quoteThenCallFromCard(
   toolRef: string,
   input: Record<string, Value>,
 ): Promise<{ quote: QuoteResult; call?: CallResult } | null> {
-  if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef })) return null
+  const resolvedToolRef = await callableToolRef(ctx, toolRef)
+  if (resolvedToolRef === null) return null
+  if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef: resolvedToolRef })) return null
   const commandDigest = canonicalDigest({
     turnRef: authority.turnRef,
     credentialId: authority.credentialLocator,
-    operationRef: toolRef,
+    operationRef: resolvedToolRef,
     input,
   } as StableHashValue)
   const quote = await ctx.runAction(quoteRef, {
     authority,
     operationKey: commandDigest,
     correlationId: `chat-inspect-corr:${commandDigest}`,
-    toolRef,
+    toolRef: resolvedToolRef,
     input: structuredClone(input),
   })
   if (quote.kind !== 'committed') return { quote }

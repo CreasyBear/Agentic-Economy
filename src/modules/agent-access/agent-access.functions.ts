@@ -53,7 +53,6 @@ import {
 import { defaultSandboxAgentAccessPolicy } from './sandbox-policy'
 import { exactAmountSchema } from '@/modules/money/public'
 import { issuedAgentGrantRef } from './issued-agent-binding'
-import { hasFreshMfaFactorVerification } from '../../../convex/lib/principalAccount/workspaceSecurity/factorVerification'
 import type { OwnerConnectionLifecycleResult } from './agent-connection'
 import {
   agentSpendingLimitsUpdateSchema,
@@ -466,11 +465,8 @@ export const enableOwnerChatSpendingServer = createServerFn({ method: 'POST' })
     if (!session.isAuthenticated || session.userId === null) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
-    if (!hasFreshMfaFactorVerification(session.sessionClaims?.fva)) {
-      return { kind: 'refused' as const, code: 'mfa_reverification_required' as const }
-    }
     await requireCanonicalOwnerAuthorityServer()
-    const idempotencyKey = `owner-chat-${session.userId}`
+    const idempotencyKey = `owner-chat-spend-${session.userId}`
     const result = await issueAgentAccessKey({
       principal: { userId: session.userId },
       input: {
@@ -479,7 +475,7 @@ export const enableOwnerChatSpendingServer = createServerFn({ method: 'POST' })
         grantRef: issuedAgentGrantRef(session.userId, idempotencyKey),
         applicationRef: 'ae-owner-chat',
         environment: 'sandbox',
-        scopes: [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode('approval_required')],
+        scopes: [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode('spending_policy')],
       },
       spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }),
       api: createClerkAgentAccessKeyApi(clerkClient().apiKeys),

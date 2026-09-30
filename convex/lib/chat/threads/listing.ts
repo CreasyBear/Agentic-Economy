@@ -82,7 +82,7 @@ async function ownerPage(ctx: QueryCtx, page: PaginationResult<Doc<'chatThreads'
       .map(row => projectThread(row, now)),
   }
 }
-/** A Clerk session may start only the owner's explicit, live, approval-only chat grant. */
+/** A Clerk session may start only the owner's explicit, live, spending-policy chat grant. */
 export async function resolveOwnerChatActor(ctx: Pick<QueryCtx, 'auth' | 'db'> | MutationCtx): Promise<TurnActor | null> {
   const owner = await resolveBusinessActor(ctx)
   if (owner.kind !== 'authenticated_owner') throw new Error('unauthenticated')
@@ -92,7 +92,7 @@ export async function resolveOwnerChatActor(ctx: Pick<QueryCtx, 'auth' | 'db'> |
   const matches = rows.filter(row => row.applicationRef === 'ae-owner-chat')
   if (matches.length !== 1) return null
   const [row] = matches
-  if (row === undefined || row.authorityMode !== 'approval_required') return null
+  if (row === undefined || row.authorityMode !== 'spending_policy') return null
   const canonical = await resolveCanonicalAgentContext(ctx, row.credentialId, Date.now())
   if (canonical?.principalRef !== row.principalId || canonical.accountRef !== owner.canonicalAccountRef) return null
   const current = await resolveCurrentAgentAuthority(ctx, {

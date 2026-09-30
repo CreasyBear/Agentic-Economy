@@ -13,7 +13,7 @@ import { ChatHeader } from './ChatHeader'
 import { ChatHeaderAuthorityContainer } from '../ChatHeaderAuthorityContainer'
 
 
-export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy = model.header.busy, onEnableSpending }: ChatLayoutProps) {
+export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy = model.header.busy, onEnableSpending, onAddCredit, balanceLabel }: ChatLayoutProps) {
   const [historyOpen, setHistoryOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   useEffect(() => {
@@ -53,11 +53,11 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
       <AeChatPage
         header={
           <ErrorBoundary key={model.header.threadId} fallback={<ChatHeader {...fallbackHeader}
-            mobileHistory={null} mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} onToggleHistory={toggleHistory} />}>
+            balanceLabel={balanceLabel} mobileHistory={null} mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} onToggleHistory={toggleHistory} />}>
             <ChatHeaderAuthorityContainer
               {...fallbackHeader}
+              balanceLabel={balanceLabel}
               ownerChatEnabled={ownerChatEnabled}
-              {...(onEnableSpending === undefined ? {} : { onEnableSpending })}
               mobileHistory={model.showHistoryRail ? (
                 <ErrorBoundary key={model.header.threadId} fallback={<a href="/market" className="m-3 text-sm underline">Browse Tools</a>}>
                   {model.createHistoryPanel('history', () => setMobileOpen(false))}
@@ -74,7 +74,9 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
       >
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <ChatTranscript {...model.transcript} ownerChatEnabled={ownerChatEnabled}
+            onRunTool={model.onRunTool}
             enableSpendingBusy={enableSpendingBusy}
+            {...(onAddCredit === undefined ? {} : { onAddCredit })}
             {...(onEnableSpending === undefined ? {} : { onEnableSpending })} />
           <div className="sticky bottom-0 z-10 w-full shrink-0 bg-background pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
             <div className="mx-auto grid w-full max-w-[1200px] grid-cols-12 gap-x-2 px-[5px] sm:px-0">

@@ -20,6 +20,7 @@ export function ChatHeader({
   sharePath,
   copied,
   ownerChatEnabled,
+  balanceLabel,
   enableProblem,
   onEnableSpending,
   mobileHistory,
@@ -76,6 +77,16 @@ export function ChatHeader({
       <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch max-sm:!size-8 max-sm:!min-h-8 max-sm:!min-w-8 [&_svg]:size-5" aria-label={chatHistory.newChat} onClick={onNewChat}>
         <PlusIcon aria-hidden="true" />
       </Button>
+      {balanceLabel === undefined ? null : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="min-h-touch rounded-full px-3"
+          render={<a href="/owner/credit" aria-label={`Balance ${balanceLabel}`} />}
+        >
+          {balanceLabel}
+        </Button>
+      )}
       {authenticated && threadId !== null ? (
         <div className="hidden items-center gap-intra sm:flex">
           <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={shareState === 'active' ? chatHistory.shareGet : chatHistory.shareCreate} disabled={busy} onClick={onIssueShare}>

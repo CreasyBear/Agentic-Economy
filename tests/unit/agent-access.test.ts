@@ -11,7 +11,7 @@ import {
   listAgentAccessKeys,
   projectAgentAccessKey,
 } from '../../src/modules/agent-access/agent-access'
-import { CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE } from '../../src/modules/agent-access/contract'
+import { CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, CUSTOMER_REQUEST_UNRESTRICTED_TEST_ONLY_SCOPE } from '../../src/modules/agent-access/contract'
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
 import { issuedAgentCanonicalRefs } from '../../src/modules/agent-access/issued-agent-binding'
@@ -147,7 +147,7 @@ describe('agent access', () => {
       scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
     })
   })
-  it('keeps the owner-chat credential secretless and rejects autonomous authority', async () => {
+  it('keeps the owner-chat credential secretless and within spending policy', async () => {
     const api = {
       create: vi.fn().mockResolvedValue({ id: 'owner-chat-key', secret: 'must-not-return' }),
       getSecret: vi.fn().mockResolvedValue({ secret: 'must-not-return' }),
@@ -159,22 +159,29 @@ describe('agent access', () => {
       api,
       registerBinding: vi.fn().mockResolvedValue(recordedBinding('owner-chat-12345678')),
     }
-    const approved = await issueAgentAccessKey({
-      ...base, returnSecret: false,
-      input: { name: 'Owner chat', idempotencyKey: 'owner-chat-12345678',
-        applicationRef: 'ae-owner-chat',
-        scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE] },
-    })
-    expect(approved).toMatchObject({ kind: 'created', authorityMode: 'approval_required', secret: '' })
+    const input = {
+      name: 'Owner chat',
+      idempotencyKey: 'owner-chat-12345678',
+      applicationRef: 'ae-owner-chat',
+      scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
+    }
+    const issued = await issueAgentAccessKey({ ...base, returnSecret: false, input })
+    expect(issued).toMatchObject({ kind: 'created', authorityMode: 'spending_policy', secret: '' })
     expect(api.getSecret).not.toHaveBeenCalled()
-    const autonomous = await issueAgentAccessKey({
+
+    const approvalRequired = await issueAgentAccessKey({
       ...base, returnSecret: false,
-      input: { name: 'Owner chat', idempotencyKey: 'owner-chat-22345678',
-        applicationRef: 'ae-owner-chat',
-        scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE] },
+      input: { ...input, scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE] },
     })
-    expect(autonomous).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
-    expect(api.create).toHaveBeenCalledTimes(1)
+    expect(approvalRequired).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
+    const unrestricted = await issueAgentAccessKey({
+      ...base, returnSecret: false,
+      input: { ...input, scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_UNRESTRICTED_TEST_ONLY_SCOPE] },
+    })
+    expect(unrestricted).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
+    const secretRequested = await issueAgentAccessKey({ ...base, returnSecret: true, input })
+    expect(secretRequested).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
+    expect(api.create).toHaveBeenCalledOnce()
   })
 
   it('issues and exactly replays one canonical market-operations key', async () => {

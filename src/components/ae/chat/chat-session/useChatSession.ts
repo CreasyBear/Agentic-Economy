@@ -365,6 +365,14 @@ export function useChatSession({
     setError(promptLimitMessage(value))
     document.getElementById('tool-chat-prompt')?.focus()
   }
+  async function resubmitLastRequest(forceNewThread: boolean, beforeSubmit?: () => void): Promise<void> {
+    const lastRequest = textFromParts(visibleMessages.findLast(message => message.role === 'user')?.parts ?? []).trim()
+    beforeSubmit?.()
+    if (lastRequest) await submit(forceNewThread, lastRequest)
+  }
+  function retryLastRequest(): void {
+    void resubmitLastRequest(false)
+  }
   return {
     showHistoryRail: isAuthenticated,
     ...(privateThreadLocked ? { signInToThread: { href: `/sign-in?redirect=${encodeURIComponent(`/t/${threadId}`)}` } } : {}),
@@ -380,14 +388,12 @@ export function useChatSession({
         if (busy) return
         setBusy(true)
         setEnableProblem('')
-        void enableOwnerChat().then(result => {
+        void enableOwnerChat().then(async result => {
           if (result.kind === 'enabled') {
-            setStatus('Approval-only chat spending enabled. Start a new conversation to use it.')
-            onNewChat()
+            await resubmitLastRequest(true, onNewChat)
+            setStatus('Paying is on.')
           } else {
-            setEnableProblem(result.code === 'mfa_reverification_required'
-              ? 'Verify it is you in Account security before enabling chat spending.'
-              : `Could not enable approval-only chat: ${result.code}.`)
+            setEnableProblem(`Could not enable approval-only chat: ${result.code}.`)
           }
         }).catch((cause: unknown) => {
           captureClientExceptionOnClient(cause)
@@ -463,5 +469,7 @@ export function useChatSession({
       }),
     },
     pageBusy: busy,
+    onRunTool: (toolRef, title) => { void submit(false, `Use ${title} (${toolRef}) for my last request. Fill its input from what I asked, run it, and give me the answer.`) },
+    retryLastRequest,
   }
 }

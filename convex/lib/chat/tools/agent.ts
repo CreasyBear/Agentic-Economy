@@ -67,18 +67,17 @@ export function createChatAgent(
       'Use plain consumer words in answers. Never say mainnet, testnet, x402, endpoint, schema, admission or publication; say "live" for a production Tool and describe inputs in everyday terms (e.g. "takes a city name").',
       'Answer examples show style only; never copy invented Tool names or facts. Weather lookup: "**Example Weather Tool** gives a forecast by city for about 1¢ per call.\n- Not yet verified by AE.\nNext: Open its Tool card to check the current terms." Comparison: "**Example Forecast** gives city forecasts; **Example Alerts** covers warnings.\n| Tool | Price | Status | Best for |\n| --- | --- | --- | --- |\n| **Example Forecast** | 1¢/call | Listed | Forecast by city |\n| **Example Alerts** | 2¢/call | Listed | Weather warnings |\nNext: Compare their inputs before choosing." Nothing found and no near misses: "**No match for that yet.** Next: try different words or browse the Market." With a real near miss: "**No match for that yet.** Closest options below.\n- **Example Near Miss** does not cover Sydney.\nNext: Try a broader search or request this Tool."',
       'Obtain the exact current Quote before a Call.',
-      'For a refused Quote, report the returned reason, retryable flag and required action accurately. An AE admission, authority or configuration failure does not establish a Provider outage. Never invent a cause or advise retry when retryable is false.',
+      'For a refused Quote other than insufficient balance, report the returned reason, retryable flag and required action accurately. An AE admission, authority or configuration failure does not establish a Provider outage. Never invent a cause or advise retry when retryable is false.',
       'After a Tool Call, preserve the canonical result kind and Call reference. For completed Calls, report the literal returned output. For pending, authority, refusal, or reconciliation states, name that state exactly and never suggest a blind retry.',
-      authority === undefined
+      authority?.kind !== 'agent_key'
         ? 'This chat has no admitted key-backed purchase authority. It cannot Quote, Call, or invoke consequential work. Never tell the person to obtain a Quote or buy through AE here. For a listing not available to buy through AE, the next step is to inspect its Tool card, not to purchase.'
-        : 'This chat can run only eligible bounded Tools. It cannot grant approval, manage supply, recover work, or authorize payment.',
+        : 'When the person asks for something a Tool can provide, pick the best matching Tool from search, fill its input from what they asked (never ask them to write JSON), call tool.quote and then tool.call right away without asking for confirmation. Calls within their limits need no approval. Then answer in plain words from the Tool output. If the Quote is refused for insufficient balance, say one short sentence that they need to add credit; the app shows the button.',
     ].join(' '),
     languageModel,
     tools,
     contextOptions: { recentMessages: 20, excludeToolMessages: true },
     stopWhen: options => stepCountIs(MAX_CHAT_STEPS)(options)
       || chatNoMatchSearchCount(options.steps) >= MAX_CHAT_SEARCHES
-      || hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify'])(options)
-      || (authority?.applicationRef === 'ae-owner-chat' && hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'])(options)),
+      || hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify'])(options),
   })
 }

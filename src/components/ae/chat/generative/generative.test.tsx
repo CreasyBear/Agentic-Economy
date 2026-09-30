@@ -208,26 +208,29 @@ describe('generative chat leaves', () => {
     })
     if (card === null) throw new Error('missing search card')
     const onQuoteTool = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    const onRunTool = vi.fn()
     render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [
       { type: 'text', text: 'Currency exchange is available.' }, serializeToolCard(card),
-    ] }]} ownerChatThreadId="owned-thread" ownerChatEnabled onQuoteTool={onQuoteTool} />)
+    ] }]} ownerChatThreadId="owned-thread" ownerChatEnabled onQuoteTool={onQuoteTool} onRunTool={onRunTool} />)
     expect(screen.getByText('A$0.01 per Call')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run · A$0.01 per Call' }))
+    expect(onRunTool).toHaveBeenCalledExactlyOnceWith(toolRef, 'Currency exchange')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit input' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
     expect(screen.getByRole('alert')).toHaveTextContent('exact input')
     expect(onQuoteTool).not.toHaveBeenCalled()
     fireEvent.change(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' }), {
       target: { value: '["not an object"]' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
     expect(onQuoteTool).not.toHaveBeenCalled()
     fireEvent.change(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' }), {
       target: { value: '{"base":"USD","quote":"AUD"}' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Get a Quote for this input' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Check input and price' })).toBeEnabled())
     expect(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' })).toHaveValue('{"base":"USD","quote":"AUD"}')
-    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check input and price' }))
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Exact Tool input (JSON object)' })).toBeNull())
     expect(onQuoteTool).toHaveBeenCalledTimes(2)
     expect(onQuoteTool).toHaveBeenLastCalledWith(toolRef, { base: 'USD', quote: 'AUD' })

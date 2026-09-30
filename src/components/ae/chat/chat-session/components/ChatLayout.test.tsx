@@ -46,6 +46,8 @@ function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel
       messages: [],
     },
     pageBusy: false,
+    onRunTool: vi.fn(),
+    retryLastRequest: vi.fn(),
     ...overrides,
   }
 }

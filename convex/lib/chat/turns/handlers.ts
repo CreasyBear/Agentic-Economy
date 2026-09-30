@@ -95,7 +95,7 @@ export async function authorizeKeyTurnGeneration(
   if (stored === null || stored.lifecycle !== 'active' || stored.principalId !== turn.principalRef
     || stored.ownerId !== turn.accountRef) return null
   if ((turn.origin === 'owner_chat') !== (stored.applicationRef === 'ae-owner-chat')
-    || (turn.origin === 'owner_chat' && stored.authorityMode !== 'approval_required')) return null
+    || (turn.origin === 'owner_chat' && stored.authorityMode !== 'spending_policy')) return null
   const candidate = {
     principalId: canonical.principalRef, ownerId: canonical.accountRef,
     credentialId: turn.credentialLocator, applicationRef: stored.applicationRef,

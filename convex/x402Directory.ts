@@ -6,30 +6,12 @@ import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/serv
 import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
 import { readX402DirectoryRawPage } from '@/modules/market/x402-directory-source.server'
 import { x402DirectoryResolveInputSchema, type X402DirectoryResolution, type X402DirectoryResolutionReason } from '@/modules/market/x402-directory'
-import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
-import { directoryEntryMatchesFilters, isDirectoryEntryEligible, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
-import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
+import { directoryEntryMatchesFilters } from '@/modules/market/x402-directory-index'
 import { api, internal } from './_generated/api'
 import { action } from './_generated/server'
 import { reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 
-/**
- * Ineligible resources refuse the same way a filter mismatch would:
- * eligibility is the directory's own quality bar
- * (src/modules/market/x402-directory-index.ts:isDirectoryEntryEligible).
- * The payer clause is only enforced when the source actually reported activity
- * (`entry.activity !== undefined`); a resource with no activity telemetry
- * bypasses that floor, but still needs a recognised USDC price.
- */
-function directoryResolutionEligible(entry: X402DirectoryEntry): boolean {
-  const minimumUsdPrice = minimumDirectoryUsdPrice(entry)
-  if (minimumUsdPrice === undefined) return false
-  if (entry.activity === undefined) return true
-  const flags = directoryMetadataFlags(entry)
-  const payersOrder = entry.activity.payers30d ?? -1
-  return isDirectoryEntryEligible({ hasOutputSchema: flags.hasOutputSchema, hasOutputExample: flags.hasOutputExample, minimumUsdPrice, payersOrder })
-}
 
 function boundedResolutionReason(reason: string): X402DirectoryResolutionReason {
   switch (reason) {
@@ -71,7 +53,6 @@ export const resolve = action({
     })
     let selected: unknown
     if (indexed.kind === 'found') {
-      if (!directoryResolutionEligible(indexed.entry)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
       selected = JSON.parse(indexed.sourceJson) as unknown
     }
     else if (indexed.kind === 'not_found') return { kind: 'unavailable', reason: 'resource_not_found' }
@@ -85,7 +66,6 @@ export const resolve = action({
       if (candidate === undefined) return { kind: 'unavailable', reason: 'resource_not_found' }
       const candidateEntry = projectX402DirectoryEntry(candidate)
       if (!directoryEntryMatchesFilters(candidateEntry, context)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
-      if (!directoryResolutionEligible(candidateEntry)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
       selected = candidate
     }
     try {

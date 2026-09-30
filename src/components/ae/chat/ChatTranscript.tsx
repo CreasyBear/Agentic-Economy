@@ -39,6 +39,11 @@ import type { FilterValue } from './generative/generative.contracts'
 import { SearchNext, ToolCard } from './ToolCard'
 import { projectGenerativeTurn, projectTranscriptTurns } from './presentation'
 
+type ChatTranscriptProps = ChatTranscriptViewProps & Readonly<{
+  onRunTool?: (toolRef: string, title: string) => void
+  onAddCredit?: (shortfall?: { units: string; exponent: number }) => void
+}>
+
 const TRANSCRIPT_COLUMN = 'mx-auto grid w-full content-start max-w-[1200px] grid-cols-12 gap-x-2 gap-y-5 px-[5px] py-6 sm:px-0 md:gap-y-7'
 
 export function ChatTranscript({
@@ -54,9 +59,9 @@ export function ChatTranscript({
   onContinueSearch,
   onRepeatSearch,
   onQuoteTool,
+  onRunTool,
+  onAddCredit,
   ownerChatEnabled = false,
-  enableSpendingBusy = false,
-  onEnableSpending,
   ownerChatThreadId,
   ownerChatNow,
   onFreshQuote,
@@ -65,7 +70,7 @@ export function ChatTranscript({
   clarifyDisabled = false,
   pending = false,
   readOnly = false,
-}: ChatTranscriptViewProps) {
+}: ChatTranscriptProps) {
   const [comparedByTurn, setComparedByTurn] = useState<Record<string, readonly string[]>>({})
   const [filtersByTurn, setFiltersByTurn] = useState<Record<string, FilterValue>>({})
   const [selectedByTurn, setSelectedByTurn] = useState<Record<string, string | undefined>>({})
@@ -164,6 +169,9 @@ export function ChatTranscript({
                               <OptionsGrid
                                 view={{ ...view.options, comparedIds: readOnly ? [] : selected, ...(readOnly || selectedId === undefined ? {} : { selectedId }) }}
                                 signedIn={!readOnly && ownerChatThreadId !== undefined}
+                                ownerChatEnabled={ownerChatEnabled}
+                                {...(onRunTool === undefined ? {} : { onRunTool })}
+                                {...(onAddCredit === undefined ? {} : { onAddCredit })}
                                 {...(readOnly || onQuoteTool === undefined ? {} : { onQuoteSelect: (toolRef: string) =>
                                   setQuoteDraft({ turnId: turn.id, toolRef, input: '', invalid: false, submitting: false }) })}
                                 {...(readOnly ? { readOnly: true } : {
@@ -175,8 +183,8 @@ export function ChatTranscript({
                                   onCompare: toggleCompare,
                                 })}
                               />
-                              {quoteDraft?.turnId !== turn.id || onQuoteTool === undefined || ownerChatThreadId === undefined ? null : ownerChatEnabled ? (
-                                <form aria-label="Quote input" className="grid gap-intra rounded-card border border-border bg-card p-4"
+                              {quoteDraft?.turnId !== turn.id || onQuoteTool === undefined || ownerChatThreadId === undefined ? null : (
+                                <form aria-label="Tool input" className="grid gap-intra rounded-card border border-border bg-card p-4"
                                   onSubmit={(event) => {
                                     event.preventDefault()
                                     if (quoteDraft.submitting) return
@@ -200,21 +208,15 @@ export function ChatTranscript({
                                     onChange={(event) => setQuoteDraft({ ...quoteDraft, input: event.target.value, invalid: false })}
                                     placeholder='{"field":"your value"}' className="font-mono text-sm" />
                                   {quoteDraft.invalid ? <p id="chat-quote-input-error" role="alert" className="text-sm text-destructive">Enter the Tool’s exact input as a JSON object (up to 1,500 bytes).</p> : null}
-                                  <p className="text-sm text-muted-foreground">A fresh Quote checks your input and price. No Call is made by this step.</p>
+                                  <p className="text-sm text-muted-foreground">Check the input and price without running the Tool.</p>
                                   <div className="flex flex-wrap gap-2">
                                     <Button type="submit" className="min-h-touch" disabled={quoteDraft.submitting}>
-                                      {quoteDraft.submitting ? 'Requesting Quote…' : 'Get a Quote for this input'}
+                                      {quoteDraft.submitting ? 'Checking input…' : 'Check input and price'}
                                     </Button>
                                     <Button type="button" variant="ghost" className="min-h-touch" disabled={quoteDraft.submitting}
                                       onClick={() => setQuoteDraft(null)}>Cancel</Button>
                                   </div>
                                 </form>
-                              ) : (
-                                <div className="grid gap-intra rounded-card border border-border bg-card p-4">
-                                  <p className="text-sm">Turn on paying in chat to get a Quote. Every Call waits for your approval.</p>
-                                  <Button type="button" className="min-h-touch" disabled={enableSpendingBusy || onEnableSpending === undefined}
-                                    onClick={onEnableSpending}>Turn on paying</Button>
-                                </div>
                               )}
                               {readOnly || onCompareRequest === undefined || selected.length < 2 ? null : (
                                 <div className="flex flex-wrap items-center gap-2">
@@ -241,7 +243,7 @@ export function ChatTranscript({
                                 hidePending={onClarifyAnswer !== undefined && clarify.pending?.key === key} />
                             }
                             return card.toolId === 'tool.quote' || card.toolId === 'tool.call'
-                              ? <ToolCard key={`${turn.id}-${card.toolId}-${cardIndex}`} projection={card} />
+                              ? <ToolCard key={`${turn.id}-${card.toolId}-${cardIndex}`} projection={card} {...{ onAddCredit }} />
                               : null
                           })}
                           {!readOnly && onSuggest && !writing ? <FollowUps view={view.followUps} onPick={onSuggest} /> : null}

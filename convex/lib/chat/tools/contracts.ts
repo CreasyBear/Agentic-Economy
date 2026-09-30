@@ -14,6 +14,7 @@ const chatToolFailureReasons = [
   'search_repeated',
   'paging_not_requested',
   'turn_stopped',
+  'tool_unavailable',
 ] as const
 
 export type ChatToolFailure = Readonly<{

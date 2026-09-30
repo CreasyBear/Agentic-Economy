@@ -35,7 +35,11 @@ import {
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
 import { NeedSaveAction } from './need-save-action/NeedSaveAction'
-import type { SearchNextProps, ToolCardProps } from './presentation'
+import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './presentation'
+
+type ToolCardProps = ToolCardBaseProps & Readonly<{
+  onAddCredit?: ((shortfall?: { units: string; exponent: number }) => void) | undefined
+}>
 
 export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
 
@@ -197,10 +201,13 @@ function CardBody({ projection }: { projection: ToolCardProjection }) {
         : <AeFactList density="compact" facts={projection.facts} />
     case 'execute':
       return (
-        <Alert variant={projection.state === 'reconciliation_required' ? 'destructive' : 'default'}>
-          <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
-          <AlertDescription>{projection.summary}</AlertDescription>
-        </Alert>
+        <div className="grid gap-intra">
+          <Alert variant={projection.state === 'reconciliation_required' ? 'destructive' : 'default'}>
+            <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
+            <AlertDescription>{projection.summary}</AlertDescription>
+          </Alert>
+          {projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
+        </div>
       )
     default: {
       const exhaustive: never = projection
@@ -246,7 +253,7 @@ const STATUS_VARIANT = {
   error: 'destructive',
 } as const
 
-export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread }: ToolCardProps) {
+export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread, onAddCredit }: ToolCardProps) {
   const needActions = useContext(ChatNeedActionsContext)
   if (projection.kind === 'working') {
     return (
@@ -272,7 +279,8 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
         <CardBody projection={projection} />
       </CardContent>
       {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
-        || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (
+        || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined
+          || (projection.funding !== undefined && onAddCredit !== undefined))) ? (
         <CardFooter className="grid gap-intra">
           {projection.kind === 'choices' && projection.count !== undefined ? <ChoiceRemainder count={projection.count} shown={projection.choices.length} /> : null}
           {projection.next === undefined ? null : <SearchNext next={projection.next}
@@ -280,6 +288,10 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
             {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
             {...(signedThread === undefined ? {} : { signedThread })} />}
           {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
+          {projection.kind === 'status' && projection.funding !== undefined && onAddCredit !== undefined ? (
+            <Button type="button" variant="outline" size="sm" className="min-h-touch"
+              onClick={() => onAddCredit(projection.funding)}>Add credit</Button>
+          ) : null}
         </CardFooter>
       ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined ? (
         <CardFooter>

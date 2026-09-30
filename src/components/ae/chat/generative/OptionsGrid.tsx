@@ -1,9 +1,15 @@
 import { Button } from '@/components/ui/button'
 import { ToolPriceText } from '@/components/ae/market/AeToolPrice'
 import { toolChoiceReadinessLabel } from '@/modules/chat/tool-card'
-import type { OptionsGridProps } from './generative.contracts'
+import type { OptionsGridProps as GenerativeOptionsGridProps } from './generative.contracts'
 
-export function OptionsGrid({ view, onSelect, onCompare, onQuoteSelect, signedIn, readOnly = false }: OptionsGridProps) {
+type OptionsGridProps = GenerativeOptionsGridProps & Readonly<{
+  ownerChatEnabled?: boolean
+  onRunTool?: (toolRef: string, title: string) => void
+  onAddCredit?: (shortfall?: { units: string; exponent: number }) => void
+}>
+
+export function OptionsGrid({ view, onSelect, onCompare, onQuoteSelect, signedIn, ownerChatEnabled = false, onRunTool, onAddCredit, readOnly = false }: OptionsGridProps) {
   if (view.options.length === 0) return null
   return (
     <section aria-label="Options" className="grid min-w-0 gap-3">
@@ -29,13 +35,20 @@ export function OptionsGrid({ view, onSelect, onCompare, onQuoteSelect, signedIn
                 {!option.selectable ? <p className="text-muted-foreground">View listing; not available to buy through AE</p> : null}
               </div>
               {readOnly ? null : <div className="flex flex-wrap gap-1">
+                {option.quoteable ? (
+                  <>
+                    <Button type="button" size="sm" className="min-h-10" disabled={ownerChatEnabled ? onRunTool === undefined : onAddCredit === undefined}
+                      onClick={() => ownerChatEnabled ? onRunTool?.(option.id, option.name) : onAddCredit?.()}>
+                      {option.price === 'Price to be confirmed' ? 'Run' : <>Run · <ToolPriceText price={option.price}
+                        {...(option.priceValidUntil === undefined ? {} : { validUntil: option.priceValidUntil })} /></>}
+                    </Button>
+                    {onQuoteSelect && signedIn
+                      ? <Button type="button" size="sm" variant="ghost" className="min-h-10 px-2 text-muted-foreground underline underline-offset-4" onClick={() => onQuoteSelect(option.id)}>Edit input</Button>
+                      : null}
+                  </>
+                ) : null}
                 <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onSelect?.(option.id)} disabled={!option.selectable} aria-pressed={view.selectedId === option.id}>Select</Button>
                 {view.options.length < 2 || !option.selectable ? null : <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onCompare?.(option.id)} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button>}
-                {option.quoteable && onQuoteSelect && signedIn
-                  ? <Button type="button" size="sm" variant="outline" className="min-h-10" onClick={() => onQuoteSelect(option.id)}>Get a Quote</Button>
-                  : option.quoteable && !signedIn
-                    ? <a href="/sign-in" className="inline-flex min-h-10 items-center rounded-md px-2 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">Sign in to get a Quote</a>
-                    : null}
               </div>}
             </article>
           )

@@ -171,7 +171,7 @@ export const call = internalAction({
       principal, quoteRef: args.quoteRef, idempotencyKey: args.idempotencyKey,
       operationKey: args.operationKey, correlationId: args.correlationId,
     }, args.authority)
-    if (args.authority.applicationRef === 'ae-owner-chat' && result.kind === 'needs_authority') {
+    if (args.authority.applicationRef === 'ae-owner-chat' && result.kind !== 'refused') {
       const recorded = await ctx.runMutation(internal.chatTurns.recordOwnerChatCall, {
         authority: args.authority, quoteRef: args.quoteRef, callRef: result.callRef,
       })

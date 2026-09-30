@@ -60,8 +60,7 @@ export const recordOwnerChatCallHandler = async (ctx: MutationCtx, { authority, 
       || call.ownerId !== turn.accountRef || call.principalId !== turn.principalRef
       || call.credentialId !== turn.credentialLocator || call.grantRef !== turn.grantRef
       || call.applicationRef !== 'ae-owner-chat'
-      || !turn.inFlightCallRefs?.includes(callRef)
-      || call.state !== 'pending' || call.result?.kind !== 'needs_authority') return false
+      || !turn.inFlightCallRefs?.includes(callRef)) return false
     if (!turn.callRefs?.includes(callRef)) {
       await ctx.db.patch(turn._id, { callRefs: [...(turn.callRefs ?? []), callRef], updatedAt: Date.now() })
     }

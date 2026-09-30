@@ -73,6 +73,7 @@ export type ChatHeaderProps = Readonly<{
   copied: boolean
   ownerChatEnabled?: boolean
   enableProblem?: string
+  balanceLabel?: string | undefined
   onEnableSpending?: () => void
   mobileHistory: ReactNode
   mobileOpen: boolean
@@ -142,6 +143,8 @@ export type ChatSessionModel = Readonly<{
   header: ChatHeaderViewProps
   composer: ChatComposerProps
   transcript: ChatTranscriptViewProps
+  onRunTool(toolRef: string, title: string): void
+  retryLastRequest(): void
   pageBusy: boolean
 }>
 
@@ -150,4 +153,6 @@ export type ChatLayoutProps = Readonly<{
   ownerChatEnabled?: boolean
   enableSpendingBusy?: boolean
   onEnableSpending?: () => void
+  onAddCredit?: (shortfall?: { units: string; exponent: number }) => void
+  balanceLabel?: string | undefined
 }>

@@ -24,7 +24,7 @@ import {
   suggestNextAction,
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
-import { formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice, formatExactAmount, parseDecimalExactAmount, type ExactAmount } from '@/modules/money/public'
+import { exactAmountSchema, formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice, formatExactAmount, parseDecimalExactAmount, type ExactAmount } from '@/modules/money/public'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import type {
   OwnerMarketDemandFindResult,
@@ -131,7 +131,7 @@ export function parseChatQuoteInput(toolRef: string, draft: string): Record<stri
 
 export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
-  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed })
+  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed; funding?: { units: string; exponent: number } })
   | (CardChrome & {
       kind: 'choices'
       state: 'complete'
@@ -159,6 +159,7 @@ export type ToolCardProjection =
       outputPreview?: string
       outputTruncated?: boolean
       facts: readonly ToolFact[]
+      paid?: string
       receiptRef?: string
       evidenceHash?: string
       summary: string
@@ -291,6 +292,7 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
       ...(provider === undefined ? {} : { provider }),
       ...choicePriceFields(value),
       access: 'external_listing',
+      callable: true,
     }
   }
   const refs: string[] = []
@@ -456,6 +458,14 @@ function buyerCompareContrasts(output: Record<string, unknown>, choices: readonl
 
 const MAX_EXECUTE_OUTPUT_PREVIEW_CHARS = 8_000
 
+function fundingShortfall(value: unknown): { units: string; exponent: number } | undefined {
+  if (!isRecord(value)) return undefined
+  const principalAmount = exactAmountSchema.safeParse(value.principalAmount)
+  return principalAmount.success && principalAmount.data.currency === 'AUD'
+    ? { units: principalAmount.data.units, exponent: principalAmount.data.exponent }
+    : undefined
+}
+
 const CHARGE_STATE_LABELS = {
   free_tier: 'Free tier',
   paid: 'Paid',
@@ -501,6 +511,11 @@ function projectCallResult(result: CallResult): ToolCardProjection {
   const toolRefs = result.toolRef === undefined ? [] : [result.toolRef]
   if (result.kind === 'completed') {
     const preview = outputPreview(result)
+    const charge = result.receipt?.totalBuyerCharge
+      ?? (result.usage.chargeState === 'paid' ? result.usage.amount : undefined)
+    const paid = charge?.currency === 'AUD' && BigInt(charge.units) > 0n
+      ? `Paid ${formatDisplayAmount(charge)}`
+      : undefined
     const facts: ToolFact[] = [
       {
         label: 'Charge',
@@ -521,6 +536,7 @@ function projectCallResult(result: CallResult): ToolCardProjection {
       outputPreview: preview.text,
       ...(preview.truncated ? { outputTruncated: true } : {}),
       facts,
+      ...(paid === undefined ? {} : { paid }),
       ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
       evidenceHash: result.evidenceHash,
       summary: 'The Tool returned a result the calling agent can use now.',
@@ -725,9 +741,15 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     const saveNeed = toolId === 'registry.tools.search' && state === 'attention'
       ? storedSaveNeedSchema.safeParse(part.saveNeed)
       : undefined
+    const funding = toolId === 'tool.quote' && state === 'refused' && isRecord(part.funding)
+      ? exactAmountSchema.safeParse({ ...part.funding, currency: 'AUD' })
+      : undefined
     return {
       ...statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable')),
       ...(next === undefined ? {} : { next }),
+      ...(funding?.success && funding.data.currency === 'AUD'
+        ? { funding: { units: funding.data.units, exponent: funding.data.exponent } }
+        : {}),
       ...(saveNeed?.success ? { saveNeed: saveNeed.data } : {}),
     }
   }
@@ -752,6 +774,7 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     const outputPreview = boundedString(part.outputPreview, MAX_EXECUTE_OUTPUT_PREVIEW_CHARS)
     const receiptRef = boundedString(part.receiptRef, 400)
     const evidenceHash = boundedString(part.evidenceHash, 400)
+    const paid = state === 'completed' ? boundedString(part.paid, 80) : undefined
     const summary = boundedString(part.summary, 320) ?? 'Call result recorded.'
     const nextAction = boundedString(part.nextAction, 320)
     return {
@@ -763,6 +786,7 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
       ...(callRef === undefined ? {} : { callRef }),
       ...(outputPreview === undefined ? {} : { outputPreview }),
       ...(part.outputTruncated === true ? { outputTruncated: true } : {}),
+      ...(paid === undefined ? {} : { paid }),
       facts: projectStoredFacts(part.facts),
       ...(receiptRef === undefined ? {} : { receiptRef }),
       ...(evidenceHash === undefined ? {} : { evidenceHash }),
@@ -862,19 +886,34 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
   if (toolId === 'tool.quote') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
-      return statusCard(toolId, 'refused', reason ?? 'Request refused')
+      const funding = output?.reason === 'insufficient_balance'
+        ? fundingShortfall(output.funding)
+        : undefined
+      return {
+        ...statusCard(toolId, 'refused', reason ?? 'Request refused'),
+        ...(funding === undefined ? {} : { funding }),
+      }
     }
     if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
     const result = toolQuoteResultSchema.safeParse(output)
     if (!result.success) return statusCard(toolId, 'error', 'Tool unavailable')
-    return result.data.kind === 'committed'
-      ? projectInspectResult(result.data)
-      : statusCard(
-          toolId,
-          'refused',
-          result.data.requiredActions?.[0]?.description
-            ?? REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
-        )
+    if (result.data.kind === 'committed') return projectInspectResult(result.data)
+    const funding = result.data.code === 'insufficient_balance'
+      && result.data.continuation?.action === 'funding.handoff.create'
+      ? {
+          units: result.data.continuation.input.principalAmount.units,
+          exponent: result.data.continuation.input.principalAmount.exponent,
+        }
+      : undefined
+    return {
+      ...statusCard(
+        toolId,
+        'refused',
+        result.data.requiredActions?.[0]?.description
+          ?? REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
+      ),
+      ...(funding === undefined ? {} : { funding }),
+    }
   }
   const refused = kind === 'refused'
     || kind === 'chat_tool_refused'
@@ -921,6 +960,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         summary: card.summary,
         ...(card.next === undefined ? {} : { next: card.next }),
         ...(card.saveNeed === undefined ? {} : { saveNeed: card.saveNeed }),
+        ...(card.funding === undefined ? {} : { funding: card.funding }),
       }
     case 'choices':
       return {
@@ -962,6 +1002,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         ...(card.callRef === undefined ? {} : { callRef: card.callRef }),
         ...(card.outputPreview === undefined ? {} : { outputPreview: card.outputPreview }),
         ...(card.outputTruncated === true ? { outputTruncated: true } : {}),
+        ...(card.paid === undefined ? {} : { paid: card.paid }),
         facts: card.facts.map((fact) => ({ ...fact })),
         ...(card.receiptRef === undefined ? {} : { receiptRef: card.receiptRef }),
         ...(card.evidenceHash === undefined ? {} : { evidenceHash: card.evidenceHash }),
