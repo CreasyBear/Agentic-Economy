@@ -11,7 +11,7 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
@@ -56,7 +56,10 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   OrganizationSwitcher: () => <div data-testid="org-switcher" />,
 }))
 
+beforeEach(() => vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210'))
+
 afterEach(() => {
+  vi.unstubAllEnvs()
   cleanup()
   entitlement.isAuthenticated = false
   entitlement.result = undefined

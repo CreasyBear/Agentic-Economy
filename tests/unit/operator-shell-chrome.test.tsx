@@ -12,7 +12,7 @@ import {
   createRouter,
   useLocation,
 } from '@tanstack/react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Boxes as NavIcon } from 'lucide-react'
 import '../setup/jsdom-platform'
 
@@ -75,7 +75,10 @@ import { Route as OperatorLayoutRoute } from '@/routes/_operator'
 import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
 
+beforeEach(() => vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210'))
+
 afterEach(() => {
+  vi.unstubAllEnvs()
   cleanup()
   shellMocks.readAgentKeys.mockReset()
   shellMocks.readAgentKeys.mockResolvedValue([])

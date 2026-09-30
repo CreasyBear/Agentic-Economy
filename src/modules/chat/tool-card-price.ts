@@ -3,7 +3,6 @@ import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-s
 import type { PublicToolPrice } from '@/modules/capability-supply/public'
 import { formatDisplayAmount, formatDisplayPrice, formatExactAmount, parseDecimalExactAmount, type ExactAmount } from '@/modules/money/public'
 import { projectCompareContrasts, readPrice } from './internal/tool-card-compare'
-import type { ToolChoiceRow, ToolFact } from './tool-card'
 
 export function stringField(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0
@@ -58,7 +57,10 @@ export function choicePriceFields(value: Record<string, unknown>) {
   }
 }
 
-export function buyerCompareContrasts(output: Record<string, unknown>, choices: readonly ToolChoiceRow[]): readonly ToolFact[] {
+export function buyerCompareContrasts(
+  output: Record<string, unknown>,
+  choices: Parameters<typeof projectCompareContrasts>[1],
+): ReturnType<typeof projectCompareContrasts> {
   const contrasts = projectCompareContrasts(output, choices)
   if (!Array.isArray(output.facts)) return contrasts
   const priceFact = output.facts.find((fact) => isRecord(fact) && fact.field === 'price')

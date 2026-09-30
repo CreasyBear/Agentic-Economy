@@ -16,7 +16,7 @@ export type VerifiedClerkWebhook = Readonly<{
   deliveryRef: string | null
 }>
 
-export type ClerkWebhookVerifier = (request: Request) => Promise<unknown>
+export type ClerkWebhookVerifier = (request: Request) => Promise<Readonly<{ type: string; data: unknown }>>
 
 export type ClerkWebhookVerificationResult =
   | Readonly<{ kind: 'verified'; webhook: VerifiedClerkWebhook }>

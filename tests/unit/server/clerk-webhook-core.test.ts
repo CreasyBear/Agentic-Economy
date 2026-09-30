@@ -7,7 +7,7 @@ describe('verifyClerkWebhookRequest', () => {
     ['an undeclared length', {}],
     ['a declared length', { 'content-length': String(6 * 64 * 1024) }],
   ])('rejects a streamed body over 256 KiB with %s without the caller reading it', async (_label, headers) => {
-    const verify = vi.fn(async () => ({ type: 'session.created' }))
+    const verify = vi.fn(async () => ({ type: 'session.created', data: {} }))
     const result = await verifyClerkWebhookRequest(streamedRequest(6, 64 * 1024, headers), verify)
 
     expect(MAX_CLERK_WEBHOOK_BODY_BYTES).toBeLessThan(6 * 64 * 1024)

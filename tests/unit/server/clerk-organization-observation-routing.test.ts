@@ -112,7 +112,7 @@ function request(deliveryRef: string): Request {
   })
 }
 
-function observationEvents(): unknown[] {
+function observationEvents() {
   return [
     invitationCreatedEvent(),
     { ...invitationCreatedEvent(), type: 'organizationInvitation.revoked', data: { ...invitationCreatedEvent().data, status: 'revoked' } },
