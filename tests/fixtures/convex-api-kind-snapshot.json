@@ -1266,6 +1266,18 @@
     "kind": "query"
   },
   {
+    "visibility": "public",
+    "module": "capabilitySelectionDecisions",
+    "method": "recent",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySelectionDecisions",
+    "method": "record",
+    "kind": "mutation"
+  },
+  {
     "visibility": "internal",
     "module": "capabilitySupply",
     "method": "authorizeOwnerSupplyAction",
@@ -2073,6 +2085,18 @@
     "visibility": "public",
     "module": "marketListingEvidence",
     "method": "read",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketListingEvidence",
+    "method": "selectionEvidence",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketListingEvidence",
+    "method": "selectionEvidenceInternal",
     "kind": "query"
   },
   {

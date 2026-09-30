@@ -149,7 +149,7 @@ describe('Tool chat Agent tools', () => {
     const completeExternal = { kind: 'scoped', assessed: { coverage: 'complete' },
       next: [{ action: 'broaden', args: { query: 'timezone' } }] }
     const externalResolution = chatSearchResolution(step(completeExternal))
-    expect(externalResolution).toContain('external listings')
+    expect(externalResolution).toContain('closest matches')
     expect(externalResolution).not.toContain('Only part')
     expect(externalResolution).not.toContain('Next page')
     expect(chatSearchResolution(step({ kind: 'unavailable', next: [{ action: 'retry', args: { query: 'timezone' } }] }))).toContain('retry “timezone”')

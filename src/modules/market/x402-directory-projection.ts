@@ -1,5 +1,5 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { x402DefaultAssetFacts, x402LegacyDiscoveryInfo, x402NetworkLabel } from '@/modules/capability-supply/internal/x402-directory-projection-facts'
+import { x402DefaultAssetFacts, x402LegacyDiscoveryInfo, x402NetworkLabel } from '@/modules/capability-supply/public'
 import { isRecord } from '@/modules/common/is-record'
 import { formatExactAmount } from '@/modules/money/public'
 import { directorySourceLabels } from './x402-directory-metadata'

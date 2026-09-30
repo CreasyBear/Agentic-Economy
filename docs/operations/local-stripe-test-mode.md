@@ -36,7 +36,7 @@ npm run connect:local
 
 As the owner, open `http://127.0.0.1:3024/owner/credit` (`src/routes/_operator/owner.credit.tsx`). Enter an amount, click "Continue to Stripe" (`src/components/ae/console/AeCreditTopUpPanel.tsx:258`), pay with `4242 4242 4242 4242`, any future expiry, any CVC, and wait for `stripe listen` to relay `checkout.session.completed`.
 
-The loading fee is 5% service fee (`fundingServiceFeeBps: 500`, `src/modules/money/internal/commercial-policy.ts:136`) plus 10% GST on that fee (`serviceFeeTaxBps: 1_000`, same file:100), computed by `calculateAudFundingFinancials` (`src/modules/money/internal/aud-funding.ts:47-70`).
+The loading fee is 5% service fee (`fundingServiceFeeBps: 500`, `src/modules/money/internal/commercial-policy.ts`) plus 10% GST on the loaded amount and that cent-rounded fee (`serviceFeeTaxBps: 1_000`), added on top. `quoteAudAccountFunding` is the figure Checkout, the ledger, and the receipt use. An A$5.00 load is A$0.25 fee, A$0.53 GST, and A$5.78 payable.
 
 Verify:
 
@@ -53,7 +53,7 @@ CDP custody env, read in `convex/capabilityQuotes.ts:204-215` and declared in `s
 
 Provider spend is gated on a `moneyTreasuryObservations` row (`convex/moneyTreasury.ts:9-68`, read back by `treasurySpendableUnits`, `convex/capabilityQuotes.ts:219`). **Unverified/gap**: no command in this repo calls `recordObservation` outside unit tests (`tests/unit/convex/money-treasury.test.ts` via `convexTest`); there is no documented operator path to populate this table locally — it would need a manual `npx convex run moneyTreasury:recordObservation` with hand-assembled CDP balance evidence.
 
-The reference provider (`tools/release/package5-reference-provider/core.ts`, no README) needs `AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN` (credential-free HTTPS, `core.ts:281`), `AE_PACKAGE5_FIXTURE_X402_PAY_TO` (EVM address, `core.ts:68`), and `AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL` (`api/fixture.ts:37,42-43`). It's a Vercel fixture, not a plain `localhost` server, so local use needs an HTTPS tunnel in front of it (manual, outside this repo).
+The local package5 reference provider has been removed. Paid sandbox Calls use an external Base Sepolia x402 endpoint named by `AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN` and `AE_PACKAGE5_FIXTURE_X402_PAY_TO`. Those values are deployment facts, not a server in this repo.
 
 Base Sepolia test ETH/USDC come from the public Coinbase/Base faucet: https://portal.cdp.coinbase.com/products/faucet (manual, outside this repo).
 
@@ -70,22 +70,8 @@ The sandbox counterparty is the app's own `POST /api/v1/sandbox-reference`; the 
 
 Hosted Stripe webhook destinations are disabled/unpinned per the September 2026 preflight (`docs/operations/vocabulary-cutover-preflight.md:64-72`). This doc is local-only and does not change that hosted state.
 
-## 6. Managing the hosted webhook destinations
+## 6. Hosted webhook destinations
 
-`npm run stripe:webhooks` (`tools/release/stripe-webhook-destinations.ts`) manages the hosted Stripe v1 `webhookEndpoints` declaratively, in both modes, so the section 5 state is fixable as code rather than by hand in the dashboard.
+The declarative webhook helper (`tools/release/stripe-webhook-destinations.ts`) has been removed. Create or replace the hosted Stripe v1 endpoint in the Stripe dashboard. Desired state is exactly one enabled endpoint for `https://<host>/api/stripe/webhook`, `api_version` pinned to the SDK constant (`Stripe.API_VERSION`, the same pin `createStripeMoneyClient` uses), and `enabled_events` equal to the six events the worker consumes (`mapStripeMoneyWebhookEvent` in `src/lib/server/stripe-money-webhook.ts`): `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `refund.created`, `refund.updated`, `refund.failed`.
 
-```
-npm run stripe:webhooks -- --mode test --url https://<host>/api/stripe/webhook            # dry run, prints the plan
-npm run stripe:webhooks -- --mode test --url https://<host>/api/stripe/webhook --apply
-npm run stripe:webhooks -- --mode live --url https://<host>/api/stripe/webhook --apply --confirm-live
-```
-
-Desired state is exactly one enabled endpoint for the URL, `api_version` pinned to the SDK constant (`Stripe.API_VERSION`, the same pin `createStripeMoneyClient` uses at `src/lib/server/stripe-money-provider-config.ts:127-131`), and `enabled_events` equal to the six events the worker consumes (the `switch (event.type)` in `mapStripeMoneyWebhookEvent`, `src/lib/server/stripe-money-webhook.ts:52-63`): `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `refund.created`, `refund.updated`, `refund.failed`. `tests/unit/release/stripe-webhook-destinations.test.ts` fails if that worker switch drifts from the tool's list.
-
-- Default is a dry run: it lists and prints an action table and performs no writes. `--apply` is required to write; live `--apply` additionally requires `--confirm-live`.
-- `STRIPE_SECRET_KEY` must match the mode (`sk_test_` / `sk_live_`); a mismatch exits `2` before any API call.
-- `api_version` is immutable on an existing endpoint, so a version mismatch creates a replacement and **disables** (never deletes) the old one. Superseded duplicates and the enabled legacy unpinned destination on the same host are disabled the same way, preserving delivery history.
-- On create the signing secret is printed exactly once — store it as `STRIPE_WEBHOOK_SECRET`. It is never logged again and `--json` redacts it to `<printed once above>`.
-- Only v1 `webhookEndpoints` are managed. The Accounts v2 destination (`/api/stripe/webhook/accounts-v2`, id prefix `ed_`) is a v2 core event destination on a separate API resource; the tool never touches it and its secret stays in `STRIPE_V2_WEBHOOK_SECRET`.
-
-Run `npx tsx tools/release/stripe-webhook-destinations.ts --help` for the full flag reference.
+On create, store the signing secret as `STRIPE_WEBHOOK_SECRET`. The Accounts v2 destination (`/api/stripe/webhook/accounts-v2`) is a separate resource; its secret stays in `STRIPE_V2_WEBHOOK_SECRET`.

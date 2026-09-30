@@ -41,7 +41,7 @@ import { projectGenerativeTurn, projectTranscriptTurns } from './presentation'
 
 type ChatTranscriptProps = ChatTranscriptViewProps & Readonly<{
   onRunTool?: (toolRef: string, title: string) => void
-  onAddCredit?: (shortfall?: { units: string; exponent: number }) => void
+  onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: { toolRef: string; title: string }) => void
 }>
 
 const TRANSCRIPT_COLUMN = 'mx-auto grid w-full content-start max-w-[1200px] grid-cols-12 gap-x-2 gap-y-5 px-[5px] py-6 sm:px-0 md:gap-y-7'

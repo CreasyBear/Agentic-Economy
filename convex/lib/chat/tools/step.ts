@@ -61,14 +61,10 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
     ? args.query : null
   if (verdict.kind === 'unavailable') return `**Search is temporarily unavailable.** Next: retry${query === null ? ' the search.' : ` “${markdownText(query)}”.`}`
   if (verdict.kind === 'scoped') {
-    const complete = typeof verdict.assessed === 'object' && verdict.assessed !== null
-      && 'coverage' in verdict.assessed && verdict.assessed.coverage === 'complete'
     const hasNextPage = typeof next === 'object' && next !== null
       && 'action' in next && next.action === 'next-page'
     const followUp = hasNextPage ? ' Use Next page below to continue this search.' : ''
-    return complete
-      ? `**These are external listings to inspect, not AE-callable Tools.**${followUp}`
-      : `**Only part of the catalogue was assessed; no suitable Tool is established yet.**${followUp}`
+    return `**Here are the closest matches.**${followUp}`
   }
   return `**No suitable Tool in the assessed catalogue.** Next: ${query === null ? 'try a broader search.' : `broaden “${markdownText(query)}”.`}`
 }

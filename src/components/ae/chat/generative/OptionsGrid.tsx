@@ -6,7 +6,7 @@ import type { OptionsGridProps as GenerativeOptionsGridProps } from './generativ
 type OptionsGridProps = GenerativeOptionsGridProps & Readonly<{
   ownerChatEnabled?: boolean
   onRunTool?: (toolRef: string, title: string) => void
-  onAddCredit?: (shortfall?: { units: string; exponent: number }) => void
+  onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: { toolRef: string; title: string }) => void
 }>
 
 export function OptionsGrid({ view, onSelect, onCompare, onQuoteSelect, signedIn, ownerChatEnabled = false, onRunTool, onAddCredit, readOnly = false }: OptionsGridProps) {
@@ -24,21 +24,20 @@ export function OptionsGrid({ view, onSelect, onCompare, onQuoteSelect, signedIn
                 {option.outcome ? <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground sm:text-[0.8125rem]">{option.outcome}</p> : null}
               </div>
               <div className="mt-auto grid gap-1 text-xs sm:text-[0.8125rem]">
-                <p className="tabular-nums"><ToolPriceText price={option.price}
-                  {...(option.priceValidUntil === undefined ? {} : { validUntil: option.priceValidUntil })} /></p>
-                <p className="flex items-center gap-1.5 text-muted-foreground">
-                  <span aria-hidden="true" className={option.readiness === 'ready' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />
+                {option.price === 'Price to be confirmed' ? null : <p className="tabular-nums"><ToolPriceText price={option.price}
+                  {...(option.priceValidUntil === undefined ? {} : { validUntil: option.priceValidUntil })} /></p>}
+                {option.readiness === 'ready' ? <p className="flex items-center gap-1.5 text-muted-foreground">
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
                   {toolChoiceReadinessLabel(option.readiness)}
-                </p>
+                </p> : null}
                 {option.usage ? <p className="line-clamp-2 text-muted-foreground">{option.usage}</p> : null}
                 {option.seller ? <p className="truncate text-muted-foreground">{option.seller.kind === 'provider' ? 'Sold by' : 'Listed on'} {option.seller.name}</p> : null}
-                {!option.selectable ? <p className="text-muted-foreground">View listing; not available to buy through AE</p> : null}
               </div>
               {readOnly ? null : <div className="flex flex-wrap gap-1">
                 {option.quoteable ? (
                   <>
                     <Button type="button" size="sm" className="min-h-10" disabled={ownerChatEnabled ? onRunTool === undefined : onAddCredit === undefined}
-                      onClick={() => ownerChatEnabled ? onRunTool?.(option.id, option.name) : onAddCredit?.()}>
+                      onClick={() => ownerChatEnabled ? onRunTool?.(option.id, option.name) : onAddCredit?.(undefined, { toolRef: option.id, title: option.name })}>
                       {option.price === 'Price to be confirmed' ? 'Run' : <>Run · <ToolPriceText price={option.price}
                         {...(option.priceValidUntil === undefined ? {} : { validUntil: option.priceValidUntil })} /></>}
                     </Button>

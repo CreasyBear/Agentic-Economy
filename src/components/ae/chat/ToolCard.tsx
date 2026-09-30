@@ -182,11 +182,6 @@ function CardBody({ projection }: { projection: ToolCardProjection }) {
     case 'choices':
       return (
         <div className="grid gap-related">
-          {projection.verdict === 'scoped' ? (
-            <Alert><AlertDescription>{projection.coverage === 'complete'
-              ? 'These external listings are not callable through AE.'
-              : 'Only part of the catalogue was assessed. These external listings are not an AE Tool recommendation.'}</AlertDescription></Alert>
-          ) : null}
           {projection.choices.length === 0 ? null : projection.toolId === 'registry.tools.compare' || projection.surface === 'compare'
             ? <CompareTable choices={projection.choices} />
             : <ChoiceList choices={projection.choices} />}

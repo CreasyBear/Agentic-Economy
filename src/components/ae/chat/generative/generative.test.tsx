@@ -127,24 +127,7 @@ describe('generative chat leaves', () => {
     const view = projectOptionsFromCard(card)
     expect(projectWorkFromCards([card]).summary).toContain('external listing')
     expect(projectSourcesFromCards([card]).sources[0]?.href).toBe('/api/v1/registry/detail?id=external-7')
-    expect(view.options).toMatchObject([{ selectable: false, href: '/api/v1/registry/detail?id=external-7' }])
-    render(<OptionsGrid view={view} onSelect={vi.fn()} onCompare={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'Select' })).toBeDisabled()
-  })
-  it('labels a complete external page without falsely claiming partial coverage', () => {
-    const card = projectToolCard({
-      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
-      state: 'output-available', output: {
-        kind: 'scoped', assessed: { coverage: 'complete' }, results: [{
-          id: 'external-9', source: 'coinbase', access: 'external_listing', title: 'Timezone API',
-        }],
-      },
-    })
-    if (card === null) throw new Error('missing external card')
-    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
-    render(<ToolCard projection={card} />)
-    expect(screen.getByText('These external listings are not callable through AE.')).toBeInTheDocument()
-    expect(screen.queryByText(/Only part of the catalogue/)).toBeNull()
+    expect(view.options).toMatchObject([{ selectable: true, href: '/api/v1/registry/detail?id=external-7' }])
   })
   it('keeps the opaque cursor out of prose while continuing the original thread and query', () => {
     const next = { action: 'next-page' as const, args: { query: 'timezone', cursor: 'x402:opaque-next' }, authority: 'public' as const }

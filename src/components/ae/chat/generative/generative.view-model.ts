@@ -49,7 +49,7 @@ export function projectOptionsFromCard(
         ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
         readiness: projectChoiceReadiness(choice.readiness),
         ...(seller === undefined ? {} : { seller }),
-        selectable: choice.access !== 'external_listing' && !choice.belowMatch
+        selectable: !choice.belowMatch
           && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
         ...(choice.callable === true && !choice.belowMatch ? { quoteable: true } : {}),
         ...(listing === undefined ? {} : { facts }),

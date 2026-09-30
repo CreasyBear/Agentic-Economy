@@ -47,6 +47,7 @@ import type * as capabilityProviderToolProjection from "../capabilityProviderToo
 import type * as capabilityProviderTools from "../capabilityProviderTools.js";
 import type * as capabilityQuotes from "../capabilityQuotes.js";
 import type * as capabilityQuotesStatus from "../capabilityQuotesStatus.js";
+import type * as capabilitySelectionDecisions from "../capabilitySelectionDecisions.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
 import type * as capabilitySupplyCurrentTool from "../capabilitySupplyCurrentTool.js";
 import type * as capabilitySupplyDirectoryEligibility from "../capabilitySupplyDirectoryEligibility.js";
@@ -248,6 +249,7 @@ import type * as lib_capabilityExecution_quotes_quoteValuation from "../lib/capa
 import type * as lib_capabilityExecution_quotes_readForCall from "../lib/capabilityExecution/quotes/readForCall.js";
 import type * as lib_capabilityExecution_quotes_refusalHelpers from "../lib/capabilityExecution/quotes/refusalHelpers.js";
 import type * as lib_capabilityExecution_quotes_statusQuery from "../lib/capabilityExecution/quotes/statusQuery.js";
+import type * as lib_capabilityExecution_selectionDecisions from "../lib/capabilityExecution/selectionDecisions.js";
 import type * as lib_capabilityExecution_x402AuthorizationExpiry_queueExpired from "../lib/capabilityExecution/x402AuthorizationExpiry/queueExpired.js";
 import type * as lib_capabilitySupply_admission_sourceAuthority from "../lib/capabilitySupply/admission/sourceAuthority.js";
 import type * as lib_capabilitySupply_commands_writes from "../lib/capabilitySupply/commands/writes.js";
@@ -732,6 +734,7 @@ declare const fullApi: ApiFromModules<{
   capabilityProviderTools: typeof capabilityProviderTools;
   capabilityQuotes: typeof capabilityQuotes;
   capabilityQuotesStatus: typeof capabilityQuotesStatus;
+  capabilitySelectionDecisions: typeof capabilitySelectionDecisions;
   capabilitySupply: typeof capabilitySupply;
   capabilitySupplyCurrentTool: typeof capabilitySupplyCurrentTool;
   capabilitySupplyDirectoryEligibility: typeof capabilitySupplyDirectoryEligibility;
@@ -933,6 +936,7 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/quotes/readForCall": typeof lib_capabilityExecution_quotes_readForCall;
   "lib/capabilityExecution/quotes/refusalHelpers": typeof lib_capabilityExecution_quotes_refusalHelpers;
   "lib/capabilityExecution/quotes/statusQuery": typeof lib_capabilityExecution_quotes_statusQuery;
+  "lib/capabilityExecution/selectionDecisions": typeof lib_capabilityExecution_selectionDecisions;
   "lib/capabilityExecution/x402AuthorizationExpiry/queueExpired": typeof lib_capabilityExecution_x402AuthorizationExpiry_queueExpired;
   "lib/capabilitySupply/admission/sourceAuthority": typeof lib_capabilitySupply_admission_sourceAuthority;
   "lib/capabilitySupply/commands/writes": typeof lib_capabilitySupply_commands_writes;

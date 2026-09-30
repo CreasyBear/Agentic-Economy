@@ -365,13 +365,16 @@ export function useChatSession({
     setError(promptLimitMessage(value))
     document.getElementById('tool-chat-prompt')?.focus()
   }
-  async function resubmitLastRequest(forceNewThread: boolean, beforeSubmit?: () => void): Promise<void> {
-    const lastRequest = textFromParts(visibleMessages.findLast(message => message.role === 'user')?.parts ?? []).trim()
-    beforeSubmit?.()
-    if (lastRequest) await submit(forceNewThread, lastRequest)
+  function lastUserText(): string | undefined {
+    const text = textFromParts(visibleMessages.findLast(message => message.role === 'user')?.parts ?? []).trim()
+    return text || undefined
+  }
+  function submitText(text: string): void {
+    void submit(false, text)
   }
   function retryLastRequest(): void {
-    void resubmitLastRequest(false)
+    const lastRequest = lastUserText()
+    if (lastRequest) submitText(lastRequest)
   }
   return {
     showHistoryRail: isAuthenticated,
@@ -388,9 +391,9 @@ export function useChatSession({
         if (busy) return
         setBusy(true)
         setEnableProblem('')
-        void enableOwnerChat().then(async result => {
+        void enableOwnerChat().then(result => {
           if (result.kind === 'enabled') {
-            await resubmitLastRequest(true, onNewChat)
+            onNewChat()
             setStatus('Paying is on.')
           } else {
             setEnableProblem(`Could not enable approval-only chat: ${result.code}.`)
@@ -469,7 +472,11 @@ export function useChatSession({
       }),
     },
     pageBusy: busy,
-    onRunTool: (toolRef, title) => { void submit(false, `Use ${title} (${toolRef}) for my last request. Fill its input from what I asked, run it, and give me the answer.`) },
+    lastUserText,
+    submitText,
+    onRunTool: (toolRef, title, ask) => {
+      submitText(`Use ${title} (${toolRef}) to answer: "${ask ?? lastUserText() ?? ''}". Fill its input from that, run it, and give me the answer.`)
+    },
     retryLastRequest,
   }
 }

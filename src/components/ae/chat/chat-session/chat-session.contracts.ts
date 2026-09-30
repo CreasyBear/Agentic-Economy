@@ -143,7 +143,9 @@ export type ChatSessionModel = Readonly<{
   header: ChatHeaderViewProps
   composer: ChatComposerProps
   transcript: ChatTranscriptViewProps
-  onRunTool(toolRef: string, title: string): void
+  lastUserText(): string | undefined
+  submitText(text: string): void
+  onRunTool(toolRef: string, title: string, ask?: string): void
   retryLastRequest(): void
   pageBusy: boolean
 }>
@@ -153,6 +155,6 @@ export type ChatLayoutProps = Readonly<{
   ownerChatEnabled?: boolean
   enableSpendingBusy?: boolean
   onEnableSpending?: () => void
-  onAddCredit?: (shortfall?: { units: string; exponent: number }) => void
+  onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: { toolRef: string; title: string }) => void
   balanceLabel?: string | undefined
 }>

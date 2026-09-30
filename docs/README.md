@@ -16,6 +16,8 @@
 - [designs/2026-09-23-platform-hostility-register.md](designs/2026-09-23-platform-hostility-register.md) — platform hostility register.
 - [designs/2026-09-23-platform-cohesion-rfc.md](designs/2026-09-23-platform-cohesion-rfc.md) — platform cohesion RFC.
 - [designs/2026-09-23-agent-experience-wave2-plan.md](designs/2026-09-23-agent-experience-wave2-plan.md) — agent-experience Wave 2 plan.
+- [designs/2026-09-25-tool-market-routing-and-data-strategy.md](designs/2026-09-25-tool-market-routing-and-data-strategy.md) — proposed cross-platform strategy for Tool choice, routing, data release and purchase records.
+- [designs/platform-data-privacy.md](designs/platform-data-privacy.md) — canonical platform design for data recipients, first release, access, retention and Australian privacy requirements.
 - [designs/agent-operating-contract.md](designs/agent-operating-contract.md) — machine-facing operating contract.
 - [workflow/aecon-signals-proposal.md](workflow/aecon-signals-proposal.md) — AEcon Signals proposal.
 - [workflow/simple-user-expectations.md](workflow/simple-user-expectations.md) — user-expectation scoreboard.

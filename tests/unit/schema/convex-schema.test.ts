@@ -78,6 +78,7 @@ const durableTables = [
   'purchaseResolutionRecords',
   'capabilityQuotes',
   'capabilityCalls',
+  'toolSelectionDecisions',
   'providerConsequenceJournal',
   'capabilityPublications',
   'capabilityProviderToolProjections',

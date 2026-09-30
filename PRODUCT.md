@@ -89,12 +89,61 @@ journey. First demonstrate find → inspect/compare → choose → use → resul
 return, with setup only when needed. Broader infrastructure and roadmap audits
 must not displace this basic experience review.
 
+**OpenRouter experience benchmark clarified with Joel: 2026-09-25.** Continue
+the current market and commercial direction. Benchmark first use, agent Calls,
+Provider and price choice, and spend visibility against OpenRouter's server
+tools through completed customer tasks, while preserving the material Quote and
+Call controls required for a purchase.
+
+**Competitive quality clarified with Joel: 2026-09-27.** Treat each relevant
+competitor as a serious product benchmark across product experience, functional
+coverage and performance. For comparable customer tasks, assess whether an Agent
+finds a suitable capability, makes a useful Provider choice, completes the work
+within its budget, recovers from failure and can return efficiently. Measure
+search relevance, task success, time and turns to usable output, cost,
+reliability and repeat-use quality. Aim for a familiar, mature experience at
+least as good as the best relevant reference for AE's supported use cases before
+seeking distinctive mechanisms. A competitor's stronger execution or routing
+must be investigated as a product gap, even when AE's internal contracts are
+more precise. Preserve AE's commercial and authority obligations without adding
+friction that does not help the Customer's decision.
+
+**Data visibility and search defaults clarified with Joel: 2026-09-25.** Keep
+the supported path short. At each point where a search, inspection or Call can
+release customer information, make it clear who receives which fields, what
+remains within the Customer's account and what appears in usage or public
+payment records. Show the essential disclosure at the point of choice and let
+the buyer inspect full terms when needed; do not turn ordinary permitted Calls
+into repeated privacy approval steps. Customer-set limits are the ceiling.
+Agents may save preferred search defaults and narrow or adjust filters within
+that ceiling for a particular need. Excluded supply should have an understandable
+reason and a way back to comparison without silently relaxing a hard limit.
+
 - **Locus:** the reference for connecting agents, prepaid tool access, spending
   controls, usage and everyday account management.
 - **Nevermined:** the reference for service publishing, pricing and access
   management, APIs and SDKs, reporting, events and the surrounding platform.
+- **OpenRouter server tools:** the reference for low-friction model-callable
+  capability access, clear Provider and price choices, and usage visibility.
+  Apply that ease-of-use standard to AE's supported Tool journey while retaining
+  the Quote, Call and Australian buyer record defined here.
+- **Mercator:** the reference for on-demand Tool discovery, fit and reliability
+  ranking, priced multi-Tool work, durable execution, spending limits and
+  feedback into later selection. Compare completed Agent tasks and Provider
+  distribution, not only the presence of individual features. The Customer's
+  harness may compose multiple AE Calls; matching Mercator's useful outcome does
+  not by itself require AE to own the larger workflow.
+
 - **Whop:** a supporting reference for familiar business setup, billing, payout,
   support and account-management interactions.
+
+**Mercator parity boundary clarified with Joel: 2026-09-27.** AE should be able
+to deliver the customer-visible capabilities Mercator offers as a baseline.
+For independent Tool contributions, the Customer's harness composes AE Calls.
+When AE offers a quoted bundle, AE owns the bundle's quoted commercial choice
+and its execution and recovery. This direction does not by itself settle a new
+public API, market object or release sequence; the Tool and Call distinctions
+in this charter still apply.
 
 Study complete behaviour, not screenshots or happy-path copy alone: setup,
 normal use, changes, interruptions, failures, recovery and offboarding. Reuse
@@ -143,10 +192,17 @@ hosted deployment and production proof remain separate holds.
 
 Reference entry points:
 [Locus](https://paywithlocus.com/developers),
-[Nevermined](https://nevermined.ai/docs/api-reference/introduction) and the
+[Nevermined](https://nevermined.ai/docs/api-reference/introduction),
+[OpenRouter server tools](https://openrouter.ai/tools),
+[Mercator](https://tempo.xyz/developers/blog/introducing-mercator) and the
 [Whop maturity summary](./research/WHOP-AE-MATURITY.md).
-Reference behaviour and limitations are recorded in the existing scavenger docs;
-a reference's published feature is not proof of AE implementation.
+The [Tool market routing and data strategy](./docs/designs/2026-09-25-tool-market-routing-and-data-strategy.md)
+maps the platform journey and its open design decisions.
+The [platform data privacy design](./docs/designs/platform-data-privacy.md)
+owns the cross-platform recipient, first-release, access and retention standard
+for that journey. It distinguishes current source behavior from required controls
+and public claims.
+A reference's published feature is not proof of AE implementation.
 
 ## Customer and job
 
@@ -249,9 +305,15 @@ or excluded, with their provenance and caller-specific reasons.
 A **Quote** binds an expiring purchase decision to the customer, acting
 agent, authority version, Tool version, Provider, Seller,
 normalised inputs, buyer consideration ceiling, terms, data use, effects,
-evidence standard and retry rule. Discovery is reversible. The Quote is the
-last point at which the full commercial choice can be inspected before money,
-information or an external effect is released.
+evidence standard and retry rule. Discovery does not itself make a purchase;
+an AI-assisted or external-directory search may still release bounded query
+text to its stated recipient. The Quote is the
+last point at which the full commercial choice can be inspected before money or
+an external effect is released by the paid Call. A managed x402 price inspection
+may send proposed input to the selected Provider before the Quote exists. Its
+recipient and data release must therefore be visible and within Customer
+authority before that inspection; the Quote must not be presented as the first
+information-release boundary.
 
 A **Call** owns one accepted command and effect identity. It records what
 Agentic Economy asked the Provider to do and the observations returned by the

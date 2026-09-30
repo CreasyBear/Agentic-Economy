@@ -347,6 +347,7 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
     "src/modules/capability-supply/internal/route-transport-mcp.ts",
     "src/modules/capability-supply/internal/route-transport-x402.ts",
     "src/modules/capability-supply/internal/x402-directory-protocol.ts",
+    "src/modules/capability-supply/internal/x402-directory-projection-facts.ts", // reads x402 default asset and network facts for directory projection; no payment execution
     "src/modules/capability-supply/internal/x402-offer-receipt.ts",
     "src/modules/capability-supply/internal/x402-evm-protocol.ts",
     "src/modules/capability-supply/internal/x402-payment-signer.ts",

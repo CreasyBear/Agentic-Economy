@@ -37,7 +37,7 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     })
     expect(output).not.toHaveProperty('recommendation')
   })
-  it('never presents an exact USDC source amount as the buyer price', () => {
+  it('uses a USD price label for USDC without AUD evidence', () => {
     const tool = {
       ...TOOL_CURRENCY,
       commercial: { ...TOOL_CURRENCY.commercial, price: { kind: 'fixed' as const, amount: { currency: 'USDC' as const, units: '1', exponent: 6 } } },
@@ -47,7 +47,20 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     expect(result.kind).toBe('match')
     if (result.kind === 'match') expect(result.results[0]?.price).toEqual({ kind: 'unavailable' })
     const list = projectToolListChoices(source)
-    if (list.kind === 'ok') expect(list.items[0]?.priceLabel).toBe('AUD estimate temporarily unavailable')
+    if (list.kind === 'ok') expect(list.items[0]?.priceLabel).toBe('US$0.000001')
+    const rangeTool = {
+      ...tool,
+      commercial: {
+        ...tool.commercial,
+        price: {
+          kind: 'range' as const,
+          minimum: { currency: 'USDC' as const, units: '1', exponent: 6 },
+          maximum: { currency: 'USDC' as const, units: '2000', exponent: 6 },
+        },
+      },
+    }
+    const rangeList = projectToolListChoices({ ...source, items: [rangeTool] })
+    if (rangeList.kind === 'ok') expect(rangeList.items[0]?.priceLabel).toBe('US$0.000001–US$0.002')
   })
 
   it('never advertises a cursor on an unavailable result even when a preceding page had one', () => {

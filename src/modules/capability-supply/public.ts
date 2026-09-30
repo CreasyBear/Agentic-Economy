@@ -457,6 +457,11 @@ export type {
   PaymentLaneAdmission,
 } from './internal/x402-call-policy'
 export {
+  x402DefaultAssetFacts,
+  x402LegacyDiscoveryInfo,
+  x402NetworkLabel,
+} from './internal/x402-directory-projection-facts'
+export {
   BASE_MAINNET_NETWORK,
   BASE_MAINNET_USDC_ADDRESS,
   BASE_SEPOLIA_NETWORK,

@@ -7,8 +7,9 @@ import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agen
 import { addRef, collectToolRefs, matchedCount } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
-import type { PublicToolAuthentication, PublicToolPrice } from '@/modules/capability-supply/public'
-import { projectCompareContrasts, readPosture, readPrice } from './internal/tool-card-compare'
+import type { PublicToolAuthentication } from '@/modules/capability-supply/public'
+import { readPosture, readPrice } from './internal/tool-card-compare'
+import { buyerCompareContrasts, buyerPrice, choicePriceFields, paidLabel, stringField } from './tool-card-price'
 import { formatToolAuthentication } from '@/modules/market/tool-view-model'
 import {
   callResultKindValues,
@@ -24,7 +25,7 @@ import {
   suggestNextAction,
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
-import { exactAmountSchema, formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice, formatExactAmount, parseDecimalExactAmount, type ExactAmount } from '@/modules/money/public'
+import { exactAmountSchema, formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import type {
   OwnerMarketDemandFindResult,
@@ -200,62 +201,9 @@ const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   turn_stopped: 'Turn stopped',
 }
 
-function stringField(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0
-    ? Array.from(value.trim()).slice(0, 120).join('')
-    : undefined
-}
-
 function boundedString(value: unknown, maximum: number): string | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) return undefined
   return Array.from(value.trim()).slice(0, maximum).join('')
-}
-
-function buyerAmount(amount: ExactAmount): string | undefined {
-  if (amount.currency === 'AUD') return formatDisplayAmount(amount)
-  if (amount.currency !== 'USD' && amount.currency !== 'USDC') return undefined
-  const formatted = formatExactAmount(amount)
-  if (formatted === undefined) return undefined
-  const normalized = formatted.includes('.') ? formatted.replace(/0+$/u, '').replace(/\.$/u, '') : formatted
-  return `US$${normalized}`
-}
-
-function usdPriceFromSource(source: unknown): string | undefined {
-  if (typeof source !== 'string') return undefined
-  const decimal = /^(\d+(?:\.\d+)?) USDC$/u.exec(source)?.[1]
-    ?? /^USDC (\d+(?:\.\d+)?)$/u.exec(source)?.[1]
-  const amount = decimal === undefined ? undefined : parseDecimalExactAmount('USDC', decimal, 6)
-  return amount === undefined ? undefined : buyerAmount(amount)
-}
-
-function buyerPrice(price: PublicToolPrice): string | undefined {
-  if (price.kind === 'on_request') return undefined
-  if (price.kind === 'fixed') return buyerAmount(price.amount)
-  if (price.minimum.currency !== price.maximum.currency) return undefined
-  const minimum = buyerAmount(price.minimum)
-  const maximum = buyerAmount(price.maximum)
-  return minimum === undefined || maximum === undefined ? undefined : `${minimum}–${maximum}`
-}
-
-function choicePriceFields(value: Record<string, unknown>) {
-  const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
-  const formatted = display.success && display.data.kind === 'indicative'
-    && display.data.validUntil > Date.now() ? formatDisplayPrice(display.data) : undefined
-  const listedPrice = isRecord(value.price) && value.price.kind === 'indicative' && typeof value.price.label === 'string'
-    ? value.price.label : undefined
-  const listedAudIsFresh = listedPrice?.startsWith('A$') === true
-    && isRecord(value.price) && typeof value.price.validUntil === 'number' && value.price.validUntil > Date.now()
-  const price = formatted?.startsWith('A$') ? formatted
-    : listedAudIsFresh ? stringField(listedPrice)
-      : usdPriceFromSource(value.sourcePrice) ?? usdPriceFromSource(listedPrice)
-  const priceValidUntil = price?.startsWith('A$') !== true ? undefined
-    : display.success && display.data.kind === 'indicative' ? display.data.validUntil
-      : listedAudIsFresh && isRecord(value.price) && typeof value.price.validUntil === 'number'
-        ? value.price.validUntil : undefined
-  return {
-    ...(price === undefined ? {} : { price }),
-    ...(priceValidUntil === undefined ? {} : { priceValidUntil }),
-  }
 }
 
 function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
@@ -434,28 +382,6 @@ function projectStoredFacts(values: unknown): ToolFact[] {
   return facts
 }
 
-function buyerCompareContrasts(output: Record<string, unknown>, choices: readonly ToolChoiceRow[]): readonly ToolFact[] {
-  const contrasts = projectCompareContrasts(output, choices)
-  if (!Array.isArray(output.facts)) return contrasts
-  const priceFact = output.facts.find((fact) => isRecord(fact) && fact.field === 'price')
-  if (!isRecord(priceFact) || !Array.isArray(priceFact.values)) return contrasts
-  const prices: string[] = []
-  for (const cell of priceFact.values) {
-    if (!isRecord(cell)) continue
-    const price = readPrice(cell.value)
-    if (price === undefined) continue
-    const title = typeof cell.toolRef === 'string'
-      ? choices.find((choice) => choice.toolRef === cell.toolRef)?.title
-      : undefined
-    const label = buyerPrice(price)
-    if (label === undefined) continue
-    prices.push(title === undefined ? label : `${title}: ${label}`)
-  }
-  return contrasts.flatMap(fact => fact.label !== 'Price'
-    ? [fact]
-    : prices.length > 0 ? [{ ...fact, value: prices.join('; ') }] : [])
-}
-
 const MAX_EXECUTE_OUTPUT_PREVIEW_CHARS = 8_000
 
 function fundingShortfall(value: unknown): { units: string; exponent: number } | undefined {
@@ -513,9 +439,7 @@ function projectCallResult(result: CallResult): ToolCardProjection {
     const preview = outputPreview(result)
     const charge = result.receipt?.totalBuyerCharge
       ?? (result.usage.chargeState === 'paid' ? result.usage.amount : undefined)
-    const paid = charge?.currency === 'AUD' && BigInt(charge.units) > 0n
-      ? `Paid ${formatDisplayAmount(charge)}`
-      : undefined
+    const paid = paidLabel(charge)
     const facts: ToolFact[] = [
       {
         label: 'Charge',

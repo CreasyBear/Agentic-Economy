@@ -47,6 +47,8 @@ function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel
     },
     pageBusy: false,
     onRunTool: vi.fn(),
+    lastUserText: vi.fn(),
+    submitText: vi.fn(),
     retryLastRequest: vi.fn(),
     ...overrides,
   }

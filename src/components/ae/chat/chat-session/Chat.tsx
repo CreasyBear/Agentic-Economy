@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../../convex/_generated/api'
@@ -22,14 +22,25 @@ export function Chat(props: ChatProps) {
   const [shortfall, setShortfall] = useState<AddCreditSheetProps['shortfall']>()
   const [balanceRefresh, setBalanceRefresh] = useState(0)
   const [balanceLabel, setBalanceLabel] = useState<string>()
-  const [balanceIsZero, setBalanceIsZero] = useState(false)
   const [balanceLoading, setBalanceLoading] = useState(false)
   const previousOwnerChatEnabled = useRef<boolean | undefined>(grantStatus?.enabled)
+  const pendingRef = useRef<{ ask: string | undefined; run: { toolRef: string; title: string } | undefined } | null>(null)
+  const resumedPendingRef = useRef(false)
 
+  function resumePending(fundedOrPositiveBalance = false): void {
+    if (!creditOpen || !ownerChatEnabled || pendingRef.current === null || resumedPendingRef.current) return
+    if (shortfall !== undefined && !fundedOrPositiveBalance) return
+    const pending = pendingRef.current
+    pendingRef.current = null
+    resumedPendingRef.current = true
+    setCreditOpen(false)
+    if (pending.run !== undefined) model.onRunTool(pending.run.toolRef, pending.run.title, pending.ask)
+    else if (pending.ask !== undefined) model.submitText(pending.ask)
+  }
+  const resumePendingAfterPayingOn = useEffectEvent((funded: boolean) => resumePending(funded))
   useEffect(() => {
     if (!model.header.authenticated) {
       setBalanceLabel(undefined)
-      setBalanceIsZero(false)
       setBalanceLoading(false)
       return
     }
@@ -39,18 +50,13 @@ export function Chat(props: ChatProps) {
       if (!active) return
       if (balance.kind !== 'available') {
         setBalanceLabel(undefined)
-        setBalanceIsZero(false)
         return
       }
       const { units, exponent } = balance.balance
-      const nextLabel = formatDisplayAmount({ currency: 'AUD', units, exponent })
-      const isZero = BigInt(units) === 0n
-      setBalanceLabel(nextLabel)
-      setBalanceIsZero(isZero)
+      setBalanceLabel(formatDisplayAmount({ currency: 'AUD', units, exponent }))
     }, () => {
       if (!active) return
       setBalanceLabel(undefined)
-      setBalanceIsZero(false)
     }).finally(() => {
       if (active) setBalanceLoading(false)
     })
@@ -62,24 +68,28 @@ export function Chat(props: ChatProps) {
       previousOwnerChatEnabled.current = undefined
       return
     }
-    if (previousOwnerChatEnabled.current === undefined) {
-      previousOwnerChatEnabled.current = ownerChatEnabled
-      return
-    }
     if (!ownerChatEnabled) {
       previousOwnerChatEnabled.current = false
       return
     }
+    if (creditOpen && shortfall === undefined) {
+      previousOwnerChatEnabled.current = true
+      resumePendingAfterPayingOn(false)
+      return
+    }
+    if (previousOwnerChatEnabled.current === undefined) {
+      previousOwnerChatEnabled.current = true
+      return
+    }
     if (previousOwnerChatEnabled.current) return
-    if (balanceLoading && creditOpen) return
+    if (creditOpen && (balanceLoading || balanceLabel === undefined)) return
     previousOwnerChatEnabled.current = true
-    if (creditOpen && !balanceIsZero) setCreditOpen(false)
-  }, [balanceIsZero, balanceLoading, creditOpen, grantStatus, ownerChatEnabled])
+    if (creditOpen && balanceLabel !== 'A$0.00') resumePendingAfterPayingOn(true)
+  }, [balanceLabel, balanceLoading, creditOpen, grantStatus, ownerChatEnabled, shortfall])
 
   const handleFunded = () => {
-    setCreditOpen(false)
     setBalanceRefresh(value => value + 1)
-    model.retryLastRequest()
+    resumePending(true)
   }
 
   return (
@@ -89,7 +99,12 @@ export function Chat(props: ChatProps) {
           model={model}
           ownerChatEnabled={ownerChatEnabled}
           enableSpendingBusy={model.header.busy}
-          onAddCredit={value => { setShortfall(value); setCreditOpen(true) }}
+          onAddCredit={(value, run) => {
+            pendingRef.current = { ask: model.lastUserText(), run }
+            resumedPendingRef.current = false
+            setShortfall(value)
+            setCreditOpen(true)
+          }}
           balanceLabel={balanceLabel}
           {...(grantStatus !== undefined && model.header.onEnableSpending !== undefined
             ? { onEnableSpending: model.header.onEnableSpending }
