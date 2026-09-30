@@ -17,7 +17,7 @@ export type CommercialPolicyLifecycle = 'active' | 'superseded' | 'suspended'
 export type CommercialPolicySandboxFixture = 'managed_x402_deterministic_v1'
 
 export const PACKAGE4_FORMANCE_REQUIREMENTS = Object.freeze({
-  ledgerVersion: 'v2.4.12',
+  ledgerVersion: 'v2.4.14',
   gatewayVersion: 'v2.3.1',
   schemaVersion: 'v1.6.0',
   sdkVersion: '7.0.0',

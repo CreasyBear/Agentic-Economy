@@ -159,7 +159,7 @@ function ledgerFixture(options: { legacyActivity?: boolean; hideReadback?: boole
   }
   const context = { configuration: { environment: 'sandbox', ledger: 'treasury-evaluation' },
     sdk: { ledger: { v2: ledger }, getVersions: async () => ({ getVersionsResponse: {
-      versions: [{ name: 'ledger', version: 'v2.4.12', health: options.health !== 'unhealthy' }],
+      versions: [{ name: 'ledger', version: 'v2.4.14', health: options.health !== 'unhealthy' }],
     } }) } } as unknown as FormanceContext
   return { context, transactions, balances, availableBalance: () => [...balances].find(([address]) => address.endsWith(':available'))?.[1] ?? 0n,
     bufferBalance: () => balances.get(bufferAddress) ?? 0n }

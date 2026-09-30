@@ -53,7 +53,7 @@ metadata:
   name: ${drill_name}-pins
 spec:
   gateway: 'v2.3.1@sha256:239926753312410ee9a602aa0bffe1e5c89cd340540a98a6df58694f3d6e4165'
-  ledger: 'v2.4.12@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df'
+  ledger: 'v2.4.14@sha256:9a2902d8d04c67c8a5f6270fc297f8ca5c6cf288f463dfad3984e5d376179c43'
 ---
 apiVersion: formance.com/v1beta1
 kind: Settings

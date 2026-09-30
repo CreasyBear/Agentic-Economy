@@ -142,7 +142,7 @@ describe('Package 4 reusable release topology', () => {
     const compute = read('modules/release-environment/compute.tf')
     const bootstrap = read('modules/release-environment/templates/bootstrap.sh.tftpl')
 
-    for (const pin of ['3.9.6', 'v2.4.12@sha256:', 'v2.3.1@sha256:', 'cloudflared:2026.7.2@sha256:']) {
+    for (const pin of ['3.9.6', 'v2.4.14@sha256:', 'v2.3.1@sha256:', 'cloudflared:2026.7.2@sha256:']) {
       expect(pins).toContain(pin)
     }
     expect(pins).toContain('k3s_install_script_sha')

@@ -856,6 +856,32 @@ describe('Package 4 official Formance boundary', () => {
     expect(requests[0]?.headers.get('CF-Access-Client-Secret')).toBe('access-client-secret')
   })
 
+  it('refuses a healthy v2.4.12 Ledger after the approved version advances', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      env: 'production',
+      region: 'local',
+      versions: [
+        { health: true, name: 'gateway', version: PACKAGE4_FORMANCE_REQUIREMENTS.gatewayVersion },
+        { health: true, name: 'ledger', version: 'v2.4.12' },
+      ],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    const context = createFormanceContext({
+      environment: 'production',
+      gatewayUrl: 'https://formance.example.com',
+      ledger: 'agentic-economy-production',
+      requestTimeoutMs: 5_000,
+      accessClientId: 'access-client-id',
+      accessClientSecret: 'access-client-secret',
+    })
+
+    expect(await readFormanceHealth(context)).toEqual({
+      kind: 'setup_required',
+      code: 'formance_component_version_drift',
+    })
+  })
+
   it('rotates Access tokens by rebuilding the client and fails closed after revocation', async () => {
     const observedIds: Array<string | null> = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

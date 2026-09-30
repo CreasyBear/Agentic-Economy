@@ -32,7 +32,7 @@ locals {
     operator_chart_version = "3.9.6"
     operator_image         = "ghcr.io/formancehq/operator@sha256:3781ee4dd554c3933b2bc972732de4d5b37db6afebb7612616d00800dfcab418"
     operator_utils_version = "v3.9.6@sha256:0dbba5d4314bdadee67a6cc7f587de821d99053de75c4ee140273e0d5fb19a42"
-    ledger_version         = "v2.4.12@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df"
+    ledger_version         = "v2.4.14@sha256:9a2902d8d04c67c8a5f6270fc297f8ca5c6cf288f463dfad3984e5d376179c43"
     gateway_version        = "v2.3.1@sha256:239926753312410ee9a602aa0bffe1e5c89cd340540a98a6df58694f3d6e4165"
     caddy_image            = "docker.io/library/caddy:2.7.6-alpine@sha256:2e1d4592f1718bb47645da5a83a846fe19094f18e6c921fdf56d174f05c63213"
     cloudflared_image      = "cloudflare/cloudflared:2026.7.2@sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d"

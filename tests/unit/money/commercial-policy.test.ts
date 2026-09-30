@@ -164,6 +164,10 @@ describe('commercial policy launch gate', () => {
   })
 
   it.each([
+    ['previous Ledger version', {
+      ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody,
+      formanceLedgerVersion: 'v2.4.12',
+    }],
     ['fixture deployment', {
       ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody,
       deploymentClass: 'synthetic_vps_fixture' as const,
