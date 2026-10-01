@@ -2273,4 +2273,26 @@ abort, distinct concurrent CDP credentials and browser privacy behavior.
 `npm run build` passes. Independent review found no actionable defect in the
 transport guards, abort propagation, cleanup or compiler wiring. No merge or
 alpha release is performed; the full release gate last passed at Stage 33.
-Deployed backend behavior and authenticated paid-Call proof are still pending.
+Deployed acceptance: native Convex push of source commit
+`86c0d74ecffdec31470573e5304bc5c91ad85fef` completed on development
+`cool-crab-306` after its clean compiler passed. The two notification-workpool
+components were installed, bringing the observed component count to 18.
+The deployed schema declares all 113 local table names; all 119 observed root
+tables, including legacy inferred tables, remain empty. The rate limiter still
+has its one record. Root plus all 18 components have no scheduled-function rows
+or stored files in the post-push census. These reads have separate cutoffs.
+
+Direct deployed-function reads establish `readiness_evidence_missing` for sandbox
+and `readiness_environment_mismatch` for production. An unauthenticated public
+client receives `authentication_required` from owner payment access. A read-only
+workload-admission query refuses `refresh payment readiness` with
+`workload_principal_missing`; no workload identities were provisioned and no
+consequence was invoked. This is bounded admission evidence, not a functioning
+scheduler or payment path. The backend's `development` declaration and source
+revision above were read back through the native deployment selector.
+
+The shared frontend still needs coherent configuration and credentials for this
+backend. Joel's authoritative Infisical Development project choice remains
+pending. Authenticated use, provider readiness, a paid development Call, full
+restore/alerts and explicitly authorized live-money drills remain unverified.
+Production `cautious-zebra-473` was not queried or changed.
