@@ -2345,3 +2345,39 @@ It does not roll back the separately deployed Convex backend. Verification is
 native branch inventory, exact release identity, actual readiness origin/money
 world, free public reads and continued unauthenticated refusal. Credential and
 paid-Call proof remain dependent on the pending Infisical Development source.
+
+
+The first rebuilt Preview (`dpl_3PbkMh83pbcSe4FyVN4w6moTax7j`, source
+`dca76dc433225b29d8ad1590dc67c02910982722`) proves the five bindings:
+release identity matches, readiness reports sandbox and `cool-crab-306`, and
+`/about` plus `/market` return server-rendered pages. Public readiness is 200
+while commercial status correctly says catalogue absent, quoting unavailable,
+funding missing and sellable false. This does not prove browser hydration.
+Catalogue status is 503; anonymous account inspection unexpectedly escapes as
+an uncorrelated generic 500. Native request logs show `authentication_required`
+from the source, consistent with the deployed rate-limit assertion guard and
+the unresolved service credential binding.
+
+The source correction belongs in the existing shared HTTP rate-limit wrapper.
+**Requires:** a valid Request, declared rate-limit name and deferred operation;
+external admission may reject or be unavailable.
+**Ensures:** the operation runs exactly once only after successful admission;
+an unavailable admission yields the existing `source_unavailable` UNAVAILABLE
+problem, HTTP 503, no-store and Retry-After 5 seconds.
+**Invariant:** known exhaustion retains 429; the wrapper does not catch errors
+from an admitted operation, retry, cache an admission, substitute credentials or
+permit work after failure. Existing request correlation remains applicable.
+**On violation:** terminate this request at the HTTP boundary, report the
+operational failure and return the controlled unavailable response without raw
+exception content or an incorrect end-user authentication challenge.
+
+Error strategy: missing/rejected service credentials and external admission
+transport failures are operational unavailability. Recovery belongs to the
+operator restoring the binding and to a later client request with fresh
+admission. The guarantee for application work is no invocation on admission
+failure. The limiter itself has a basic guarantee: a remote counter update may
+have committed before a lost reply, so do not claim full rollback or retry it
+automatically. Errors in the admitted operation retain their existing boundary.
+One catch around the existing admission call removes inconsistent per-route
+handling; keep the current wrapper, response vocabulary and test seams, with
+no new error hierarchy, API object, dependency or routing layer.
