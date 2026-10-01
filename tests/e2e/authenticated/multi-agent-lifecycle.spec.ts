@@ -48,22 +48,23 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
 
     await openAgent(page, agentAName)
     await page.getByRole('button', { name: 'Technical details' }).click()
-    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 2', { exact: true })).toBeVisible()
-    await expect(page.getByText('Revoked').first()).toBeVisible()
-    const revoke = page.getByRole('button', { name: 'Revoke', exact: true })
+    await expect(page.getByText('Current generation', { exact: true }).locator('..').locator('dd')).toHaveText('2')
+    await expect(page.getByText('Credentials', { exact: true }).locator('..').locator('dd')).toHaveText('2')
+    await page.getByRole('link', { name: 'Manage Agent keys and credential history' }).click()
+    const historyA = page.getByRole('link', { name: 'View Agent', exact: true })
+      .and(page.locator(`a[href="/agent-access?caller=${identityA.principalRef}"]`))
+    await expect(historyA).toHaveCount(2)
+    await expect(historyA.locator('..').getByText('revoked', { exact: true })).toHaveCount(1)
+    const revoke = page.getByRole('button', { name: new RegExp(`^Revoke key created .+ for ${agentAName}$`, 'u') })
     await expect(revoke).toBeVisible()
-    await revoke.dispatchEvent('click')
-    const confirmRevoke = page.getByRole('button', { name: 'Revoke credential' })
+    await revoke.click()
+    const confirmRevoke = page.getByRole('button', { name: 'Revoke this key', exact: true })
     await expect(confirmRevoke).toBeVisible()
-    await confirmRevoke.dispatchEvent('click')
+    await confirmRevoke.click()
     await expect(page.getByRole('alertdialog')).toBeHidden()
-    await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 2', { exact: true })).toBeVisible()
-    await expect(page.getByText('Revoked', { exact: true })).toHaveCount(2)
+    await expect(historyA).toHaveCount(2)
+    await expect(historyA.locator('..').getByText('revoked', { exact: true })).toHaveCount(2)
+    await expect(revoke).toBeHidden()
 
     const selectivelyRevoked = await page.request.get('/api/v1/account', {
       headers: { Authorization: `Bearer ${replacement.secret}` },
@@ -75,15 +76,17 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await page.getByRole('button', { name: 'Technical details' }).click()
     const disconnect = page.getByRole('button', { name: 'Remove agent everywhere' })
     await expect(disconnect).toHaveCount(1)
-    await disconnect.dispatchEvent('click')
-    const confirmDisconnect = page.getByRole('button', { name: 'Remove agent everywhere' }).last()
+    await disconnect.click()
+    const confirmDisconnect = page.getByRole('alertdialog').getByRole('button', { name: 'Remove agent', exact: true })
     await expect(confirmDisconnect).toBeVisible()
-    await confirmDisconnect.dispatchEvent('click')
+    await confirmDisconnect.click()
     await expect(page.getByRole('alertdialog')).toBeHidden()
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
-    await expect(page.getByText('Revoked', { exact: true })).toBeVisible()
+    await page.getByRole('link', { name: 'Manage Agent keys and credential history' }).click()
+    const historyB = page.getByRole('link', { name: 'View Agent', exact: true })
+      .and(page.locator(`a[href="/agent-access?caller=${identityB.principalRef}"]`))
+    await expect(historyB).toHaveCount(1)
+    await expect(historyB.locator('..').getByText('revoked', { exact: true })).toHaveCount(1)
     const disconnected = await page.request.get('/api/v1/account', {
       headers: { Authorization: `Bearer ${agentB.secret}` },
     })
@@ -209,7 +212,8 @@ async function replaceAgentCredential(page: Page, name: string, targetName: stri
   for (let pageNumber = 0; ; pageNumber += 1) {
     if (pageNumber >= 50) throw new Error('replacement_agent_not_found')
     await selector.click()
-    const target = page.getByRole('option', { name: targetName, exact: true })
+    await expect(page.getByRole('option').first()).toBeVisible()
+    const target = page.getByRole('option', { name: new RegExp(`^${targetName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} · prn_[0-9a-f]{32}$`, 'u') })
     if (await target.count() > 0) {
       await target.click()
       break
@@ -258,13 +262,14 @@ async function submitAgentApprovalRedirect(page: Page, callback: string): Promis
 }
 
 async function ensureAgentVisible(page: Page, name: string): Promise<void> {
-  const link = page.getByRole('link', { name: `Open ${name}`, exact: true })
+  await expect(page.getByRole('table', { name: 'Agents', exact: true })).toBeVisible()
+  const link = page.getByRole('link', { name: new RegExp(`^Open ${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} \\(`, 'u') })
   for (let pageNumber = 0; await link.count() === 0; pageNumber += 1) {
     if (pageNumber >= 50) throw new Error(`agent_not_found:${name}`)
-    const loadMore = page.getByRole('button', { name: 'Load more agents', exact: true })
+    const loadMore = page.getByRole('button', { name: 'Load more Agents', exact: true })
     if (await loadMore.count() === 0) throw new Error(`agent_not_found:${name}`)
     await loadMore.click()
-    await expect(page.getByRole('button', { name: 'Loading more agents…', exact: true })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Loading more Agents…', exact: true })).toBeHidden()
   }
   await expect(link).toBeVisible()
 }
@@ -273,7 +278,7 @@ async function openAgent(page: Page, name: string): Promise<void> {
   await page.goto('/agent-access')
   await expect(page.getByRole('heading', { level: 1, name: 'Agents', exact: true })).toBeVisible()
   await ensureAgentVisible(page, name)
-  const link = page.getByRole('link', { name: `Open ${name}`, exact: true })
+  const link = page.getByRole('link', { name: new RegExp(`^Open ${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} \\(`, 'u') })
   const href = await link.getAttribute('href')
   if (href === null || !/^\/agent-access\?caller=prn_[0-9a-f]{32}$/u.test(href)) {
     throw new Error('agent_detail_link_invalid')

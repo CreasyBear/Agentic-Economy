@@ -93,6 +93,10 @@ This checkout is shared. A PreToolUse hook blocks stash, `checkout --`, restore,
 
 Use Node 22 and npm 11.5.1, including Convex and child processes. `.nvmrc` and `package.json` pin the local runtime. `convex.json` pins Node actions to the same major. Do not work around failures with Node 24 or 25.
 
+Hosted exception confirmed by Joel on 1 October 2026: retain Vercel's existing
+`vercel.json` npm 11.19.1 install override. Local checks remain on npm 11.5.1;
+both environments use Node 22.
+
 Fresh login shells select `.nvmrc`. For a shell that does not, run this checkout through NVM's runner:
 
 ```sh

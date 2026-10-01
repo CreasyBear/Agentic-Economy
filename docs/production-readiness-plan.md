@@ -2381,3 +2381,132 @@ automatically. Errors in the admitted operation retain their existing boundary.
 One catch around the existing admission call removes inconsistent per-route
 handling; keep the current wrapper, response vocabulary and test seams, with
 no new error hierarchy, API object, dependency or routing layer.
+
+### Stage 37 — deploy and verify the isolated staging foundation
+
+Joel selected the prepared staging resources on 1 October 2026. This supersedes
+the pending Development-vault choice for this target only. The authoritative
+configuration source is Infisical project
+`7a7f4820-5412-4a0f-92b6-c4106051333f`, environment `staging`, path
+`/agentic-economy/deployment`. Initial copies are not automatic synchronization.
+
+**Requires:** exact staging selectors, accepted source and a fresh baseline of
+the new backend; Clerk development keys from the selected vault; no live funds.
+**Ensures:** web and backend run the same recorded revision, the stable staging
+host resolves, and runtime acceptance distinguishes anonymous, authenticated
+and commercial behavior.
+**Invariant:** the application declares `development` with sandbox payments;
+production, the older development backend and other Vercel targets remain
+outside this change. Existing spending and workload admission remain enforced.
+**On violation:** retain the failed proof and its source, refuse consequential
+work, and fix the affected binding or code. Do not relabel sandbox evidence as
+production, disable deployment protection or infer readiness from HTTP 200.
+
+The existing provider deployment commands, Clerk test fixture and Playwright
+suite cover this boundary. Keep those mechanisms: no application abstraction,
+dependency, schema change or deployment wrapper is required. The only committed
+code changes in this stage correct release tests. Vitest's rate-limit setup
+preloaded telemetry before the market test's mock; a scoped module reset
+restores the actual exception assertions. The discovery browser test now checks
+the intended RFC 9457 admission-unavailable response, including status, retry
+and cache behavior. Independent review accepted the mock isolation correction.
+
+| Resource | Verified staging identity |
+| --- | --- |
+| Source revision | `1eac65e7190c60555690b649a3e43b89a17eebf1` |
+| Vercel project | `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects` |
+| Vercel custom environment | `env_glJqfVcrMaSi920N4JP1NpI0Ovj6`, slug `staging` |
+| Web deployment | `dpl_A96huSQ7Eu4dmadS4ha6Vo7rEjrp`, native state `READY` |
+| Stable host | `https://staging.aecon.ai` |
+| Convex preview | `courteous-finch-213`, `https://courteous-finch-213.convex.cloud` |
+| Clerk test issuer | `https://composed-stallion-40.clerk.accounts.dev` |
+
+Both providers received the source revision above. Native web metadata and
+`/api/v1/release` agree; the backend revision was read back with its explicit
+deployment selector. Vercel uses Node 22 and its existing npm 11.19.1 override,
+which Joel explicitly retained; local checks use Node 22.22.0/npm 11.5.1.
+
+The backend was empty before its first push: no tables, files, Accounts,
+Principals or scheduled-function rows. Native file-inclusive snapshot
+`1790865372397145029` was retained before deployment, with SHA-256
+`2cae9b867f91b2211f6b0e96b11c545d45cae5a3ee92d25a75f2d9b7fa63d765`.
+It is a baseline rollback record, not an encrypted off-platform recovery drill.
+The push completed with native typechecking. The web build completed in 1m52s.
+
+The new DNS-only Cloudflare CNAME `staging.aecon.ai` points to Vercel's declared
+`8d42132500f59cf0.vercel-dns-016.com`; Vercel verified the domain and reports no
+misconfiguration. Its domain binding selects the staging custom environment.
+Existing DNS records and web aliases were preserved. Canonical/site URLs and
+the release marker were stored in the staging vault and copied to their actual
+web/backend consumers. TLS and browser navigation work. Deployment protection
+remains enabled; native Vercel CLI access and the existing browser session were
+used for verification.
+
+Local acceptance: `npm run check` and the full `npm run gate` pass. The gate
+includes 7,663 unit passes (one skipped), 2,698 integration passes (61 skipped,
+three todo), 31 SEO proofs, 16 browser passes (14 skipped), 18 accessibility
+passes, CLI package checks, anonymous Convex regeneration and the public build.
+The focused market suite passes all 44 cases; focused discovery browser proof
+passes four with two configured skips. Skipped external journeys are not runtime
+acceptance. No main merge or production release is performed.
+
+Runtime acceptance: `/api/ready` reports config and Convex ready, sandbox and
+the exact staging backend. It separately reports catalogue absent, quoting
+unavailable, funding missing and `sellable: false`. `/api/v1/catalogue-status`
+returns 200 with the truthful `absent` state. Anonymous `/api/v1/account` returns
+401 `authentication_required`, with canonical staging connection URLs.
+
+A dedicated Clerk development fixture, `staging-owner+clerk_test@aecon.ai`,
+completed the real email-code sign-in flow and created `Staging Journey Tests`.
+The authenticated browser opened Market, Agents, Agent keys, Security activity
+and Credit. Credit correctly displays unavailable funding and does not infer a
+balance. No payment was attempted. This fixture is isolated test data, not Joel's
+production identity.
+
+The deployed authenticated test exposed stale browser selectors and navigation:
+Agent labels now include their identity, replacement choices need their popup
+to render, and key history/revocation live in Settings. The test follows those
+current surfaces while retaining the same-principal, credential-generation,
+predecessor rejection, selective revocation and unrelated-Agent checks. It waits
+for observable loaded content rather than inferring absence from an immediate
+element count. The real five-changes-per-ten-minutes Account limit was reached
+during repeated runs; it was observed and allowed to expire, never reset or
+disabled. Incomplete test connections were revoked through existing owner UI.
+
+Automated staging access used the existing Vercel automation authority to obtain
+a cookie scoped only to `staging.aecon.ai`; it was not attached as a global
+browser header that could reach Clerk or another origin. Clerk keys stayed in
+process memory and were verified as belonging to the selected development
+instance. Temporary access material is removed after the run.
+
+Final deployed lifecycle acceptance passes: Clerk setup plus the existing
+`multi-agent-lifecycle.spec.ts` test, selected by `--grep 'keeps two agents'`,
+two passes in 1.6 minutes. It proves two distinct authenticated Agent identities,
+replacement preserving the original Principal at generation 2, predecessor 401,
+selective revocation returning 401 while the other Agent remains usable, and
+all-Agent disconnection returning 401 with credential history retained. The
+target release was asserted before the test. Browser/API requests used the real
+staging host, Clerk development instance and Convex backend. No paid Call ran.
+
+Operational limitation: `AE_SCHEDULED_WORKLOADS_ENABLED=false` has no maintained
+consumer. The deployment installs 17 cron definitions; their admission requires
+the platform workload identity, which was deliberately not provisioned. The
+flag therefore does not disable timers. Direct directory refresh without a
+workload snapshot can bootstrap the shared workload identity; do not use it as
+an incidental catalogue probe. Scheduler activation needs a bounded follow-up
+covering every admitted consequence.
+
+A native read-only workload-admission call after owner sign-in still refuses
+`refresh payment readiness` with `workload_principal_missing`. Test owner/Agent
+creation does not bootstrap scheduled-workload authority. GitHub's `staging`
+environment exists but currently has no secrets, variables, protection rules or
+branch restriction; its deployment-test configuration remains a separate task.
+
+Remaining acceptance includes the separate durable OAuth/MCP refresh journey,
+missing provider bindings and catalogue ingestion, GitHub staging configuration and vault
+synchronization, actual telemetry/alert delivery and an isolated restore drill.
+Production readiness, production ledger/custody/screening, approved spending caps
+and explicitly authorized live-money drills remain open under Wayfinder #256.
+An independently identified approval-expiry pagination defect also remains:
+the timestamp-only continuation can skip rows tied at a full page boundary.
+Admission still refuses expired approvals; repair and prove recovery separately.
