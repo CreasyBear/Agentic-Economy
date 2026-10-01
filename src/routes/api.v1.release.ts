@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { defineRouteHandlers } from '@/lib/server/gateway-json-route'
+import { readReleaseSourceRevision } from '@/lib/deployment/environment'
 
 function readReleaseIdentity(head = false): Response {
-  const sourceRevision = process.env.AE_RELEASE_SOURCE_REVISION?.trim()
-  const body = sourceRevision !== undefined && /^[a-f0-9]{40}$/u.test(sourceRevision)
+  const sourceRevision = readReleaseSourceRevision(process.env)
+  const body = sourceRevision !== undefined
     ? { kind: 'ok' as const, sourceRevision }
     : { kind: 'unavailable' as const, reason: 'source_revision_unconfigured' as const }
   const response = Response.json(body, {

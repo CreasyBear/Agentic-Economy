@@ -65,6 +65,8 @@ describe('boot and auth admission for router diagnostics', () => {
   beforeEach(() => {
     resetBootEnvironmentValidationForTests()
     mocks.clerkFactory.mockReset()
+    vi.stubEnv('VERCEL', undefined)
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', undefined)
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.stubEnv('CONVEX_URL', '')
@@ -119,11 +121,20 @@ describe('boot and auth admission for router diagnostics', () => {
   })
 
   it.each([
-    ['valid', 'a'.repeat(40), 200],
-    ['missing', undefined, 503],
-    ['malformed', 'not-a-source-revision', 503],
-  ] as const)('serves the actual %s release identity despite invalid production/auth configuration', async (_kind, revision, status) => {
+    ['explicit valid', undefined, undefined, 'a'.repeat(40), 'a'.repeat(40)],
+    ['missing', undefined, undefined, undefined, undefined],
+    ['malformed explicit', undefined, undefined, 'not-a-source-revision', undefined],
+    ['provider only', '1', 'b'.repeat(40), undefined, 'b'.repeat(40)],
+    ['matching provider', '1', 'b'.repeat(40), 'b'.repeat(40), 'b'.repeat(40)],
+    ['conflicting provider', '1', 'b'.repeat(40), 'a'.repeat(40), undefined],
+    ['malformed provider', '1', 'bad', 'a'.repeat(40), undefined],
+    ['malformed explicit with provider', '1', 'b'.repeat(40), 'bad', undefined],
+    ['non-Vercel provider ignored', undefined, 'b'.repeat(40), 'a'.repeat(40), 'a'.repeat(40)],
+  ] as const)('serves the actual %s release identity despite invalid production/auth configuration', async (_kind, vercel, provider, revision, expected) => {
+    vi.stubEnv('VERCEL', vercel)
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', provider)
     vi.stubEnv('AE_RELEASE_SOURCE_REVISION', revision)
+    const status = expected === undefined ? 503 : 200
     for (const method of ['GET', 'HEAD']) {
       const request = new Request('https://ae.example/api/v1/release', {
         method, headers: { 'x-ae-request-id': 'corr_release_probe' },
@@ -135,7 +146,7 @@ describe('boot and auth admission for router diagnostics', () => {
       expect(terminal).toHaveBeenCalledOnce()
       if (method === 'HEAD') expect(await response.text()).toBe('')
       else expect(await response.json()).toEqual(status === 200
-        ? { kind: 'ok', sourceRevision: revision }
+        ? { kind: 'ok', sourceRevision: expected }
         : { kind: 'unavailable', reason: 'source_revision_unconfigured' })
     }
     expect(mocks.clerkFactory).not.toHaveBeenCalled()

@@ -49,6 +49,8 @@ vi.mock('@/components/ae/layout/AePublicPage', () => ({
 
 import { readStatusProbesServer, type StatusProbesResult } from '@/routes/-status.functions'
 import { Route } from '@/routes/status'
+import { Route as ReleaseRoute } from '@/routes/api.v1.release'
+import type { RouteHandler } from '@/lib/server/gateway-json-route'
 
 function operationalManifest() {
   return { schemaVersion: 'ae-site-discovery:v2', name: 'Agentic Economy', origin: 'https://ae.test', endpoints: [], toolGateway: {} }
@@ -63,6 +65,8 @@ function readyDefaults() {
 
 beforeEach(() => {
   readyDefaults()
+  vi.stubEnv('VERCEL', undefined)
+  vi.stubEnv('VERCEL_GIT_COMMIT_SHA', undefined)
   vi.stubEnv('AE_RELEASE_SOURCE_REVISION', 'a'.repeat(40))
 })
 
@@ -74,6 +78,34 @@ afterEach(() => {
 })
 
 describe('readStatusProbesServer', () => {
+  it.each([
+    ['provider only', '1', 'b'.repeat(40), undefined, 'b'.repeat(40)],
+    ['matching provider', '1', 'b'.repeat(40), 'b'.repeat(40), 'b'.repeat(40)],
+    ['conflict', '1', 'b'.repeat(40), 'a'.repeat(40), undefined],
+    ['malformed provider', '1', 'bad', 'a'.repeat(40), undefined],
+    ['malformed explicit', '1', 'b'.repeat(40), 'bad', undefined],
+    ['missing', '1', undefined, undefined, undefined],
+    ['non-Vercel provider ignored', undefined, 'b'.repeat(40), 'a'.repeat(40), 'a'.repeat(40)],
+  ] as const)('agrees with actual GET/HEAD release handlers for %s', async (_label, vercel, provider, configured, expected) => {
+    vi.stubEnv('VERCEL', vercel)
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', provider)
+    vi.stubEnv('AE_RELEASE_SOURCE_REVISION', configured)
+    const result = await readStatusProbesServer()
+    expect(result.checks.find(check => check.id === 'release')?.state)
+      .toBe(expected === undefined ? 'degraded' : 'operational')
+    const handlers = ReleaseRoute.options.server?.handlers as { GET: RouteHandler; HEAD: RouteHandler } | undefined
+    if (handlers === undefined) throw new Error('release route handlers missing')
+    for (const method of ['GET', 'HEAD'] as const) {
+      const response = await handlers[method]({ request: new Request('https://ae.test/api/v1/release', { method }), params: {} })
+      expect(response.status).toBe(expected === undefined ? 503 : 200)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      if (method === 'HEAD') expect(await response.text()).toBe('')
+      else expect(await response.json()).toEqual(expected === undefined
+        ? { kind: 'unavailable', reason: 'source_revision_unconfigured' }
+        : { kind: 'ok', sourceRevision: expected })
+    }
+  })
+
   it('reports every probe operational when every reader is healthy', async () => {
     const result = await readStatusProbesServer()
     expect(result.checks).toHaveLength(5)

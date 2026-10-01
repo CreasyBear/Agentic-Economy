@@ -5,8 +5,38 @@ import {
   clerkMiddlewareConfigured,
   deploymentPaymentEnvironment,
   resolveDeploymentMode,
+  readReleaseSourceRevision,
   vercelPreviewHosts,
 } from '@/lib/deployment/environment'
+
+describe('readReleaseSourceRevision', () => {
+  const revision = 'a'.repeat(40)
+  const otherRevision = 'b'.repeat(40)
+
+  it.each([
+    ['explicit local', { AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['provider only', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision }, revision],
+    ['matching markers', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['trimmed markers', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: ` ${revision}\n`, AE_RELEASE_SOURCE_REVISION: `\t${revision} ` }, revision],
+    ['blank provider falls back', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: ' \t', AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['blank explicit uses provider', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: ' ' }, revision],
+    ['conflicting markers', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: otherRevision }, undefined],
+    ['malformed provider refuses fallback', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: 'bad', AE_RELEASE_SOURCE_REVISION: revision }, undefined],
+    ['malformed explicit refuses provider', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: 'bad' }, undefined],
+    ['uppercase explicit', { AE_RELEASE_SOURCE_REVISION: 'A'.repeat(40) }, undefined],
+    ['short explicit', { AE_RELEASE_SOURCE_REVISION: revision.slice(1) }, undefined],
+    ['long provider', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: `${revision}0` }, undefined],
+    ['missing', {}, undefined],
+    ['non-Vercel provider ignored', { VERCEL_GIT_COMMIT_SHA: revision }, undefined],
+    ['non-Vercel explicit authoritative', { VERCEL: '0', VERCEL_GIT_COMMIT_SHA: otherRevision, AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['exact provider flag required', { VERCEL: ' 1', VERCEL_GIT_COMMIT_SHA: revision }, undefined],
+  ])('selects only coherent identity: %s', (_label, input, expected) => {
+    const env = Object.freeze({ ...input })
+    const original = { ...env }
+    expect(readReleaseSourceRevision(env)).toBe(expected)
+    expect(env).toEqual(original)
+  })
+})
 
 describe('deploymentPaymentEnvironment', () => {
   it.each([

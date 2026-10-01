@@ -2159,3 +2159,65 @@ Composed unit tests separately prove that release reads do not prime the boot
 cache; their context-free router harness does not prove middleware correlation.
 All five HTTP processes exited and were independently checked absent. No provider
 credentials, financial state or production deployment was changed by these proofs.
+
+### Stage 34 — bind development and identify each deployed commit
+
+The confirmed development boundary is `cool-crab-306` and the
+`codex/production-money` Vercel Preview. Production `cautious-zebra-473` remains
+outside this change. On 1 October, the official Convex MCP `status`/`tables`
+path bypassed the CLI's failing `apiSpec` discovery. Sandboxed read-only queries
+found all 87 root tables empty and no root file-storage records. This does not
+census component data or establish recoverability. The live schema predates
+payment readiness, promotional grants and treasury snapshots; pointing the web
+at this backend alone cannot establish current functionality.
+
+The local Clerk test publishable key identifies `composed-stallion-40`, matching
+the development backend's issuer. Credential generations and authenticated
+browser/server operation remain unverified. Infisical now has both
+`AE Platform Secrets` and `AE Alpha Platform Secrets`, superseding the historical
+Example-Project-only inventory. Joel's selection of the authoritative development
+project is pending; no credentials were displayed or copied between providers.
+
+The independent source correction removes the need to pin a commit manually for
+each Vercel Git deployment. [Vercel's system-variable contract](https://vercel.com/docs/environment-variables/system-environment-variables#vercel_git_commit_sha)
+provides the triggering commit at build and runtime.
+
+**Requires:** a lowercase 40-character Git revision from explicit
+`AE_RELEASE_SOURCE_REVISION`, or nonblank `VERCEL_GIT_COMMIT_SHA` when
+`VERCEL=1`. If both are supplied, they must agree after trimming. A supplied
+provider revision takes precedence for validation and cannot be repaired by a
+different configured revision.
+**Ensures:** the release API and status probe use the same revision rule.
+Non-Vercel processes retain explicit revision configuration; unrelated CI
+metadata cannot supply an identity. A missing provider value retains the
+existing explicit-configuration path.
+**Invariant:** identity does not establish payment readiness, backend revision,
+authentication or purchase authority. Reads do not alter environment or state;
+GET/HEAD retain no-store, empty HEAD bodies and the existing diagnostic boundary.
+**On violation:** missing, malformed or conflicting identity remains unavailable
+(existing release 503 and degraded status), without reporting either conflicting
+value. This is a recoverable deployment-configuration fault with no state change;
+the operator corrects the binding, without request-level retry or fallback to an
+invented revision.
+
+One pure reader in the existing deployment module replaces two duplicate
+validators. Keep this small shared rule; reject a new build framework, static
+branch marker or additional deployment service. Verification must cover native
+metadata, explicit fallback, agreement/conflict, malformed values and both
+consumers, then compare the actual hosted API with the provider's commit metadata.
+
+Stage 34 local acceptance: independent review found no actionable defect.
+The 110 focused deployment/status/middleware tests, `npm run check` (zero cycles)
+and `npm run build` pass under Node 22.22.0/npm 11.5.1. An independently prepared
+HTTP matrix passed 64 requests against the actual built Vercel Node handler in
+eight fresh processes. It establishes exact native/explicit revision selection,
+conflict and malformed-value refusal, release GET/HEAD headers and empty HEAD
+bodies, continued readiness refusal, and ordinary request rejection after
+diagnostic reads. Each process exited. Requests used separate connections after
+the initial pooled client lost a socket; connection pooling itself is unverified.
+No production handler change was needed for that proof-client adjustment.
+
+No backend code, environment binding or credential was changed. The full release
+gate last passed at Stage 33; this bounded change ran its affected checks and
+build, and is not a merge or alpha release. Deployed current-backend operation,
+authenticated development use and a paid development Call remain unverified.

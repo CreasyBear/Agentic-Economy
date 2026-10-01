@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 
 import { degrade } from '@/lib/observability/degrade'
+import { readReleaseSourceRevision } from '@/lib/deployment/environment'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readServerReadiness } from '@/lib/server/readiness'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
@@ -12,9 +13,8 @@ import { readCatalogueFreshness } from '@/modules/market/x402-directory-index.se
 /**
  * `/status` reads every probe in-process instead of round-tripping through
  * `/api/health`, `/api/ready`, `/.well-known/ucp`, and `/api/v1/catalogue-status`
- * over HTTP: it calls the same server-side readers those routes use. Release
- * identity has no exported reader (`api.v1.release.ts` keeps it route-local),
- * so it is re-derived here from the same environment contract.
+ * over HTTP: it calls the same server-side readers those routes use, including
+ * the shared deployment release-identity reader.
  */
 
 export type ProbeId = 'site' | 'market' | 'discovery' | 'release' | 'catalogue'
@@ -83,8 +83,8 @@ async function probeDiscovery(request: Request): Promise<ProbeAssessment> {
 }
 
 async function probeRelease(): Promise<ProbeAssessment> {
-  const sourceRevision = process.env.AE_RELEASE_SOURCE_REVISION?.trim()
-  return sourceRevision !== undefined && /^[a-f0-9]{40}$/u.test(sourceRevision)
+  const sourceRevision = readReleaseSourceRevision(process.env)
+  return sourceRevision !== undefined
     ? { state: 'operational', detail: 'Deployment identity is available.' }
     : { state: 'degraded', detail: 'Release identity is unavailable. New Calls should wait.' }
 }
