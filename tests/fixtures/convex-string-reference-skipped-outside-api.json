@@ -1,5 +1,47 @@
 [
   {
+    "file": "tests/fixtures/convex-work-recovery-proof.ts",
+    "line": 26,
+    "literal": "workRecoveryProof:increment",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/fixtures/convex-work-recovery-proof.ts",
+    "line": 27,
+    "literal": "workRecoveryProof:completeQueued",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/fixtures/convex-work-recovery-proof.ts",
+    "line": 31,
+    "literal": "workRecoveryProof:noEffect",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/fixtures/convex-work-recovery-proof.ts",
+    "line": 32,
+    "literal": "workRecoveryProof:lostCompletion",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/fixtures/convex-work-recovery-proof.ts",
+    "line": 36,
+    "literal": "workRecoveryProof:seedActiveCalls",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/fixtures/convex-work-recovery-proof.ts",
+    "line": 37,
+    "literal": "workRecoveryProof:seedStrandedCalls",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/fixtures/convex-work-recovery-proof.ts",
+    "line": 271,
+    "literal": "workRecoveryProof:readCallCutoff",
+    "helper": "makeFunctionReference"
+  },
+  {
     "file": "tests/unit/convex/workflow-component-proof.test.ts",
     "line": 23,
     "literal": "workflowProof:begin",

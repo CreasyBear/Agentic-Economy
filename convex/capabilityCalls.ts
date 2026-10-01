@@ -26,7 +26,8 @@ import {
   completeWorkWithReconciliationInitialization, finishAutomaticReconciliationHandler,
   finalizeDispatchWithReconciliationInitialization, cancelBeforeClaimWithReconciliationInitialization,
   listDueAutomaticReconciliationCandidatesHandler, projectRecoveryWithReconciliationInitialization,
-  recordWithReconciliationInitialization,
+  recordWithReconciliationInitialization, reconcileFinishedDispatchesArgs,
+  reconcileFinishedDispatchesResult, reconcileFinishedDispatchesHandler,
 } from './lib/capabilityExecution/callLifecycle/reconciliation'
 import {
   resolveCallAgentAuthorityArgs, resolveCallAgentAuthorityResult, resolveCallAgentAuthorityHandler,
@@ -145,6 +146,10 @@ export const listDueAutomaticReconciliationCandidates = internalQuery({
   args: listDueAutomaticReconciliationCandidatesArgs,
   returns: listDueAutomaticReconciliationCandidatesResult,
   handler: listDueAutomaticReconciliationCandidatesHandler,
+})
+export const reconcileFinishedDispatches = internalMutation({
+  args: reconcileFinishedDispatchesArgs, returns: reconcileFinishedDispatchesResult,
+  handler: reconcileFinishedDispatchesHandler,
 })
 export const claimAutomaticReconciliationCandidate = internalMutation({
   args: claimAutomaticReconciliationCandidateArgs, returns: reconciliationClaimResult,

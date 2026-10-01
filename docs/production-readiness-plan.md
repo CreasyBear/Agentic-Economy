@@ -989,3 +989,106 @@ passes in 148 seconds with the pinned native backend. One preceding run timed ou
 during a verified 24-minute clamshell sleep; its disposable process/data were
 explicitly cleaned before the successful rerun. These are local source and native
 runtime proofs, not hosted or complete application-restoration acceptance.
+
+## Stage 23 — recover missing Call completions; queued restore remains open
+
+Sluice selects the main channel for the restored scheduler and durable Call
+boundary. Successful Workpool actions already run their completion callback in
+the completion mutation; no new inline-callback adapter is needed. The remaining
+failure, recovery and callback-fallback paths can leave a pending Call referring
+to finished work. The existing automatic reconciliation selector excludes those
+Calls. Reuse the maintained Workpool status query and existing Call completion
+classification, connected to the admitted reconciliation sweep.
+
+Requires: current workload admission, a bounded native cursor page under a fixed
+creation-time cutoff, a pending non-approval Call and its exact stored WorkId.
+Ensures: only Workpool items observed finished are passed through the existing
+failed-completion and reconciliation initialization path. Every page is visited,
+including equal timestamps and pages filled by active work. Invariant: queued or
+running work is not replaced; Call identity, input, booking, attempt and release
+fences remain authoritative; no Provider request, signature or external ledger
+posting occurs in this mutation. A missing scheduler row is never evidence that
+an external effect did not happen. On violation: invalid bounds or workload,
+failed component reads or failed continuation scheduling abort the transaction;
+no partial page is reported as recovered. Each continuation revalidates current
+workload admission. The next admitted cron can restart a lost continuation.
+
+The recovery mutation and its continuation are naturally replayable through
+Convex transactions and the existing pending-state/exact-WorkId completion guard.
+Concurrent passes and late callbacks must not overwrite a terminal Call or create
+a second attempt. The existing reconciliation worker owns any later status read
+or exact refund; new spending still requires current authority. The native acceptance test
+requires queued Workpool work to resume with its original identity and one effect
+after stopping the source and invoking the maintained `kick:forceKick` twice.
+This criterion is not yet met. It does not authorize blanket external action
+replay or establish complete application recovery.
+
+Complexity decision: extend the existing Call reconciliation concern and cron
+consumer, with one internal registration. Reuse the existing pending/creation-time
+index, native cursor and transaction/scheduler mechanisms; no new table, index,
+public API, recovery service or generic callback reconstruction. Native fixtures
+reuse the isolated CLI runtime. This adds a bounded scan to the existing recovery
+cadence in exchange for automatically repairing the observed missing-consumer
+path, without adding a customer decision or manual retry requirement.
+
+The seven new registered-mutation tests and 18 reconciliation-worker tests pass.
+They establish cursor reachability beyond 25 active rows at the same creation
+cutoff, conservative held/uncertain classification, preserved original financial
+and attempt records, duplicate/stale-generation protection, current workload
+admission, and transaction rollback on component-read or scheduling failure.
+The scheduler failure is an injected boundary; status reads use the real
+Workpool component. Financial records in this fixture are synthetic, not proof
+of a native Formance refund or an external Provider effect.
+
+The native drill reached and passed the data/file comparison, six corruption
+falsifiers and Call-recovery assertions: three stranded Calls were classified
+behind 25 active Calls through a real scheduled cursor continuation. Concurrent
+recovery repeats retained the same classification and original identities. The
+source backend was stopped before target execution. **Queued work did not resume.**
+Three native runs reached the same failure; direct readback found the queued job
+pending with zero effects and zero completions, and both restarted BatchWorker
+loops failed with `Function handle not found`. No successful full-restore receipt
+was produced. The positive one-effect assertion remains in the opt-in native
+test, with an explicit runner-failure assertion to expose this cause promptly.
+
+This matches the pinned backend's handle contract: a stored function handle is
+resolved by its system-table ID, with the appended function name only advisory
+([handle format](https://github.com/get-convex/convex-backend/blob/5c7cb5b/crates/common/src/bootstrap_model/components/handles.rs),
+[lookup](https://github.com/get-convex/convex-backend/blob/5c7cb5b/crates/model/src/components/handles.rs)).
+Logical exports include user tables and optional file storage, excluding the
+system handle mapping ([export implementation](https://github.com/get-convex/convex-backend/blob/5c7cb5b/crates/exports/src/lib.rs)).
+The documented cloud backup and CLI export use the same ZIP format
+([backup contract](https://docs.convex.dev/database/backup-restore)). This is
+fresh-target evidence for backend `precompiled-2026-09-28-5c7cb5b`, Workpool 0.4.10
+and BatchWorker 0.2.1, not a test of same-deployment or dedicated physical restore.
+
+Installed Workpool has no maintained operation to rebind the execution and
+completion handles on an existing WorkId. Refreshing its main-loop handles alone
+would leave those job handles stale. Do not make the drill pass by rewriting
+private component records or treating an advisory handle suffix as authority.
+Keep #286 open. The next engineering boundary is supported handle restoration or
+reconstruction of work from AE's original durable domain records, with explicit
+Call/effect identity and external reconciliation before any new dispatch. Other
+restore consumers, hosted retention/RPO/RTO, and actual restored financial effects
+remain outstanding. This stage's safe finished-Call repair does not close those
+requirements or the full Wayfinder objective.
+
+The final native run fails explicitly on two `loop.js:loop` handle-resolution
+failures after 160 seconds; the preceding Call-recovery assertions pass. Both
+disposable deployments and their files were cleaned. This remains a failing
+acceptance test; its assertion was not relaxed or converted to an expected failure.
+The ordinary gate leaves this pre-existing opt-in native drill disabled, so a
+passing source gate does not establish full recovery.
+
+Final source verification under Node 22/npm 11.5.1: `npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+pass. The gate verifies seven-file anonymous Convex generation, public-build
+integrity, clean types, zero cycles, 7,285 unit tests, 2,542 integration-command
+tests, four type tests, 75 import checks, TypeScript standards, 31 SEO checks,
+16 browser journeys, 18 accessibility checks and reproducible CLI packaging.
+Integration selection also includes Convex-named unit files; these totals are not
+disjoint. Existing skips/todos remain: one unit skip, 55 integration skips and
+three todos. The separately executed native command
+`AE_CONVEX_RESTORE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism`
+fails on the restored function handles as described above. No production
+deployment or live-money drill is represented by these local checks.

@@ -726,6 +726,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "reconcileFinishedDispatches",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "capabilityCalls",
     "method": "reconcileOwnerCall",

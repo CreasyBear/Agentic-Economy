@@ -51,10 +51,16 @@ import { v } from 'convex/values'
 export default defineSchema({ ...original.tables,
   restoreProofRecords: defineTable({ ordinal:v.number(), value:v.string(), fractional:v.number(), integer:v.int64(), bytes:v.bytes(), special:v.object({ nan:v.number(), infinity:v.number(), negativeZero:v.number() }) }),
   restoreProofControl: defineTable({ threadId:v.string(), scheduledId:v.string(), timerRuns:v.number(), storageId:v.optional(v.id('_storage')) }),
+  workRecoveryProof: defineTable(v.union(
+    v.object({ kind:v.literal('queued'), workId:v.string(), count:v.number(), completions:v.number(), callbackWorkId:v.optional(v.string()) }),
+    v.object({ kind:v.literal('calls'), createdBefore:v.number(), fixtureDigest:v.string(), entries:v.array(v.object({ callRef:v.string(), workId:v.string(), kind:v.union(v.literal('active'),v.literal('unfunded'),v.literal('held'),v.literal('possibly_released')), identityDigest:v.string() })) }),
+  )),
 })
 `)
   writeFileSync(join(convex, 'restoreProof.ts'), readFileSync(resolve('tests/fixtures/convex-restore-proof.ts'), 'utf8')
     .replace('../../convex/_generated/api', './_generated/api'))
+  writeFileSync(join(convex, 'workRecoveryProof.ts'), readFileSync(resolve('tests/fixtures/convex-work-recovery-proof.ts'), 'utf8')
+    .replaceAll('../../convex/', './'))
   // Suppress application crons in both disposable copies: no provider work or expiry during the data proof.
   writeFileSync(join(convex, 'crons.ts'), "import { cronJobs } from 'convex/server'\nexport default cronJobs()\n")
 }
@@ -62,11 +68,11 @@ export default defineSchema({ ...original.tables,
 /**
  * Requires fresh disposable anonymous roots, unique ports, maintained native CLI and matching code.
  * Ensures native import preserves the complete archive, real component records, typed values and bytes.
- * Invariant: source is untouched after export; timers are accounted for separately; no inherited selectors.
+ * Invariant: each archive has a fixed baseline; source stops before work resumes on target; no inherited selectors.
  * On violation fail, including saturation or cleanup; never retry against a shared/cloud deployment.
  */
 describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true')('native Convex archive restoration', () => {
-  it('restores all records/files, detects independent corruption and exposes the omitted scheduler', async () => {
+  it('restores records/files, detects corruption, resumes queued work and reconciles missing Call completions', async () => {
     const root = mkdtempSync(join(tmpdir(), 'ae-convex-restore-'))
     const source = join(root, 'source')
     const target = join(root, 'target')
@@ -85,6 +91,21 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true')('native Co
       // The maintained CLI emits no stdout for a successful null-returning function.
       if (stdout.trim() === '' && ['seed', 'corrupt', 'deleteFile'].includes(method)) return null
       return JSON.parse(stdout)
+    }
+    const invokeWork = async <T>(isolatedRoot: string, method: string, args: object = {}): Promise<T> => {
+      const { stdout } = await command(isolatedRoot, ['run', `workRecoveryProof:${method}`, JSON.stringify(args)])
+      return JSON.parse(stdout) as T
+    }
+    const pollWork = async <T>(method: string, ready: (value: T) => boolean): Promise<T> => {
+      const deadline = Date.now() + 90_000
+      let last: T | undefined
+      while (Date.now() < deadline) {
+        const value = await invokeWork<T>(target, method)
+        last = value
+        if (ready(value)) return value
+        await new Promise(done => setTimeout(done, 1_000))
+      }
+      throw new Error(`restore_proof_work_timeout:${method}`, { cause: last })
     }
     const exportArchive = async (isolatedRoot: string, name: string): Promise<string> => {
       const path = join(root, `${name}.zip`)
@@ -178,9 +199,70 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true')('native Co
       const failedReceipt = join(root, 'failed-receipt.json')
       await expect(compareRestoreArchives(['--source', baseline, '--restored', changedArchive, '--receipt', failedReceipt])).rejects.toThrow()
       expect(() => statSync(failedReceipt)).toThrow()
+      // Restore actual component queues and synthetic durable Call evidence separately from the data proof.
+      console.log('Restore proof: seed original work and stranded Call evidence')
+      const calls = await invokeWork<{ createdBefore: number; fixtureDigest: string }>(source, 'seedCalls', {
+        runAt: Date.now() + 86_400_000,
+      })
+      type CallProof = {
+        fixtureDigest: string; identitiesPreserved: boolean; activePrefix: boolean; activePending: number; workFinished: number
+        states: Array<{ kind: string; state: string; resultKind: string; attemptRef: string | null;
+          effectGeneration: number | null; financialState: string | null; reservationRefsPreserved: boolean;
+          reconciliation: null | { disposition: string; reason: string } }>
+      }
+      const sourceDeadline = Date.now() + 90_000
+      let sourceCalls = await invokeWork<CallProof>(source, 'readCalls')
+      while (sourceCalls.workFinished !== 3 && Date.now() < sourceDeadline) {
+        await new Promise(done => setTimeout(done, 1_000))
+        sourceCalls = await invokeWork<CallProof>(source, 'readCalls')
+      }
+      expect(sourceCalls).toMatchObject({ fixtureDigest: calls.fixtureDigest, identitiesPreserved: true,
+        activePrefix: true, activePending: 25, workFinished: 3 })
+      const runAt = Date.now() + 30_000
+      const queued = await invokeWork<{ workId: string }>(source, 'seedQueued', { runAt })
+      const workBaseline = await exportArchive(source, 'work-baseline')
+      expect(await invokeWork(source, 'readQueued')).toMatchObject({ workId: queued.workId, state: 'pending', count: 0, completions: 0 })
+      expect(runAt - Date.now()).toBeGreaterThan(5_000)
+      await stopBackends[0]!()
+      await command(target, ['import', workBaseline, '--replace', '--yes'])
+      expect(await compareConvexSnapshots(workBaseline, await exportArchive(target, 'work-restored')))
+        .toMatchObject({ kind: 'matched', scope: 'records_and_files' })
+      const firstPage = await invokeWork(target, 'beginCallRecovery')
+      expect(firstPage).toMatchObject({ scanned: 25, recovered: 0, waiting: 25, isDone: false })
+      const recovered = await pollWork<CallProof>('readCalls', value => value.states
+        .filter(row => row.kind !== 'active').every(row => row.state !== 'pending'))
+      expect(recovered).toMatchObject({ fixtureDigest: calls.fixtureDigest, identitiesPreserved: true, activePending: 25 })
+      expect(recovered.states.every(row => row.reservationRefsPreserved)).toBe(true)
+      expect(recovered.states.find(row => row.kind === 'unfunded')).toMatchObject({ state: 'refused', resultKind: 'refused' })
+      for (const kind of ['held', 'possibly_released']) {
+        expect(recovered.states.find(row => row.kind === kind)).toMatchObject({ state: 'reconciliation_required',
+          resultKind: 'reconciliation_required', reconciliation: { disposition: 'automatic' } })
+      }
+      const uncertainBefore = sourceCalls.states.find(row => row.kind === 'possibly_released')!
+      expect(recovered.states.find(row => row.kind === 'possibly_released')).toMatchObject({
+        attemptRef: uncertainBefore.attemptRef, effectGeneration: uncertainBefore.effectGeneration,
+        financialState: 'outcome_unknown',
+      })
+      // Concurrent repeats retain the same durable classification and original work generations.
+      await Promise.all([invokeWork(target, 'beginCallRecovery'), invokeWork(target, 'beginCallRecovery')])
+      expect(await invokeWork(target, 'readCalls')).toEqual(recovered)
+      console.log('Restore proof: Call recovery passed; resume original queue')
+      await command(target, ['run', 'kick:forceKick', '{}', '--component', 'workpool'])
+      await command(target, ['run', 'kick:forceKick', '{}', '--component', 'workpool'])
+      const runnerHistory = await command(target, ['run', '--inline-query',
+        'return (await ctx.db.system.query("_scheduled_functions").take(101)).filter(job => job.state.kind === "failed").map(job => ({ name: job.name, state: job.state }))',
+        '--component', 'workpool/batchWorker'])
+      // A successful kick is insufficient: restored runner handles must actually resolve.
+      expect(JSON.parse(runnerHistory.stdout), 'restored Workpool runner failures').toEqual([])
+      type QueuedProof = { workId: string; state: string; count: number; completions: number; callbackWorkId: string | null }
+      const resumed = await pollWork<QueuedProof>('readQueued', value => value.state === 'finished' && value.completions > 0)
+      expect(resumed).toEqual({ workId: queued.workId, state: 'finished', count: 1, completions: 1, callbackWorkId: queued.workId })
+      expect(await invokeWork(target, 'readCalls')).toEqual(recovered)
       summary = { scope: match.scope, counts: match.counts, digests: match.digests,
         scheduledNamespaces: namespaces.length, sourceJobs, targetJobs, schedulerRecovery: 'not_restored',
-        falsifiers: 6, backendVersion }
+        falsifiers: 6, backendVersion, workRecovery: { originalWorkId: queued.workId, effects: resumed.count,
+          completions: resumed.completions, forceKicks: 2, strandedCallsRecovered: 3, activeCallsPreserved: 25,
+          fixtureDigest: calls.fixtureDigest, sourceStoppedBeforeResume: true, externalEffectsProven: false } }
     } catch (error) {
       failures.push(error)
     } finally {

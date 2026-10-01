@@ -53,6 +53,14 @@ export async function reconcileScheduledHandler(
   const startedAt = Date.now()
   const deadlineAt = startedAt + RECONCILIATION_SWEEP_DEADLINE_MS
   const leaseOwner = `reconciliation-sweep:${crypto.randomUUID()}`
+  try {
+    await ctx.runMutation(internal.capabilityCalls.reconcileFinishedDispatches, {
+      workload, cursor: null, createdBefore: Math.max(0, startedAt - 60_000),
+    })
+  } catch (cause) {
+    // A failed completion repair must not block already admitted recovery/refunds.
+    degradeBackend(cause, undefined, { site: 'reconcileFinishedDispatches', reason: 'source_unavailable' })
+  }
   let expiredCandidates: Array<{
     dispatchRef: string
     attemptRef: string
