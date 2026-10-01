@@ -39,7 +39,7 @@ permissions:
 
 concurrency:
   group: kernel-release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -394,11 +394,14 @@ jobs:
 
   authenticated-platform-proof:
     if: github.event_name == 'workflow_dispatch'
-    name: Required exact-revision authenticated multi-agent lifecycle proof
+    name: Required exact-revision authenticated platform proof
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: staging
+    concurrency:
+      group: authenticated-platform-staging
+      cancel-in-progress: false
     env:
       AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
@@ -419,11 +422,12 @@ jobs:
       - name: Install the authenticated Chromium browser
         run: npm exec -- playwright install --with-deps chromium
 
-      - name: Prove the authenticated two-agent lifecycle
+      - name: Prove authenticated Agent, security and commerce journeys
         env:
           AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:authenticated
 
   live-gateway-proof:

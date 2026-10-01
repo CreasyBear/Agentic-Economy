@@ -89,6 +89,24 @@ describe('authenticated E2E environment', () => {
     expect(exact.expectedSourceRevision).toBe('a'.repeat(40))
   })
 
+  it.each([
+    'https://user:password@staging.agentic.example',
+    'https://staging.agentic.example/owner',
+    'https://staging.agentic.example/?token=private',
+    'https://staging.agentic.example/#token',
+    'http://staging.agentic.example',
+  ])('rejects an unsafe external origin: %s', (baseURL) => {
+    const result = readAuthenticatedE2EEnvironment({
+      CLERK_PUBLISHABLE_KEY: publishableKey,
+      CLERK_SECRET_KEY: secretKey,
+      AE_E2E_OWNER_EMAIL: 'owner+clerk_test@example.com',
+      AE_AUTHENTICATED_E2E_BASE_URL: baseURL,
+    })
+    expect(result.configured).toBe(false)
+    expect(result.invalid).toEqual([expect.stringContaining('AE_AUTHENTICATED_E2E_BASE_URL')])
+    expect(result.invalid.join()).not.toContain(baseURL)
+  })
+
   it('keeps required mode incomplete until every required value is present', () => {
     const result = readAuthenticatedE2EEnvironment({ AE_REQUIRE_AUTHENTICATED_E2E: 'true' })
 

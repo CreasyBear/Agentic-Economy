@@ -2510,3 +2510,98 @@ and explicitly authorized live-money drills remain open under Wayfinder #256.
 An independently identified approval-expiry pagination defect also remains:
 the timestamp-only continuation can skip rows tied at a full page boundary.
 Admission still refuses expired approvals; repair and prove recovery separately.
+
+### Stage 38 — prove durable staging access and bind its CI environment
+
+The deployed lifecycle and OAuth/MCP journeys pass together: three passes,
+including Clerk setup, in 2.5 minutes against `https://staging.aecon.ai` and
+source `1eac65e7190c60555690b649a3e43b89a17eebf1`. The OAuth journey uses the
+official MCP client, restarts the client, rotates the refresh token and retains
+the same Principal, Account, authority mode and scopes. Owner disconnection
+then denies refresh (`invalid_grant`), the protected Account read and MCP
+identity access; anonymous public search remains available. This stage changes
+the test harness and workflow only; no application/backend deployment or paid
+Call was needed.
+
+**Requires:** Clerk test-instance keys, the dedicated staging owner, a validated
+application origin and the expected deployed revision for required release runs.
+**Ensures:** every authenticated journey checks deployment access and the exact
+release before its application mutations; the official MCP transport sends
+credentials only to that origin and refuses redirects.
+**Invariant:** application authentication remains required. The Vercel automation
+secret is exchanged only over HTTPS without URL credentials; the browser gets a
+host-only cookie, not a global secret header. No automatic credential-issuance
+retry or Account-rate-limit reset is permitted.
+**On violation:** abort before journey mutations, preserve the original test
+failure, and attempt owner-side disconnection of every potentially issued test
+Agent. Failed or ambiguous cleanup remains an explicit reconciliation error.
+Hard process termination cannot run browser teardown and still requires owner
+reconciliation.
+
+The selected contract, error and idempotency checks led to origin validation,
+bounded bypass exchange, failure cleanup and staging-job serialization. Manual
+release runs no longer cancel an in-progress run on the same ref; all staging
+authenticated jobs also share one non-cancelling concurrency group across refs.
+Lifecycle tests run with zero retries. Credential-bearing trace, video and
+screenshot capture is disabled. The small shared Playwright page fixture has
+three existing callers and removes duplicated access/release preflight. Keep
+this fixture; no new dependency, framework, service or deployment wrapper is
+introduced.
+
+A controlled local assertion failure after issuing two real staging test Agents
+exercised teardown. The failure remained visible and both Agents were revoked.
+Native read-only Convex counts advanced from 13 revoked Agents / 18 revoked
+grants to 15 / 20. After tightening teardown to require the named Agent's own
+Disconnected status and no incomplete-lifecycle alert, a second controlled
+failure passed those cleanup assertions: 17 / 22 revoked and zero active
+records in either table. The deliberate fault was removed. Credential and Agent
+history is retained, not deleted. The three targeted environment, bypass and
+release-baseline unit files pass all 35 tests; `npm run check` passes. The full
+gate already passed on the deployed application revision in Stage 37; no merge
+or alpha release occurs in this stage.
+
+GitHub environment `staging` now has an explicit branch allowlist (`main` and
+`codex/production-money`), the `AE_AUTHENTICATED_E2E_BASE_URL` variable and four
+encrypted environment secrets: owner fixture email, Clerk test publishable key,
+Clerk test secret key and the existing Vercel automation bypass. The exact
+secret names are `AE_AUTHENTICATED_E2E_OWNER_EMAIL`,
+`AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY`,
+`AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY` and
+`VERCEL_AUTOMATION_BYPASS_SECRET`. Native GitHub readback confirms names and
+update timestamps; GitHub does not expose plaintext secret readback. Clerk
+values were checked against the selected staging development issuer before
+binding. The Vercel credential itself has project-wide automation authority;
+the test consumers restrict its use to the configured host. Repository-level
+source-proof credentials were not changed.
+
+The workflow still invokes the complete authenticated platform suite, including
+security and commerce. Those remaining journeys need their own deployed proof
+and provider bindings; the passing lifecycle subset is not full release
+acceptance. Joel reported billing resolved and requested avoiding wasteful build
+jobs. This stage runs verification locally and dispatches no GitHub Actions
+run or Vercel build.
+
+Joel approved the native Infisical GitHub app for only
+`CreasyBear/Agentic-Economy` and completed GitHub verification. Connection
+`ae-staging-github` has Actions/metadata read and environments/secrets write
+permission on that repository. Native sync `ae-github-staging` is enabled from
+Infisical `staging:/agentic-economy/github-staging` to GitHub repository
+environment `staging`, with subfolders excluded and secret deletion prevented.
+The source contains exactly the four keys above. Both Clerk aliases are stored
+as references to `/agentic-economy/deployment`, verified in the native editor;
+the existing Vercel automation value is stored in this dedicated source.
+Resolved values were validated privately, without writing keys to logs/files.
+Infisical reports `Synced`; native GitHub metadata confirms all four destination
+keys updated at `2026-10-01T16:29:24Z`. No entire-folder deployment-secret export
+or additional GitHub consumer is involved. Auto-sync is enabled and initial
+delivery is proven; a later credential-rotation event has not been exercised.
+The source references and repository-environment/deletion settings use
+[Infisical's native references](https://infisical.com/docs/documentation/platform/secret-reference)
+and [GitHub sync](https://infisical.com/docs/integrations/secret-syncs/github).
+
+Remaining staging acceptance: the security/commerce journeys and their provider
+bindings, deliberate directory/scheduled-workload activation, telemetry and
+alert delivery, and isolated restore proof. This does not establish production
+or real-money readiness. Source changes are committed locally for the next
+consolidated release push, avoiding an incidental Preview build for harness-only
+work.
