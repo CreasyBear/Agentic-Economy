@@ -860,3 +860,132 @@ These tests do not establish live Stripe operation, hosted money readiness or le
 approval. No production deployment, paid provider generation or live-money movement
 was performed. Next is the Convex records/files restore proof and explicit evidence
 of the scheduled work that snapshots omit, under #286.
+
+## Stage 22 — prove Convex data restoration and expose missing work
+
+Sluice selects the main channel for #286's archive-to-runtime boundary. The
+existing official Convex export/import operations own backup transport. Add a
+complete comparison of their records, component data, schema material and storage
+bytes, then run it against two disposable local deployments. This is the next
+application-recovery step after the proven ledger restore; it is not a substitute
+for restoring scheduled work or the hosted drill.
+
+Requires: readable complete native exports, a fresh isolated target, matching code
+and component configuration, and explicit development environment. Ensures: every
+archive member is accounted for; document IDs, creation times, typed values, schema
+and raw files agree after native import and re-export. Invariant: no sample or
+truncated listing can establish completeness; no shared deployment, secret-bearing
+environment or production import is used; matching stored data does not prove
+that a missing scheduler callback will run. On malformed, duplicate, unsafe,
+oversized or unreadable input, fail comparison without extracting files or
+printing private rows. A failed command or cleanup makes the native drill fail.
+
+The native fixture will exceed 1,000 root records, include special Convex values,
+real Agent component records and binary storage, and query restored invariants.
+Altered old records, missing/extra records, changed component data and missing or
+changed files must be detected. A harmless future timer and its durable marker
+will demonstrate what import actually does to scheduled work. Job evidence uses
+complete namespace censuses; the CLI's silent `--limit` saturation is incomplete
+evidence. Missing component namespaces cannot be called empty. Root and nested
+Workpool, Workflow, Agent and migration work must not be silently treated as
+recovered merely because their ordinary rows match.
+
+Complexity decision: one archive reader/comparator absorbs native ZIP/JSONL,
+canonical comparison, limits and private-data-safe receipts. Use installed OS
+`unzip` with argument arrays, never extraction; no ZIP library or new dependency.
+Its operational CLI and native drill are the two callers. Extract the existing
+anonymous CLI environment/process cleanup only for the existing codegen proof and
+this second real caller, keeping selectors and cleanup in one place. The added
+module boundary buys one implementation of environment isolation, bounded command
+output and owned-process cleanup; a general deployment framework would not.
+
+Recovery classification: archive/CLI/target failures are operational failures
+that stop this isolated proof and retain a diagnostic code. They never trigger a
+production fallback or a data import retry against another target. Cleanup belongs
+to the native process owner and must finish before success is reported. Tests use
+the existing Vitest setup and native CLI; no new test infrastructure, cloud service,
+application API or durable application schema is introduced. Fixture registrations
+and schema additions exist only in the disposable copies.
+
+Root owns the native orchestration, fixture and acceptance. Bounded workers own
+the complete archive comparison and the reused anonymous CLI runtime separately;
+heavy checks are serialized. The gate remains a source check, while the explicit
+native drill establishes data restoration and records any unrecovered work. A
+separate recovery action, grounded in that observation, is still required wherever
+the maintained components or application do not resume the original work.
+
+Native format findings refine the comparison contract. Each namespace's `_tables`
+member is its table census; `_storage` and `_tables` themselves sit outside that
+census. Mapped ordinary tables must exist, including empty tables, and ordinary
+table members must be mapped. Uniform exports write int64 values as raw JSON
+integer tokens and finite Float64 values as floating-point tokens. Preserve
+those tokens through Node 22's maintained JSON reviver before hashing: ordinary
+JavaScript numeric parsing can silently equate distinct int64 values. Preserve
+the order of `generated_schema.jsonl`; its first line selects decoding and later
+legacy lines supply per-document context. Actual native import and readback own
+semantic schema validation; no JavaScript copy of Convex's Rust schema parser is
+introduced. The installed SDK validates reserved binary and special-float tags.
+
+The two runtime callers have different process lifetimes. Codegen keeps automatic
+per-command cleanup. The native drill explicitly retains a backend after a
+successful command because `data`, `export` and `import` require a running local
+backend. The installed CLI also closes a backend it temporarily starts for `run`,
+so the native owner starts the maintained `convex dev` process in each disposable
+copy and keeps it alive for the drill. Startup is bounded and its returned stop
+operation reports unexpected process failure. Failed, timed-out or saturated
+commands always clean up. The owner terminates both disposable deployments and
+removes their data before it reports success. Both native pushes use the same
+cached backend version; the target is observed empty before import. The two
+explicit lifetime operations replace a duplicate environment/process launcher;
+there is no native binary reimplementation, session manager or deployment service.
+
+The operational comparison command is read-only:
+
+```sh
+npm run verify:convex-restore -- \
+  --source /secure/source-snapshot.zip \
+  --restored /secure/restored-snapshot.zip \
+  --receipt /secure/convex-records-files-match.json
+```
+
+Use complete native exports with file storage, generated from the verified source
+and isolated restored target at the agreed cutoff. The command creates a new
+private receipt containing aggregate counts and digests; it will not overwrite an
+existing receipt. It does not select or mutate a deployment, establish archive
+provenance, or prove scheduler, environment, code, Formance or external-effect
+recovery. Hosted target selection, encryption, retention, RPO/RTO and production
+restore authorization remain separate operator responsibilities.
+
+The native acceptance fixture restores 1,007 root records, a real Agent thread and
+message, and a 1,031-byte stored file. The complete archive covers 19 namespaces,
+225 table entries, 1,198 document/table-mapping entries and 414 logical members.
+Readback verifies exact int64, fractional values, bytes, NaN, Infinity, signed
+zero, component data and file checksum. Six independent corruptions are refused:
+an old record outside a 1,000-row listing, a missing record, an extra record,
+changed component data, a deleted file and modified file bytes. The private
+receipt is created exclusively after a complete match; failed comparisons do not
+create one. Unit evidence additionally establishes malformed-input rejection,
+complete bounded output, isolated selectors and owned-process failure cleanup.
+
+The scheduler census establishes a specific remaining gap: the source has one
+future callback, the restored target has none across all 19 namespaces, and the
+durable marker still refers to the missing callback. This proves data recovery,
+not resumed application work. The next stage must prove the maintained component
+and application recovery operations, preserving uncertain external outcomes and
+the original effect identity. No hosted restore, production wiring, live-money
+operation or paid provider generation was performed.
+
+Final verification: `npm run check` passes. Under Node 22/npm 11.5.1,
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+passes anonymous seven-file Convex generation, public-build integrity, clean
+types, zero cycles, 7,277 unit tests, 2,534 integration-command tests, four type
+tests, 75 import checks, TypeScript standards, 31 SEO checks, 16 browser journeys,
+18 accessibility checks and reproducible CLI packaging. The integration command
+also selects the 54 new Convex-named unit cases; its count is not a disjoint total.
+One unit skip, 55 integration skips and three todos remain. The native restore
+test is deliberately opt-in in the ordinary gate; the separate
+`AE_CONVEX_RESTORE_INTEGRATION=true vitest run tests/integration/convex-native-restore.test.ts --no-file-parallelism`
+passes in 148 seconds with the pinned native backend. One preceding run timed out
+during a verified 24-minute clamshell sleep; its disposable process/data were
+explicitly cleaned before the successful rerun. These are local source and native
+runtime proofs, not hosted or complete application-restoration acceptance.

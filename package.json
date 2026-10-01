@@ -27,6 +27,7 @@
     "generate:convex": "node tools/dev/require-supported-node.ts -- convex codegen --typecheck=disable",
     "check:convex-codegen": "node tools/dev/require-supported-node.ts -- convex codegen --dry-run --typecheck=disable",
     "verify:convex-generated:anonymous": "tsx tools/release/verify-convex-generated-anonymous.ts",
+    "verify:convex-restore": "tsx tools/release/convex-restore.ts",
     "verify:release-integrity": "tsx tools/release/verify-release-integrity.ts -- npm run build",
     "test:release:unit": "node tools/dev/run-with-cleanup.ts vitest run tests/unit --reporter=default --reporter=json --outputFile.json=output/release/unit-vitest.json",
     "test:release:integration": "node tools/dev/run-with-cleanup.ts vitest run tests/integration convex --no-file-parallelism --reporter=default --reporter=json --outputFile.json=output/release/integration-vitest.json",
