@@ -1808,3 +1808,77 @@ journeys, 18 accessibility cases and reproducible CLI packaging. Counts overlap;
 one unit skip, 60 integration skips and three todos remain. The native proof ran
 separately above. Both disposable native deployments and Compose projects were
 removed and independently checked.
+
+### Stage 30 — treasury restore after native posting
+
+Scope: extend the existing disposable native archive proof to the maintained
+treasury deposit controller. The real development paid Call remains blocked by
+the unavailable entitled payee-screening contract; sandbox signing also requires
+a clear screening result. Do not bypass it or claim this restore proof as a paid
+Call. No production API, schema, dependency or customer-flow change is planned.
+
+Requires: the original custody/environment identity, original pending batch and
+its exact predecessor, surviving native ledger, genuine workload admission and
+stopped competing financial writers. Chain evidence in this proof is synthetic;
+Convex admission, archive export/import, native postings and controller completion
+are real. A pending batch must recover without a new chain read.
+
+Ensures: an opening and later incoming deposit, each archived before its native
+posting is acknowledged locally, finish once under concurrent retries using
+their original transaction references. Recovery preserves complete native
+transaction and balance snapshots. The buffer remains unavailable for Calls.
+
+Invariant: restoring an older ready cursor cannot replenish current treasury
+balances, replace lost history or infer spendability from archived balance
+observations. If a lost later range also increased the native buffer, a newly
+observed range must refuse on buffer continuity, retain its pending evidence and
+leave the ledger unchanged. No fabricated ready checkpoint is acceptable.
+
+On violation: retain uncertainty and identity; require investigation when original
+batch history is missing. This proves a safe hold for the specified lost-range
+case, not reconstruction of every possible archive gap or readiness to reopen
+payments. Treasury recovery alone cannot reconcile subsequent Calls or refunds.
+
+COMPLEXITY: one disposable Node fixture plus one scenario in the existing native
+restore suite. Added: one test-only boundary and explicit archive/post/recover
+ordering, with the fixture copied by the existing installer. Bought: execution of
+the actual admitted treasury controller against the restored backend and native
+ledger while replacing only the external chain read. Net: keep; Node-only imports
+cannot live in the existing mutation/query fixture. Reject a production recovery
+endpoint or generic scenario framework. Changes stay in the two proof files and
+this existing plan; no new report system.
+
+Stage 30 acceptance (1 October): `npm run check` passes under Node 22/npm 11.5.1,
+including zero dependency cycles and all 75 import-boundary checks. The native
+treasury restore scenario passes in 137.41 seconds with six unrelated scenarios
+intentionally skipped:
+
+```sh
+AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'native treasury recovery'
+```
+
+The original opening credits 5,000 atomic USDC units entirely to the protected
+buffer; the later 20,000-unit deposit leaves 15,000 available and 10,000 buffered.
+Each archived pending range completes under concurrent recovery calls using its
+original references. Native transaction counts remain two and four respectively;
+the complete transaction/account/schema/ledger snapshots remain equal across
+recovery and duplicate processing. Stored immutable batch material and completed
+rows remain unchanged on replay. Pending recovery records zero chain reads.
+
+Restoring the earlier ready checkpoint after losing the later batch and observing
+a different finalized endpoint returns `treasury_buffer_continuity_conflict`.
+The original predecessor remains in the applying cursor, the newly proposed range
+stays pending and a repeated recovery performs no chain read or native write.
+This is the specified buffer-increasing lost-range case, not a general lost-history
+repair. Independent review's opening-concurrency evidence gap was corrected before
+execution. Production source is unchanged; the prior full release gate was not
+repeated for this proof-only addition.
+
+Both disposable Convex roots, their processes, Compose containers and volumes were
+removed and independently checked. The preserved development stack was untouched.
+Read-only #279 preflight is recorded at
+https://github.com/CreasyBear/Agentic-Economy/issues/279#issuecomment-5929369066.
+It confirms a running original local stack, but does not establish valid runtime
+bindings, funds, Provider facts or a working screening adapter. Keep #279, #286
+and #256 open: hosted restore/alert evidence, provisioning, the full development
+paid Call and explicitly authorized real-money drills remain outstanding.

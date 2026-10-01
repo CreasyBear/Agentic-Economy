@@ -19,7 +19,8 @@ import { adjustFormanceSpendingPeriod, bookFormanceFundingSettlement, prepareFor
   prepareFormancePromotionalCreditExpiry,
   refundFormanceSettledSale, releaseFormanceManagedCall, reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
   type FormanceManagedCallBooking } from '@/modules/money/formance-workflows'
-import { bookFormanceTreasuryBatch } from '@/modules/money/formance-treasury'
+import { bookFormanceTreasuryBatch, readFormanceTreasuryBalances } from '@/modules/money/formance-treasury'
+import type { TreasuryChainObservation, TreasuryProgress } from '@/modules/money/treasury'
 import { readFormanceRestoreSnapshot } from '@/modules/money/formance-restore'
 import type { Doc } from '../../convex/_generated/dataModel'
 import { buildDevelopmentPublishedToolEvidence } from '../unit/capability-supply/fixtures/development-published-tool-evidence'
@@ -76,6 +77,8 @@ export default defineSchema({ ...original.tables,
   writeFileSync(join(convex, 'workRecoveryProof.ts'), readFileSync(resolve('tests/fixtures/convex-work-recovery-proof.ts'), 'utf8')
     .replaceAll('../../convex/', './'))
   writeFileSync(join(convex, 'financialRestoreProof.ts'), readFileSync(resolve('tests/fixtures/convex-financial-restore-proof.ts'), 'utf8')
+    .replaceAll('../../convex/', './'))
+  writeFileSync(join(convex, 'treasuryRestoreProof.ts'), readFileSync(resolve('tests/fixtures/convex-treasury-restore-proof.ts'), 'utf8')
     .replaceAll('../../convex/', './'))
   // Suppress application crons in both disposable copies: no provider work or expiry during the data proof.
   writeFileSync(join(convex, 'crons.ts'), "import { cronJobs } from 'convex/server'\nexport default cronJobs()\n")
@@ -935,6 +938,193 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
       }
     }
     if (failures.length > 0) throw new AggregateError(failures, 'promotional_restore_proof_failed')
+    console.log(JSON.stringify(summary))
+  }, 900_000)
+})
+
+/** Original ranges and protected-buffer plans survive only when their intent is
+ * in the archive. Exact native replay repairs that intent; current cash alone
+ * cannot manufacture a missing range or replenish spendable capacity. */
+describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
+  || process.env.AE_FORMANCE_INTEGRATION !== 'true')('native treasury recovery after Convex restore', () => {
+  it('replays surviving opening/deposit ranges and refuses a lost buffer range without native writes', async () => {
+    type Stored = { cursors: Doc<'moneyTreasuryCursors'>[]; batches: Doc<'moneyTreasuryBatches'>[] }
+    type Reconciled = { result: { kind: 'completed'; caughtUp: boolean; batchRef?: string } | { kind: 'unavailable'; code: string }; chainReads: number }
+    const root = mkdtempSync(join(tmpdir(), 'ae-convex-treasury-restore-'))
+    const source = join(root, 'source'), target = join(root, 'target')
+    const allocated = await ports(5), project = `ae-convex-treasury-${randomUUID().replaceAll('-', '').slice(0, 12)}`
+    const configuration = { environment: 'sandbox' as const, ledger: project,
+      gatewayUrl: `http://127.0.0.1:${allocated[4]}`, requestTimeoutMs: 10_000 }
+    const context = createFormanceContext(configuration)
+    const docker = async (args: string[]) => (await runFile('docker', ['compose', '--project-name', project,
+      '-f', resolve('tests/config/native-money/compose.yml'), ...args], { timeout: 120_000,
+      env: { ...process.env, AE_NATIVE_MONEY_PORT: String(allocated[4]) }, maxBuffer: 4 * 1024 * 1024 })).stdout
+    const command = (directory: string, args: string[]) => runConvexCommand({ sourceRoot, isolatedRoot: directory,
+      args, retainBackendOnSuccess: ['run', 'data', 'export', 'import'].includes(args[0] ?? '') })
+    const invoke = async <T>(directory: string, method: string, args: object = {}): Promise<T> => {
+      const response = await command(directory, ['run', `treasuryRestoreProof:${method}`, JSON.stringify(args)])
+      return (response.stdout.trim() === '' ? null : JSON.parse(response.stdout)) as T
+    }
+    const progress = async (directory: string): Promise<TreasuryProgress> => JSON.parse(await invoke<string>(directory, 'read')) as TreasuryProgress
+    const reconcile = async (observation?: TreasuryChainObservation): Promise<Reconciled> => JSON.parse(
+      await invoke<string>(target, 'reconcile', observation === undefined ? {} : { observation })) as Reconciled
+    const inspect = async (directory: string): Promise<Stored> => {
+      const response = await command(directory, ['run', '--inline-query',
+        '({cursors:await ctx.db.query("moneyTreasuryCursors").take(3),batches:await ctx.db.query("moneyTreasuryBatches").take(10)})'])
+      const rows = JSON.parse(response.stdout) as Stored
+      if (rows.cursors.length >= 3 || rows.batches.length >= 10) throw new Error('treasury_restore_source_incomplete')
+      return rows
+    }
+    const native = async () => {
+      const read = await readFormanceRestoreSnapshot(configuration)
+      if (read.kind !== 'available') throw new Error(read.code)
+      return read.snapshot
+    }
+    const archive = async (directory: string, label: string) => {
+      const path = join(root, `${label}.zip`)
+      await command(directory, ['export', '--include-file-storage', '--path', path])
+      return path
+    }
+    const restore = async (path: string) => { await command(target, ['import', path, '--replace', '--yes']) }
+    const stops: Array<() => Promise<void>> = [], failures: unknown[] = []
+    let summary: object | undefined
+    try {
+      console.log('Treasury restore: start isolated native ledger and two Convex deployments')
+      await docker(['up', '--detach', '--wait', '--wait-timeout', '90'])
+      const deadline = Date.now() + 30_000
+      let healthy = false
+      while (!healthy && Date.now() < deadline) {
+        try {
+          const response = await context.sdk.getVersions({ retries: { strategy: 'none' }, timeoutMs: 2_000 })
+          healthy = response.getVersionsResponse?.versions.some(version => version.name === 'ledger' && version.health) === true
+        } catch { /* Readiness only, before native financial writes. */ }
+        if (!healthy) await new Promise(done => setTimeout(done, 250))
+      }
+      expect(healthy).toBe(true)
+      expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+      expect(await readFormanceHealth(context)).toMatchObject({ kind: 'ready' })
+      const address = `0x${'1'.repeat(40)}`, payer = `0x${'2'.repeat(40)}`
+      const network = 'eip155:84532', asset = '0x036cbd53842c5426634e7929541ec2318f3dcf7e'
+      // Synthetic sandbox configuration establishes the same canonical custody
+      // identity in both deployments; this fixture never instantiates CDP.
+      const environment = {
+        AE_DEPLOYMENT_ENVIRONMENT: 'development', CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
+        AE_FORMANCE_ENVIRONMENT: 'sandbox',
+        AE_FORMANCE_GATEWAY_URL: configuration.gatewayUrl, AE_FORMANCE_LEDGER: configuration.ledger,
+        AE_X402_CUSTODY_ENABLED: 'true', AE_X402_CUSTODY_MAX_ATOMIC: '10000', AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000',
+        CDP_API_KEY_ID: 'fixture-key', CDP_API_KEY_SECRET: 'fixture-secret', CDP_WALLET_SECRET: 'fixture-wallet-secret',
+        AE_X402_CDP_ACCOUNT_NAME: 'fixture-treasury-restore', AE_X402_CDP_EXPECTED_EVM_ADDRESS: address,
+        AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
+        AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+        AE_X402_CDP_POLICY_RULES_DIGEST: canonicalDigest('fixture-treasury-restore-policy'), AE_X402_CDP_CREDENTIAL_GENERATION: '1',
+      }
+      for (const [index, directory] of [source, target].entries()) {
+        mkdirSync(directory); installFixture(directory)
+        await command(directory, ['dev', '--once', '--skip-push', '--local-cloud-port', String(allocated[index * 2]),
+          '--local-site-port', String(allocated[index * 2 + 1]), '--local-backend-version', backendVersion])
+        for (const [name, value] of Object.entries(environment)) await command(directory, ['env', 'set', name, value])
+        stops.push(await startConvexDev({ sourceRoot, isolatedRoot: directory, backendVersion }))
+      }
+      await invoke(source, 'initialize')
+      const hash = (value: number) => `0x${value.toString(16).padStart(64, '0')}`
+      const now = Date.now()
+      const opening: TreasuryChainObservation = { kind: 'observed', environment: 'sandbox', network, asset, address,
+        fromBlock: '100', checkpoint: { blockNumber: '100', blockHash: hash(100), balanceUnits: '5000' },
+        blockTimestamp: now - 1_000, transfers: [], caughtUp: true, observedAt: now }
+      const pendingOpening = JSON.parse(await invoke<string>(source, 'begin', { previousCheckpoint: null, observation: opening })) as TreasuryProgress
+      if (pendingOpening.kind !== 'pending') throw new Error('treasury_restore_opening_not_pending')
+      expect(pendingOpening.batch).toMatchObject({ previousCheckpoint: null, previousBufferUnits: '0', bufferIncreaseUnits: '5000' })
+      const originalOpeningRows = await inspect(source), openingArchive = await archive(source, 'pending-opening')
+      const postedOpening = await bookFormanceTreasuryBatch(context, pendingOpening.identity, pendingOpening.batch)
+      if (postedOpening.kind !== 'completed') throw new Error('treasury_restore_opening_not_posted')
+      const openingNative = await native()
+      expect(openingNative.summary.counts.transactions).toBe(2)
+      expect(await readFormanceTreasuryBalances(context, pendingOpening.identity)).toMatchObject({ availableUnits: '0', committedUnits: '0', bufferUnits: '5000' })
+      const stopSource = stops[0]
+      if (stopSource === undefined) throw new Error('treasury_restore_source_stop_missing')
+      await stopSource()
+      await restore(openingArchive)
+      expect(await inspect(target)).toEqual(originalOpeningRows)
+      expect(await compareConvexSnapshots(openingArchive, await archive(target, 'restored-opening'))).toMatchObject({ kind: 'matched' })
+      // A peer can read an already-ready checkpoint. The worker that completes
+      // the original pending range must skip chain I/O and retain its batchRef.
+      const recoveredOpening = await Promise.all([reconcile(opening), reconcile(opening)])
+      expect(recoveredOpening.every(read => read.result.kind === 'completed')).toBe(true)
+      expect(recoveredOpening.some(read => read.chainReads === 0
+        && read.result.kind === 'completed' && read.result.batchRef === pendingOpening.batch.batchRef)).toBe(true)
+      const readyOpeningRows = await inspect(target)
+      expect(readyOpeningRows.batches).toHaveLength(1)
+      expect(readyOpeningRows.batches[0]?.state).toMatchObject({ kind: 'booked', transactionRefs: [...postedOpening.transactionRefs] })
+      expect(readyOpeningRows.batches[0]).toEqual({ ...originalOpeningRows.batches[0], state: readyOpeningRows.batches[0]?.state })
+      expect(await progress(target)).toMatchObject({ kind: 'ready', checkpoint: opening.checkpoint, bufferUnits: '5000' })
+      expect((await Promise.all([reconcile(opening), reconcile(opening)])).every(read => read.result.kind === 'completed')).toBe(true)
+      expect(await inspect(target)).toEqual(readyOpeningRows)
+      expect(await native()).toEqual(openingNative)
+      const readyArchive = await archive(target, 'ready-opening')
+
+      const at = Date.now(), transferMaterial = { transactionHash: hash(201), logIndex: 0,
+        blockNumber: '101', blockHash: hash(101), payer, recipient: address, amountUnits: '20000' }
+      const deposit: TreasuryChainObservation = { ...opening, fromBlock: '101',
+        checkpoint: { blockNumber: '101', blockHash: hash(101), balanceUnits: '25000' },
+        blockTimestamp: at - 1_000, observedAt: at,
+        transfers: [{ ...transferMaterial, evidenceDigest: canonicalDigest({ kind: 'ae.treasury-transfer:v1', network, asset, ...transferMaterial }) }] }
+      const pendingDeposit = JSON.parse(await invoke<string>(target, 'begin', { previousCheckpoint: opening.checkpoint, observation: deposit })) as TreasuryProgress
+      if (pendingDeposit.kind !== 'pending') throw new Error('treasury_restore_deposit_not_pending')
+      expect(pendingDeposit.batch).toMatchObject({ previousBufferUnits: '5000', bufferIncreaseUnits: '5000' })
+      const originalDepositRows = await inspect(target), depositArchive = await archive(target, 'pending-deposit')
+      const postedDeposit = await bookFormanceTreasuryBatch(context, pendingDeposit.identity, pendingDeposit.batch)
+      if (postedDeposit.kind !== 'completed') throw new Error('treasury_restore_deposit_not_posted')
+      const depositNative = await native()
+      expect(depositNative.summary.counts.transactions).toBe(4)
+      expect(await readFormanceTreasuryBalances(context, pendingDeposit.identity)).toMatchObject({ availableUnits: '15000', committedUnits: '0', bufferUnits: '10000' })
+      await restore(depositArchive)
+      expect(await inspect(target)).toEqual(originalDepositRows)
+      const recovered = await Promise.all([reconcile(deposit), reconcile(deposit)])
+      expect(recovered.every(read => read.result.kind === 'completed')).toBe(true)
+      // A racing peer may read the already-ready checkpoint; at least the worker
+      // that finishes the original pending range must skip synthetic chain I/O.
+      expect(recovered.some(read => read.chainReads === 0)).toBe(true)
+      const readyDepositRows = await inspect(target)
+      expect(readyDepositRows.batches).toHaveLength(2)
+      expect(readyDepositRows.batches.find(batch => batch.batchRef === pendingDeposit.batch.batchRef)?.state)
+        .toMatchObject({ kind: 'booked', transactionRefs: [...postedDeposit.transactionRefs] })
+      expect(readyDepositRows.batches.find(batch => batch.batchRef === pendingOpening.batch.batchRef))
+        .toEqual(readyOpeningRows.batches[0])
+      const completedDeposit = readyDepositRows.batches.find(batch => batch.batchRef === pendingDeposit.batch.batchRef)
+      expect(completedDeposit).toEqual({ ...originalDepositRows.batches.find(batch => batch.batchRef === pendingDeposit.batch.batchRef), state: completedDeposit?.state })
+      expect(await progress(target)).toMatchObject({ kind: 'ready', checkpoint: deposit.checkpoint, bufferUnits: '10000' })
+      expect((await reconcile(deposit)).result.kind).toBe('completed')
+      expect(await inspect(target)).toEqual(readyDepositRows)
+      expect(await native()).toEqual(depositNative)
+
+      await restore(readyArchive)
+      expect(await inspect(target)).toEqual(readyOpeningRows)
+      const later: TreasuryChainObservation = { ...deposit, observedAt: Date.now(), blockTimestamp: Date.now() - 1_000,
+        checkpoint: { blockNumber: '102', blockHash: hash(102), balanceUnits: '25000' } }
+      expect(await reconcile(later)).toEqual({ result: { kind: 'unavailable', code: 'treasury_buffer_continuity_conflict' }, chainReads: 1 })
+      const heldRows = await inspect(target), held = await progress(target)
+      if (held.kind !== 'pending') throw new Error('treasury_restore_lost_range_not_held')
+      expect(held.batch.batchRef).not.toBe(pendingDeposit.batch.batchRef)
+      expect(held.batch).toMatchObject({ previousCheckpoint: opening.checkpoint, previousBufferUnits: '5000', bufferIncreaseUnits: '5000', state: { kind: 'pending' } })
+      expect(heldRows.cursors[0]?.state).toMatchObject({ kind: 'applying', checkpoint: opening.checkpoint, batchRef: held.batch.batchRef })
+      expect(await reconcile()).toEqual({ result: { kind: 'unavailable', code: 'treasury_buffer_continuity_conflict' }, chainReads: 0 })
+      expect(await inspect(target)).toEqual(heldRows)
+      expect(await native()).toEqual(depositNative)
+      expect(await readFormanceTreasuryBalances(context, pendingDeposit.identity)).toMatchObject({ availableUnits: '15000', committedUnits: '0', bufferUnits: '10000' })
+      summary = { openingRecovered: true, depositRecovered: true, lostBufferRangeRefused: true,
+        duplicateNativeTransactions: 0, completeNativeEvidenceUnchangedOnRecovery: true,
+        originalRangesPreserved: true, syntheticChainOnly: true, sourceStoppedBeforeRecovery: true }
+    } catch (error) { failures.push(error) }
+    finally {
+      const stopped = await Promise.allSettled(stops.map(stop => stop()))
+      const cleanup = await Promise.allSettled([terminateIsolatedProcesses(source), terminateIsolatedProcesses(target),
+        docker(['down', '--volumes', '--remove-orphans'])])
+      for (const result of [...stopped, ...cleanup]) if (result.status === 'rejected') failures.push(result.reason)
+      if (cleanup.every(result => result.status === 'fulfilled')) {
+        try { rmSync(root, { recursive: true, force: true }) } catch (error) { failures.push(error) }
+      }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'treasury_restore_proof_failed')
     console.log(JSON.stringify(summary))
   }, 900_000)
 })
