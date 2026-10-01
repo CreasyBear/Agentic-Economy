@@ -212,6 +212,7 @@ import type * as lib_capabilityExecution_callLifecycle_persistedCallAuthority fr
 import type * as lib_capabilityExecution_callLifecycle_procureIdentity from "../lib/capabilityExecution/callLifecycle/procureIdentity.js";
 import type * as lib_capabilityExecution_callLifecycle_purchaseResolutionMaterialize from "../lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize.js";
 import type * as lib_capabilityExecution_callLifecycle_reconciliation from "../lib/capabilityExecution/callLifecycle/reconciliation.js";
+import type * as lib_capabilityExecution_callLifecycle_restoredDispatches from "../lib/capabilityExecution/callLifecycle/restoredDispatches.js";
 import type * as lib_capabilityExecution_callLifecycle_statusControl from "../lib/capabilityExecution/callLifecycle/statusControl.js";
 import type * as lib_capabilityExecution_callLifecycle_statusQuery from "../lib/capabilityExecution/callLifecycle/statusQuery.js";
 import type * as lib_capabilityExecution_callLifecycle_supplyCallsListing from "../lib/capabilityExecution/callLifecycle/supplyCallsListing.js";
@@ -943,6 +944,7 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/callLifecycle/procureIdentity": typeof lib_capabilityExecution_callLifecycle_procureIdentity;
   "lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize": typeof lib_capabilityExecution_callLifecycle_purchaseResolutionMaterialize;
   "lib/capabilityExecution/callLifecycle/reconciliation": typeof lib_capabilityExecution_callLifecycle_reconciliation;
+  "lib/capabilityExecution/callLifecycle/restoredDispatches": typeof lib_capabilityExecution_callLifecycle_restoredDispatches;
   "lib/capabilityExecution/callLifecycle/statusControl": typeof lib_capabilityExecution_callLifecycle_statusControl;
   "lib/capabilityExecution/callLifecycle/statusQuery": typeof lib_capabilityExecution_callLifecycle_statusQuery;
   "lib/capabilityExecution/callLifecycle/supplyCallsListing": typeof lib_capabilityExecution_callLifecycle_supplyCallsListing;

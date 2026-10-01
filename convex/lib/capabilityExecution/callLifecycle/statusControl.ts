@@ -18,7 +18,13 @@ export function recoveryControlUsesPersistedResult(
   recovered: RecoveryRow,
   control: RecoveryControlRow | undefined,
 ): boolean {
-  return control === undefined
+  // Requires: this internal flag is derived from the durable manual unknown-
+  // settlement hold. Ensures: restored local control cannot prove no release.
+  // Invariant: generic recovery remains persisted while held; the dedicated
+  // verified-paid remedy retains its own admission boundary.
+  // On violation: keep the recorded uncertainty, without a retry or refund.
+  return recovered.requiresManualSettlementReview === true
+    || control === undefined
     || (recovered.state === 'completed' && recovered.result?.kind === 'completed'
       && control.control.control.state === 'terminal' && recovered.result.receipt?.state === 'settled')
     || (recovered.state === 'refused' && recovered.result?.kind === 'refused'

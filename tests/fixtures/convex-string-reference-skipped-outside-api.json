@@ -37,7 +37,7 @@
   },
   {
     "file": "tests/fixtures/convex-work-recovery-proof.ts",
-    "line": 271,
+    "line": 304,
     "literal": "workRecoveryProof:readCallCutoff",
     "helper": "makeFunctionReference"
   },

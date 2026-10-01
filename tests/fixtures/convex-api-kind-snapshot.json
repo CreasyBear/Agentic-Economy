@@ -650,6 +650,12 @@
   {
     "visibility": "internal",
     "module": "capabilityCalls",
+    "method": "quarantineRestoredDispatches",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
     "method": "readAcceptedCallGrantAfterLimitUpdate",
     "kind": "mutation"
   },

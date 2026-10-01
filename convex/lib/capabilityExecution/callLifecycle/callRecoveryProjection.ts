@@ -18,6 +18,12 @@ type CallResultValue = Infer<typeof callResultValue>
 type Usage = Infer<typeof usageValue>
 type DispatchState = 'enqueued' | 'running' | 'completed' | 'failed' | 'reconciliation_required'
 
+function requiresManualSettlementReview(row: CallRow): boolean {
+  return row.state === 'reconciliation_required'
+    && row.reconciliation?.disposition === 'manual_review'
+    && row.reconciliation.reason === 'unknown_settlement'
+}
+
 export async function recordHandler(
   ctx: MutationCtx,
   args: {
@@ -36,6 +42,7 @@ export async function recordHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
   if (row === null || row.principalId !== args.principalId) throw new Error('operation_invoke_identity_refused')
+  if (requiresManualSettlementReview(row)) throw new Error('call_manual_settlement_review_required')
   if (
     row.state !== 'pending'
     && args.state !== row.state
@@ -252,6 +259,11 @@ export async function projectRecoveryHandler(
     if (state === 'completed') await recordRecoveredCompletion(ctx, row, args.now)
     return { kind: 'recorded' as const }
   }
+  // Requires the current Call identity, not just a pre-quarantine context.
+  // Ensures generic resets and same-state writes retain held original evidence.
+  // Invariant: the verified paid-result repair above remains admissible.
+  // On violation: abort the mutation; no retry, refund or evidence overwrite.
+  if (requiresManualSettlementReview(row)) throw new Error('call_manual_settlement_review_required')
   if (!recoveryProjectionTransitionAllowed(row, args)) return { kind: 'recorded' as const }
   recordCallTerminal(row.state, args.state)
   await ctx.db.patch(row._id, recoveryProjectionPatch(row, args))

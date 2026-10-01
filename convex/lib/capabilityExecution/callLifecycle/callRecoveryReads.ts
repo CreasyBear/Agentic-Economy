@@ -82,6 +82,7 @@ export async function listAgentCallSummariesHandler(
 }
 
 export type RecoveryRow = Readonly<{
+  requiresManualSettlementReview?: true
   quoteRef?: string
   callRef: string
   principalId: string
@@ -117,6 +118,10 @@ function projectRecoveryRow(row: CallRow): RecoveryRow | null {
   if (row.toolJson === undefined || row.inputJson === undefined) return null
   if (row.result !== undefined) assertCallResultJson(row.result)
   return {
+    ...(row.state === 'reconciliation_required'
+      && row.reconciliation?.disposition === 'manual_review'
+      && row.reconciliation.reason === 'unknown_settlement'
+      ? { requiresManualSettlementReview: true as const } : {}),
     ...(row.quoteRef === undefined ? {} : { quoteRef: row.quoteRef }),
     callRef: row.callRef,
     principalId: row.principalId,

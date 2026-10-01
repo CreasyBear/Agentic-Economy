@@ -25,6 +25,11 @@ export async function beginResponseRecoveryHandler(ctx: MutationCtx, args: { cal
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
   if (row === null || (row.state !== 'pending' && row.state !== 'reconciliation_required')) return false
+  // A restored manual settlement hold cannot be turned into automatic work by
+  // an old watchdog. Refusal is read-only, including repeated/concurrent calls.
+  if (row.state === 'reconciliation_required'
+    && row.reconciliation?.disposition === 'manual_review'
+    && row.reconciliation.reason === 'unknown_settlement') return false
   const owner = row.reconciliation?.leaseOwner
   const httpErrorRemedy = await isExactHttpErrorRemedy(ctx, row)
   const ownStep = httpErrorRemedy ? (row.reconciliation?.attemptCount ?? 0) - 1

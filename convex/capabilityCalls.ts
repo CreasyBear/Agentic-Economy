@@ -30,6 +30,9 @@ import {
   reconcileFinishedDispatchesResult, reconcileFinishedDispatchesHandler,
 } from './lib/capabilityExecution/callLifecycle/reconciliation'
 import {
+  quarantineRestoredDispatchesArgs, quarantineRestoredDispatchesResult, quarantineRestoredDispatchesHandler,
+} from './lib/capabilityExecution/callLifecycle/restoredDispatches'
+import {
   resolveCallAgentAuthorityArgs, resolveCallAgentAuthorityResult, resolveCallAgentAuthorityHandler,
   reconcileCallWorkloadAuthorityArgs, readAcceptedCallGrantAfterLimitUpdateArgs,
   readAcceptedCallGrantAfterLimitUpdateResult,
@@ -150,6 +153,10 @@ export const listDueAutomaticReconciliationCandidates = internalQuery({
 export const reconcileFinishedDispatches = internalMutation({
   args: reconcileFinishedDispatchesArgs, returns: reconcileFinishedDispatchesResult,
   handler: reconcileFinishedDispatchesHandler,
+})
+export const quarantineRestoredDispatches = internalMutation({
+  args: quarantineRestoredDispatchesArgs, returns: quarantineRestoredDispatchesResult,
+  handler: quarantineRestoredDispatchesHandler,
 })
 export const claimAutomaticReconciliationCandidate = internalMutation({
   args: claimAutomaticReconciliationCandidateArgs, returns: reconciliationClaimResult,

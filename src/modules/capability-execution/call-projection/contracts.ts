@@ -69,6 +69,7 @@ export type CanonicalPort = Pick<
 >
 
 export type RecoveryRow = Readonly<{
+  requiresManualSettlementReview?: true
   quoteRef?: string
   callRef: string
   principalId: string

@@ -22,6 +22,11 @@ export const claim = internalMutation({
   returns: v.union(v.null(), v.object({ evidenceDigest: v.string() })),
   handler: async (ctx, args) => {
     const call = await readCall(ctx, args.callRef)
+    // Unused proof for a restored nonce cannot exclude a later post-snapshot
+    // attempt. Keep the exact manual settlement hold before any evidence write.
+    if (call?.state === 'reconciliation_required'
+      && call.reconciliation?.disposition === 'manual_review'
+      && call.reconciliation.reason === 'unknown_settlement') return null
     if (call === null || call.state !== 'reconciliation_required'
       || call.formanceFinancialState !== 'outcome_unknown'
       || call.result?.kind !== 'reconciliation_required'
@@ -118,6 +123,10 @@ export const schedule = internalMutation({
   handler: async (ctx, args) => {
     const call = await readCall(ctx, args.callRef)
     if (call?.state !== 'reconciliation_required') return false
+    // Even exhausted retries must not replace this hold with recovery_failed;
+    // doing so would reopen local-absence recovery from the restored control.
+    if (call.reconciliation?.disposition === 'manual_review'
+      && call.reconciliation.reason === 'unknown_settlement') return false
     const attempt = args.attempt ?? 0
     if (attempt >= 5) {
       await ctx.db.patch(call._id, { reconciliation: {

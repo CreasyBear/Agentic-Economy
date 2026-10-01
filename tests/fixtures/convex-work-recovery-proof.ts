@@ -10,8 +10,8 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 // TEMP ONLY: copied into disposable native deployments; never added to the app's API/schema.
 // Requires real component-created WorkIDs and the maintained workload admission.
-// Ensures original queued work runs unconditionally, with a separately counted completion;
-// stranded Call recovery preserves financial/attempt identity and cannot claim a refund.
+// Ensures new queued work runs unconditionally, with a separately counted completion;
+// restored Call jobs can be retired without another effect or a claimed refund.
 // Invariant: no component-table writes, Provider call, signing or native ledger booking.
 // On missing/duplicate fixture material fail with a code, rather than inventing an empty result.
 const pool = new Workpool(components.workpool, { maxParallelism: 32 })
@@ -19,7 +19,7 @@ const kindValue = v.union(v.literal('active'), v.literal('unfunded'), v.literal(
 const entryValue = v.object({ callRef: v.string(), workId: v.string(), kind: kindValue, identityDigest: v.string() })
 export const workRecoveryProofControlValue = v.union(
   v.object({ kind: v.literal('queued'), workId: v.string(), count: v.number(), completions: v.number(), callbackWorkId: v.optional(v.string()) }),
-  v.object({ kind: v.literal('calls'), createdBefore: v.number(), fixtureDigest: v.string(), entries: v.array(entryValue) }),
+  v.object({ kind: v.literal('calls'), createdBefore: v.number(), fixtureDigest: v.string(), executions: v.number(), entries: v.array(entryValue) }),
 )
 type Entry = Infer<typeof entryValue>
 const proof = {
@@ -56,7 +56,6 @@ function originalIdentity(row: Record<string, unknown>): string {
     toolJson: row.toolJson, inputJson: row.inputJson, inputDigest: row.inputDigest,
     requestDigest: row.requestDigest, workId: row.workId, createdAt: row.createdAt,
     reservationRefs: row.formanceReservationRefs ?? null,
-    financialState: row.formanceFinancialState ?? null,
   })
 }
 
@@ -86,6 +85,24 @@ export const increment = mutation({
   },
 })
 
+// New disposable work proves the queue is usable after retirement. It does not
+// resume the old WorkId, replay a Call, or establish any external effect guarantee.
+export const enqueueFreshProbe = mutation({
+  args: { retiredWorkId: v.string() }, returns: v.object({ workId: v.string() }),
+  handler: async (ctx, args): Promise<{ workId: string }> => {
+    const control = (await ctx.db.query('workRecoveryProof').collect()).find(row => row.kind === 'queued')
+    if (control === undefined || control.workId !== args.retiredWorkId || control.count !== 0 || control.completions !== 0
+      || (await pool.status(ctx, args.retiredWorkId as WorkId)).state !== 'finished') {
+      throw new Error('proof_old_work_not_retired')
+    }
+    const workId = await pool.enqueueMutation(ctx, proof.increment, {}, {
+      onComplete: proof.completeQueued, context: { proof: 'queued' },
+    })
+    await ctx.db.patch(control._id, { workId })
+    return { workId }
+  },
+})
+
 export const completeQueued = mutation({
   args: vOnCompleteArgs(v.object({ proof: v.string() }), v.null()), returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
@@ -111,7 +128,13 @@ export const readQueued = query({
 
 export const noEffect = mutation({
   args: { callRef: v.string() }, returns: v.null(),
-  handler: async (_ctx, _args): Promise<null> => null,
+  handler: async (ctx, _args): Promise<null> => {
+    const control = (await ctx.db.query('workRecoveryProof').collect()).find(row => row.kind === 'calls')
+    if (control === undefined) throw new Error('proof_calls_missing')
+    // Deliberately unconditional, including canceled work accidentally executed.
+    await ctx.db.patch(control._id, { executions: control.executions + 1 })
+    return null
+  },
 })
 
 export const lostCompletion = mutation({
@@ -162,7 +185,7 @@ export const seedActiveCalls = mutation({
       await ctx.db.insert('capabilityCalls', material)
       entries.push({ callRef, workId, kind: 'active', identityDigest: originalIdentity(material) })
     }
-    await ctx.db.insert('workRecoveryProof', { kind: 'calls', createdBefore, entries, fixtureDigest: canonicalDigest(entries) })
+    await ctx.db.insert('workRecoveryProof', { kind: 'calls', createdBefore, entries, executions: 0, fixtureDigest: canonicalDigest(entries) })
     return null
   },
 })
@@ -220,12 +243,22 @@ export const seedCalls = action({
   },
 })
 
+export const requestCallCancellations = mutation({
+  args: {}, returns: v.object({ requested: v.number() }),
+  handler: async (ctx): Promise<{ requested: number }> => {
+    const control = (await ctx.db.query('workRecoveryProof').collect()).find(row => row.kind === 'calls')
+    if (control === undefined) throw new Error('proof_calls_missing')
+    for (const entry of control.entries as Entry[]) await pool.cancel(ctx, entry.workId as WorkId)
+    return { requested: control.entries.length }
+  },
+})
+
 export const readCalls = query({
   args: {}, returns: v.object({
     createdBefore: v.number(), fixtureDigest: v.string(), identitiesPreserved: v.boolean(), activePrefix: v.boolean(),
-    activePending: v.number(), workFinished: v.number(),
+    activePending: v.number(), workFinished: v.number(), executions: v.number(),
     states: v.array(v.object({ callRef: v.string(), kind: kindValue, state: v.string(), resultKind: v.string(),
-      workState: v.string(), attemptRef: v.union(v.string(), v.null()), effectGeneration: v.union(v.number(), v.null()),
+      workId: v.string(), workState: v.string(), attemptRef: v.union(v.string(), v.null()), effectGeneration: v.union(v.number(), v.null()),
       financialState: v.union(v.string(), v.null()), reservationRefsPreserved: v.boolean(),
       reconciliation: v.union(v.null(), v.object({ disposition: v.string(), reason: v.string() })),
     })),
@@ -245,7 +278,7 @@ export const readCalls = query({
       if (entry.kind === 'active' && row.state === 'pending' && status.state === 'pending') activePending++
       if (entry.kind !== 'active' && status.state === 'finished') workFinished++
       const canonical = await ctx.db.query('actionExecutionControls').withIndex('by_executionRef', q => q.eq('executionRef', entry.callRef)).unique()
-      states.push({ callRef: entry.callRef, kind: entry.kind, state: row.state, resultKind: row.result?.kind ?? 'missing',
+      states.push({ callRef: entry.callRef, kind: entry.kind, state: row.state, resultKind: row.result?.kind ?? 'missing', workId: entry.workId,
         workState: status.state, attemptRef: row.attemptRef ?? null, effectGeneration: canonical?.currentEffectGeneration ?? null,
         financialState: row.formanceFinancialState ?? null,
         reservationRefsPreserved: entry.kind === 'active' || entry.kind === 'unfunded'
@@ -259,7 +292,7 @@ export const readCalls = query({
       q.eq('state', 'pending').eq('result.kind', 'pending').lte('createdAt', control.createdBefore)).take(25)
     return { createdBefore: control.createdBefore, fixtureDigest: control.fixtureDigest, identitiesPreserved,
       activePrefix: prefix.length === 25 && prefix.every(row => row.callRef.startsWith('work-recovery-call:active:')),
-      activePending, workFinished, states }
+      activePending, workFinished, executions: control.executions, states }
   },
 })
 

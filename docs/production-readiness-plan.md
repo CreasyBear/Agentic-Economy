@@ -1048,8 +1048,8 @@ source backend was stopped before target execution. **Queued work did not resume
 Three native runs reached the same failure; direct readback found the queued job
 pending with zero effects and zero completions, and both restarted BatchWorker
 loops failed with `Function handle not found`. No successful full-restore receipt
-was produced. The positive one-effect assertion remains in the opt-in native
-test, with an explicit runner-failure assertion to expose this cause promptly.
+was produced. At Stage 23 close, the opt-in native test retained the positive
+one-effect assertion and failed promptly on an explicit runner-failure check.
 
 This matches the pinned backend's handle contract: a stored function handle is
 resolved by its system-table ID, with the appended function name only advisory
@@ -1075,8 +1075,8 @@ requirements or the full Wayfinder objective.
 
 The final native run fails explicitly on two `loop.js:loop` handle-resolution
 failures after 160 seconds; the preceding Call-recovery assertions pass. Both
-disposable deployments and their files were cleaned. This remains a failing
-acceptance test; its assertion was not relaxed or converted to an expected failure.
+disposable deployments and their files were cleaned. Stage 23 ended with this
+failing acceptance test; Stage 24 below adopts a different, bounded recovery operation.
 The ordinary gate leaves this pre-existing opt-in native drill disabled, so a
 passing source gate does not establish full recovery.
 
@@ -1090,5 +1090,136 @@ Integration selection also includes Convex-named unit files; these totals are no
 disjoint. Existing skips/todos remain: one unit skip, 55 integration skips and
 three todos. The separately executed native command
 `AE_CONVEX_RESTORE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism`
-fails on the restored function handles as described above. No production
+failed at Stage 23 on the restored function handles as described above. No production
 deployment or live-money drill is represented by these local checks.
+
+## Stage 24 — quarantine restored Calls and retire broken dispatches
+
+The Stage 23 fresh-target failure rules out assuming that an unchanged WorkId
+can resume after logical import. This stage changes the recovery operation, not
+that backend fact: preserve the original commercial Call and effect identity,
+retire the unusable dispatch through maintained cancellation, and retain an
+explicit unresolved purchase. Source shutdown and target isolation are operator
+preconditions. This is a partial restore capability, not permission to restart
+payments from an old snapshot.
+
+Requires: the old source is stopped, target application crons/ingress are held,
+the target Workpool's BatchWorker is stopped, current workload admission, and
+1–25 distinct exact Call/expected-WorkId pairs from the restored records. Ensures:
+only matching pending or already quarantined Calls are admitted; their existing
+reconciliation becomes manual review of unknown settlement, their dispatch is
+cancelled through the maintained API, and local reserved/possibly-submitted money
+projections become outcome unknown. Invariant: preserve Call, input, Quote,
+booking references, WorkId and any actual attempt/generation; no Provider call,
+signature, transfer, refund or replacement purchase. Missing local reservation
+or attempt evidence never proves that no post-snapshot effect occurred. On
+violation: refuse a stale/ineligible batch; invalid bounds, lost admission or a
+component failure abort the transaction. Cancellation acknowledgement is not
+retirement: separately read maintained Workpool status until every exact old
+WorkId is finished before continuing.
+
+Reads must preserve this manual unknown-settlement result instead of deriving a
+retryable status or pre-submission refund from an older canonical control.
+Positive external evidence that identifies the original payment remains the basis for
+later resolution. An unused old nonce does not exclude another attempt after the
+snapshot, so expiry scheduling and unused-authorization claims cannot erase this
+hold either. Current work does not reconstruct missing signing identity or
+claim that a local fixture proves native Formance/chain reconciliation.
+
+The same hold is enforced when writing the result: a generic recovery or record
+operation that started before quarantine must not clear the result, WorkId,
+attempt or evidence afterward. Such a stale operation raises
+`call_manual_settlement_review_required` before mutation, so its caller cannot
+report a successful retryable reset. The existing verified-paid projection
+retains its separate exact-attempt, settlement and retained-output checks.
+
+Complexity decision: one operator-only concern/registration for bounded exact
+quarantine plus cancellation, and the existing recovery read/control boundary
+exposes the existing manual hold. This adds no app table/index, public endpoint,
+queue implementation or customer step. It earns its cost by making the domain
+hold and cancellation atomic; raw component cancellation cannot protect the
+Call from an unsafe local-absence inference. Reusing ordinary failed completion
+was rejected because it can offer a new purchase for an apparently unfunded old
+snapshot. Blind redispatch and private component-handle rewrites are rejected.
+
+Error strategy: stale identities or terminal Calls are recoverable operator
+conflicts with no changes; malformed bounds and invalid workload fail admission;
+component/scheduling errors propagate and roll back the complete batch. The
+multi-transaction stop/refresh/cancel/start sequence has a basic guarantee: interruption
+leaves Calls held and is replayable with the same exact pairs. No successful
+receipt may claim retirement while work is pending/running. Native acceptance
+must observe zero additional effects from old jobs and a single effect plus
+completion from a newly enqueued probe after retirement. The former original-
+WorkId resume criterion is unsupported on this pinned logical-import path; this
+new criterion establishes safe retirement and subsequent queue usability only.
+
+Operator sequence for the pinned Workpool 0.4.10/BatchWorker 0.2.1 installation:
+select and independently verify the isolated target before every CLI operation;
+keep application ingress/crons and the old source off throughout this procedure.
+Use the verified archive census for the exact Call/WorkId pairs. This operation
+does not discover or classify all other restored consumers or unbound Calls.
+
+1. Run `lib:stop {"name":"main"}` in component `workpool/batchWorker`.
+2. Run `loop:updateRunStatus {}` in component `workpool`. This installed,
+   deprecated compatibility registration calls the maintained runner ping with
+   freshly created target handles while leaving a stopped worker stopped. It is
+   not a public Workpool client API. This refresh is required even when every
+   cancellation already exists in the backup, because duplicate cancel is a no-op.
+3. Read `workloadCron:admit` with
+   `{"name":"reconcile due facilitator invocations"}`. Supply that current
+   snapshot as `workload` to `capabilityCalls:quarantineRestoredDispatches`, with
+   `dispatches` containing 1–25 `{callRef,expectedWorkId}` pairs. Repeat exact
+   batches safely; stop on a refused pair and inspect the changed domain record.
+4. Run `lib:start {"name":"main"}` in `workpool/batchWorker`. Poll `lib:statusBatch`
+   in `workpool` with `{"ids":[...]}` for every old WorkId until all are `finished`.
+   Already-running work can take the maintained recovery interval to retire.
+   A timeout is incomplete retirement, never proof of no external effect.
+5. Read the original Calls: they must remain manual unknown-settlement holds,
+   with the original references and no new purchase. Keep payment execution and
+   unrelated consumers held pending their own reconciliation. Queue usability
+   alone does not permit re-enabling production.
+
+The internal recovery projection carries an optional derived manual-settlement
+flag; this is not new storage or a public response field. It suppresses generic
+status/cancel/pre-submission and managed-signing recovery while held. The expiry
+scheduler and claim refuse held Calls before scheduling or changing evidence;
+the former retry-limit path could erase the hold without any chain read. The
+dedicated verified-paid remedy retains its existing admission rules. Generic
+onchain reconciliation and CDP forensic recovery also pass through
+the shared hold, so this stage does not promise every former recovery route can
+run during quarantine. The response watchdog cannot erase the manual hold.
+
+### Stage 24 acceptance and handover
+
+- The 24 new focused cases establish exact-batch admission, transaction rollback,
+  duplicate/concurrent replay, normalization of incomplete prior holds, retained
+  financial identity, and refusal of stale result writers, watchdogs and expiry
+  recovery. A registered positive-control case resolves the exact manual hold
+  with the original settled payment and matching retained output. These are
+  application transaction proofs; they do not prove external payment recovery.
+- The final opt-in native drill passes in 170 seconds. Records/files and all six
+  corruption falsifiers still pass. It explicitly observes two original-handle
+  restart failures, then uses the documented stop/refresh/quarantine/cancel/start
+  sequence. All 28 old Call jobs finish with zero additional executions; all Calls
+  retain their original references and manual holds. The old queued probe has
+  zero executions/completions; a fresh probe executes and completes exactly once.
+  Expiry attempts 0 and 5 cannot remove the hold. Both disposable deployments and
+  their files were removed. An earlier CLI stop failed once after reimport and
+  did not reproduce; its cause remains unproven. The final procedure additionally
+  stops the first experiment's monitor before replacing its durable state.
+- Node 22/npm 11.5.1 `npm run check` and
+  `AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+  pass: seven generated files, public build integrity, zero cycles, clean types,
+  7,309 unit tests, 2,566 integration-command tests, 75 import/boundary checks,
+  31 SEO checks, 16 browser journeys, 18 accessibility checks and CLI packaging.
+  Integration counts overlap the unit suite. The existing one unit skip,
+  55 integration skips and three todos remain. Native restore is a separate
+  successful opt-in command, not an ordinary gate pass through a skipped test:
+  `AE_CONVEX_RESTORE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism`.
+
+Keep #286 and #256 open. This proves safe retirement and queue usability, not
+same-WorkId resumption, automatic payment recovery or complete application restore.
+Other restored consumers, hosted wiring, retention/RPO/RTO and live-money
+acceptance remain outstanding. Next, exercise held Calls against the native
+Formance ledger, including external money effects recorded after the snapshot;
+resolve from original financial evidence before allowing another purchase.

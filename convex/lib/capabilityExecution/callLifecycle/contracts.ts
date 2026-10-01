@@ -164,6 +164,7 @@ export const replayValue = v.object({
   attemptRef: v.optional(v.string()),
 })
 export const recoveryValue = v.object({
+  requiresManualSettlementReview: v.optional(v.literal(true)),
   quoteRef: v.optional(v.string()),
   callRef: v.string(),
   principalId: v.string(),
