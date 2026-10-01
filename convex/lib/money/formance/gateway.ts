@@ -26,8 +26,8 @@ export { readFormanceTreasuryAudit, matchTreasuryProviderSettlement, matchTreasu
 export { bookFormanceTreasuryBatch } from '../../../../src/modules/money/formance-treasury'
 export {
   readFormanceAccountCreditBalance,
-  prepareFormancePromotionalCreditGrant,
-  prepareFormancePromotionalCreditExpiry,
+  grantFormancePromotionalCredit,
+  expireFormancePromotionalCredit,
   type FormancePromotionalCreditBooking,
   adjustFormanceSpendingPeriod,
   bookFormanceFundingReversal,
@@ -42,6 +42,7 @@ export {
   settleFormanceManagedCall,
   readFormanceManagedCallSettlement,
   readFormanceManagedCallReservation,
+  readFormanceManagedCallRelease,
   remedyFormancePaidCall,
   refundFormanceSettledSale,
   type FormanceSettledSaleRefund,

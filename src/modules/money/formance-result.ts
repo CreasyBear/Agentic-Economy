@@ -40,6 +40,12 @@ export type FormanceReservationReadResult =
   | Readonly<{ kind: 'refused'; code: string }>
   | Readonly<{ kind: 'unavailable'; code: string }>
 
+/** Historical unpaid release, not payment absence or authority for a new effect. */
+export type FormanceReleaseReadResult =
+  | Readonly<{ kind: 'confirmed'; transactionRefs: readonly string[] }>
+  | Readonly<{ kind: 'refused'; code: string }>
+  | Readonly<{ kind: 'unavailable'; code: string }>
+
 export function completed(reference: string, replayed: boolean): FormanceCompleted {
   return Object.freeze({ kind: 'completed', transactionRefs: Object.freeze([reference]), replayed })
 }

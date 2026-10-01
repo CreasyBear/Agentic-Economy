@@ -147,6 +147,7 @@ export const readBookingResult = v.union(v.object({
     settlementRefs: v.optional(transactionRefsValue),
     entryRefusalCode: v.optional(v.literal('financial_scope_locked')),
     remedyInProgress: v.optional(v.boolean()),
+    requiresManualSettlementReview: v.optional(v.literal(true)),
   }), v.object({ kind: v.literal('not_required') }), v.object({ kind: v.literal('not_found') }))
 export const readBookingHandler = async (ctx: QueryCtx, args: Infer<typeof readBookingArgs>) => {
     const call = await ctx.db.query('capabilityCalls')
@@ -187,6 +188,10 @@ export const readBookingHandler = async (ctx: QueryCtx, args: Infer<typeof readB
     return {
       kind: 'available' as const,
       booking,
+      ...(call.state === 'reconciliation_required'
+        && call.reconciliation?.disposition === 'manual_review'
+        && call.reconciliation.reason === 'unknown_settlement'
+        ? { requiresManualSettlementReview: true as const } : {}),
       ...(call.reconciliation?.leaseOwner?.startsWith('expired-unused:')
         || call.reconciliation?.leaseOwner?.startsWith('paid-result-loss:') ? { remedyInProgress: true } : {}),
       ...(financialScopeLocked ? { entryRefusalCode: 'financial_scope_locked' as const } : {}),

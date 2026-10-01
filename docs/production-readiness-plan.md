@@ -1460,3 +1460,425 @@ unverified. Native fixtures do not prove chain payment or Provider delivery;
 payment-attempt preservation is established by the registered boundary tests.
 Both scenarios removed their own deployments and Compose projects. No public API,
 storage schema, deployment or live-money change occurred.
+
+### Stage 27 — restore an approved pending buyer refund
+
+Inspection found the required producer and consumer already maintained. The
+native refund workflow proves the original settled sale, reads all canonical
+refund references before submission, and verifies exact metadata/postings after
+replay. `capabilityCallReports:process` consumes the surviving approved report and
+finishes its local records transactionally. This stage adds native restore proof
+for that failure window without another production recovery operation.
+
+Contract for recovery of a surviving pending report:
+
+- **Requires:** a complete restored archive containing the original admitted
+  report, completed/settled Call and receipt, frozen Quote/booking, original
+  purchase resolution and promotional grant records. The independently surviving
+  native ledger must contain the complete matching original settlement/refund.
+  Keep source and target effect writers stopped except the selected recovery.
+- **Ensures:** the maintained worker reuses the original refund transactions and
+  atomically posts the report, restores its promotional units once, updates the
+  receipt/usage and replaces the original Purchase resolution with refunded.
+- **Invariant:** retain delivery output, original receipt evidence, reporter and
+  approval material, settled Provider obligation and complete native ledger.
+  Repeated/concurrent processing cannot refund twice or restore grants twice.
+- **On violation:** conflicting native evidence leaves the report pending and
+  local financial facts intact; only its retry timestamps may advance. Missing
+  report material cannot be reconstructed from a native hash. Held Calls cannot
+  be promoted to delivered through this worker. Local transactional failures roll
+  back; the existing due-work retry retains the original report identity.
+
+Idempotency analysis: native refund submission is non-idempotent money movement,
+protected by stable Call/part/grant references, input-bound command digests and
+complete pre-read replay. `finishWork` contains the non-idempotent grant increment
+and resolution/projection writes; the pending-to-posted transition and all those
+writes share one Convex transaction. Posted replay returns before increments.
+Claim retry timestamps are intentionally renewable. No new idempotency mechanism
+is required by the inspected boundary.
+
+Complexity decision: extend the existing disposable fixture and financial
+archive/import case. The added cost is one scenario and fixture preparation of
+the original completed sale/report; the benefit is exercising real registered
+actions across stale application state and a surviving native ledger. Keep the
+existing deployment/cleanup harness and genuine report admission. Reject a new
+reader, repair table, generic framework or public workflow. No production schema,
+API, dependency or service change is planned.
+
+The disposable fixture exposes one action that forwards the authenticated owner
+to the real internal admission mutation, then stops before refund submission.
+This preserves native auth propagation while capturing the pending-report crash
+window; the fixture action is never copied into the production deployment.
+
+Verification covers mixed and wholly promotional refunds, concurrent recovery,
+inert posted replay, conflicting native evidence and absent report material.
+Compare complete ledger summaries and original transaction IDs, and inspect the
+report, receipt, usage, grants, original resolution history and Provider facts.
+This does not establish recovery when approval history was lost, refund absence,
+chain delivery, hosted recovery objectives or live-money readiness.
+
+Operator sequence: retain the deployment writer stop; verify the original pending
+report and its matching complete native refund before invoking
+`capabilityCallReports:process` with that `callRef`. This existing worker is a
+refund producer when no native refund exists, so it is not an absence probe or a
+general read-only reconciliation command. Inspect the posted report, exact
+original transaction references and repaired buyer records afterward; `true`
+alone is insufficient because a missing report also returns an inert success.
+Keep conflicting or missing approval evidence for investigation and leave global
+workers stopped until the remaining restore reconciliation is complete.
+
+### Stage 27 acceptance and handover
+
+The native approved-refund restore drill passed in 93.59 seconds including setup
+and cleanup. Genuine owner admission creates three pending reports before the
+archive; the source stops before their original refunds are posted on the
+surviving native ledger. After importing the older archive, registered recovery:
+
+- posts mixed purchased/promotional and wholly promotional refunds, restoring
+  each original grant once under concurrent processing;
+- preserves the delivered output, original receipt evidence, Quote, settled
+  Provider obligation, original report attribution/history and market facts;
+- updates receipt and usage to refunded and the Purchase resolution to refunded
+  with every party and monetary fact preserved;
+- refuses conflicting native refund evidence, advancing only retry timestamps,
+  and leaves a Call with no approved report entirely unchanged;
+- makes subsequent posted-report processing inert and native workflow replay
+  return the original references with `replayed:true`;
+- preserves the complete ledger summary and every original refund transaction ID
+  throughout recovery and replay, establishing zero new native accounting writes.
+
+Independent review closed one proof gap by comparing the full stored Purchase
+resolution, including parties and amounts. Native admission also required a
+realistic one-day credential expiry and the disposable public action described
+above; directly impersonating the owner at an internal CLI registration did not
+invoke that function. All temporary diagnostic changes were removed. Source and
+target deployments, the ledger Compose project and diagnostic scratch files were
+removed; independently inspected owned temporary-root and container counts are zero.
+
+The accepted native command was
+`AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'refund=true'`
+on Node 22/npm 11.5.1. It passed one scenario and intentionally skipped the three
+unchanged archive/reservation/settlement scenarios. This is synthetic delivery
+with genuine report admission, native money and registered recovery actions; it
+does not prove chain delivery or real-money execution.
+
+`npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+passed on Node 22/npm 11.5.1. The gate reproduced seven generated Convex files,
+built the public application, passed clean types, 7,432 unit tests, 2,630
+integration-suite tests, 75 import checks, 31 SEO checks, 16 browser journeys,
+18 accessibility cases and reproducible CLI packaging. Suite counts overlap;
+one unit skip, 58 integration skips and three todos remain. The ordinary gate
+skips the opt-in native drill, which passed separately above.
+
+Keep #286 and #256 open. Lost approval history, other restore consumers including
+release and Provider reversal, hosted retention/RPO/RTO and explicitly authorized
+live-money acceptance remain open. Production code, schema, dependencies and
+user-facing flows are unchanged.
+
+### Stage 28 — recover an original unpaid managed Call release
+
+Contract for historical accounting repair:
+
+- **Requires:** the surviving frozen Call/Quote/booking, complete original
+  reservation attachment, compatible canonical accrued/held Provider obligation,
+  original promotional allocations/grants, and the exact durable manual
+  unknown-settlement hold. Drain any original WorkId before repair. The independent
+  native ledger must contain every original release member with exact reference,
+  template, metadata and postings. Source and target effect writers remain stopped.
+- **Ensures:** a read-only native proof permits a booking-bound Convex transaction
+  to record the original release references, reverse the unpaid obligation and
+  restore its promotional allocation once. Concurrent and exact replay are inert.
+- **Invariant:** preserve input, Quote, WorkId, payment attempts, delivery/result
+  uncertainty and manual hold. No payment-absence assertion, signing, dispatch,
+  native accounting write, new execution authority or global spendability claim.
+- **On violation:** missing/conflicting/unavailable native evidence, changed
+  booking, partial local locators, active work, later settlement/remedy/dispute,
+  or incompatible promotional facts refuse without financial writes. Transaction
+  failure rolls back local repair. Operators retain uncertainty for investigation.
+
+The unpaid release shares its buyer and promotional commands with a paid-result
+remedy. Proof therefore verifies the complete unpaid bundle, including treasury
+return and accrued-obligation release; a buyer release alone is insufficient.
+The native commands cannot recover whether original release authority came from
+proven absence or an expired unused authorization. This operation records historical
+accounting only. It does not reconstruct either authority proof or infer current
+chain state. Provider reversal remains disabled for new requests pending proof of
+returned corporate USDC; this stage does not reopen that separate boundary.
+
+Idempotency analysis: this producer only reads stable original references, with
+at most eight native reads in flight. The consumer rechecks the complete booking,
+hold and compatible local facts after the native read. Its released-state replay
+check and promotional increment/obligation/Call updates share one transaction.
+Existing ordinary release writers retain their admission rules and cannot consume
+the manual hold. Financial repair leaves the hold in place for later reconciliation.
+The local reservation check preserves the maintained attachment-integrity contract:
+nonempty complete locators and their stored digest must survive. It does not
+independently re-prove those reservation transactions. Stage 26 remains the
+separate operation for a missing attachment; the new native proof binds every
+release transaction to the complete frozen booking.
+
+Complexity decision: keep one read-only proof and one internal reconciliation
+entry point in the maintained money/managed-Call concerns, reusing canonical
+command builders, posting matcher and transactional grant restoration. This adds
+one explicit historical repair mode and focused behavioral tests; it removes the
+need to misuse a money-producing release worker across a snapshot gap. Reject a
+new schema, recovery framework, public API or generic replay authority. Extend the
+existing disposable archive/restore fixture for mixed and all-promotional release,
+missing/conflicting proof, concurrency and inert replay. Compare complete native
+ledger summaries and original transaction IDs; assert the uncertainty hold remains.
+
+Operator sequence: keep effect writers stopped, quarantine and retire any original
+WorkId through Stage 24, and recover missing reservation attachment/obligation
+through Stage 26 before release repair. Preserve the original promotional grant
+rows and allocation. Invoke `moneyManagedCallLifecycle:reconcileRelease` with
+`callRef` and current millisecond `now`. Success returns
+`{"kind":"accepted","state":"released","replayed":false}`; an exact repeat
+returns `replayed:true` after another complete native read. Inspect the original
+release references, reversed unpaid obligation, returned grant units and retained
+manual uncertainty. A refusal authorizes neither a money-producing release nor a
+payment retry. Complete the remaining restore reconciliation before enabling
+spending or general workers; historical release alone does not establish current
+balances, delivery, chain absence or a terminal Purchase resolution.
+
+### Stage 28 acceptance and handover
+
+The native unpaid-release restore drill passed in 90.77 seconds including setup
+and cleanup. Four genuine reservations and their local attachments precede the
+archive. After stopping the source, the independent ledger records the original
+releases; the restored deployment quarantines and retires the archived WorkIds.
+Registered read-only reconciliation then:
+
+- restores mixed purchased/promotional and wholly promotional accounting once
+  under concurrent recovery, including each grant and unpaid Provider obligation;
+- refuses missing and conflicting release evidence without changing local facts;
+- preserves the original Quote, inputs, result, WorkId and manual uncertainty;
+  recovery status remains held and the ordinary release worker refuses the Call;
+- preserves timestamps and counters on exact replay, with complete ledger
+  summaries and every original release transaction ID unchanged.
+
+The accepted native command was
+`AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'release=true'`
+on Node 22/npm 11.5.1. It passed one scenario and intentionally skipped the four
+earlier archive/reservation/settlement/refund scenarios. Owned temporary roots and
+Compose containers were independently checked after cleanup: zero remained.
+
+The 216 focused money workflow, refund-evidence and managed-Call tests passed.
+They additionally establish supported legacy/period/promotional release variants,
+paid-remedy rejection, exact postings and metadata, maximum 102-member bundles
+with at most eight reads in flight, unavailable reads, stale booking, active work,
+settled payment attempts, later reversal evidence, expired-grant return and
+preservation of original uncertain payment attempts. Independent review closed
+one replay-validation gap: grant identity/expiry and safe amount bounds are
+checked even on replay, while legitimate later spending never increments again.
+The repository check also caught and corrected a registration-object typo.
+
+`npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+passed on Node 22/npm 11.5.1. The gate reproduced seven generated Convex files,
+built the public application, passed clean types, 7,489 unit tests, 2,647
+integration-suite tests, 75 import checks, 31 SEO checks, 16 browser journeys,
+18 accessibility cases and reproducible CLI packaging. Suite counts overlap;
+one unit skip, 59 integration skips and three todos remain. The ordinary gate
+skips native drills; the release drill passed separately above.
+
+Keep #286 and #256 open. This closes historical unpaid-release accounting repair
+for the stated surviving evidence. Other restore consumers and lost history,
+hosted retention/RPO/RTO, production provisioning and explicitly authorized
+live-money acceptance remain open. New Provider reversals remain disabled without
+verified returned USDC. No public API, schema, dependency, customer flow or
+live-money change occurred. Local native accounting proof is not chain or
+Provider-delivery proof.
+
+### Stage 29 — recover approved promotional grant and expiry work
+
+Inspection found maintained grant/expiry producers and a one-minute admitted
+reconciliation worker. Two gaps remain: native promotional replay checks only
+template and command/idempotency digests, and local grant completion can accept
+a dangling requested-audit reference or an unrelated pending operation receipt.
+Close those existing boundaries and prove their recovery across a stale archive.
+
+Contract for the maintained promotional workflow:
+
+- **Requires:** the original grant input, actor, operation key, correlation,
+  command digest, requested audit and bound pending operation receipt/hash.
+  Native work must use its original stable reference and explicit revision.
+  Expiry requires the original booked grant and exact frozen pending expiry.
+  Keep source/target effect writers stopped apart from selected recovery.
+- **Ensures:** complete exact native metadata and postings are confirmed before
+  local completion. The original grant, admin operation receipt and completion
+  audit converge atomically once; frozen expiry clears once and preserves late
+  returns for their next expiry revision. No second native transaction on replay.
+- **Invariant:** no new approval, substituted actor or reconstructed lost audit.
+  Validate surviving authority before returning pending grant work and again at
+  completion. Preserve purchased credit, original expiry and reference identity.
+  Expired returns remain unavailable for spending. Housekeeping retry timestamps
+  may renew; financial balances, audit and completed receipts remain idempotent.
+- **On violation:** absent/conflicting original authority cannot issue or finish
+  a grant. Native missing/conflicting proof cannot finish local work; unavailable
+  confirmation retains uncertainty and the original retry identity. Transactional
+  failures roll back. Historical grant proof alone does not establish current
+  global availability when later Calls or expiry advanced beyond the snapshot.
+
+Idempotency analysis: native grant/expiry is money movement; retain the maintained
+stable grant/revision reference and idempotency key, and strengthen only its
+evidence confirmation. Local credit initialization, admin receipt completion and
+completion audit share the pending-to-booked transaction. Expiry freezes its
+amount/revision before I/O; duplicate finishes cannot consume returned credit
+under an older revision. Keep the existing worker and admitted sweep.
+
+Complexity decision: reuse the canonical promotional builders, native reference
+read and local operation/audit records. One scoped promotional confirmation path
+for the two existing callers and a shared pending-grant evidence check remove
+duplicated assumptions; no schema, service, dependency or public workflow is
+needed. Preserve existing replay/result contracts where they express the outcome;
+use an explicit internal refusal if a known invalid pending grant would otherwise
+be reported as no work. Extend native archive proof with original grant/expiry
+windows and authority/evidence conflicts, using the existing disposable runtime.
+Source Formance stays unconfigured during genuine admin admission so its immediate
+scheduled action cannot post before the archive. Synthetic fixture MFA is not a
+claim of interactive Clerk verification or production authorization.
+
+The native proof reuses the existing two-deployment archive runtime. Its only
+fixture extraction shares the canonical synthetic owner already needed by report
+admission and promotional admission; it removes duplicate identity setup without
+introducing a production abstraction. Keep a separate promotional test case so
+Call/treasury fixtures do not become prerequisites for a grant. Frozen expiry is
+exported and reimported after the native expiry posts. Existing allocation tests
+cover late returns and next revisions; do not claim these as a new real Call proof.
+
+Review found a queue-liveness consequence: refusing invalid authority before
+renewing its retry timestamp could leave 25 bad grants permanently at the front
+of the due-work page. Keep the existing retry-clock renewal for explicit refusals,
+with no balance, operation, audit or native write. Verify that a later valid grant
+becomes visible after the refused batch; this preserves bounded worker progress.
+
+Review also requires checking a frozen expiry's stored command reference and
+revision against the canonical grant/revision before native work. Otherwise a
+corrupted locator could allow the native expiry yet permanently reject its local
+completion. Reject that conflict with the same bounded retry behavior.
+
+Operational recovery uses the maintained `moneyPromotionalCredit:process` worker
+and admitted reconciliation sweep. First bind the restored target to its original
+payment environment and surviving ledger, stop/drain other financial writers,
+and confirm the original grant operation, requested audit and pending receipt
+survive. For recovery that must perform zero new accounting writes, establish the
+complete original native grant/expiry transaction before processing: this worker
+is also the ordinary producer and can issue an authorized missing transaction.
+Missing approval history requires investigation; do not fabricate it or replace
+it with a fresh approval. An expired return remains excluded from spending and
+is queued under its next expiry revision. Keep payments closed until later Calls,
+refunds and other post-snapshot effects are reconciled too.
+
+Native reproduction (Node 22/npm 11.5.1):
+
+```sh
+AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'native promotional|refund=true'
+```
+
+Stage 29 acceptance (1 October): 190 focused money/Convex cases pass, including
+exact native effects, lost acknowledgement, post-write read uncertainty, original
+admin evidence loss before/during I/O, concurrent completion, queue fairness and
+frozen expiry identity. Independent review's queue starvation and expiry locator
+findings are fixed and verified; `npm run check` passes with zero dependency cycles.
+
+The native grant/expiry restore and existing refund regression both pass in
+397.85 seconds, including disposable setup/cleanup. Three genuine admin grants
+were archived pending. One recovered concurrently from its original native
+posting; missing requested-audit history and a deliberately wrong native amount
+refused without issuing credit. The valid grant then resumed an exported frozen
+expiry once after its native expiry transaction had already posted. Original
+transaction IDs and complete native ledger summaries stayed unchanged during
+recovery, with one grant completion audit and one expiry audit. Four unchanged
+native scenarios were intentionally skipped by the selected test filter.
+
+Keep #286 and #256 open. This proves the stated surviving promotional accounting
+and approval history with synthetic identity/MFA, not live Clerk verification,
+chain payment, Provider delivery, current global spendability or lost-history
+reconstruction. Other restore consumers, hosted retention/RPO/RTO, production
+provisioning, full development paid-Call proof and explicitly authorized real-money
+drills remain outstanding. No public API/schema/dependency/customer-flow change,
+production mutation or live-money movement occurred.
+
+The full development/sandbox release gate also passes under Node 22/npm 11.5.1:
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`.
+It verifies generated Convex output, public-build integrity, clean types, 7,554
+unit cases, 2,664 integration-suite cases, 75 import checks, 31 SEO cases, 16 browser
+journeys, 18 accessibility cases and reproducible CLI packaging. Counts overlap;
+one unit skip, 60 integration skips and three todos remain. The native proof ran
+separately above. Both disposable native deployments and Compose projects were
+removed and independently checked.
+
+### Stage 30 — treasury restore after native posting
+
+Scope: extend the existing disposable native archive proof to the maintained
+treasury deposit controller. The real development paid Call remains blocked by
+the unavailable entitled payee-screening contract; sandbox signing also requires
+a clear screening result. Do not bypass it or claim this restore proof as a paid
+Call. No production API, schema, dependency or customer-flow change is planned.
+
+Requires: the original custody/environment identity, original pending batch and
+its exact predecessor, surviving native ledger, genuine workload admission and
+stopped competing financial writers. Chain evidence in this proof is synthetic;
+Convex admission, archive export/import, native postings and controller completion
+are real. A pending batch must recover without a new chain read.
+
+Ensures: an opening and later incoming deposit, each archived before its native
+posting is acknowledged locally, finish once under concurrent retries using
+their original transaction references. Recovery preserves complete native
+transaction and balance snapshots. The buffer remains unavailable for Calls.
+
+Invariant: restoring an older ready cursor cannot replenish current treasury
+balances, replace lost history or infer spendability from archived balance
+observations. If a lost later range also increased the native buffer, a newly
+observed range must refuse on buffer continuity, retain its pending evidence and
+leave the ledger unchanged. No fabricated ready checkpoint is acceptable.
+
+On violation: retain uncertainty and identity; require investigation when original
+batch history is missing. This proves a safe hold for the specified lost-range
+case, not reconstruction of every possible archive gap or readiness to reopen
+payments. Treasury recovery alone cannot reconcile subsequent Calls or refunds.
+
+COMPLEXITY: one disposable Node fixture plus one scenario in the existing native
+restore suite. Added: one test-only boundary and explicit archive/post/recover
+ordering, with the fixture copied by the existing installer. Bought: execution of
+the actual admitted treasury controller against the restored backend and native
+ledger while replacing only the external chain read. Net: keep; Node-only imports
+cannot live in the existing mutation/query fixture. Reject a production recovery
+endpoint or generic scenario framework. Changes stay in the two proof files and
+this existing plan; no new report system.
+
+Stage 30 acceptance (1 October): `npm run check` passes under Node 22/npm 11.5.1,
+including zero dependency cycles and all 75 import-boundary checks. The native
+treasury restore scenario passes in 137.41 seconds with six unrelated scenarios
+intentionally skipped:
+
+```sh
+AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'native treasury recovery'
+```
+
+The original opening credits 5,000 atomic USDC units entirely to the protected
+buffer; the later 20,000-unit deposit leaves 15,000 available and 10,000 buffered.
+Each archived pending range completes under concurrent recovery calls using its
+original references. Native transaction counts remain two and four respectively;
+the complete transaction/account/schema/ledger snapshots remain equal across
+recovery and duplicate processing. Stored immutable batch material and completed
+rows remain unchanged on replay. Pending recovery records zero chain reads.
+
+Restoring the earlier ready checkpoint after losing the later batch and observing
+a different finalized endpoint returns `treasury_buffer_continuity_conflict`.
+The original predecessor remains in the applying cursor, the newly proposed range
+stays pending and a repeated recovery performs no chain read or native write.
+This is the specified buffer-increasing lost-range case, not a general lost-history
+repair. Independent review's opening-concurrency evidence gap was corrected before
+execution. Production source is unchanged; the prior full release gate was not
+repeated for this proof-only addition.
+
+Both disposable Convex roots, their processes, Compose containers and volumes were
+removed and independently checked. The preserved development stack was untouched.
+Read-only #279 preflight is recorded at
+https://github.com/CreasyBear/Agentic-Economy/issues/279#issuecomment-5929369066.
+It confirms a running original local stack, but does not establish valid runtime
+bindings, funds, Provider facts or a working screening adapter. Keep #279, #286
+and #256 open: hosted restore/alert evidence, provisioning, the full development
+paid Call and explicitly authorized real-money drills remain outstanding.

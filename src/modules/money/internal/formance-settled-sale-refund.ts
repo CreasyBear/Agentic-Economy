@@ -135,14 +135,21 @@ export function prepareFormanceSettledSaleRefund(input: FormanceSettledSaleRefun
 
 /** Exact booked effects are the financial evidence; metadata alone cannot prove
  * amounts or destinations. Zero sends may be omitted by the native engine. */
-export function managedCallPostingsMatch(
+export function formanceCommandPostingsMatch(
   command: FormanceMoneyCommand,
   postings: readonly { source: string; destination: string; asset: string; amountUnits: string }[],
 ): boolean {
   type Leg = readonly [string, string, string]
-  const variables = command.variables
+  const variables: Readonly<Record<string, string>> = command.template === 'PROMO_GRANTED' || command.template === 'PROMO_EXPIRED'
+    ? { ...command.variables, world: 'world' } : command.variables
   let legs: readonly Leg[]
   switch (command.template) {
+    case 'PROMO_GRANTED':
+      legs = [['world', 'destination', 'amount']]
+      break
+    case 'PROMO_EXPIRED':
+      legs = [['source', 'world', 'amount']]
+      break
     case 'CALL_RESERVED_AUD':
       legs = [
         ['account_available', 'call_reserved', 'buyer_amount'],
@@ -154,6 +161,18 @@ export function managedCallPostingsMatch(
       break
     case 'PROVIDER_OBLIGATION_ACCRUED':
       legs = [['expense', 'obligation', 'amount']]
+      break
+    case 'CALL_RELEASED_AUD':
+      legs = [
+        ['call_reserved', 'account_available', 'buyer_amount'],
+        ['legal_reserved', 'legal_available', 'exposure_amount'],
+        ...(variables.agent_reserved === undefined
+          ? [['daily_reserved', 'daily_available', 'daily_amount'], ['monthly_reserved', 'monthly_available', 'monthly_amount']] as const
+          : [['agent_reserved', 'agent_available', 'budget_amount']] as const),
+      ]
+      break
+    case 'CALL_RELEASED_USDC':
+      legs = [['treasury_committed', 'treasury_available', 'amount'], ['obligation_accrued', 'expense', 'amount']]
       break
     case 'BUYER_SALE_SETTLED':
       legs = [
@@ -174,6 +193,7 @@ export function managedCallPostingsMatch(
     case 'CALL_PROMO_SETTLED':
     case 'CALL_RESERVED_USDC':
     case 'CALL_PROMO_RESERVED':
+    case 'CALL_PROMO_RELEASED':
     case 'CALL_PROMO_REFUNDED':
     case 'CALL_SPEND_REFUNDED':
       legs = [['source', 'destination', 'amount']]

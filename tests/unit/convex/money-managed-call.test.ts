@@ -7,7 +7,7 @@ import type { Doc } from '../../../convex/_generated/dataModel'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { FormanceMoneyResult, FormanceSettlementReadResult } from '@/modules/money/public'
 import { reserveFormanceBackedInvocation } from '../../../convex/lib/capabilityExecution/callLifecycle/callFinancialReservation'
-import { reconcileSettlementHandler, reconcileReservationHandler } from '../../../convex/lib/money/managedCall/lifecycleActions'
+import { reconcileSettlementHandler, reconcileReservationHandler, reconcileReleaseHandler, releaseBeforeSubmissionHandler } from '../../../convex/lib/money/managedCall/lifecycleActions'
 
 import schema from '../../../convex/schema'
 import { api, internal } from '../../../convex/_generated/api'
@@ -17,7 +17,9 @@ import { currentUtcDayBounds, currentUtcMonthBounds } from '../../../src/modules
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import { createPublicToolRef } from '../../../src/modules/capability-supply/public'
 import { quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
-import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, convexTestWithWorkers, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { marketDispatchWorkpool } from '../../../convex/marketDispatchWorkpool'
+import { readRecoveryStatus } from '@/modules/capability-execution/call-runtime'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const convexModules = Object.fromEntries(
@@ -873,6 +875,191 @@ describe('paid Call with a lost response', () => {
       })
     })
     expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, { callRef, transactionHash })).toBeNull()
+  })
+})
+
+describe('read-only historical unpaid release reconciliation', () => {
+  async function heldFixture(purchasedUnits = '2000000') {
+    const backend = convexTestWithWorkers()
+    await seedLostResult(backend)
+    const promotionalUnits = (6000000n - BigInt(purchasedUnits)).toString()
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      const quote = await ctx.db.query('capabilityQuotes').first()
+      if (row === null || quote === null) throw new Error('fixture_missing')
+      const refs = [...reservationRefs, 'formance:reserve-promo']
+      await ctx.db.patch(quote._id, { formanceSchemaVersion: 'v1.5.0', spendingPeriods: {
+        version: 'ae.spending-periods:v1', daily: { ...currentUtcDayBounds(now), revision: 1, limitUnits: '10000000' },
+        monthly: { ...currentUtcMonthBounds(now), revision: 1, limitUnits: '10000000' },
+      } })
+      await ctx.db.patch(row._id, { dispatchState: 'reconciliation_required', attemptRef: 'attempt:lost',
+        formanceReservationRefs: refs,
+        formanceReservationDigest: canonicalDigest({ format: 'ae.formance-managed-call-reservation:v1', callRef, transactionRefs: refs }),
+        promotionalCreditAllocation: { version: 'ae.promotional-credit-allocation:v1', purchasedUnits,
+          grants: [{ grantRef: 'promo:historical-release', amountUnits: promotionalUnits, expiresAt: now + 10 }] },
+        reconciliation: { disposition: 'manual_review', reason: 'unknown_settlement', attemptCount: 2, nextAttemptAt: now },
+      })
+      await ctx.db.insert('moneyPromotionalGrants', { grantRef: 'promo:historical-release', accountRef, environment: 'sandbox',
+        amountUnits: promotionalUnits, availableUnits: '0', expiresAt: now + 10, createdAt: now - 10, updatedAt: now,
+        operationKey: 'promo:historical-release', actorRef: 'admin:test', correlationId: 'promo:historical-release',
+        commandDigest: canonicalDigest('promo:historical-release'), reasonCode: 'onboarding', evidenceRefs: [], bookingState: 'booked', expiryRevision: 0 })
+    })
+    return backend
+  }
+  async function state(backend: ReturnType<typeof convexTest>) {
+    return { ...await settlementState(backend), ...await backend.run(async ctx => ({
+      grants: await ctx.db.query('moneyPromotionalGrants').collect(),
+      projections: await ctx.db.query('capabilityCallProjections').collect(),
+      resolutions: await ctx.db.query('purchaseResolutionRecords').collect(),
+    })) }
+  }
+  const refs = [...releaseRefs, 'formance:release-promo']
+  const readContext = (backend: ReturnType<typeof convexTest>, read = async (): Promise<FormanceSettlementReadResult> => ({ kind: 'confirmed', transactionRefs: refs })) =>
+    settlementReadContext(backend, read, 'moneyFormance:readManagedCallRelease')
+
+  // Native reads are the sole mocked boundary. All booking reads/finalizers are
+  // registered operations; the original submitted attempt remains uncertain.
+  it.each([{ obligation: 'accrued', purchased: '2000000' }, { obligation: 'held', purchased: '0' }] as const)(
+    'repairs $obligation/$purchased concurrently without delivery or retry authority', async ({ obligation, purchased }) => {
+      const backend = await heldFixture(purchased)
+      await backend.run(async ctx => {
+        const row = await ctx.db.query('moneyProviderObligations').first()
+        if (row === null) throw new Error('fixture_missing')
+        await ctx.db.patch(row._id, { state: obligation })
+      })
+      const before = await state(backend)
+      const { ctx, nativeRead } = readContext(backend)
+      const results = await Promise.all([0, 1].map(offset => reconcileReleaseHandler(ctx, { callRef, now: now + 20 + offset })))
+      expect(results).toContainEqual({ kind: 'accepted', state: 'released', replayed: false })
+      expect(results).toContainEqual({ kind: 'accepted', state: 'released', replayed: true })
+      const repaired = await state(backend)
+      expect(repaired.call).toEqual({ ...before.call, formanceFinancialState: 'released', formanceReleaseRefs: refs, updatedAt: repaired.call?.updatedAt })
+      expect(repaired.obligations).toEqual([{ ...before.obligations[0], state: 'reversed', updatedAt: repaired.call?.updatedAt }])
+      expect(repaired.grants).toEqual([{ ...before.grants[0], availableUnits: (6000000n - BigInt(purchased)).toString(),
+        nextWorkAt: repaired.call?.updatedAt, updatedAt: repaired.call?.updatedAt }])
+      expect(repaired.quote).toEqual(before.quote)
+      expect(repaired.paymentAttempts).toEqual(before.paymentAttempts)
+      expect(repaired.controls).toEqual(before.controls)
+      expect(repaired.projections).toEqual(before.projections)
+      expect(repaired.resolutions).toEqual(before.resolutions)
+      expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 100 })).toEqual({ kind: 'accepted', state: 'released', replayed: true })
+      expect(await state(backend)).toEqual(repaired)
+      expect(nativeRead).toHaveBeenCalledTimes(3)
+      expect(await backend.query(internal.capabilityCalls.readRecovery, { callRef, principalId: principalRef }))
+        .toMatchObject({ requiresManualSettlementReview: true, result: before.call?.result })
+      expect(await readRecoveryStatus(ctx, { callRef, principalId: principalRef, credentialId: call().credentialId }))
+        .toMatchObject({ kind: 'found', state: 'reconciliation_required', result: before.call?.result })
+      expect(await releaseBeforeSubmissionHandler(ctx, { callRef, now: now + 100 }))
+        .toEqual({ kind: 'refused', code: 'call_manual_settlement_review_required' })
+      expect(await backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, { callRef, transactionRefs: refs, now: now + 100 }))
+        .toEqual({ kind: 'refused', code: 'call_manual_settlement_review_required' })
+      expect(await backend.mutation(internal.moneyManagedCall.claimReservationAttempt, { callRef, initialAdmission: false })).toEqual({ kind: 'busy' })
+      expect(await backend.mutation(internal.moneyManagedCall.attachReservation, { callRef, transactionRefs: reservationRefs }))
+        .toEqual({ kind: 'refused', code: 'call_manual_settlement_review_required' })
+      expect(await state(backend)).toEqual(repaired)
+    })
+
+  it.each([{ kind: 'refused', code: 'formance_release_evidence_invalid' },
+    { kind: 'unavailable', code: 'formance_read_unavailable' }] as const)('retains every fact on $kind/$code', async evidence => {
+    const backend = await heldFixture(), before = await state(backend)
+    const { ctx, nativeRead } = readContext(backend, async () => evidence)
+    expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 20 })).toEqual({ kind: 'refused', code: evidence.code })
+    expect(nativeRead).toHaveBeenCalledTimes(1)
+    expect(await state(backend)).toEqual(before)
+  })
+
+  it('refuses a booking changed while the native read is in flight', async () => {
+    const backend = await heldFixture()
+    let current: Awaited<ReturnType<typeof state>> | undefined
+    const { ctx } = readContext(backend, async () => {
+      await backend.run(async db => {
+        const row = await db.db.query('capabilityQuotes').first()
+        if (row === null) throw new Error('fixture_missing')
+        await db.db.patch(row._id, { commercialPolicyDigest: canonicalDigest('new-policy') })
+      })
+      current = await state(backend)
+      return { kind: 'confirmed', transactionRefs: refs }
+    })
+    expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 20 })).toEqual({ kind: 'refused', code: 'managed_call_booking_changed' })
+    expect(await state(backend)).toEqual(current)
+  })
+
+  it.each(['attachment', 'obligation', 'amount', 'settled', 'paid attempt', 'reversal', 'partial release', 'grant', 'lease'] as const)(
+    'refuses incompatible %s without any repair write', async defect => {
+      const backend = await heldFixture()
+      await backend.run(async ctx => {
+        const row = await ctx.db.query('capabilityCalls').first()
+        const obligation = await ctx.db.query('moneyProviderObligations').first()
+        const grant = await ctx.db.query('moneyPromotionalGrants').first()
+        if (row === null || obligation === null || grant === null) throw new Error('fixture_missing')
+        if (defect === 'attachment') await ctx.db.patch(row._id, { formanceReservationRefs: undefined })
+        else if (defect === 'obligation') await ctx.db.delete(obligation._id)
+        else if (defect === 'amount') await ctx.db.patch(obligation._id, { buyerAmountUnits: '1' })
+        else if (defect === 'settled') await ctx.db.patch(obligation._id, { state: 'settled' })
+        else if (defect === 'paid attempt') {
+          const attempt = await ctx.db.query('moneyX402PaymentAttempts').first()
+          if (attempt === null) throw new Error('fixture_missing')
+          await ctx.db.patch(attempt._id, { settlementStatus: 'settled' })
+        } else if (defect === 'reversal') await ctx.db.patch(obligation._id, { reversalTransactionRef: 'formance:later-reversal' })
+        else if (defect === 'partial release') await ctx.db.patch(row._id, { formanceReleaseRefs: refs })
+        else if (defect === 'grant') await ctx.db.delete(grant._id)
+        else await ctx.db.patch(row._id, { reconciliation: { disposition: 'manual_review', reason: 'unknown_settlement',
+          attemptCount: 2, nextAttemptAt: now, leaseOwner: 'other-remedy', leaseExpiresAt: now - 1 } })
+      })
+      const before = await state(backend), { ctx } = readContext(backend)
+      expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 20 })).toMatchObject({ kind: 'refused' })
+      expect(await state(backend)).toEqual(before)
+    })
+
+  it('refuses an original WorkID still pending in the maintained Workpool', async () => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const workId = await marketDispatchWorkpool.enqueueMutation(ctx, internal.moneyManagedCall.markReservationUnknown,
+        { callRef, reference: 'unchanged', statusRef: 'unchanged' }, { runAt: Date.now() + 86_400_000 })
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { workId })
+    })
+    const before = await state(backend), { ctx } = readContext(backend)
+    expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 20 }))
+      .toEqual({ kind: 'refused', code: 'managed_call_work_not_drained' })
+    expect(await state(backend)).toEqual(before)
+  })
+
+  it('requires the exact manual hold before any native read', async () => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { reconciliation: { disposition: 'automatic', reason: 'unknown_settlement', attemptCount: 0, nextAttemptAt: now } })
+    })
+    const before = await state(backend), { ctx, nativeRead } = readContext(backend)
+    expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 20 }))
+      .toEqual({ kind: 'refused', code: 'call_manual_settlement_review_required' })
+    expect(nativeRead).not.toHaveBeenCalled()
+    expect(await state(backend)).toEqual(before)
+  })
+
+  it('refuses incompatible grant amount on replay but permits legitimate subsequent spending without restoring twice', async () => {
+    const backend = await heldFixture(), { ctx } = readContext(backend)
+    expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 20 })).toMatchObject({ kind: 'accepted', replayed: false })
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyPromotionalGrants').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { availableUnits: '1' })
+    })
+    const spent = await state(backend)
+    expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 30 })).toMatchObject({ kind: 'accepted', replayed: true })
+    expect(await state(backend)).toEqual(spent)
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyPromotionalGrants').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { amountUnits: '0' })
+    })
+    const bad = await state(backend)
+    expect(await reconcileReleaseHandler(ctx, { callRef, now: now + 40 }))
+      .toEqual({ kind: 'refused', code: 'managed_call_promotional_evidence_invalid' })
+    expect(await state(backend)).toEqual(bad)
   })
 })
 
