@@ -71,6 +71,10 @@ describe('generative chat leaves', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Compare these tools' }))
     expect(onPick).toHaveBeenCalledExactlyOnceWith('Compare these tools')
   })
+  it('renders no follow-up row when there are no suggestions', () => {
+    const { container } = render(<FollowUps view={{ suggestions: [] }} onPick={vi.fn()} />)
+    expect(container).toBeEmptyDOMElement()
+  })
   it('emits copy and edit as distinct intents', () => {
     const onCopy = vi.fn(), onEditQuestion = vi.fn()
     render(<MessageActions view={{ canCopy: true, canEditQuestion: true }} onCopy={onCopy} onEditQuestion={onEditQuestion} />)
@@ -144,6 +148,36 @@ describe('generative chat leaves', () => {
     expect(projectWorkFromCards([card]).summary).toContain('external listing')
     expect(projectSourcesFromCards([card]).sources[0]?.href).toBe('/api/v1/registry/detail?id=external-7')
     expect(view.options).toMatchObject([{ selectable: true, href: '/api/v1/registry/detail?id=external-7' }])
+  })
+  it('distinguishes same-title directory listings by host and path with honest metadata', () => {
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available',
+      output: {
+        kind: 'scoped',
+        results: [
+          { id: 'listing-one', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+            host: 'weather-one.example', resourcePath: '/v1/current', networkLabel: 'Base',
+            sourcePrice: '0.002000 USDC', readiness: 'unverified' },
+          { id: 'listing-two', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+            host: 'weather-two.example', resourcePath: '/v2/forecast', networkLabel: 'Ethereum',
+            sourcePrice: '0.003000 USDC', readiness: 'unverified' },
+        ],
+      },
+    })
+    if (card === null) throw new Error('missing_directory_card')
+    const view = projectOptionsFromCard(card)
+    expect(view.options.every(option => option.quoteable !== true)).toBe(true)
+    render(<OptionsGrid view={view} onReview={vi.fn()} />)
+    expect(screen.getAllByRole('link', { name: 'Weather lookup' })).toHaveLength(2)
+    expect(screen.getByText('weather-one.example/v1/current')).toBeInTheDocument()
+    expect(screen.getByText('weather-two.example/v2/forecast')).toBeInTheDocument()
+    expect(screen.getByText('Base')).toBeInTheDocument()
+    expect(screen.getByText('Ethereum')).toBeInTheDocument()
+    expect(screen.getAllByText('Unverified')).toHaveLength(2)
+    expect(screen.getByText('Provider-listed price: 0.002000 USDC')).toBeInTheDocument()
+    expect(screen.getByText('Provider-listed price: 0.003000 USDC')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
   })
   it('keeps the opaque cursor out of prose while continuing the original thread and query', () => {
     const next = { action: 'next-page' as const, args: { query: 'timezone', cursor: 'x402:opaque-next' }, authority: 'public' as const }

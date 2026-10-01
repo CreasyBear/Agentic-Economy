@@ -27,3 +27,20 @@ export function matchedCount(output: Record<string, unknown>): number | undefine
   if (Array.isArray(output.tools)) return output.tools.length
   return undefined
 }
+
+export function boundedString(value: unknown, maximum: number): string | undefined {
+  if (typeof value !== 'string' || value.trim().length === 0) return undefined
+  return Array.from(value.trim()).slice(0, maximum).join('')
+}
+export function directoryChoiceFields(value: Record<string, unknown>) {
+  const sourcePrice = boundedString(value.sourcePrice, 80)
+  const host = boundedString(value.host, 300)
+  const resourcePath = boundedString(value.resourcePath, 512)
+  const networkLabel = boundedString(value.networkLabel, 128)
+  return {
+    ...(sourcePrice === undefined ? {} : { sourcePrice }),
+    ...(host === undefined ? {} : { host }),
+    ...(resourcePath === undefined ? {} : { resourcePath }),
+    ...(networkLabel === undefined ? {} : { networkLabel }),
+  }
+}

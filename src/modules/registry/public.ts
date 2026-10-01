@@ -172,3 +172,4 @@ export {
   getIndexStatus,
   readCatalogHealth,
 } from './internal/projection-attempts'
+export { compactDirectoryRows } from './internal/compact-directory-search'

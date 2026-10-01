@@ -26,6 +26,8 @@ type DirectoryRow = {
   completedAt: number
   category?: string
   minimumUsdPrice?: string
+  resource?: string
+  network?: string
 }
 const directoryRow = (id: string): DirectoryRow => ({
   id, title: 'Timezone conversion', summary: 'Convert a time between cities', provider: 'Open source',
@@ -121,11 +123,17 @@ describe('registry.tools.search mixed assessment', () => {
 
   it('returns an assessed external-only Bazaar entry as a match without claiming AE callability', async () => {
     vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
-    directoryRows = [{ ...directoryRow('directory-1'), minimumUsdPrice: '0.002000' }]
+    directoryRows = [{
+      ...directoryRow('directory-1'),
+      minimumUsdPrice: '0.002000',
+      resource: 'https://weather.example/v2/current?key=private',
+      network: 'eip155:8453',
+    }]
     mockDirectoryAssessment()
     const result = await runSearch('timezone conversion')
     expect(result).toMatchObject({ kind: 'match', assessed: { source: 'all', coverage: 'partial' },
       results: [{ id: 'directory-1', access: 'external_listing', sourcePrice: '0.002000 USDC',
+        host: 'weather.example', resourcePath: '/v2/current', networkLabel: 'Base',
         price: { kind: 'indicative', label: 'US$0.002' },
         next: [{ action: 'describe-external', args: { id: 'directory-1' } }] }] })
     expect(result.next).toEqual([{ action: 'broaden', args: { query: 'timezone conversion' }, authority: 'public' }])

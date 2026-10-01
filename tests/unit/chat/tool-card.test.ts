@@ -158,6 +158,39 @@ describe('search result state', () => {
     expect(projectToolCard({ ...stored, recommendation: { toolRef: 'operation:invalid', by: 'Jev' } }))
       .not.toHaveProperty('recommendation')
   })
+  it('preserves external listing identity and provider price through shared history', () => {
+    const output = {
+      kind: 'scoped',
+      results: [
+        { id: 'listing-one', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+          host: 'weather-one.example', resourcePath: '/v1/current', networkLabel: 'Base',
+          sourcePrice: '0.002000 USDC', readiness: 'unverified' },
+        { id: 'listing-two', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+          host: 'weather-two.example', resourcePath: '/v2/forecast', networkLabel: 'Ethereum',
+          sourcePrice: '0.003000 USDC', readiness: 'unverified' },
+      ],
+    }
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available',
+      output,
+    })
+    expect(card).toMatchObject({
+      kind: 'choices',
+      choices: [
+        { toolRef: 'listing-one', title: 'Weather lookup', host: 'weather-one.example',
+          resourcePath: '/v1/current', networkLabel: 'Base', sourcePrice: '0.002000 USDC', readiness: 'unverified' },
+        { toolRef: 'listing-two', title: 'Weather lookup', host: 'weather-two.example',
+          resourcePath: '/v2/forecast', networkLabel: 'Ethereum', sourcePrice: '0.003000 USDC', readiness: 'unverified' },
+      ],
+    })
+    if (card === null) throw new Error('missing_external_card')
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+    if (card.kind !== 'choices') throw new Error('missing_external_choices')
+    expect(card.choices.every(choice => choice.callable !== true)).toBe(true)
+    const legacy = serializeToolCard({ ...card, choices: card.choices.map(choice => ({ ...choice, callable: true })) })
+    expect(projectToolCard(legacy)).toEqual(card)
+  })
 
   it('carries the live estimate expiry from indexed search to chat instead of retaining an old price', () => {
     const descriptor = mockSearchTool(TOOL_REF, 'lookup.a', 'Lookup A', 'Lookup')

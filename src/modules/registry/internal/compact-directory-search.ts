@@ -1,5 +1,5 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
-import { isPublicToolRef } from '@/modules/capability-supply/public'
+import { isPublicToolRef, x402NetworkLabel } from '@/modules/capability-supply/public'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState } from '@/modules/common/freshness'
 import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { SearchResult } from '../tool-choice-contracts'
@@ -21,6 +21,8 @@ export type CompactDirectoryPage =
       category?: string
       completedAt?: number
       minimumUsdPrice?: string
+      network?: string
+      resource?: string
     }>[]
     continueCursor: string
     isDone: boolean
@@ -91,6 +93,10 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       amount,
       ...(rate === undefined ? {} : { referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }),
     }, now)
+    const url = item.resource !== undefined && URL.canParse(item.resource) ? new URL(item.resource) : undefined
+    const networkLabel = item.network === undefined || item.network === '*'
+      ? undefined
+      : x402NetworkLabel(item.network)
     return {
       id: item.id,
       source: 'coinbase' as const,
@@ -101,6 +107,12 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       title: Array.from(item.title).slice(0, 72).join(''),
       summary: Array.from(item.summary).slice(0, 100).join(''),
       provider: Array.from(item.provider).slice(0, 48).join(''),
+      ...(url === undefined || (url.protocol !== 'http:' && url.protocol !== 'https:') ? {} : {
+        host: url.host,
+        resourcePath: Array.from(url.pathname).slice(0, 512).join(''),
+      }),
+      ...(networkLabel === undefined || (networkLabel === item.network && item.network?.includes(':') === true)
+        ? {} : { networkLabel }),
       actionClass: item.actionClass,
       objectClass: item.objectClass,
       ...(item.category === undefined ? {} : { category: Array.from(item.category).slice(0, 80).join('') }),

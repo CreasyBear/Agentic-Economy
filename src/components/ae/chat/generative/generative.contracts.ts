@@ -23,6 +23,10 @@ export type OptionView = Readonly<{
   price: string
   usage?: string
   priceValidUntil?: number
+  providerListedPrice?: string
+  host?: string
+  resourcePath?: string
+  networkLabel?: string
   readiness: 'ready' | 'unverified' | 'unavailable'
   seller?: Readonly<{ kind: 'provider' | 'host'; name: string }>
   selectable: boolean

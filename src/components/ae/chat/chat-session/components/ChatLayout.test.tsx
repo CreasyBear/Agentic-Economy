@@ -221,8 +221,7 @@ describe('ChatLayout', () => {
     expect(onCopyAnswer).toHaveBeenCalledWith('Here are two weather APIs for Sydney.')
     fireEvent.click(screen.getByRole('button', { name: 'Edit question' }))
     expect(onEditQuestion).toHaveBeenCalledWith('Find weather in Sydney')
-    fireEvent.click(screen.getByRole('button', { name: 'Which of these is ready to use?' }))
-    expect(onSuggest).toHaveBeenCalledWith('Which of these is ready to use?')
+    expect(screen.queryByRole('region', { name: 'Related questions' })).toBeNull()
   })
   it('shows answer progress above options and defers answer actions until generation settles', () => {
     const user = { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather in Sydney' }] }

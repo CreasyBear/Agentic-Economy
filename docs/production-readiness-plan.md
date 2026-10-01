@@ -2605,3 +2605,49 @@ alert delivery, and isolated restore proof. This does not establish production
 or real-money readiness. Source changes are committed locally for the next
 consolidated release push, avoiding an incidental Preview build for harness-only
 work.
+
+### Stage 39 — consolidate the committed UI and money baselines
+
+Joel requested convergence of the UI and money branches. Merge committed UI
+revision `b63ddda5c` from `well-30/rebuild-a` into `codex/production-money` at
+`87d36102e`, preserving both histories. The active Arc refactor in the shared
+checkout remains uncommitted and is outside this frozen baseline. Integrate its
+tested checkpoint separately; never capture another chat's working files or the
+unrelated whitepaper, strategy and research edits.
+
+**Requires:** identified, committed source revisions and a clean money worktree.
+**Ensures:** richer directory cards retain host, path, network and Provider-listed
+price, while the merged immediate-search path enforces the deployment's payment
+network before projection and keeps admitted Tools separate from external listings.
+**Invariant:** listing metadata does not grant Quote/Call access; Provider identity
+is not Seller identity. Existing admission, pagination and purchase controls remain.
+**On violation:** stop acceptance and repair the narrow merge boundary before
+committing or progressing toward main. No money or deployment mutation is part of
+this integration.
+
+Conflict resolution combines the registry's public compact-row projection with
+production filtering. The extracted option card retains the `Provider:` label.
+External listings keep their detail links and comparison metadata but no longer
+expose the dead-end purchase Review button; stored history also ignores legacy
+`callable` flags on external listings. The incoming removal of generic follow-up
+chips is intentional in commit `396c8b873` and is preserved.
+
+**Complexity:** keep choices serialization beside its existing projection type,
+and move bounded metadata helpers into the already imported search helper. This
+adds two exports within the same two files, removes the incoming circular type
+import and keeps the main projection below 1,000 lines. No new contracts file,
+duplicate type or dependency is needed. The helper hides metadata truncation;
+the parent owns history serialization. Changing metadata limits, reference
+collection or history formatting each remains local to its owning file.
+
+Acceptance covers production/sandbox directory isolation, retained card metadata,
+external-listing purchase affordances, legacy history, admitted-Tool review and
+chat suggestions: all 86 focused tests pass. `npm run check` passes, including
+zero dependency cycles, application/Convex types, import boundaries and file-size
+limits. Independent review found the external-listing affordance issue before
+acceptance; the fixes and regression assertions are included here.
+
+This is a local branch integration. No push, Actions run, Preview build, backend
+deployment or main merge occurs. The active Arc checkpoint and the full gate on
+the consolidated result remain required before merging to main; this baseline
+alone does not establish deployed UI or production/live-money readiness.

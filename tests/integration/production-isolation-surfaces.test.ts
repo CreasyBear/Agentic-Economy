@@ -123,7 +123,13 @@ describe('production surface isolation', () => {
     expect(await backend.query(internal.x402DirectoryIndex.firstEligiblePage, { generation }))
       .toEqual(['https://provider.test/base'])
     const immediate = await backend.action(ctx => retrieveImmediateTools(ctx, 'sandbox weather'))
-    expect(immediate).toMatchObject({ kind: 'scoped', results: [{ title: 'Sandbox weather base' }] })
+    expect(immediate).toMatchObject({ kind: 'scoped', results: [{
+      title: 'Sandbox weather base', provider: 'provider.test',
+      host: 'provider.test', resourcePath: '/base', networkLabel: 'Base',
+      sourcePrice: '0.001 USDC', access: 'external_listing', readiness: 'unverified',
+      next: [{ action: 'describe-external', authority: 'public' }],
+    }] })
+    if (immediate?.kind === 'scoped') expect(immediate.results[0]).not.toHaveProperty('toolRef')
     const search = await backend.action(async ctx => {
       const agent = createChatAgent(mockModel())
       const tool = agent.options.tools?.registry_tools_search
