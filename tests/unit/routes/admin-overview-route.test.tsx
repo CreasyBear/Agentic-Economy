@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 import type { ReactNode } from 'react'
+import { renderToString } from 'react-dom/server'
 import { getFunctionName, type FunctionReference } from 'convex/server'
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { emptyMarketplaceFunding } from '@/modules/observability/public'
@@ -46,6 +47,7 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
 }))
 
 import { AdminOverviewPage } from '@/components/ae/admin/overview/AdminOverviewPage'
+import { useAdminOverview } from '@/components/ae/admin/overview/useAdminOverview'
 
 function passingReadiness(expiresAt: number): PaymentReadinessView {
   const passed = { kind: 'passed' as const, validUntil: expiresAt }
@@ -190,5 +192,36 @@ describe('admin overview route', () => {
     act(() => window.dispatchEvent(new Event('focus')))
     expect(screen.queryByText('Ready')).toBeNull()
     expect(screen.getByText('Not ready')).toBeTruthy()
+  })
+})
+
+function RecentRecordProbe() {
+  const state = useAdminOverview()
+  return <output>{state.kind === 'ready' ? state.recent.map(row => row.ref).join(',') : state.kind}</output>
+}
+
+describe('founder investigation disclosure', () => {
+  it('starts server rendering without browser history, then reads valid recent references after mounting', () => {
+    const storage = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify([{ kind: 'provider', ref: 'acme-provider' }]))
+    try {
+      expect(renderToString(<RecentRecordProbe />)).not.toContain('acme-provider')
+      expect(storage).not.toHaveBeenCalled()
+      render(<RecentRecordProbe />)
+      expect(screen.getByText('acme-provider')).toBeTruthy()
+    } finally {
+      storage.mockRestore()
+    }
+  })
+
+  it('immediately removes closed investigation panels from keyboard navigation', () => {
+    render(<AdminOverviewPage />)
+    const trigger = screen.getByRole('button', { name: 'Find an exact record' })
+    const panel = Array.from(document.querySelectorAll('[role="region"]')).find(element => element.getAttribute('aria-labelledby') === trigger.id)
+    expect(panel?.hasAttribute('inert')).toBe(true)
+    fireEvent.click(trigger)
+    expect(panel?.hasAttribute('inert')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Recently viewed records' }))
+    expect(panel?.hasAttribute('inert')).toBe(true)
+    expect(panel?.getAttribute('aria-hidden')).toBe('true')
   })
 })

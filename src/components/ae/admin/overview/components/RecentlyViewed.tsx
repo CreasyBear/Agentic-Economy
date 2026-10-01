@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   ADMIN_OVERVIEW_COPY,
   type AdminOverviewRecentRow,
@@ -11,7 +10,8 @@ export type RecentlyViewedProps = Readonly<{ rows: readonly AdminOverviewRecentR
 
 export function RecentlyViewed({ rows }: RecentlyViewedProps) {
   return (
-    <AeSection title={ADMIN_OVERVIEW_COPY.recentlyViewedTitle} description={ADMIN_OVERVIEW_COPY.recentlyViewedDescription}>
+    <div className="grid gap-related">
+      <p className="text-sm text-muted-foreground">{ADMIN_OVERVIEW_COPY.recentlyViewedDescription}</p>
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">{ADMIN_OVERVIEW_COPY.noRecentlyViewed}</p>
       ) : (
@@ -24,6 +24,6 @@ export function RecentlyViewed({ rows }: RecentlyViewedProps) {
           ))}
         </ul>
       )}
-    </AeSection>
+    </div>
   )
 }

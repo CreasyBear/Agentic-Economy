@@ -14,12 +14,6 @@ import {
   type AdminMetricsDataState,
 } from './metrics.contracts'
 
-const signedPercentFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'percent',
-  maximumFractionDigits: 1,
-  signDisplay: 'always',
-})
-
 export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDataState {
   const report = useQuery(api.adminConsoleMetrics.readMarketplaceMetrics, { range })
   if (report === undefined) return { kind: 'loading' }
@@ -27,6 +21,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
   const requestedDays = range === 'last_7' ? 7 : range === 'last_30' ? 30 : 90
   if (report.headline === null || report.ratios === null || report.wow === null) return {
     kind: 'ready',
+    report,
     coverageComplete: false,
     coverageDescription: ADMIN_METRICS_COPY.incompleteRange(report.days.length, requestedDays),
     cards: [],
@@ -36,6 +31,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
   }
   return {
     kind: 'ready',
+    report,
     coverageComplete: report.coverageComplete,
     coverageDescription: ADMIN_METRICS_COPY.incompleteRange(report.days.length, requestedDays),
     cards: [
@@ -43,21 +39,6 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
         label: ADMIN_METRICS_COPY.settledCallValue,
         value: moneyLabel(report.headline.money, report.headline.settledCallValue),
         delta: ADMIN_METRICS_COPY.noComparison,
-      },
-      {
-        label: ADMIN_METRICS_COPY.settledCalls,
-        value: formatCount(report.headline.settledCalls),
-        delta: range === 'last_7' ? deltaLabel(report.wow.settledCalls) : ADMIN_METRICS_COPY.noComparison,
-      },
-      {
-        label: ADMIN_METRICS_COPY.successRate,
-        value: ratioLabel(report.headline.successRate),
-        delta: ADMIN_METRICS_COPY.noComparison,
-      },
-      {
-        label: ADMIN_METRICS_COPY.transactingWorkspaces,
-        value: formatCount(report.headline.transactingWorkspaces),
-        delta: range === 'last_7' ? deltaLabel(report.wow.transactingWorkspaces) : ADMIN_METRICS_COPY.noComparison,
       },
     ],
     ratios: [
@@ -82,10 +63,6 @@ function moneyLabel(
 
 function ratioLabel(value: number | null): string {
   return value === null ? ADMIN_METRICS_COPY.notAvailable : formatPercent(value)
-}
-
-function deltaLabel(value: number | null): string {
-  return value === null ? ADMIN_METRICS_COPY.noComparison : signedPercentFormatter.format(value)
 }
 
 function toDayRow(day: MarketplaceMetricDay): AdminMetricDayRow {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
+import { Alert } from '@/components/arc/alert/alert'
+import { Badge } from '@/components/arc/badge/badge'
 import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { ADMIN_OVERVIEW_COPY } from '../overview.contracts'
@@ -51,7 +51,7 @@ const FAILURE_REASONS: Readonly<Record<string, string>> = {
  * an expired pass. Readiness is informational, never a command override.
  */
 export function ConfigurationBanner({ readiness, compact = false }: ConfigurationBannerProps) {
-  const [now, setNow] = useState(() => Date.now())
+  const [now, setNow] = useState<number | null>(null)
   const expiresAt = readiness?.expiresAt ?? null
   useEffect(() => {
     const updateClock = () => setNow(Date.now())
@@ -66,8 +66,8 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
       document.removeEventListener('visibilitychange', updateClock)
     }
   }, [expiresAt])
-  const expired = expiresAt !== null && now >= expiresAt
-  const ready = readiness?.kind === 'ready' && !expired && expiresAt !== null
+  const expired = now !== null && expiresAt !== null && now >= expiresAt
+  const ready = now !== null && readiness?.kind === 'ready' && !expired && expiresAt !== null
     && readiness.checkedAt !== null && readiness.checkedAt <= now
     && PAYMENT_READINESS_CHECK_KEYS.every(key => {
       const check = readiness.checks[key]
@@ -77,25 +77,30 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
     : expired ? FAILURE_REASONS.readiness_expired
       : readiness.code === null ? null : FAILURE_REASONS[readiness.code] ?? 'One or more required checks have failed.'
   return (
-    <AeSection title={ADMIN_OVERVIEW_COPY.configurationTitle} description={ADMIN_OVERVIEW_COPY.configurationDescription}>
-      <div className="mb-related grid gap-intra">
-        <p role="status" aria-label="Payment readiness status"><Badge variant={ready ? 'secondary' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
-        <p className="text-sm">{readiness === null ? 'Environment: Not declared'
-          : readiness.environment === 'production' ? 'Environment: Production · Base' : 'Environment: Sandbox · Base Sepolia'}</p>
-        {summary === null ? null : <p className="text-sm text-muted-foreground">{summary}</p>}
-        <p className="text-xs text-muted-foreground">Checked: {readiness?.checkedAt == null ? 'No evidence'
-          : <time dateTime={timestampIso(readiness.checkedAt)}>{formatPerthTimestamp(readiness.checkedAt)}</time>}
+    <section className="ae-arc min-w-0" aria-label={ADMIN_OVERVIEW_COPY.configurationTitle}>
+      <Alert tone={ready ? 'success' : 'warning'} title="Payment readiness" aria-label="Payment readiness status">
+        <span className="flex flex-wrap items-center gap-intra">
+          <Badge tone={ready ? 'success' : 'warning'}><span>{ready ? 'Ready' : 'Not ready'}</span></Badge>
+          <span>{readiness === null ? 'Environment: Not declared'
+            : readiness.environment === 'production' ? 'Environment: Production · Base' : 'Environment: Sandbox · Base Sepolia'}</span>
+        </span>
+        {summary === null ? null : <span className="mt-intra block">{summary}</span>}
+      </Alert>
+      <details open={!compact} className="mt-intra">
+        <summary className="min-h-touch cursor-pointer py-intra text-sm font-medium">Inspect readiness evidence</summary>
+        <p className="my-intra text-xs text-muted-foreground">
+          Checked: {readiness?.checkedAt == null ? 'No evidence'
+            : <time dateTime={timestampIso(readiness.checkedAt)}>{formatPerthTimestamp(readiness.checkedAt)}</time>}
           {' · '}Valid until: {expiresAt === null ? 'No valid evidence'
-            : <time dateTime={timestampIso(expiresAt)}>{formatPerthTimestamp(expiresAt)}</time>}</p>
-      </div>
-      <details open={!compact} className="group">
-      <summary className="min-h-touch cursor-pointer text-sm font-medium">Inspect readiness evidence</summary>
-      <dl className="mt-related grid gap-related sm:grid-cols-2 xl:grid-cols-4">
-        {PAYMENT_READINESS_CHECK_KEYS.map(key => <ReadinessCheckRow key={key} name={key}
-          check={readiness?.checks[key]} now={now} expired={expired} />)}
-      </dl>
+            : <time dateTime={timestampIso(expiresAt)}>{formatPerthTimestamp(expiresAt)}</time>}
+        </p>
+        <dl className="grid gap-related sm:grid-cols-2 xl:grid-cols-4">
+          {PAYMENT_READINESS_CHECK_KEYS.map(key => (
+            <ReadinessCheckRow key={key} name={key} check={readiness?.checks[key]} now={now} expired={expired} />
+          ))}
+        </dl>
       </details>
-    </AeSection>
+    </section>
   )
 }
 
@@ -104,10 +109,10 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
 function ReadinessCheckRow({ name, check, now, expired }: Readonly<{
   name: typeof PAYMENT_READINESS_CHECK_KEYS[number]
   check: PaymentReadinessCheck | undefined
-  now: number
+  now: number | null
   expired: boolean
 }>) {
-  const passed = check?.kind === 'passed' && !expired && check.validUntil > now
+  const passed = now !== null && check?.kind === 'passed' && !expired && check.validUntil > now
   let reason = FAILURE_REASONS.readiness_expired
   if (!expired) {
     if (check === undefined) reason = 'No readiness evidence is available.'

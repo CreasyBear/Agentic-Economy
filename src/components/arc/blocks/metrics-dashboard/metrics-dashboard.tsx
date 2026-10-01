@@ -4,6 +4,8 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Keyb
 import { animate, motion, useReducedMotion } from "motion/react";
 import { Download } from "lucide-react";
 import { motionTokens } from "../../lib/motion-tokens";
+import SegmentedControl from "../../segmented-control/segmented-control";
+import { Alert } from "../../alert/alert";
 import styles from "./metrics-dashboard.module.css";
 
 /** ARC Pro metrics-dashboard, adapted to authorized AE snapshots. No demonstration data. */
@@ -18,6 +20,7 @@ export type MetricsDashboardProps = Readonly<{
   range: DashboardRange
   onRangeChange: (range: DashboardRange) => void
   description: string
+  loading?: boolean
   notice?: string
   exportHref?: string
 }>
@@ -91,7 +94,7 @@ function smoothPath(pts: [number, number][]) {
 const W = 600;
 const H = 180;
 
-export function MetricsDashboard({ metrics, range, onRangeChange, description, notice, exportHref }: MetricsDashboardProps) {
+export function MetricsDashboard({ metrics, range, onRangeChange, description, notice, exportHref, loading = false }: MetricsDashboardProps) {
   const reduce = useReducedMotion();
   const uid = useId();
   const [metricKey, setMetricKey] = useState(metrics[0].key);
@@ -161,26 +164,26 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
   const tooltipLeft = focus ? Math.min(88, Math.max(12, (chart.x(active ?? 0) / W) * 100)) : 0;
 
   return (
-    <section ref={rootRef} className={styles.dashboard} data-size={size} aria-label="Marketplace activity">
+    <section ref={rootRef} className={styles.dashboard} data-size={size} aria-label="Marketplace activity" aria-busy={loading}>
       <header className={styles.header}>
         <div className={styles.title}>
           <h2>Marketplace activity</h2>
           <p>{description}</p>
         </div>
         <div className={styles.actions}>
-          <div className={styles.segmented} role="group" aria-label="Time range">
-            {ranges.map((r) => (
-              <button key={r.value} type="button" aria-pressed={range === r.value} aria-label={r.long} onClick={() => selectRange(r.value)}>
-                {range === r.value && <motion.span layoutId={`${uid}-range`} className={styles.segmentThumb} transition={reduce ? { duration: 0 } : motionTokens.spring.snappy} />}
-                <span className={styles.segmentLabel}>{r.label}</span>
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="Time range" value={range}
+            options={ranges.map(item => ({ value: item.value, label: item.long }))}
+            onValueChange={value => {
+              const selected = ranges.find(item => item.value === value);
+              if (selected) selectRange(selected.value);
+            }}
+          />
           {exportHref && <a className={styles.exportButton} href={exportHref} download><Download size={14} aria-hidden /><span>Export CSV</span></a>}
         </div>
       </header>
 
-      {notice && <p className={styles.notice} role="status">{notice}</p>}
+      {notice && <div className={styles.notice}><Alert tone="warning" title="Incomplete reporting period">{notice}</Alert></div>}
       <div className={styles.kpis} role="tablist" aria-label="Metric">
         {metrics.map((m, index) => {
           const selected = metric.key === m.key;
@@ -188,7 +191,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
             <button key={m.key} type="button" role="tab" id={`${uid}-${m.key}`} aria-controls={`${uid}-chart`} tabIndex={selected ? 0 : -1} data-metric-index={index} onKeyDown={(event) => onMetricKey(event, index)} aria-selected={selected} className={styles.kpi} onClick={() => { setMetricKey(m.key); setActive(null); }}>
               {selected && <motion.span layoutId={`${uid}-kpi`} className={styles.kpiIndicator} transition={reduce ? { duration: 0 } : motionTokens.spring.smooth} />}
               <span className={styles.kpiLabel}>{m.label}</span>
-              <span className={styles.kpiValue}>{m.value === null ? "Unavailable" : m.displayValue ?? <CountValue value={m.value} format={m.formatPoint ?? formatValue} />}</span>
+              <span className={styles.kpiValue}>{loading ? "Loading…" : m.value === null ? "Unavailable" : m.displayValue ?? <CountValue value={m.value} format={m.formatPoint ?? formatValue} />}</span>
               <span className={styles.metricDescription}>{m.description}</span>
             </button>
           );
@@ -232,7 +235,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
                 <path className={styles.line} d={chart.current} />
                 {points.map((point, index) => point.value === null ? null : <circle key={point.date} cx={chart.x(index)} cy={chart.y(point.value)} r={2.5} fill="var(--accent)" />)}
               </motion.svg>
-            {!chart.hasValues && <p className={styles.empty}>No complete daily observations yet.</p>}
+            {!chart.hasValues && <p className={styles.empty} role="status">{loading ? "Loading daily observations…" : "No complete daily observations yet."}</p>}
             {focus && (
               <>
                 <span className={styles.crosshair} style={{ left: `${(chart.x(active ?? 0) / W) * 100}%` }} aria-hidden />

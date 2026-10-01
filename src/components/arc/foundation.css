@@ -1,4 +1,4 @@
-/* ARC foundation adapted to AE's existing design contract. Scoped to the installed block. */
+/* Official ARC tokens bridged to AE; never install ARC's global reset over the app. */
 .ae-arc {
   --surface: var(--ae-surface);
   --surface-muted: var(--ae-surface-sunken);
@@ -10,16 +10,48 @@
   --accent: var(--ae-brand);
   --accent-strong: var(--ae-brand-strong);
   --accent-subtle: var(--ae-brand-muted);
+  --accent-foreground: var(--primary-foreground);
+  --success: var(--ae-success-foreground);
+  --warning: var(--ae-warning-foreground);
+  --danger: var(--ae-danger-foreground);
+  --focus-ring: var(--ring);
   --font-body: var(--ae-font-sans);
   --font-display: var(--ae-font-sans);
   --tracking-body: -0.01em;
+  --leading-body: 1.4;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --radius-control: var(--radius-lg);
+  --radius-panel: var(--radius-card);
+  --radius-pill: 9999px;
+  --control-height-sm: 2.25rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3.125rem;
+  --shadow-resting: var(--shadow-soft);
+  --shadow-floating: var(--ae-shadow-overlay);
+  --duration-instant: 120ms;
   --duration-fast: 150ms;
   --duration-standard: 220ms;
+  --duration-considered: 480ms;
+  --duration-spring: 580ms;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
 }
-.ae-arc :is(button, a, [tabindex]):focus-visible {
+.ae-arc :is(button, a, input, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
 
-.dark .ae-arc { --accent: var(--primary); --accent-strong: var(--primary); }
+.dark .ae-arc {
+  --accent: var(--primary);
+  --accent-strong: var(--primary);
+  --success: color-mix(in oklch, var(--ae-success) 60%, var(--ae-fg));
+  --warning: color-mix(in oklch, var(--ae-warning) 60%, var(--ae-fg));
+}

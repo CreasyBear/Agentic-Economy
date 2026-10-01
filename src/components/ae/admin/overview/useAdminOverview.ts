@@ -1,32 +1,27 @@
 import { useQuery } from 'convex/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
-import { formatCount, formatPercent } from '@/lib/ui/format-time'
-import { formatCurrencyAmount } from '@/modules/money/public'
 import { adminObjectHref } from '@/lib/operator/admin-console/contracts'
 import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 import { ADMIN_EXCEPTION_PARTITION_LABELS, ADMIN_EXCEPTIONS_COPY } from '../exceptions/exceptions.contracts'
-import { ADMIN_METRICS_COPY } from '../metrics/metrics.contracts'
 import {
   ADMIN_OBJECT_KIND_OPTIONS,
   ADMIN_RECENT_REFS_STORAGE_KEY,
   adminRecentRefsSchema,
 } from '../object-search/object-search.contracts'
 import {
-  ADMIN_OVERVIEW_COPY,
   exceptionKindLabel,
   type AdminOverviewDataState,
   type AdminOverviewExceptionRow,
   type AdminOverviewExceptionsState,
-  type AdminOverviewMetricsState,
   type AdminOverviewRecentRow,
 } from './overview.contracts'
 
-
 export function useAdminOverview(): AdminOverviewDataState {
   const overview = useQuery(api.adminConsoleOverview.readAdminOverview, {})
-  const [recent] = useState(readRecentAdminRefs)
+  const [recent, setRecent] = useState<readonly AdminOverviewRecentRow[]>([])
+  useEffect(() => setRecent(readRecentAdminRefs()), [])
   if (overview === undefined) return { kind: 'loading' }
   if ('kind' in overview) return { kind: 'refused' }
   return { kind: 'ready', paymentReadiness: overview.paymentReadiness, attention: overview.attention, recent }
@@ -46,25 +41,6 @@ export function useOverviewExceptions(): AdminOverviewExceptionsState {
     }))
   return { kind: 'ready', rows, unavailable: exceptions.some((entry) => entry.unavailable) }
 }
-
-export function useOverviewMetrics(): AdminOverviewMetricsState {
-  const metrics = useQuery(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
-  if (metrics === undefined) return { kind: 'loading' }
-  if ('kind' in metrics) return { kind: 'refused' }
-  if (metrics.headline === null) return { kind: 'empty' }
-  return {
-    kind: 'ready',
-    headline: {
-      settledCallValue: metrics.headline.money === 'no_settled_usage' || metrics.headline.settledCallValue === null
-        ? ADMIN_METRICS_COPY.noSettledUsage : formatCurrencyAmount(metrics.headline.settledCallValue),
-      settledCalls: formatCount(metrics.headline.settledCalls),
-      successRate: metrics.headline.successRate === null ? ADMIN_OVERVIEW_COPY.notAvailable : formatPercent(metrics.headline.successRate),
-      transactingWorkspaces: formatCount(metrics.headline.transactingWorkspaces),
-    },
-  }
-}
-
-
 
 function readRecentAdminRefs(): readonly AdminOverviewRecentRow[] {
   try {

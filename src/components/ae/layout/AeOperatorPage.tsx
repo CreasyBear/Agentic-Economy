@@ -8,6 +8,7 @@ import type { OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBr
 import type { OperatorRole } from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
 import { ADMIN_NAVIGATION, activeRoleNavigationHref } from './app-shell/app-shell.contracts'
+import '@/components/arc/foundation.css'
 
 type OperatorPageChrome = Omit<AeOperatorPageProps, 'children' | 'operatorContext'>
 
@@ -166,7 +167,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
           {currentChrome.operatorRole === 'admin' && !currentChrome.suppressSurfaceNavigation ? (
             <nav aria-label="Admin navigation" className="flex flex-wrap gap-x-related gap-y-1 border-b border-border pb-intra">
               {ADMIN_NAVIGATION.map(item => (
-                <Link key={item.href} to={item.href} aria-current={item.href === activeAdminHref ? 'page' : undefined}
+                <Link key={item.href} to={item.href} activeOptions={{ exact: true }} aria-current={item.href === activeAdminHref ? 'page' : undefined}
                   className="inline-flex min-h-touch items-center border-b-2 border-transparent text-sm text-muted-foreground hover:text-foreground aria-[current=page]:border-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {item.label}
                 </Link>

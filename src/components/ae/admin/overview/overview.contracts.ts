@@ -10,22 +10,10 @@ export type AdminOverviewExceptionRow = Readonly<{
   count: string
 }>
 export type AdminOverviewRecentRow = AdminRecentRef & Readonly<{ label: string; href: string }>
-export type AdminOverviewHeadline = Readonly<{
-  settledCallValue: string
-  settledCalls: string
-  successRate: string
-  transactingWorkspaces: string
-}>
 export type AdminOverviewExceptionsState =
   | Readonly<{ kind: 'loading' }>
   | Readonly<{ kind: 'refused' }>
   | Readonly<{ kind: 'ready'; rows: readonly AdminOverviewExceptionRow[]; unavailable: boolean }>
-export type AdminOverviewMetricsState =
-  | Readonly<{ kind: 'loading' }>
-  | Readonly<{ kind: 'refused' }>
-  | Readonly<{ kind: 'empty' }>
-  | Readonly<{ kind: 'ready'; headline: AdminOverviewHeadline }>
-
 export type AdminOverviewDataState =
   | Readonly<{ kind: 'loading' }>
   | Readonly<{ kind: 'refused' }>
@@ -43,7 +31,6 @@ export const ADMIN_OVERVIEW_COPY = {
   configurationTitle: 'Payment readiness',
   configurationDescription: 'Current evidence for opening payments in this deployment.',
   metricsUnavailable: 'Metrics unavailable. Open Metrics to try again.',
-  noCompletedMetrics: 'A complete 7-day snapshot is not available. Daily records remain in Metrics.',
   searchTitle: 'Exact-reference search',
   searchDescription: 'Find a Call, Quote, Tool version, Workspace, Agent, or Provider.',
   exceptionsTitle: 'Other reviews',
@@ -52,11 +39,6 @@ export const ADMIN_OVERVIEW_COPY = {
   exceptionsUnavailable: 'Some exception sources are unavailable.',
   viewAll: 'Open queues',
   metricsTitle: 'Last 7 days',
-  settledCallValue: 'Settled Call value',
-  settledCalls: 'Settled Calls',
-  successRate: 'Success rate',
-  transactingWorkspaces: 'Transacting Workspaces',
-  notAvailable: 'Not available',
   recentlyViewedTitle: 'Recently viewed',
   recentlyViewedDescription: 'Exact references opened on this device.',
   noRecentlyViewed: 'No recently viewed references.',

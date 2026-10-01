@@ -1,7 +1,7 @@
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { AdminMetricsPageSkeleton } from './AdminMetricsPageSkeleton'
-import { MarketplaceActivity } from './MarketplaceActivity'
+import { Skeleton } from '@/components/ui/skeleton'
+import { MarketplaceActivityView } from './MarketplaceActivity'
 import { MetricsDayTable } from './components/MetricsDayTable'
 import { MetricsHeadline } from './components/MetricsHeadline'
 import { MetricsRatios } from './components/MetricsRatios'
@@ -11,7 +11,6 @@ import { useAdminMetrics } from './useAdminMetrics'
 
 export function AdminMetricsPage({ range, rejected, onRangeChange }: AdminMetricsPageProps) {
   const data = useAdminMetrics(range)
-  if (data.kind === 'loading') return <AdminMetricsPageSkeleton />
   return (
     <AeOperatorPage
       operatorRole="admin"
@@ -33,13 +32,17 @@ export function AdminMetricsPage({ range, rejected, onRangeChange }: AdminMetric
         />
       ) : (
         <div className="grid gap-section">
-          <MarketplaceActivity range={range} onRangeChange={onRangeChange} />
-          {data.partialDays.map((day) => (
-            <p key={day} role="status" className="text-sm text-muted-foreground">{ADMIN_METRICS_COPY.snapshotIncomplete(day)}</p>
-          ))}
-          {data.coverageComplete ? <MetricsHeadline cards={data.cards.filter((card) => card.label === ADMIN_METRICS_COPY.settledCallValue)} /> : <p role="status">{data.coverageDescription}</p>}
-          {data.coverageComplete ? <MetricsRatios ratios={data.ratios} /> : null}
-          <MetricsDayTable rows={data.days} />
+          <MarketplaceActivityView report={data.kind === 'ready' ? data.report : undefined} range={range} onRangeChange={onRangeChange} />
+          {data.kind === 'loading' ? <Skeleton className="h-80 rounded-card" /> : (
+            <>
+              {data.partialDays.map((day) => (
+                <p key={day} role="status" className="text-sm text-muted-foreground">{ADMIN_METRICS_COPY.snapshotIncomplete(day)}</p>
+              ))}
+              {data.coverageComplete ? <MetricsHeadline cards={data.cards} /> : <p role="status">{data.coverageDescription}</p>}
+              {data.coverageComplete ? <MetricsRatios ratios={data.ratios} /> : null}
+              <MetricsDayTable rows={data.days} />
+            </>
+          )}
         </div>
       )}
     </AeOperatorPage>

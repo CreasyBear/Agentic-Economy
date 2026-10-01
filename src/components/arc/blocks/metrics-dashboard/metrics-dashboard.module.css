@@ -64,52 +64,9 @@
 .actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 8px;
-}
-
-.segmented {
-  display: inline-flex;
-  min-height: 44px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-muted);
-}
-
-.segmented button {
-  position: relative;
-  min-width: 44px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  transition: color var(--duration-fast) var(--ease-standard);
-}
-
-.segmented button[aria-pressed="true"] {
-  color: var(--foreground);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .segmented button:hover {
-    color: var(--foreground);
-  }
-}
-
-.segmentThumb {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-}
-
-.segmentLabel {
-  position: relative;
 }
 
 .exportButton {
@@ -135,32 +92,6 @@
 
 .exportButton:active {
   transform: scale(0.97);
-}
-
-.exportIcon {
-  display: grid;
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary);
-}
-
-.exportIcon > span {
-  display: grid;
-  grid-area: 1 / 1;
-}
-
-/* Both labels share one grid cell so the button keeps its width. */
-.exportLabel {
-  display: grid;
-}
-
-.exportLabel > span {
-  grid-area: 1 / 1;
-  transition: opacity var(--duration-fast) var(--ease-standard);
-}
-
-.exportLabel > span[data-hidden="true"] {
-  opacity: 0;
 }
 
 /* KPI tabs double as the chart's metric picker. */
@@ -427,17 +358,11 @@
 
 
 .dashboard[data-size="sm"] .actions,
-.dashboard[data-size="sm"] .segmented {
-  flex: 1;
-}
 
 .dashboard[data-size="sm"] .actions {
   width: 100%;
 }
 
-.dashboard[data-size="sm"] .segmented button {
-  flex: 1;
-}
 
 .dashboard[data-size="sm"] .kpiValue {
   font-size: 20px;
@@ -460,4 +385,4 @@
 .empty { position: absolute; inset: 30% 0 auto; text-align: center; color: var(--text-secondary); }
 .exportButton { text-decoration: none; }
 .chartArea { touch-action: pan-y; }
-@media (max-width: 640px) { .segmented { height: 44px; } .exportButton { min-height: 44px; } }
+@media (max-width: 640px) { .exportButton { min-height: 44px; } }

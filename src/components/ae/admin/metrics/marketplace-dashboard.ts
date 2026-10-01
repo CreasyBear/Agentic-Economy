@@ -6,8 +6,8 @@ import { formatCurrencyAmount } from '@/modules/money/public'
 const chartMoney = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 2 })
 
 /** Complete snapshots only. Missing observations remain gaps; range totals require complete coverage. */
-export function marketplaceDashboardMetrics(report: MarketplaceMetricsReport, range: MarketplaceMetricsRange = 'last_7'): readonly [DashboardMetric, ...DashboardMetric[]] {
-  const days = report.days.filter((day) => day.complete).toSorted((a, b) => a.day.localeCompare(b.day))
+export function marketplaceDashboardMetrics(report: MarketplaceMetricsReport | undefined, range: MarketplaceMetricsRange = 'last_7'): readonly [DashboardMetric, ...DashboardMetric[]] {
+  const days = (report?.days ?? []).filter((day) => day.complete).toSorted((a, b) => a.day.localeCompare(b.day))
   const first = days[0]?.day
   const last = days.at(-1)?.day
   const dates: string[] = []
@@ -17,7 +17,7 @@ export function marketplaceDashboardMetrics(report: MarketplaceMetricsReport, ra
     }
   }
   const byDate = new Map(days.map((day) => [day.day, day]))
-  const complete = report.coverageComplete && report.headline !== null
+  const complete = report !== undefined && report.coverageComplete && report.headline !== null
   const total = (field: 'completedCalls' | 'quotesCreated') => complete
     ? days.reduce((sum, day) => sum + day[field], 0) : null
   const points = (field: 'completedCalls' | 'settledCalls' | 'transactingWorkspaces' | 'quotesCreated') => dates.map((date) => ({

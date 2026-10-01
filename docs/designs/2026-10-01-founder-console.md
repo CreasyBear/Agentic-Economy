@@ -2,6 +2,84 @@
 
 ## Active delivery goal — 1 October 2026
 
+### Console quality review and ARC refactor
+
+Reviewed source, backend contracts, existing tests, the authenticated ARC MCP
+catalogue and the actual desktop/mobile console before changing product code
+(review began 12:19 UTC; implementation began after 12:34 UTC). Interview skipped:
+Joel explicitly requested execution and at least seven useful ARC components.
+
+Thesis: the founder should see activity, recognize a material exception and reach
+its evidence without remembering identifiers or interpreting implementation codes.
+The primary action is opening the underlying purchase or Account. Keep the AE
+shell, authoritative reads and existing money commands. No new service, schema,
+reporting engine or production access is part of this refactor.
+
+Concrete findings: compressed query/render code obscures states; dead overview
+metrics remain after the dashboard replacement; the Metrics page requests its
+report in two components; recent references read browser storage during initial
+render; Overview is incorrectly marked active on nested admin routes; the mobile
+organization switcher crowds the account menu; readiness occupies most of the
+first mobile screen. Tables need readable records and explicit loaded-row scope.
+
+| Official ARC item | Real use |
+| --- | --- |
+| `alert` | Payment readiness and incomplete measurement evidence |
+| `accordion` | Exact-reference investigation and recently viewed records |
+| `segmented-control` | Reporting and purchase periods with keyboard selection |
+| `sortable-data-table` | Loaded purchase and Account records, including mobile layout |
+| `search-field` | Controlled Account name search and clear |
+| `filter-toolbar` | Applied outcome, funding and Account filters, removal and reset |
+| `empty-state` | Empty results, distinct from loading, refusal and unscanned pages |
+| `badge` | Literal delivery, Account and readiness status |
+
+These eight newly installed items join the existing Pro `metrics-dashboard`.
+Transitive dependencies do not count. Install through the official shadcn
+registry, retaining the existing scoped foundation and AE keyboard focus.
+Reject the number-only metric card for exact currency and the editable data grid
+for read-only purchases. No demo data, invented trends or replacement chart.
+
+Added: eight maintained vendor components and a scoped token bridge. Bought:
+accessible keyboard controls, responsive record layout and consistent state
+presentation without custom equivalents. Net: keep this requested UI capability;
+remove superseded controls, dead metrics and duplicate read ownership. Keep small
+row/render helpers with their existing pages; no general table or query framework.
+
+Requires: a validated admin search, authorized backend data and explicit evidence
+coverage. Ensures: changes preserve period, funding meaning, exact amounts, cursor
+continuation and the original record links. Invariant: sorting affects loaded
+rows only; an empty filtered source page is not an exhausted query; Account totals
+are server-deduplicated; missing values never become zero; these controls never
+mutate money or dispatch purchases. On violation: reject unknown filter values,
+retain refusal/unavailable states and withhold incomplete totals. Clock and local
+storage reads occur after mounting; expired readiness never presents a pass.
+Period controls remain mounted during report loading; the previous period's
+values are withheld until the selected period's authoritative report arrives.
+
+Verification targets: filter add/remove/reset and route meaning, loaded-row sort,
+exact money and unknown funding, clear/search, filtered-page continuation, server
+refusal, readiness expiry and independent error boundaries; then repository
+checks and actual desktop/mobile/light/dark/keyboard browser review. Closed ARC
+disclosures must immediately leave focus navigation, including during animation.
+
+Observed browser findings fixed during verification: clearing Account search must
+not remount its input; changing a report period must not lose keyboard focus; a
+closed animated accordion must make its contents inert immediately. Dark warning
+text measures 5.84:1 contrast. Tested actual local Clerk/Convex pages at 390, 768,
+1024 and 1440 pixels, light/dark and reduced motion. Native filter changes preserve
+their route meaning, and only the current admin navigation item is marked active.
+Source tests additionally cover exact micro-unit currency, unknown funding,
+empty-but-unscanned pagination, refusal, readiness expiry and storage-free SSR.
+
+Refactor validation, 1 October: `npm run check` passed. The final full gate passed
+with `AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+under Node 22/npm 11.5.1: 7,646 unit tests, 2,695 integration tests, 16 browser
+journeys and 18 accessibility cases, plus clean types, import/security boundaries,
+SEO, the public build and packaged CLI. Existing conditional coverage remains
+skipped (1 unit, 61 integration, 14 browser; 3 integration todo). This proves the
+local source and runtime refactor; production admission, alert delivery and the
+coordinated backend/web release remain the delivery goal's open acceptance work.
+
 Deliver a working founder operating console on the existing `/admin` surface.
 Joel can sign in, understand actual marketplace traction and money, find an
 affected Account or purchase, take a supported authorized action, and verify its

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { MarketplaceMetricsRange } from '@/lib/operator/admin-console/metrics.contracts'
+import type { MarketplaceMetricsRange, MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
 import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
 
 export const adminMetricsSearchSchema = z.strictObject({
@@ -32,6 +32,7 @@ export type AdminMetricsDataState =
   | Readonly<{ kind: 'refused' }>
   | Readonly<{
       kind: 'ready'
+      report: MarketplaceMetricsReport
       cards: readonly AdminMetricCard[]
       ratios: readonly AdminMetricRatio[]
       coverageComplete: boolean

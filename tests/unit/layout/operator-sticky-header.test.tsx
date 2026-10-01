@@ -23,6 +23,8 @@ function renderAt(ui: ReactElement, pathname = '/owner/operations') {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/accounts' }),
   ])
   const router = createRouter({
     routeTree,
@@ -106,5 +108,14 @@ describe('AeRecordHeader sticky', () => {
     const root = container.firstElementChild
     expect(root?.getAttribute('data-record-header-sticky')).toBeNull()
     expect(root?.className).not.toContain('top-(--header-height)')
+  })
+})
+
+describe('admin current destination', () => {
+  it('marks Accounts, without also marking Overview, on the Accounts route', () => {
+    renderAt(<AeOperatorPage operatorRole="admin" title="Accounts" description="" currentPath="/admin/accounts"><p>Accounts</p></AeOperatorPage>, '/admin/accounts')
+    const navigation = screen.getByRole('navigation', { name: 'Admin navigation' })
+    expect(within(navigation).getByRole('link', { name: 'Accounts' }).getAttribute('aria-current')).toBe('page')
+    expect(within(navigation).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
   })
 })
