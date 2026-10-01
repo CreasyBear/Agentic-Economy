@@ -31,7 +31,7 @@ Work sequence (one owner, isolated `codex/founder-console` worktree):
 - [x] Complete the founder home and connected purchase/Account investigation paths.
 - [x] Connect existing money/readiness/exception controls to context and existing command readback.
 - [ ] Complete actual application telemetry, useful vendor dashboards and alert delivery.
-- [ ] Pass behavioral checks, repository checks, full release gate and browser acceptance.
+- [x] Pass behavioral checks, repository checks, full release gate and local browser acceptance.
 - [ ] Deliver the matching release and verify founder access, refused access and live evidence.
 
 ### Contracts and complexity decisions
@@ -92,11 +92,13 @@ incidents; it does not disable telemetry in the actual local or hosted app.
 
 ### Current acceptance evidence
 
-- The full source release gate passed on 1 October: 7,577 unit tests; 2,674
-  integration tests; source, clean type, import/security, SEO, CLI and browser
-  checks. Conditional integration/browser tests remain skipped where their
-  external prerequisites are unavailable. Small browser-discovered navigation
-  and filter-label fixes are being checked against the final source.
+- `npm run check` and the full `npm run gate` passed on final source
+  `e612b8add80da0b5c5cf8aa00caf7fb5cdc31322` on 1 October: 7,632 unit tests;
+  2,695 integration tests; 16 browser journeys; 18 accessibility cases; clean
+  type/import/security, SEO, public-build and CLI checks. One unit test, 61
+  integration tests and 14 browser cases remain skipped; three integration
+  cases are todo. Conditional external money/restore drills are not established
+  by this local gate. The 64 focused telemetry/diagnostic cases also passed.
 - 138 focused tests establish funding/environment isolation, exact amounts,
   Account deduplication, filtered-page continuation, payload redaction,
   anonymous/non-admin/revoked refusal, partial publication, late-refund rebuild,
@@ -152,6 +154,15 @@ by the current Starter plan. Professional is US$25/member/month plus usage;
 Joel's plan decision remains pending. The console itself does not depend on that
 upgrade. Production-app telemetry, alert delivery, matched release and hosted
 founder admission remain open acceptance work.
+
+Review delivery: [draft PR #290](https://github.com/CreasyBear/Agentic-Economy/pull/290)
+targets the ongoing `codex/production-money` foundation. Vercel's AE web preview
+`Cb8AtWAiqS3dZ6V36CEbmF4JmVHL` built successfully at `e612b8add`. The separate
+`agentic-economy-sandbox-tools` check failed because its configured root
+`tools/release/package5-reference-provider` is absent from both this branch and
+the target money branch. This is a distinct provider project configuration
+issue; no replacement target was guessed. A successful web preview does not
+establish matching hosted backend functions or production readiness.
 
 ## Brief and boundary
 
