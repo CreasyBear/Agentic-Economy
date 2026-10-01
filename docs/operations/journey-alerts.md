@@ -1,6 +1,6 @@
 # Journey SLI alerts
 
-Create these six alerts in the Sentry UI. Do not script the Sentry API. Each rule is one journey.
+Create each rule in the destination that actually receives its events. Web metrics can use Sentry; backend journey logs require a log destination. Do not script the Sentry API. Each rule is one journey.
 
 ## What is counted
 
@@ -19,7 +19,13 @@ When `SENTRY_DSN` is set, the web server also sends:
 
 Alert on the **metric**, not on the message as well. Counting both double-counts one attempt.
 
-Quote, Call, funding, chat, and publish reach their terminal state inside Convex. Convex does not load the Sentry SDK. Those attempts are the `[ae.journey]` log line. They show up as the metric above only after this Sentry project is receiving the Convex log stream (Sentry → Settings → Integrations → Convex, or an equivalent log drain). Until that stream is connected, create the same rule as a Logs alert on the JSON line. The filters below are the same either way.
+Quote, Call, funding, chat, and publish reach their terminal state inside Convex. Convex does not load the Sentry SDK. Those attempts emit the `[ae.journey]` log line.
+
+Convex's native Sentry integration reports **exceptions**, not ordinary journey logs or Sentry metrics. Configure it in **Convex → Deployment Settings → Integrations**, using the existing Sentry project's DSN. Convex tags its deployment type as `prod`, `dev` or `preview`; this does not establish AE's financial environment.
+
+For journey logs, use Convex's native **PostHog log stream** to the existing US project. Set the service name to the explicit AE environment/deployment and verify a real journey line in PostHog before creating alerts. Log-stream events use OTLP bodies; the JSON log text is inside the console event's `message`. Do not assume the illustrative metric query below works unchanged on logs. Both exception reporting and log streams require Convex Pro.
+
+Sources verified 1 October 2026: [Convex exception reporting](https://docs.convex.dev/production/integrations/exception-reporting), [Convex log streams](https://docs.convex.dev/production/integrations/log-streams). No custom bridge or new monitoring service is required. If the connected log product cannot express the ratio and minimum together, retain the query as a dashboard and use a verified supported alert; do not substitute a misleading ratio.
 
 Do not fire a ratio when the window has fewer events than the minimum. One failure in an empty window is not a ratio.
 

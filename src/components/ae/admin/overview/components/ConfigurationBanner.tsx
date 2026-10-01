@@ -5,7 +5,7 @@ import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { ADMIN_OVERVIEW_COPY } from '../overview.contracts'
 
-export type ConfigurationBannerProps = Readonly<{ readiness: PaymentReadinessView | null }>
+export type ConfigurationBannerProps = Readonly<{ readiness: PaymentReadinessView | null; compact?: boolean }>
 
 const CHECK_LABELS: Readonly<Record<typeof PAYMENT_READINESS_CHECK_KEYS[number], string>> = {
   web_configuration: 'Web configuration',
@@ -50,7 +50,7 @@ const FAILURE_REASONS: Readonly<Record<string, string>> = {
  * tab update the clock without waiting for a database write; neither can restore
  * an expired pass. Readiness is informational, never a command override.
  */
-export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
+export function ConfigurationBanner({ readiness, compact = false }: ConfigurationBannerProps) {
   const [now, setNow] = useState(() => Date.now())
   const expiresAt = readiness?.expiresAt ?? null
   useEffect(() => {
@@ -88,10 +88,13 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
           {' · '}Valid until: {expiresAt === null ? 'No valid evidence'
             : <time dateTime={timestampIso(expiresAt)}>{formatPerthTimestamp(expiresAt)}</time>}</p>
       </div>
-      <dl className="grid gap-related sm:grid-cols-2 xl:grid-cols-4">
+      <details open={!compact} className="group">
+      <summary className="min-h-touch cursor-pointer text-sm font-medium">Inspect readiness evidence</summary>
+      <dl className="mt-related grid gap-related sm:grid-cols-2 xl:grid-cols-4">
         {PAYMENT_READINESS_CHECK_KEYS.map(key => <ReadinessCheckRow key={key} name={key}
           check={readiness?.checks[key]} now={now} expired={expired} />)}
       </dl>
+      </details>
     </AeSection>
   )
 }

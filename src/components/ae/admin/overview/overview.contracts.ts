@@ -1,6 +1,7 @@
 import { ADMIN_ACCESS_REFUSED_COPY, type AdminException } from '@/lib/operator/admin-console/contracts'
 import type { AdminRecentRef } from '../object-search/object-search.contracts'
 import type { PaymentReadinessView } from '@/modules/money/payment-readiness'
+import type { AdminPurchaseRow } from '@/lib/operator/admin-console/activity'
 
 export type AdminOverviewExceptionRow = Readonly<{
   id: string
@@ -31,6 +32,7 @@ export type AdminOverviewDataState =
   | Readonly<{
       kind: 'ready'
       paymentReadiness: PaymentReadinessView | null
+      attention?: Readonly<{ purchases: readonly AdminPurchaseRow[]; complete: boolean }>
       recent: readonly AdminOverviewRecentRow[]
     }>
 
@@ -44,9 +46,9 @@ export const ADMIN_OVERVIEW_COPY = {
   noCompletedMetrics: 'A complete 7-day snapshot is not available. Daily records remain in Metrics.',
   searchTitle: 'Exact-reference search',
   searchDescription: 'Find a Call, Quote, Tool version, Workspace, Agent, or Provider.',
-  exceptionsTitle: 'Exception queues',
-  exceptionsDescription: 'Observed cases by indexed source; open a queue to page through every case.',
-  nothingNeedsAttention: 'Nothing needs attention.',
+  exceptionsTitle: 'Other reviews',
+  exceptionsDescription: 'Supply and policy cases requiring an operator decision.',
+  nothingNeedsAttention: 'No cases in the checked review queues.',
   exceptionsUnavailable: 'Some exception sources are unavailable.',
   viewAll: 'Open queues',
   metricsTitle: 'Last 7 days',

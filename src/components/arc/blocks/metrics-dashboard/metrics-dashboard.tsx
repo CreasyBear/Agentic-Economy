@@ -10,6 +10,7 @@ import styles from "./metrics-dashboard.module.css";
 export type DashboardPoint = Readonly<{ date: string; value: number | null }>
 export type DashboardMetric = Readonly<{
   key: string; label: string; value: number | null; description: string; points: readonly DashboardPoint[]
+  displayValue?: string; formatPoint?: (value: number) => string; detailHref?: string
 }>
 export type DashboardRange = 'last_7' | 'last_30' | 'last_90'
 export type MetricsDashboardProps = Readonly<{
@@ -187,7 +188,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
             <button key={m.key} type="button" role="tab" id={`${uid}-${m.key}`} aria-controls={`${uid}-chart`} tabIndex={selected ? 0 : -1} data-metric-index={index} onKeyDown={(event) => onMetricKey(event, index)} aria-selected={selected} className={styles.kpi} onClick={() => { setMetricKey(m.key); setActive(null); }}>
               {selected && <motion.span layoutId={`${uid}-kpi`} className={styles.kpiIndicator} transition={reduce ? { duration: 0 } : motionTokens.spring.smooth} />}
               <span className={styles.kpiLabel}>{m.label}</span>
-              <span className={styles.kpiValue}>{m.value === null ? "Unavailable" : <CountValue value={m.value} format={formatValue} />}</span>
+              <span className={styles.kpiValue}>{m.value === null ? "Unavailable" : m.displayValue ?? <CountValue value={m.value} format={m.formatPoint ?? formatValue} />}</span>
               <span className={styles.metricDescription}>{m.description}</span>
             </button>
           );
@@ -200,7 +201,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
             <span><i className={styles.swatch} />{metric.label}</span>
 
           </div>
-          <span className={styles.metricDescription}>Daily observations · Perth time</span>
+          {metric.detailHref ? <a className={styles.metricDescription} href={metric.detailHref}>View underlying purchases ↗</a> : <span className={styles.metricDescription}>Daily observations · Perth time</span>}
         </div>
 
         <div className={styles.plot}>
@@ -238,7 +239,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
                 {focus.value !== null && <span className={styles.dot} style={{ left: `${(chart.x(active ?? 0) / W) * 100}%`, top: `${(chart.y(focus.value) / H) * 100}%` }} aria-hidden />}
                 <div className={styles.tooltip} style={{ left: `clamp(90px, ${tooltipLeft}%, calc(100% - 90px))`, ...(focus.value !== null && chart.y(focus.value) / H < 0.5 ? { top: "auto", bottom: 6 } : null) }} role="status">
                   <span className={styles.tooltipDate}>{formatDay(focus.date)}</span>
-                  <strong>{focus.value === null ? "No complete snapshot" : formatValue(focus.value)}</strong>
+                  <strong>{focus.value === null ? "No complete snapshot" : (metric.formatPoint ?? formatValue)(focus.value)}</strong>
                 </div>
               </>
             )}

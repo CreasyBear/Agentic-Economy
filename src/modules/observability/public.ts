@@ -38,6 +38,9 @@ import {
   Package3AuditEventTypeValues,
 } from './internal/literals'
 
+export { callFundingValue, classifyCallFunding, emptyMarketplaceFunding, marketplaceFundingValue } from './marketplace-metrics'
+export type { CallFunding, MarketplaceFunding } from './marketplace-metrics'
+
 export {
   payloadHash,
   redactPayload,

@@ -2,6 +2,7 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
+import { marketplaceFundingValue } from '../marketplace-metrics'
 import {
   ActorKindValues,
   OperationKeyStatusValues,
@@ -76,7 +77,9 @@ export const observabilityTables = {
 
   marketplaceMetricDays: defineTable({
     day: v.string(),
+    sourceStartedAt: v.optional(v.number()),
     computedAt: v.number(),
+    funding: v.optional(marketplaceFundingValue),
     version: v.literal(1),
     // Published entity generation; legacy completed days use the calendar day itself.
     entityDay: v.optional(v.string()),
@@ -113,6 +116,7 @@ export const observabilityTables = {
   marketplaceMetricBuilds: defineTable({
     day: v.string(),
     entityDay: v.string(),
+    funding: v.optional(marketplaceFundingValue),
     phase: v.union(v.literal('calls'), v.literal('quotes'), v.literal('resolutions')),
     cursor: v.union(v.string(), v.null()),
     settledCallValue: v.union(v.null(), v.object({
@@ -140,8 +144,10 @@ export const observabilityTables = {
     entityKind: v.union(
       v.literal('workspace'), v.literal('agent'), v.literal('provider'),
       v.literal('tool'), v.literal('call'), v.literal('terminal'), v.literal('resolved'),
+      v.literal('buyer'),
     ),
     entityRef: v.string(),
+    completedPurchases: v.optional(v.number()),
   })
     .index('by_day_and_entityKind', ['day', 'entityKind'])
     .index('by_entityKind_and_entityRef_and_day', [

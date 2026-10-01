@@ -96,6 +96,8 @@ import { Route as OperatorAdminSearchRouteImport } from './routes/_operator/admi
 import { Route as OperatorAdminMetricsRouteImport } from './routes/_operator/admin.metrics'
 import { Route as OperatorAdminExceptionsRouteImport } from './routes/_operator/admin.exceptions'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
+import { Route as OperatorAdminActivityRouteImport } from './routes/_operator/admin.activity'
+import { Route as OperatorAdminAccountsRouteImport } from './routes/_operator/admin.accounts'
 import { Route as OperatorAdminProvidersIndexRouteImport } from './routes/_operator/admin.providers.index'
 import { Route as ApiV1ToolsQuoteRouteImport } from './routes/api.v1.tools.quote'
 import { Route as ApiV1ToolsProcureRouteImport } from './routes/api.v1.tools.procure'
@@ -608,6 +610,16 @@ const OperatorAdminAuditEventsRoute =
     path: '/admin/audit-events',
     getParentRoute: () => OperatorRoute,
   } as any)
+const OperatorAdminActivityRoute = OperatorAdminActivityRouteImport.update({
+  id: '/admin/activity',
+  path: '/admin/activity',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorAdminAccountsRoute = OperatorAdminAccountsRouteImport.update({
+  id: '/admin/accounts',
+  path: '/admin/accounts',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorAdminProvidersIndexRoute =
   OperatorAdminProvidersIndexRouteImport.update({
     id: '/admin/providers/',
@@ -1031,6 +1043,8 @@ export interface FileRoutesByFullPath {
   '/t/$threadId': typeof TThreadIdRoute
   '/t/new': typeof TNewRoute
   '/tools/$toolRef': typeof ToolsToolRefRoute
+  '/admin/accounts': typeof OperatorAdminAccountsRoute
+  '/admin/activity': typeof OperatorAdminActivityRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/metrics': typeof OperatorAdminMetricsRoute
@@ -1186,6 +1200,8 @@ export interface FileRoutesByTo {
   '/t/$threadId': typeof TThreadIdRoute
   '/t/new': typeof TNewRoute
   '/tools/$toolRef': typeof ToolsToolRefRoute
+  '/admin/accounts': typeof OperatorAdminAccountsRoute
+  '/admin/activity': typeof OperatorAdminActivityRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/metrics': typeof OperatorAdminMetricsRoute
@@ -1343,6 +1359,8 @@ export interface FileRoutesById {
   '/t/$threadId': typeof TThreadIdRoute
   '/t/new': typeof TNewRoute
   '/tools/$toolRef': typeof ToolsToolRefRoute
+  '/_operator/admin/accounts': typeof OperatorAdminAccountsRoute
+  '/_operator/admin/activity': typeof OperatorAdminActivityRoute
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/_operator/admin/metrics': typeof OperatorAdminMetricsRoute
@@ -1500,6 +1518,8 @@ export interface FileRouteTypes {
     | '/t/$threadId'
     | '/t/new'
     | '/tools/$toolRef'
+    | '/admin/accounts'
+    | '/admin/activity'
     | '/admin/audit-events'
     | '/admin/exceptions'
     | '/admin/metrics'
@@ -1655,6 +1675,8 @@ export interface FileRouteTypes {
     | '/t/$threadId'
     | '/t/new'
     | '/tools/$toolRef'
+    | '/admin/accounts'
+    | '/admin/activity'
     | '/admin/audit-events'
     | '/admin/exceptions'
     | '/admin/metrics'
@@ -1811,6 +1833,8 @@ export interface FileRouteTypes {
     | '/t/$threadId'
     | '/t/new'
     | '/tools/$toolRef'
+    | '/_operator/admin/accounts'
+    | '/_operator/admin/activity'
     | '/_operator/admin/audit-events'
     | '/_operator/admin/exceptions'
     | '/_operator/admin/metrics'
@@ -2627,6 +2651,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/admin/activity': {
+      id: '/_operator/admin/activity'
+      path: '/admin/activity'
+      fullPath: '/admin/activity'
+      preLoaderRoute: typeof OperatorAdminActivityRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/accounts': {
+      id: '/_operator/admin/accounts'
+      path: '/admin/accounts'
+      fullPath: '/admin/accounts'
+      preLoaderRoute: typeof OperatorAdminAccountsRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/admin/providers/': {
       id: '/_operator/admin/providers/'
       path: '/admin/providers'
@@ -3176,6 +3214,8 @@ const OperatorOwnerSettingsRouteWithChildren =
 interface OperatorRouteChildren {
   OperatorActivityRoute: typeof OperatorActivityRoute
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
+  OperatorAdminAccountsRoute: typeof OperatorAdminAccountsRoute
+  OperatorAdminActivityRoute: typeof OperatorAdminActivityRoute
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminExceptionsRoute: typeof OperatorAdminExceptionsRoute
   OperatorAdminMetricsRoute: typeof OperatorAdminMetricsRoute
@@ -3204,6 +3244,8 @@ interface OperatorRouteChildren {
 const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorActivityRoute: OperatorActivityRoute,
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
+  OperatorAdminAccountsRoute: OperatorAdminAccountsRoute,
+  OperatorAdminActivityRoute: OperatorAdminActivityRoute,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminExceptionsRoute: OperatorAdminExceptionsRoute,
   OperatorAdminMetricsRoute: OperatorAdminMetricsRoute,

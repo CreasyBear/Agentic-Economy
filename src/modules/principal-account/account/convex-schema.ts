@@ -217,6 +217,7 @@ export const successionAuthorizationParticipantValue = v.object({
 
 export const accountTables = {
   accounts: defineTable(accountValue)
+    .searchIndex('search_displayName', { searchField: 'displayName' })
     .index('by_accountRef', ['accountRef'])
     .index('by_creationActorPrincipalRef_and_creationIdempotencyRef', ['creationActorPrincipalRef', 'creationIdempotencyRef'])
     .index('by_lifecycle_and_updatedAt', ['lifecycle', 'updatedAt'])

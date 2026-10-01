@@ -43,6 +43,18 @@
   },
   {
     "visibility": "public",
+    "module": "adminConsoleActivity",
+    "method": "listAccounts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "adminConsoleActivity",
+    "method": "listPurchases",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
     "module": "adminConsoleAudit",
     "method": "listAdminApprovalProposals",
     "kind": "query"
@@ -64,6 +76,18 @@
     "module": "adminConsoleMetrics",
     "method": "advanceMarketplaceMetricsBuild",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "changedMetricDays",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "missingMetricDays",
+    "kind": "query"
   },
   {
     "visibility": "internal",
@@ -94,6 +118,12 @@
     "module": "adminConsoleMetrics",
     "method": "readMarketplaceMetricsBuild",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "refreshMarketplaceMetrics",
+    "kind": "action"
   },
   {
     "visibility": "internal",

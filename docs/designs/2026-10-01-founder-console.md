@@ -1,5 +1,121 @@
 # Founder console
 
+## Active delivery goal — 1 October 2026
+
+Deliver a working founder operating console on the existing `/admin` surface.
+Joel can sign in, understand actual marketplace traction and money, find an
+affected Account or purchase, take a supported authorized action, and verify its
+outcome. Unauthorized and revoked users cannot read or operate the console.
+Completion includes the deployed application, actual telemetry receipt and alert
+verification; a component preview or SDK connection check does not complete it.
+The app goal tool rejected this side conversation because it is not a persistent
+thread; this existing design document records the requested goal and acceptance.
+
+### Design and execution
+
+Thesis: absorb the work of connecting business activity, customer impact and
+operational evidence so the founder spends attention on decisions. The previous
+brief below is implementation history, not the final acceptance standard.
+
+Keep the existing admin authority, command receipts, treasury, PostHog, Sentry,
+ARC and AE component system. Add no service or general reporting framework.
+Use one calm home for business movement and material exceptions, with connected
+activity and Account drilldowns that preserve period and environment. Missing
+coverage stays distinct from zero activity. Source records own business facts;
+browser analytics provide acquisition and interaction context.
+
+Work sequence (one owner, isolated `codex/founder-console` worktree):
+
+- [x] Integrate the latest committed money foundation without changing the shared checkout.
+- [x] Establish environment-scoped, funding-aware marketplace measurements and Account activity in source.
+- [x] Complete the founder home and connected purchase/Account investigation paths.
+- [x] Connect existing money/readiness/exception controls to context and existing command readback.
+- [ ] Complete actual application telemetry, useful vendor dashboards and alert delivery.
+- [ ] Pass behavioral checks, repository checks, full release gate and browser acceptance.
+- [ ] Deliver the matching release and verify founder access, refused access and live evidence.
+
+### Contracts and complexity decisions
+
+Requires: current server-verified admin permission, a validated period, and an
+explicit deployment environment. Money classifications require the original
+authoritative booking; an absent classification is unknown, never purchased.
+Ensures: each headline has a definition, evidence window and connected records;
+repeat activity counts distinct Accounts, and customer-funded activity excludes
+promotional-only purchases. An Account is not silently relabelled a person.
+Invariant: money, delivery, resolution and authorization remain distinct;
+partial reads do not produce complete totals; reads never dispatch purchases or
+change funds. Existing command authority, idempotency, MFA and approval rules own
+every mutation and its receipt.
+On violation: refuse unauthorized reads before loading business records, reject
+invalid filters, preserve unavailable/partial evidence, and retain pending or
+unknown command outcomes until authoritative readback establishes a result.
+
+Complexity budget: extend the existing metric and admin read boundaries only
+where the founder needs funded-activity meaning or a contextual record list.
+This adds typed projections and their validators/tests, buying consistent metric
+definitions and removing manual joins from the UI. Reuse existing persisted
+snapshots and commands rather than add another database, scheduler, security
+layer, BI engine or autonomous-agent system. Keep additions with real callers;
+remove duplicate display-only wrappers and mock-only flows.
+
+Cognitive-load audit: the prior home gives six independent regions equal weight,
+places purchase readiness after charts/vendor links, and asks the founder to
+choose record kinds and supply opaque references. Prioritize material blockers;
+offer readable Account/purchase lists and contextual navigation; keep detailed
+technical evidence available without making it the initial decision surface.
+Visual hierarchy should work with sparse real data, not depend on a demo chart.
+
+Acceptance evidence must establish actual meanings and behavior: environment and
+funding isolation, distinct/repeat Account counting, partial/missing coverage,
+authorized/refused reads and exports, contextual navigation, and supported
+command pending/replay/confirmed states. Record deployment and runtime evidence
+separately from local source checks.
+
+### Current acceptance evidence
+
+- The full source release gate passed on 1 October: 7,577 unit tests; 2,674
+  integration tests; source, clean type, import/security, SEO, CLI and browser
+  checks. Conditional integration/browser tests remain skipped where their
+  external prerequisites are unavailable. Small browser-discovered navigation
+  and filter-label fixes are being checked against the final source.
+- 138 focused tests establish funding/environment isolation, exact amounts,
+  Account deduplication, filtered-page continuation, payload redaction,
+  anonymous/non-admin/revoked refusal, partial publication, late-refund rebuild,
+  duplicate build start and refusal of stale snapshot publication.
+- Real Clerk development sign-in and the isolated anonymous Convex backend on
+  port 3212 demonstrated denied admin access before membership, then admitted
+  the verified Joel Chan identity. The local founder membership is acceptance
+  configuration; no hosted role was changed. Account name search, detail and
+  contextual purchase links were exercised against that actual backend.
+- The daily refresh uses existing Convex scheduling, scans changed Calls in a
+  48-hour overlap and backfills missing days within 90 days. Snapshots are dated
+  observations. An outage beyond that overlap requires explicit historical
+  rebuild; this does not claim continuous reconciliation or true cohort
+  retention. Internal production activity has no separate exclusion yet and is
+  explicitly disclosed beside the metrics.
+- Browser inspection found internal filter codes and navigation hidden in the
+  general workspace menu. Human labels and a persistent admin navigation now
+  reuse existing Select and navigation definitions. Cost: a small conditional
+  view in the existing operator frame; benefit: every admin investigation has a
+  visible return path without creating another shell or route hierarchy.
+- Idempotency review: repeated build identity does not reset counts; publication
+  carries its generation creation time; an older completion cannot overwrite a
+  newer published snapshot. Failed/partial generations leave prior published
+  evidence intact. No added read path mutates money or dispatches a Call.
+
+Live rollout observations (1 October): Vercel `agentic-economy` serves
+`app.aecon.ai` from main `d104a80099214df0500e54850b5a5a4b96cfbc9c`.
+Convex's project lists development `cool-crab-306` and production
+`cautious-zebra-473`; its production page reports the last deployment 17 days
+earlier. These observations do not prove the web deployment's backend binding.
+Do not promote this console by redeploying that older main revision.
+
+Native Convex Sentry exception reporting and PostHog log streaming are blocked
+by the current Starter plan. Professional is US$25/member/month plus usage;
+Joel's plan decision remains pending. The console itself does not depend on that
+upgrade. Actual deployed-app telemetry, alert delivery, matched release and
+hosted founder admission remain open acceptance work.
+
 ## Brief and boundary
 
 Audience: Joel and existing authorized AE operators.
@@ -51,4 +167,4 @@ Check metric/range semantics and gaps using behavioral tests. Exercise anonymous
 - Reused [PostHog founder acquisition dashboard](https://us.posthog.com/project/491802/dashboard/1778627), saved production-environment and browser-library filters, corrected identity guidance and removed unsupported retention/autocapture-funnel tiles without deleting their underlying insights. Browser identities remain session-scoped. Cross-session Customer retention is not yet measured.
 - Reused the existing Sentry error monitor and confirmed its high-priority email alert is enabled. It targets suggested assignees or recently active members. No new subscription, access grant or duplicate project was created. Alert email delivery and the Convex journey log-drain/SLI alerts remain unverified.
 
-Release boundary: this branch starts from `codex/production-money` at `9405d77f0`. Integrate it with that work without overwriting later changes, run the full `npm run gate`, deploy the matching backend and web release, then verify a real admin session, revoked/non-admin refusal, production event receipt, snapshot coverage and alert delivery. A successful local build is not a production release. No merge, push or production deployment is included in this isolated side-conversation change.
+Release boundary: this branch started from `codex/production-money` at `9405d77f0` and subsequently integrated `b113cc332`. Keep it compatible with that work without changing the shared checkout. Deliver a reviewed matching backend and web release, then verify hosted founder admission, refused access, production event receipt, snapshot coverage and alert delivery. The complete source gate and local browser acceptance are evidence for review, not a production release.

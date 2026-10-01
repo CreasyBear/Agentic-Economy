@@ -436,4 +436,70 @@ describe('admin marketplace metrics', () => {
     await expect(outsider.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' }))
       .resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
   })
+
+  it('counts repeat buying Accounts once and keeps promotional-only and foreign-environment activity separate', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['account:buyer', 'account:promo', 'account:foreign'], true)
+    await seedDay(backend, SECOND_DAY, ['account:buyer'], true)
+    await backend.run(async ctx => {
+      const calls = await ctx.db.query('capabilityCalls').collect()
+      for (const call of calls) {
+        const promo = call.ownerId === 'account:promo'
+        await ctx.db.patch(call._id, {
+          environment: call.ownerId === 'account:foreign' ? 'production' : 'sandbox',
+          usage: { ...call.usage!, amount: { currency: 'AUD', exponent: 6, units: '1000000' } },
+          promotionalCreditAllocation: {
+            version: 'ae.promotional-credit-allocation:v1', purchasedUnits: promo ? '0' : '750000',
+            grants: [{ grantRef: 'grant:promo', amountUnits: promo ? '1000000' : '250000', expiresAt: SECOND_DAY_UTC_START + 86_400_000 }],
+          },
+        })
+        if (call.ownerId === 'account:foreign') {
+          const quote = await ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', call.quoteRef!)).unique()
+          await ctx.db.patch(quote!._id, { environment: 'production' })
+        }
+      }
+    })
+    for (const day of ['2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', FIRST_DAY, SECOND_DAY]) await snapshot(backend, day)
+    // Rebuilding a day must not duplicate purchased activity or repeat buyers.
+    await snapshot(backend, SECOND_DAY)
+    const admin = await ownerAdmin(backend, 'user_admin-funded-metrics')
+    expect(await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })).toMatchObject({
+      environment: 'sandbox', coverageComplete: true,
+      funding: { purchasedUnits: '1500000', promotionalUnits: '1500000', customerFundedCalls: 2,
+        promotionalOnlyCalls: 1, completedCustomerFundedCalls: 2, buyingAccounts: 1,
+        repeatBuyingAccounts: 1, unclassifiedCalls: 0, accountCoverageComplete: true },
+      headline: { settledCalls: 3 },
+    })
+  })
+
+  it('withholds historical snapshots whose environment was never recorded', async () => {
+    const backend = convexTestWithMarketComponents()
+    await snapshot(backend, FIRST_DAY)
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('marketplaceMetricDays').first()
+      await ctx.db.patch(row!._id, { funding: undefined })
+    })
+    const admin = await ownerAdmin(backend, 'user_admin-legacy-metrics')
+    expect(await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })).toMatchObject({
+      coverageComplete: false, days: [], partialDays: [FIRST_DAY], headline: null, funding: null,
+    })
+  })
+  it('replays generation creation and refuses an older generation overwriting a newer publication', async () => {
+    const backend = convexTestWithMarketComponents()
+    const day = FIRST_DAY
+    const older = `${day}#older`
+    await backend.mutation(internal.adminConsoleMetrics.startMarketplaceMetricsBuild, { day, entityDay: older })
+    await backend.mutation(internal.adminConsoleMetrics.startMarketplaceMetricsBuild, { day, entityDay: older })
+    expect(await backend.run(async ctx => (await ctx.db.query('marketplaceMetricBuilds').collect()).length)).toBe(1)
+    vi.advanceTimersByTime(1)
+    await snapshot(backend, day)
+    const current = await backend.run(async ctx => await ctx.db.query('marketplaceMetricDays').first())
+    for (const phase of ['calls', 'quotes', 'resolutions'] as const) await backend.mutation(internal.adminConsoleMetrics.advanceMarketplaceMetricsBuild, {
+      day, entityDay: older, phase, expectedCursor: null, nextCursor: '', done: true,
+    })
+    const after = await backend.run(async ctx => await ctx.db.query('marketplaceMetricDays').first())
+    expect(after?.entityDay).toBe(current?.entityDay)
+    expect(after?.sourceStartedAt).toBe(current?.sourceStartedAt)
+  })
+
 })

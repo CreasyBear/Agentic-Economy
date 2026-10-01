@@ -7,9 +7,11 @@ import type {
   MarketplaceMetricsReport,
 } from '@/lib/operator/admin-console/metrics.contracts'
 import { addExactAmounts, type ExactAmount } from '@/modules/money/public'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { emptyMarketplaceFunding, marketplaceFundingValue, type MarketplaceFunding } from '@/modules/observability/public'
 import type { Doc } from '../../../_generated/dataModel'
-import { internal } from '../../../_generated/api'
 import type { QueryCtx } from '../../../_generated/server'
+import { env } from '../../../_generated/server'
 import { previousPerthDay, shiftPerthDay } from './dayWindow'
 
 export const marketplaceMetricsRangeValue = v.union(
@@ -24,6 +26,7 @@ const exactAmountOrNullValue = v.union(v.null(), v.object({
   currency: v.string(),
 }))
 const marketplaceMetricDayValue = v.object({
+  funding: v.optional(marketplaceFundingValue),
   day: v.string(),
   computedAt: v.number(),
   version: v.literal(1),
@@ -50,6 +53,10 @@ const marketplaceMetricDayValue = v.object({
 const ratioValue = v.union(v.number(), v.null())
 
 export const marketplaceMetricsReportValue = v.object({
+  environment: v.optional(v.union(v.literal('sandbox'), v.literal('production'), v.null())),
+  funding: v.optional(v.union(v.null(), marketplaceFundingValue.extend({
+    repeatBuyingAccounts: v.number(), accountCoverageComplete: v.boolean(),
+  }))),
   days: v.array(marketplaceMetricDayValue),
   partialDays: v.array(v.string()),
   coverageComplete: v.boolean(),
@@ -84,6 +91,7 @@ const RANGE_DAYS: Readonly<Record<MarketplaceMetricsRange, number>> = {
 
 function projectDay(row: Doc<'marketplaceMetricDays'>): MarketplaceMetricDay {
   return {
+    ...(row.funding === undefined ? {} : { funding: row.funding }),
     day: row.day,
     computedAt: row.computedAt,
     complete: row.complete !== false,
@@ -145,22 +153,34 @@ export async function pageWorkspacesForDayHandler(
   return { ...result, page: result.page.map((row) => row.entityRef) }
 }
 
-async function distinctWorkspaces(ctx: QueryCtx, days: readonly string[]): Promise<number> {
-  const refs = new Set<string>()
+const ACCOUNT_ACTIVITY_READ_LIMIT = 5_000
+
+async function accountActivity(ctx: QueryCtx, days: readonly string[], kind: 'workspace' | 'buyer') {
+  const counts = new Map<string, number>()
+  let remaining = ACCOUNT_ACTIVITY_READ_LIMIT
   for (const day of days) {
-    let cursor: string | null = null
-    let done = false
-    while (!done) {
-      const result: PaginationResult<string> = await ctx.runQuery(
-        internal.adminConsoleMetrics.pageWorkspacesForDay,
-        { day, paginationOpts: { cursor, numItems: 500 } },
-      )
-      for (const ref of result.page) refs.add(ref)
-      cursor = result.continueCursor
-      done = result.isDone
+    const rows = await ctx.db.query('marketplaceEntityDays')
+      .withIndex('by_day_and_entityKind', q => q.eq('day', day).eq('entityKind', kind)).take(remaining + 1)
+    if (rows.length > remaining) return { complete: false, count: 0, repeat: 0 }
+    remaining -= rows.length
+    for (const row of rows) counts.set(row.entityRef, (counts.get(row.entityRef) ?? 0) + (row.completedPurchases ?? 1))
+  }
+  return { complete: true, count: counts.size, repeat: [...counts.values()].filter(count => count >= 2).length }
+}
+
+function sumFunding(days: readonly MarketplaceMetricDay[], environment: MarketplaceFunding['environment']): MarketplaceFunding {
+  const result = emptyMarketplaceFunding(environment)
+  for (const day of days) {
+    const funding = day.funding
+    if (funding === undefined || funding.environment !== environment) throw new Error('marketplace_funding_coverage_invariant')
+    for (const field of ['purchasedUnits', 'promotionalUnits', 'refundedPurchasedUnits'] as const) {
+      result[field] = (BigInt(result[field]) + BigInt(funding[field])).toString()
+    }
+    for (const field of ['customerFundedCalls', 'promotionalOnlyCalls', 'completedCustomerFundedCalls', 'unclassifiedCalls', 'refundedCalls'] as const) {
+      result[field] += funding[field]
     }
   }
-  return refs.size
+  return result
 }
 
 
@@ -168,6 +188,7 @@ export async function readMarketplaceMetricsRange(
   ctx: QueryCtx,
   range: MarketplaceMetricsRange,
 ): Promise<MarketplaceMetricsReport> {
+  const environment = deploymentPaymentEnvironment(env) ?? null
   const rangeDays = RANGE_DAYS[range]
   const lastDay = previousPerthDay(Date.now())
   const firstDay = shiftPerthDay(lastDay, -(rangeDays - 1))
@@ -178,11 +199,12 @@ export async function readMarketplaceMetricsRange(
     .withIndex('by_day', (query) => query.gte('day', queryFirstDay).lte('day', lastDay))
     .take(101)
   if (rows.length > 100) throw new Error('marketplace_metric_day_limit_exceeded')
-  const partialDays = rows.filter((row) => row.day >= firstDay && row.complete === false).map((row) => row.day)
-  const allDays = rows.filter((row) => row.complete !== false).map(projectDay)
+  const partialDays = rows.filter((row) => row.day >= firstDay && (row.complete === false || row.funding?.environment !== environment)).map((row) => row.day)
+  const allDays = rows.filter((row) => row.complete !== false && environment !== null && row.funding?.environment === environment).map(projectDay)
   const days = allDays.filter((day) => day.day >= firstDay)
   const coverageComplete = days.length === rangeDays && partialDays.length === 0
   if (!coverageComplete) return {
+    environment, funding: null,
     days, partialDays, coverageComplete, latestDay: days.at(-1)?.day ?? null,
     headline: null, ratios: null, wow: null,
   }
@@ -192,15 +214,24 @@ export async function readMarketplaceMetricsRange(
   const latest = allDays.filter((day) => day.day >= headlineFirstDay)
   const prior = allDays.filter((day) => day.day >= priorFirstDay && day.day < headlineFirstDay)
   const publishedEntityDay = (day: MarketplaceMetricDay) => rows.find((row) => row.day === day.day)?.entityDay ?? day.day
-  const [headlineWorkspaces, priorWorkspaces, rangeWorkspaces] = await Promise.all([
-    distinctWorkspaces(ctx, latest.map(publishedEntityDay)),
-    distinctWorkspaces(ctx, prior.map(publishedEntityDay)),
-    distinctWorkspaces(ctx, days.map(publishedEntityDay)),
+  const [headlineWorkspaces, priorWorkspaces, rangeWorkspaces, buyers] = await Promise.all([
+    accountActivity(ctx, latest.map(publishedEntityDay), 'workspace'),
+    accountActivity(ctx, prior.map(publishedEntityDay), 'workspace'),
+    accountActivity(ctx, days.map(publishedEntityDay), 'workspace'),
+    accountActivity(ctx, days.map(publishedEntityDay), 'buyer'),
   ])
+  if (environment === null) throw new Error('marketplace_metrics_environment_unavailable')
+  const funding = sumFunding(days, environment)
+  funding.buyingAccounts = buyers.count
+  if (!rangeWorkspaces.complete) return {
+    environment, funding: null, days, partialDays, coverageComplete: false,
+    latestDay: days.at(-1)?.day ?? null, headline: null, ratios: null, wow: null,
+  }
   const headlineMoney = sumMoney(days)
   const attempted = sum(days, 'attemptedCalls')
   const completed = sum(days, 'completedCalls')
   return {
+    environment, funding: { ...funding, repeatBuyingAccounts: buyers.repeat, accountCoverageComplete: buyers.complete },
     partialDays,
     coverageComplete,
     days,
@@ -210,7 +241,7 @@ export async function readMarketplaceMetricsRange(
       money: headlineMoney === null ? 'no_settled_usage' : 'settled_only',
       settledCalls: sum(days, 'settledCalls'),
       successRate: ratio(sum(days, 'completedCalls'), sum(days, 'attemptedCalls')),
-      transactingWorkspaces: rangeWorkspaces,
+      transactingWorkspaces: rangeWorkspaces.count,
     },
     ratios: {
       successRate: ratio(completed, attempted),
@@ -222,7 +253,7 @@ export async function readMarketplaceMetricsRange(
       settledCalls: prior.length < 7 ? null : wow(sum(latest, 'settledCalls'), sum(prior, 'settledCalls')),
       attemptedCalls: prior.length < 7 ? null : wow(sum(latest, 'attemptedCalls'), sum(prior, 'attemptedCalls')),
       completedCalls: prior.length < 7 ? null : wow(sum(latest, 'completedCalls'), sum(prior, 'completedCalls')),
-      transactingWorkspaces: prior.length < 7 ? null : wow(headlineWorkspaces, priorWorkspaces),
+      transactingWorkspaces: prior.length < 7 || !headlineWorkspaces.complete || !priorWorkspaces.complete ? null : wow(headlineWorkspaces.count, priorWorkspaces.count),
       quotesCreated: prior.length < 7 ? null : wow(sum(latest, 'quotesCreated'), sum(prior, 'quotesCreated')),
     },
   }

@@ -21,7 +21,10 @@ vi.mock('@tanstack/react-router', () => ({
   },
   useLocation: () => ({ pathname: '/admin/search', hash: '' }),
 }))
-vi.mock('convex/react', () => ({ useQuery: runtime.query }))
+vi.mock('convex/react', () => ({
+  useQuery: runtime.query,
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() }),
+}))
 vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({ title, children }: { title: string; children: ReactNode }) => (
@@ -76,7 +79,7 @@ const cases = [
     path: '/_operator/admin/workspaces/$accountRef',
     param: 'accountRef',
     ref: accountRef,
-    heading: 'Workspace',
+    heading: 'Account',
     view: {
       kind: 'workspace', ref: accountRef, lifecycle: 'active', ownerCount: 1, memberCount: 2,
       createdAt: Date.UTC(2026, 8, 22), externalOrganizationBound: true,

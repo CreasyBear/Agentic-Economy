@@ -29,7 +29,7 @@ export function useAdminOverview(): AdminOverviewDataState {
   const [recent] = useState(readRecentAdminRefs)
   if (overview === undefined) return { kind: 'loading' }
   if ('kind' in overview) return { kind: 'refused' }
-  return { kind: 'ready', paymentReadiness: overview.paymentReadiness, recent }
+  return { kind: 'ready', paymentReadiness: overview.paymentReadiness, attention: overview.attention, recent }
 }
 export function useOverviewExceptions(): AdminOverviewExceptionsState {
   const exceptions = useQuery(api.adminConsoleExceptions.readAdminExceptionOverview, {})

@@ -4,6 +4,7 @@ import { getFunctionName, type FunctionReference } from 'convex/server'
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
+import { emptyMarketplaceFunding } from '@/modules/observability/public'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessChecks, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 
 const mocks = vi.hoisted(() => ({
@@ -20,8 +21,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('convex/react', () => ({
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() }),
   useQuery: (query: FunctionReference<'query'>) => {
     const name = getFunctionName(query)
+    if (name === 'adminConsoleAudit:readAdminAuditAccess') return { kind: 'allowed' }
     if (name === 'adminConsoleOverview:readAdminOverview') return mocks.overview
     if (name === 'adminConsoleExceptions:readAdminExceptionOverview') {
       if (mocks.exceptions instanceof Error) throw mocks.exceptions
@@ -94,12 +97,13 @@ describe('admin overview route', () => {
     mocks.exceptions = new Error('injected_exceptions_read_rejection')
     mocks.metrics = {
       coverageComplete: true, days: [], latestDay: null,
+      funding: { ...emptyMarketplaceFunding('production'), buyingAccounts: 2, completedCustomerFundedCalls: 4, repeatBuyingAccounts: 1, accountCoverageComplete: true },
       headline: { settledCallValue: null, money: 'no_settled_usage', settledCalls: 4, successRate: 0.75, transactingWorkspaces: 2 },
     }
     render(<AdminOverviewPage />)
     expect(screen.getByText('Some exception sources are unavailable.')).toBeTruthy()
     expect(screen.getByText('4')).toBeTruthy()
-    expect(within(screen.getByRole('tab', { name: /Transacting Accounts/ })).getByText('2')).toBeTruthy()
+    expect(within(screen.getByRole('tab', { name: /Buying Accounts/ })).getByText('2')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open queues' })).toBeTruthy()
   })
 
