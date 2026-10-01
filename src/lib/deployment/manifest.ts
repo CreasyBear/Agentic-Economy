@@ -263,7 +263,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   ]),
   readinessProbes: Object.freeze([
     Object.freeze({ id: 'liveness', method: Object.freeze(['GET', 'HEAD']), path: '/api/health', dependencies: Object.freeze([]) }),
-    Object.freeze({ id: 'readiness', method: Object.freeze(['GET', 'HEAD']), path: '/api/ready', dependencies: Object.freeze(['deployment-config', 'convex-source', 'source-authority']) }),
+    Object.freeze({ id: 'readiness', method: Object.freeze(['GET', 'HEAD']), path: '/api/ready', dependencies: Object.freeze(['deployment-config', 'convex-source', 'source-authority', 'production-payment-readiness']) }),
     Object.freeze({ id: 'release-readback', method: Object.freeze(['GET']), path: '/api/v1/release', dependencies: Object.freeze(['release-identity']) }),
   ]),
 })

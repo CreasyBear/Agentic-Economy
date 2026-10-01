@@ -33,7 +33,8 @@ export async function handleReadyRequest(
       ? Response.json(
           {
             status: 'ready',
-            checks: { config: 'ready', convex: 'ready' },
+            checks: { config: 'ready', convex: 'ready',
+              ...(readiness.checks.payments === undefined ? {} : { payments: 'ready' }) },
             commercial: readiness.commercial,
             deployment: readiness.deployment,
           },

@@ -1,3 +1,4 @@
+import { verifyCustomerRequestServiceAssertion, type CustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { v, type Infer } from 'convex/values'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
@@ -70,4 +71,19 @@ export async function readPaymentReadiness(
     checkedAt: evidence.completedAt, expiresAt: evidence.expiresAt,
     code: firstFailure === undefined ? null : firstFailure.kind === 'failed' ? firstFailure.code : 'readiness_expired',
     checks: evidence.checks }
+}
+
+/** Signed service read: authenticate before any store access; time is backend-owned. */
+export async function readPaymentReadinessForServer(
+  ctx: Pick<QueryCtx, 'db'>,
+  args: { environment: PaymentEnvironment; serviceAuth: CustomerRequestServiceAssertion },
+): Promise<PaymentReadinessView> {
+  const assertion = args.serviceAuth
+  const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  if (key === undefined || key.length < 32 || assertion.principalId !== 'ae:server-function'
+    || assertion.ownerId !== 'ae:server-function' || assertion.credentialId !== 'ae:server-function'
+    || !assertion.scopes.includes('money_readiness:read')
+    || !await verifyCustomerRequestServiceAssertion({ key, operation: 'moneyReadiness:readForServer',
+      command: { environment: args.environment }, assertion })) throw new Error('authentication_required')
+  return await readPaymentReadiness(ctx, args.environment, Date.now())
 }

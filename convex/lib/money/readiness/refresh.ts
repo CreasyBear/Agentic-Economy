@@ -99,9 +99,14 @@ export async function readWebConfiguration(
     const response = await sendGuardedHttpRequest(new Request(target, {
       method: 'GET', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(5_000),
     }), 32 * 1024)
-    if (response.status !== 200) return failed('web_readiness_unavailable')
+    if (response.status !== 200 && response.status !== 503) return failed('web_readiness_unavailable')
     const body: unknown = await response.json()
-    if (!isRecord(body) || body.status !== 'ready' || !isRecord(body.checks)
+    const successful = response.status === 200 && isRecord(body) && body.status === 'ready'
+    const diagnostic = response.status === 503 && response.headers.get('content-type')?.split(';')[0] === 'application/problem+json'
+      && isRecord(body) && body.type === 'about:blank' && body.status === 503
+      && body.kind === 'UNAVAILABLE' && body.code === 'server_not_ready' && body.retryable === true
+      && typeof body.title === 'string' && typeof body.detail === 'string'
+    if (response.redirected || (!successful && !diagnostic) || !isRecord(body) || !isRecord(body.checks)
       || body.checks.config !== 'ready' || body.checks.convex !== 'ready'
       || !isRecord(body.deployment) || body.deployment.paymentEnvironment !== paymentEnvironment
       || body.deployment.convexOrigin !== source.origin) return failed('web_readiness_identity_mismatch')

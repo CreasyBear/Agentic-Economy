@@ -1,3 +1,5 @@
+import { createCustomerRequestServiceAssertion, type CustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
+import { readPaymentReadinessForServer } from '../../../convex/lib/money/readiness/store'
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test'
 import { makeFunctionReference } from 'convex/server'
@@ -222,5 +224,59 @@ describe('payment readiness evidence publication and admission view', () => {
     expect(await view(backend, -1)).toMatchObject({ kind: 'not_ready', code: 'readiness_clock_invalid' })
     await backend.mutation(publish, { snapshot: snapshot() })
     expect(await view(backend, NOW - 1)).toMatchObject({ kind: 'not_ready', code: 'readiness_snapshot_invalid' })
+  })
+})
+
+const serviceRead = makeFunctionReference<'query', { environment: 'sandbox' | 'production'; serviceAuth: CustomerRequestServiceAssertion }, PaymentReadinessView>('moneyReadiness:readForServer')
+const SERVICE_KEY = 'readiness-service-key-0123456789abcdef'
+async function serviceProof(options: { operation?: string; environment?: 'sandbox' | 'production'; issuedAt?: number; scope?: string; principalId?: string } = {}) {
+  return await createCustomerRequestServiceAssertion({ key: SERVICE_KEY,
+    operation: options.operation ?? 'moneyReadiness:readForServer', command: { environment: options.environment ?? 'production' },
+    principal: { principalId: options.principalId ?? 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function',
+      scopes: [options.scope ?? 'money_readiness:read'] }, issuedAt: options.issuedAt ?? NOW })
+}
+describe('registered server-authorized payment readiness read', () => {
+  beforeEach(() => vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', SERVICE_KEY))
+  it('reads exact current evidence without an interactive identity or writes, and expires at backend time', async () => {
+    const backend = convexTest(schema, modules)
+    const evidence = snapshot({ checks: passedChecks(NOW + 1000) })
+    await backend.mutation(publish, { snapshot: evidence })
+    const before = await storedRows(backend)
+    const args = { environment: 'production' as const, serviceAuth: await serviceProof() }
+    expect(await backend.query(serviceRead, args)).toMatchObject({ kind: 'ready', expiresAt: NOW + 1000 })
+    expect(await backend.query(serviceRead, args)).toMatchObject({ kind: 'ready' })
+    vi.spyOn(Date, 'now').mockReturnValue(NOW + 1000)
+    expect(await backend.query(serviceRead, args)).toMatchObject({ kind: 'not_ready', code: 'readiness_expired' })
+    expect(await storedRows(backend)).toEqual(before)
+  })
+  it.each(['operation', 'environment', 'scope', 'principal', 'owner', 'credential', 'signature', 'old', 'future'] as const)(
+    'refuses %s assertion before a protected read', async defect => {
+      const backend = convexTest(schema, modules)
+      let proof = await serviceProof({
+        ...(defect === 'operation' ? { operation: 'moneyReadiness:publish' } : {}),
+        ...(defect === 'environment' ? { environment: 'sandbox' as const } : {}),
+        ...(defect === 'scope' ? { scope: 'market_flow:lookup' } : {}),
+        ...(defect === 'principal' ? { principalId: 'foreign-server' } : {}),
+        ...(defect === 'old' ? { issuedAt: NOW - 30_001 } : {}),
+        ...(defect === 'future' ? { issuedAt: NOW + 5001 } : {}),
+      })
+      if (defect === 'owner') proof = { ...proof, ownerId: 'foreign-owner' }
+      if (defect === 'credential') proof = { ...proof, credentialId: 'foreign-credential' }
+      if (defect === 'signature') proof = { ...proof, signature: 'tampered' }
+      await expect(backend.query(serviceRead, { environment: 'production', serviceAuth: proof })).rejects.toThrow('authentication_required')
+      const db = { get db(): never { throw new Error('protected_db_read') } }
+      await expect(readPaymentReadinessForServer(db, { environment: 'production', serviceAuth: proof })).rejects.toThrow('authentication_required')
+    },
+  )
+  it('refuses missing service keys and returns changed-configuration failure after valid newly signed reads', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(publish, { snapshot: snapshot() })
+    const proof = await serviceProof()
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', undefined)
+    await expect(backend.query(serviceRead, { environment: 'production', serviceAuth: proof })).rejects.toThrow('authentication_required')
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', SERVICE_KEY)
+    vi.stubEnv('CDP_WALLET_SECRET', 'rotated-wallet-secret')
+    expect(await backend.query(serviceRead, { environment: 'production', serviceAuth: proof }))
+      .toMatchObject({ kind: 'not_ready', code: 'readiness_configuration_changed' })
   })
 })

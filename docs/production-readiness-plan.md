@@ -1882,3 +1882,98 @@ It confirms a running original local stack, but does not establish valid runtime
 bindings, funds, Provider facts or a working screening adapter. Keep #279, #286
 and #256 open: hosted restore/alert evidence, provisioning, the full development
 paid Call and explicitly authorized real-money drills remain outstanding.
+
+### Stage 31 — operational readiness through the real request boundary
+
+Current acceptance inspection found two source gaps in #276: first-request boot
+validation can throw before the diagnostic handler returns its required 503,
+and public readiness currently checks static configuration/Convex reachability
+without consuming the payment-readiness evidence used by admission. Journey
+alert instructions also invert Search's failure-ratio threshold and imply that
+an exception integration alone delivers structured Convex logs.
+
+Design thesis: make the existing readiness endpoint report the actual production
+payment gate while remaining usable to diagnose a broken deployment. Sluice uses
+the main channel; contract/error analysis applies to the request and read-only
+backend boundaries. No new monitoring service, endpoint, storage or customer step.
+
+Requires: exact GET/HEAD router requests for `/api/health` or `/api/ready` before
+the boot/auth diagnostic exception applies. Production readiness additionally
+requires the same explicit environment, current static configuration, reachable
+backend and fresh current-configuration payment evidence. Read that evidence
+through the existing signed server-function assertion and Convex query pattern.
+
+Ensures: diagnostics return their canonical health/readiness responses even when
+ordinary boot/auth configuration is broken. Normal app/payment requests still
+refuse. Production `/api/ready` returns 503 for absent, failed, stale, mismatched or
+unavailable payment evidence, and 200 only when all required evidence passes.
+HEAD preserves status/headers without a body. Public responses contain aggregate
+checks only; source failures, credentials and configuration digests remain private.
+
+Invariant: diagnostics cannot authorize a server function, write or payment.
+Bypassing boot validation cannot populate its successful-validation cache. The
+backend web probe evaluates only the response's static configuration/backend
+checks and exact deployment identity. A canonical 503 caused by the aggregate
+payment gate can prove those static checks, avoiding a readiness dependency cycle;
+arbitrary 503 bodies, identity mismatch and failed static checks cannot.
+
+On violation: return a bounded generic not-ready result without provider writes,
+last-good fallback or extended evidence lifetime. The current fail-closed payment
+admission and in-flight recovery remain authoritative. Missing first evidence must
+recover through the normal refresh/publication path once real checks pass.
+
+COMPLEXITY: one signed read adapter and service-authorized registration, reusing
+the existing readiness store and assertion transport. Added: a bounded read and
+one explicit distinction between static web evidence and aggregate payment state.
+Bought: public diagnostics, admin display and payment admission share the same
+evidence without a recursive gate. Keep this small composition; reject a second
+readiness endpoint, special bypass header, parallel registry or monitoring layer.
+Verify the actual middleware path, no-evidence/failure/expiry/rotation, safe
+bootstrap/recovery, authorization and sanitized GET/HEAD behavior. Root owns
+integration, heavy execution and acceptance; bounded workers own disjoint files.
+
+Stage 31 acceptance (1 October): the signed read is registered as
+`moneyReadiness:readForServer`, with the exact `PaymentReadinessView` contract.
+It verifies operation, environment, scope and fixed server identity before DB
+access; repeated reads leave the evidence unchanged. Backend clock expiry and
+credential/configuration rotation fail closed. The public response exposes only
+`payments_unavailable`, while the authenticated operational view retains details.
+
+The actual canonical 503 now passes the backend's static web check when its
+configuration, Convex check and deployment identity match. The composed
+handler → refresh → registered publication/read test retains the real unsupported
+sanctions failure and stays 503. A separately admitted all-passing fixture proves
+subsequent 200 recovery; it is not a live Provider or sanctions acceptance claim.
+Network and partial-body cancellation use the installed Convex HTTP client.
+An explicit asynchronous barrier proves that evidence expiring after the payment
+read, while a commercial probe is pending, cannot yield a ready response.
+
+Validation under Node 22.22.0/npm 11.5.1:
+
+- Six focused readiness, boot and deployment suites: 244 passing tests. The two
+  server suites passed again after test typing/barrier corrections (73 tests).
+- `npm run check`: passing, zero dependency cycles and 75 import-boundary checks.
+- `AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`:
+  passing. Anonymous Convex code generation and production build integrity passed;
+  7,604 unit and 2,685 integration/Convex tests passed, along with type/architecture
+  checks, 31 SEO proofs, 16 public browser checks, 18 accessibility checks and the
+  reproducible CLI package proof. Existing native/hosted/authenticated skips and
+  integration TODOs are not acceptance evidence for those environments.
+
+A separate loopback HTTP proof loaded the built Vercel Node handler in three
+fresh processes with no inherited credentials: missing configuration, damaged
+Clerk keys and an invalid deployment environment. All 27 requests passed.
+GET/HEAD health returned 200; readiness returned canonical 503 with no-store,
+correlation headers and empty HEAD bodies. Ordinary pages, diagnostic writes,
+payment writes and lookalike paths returned 500 under invalid boot configuration.
+A final readiness request remained 503 in each process, proving the diagnostic
+exception did not mark boot validation successful. Warm GET readiness took
+6–10 ms in this local invalid-configuration proof; this is not a hosted latency SLO.
+All three processes exited and their absence was independently checked.
+
+The alert runbook now uses the correct Search failure-ratio threshold (>5%) and
+requires verified Convex log delivery plus an acknowledged test alert; exception
+integration alone is not log delivery. No monitoring destination was provisioned.
+Keep #276, #286 and #256 open for hosted readiness/alert/restore evidence, the
+entitled screening adapter, the full development paid Call and authorized
+real-money drills. The preserved development stack was untouched.
