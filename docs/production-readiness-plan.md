@@ -1966,8 +1966,8 @@ Clerk keys and an invalid deployment environment. All 27 requests passed.
 GET/HEAD health returned 200; readiness returned canonical 503 with no-store,
 correlation headers and empty HEAD bodies. Ordinary pages, diagnostic writes,
 payment writes and lookalike paths returned 500 under invalid boot configuration.
-A final readiness request remained 503 in each process, proving the diagnostic
-exception did not mark boot validation successful. Warm GET readiness took
+A final readiness request remained 503 in each process. The middleware tests
+separately prove the exception does not mark boot validation successful. Warm GET readiness took
 6–10 ms in this local invalid-configuration proof; this is not a hosted latency SLO.
 All three processes exited and their absence was independently checked.
 
