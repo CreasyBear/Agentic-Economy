@@ -155,6 +155,18 @@ export function managedCallPostingsMatch(
     case 'PROVIDER_OBLIGATION_ACCRUED':
       legs = [['expense', 'obligation', 'amount']]
       break
+    case 'CALL_RELEASED_AUD':
+      legs = [
+        ['call_reserved', 'account_available', 'buyer_amount'],
+        ['legal_reserved', 'legal_available', 'exposure_amount'],
+        ...(variables.agent_reserved === undefined
+          ? [['daily_reserved', 'daily_available', 'daily_amount'], ['monthly_reserved', 'monthly_available', 'monthly_amount']] as const
+          : [['agent_reserved', 'agent_available', 'budget_amount']] as const),
+      ]
+      break
+    case 'CALL_RELEASED_USDC':
+      legs = [['treasury_committed', 'treasury_available', 'amount'], ['obligation_accrued', 'expense', 'amount']]
+      break
     case 'BUYER_SALE_SETTLED':
       legs = [
         ['call_reserved', 'revenue', 'revenue_amount'], ['call_reserved', 'tax', 'tax_amount'],
@@ -174,6 +186,7 @@ export function managedCallPostingsMatch(
     case 'CALL_PROMO_SETTLED':
     case 'CALL_RESERVED_USDC':
     case 'CALL_PROMO_RESERVED':
+    case 'CALL_PROMO_RELEASED':
     case 'CALL_PROMO_REFUNDED':
     case 'CALL_SPEND_REFUNDED':
       legs = [['source', 'destination', 'amount']]

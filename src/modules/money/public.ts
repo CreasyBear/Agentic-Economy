@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { PaginationOptions } from "convex/server";
 export type { FormanceMoneyResult } from './formance'
-export type { FormanceSettlementReadResult, FormanceReservationReadResult } from './formance-result'
+export type { FormanceSettlementReadResult, FormanceReservationReadResult, FormanceReleaseReadResult } from './formance-result'
 export type { FormanceManagedCallBooking } from './formance-workflows'
 import { exactAmountSchema, type ExactAmount } from "./internal/exact-amount";
 import {

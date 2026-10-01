@@ -2,7 +2,7 @@
 
 import type { AccountCreditBalance, EligiblePromotionalGrant, FormanceManagedCallBooking } from '@/modules/money/public'
 import type { Infer } from 'convex/values'
-import { managedCallSettlementReadResult, managedCallReservationReadResult } from './contracts'
+import { managedCallSettlementReadResult, managedCallReservationReadResult, managedCallReleaseReadResult } from './contracts'
 
 import {
   configuredContext,
@@ -16,6 +16,7 @@ import {
   readFormanceStatementPage,
   readFormanceManagedCallSettlement,
   readFormanceManagedCallReservation,
+  readFormanceManagedCallRelease,
 } from './gateway'
 
 export async function readManagedCallSettlementHandler(
@@ -36,6 +37,17 @@ export async function readManagedCallReservationHandler(
   const context = configuredContext()
   if (context.kind === 'setup_required') return { kind: 'refused', code: context.code }
   const result = await readFormanceManagedCallReservation(context.context, args)
+  return result.kind === 'confirmed'
+    ? { kind: 'confirmed', transactionRefs: [...result.transactionRefs] }
+    : result
+}
+export async function readManagedCallReleaseHandler(
+  _ctx: unknown,
+  args: FormanceManagedCallBooking,
+): Promise<Infer<typeof managedCallReleaseReadResult>> {
+  const context = configuredContext()
+  if (context.kind === 'setup_required') return { kind: 'refused', code: context.code }
+  const result = await readFormanceManagedCallRelease(context.context, args)
   return result.kind === 'confirmed'
     ? { kind: 'confirmed', transactionRefs: [...result.transactionRefs] }
     : result

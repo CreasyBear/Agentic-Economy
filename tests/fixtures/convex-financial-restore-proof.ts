@@ -29,8 +29,9 @@ export const admitReport = action({
 })
 
 export const seed = mutation({
-  args: { toolJson: v.string(), now: v.number(), unbound: v.boolean(), reportOwner: v.optional(v.boolean()) }, returns: v.null(),
-  handler: async (ctx, { toolJson, now, unbound, reportOwner }): Promise<null> => {
+  args: { toolJson: v.string(), now: v.number(), unbound: v.boolean(), reportOwner: v.optional(v.boolean()),
+    release: v.optional(v.boolean()) }, returns: v.null(),
+  handler: async (ctx, { toolJson, now, unbound, reportOwner, release }): Promise<null> => {
     if (await ctx.db.query('capabilityCalls').first()) throw new Error('proof_already_seeded')
     const accountRef = reportOwner === true ? ownerAccountRef : 'account:financial-restore'
     if (reportOwner === true) {
@@ -103,6 +104,15 @@ export const seed = mutation({
             amountUnits: label === 'promo' ? '600000' : '300000', expiresAt: now + 86_400_000 }] },
         createdAt: now, updatedAt: now,
       })
+      if (release === true) {
+        const grantRef = `promo:${callRef}`
+        const amountUnits = label === 'promo' ? '600000' : '300000'
+        await ctx.db.insert('moneyPromotionalGrants', { grantRef, accountRef,
+          environment: 'sandbox', amountUnits, availableUnits: '0', expiresAt: now + 86_400_000,
+          createdAt: now, updatedAt: now, operationKey: grantRef, actorRef: 'principal:financial-restore',
+          correlationId: 'financial-restore-promotional', commandDigest: canonicalDigest({ grantRef, accountRef }),
+          reasonCode: 'onboarding', evidenceRefs: [callRef], bookingState: 'booked', expiryRevision: 0 })
+      }
     }
     return null
   },
@@ -120,7 +130,12 @@ export const inspect = query({
       if (booking === null) throw new Error('proof_booking_invalid')
       const obligation = await ctx.db.query('moneyProviderObligations')
         .withIndex('by_obligationRef', q => q.eq('obligationRef', `provider-obligation:${call.callRef}`)).unique()
-      records.push({ call, quote, booking, obligation,
+      const grants = []
+      for (const allocated of call.promotionalCreditAllocation?.grants ?? []) {
+        const grant = await ctx.db.query('moneyPromotionalGrants').withIndex('by_grantRef', q => q.eq('grantRef', allocated.grantRef)).unique()
+        if (grant !== null) grants.push(grant)
+      }
+      records.push({ call, quote, booking, obligation, grants,
         workState: call.workId === undefined ? 'absent' : (await pool.status(ctx, call.workId as WorkId)).state })
     }
     return JSON.stringify(records.sort((left, right) => left.call.callRef.localeCompare(right.call.callRef)))

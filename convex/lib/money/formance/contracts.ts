@@ -17,6 +17,11 @@ export const managedCallReservationReadResult = v.union(
   v.object({ kind: v.literal('refused'), code: v.string() }),
   unavailable,
 )
+export const managedCallReleaseReadResult = v.union(
+  v.object({ kind: v.literal('confirmed'), transactionRefs: v.array(v.string()) }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+  unavailable,
+)
 export const moneyResult = v.union(
   v.object({
     kind: v.literal('completed'),

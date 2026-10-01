@@ -1575,3 +1575,117 @@ Keep #286 and #256 open. Lost approval history, other restore consumers includin
 release and Provider reversal, hosted retention/RPO/RTO and explicitly authorized
 live-money acceptance remain open. Production code, schema, dependencies and
 user-facing flows are unchanged.
+
+### Stage 28 — recover an original unpaid managed Call release
+
+Contract for historical accounting repair:
+
+- **Requires:** the surviving frozen Call/Quote/booking, complete original
+  reservation attachment, compatible canonical accrued/held Provider obligation,
+  original promotional allocations/grants, and the exact durable manual
+  unknown-settlement hold. Drain any original WorkId before repair. The independent
+  native ledger must contain every original release member with exact reference,
+  template, metadata and postings. Source and target effect writers remain stopped.
+- **Ensures:** a read-only native proof permits a booking-bound Convex transaction
+  to record the original release references, reverse the unpaid obligation and
+  restore its promotional allocation once. Concurrent and exact replay are inert.
+- **Invariant:** preserve input, Quote, WorkId, payment attempts, delivery/result
+  uncertainty and manual hold. No payment-absence assertion, signing, dispatch,
+  native accounting write, new execution authority or global spendability claim.
+- **On violation:** missing/conflicting/unavailable native evidence, changed
+  booking, partial local locators, active work, later settlement/remedy/dispute,
+  or incompatible promotional facts refuse without financial writes. Transaction
+  failure rolls back local repair. Operators retain uncertainty for investigation.
+
+The unpaid release shares its buyer and promotional commands with a paid-result
+remedy. Proof therefore verifies the complete unpaid bundle, including treasury
+return and accrued-obligation release; a buyer release alone is insufficient.
+The native commands cannot recover whether original release authority came from
+proven absence or an expired unused authorization. This operation records historical
+accounting only. It does not reconstruct either authority proof or infer current
+chain state. Provider reversal remains disabled for new requests pending proof of
+returned corporate USDC; this stage does not reopen that separate boundary.
+
+Idempotency analysis: this producer only reads stable original references, with
+at most eight native reads in flight. The consumer rechecks the complete booking,
+hold and compatible local facts after the native read. Its released-state replay
+check and promotional increment/obligation/Call updates share one transaction.
+Existing ordinary release writers retain their admission rules and cannot consume
+the manual hold. Financial repair leaves the hold in place for later reconciliation.
+The local reservation check preserves the maintained attachment-integrity contract:
+nonempty complete locators and their stored digest must survive. It does not
+independently re-prove those reservation transactions. Stage 26 remains the
+separate operation for a missing attachment; the new native proof binds every
+release transaction to the complete frozen booking.
+
+Complexity decision: keep one read-only proof and one internal reconciliation
+entry point in the maintained money/managed-Call concerns, reusing canonical
+command builders, posting matcher and transactional grant restoration. This adds
+one explicit historical repair mode and focused behavioral tests; it removes the
+need to misuse a money-producing release worker across a snapshot gap. Reject a
+new schema, recovery framework, public API or generic replay authority. Extend the
+existing disposable archive/restore fixture for mixed and all-promotional release,
+missing/conflicting proof, concurrency and inert replay. Compare complete native
+ledger summaries and original transaction IDs; assert the uncertainty hold remains.
+
+Operator sequence: keep effect writers stopped, quarantine and retire any original
+WorkId through Stage 24, and recover missing reservation attachment/obligation
+through Stage 26 before release repair. Preserve the original promotional grant
+rows and allocation. Invoke `moneyManagedCallLifecycle:reconcileRelease` with
+`callRef` and current millisecond `now`. Success returns
+`{"kind":"accepted","state":"released","replayed":false}`; an exact repeat
+returns `replayed:true` after another complete native read. Inspect the original
+release references, reversed unpaid obligation, returned grant units and retained
+manual uncertainty. A refusal authorizes neither a money-producing release nor a
+payment retry. Complete the remaining restore reconciliation before enabling
+spending or general workers; historical release alone does not establish current
+balances, delivery, chain absence or a terminal Purchase resolution.
+
+### Stage 28 acceptance and handover
+
+The native unpaid-release restore drill passed in 90.77 seconds including setup
+and cleanup. Four genuine reservations and their local attachments precede the
+archive. After stopping the source, the independent ledger records the original
+releases; the restored deployment quarantines and retires the archived WorkIds.
+Registered read-only reconciliation then:
+
+- restores mixed purchased/promotional and wholly promotional accounting once
+  under concurrent recovery, including each grant and unpaid Provider obligation;
+- refuses missing and conflicting release evidence without changing local facts;
+- preserves the original Quote, inputs, result, WorkId and manual uncertainty;
+  recovery status remains held and the ordinary release worker refuses the Call;
+- preserves timestamps and counters on exact replay, with complete ledger
+  summaries and every original release transaction ID unchanged.
+
+The accepted native command was
+`AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'release=true'`
+on Node 22/npm 11.5.1. It passed one scenario and intentionally skipped the four
+earlier archive/reservation/settlement/refund scenarios. Owned temporary roots and
+Compose containers were independently checked after cleanup: zero remained.
+
+The 216 focused money workflow, refund-evidence and managed-Call tests passed.
+They additionally establish supported legacy/period/promotional release variants,
+paid-remedy rejection, exact postings and metadata, maximum 102-member bundles
+with at most eight reads in flight, unavailable reads, stale booking, active work,
+settled payment attempts, later reversal evidence, expired-grant return and
+preservation of original uncertain payment attempts. Independent review closed
+one replay-validation gap: grant identity/expiry and safe amount bounds are
+checked even on replay, while legitimate later spending never increments again.
+The repository check also caught and corrected a registration-object typo.
+
+`npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+passed on Node 22/npm 11.5.1. The gate reproduced seven generated Convex files,
+built the public application, passed clean types, 7,489 unit tests, 2,647
+integration-suite tests, 75 import checks, 31 SEO checks, 16 browser journeys,
+18 accessibility cases and reproducible CLI packaging. Suite counts overlap;
+one unit skip, 59 integration skips and three todos remain. The ordinary gate
+skips native drills; the release drill passed separately above.
+
+Keep #286 and #256 open. This closes historical unpaid-release accounting repair
+for the stated surviving evidence. Other restore consumers and lost history,
+hosted retention/RPO/RTO, production provisioning and explicitly authorized
+live-money acceptance remain open. New Provider reversals remain disabled without
+verified returned USDC. No public API, schema, dependency, customer flow or
+live-money change occurred. Local native accounting proof is not chain or
+Provider-delivery proof.

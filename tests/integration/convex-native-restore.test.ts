@@ -14,7 +14,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createFormanceContext, executeFormanceMoneyCommand, installPackage4FormanceSchema,
   readFormanceHealth, readFormanceTransactionByReference } from '@/modules/money/formance'
 import { adjustFormanceSpendingPeriod, bookFormanceFundingSettlement, prepareFormancePromotionalCreditGrant,
-  refundFormanceSettledSale, reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
+  refundFormanceSettledSale, releaseFormanceManagedCall, reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
   type FormanceManagedCallBooking } from '@/modules/money/formance-workflows'
 import { bookFormanceTreasuryBatch } from '@/modules/money/formance-treasury'
 import { readFormanceRestoreSnapshot } from '@/modules/money/formance-restore'
@@ -374,10 +374,12 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true')('native Co
  */
 describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
   || process.env.AE_FORMANCE_INTEGRATION !== 'true')('native financial recovery after Convex restore', () => {
-  it.each([{ unbound: false, refund: false }, { unbound: true, refund: false }, { unbound: false, refund: true }])(
-    'repairs post-snapshot settlements while preserving holds and the complete native ledger (unbound=$unbound, refund=$refund)', async ({ unbound, refund }) => {
+  it.each([{ unbound: false, refund: false, release: false }, { unbound: true, refund: false, release: false },
+    { unbound: false, refund: true, release: false }, { unbound: false, refund: false, release: true }])(
+    'repairs post-snapshot accounting with the complete native ledger unchanged (unbound=$unbound, refund=$refund, release=$release)', async ({ unbound, refund, release }) => {
     type Record = { call: Doc<'capabilityCalls'>; quote: Doc<'capabilityQuotes'>;
-      booking: FormanceManagedCallBooking; obligation: Doc<'moneyProviderObligations'> | null; workState: string }
+      booking: FormanceManagedCallBooking; obligation: Doc<'moneyProviderObligations'> | null;
+      grants: Doc<'moneyPromotionalGrants'>[]; workState: string }
     const root = mkdtempSync(join(tmpdir(), 'ae-convex-money-restore-'))
     const source = join(root, 'source'), target = join(root, 'target')
     const allocated = await ports(5)
@@ -432,7 +434,7 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
       }
       const now = Date.now(), digest = canonicalDigest({ proof: 'financial-restore' })
       await invoke(source, 'financialRestoreProof:seed', { toolJson: JSON.stringify(buildDevelopmentPublishedToolEvidence().tool),
-        now, unbound, ...(refund ? { reportOwner: true } : {}) })
+        now, unbound, ...(refund ? { reportOwner: true } : {}), ...(release ? { release: true } : {}) })
       const seeded = await inspect(source)
       expect(seeded).toHaveLength(4)
       const first = seeded[0]!.booking
@@ -589,10 +591,10 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
         await invoke(source, 'workloadCron:ensurePlatformWorkloadIdentities')
         await command(source, ['run', 'lib:stop', '{"name":"main"}', '--component', 'workpool/batchWorker'])
         const archived = await inspect(source)
-        const archive = join(root, 'before-settlement.zip')
+        const archive = join(root, release ? 'before-release.zip' : 'before-settlement.zip')
         await command(source, ['export', '--include-file-storage', '--path', archive])
         await stops[0]!()
-        console.log('Financial restore: source stopped; create post-snapshot native settlements')
+        console.log(`Financial restore: source stopped; create post-snapshot native ${release ? 'releases' : 'settlements'}`)
         const native = new Map<string, { refs: readonly string[]; ids: string[] }>()
         const reservations = new Map<string, { refs: readonly string[]; ids: string[] }>()
         for (const { booking } of seeded.filter(row => !row.call.callRef.endsWith(':missing'))) {
@@ -607,13 +609,16 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
               continue
             }
           }
-          const settlement = await settleFormanceManagedCall(context, { booking, externalEvidenceDigest: canonicalDigest({ effect: booking.callRef }) })
+          const evidence = { booking, externalEvidenceDigest: canonicalDigest({ effect: booking.callRef }) }
+          const settlement = release
+            ? await releaseFormanceManagedCall(context, { ...evidence, submissionProvenAbsent: true })
+            : await settleFormanceManagedCall(context, evidence)
           if (settlement.kind !== 'completed') throw new Error(JSON.stringify(settlement))
           const ids = await originalIds(settlement.transactionRefs)
           native.set(booking.callRef, { refs: settlement.transactionRefs, ids })
           if (booking.callRef.endsWith(':conflict')) {
             await context.sdk.ledger.v2.addMetadataOnTransaction({ ledger: configuration.ledger, id: BigInt(ids[1]!),
-              requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-provider-evidence', schemaVersion: 'v1.5.0' })
+                requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-provider-evidence', schemaVersion: 'v1.5.0' })
           }
         }
         const ledgerBaseline = await snapshot()
@@ -672,12 +677,20 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
           expect(held.every(row => row.call.formanceFinancialState === 'outcome_unknown'
             && row.call.reconciliation?.disposition === 'manual_review')).toBe(true)
         }
-        const recover = (callRef: string) => invoke(target, 'moneyManagedCallLifecycle:reconcileSettlement', { callRef, now: Date.now() })
+        const recover = (callRef: string) => invoke(target,
+          release ? 'moneyManagedCallLifecycle:reconcileRelease' : 'moneyManagedCallLifecycle:reconcileSettlement', { callRef, now: Date.now() })
         for (const row of held) {
           const positive = row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')
-          expect(await recover(row.call.callRef)).toMatchObject(positive
-            ? { kind: 'accepted', state: 'settled', replayed: false }
-            : { kind: 'refused', code: unbound ? 'managed_call_state_conflict' : 'formance_settled_sale_evidence_invalid' })
+          const refusal = { kind: 'refused', code: unbound ? 'managed_call_state_conflict'
+            : release ? 'formance_release_evidence_invalid' : 'formance_settled_sale_evidence_invalid' }
+          if (release) {
+            const results = await Promise.all([recover(row.call.callRef), recover(row.call.callRef)])
+            if (positive) {
+              expect(results).toContainEqual({ kind: 'accepted', state: 'released', replayed: false })
+              expect(results).toContainEqual({ kind: 'accepted', state: 'released', replayed: true })
+            } else expect(results).toEqual([refusal, refusal])
+          } else expect(await recover(row.call.callRef)).toMatchObject(positive
+            ? { kind: 'accepted', state: 'settled', replayed: false } : refusal)
           expect(await snapshot()).toEqual(ledgerBaseline)
         }
         const recovered = await inspect(target)
@@ -685,13 +698,30 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
           const before = held.find(value => value.call.callRef === row.call.callRef)!
           const expected = native.get(row.call.callRef)
           if (row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')) {
-            expect(row).toEqual({ ...before, call: { ...before.call, formanceFinancialState: 'settled',
+            if (release) {
+              expect(before.grants).toHaveLength(1)
+              expect(row).toEqual({ ...before,
+                call: { ...before.call, formanceFinancialState: 'released', formanceReleaseRefs: expected!.refs,
+                  updatedAt: row.call.updatedAt },
+                obligation: { ...before.obligation, state: 'reversed', updatedAt: row.obligation!.updatedAt },
+                grants: before.grants.map(grant => ({ ...grant, availableUnits: grant.amountUnits,
+                  updatedAt: row.grants.find(value => value.grantRef === grant.grantRef)!.updatedAt })),
+              })
+              expect(row.call.reconciliation).toMatchObject({ disposition: 'manual_review', reason: 'unknown_settlement' })
+              expect(row.call.result?.kind).toBe('reconciliation_required')
+              expect(await invoke(target, 'capabilityCalls:readRecovery', {
+                callRef: row.call.callRef, principalId: row.call.principalId,
+              })).toMatchObject({ requiresManualSettlementReview: true, result: row.call.result })
+              expect(await invoke(target, 'moneyManagedCallLifecycle:releaseBeforeSubmission', {
+                callRef: row.call.callRef, now: Date.now(),
+              })).toEqual({ kind: 'refused', code: 'call_manual_settlement_review_required' })
+            } else expect(row).toEqual({ ...before, call: { ...before.call, formanceFinancialState: 'settled',
               formanceSettlementRefs: expected!.refs, buyerSaleTransactionRef: expected!.refs[0], updatedAt: row.call.updatedAt },
             obligation: { ...before.obligation, state: 'settled', settlementTransactionRef: expected!.refs[1],
               evidenceRefs: [...new Set([...before.obligation!.evidenceRefs, ...expected!.refs])],
               settledAt: row.obligation!.settledAt, updatedAt: row.obligation!.updatedAt } })
             expect(await Promise.all([recover(row.call.callRef), recover(row.call.callRef)]))
-              .toEqual(Array.from({ length: 2 }, () => ({ kind: 'accepted', state: 'settled', replayed: true })))
+              .toEqual(Array.from({ length: 2 }, () => ({ kind: 'accepted', state: release ? 'released' : 'settled', replayed: true })))
           } else expect(row).toEqual(before)
         }
         expect(await inspect(target)).toEqual(recovered)
@@ -699,7 +729,7 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
         for (const { refs, ids } of [...native.values(), ...reservations.values()]) for (const [index, ref] of refs.entries()) {
           expect(await readFormanceTransactionByReference(context, ref)).toMatchObject({ kind: 'found', transactionId: ids[index] })
         }
-        summary = { evidenceClass: 'native-convex-financial-restore', verification: 'PASS', recovered: 2,
+        summary = { evidenceClass: release ? 'native-convex-unpaid-release-restore' : 'native-convex-financial-restore', verification: 'PASS', recovered: 2,
           reservationsRepaired: unbound ? 2 : 0, refused: 2, manualHoldsPreserved: unbound ? 2 : 4,
           nativeWritesDuringRecovery: 0, ledger: ledgerBaseline,
           originalTransactionIdsPreserved: true, sourceStopped: true, chainOrDeliveryProven: false }
