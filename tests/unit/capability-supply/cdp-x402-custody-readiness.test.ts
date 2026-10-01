@@ -1,5 +1,6 @@
 import { CdpClient } from '@coinbase/cdp-sdk'
 import { getAuthHeaders } from '@coinbase/cdp-sdk/auth'
+import { fetch as guardedFetch } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 
@@ -12,6 +13,8 @@ import {
 
 vi.mock('@coinbase/cdp-sdk', () => ({ CdpClient: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk/auth', () => ({ getAuthHeaders: vi.fn() }))
+vi.mock('undici', { spy: true })
+const { Headers, Response } = await vi.importActual<typeof import('undici')>('undici')
 
 const ADDRESS = `0x${'11'.repeat(20)}`
 const ACCOUNT_ID = '11111111-1111-4111-8111-111111111111'
@@ -36,13 +39,12 @@ function fixture(paymentEnvironment: X402AeEnvironment = 'sandbox') {
     AE_X402_CDP_POLICY_RULES_DIGEST: cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)!,
     AE_X402_CDP_CREDENTIAL_GENERATION: '7',
   }
-  const fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+  const fetch = vi.mocked(guardedFetch).mockImplementation(async (input) => {
     const path = new URL(String(input)).pathname
     const value = path.endsWith(ACCOUNT_ID) ? accountPolicy
       : path.endsWith(PROJECT_ID) ? projectPolicy : account
     return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } })
   })
-  vi.stubGlobal('fetch', fetch)
   return { environment, accountPolicy, projectPolicy, account, fetch }
 }
 
@@ -58,7 +60,7 @@ afterEach(() => {
 describe('read-only CDP custody readiness', () => {
   it('refuses private provider DNS answers through the actual guarded transport', async () => {
     const f = fixture()
-    vi.unstubAllGlobals()
+    vi.mocked(guardedFetch).mockImplementation((await vi.importActual<typeof import('undici')>('undici')).fetch)
     const dns = vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
     expect(await readCdpX402CustodyReadiness(f.environment, 'sandbox')).toEqual({
       kind: 'unavailable', code: 'cdp_custody_read_unavailable',
@@ -69,7 +71,7 @@ describe('read-only CDP custody readiness', () => {
 
   it('cancels stalled provider DNS at the shared deadline and releases its transport', async () => {
     const f = fixture()
-    vi.unstubAllGlobals()
+    vi.mocked(guardedFetch).mockImplementation((await vi.importActual<typeof import('undici')>('undici')).fetch)
     const controller = new AbortController()
     vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal)
     let started!: () => void
@@ -217,10 +219,15 @@ describe('read-only CDP custody readiness', () => {
 
   it('keeps concurrent readiness credentials isolated', async () => {
     const f = fixture()
-    expect((await Promise.all([
+    const dns = vi.spyOn(defaultDnsResolver, 'lookup').mockRejectedValue(new Error('unexpected_live_dns'))
+    const results = await Promise.all([
       readCdpX402CustodyReadiness({ ...f.environment, CDP_API_KEY_ID: 'first-key' }, 'sandbox'),
       readCdpX402CustodyReadiness({ ...f.environment, CDP_API_KEY_ID: 'second-key' }, 'sandbox'),
-    ])).map((result) => result.kind)).toEqual(['ready', 'ready'])
+    ])
+    expect(dns).not.toHaveBeenCalled()
+    expect(getAuthHeaders).toHaveBeenCalledTimes(6)
+    expect(f.fetch).toHaveBeenCalledTimes(6)
+    expect(results.map((result) => result.kind)).toEqual(['ready', 'ready'])
     expect(f.fetch.mock.calls.map(([, options]) => new Headers(options?.headers).get('Authorization')).sort())
       .toEqual(['Bearer first-key', 'Bearer first-key', 'Bearer first-key', 'Bearer second-key', 'Bearer second-key', 'Bearer second-key'].sort())
   })

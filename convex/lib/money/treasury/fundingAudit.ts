@@ -1,7 +1,7 @@
 "use node"
 
 import Stripe from 'stripe'
-import { Agent } from 'undici'
+import { Agent, fetch as guardedFetch } from 'undici'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import { compareExactAmounts, isMoneyRefusal, rescaleExactAmount, type ExactAmount } from '@/modules/money/public'
@@ -140,18 +140,27 @@ export async function auditTreasuryFunding(
       apiVersion: Stripe.API_VERSION, typescript: true, timeout: TREASURY_FUNDING_REQUEST_TIMEOUT_MS, maxNetworkRetries: 0,
       // Stripe's default Node timeout is inactivity-based; its Fetch adapter's
       // own timer ends at headers. This independent signal remains bound to the
-      // native fetch response body until consumption finishes or aborts.
+      // fetch response body until consumption finishes or aborts. The response
+      // adapter forwards that stream into the SDK's Web Fetch interface.
       httpClient: Stripe.createFetchHttpClient(async (url, init) => {
         const target = new URL(url instanceof Request ? url.url : url)
         if (target.origin !== 'https://api.stripe.com' || target.username !== '' || target.password !== ''
-          || init?.method !== 'GET') throw new Error('treasury_funding_processor_target_invalid')
-        const requestOptions = {
-          ...init, dispatcher, redirect: 'error' as const, signal: AbortSignal.any([
+          || init?.method !== 'GET' || (init.body !== undefined && init.body !== null)) {
+          throw new Error('treasury_funding_processor_target_invalid')
+        }
+        const upstream = await guardedFetch(target, {
+          method: 'GET', headers: Object.fromEntries(new Headers(init.headers).entries()),
+          dispatcher, redirect: 'error', signal: AbortSignal.any([
             AbortSignal.timeout(TREASURY_FUNDING_REQUEST_TIMEOUT_MS),
             ...(init.signal === undefined || init.signal === null ? [] : [init.signal]),
           ]),
-        }
-        return await globalThis.fetch(target, requestOptions)
+        })
+        const body = upstream.body
+        if (body !== null && !(body instanceof ReadableStream)) throw new Error('treasury_funding_processor_response_invalid')
+        return new Response(body, {
+          status: upstream.status, statusText: upstream.statusText,
+          headers: [...upstream.headers.entries()],
+        })
       }),
     }) })
     if (isMoneyRefusal(resolved)) return failed('treasury_funding_processor_unavailable')

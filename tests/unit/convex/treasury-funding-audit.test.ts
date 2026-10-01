@@ -1,4 +1,5 @@
 import type Stripe from 'stripe'
+import { fetch as guardedFetch, Response as UndiciResponse } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { auditTreasuryFunding, TREASURY_FUNDING_READBACK_LIMIT, TREASURY_FUNDING_DEADLINE_MS,
   TREASURY_FUNDING_REQUEST_TIMEOUT_MS } from '../../../convex/lib/money/treasury/fundingAudit'
@@ -28,6 +29,10 @@ vi.mock('stripe', async importOriginal => {
     refunds = { list: sdk.refunds, retrieve: sdk.refund }
   },
   }
+})
+vi.mock('undici', async importOriginal => {
+  const actual = await importOriginal<typeof import('undici')>()
+  return { ...actual, fetch: vi.fn(actual.fetch) }
 })
 
 type FundingSource = Extract<TreasuryFundingSourcesResult, { kind: 'available' }>['rows'][number]
@@ -142,8 +147,9 @@ function setProcessor(refunds: Stripe.Refund[] = [], refundedMinor = 0) {
 }
 
 describe('fresh Stripe treasury funding audit', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    vi.mocked(guardedFetch).mockImplementation((await vi.importActual<typeof import('undici')>('undici')).fetch)
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     vi.stubEnv('STRIPE_READBACK_KEY', config.secretKey)
   })
@@ -252,13 +258,33 @@ describe('fresh Stripe treasury funding audit', () => {
     expect(sdk.checkout).not.toHaveBeenCalled()
   })
 
+  it('preserves authenticated GET headers and streamed JSON through the maintained Fetch adapter', async () => {
+    const { source, settlement } = fixture()
+    const fetch = vi.mocked(guardedFetch).mockResolvedValue(new UndiciResponse(JSON.stringify(checkout()), {
+      status: 200, headers: { 'content-type': 'application/json', 'request-id': 'req_readback_fixture' },
+    }))
+    sdk.checkout.mockImplementationOnce(async () => {
+      const options = sdk.construct.mock.calls[0]?.[1] as { httpClient: ReturnType<typeof Stripe.createFetchHttpClient> }
+      const response = await options.httpClient.makeRequest('api.stripe.com', '443', '/v1/audit-proof', 'GET',
+        { Authorization: 'Bearer fixture-readback' }, '', 'https', 5_000)
+      expect(response.getStatusCode()).toBe(200)
+      expect(response.getHeaders()).toMatchObject({ 'request-id': 'req_readback_fixture' })
+      return await response.toJSON()
+    })
+    expect(await auditTreasuryFunding([source], [settlement], 'sandbox')).toMatchObject({ kind: 'matched', checkedCount: 1 })
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'GET', redirect: 'error', headers: { authorization: 'Bearer fixture-readback' },
+    })
+  })
+
   it('aborts a continually dripping response body after headers through the actual maintained Fetch adapter', async () => {
     const { source, settlement } = fixture()
     const actualTimeout = AbortSignal.timeout.bind(AbortSignal)
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => actualTimeout(25))
     let aborted = false
     let signal: AbortSignal | null | undefined
-    vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
+    vi.mocked(guardedFetch).mockImplementation(async (_url, init) => {
       signal = init?.signal
       if (signal === undefined || signal === null) throw new Error('missing_abort_signal')
       const requestSignal = signal
@@ -273,8 +299,8 @@ describe('fresh Stripe treasury funding audit', () => {
           }, { once: true })
         },
       })
-      return new Response(stream, { headers: { 'content-type': 'application/json' } })
-    }))
+      return new UndiciResponse(stream, { headers: { 'content-type': 'application/json' } })
+    })
     // Headers arrive immediately, so the SDK clears its own timeout. Body I/O
     // keeps progressing, demonstrating why an inactivity timeout is insufficient.
     sdk.checkout.mockImplementationOnce(async () => {
@@ -291,14 +317,14 @@ describe('fresh Stripe treasury funding audit', () => {
   })
 
   it.each([
-    ['169.254.169.254', 'GET'], ['other.example', 'GET'], ['api.stripe.com', 'POST'],
-  ])('refuses unexpected SDK target %s or method %s before sending credentials', async (host, method) => {
+    ['169.254.169.254', 'GET', ''], ['other.example', 'GET', ''], ['api.stripe.com', 'POST', ''],
+    ['api.stripe.com', 'GET', 'unexpected body'],
+  ])('refuses unexpected SDK target %s, method %s or body %s before sending credentials', async (host, method, body) => {
     const { source, settlement } = fixture()
-    const fetch = vi.fn()
-    vi.stubGlobal('fetch', fetch)
+    const fetch = vi.mocked(guardedFetch).mockImplementation(async () => { throw new Error('unexpected_transport_request') })
     sdk.checkout.mockImplementationOnce(async () => {
       const options = sdk.construct.mock.calls[0]?.[1] as { httpClient: ReturnType<typeof Stripe.createFetchHttpClient> }
-      const response = await options.httpClient.makeRequest(host, '443', '/v1/audit-proof', method, {}, '', 'https', 5_000)
+      const response = await options.httpClient.makeRequest(host, '443', '/v1/audit-proof', method, {}, body, 'https', 5_000)
       return await response.toJSON()
     })
     expect(await auditTreasuryFunding([source], [settlement], 'sandbox')).toEqual({

@@ -2221,3 +2221,56 @@ No backend code, environment binding or credential was changed. The full release
 gate last passed at Stage 33; this bounded change ran its affected checks and
 build, and is not a merge or alpha release. Deployed current-backend operation,
 authenticated development use and a paid development Call remain unverified.
+
+
+### Stage 35 — deploy the confirmed development backend
+
+The authorized target is development `cool-crab-306`. Before applying current
+code, a file-inclusive native export captured 184 table archives, 151 documents
+and no storage files. Of those documents, 150 are native table metadata and one
+is a rate-limiter record. An independent live census found all 87 root tables
+empty, no stored files, and no scheduled functions across the root and all 16
+installed components. Workflow and workpool tables are empty. The private export
+and its manifest/census are retained outside the repository; its SHA-256 is
+`f6068bf06ee1dc2eb77170f4a807e081e1dcf779116f18304b5d8dfc823643ea`.
+The archive is access-restricted, but FileVault is off: encryption at rest is not
+established. Export and census have separate cutoffs, and this is neither a
+code/environment backup nor a demonstrated full backend rollback.
+
+The backend's environment declaration was set to `development` and read back
+through the exact native deployment selector. No provider credential was copied.
+The first native code-push attempt stopped on five TypeScript errors before
+`finishPush`; analysis/schema staging may have occurred. The application compiler
+included DOM types while the Convex compiler did not, and native/global fetch
+also disagreed with the installed Undici dispatcher types.
+
+**Requires:** treasury verification remains a bodyless GET to the fixed Stripe
+origin, and CDP checks retain their existing fixed provider origin, per-call
+credentials and guarded DNS transport. Browser telemetry initializes only with
+a browser window and after the existing privacy check.
+**Ensures:** each transport uses fetch and Agent from the same installed Undici
+package. The Stripe SDK receives the original response stream, status and headers
+through its Web Fetch interface. The existing deadline covers response-body
+consumption; redirects and private DNS results remain refused.
+**Invariant:** these checks do not sign, provision, move money or share credentials
+between concurrent calls. Cleanup still destroys the per-call dispatcher.
+**On violation:** origin/method/body violations and provider/network failures retain
+the existing controlled refusal/unavailable result; no retry or alternate
+credential is introduced. Non-browser telemetry initialization remains disabled.
+
+Keep the inline Stripe response adapter: one Response and a header copy per GET
+remove the transport type incompatibility without buffering, extra network I/O,
+a new file or an unchecked cast. The CDP path already accepts Undici responses.
+Do not widen the Convex compiler to DOM or split observability modules without an
+established runtime need. Serial native Convex typechecking now belongs to both
+`check` and the clean release gate, using the existing compiler and test setup.
+
+Local acceptance: 72 focused tests pass across treasury funding, CDP readiness
+and telemetry privacy/integration. They cover the actual Stripe adapter's JSON,
+status and headers, GET-body refusal, private/stalled DNS, slow response-body
+abort, distinct concurrent CDP credentials and browser privacy behavior.
+`npm run check` passes, including both compiler configurations and zero cycles;
+`npm run build` passes. Independent review found no actionable defect in the
+transport guards, abort propagation, cleanup or compiler wiring. No merge or
+alpha release is performed; the full release gate last passed at Stage 33.
+Deployed backend behavior and authenticated paid-Call proof are still pending.

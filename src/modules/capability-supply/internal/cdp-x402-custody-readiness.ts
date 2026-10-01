@@ -27,8 +27,8 @@ const MAX_RESPONSE_BYTES = 64 * 1024
  * unavailable with a safe code, never a raw response or credential.
  *
  * SDK 1.55's high-level reads have global Axios state and no cancellation option.
- * Its public auth hook with native fetch provides bounded, isolated GETs without
- * changing the existing signing transport or adding a dependency.
+ * Its public auth hook with the installed Undici transport provides bounded,
+ * isolated GETs without changing the signing transport or adding a dependency.
  */
 export async function readCdpX402CustodyReadiness(
   environment: StringEnvironment,
@@ -42,7 +42,7 @@ export async function readCdpX402CustodyReadiness(
     || !/^[A-Za-z0-9][A-Za-z0-9-]{0,34}[A-Za-z0-9]$/.test(configuration.accountName)) {
     return { kind: 'refused', code: 'cdp_custody_configuration_invalid' }
   }
-  const [{ Agent }, { createGuardedLookup, defaultDnsResolver }] = await Promise.all([
+  const [{ Agent, fetch: guardedFetch }, { createGuardedLookup, defaultDnsResolver }] = await Promise.all([
     import('undici'), import('@/modules/network-guard/public'),
   ])
   const completed = new AbortController()
@@ -59,10 +59,10 @@ export async function readCdpX402CustodyReadiness(
       source: 'ae-custody-readiness',
     })
     signal.throwIfAborted()
-    // Node's maintained fetch accepts the Undici dispatcher; keep it scoped to
-    // this check so neither credentials nor transport state cross invocations.
+    // Fetch and its dispatcher share the installed transport and remain scoped
+    // to this check, including response-body cancellation.
     const requestOptions = { method: 'GET', headers, signal, redirect: 'error' as const, dispatcher }
-    const response = await fetch(`${CDP_ORIGIN}${path}`, requestOptions)
+    const response = await guardedFetch(`${CDP_ORIGIN}${path}`, requestOptions)
     if (!response.ok) {
       await cancelResponseBody(response)
       throw Object.assign(new Error('CDP custody read failed'), { kind: 'cdp_custody_read_failure',

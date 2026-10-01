@@ -7,14 +7,12 @@ import {
   sanitizeTelemetryError,
   sanitizeTelemetryEvent,
   sanitizeTelemetryValue,
-  securePrivateRecordLocation,
 } from '@/lib/observability/private-route-safety'
 
 let initialized = false
 
 export function initSentryClient(router?: AnyRouter): boolean {
-  if (typeof window === 'undefined') return false
-  securePrivateRecordLocation(window.location, window.history)
+  if (typeof Reflect.get(globalThis, 'window') === 'undefined') return false
   if (!isTelemetryAllowedForCurrentRoute() || initialized) return initialized
 
   const config = readObservabilityClientConfig()
