@@ -12,9 +12,15 @@ import { readCapabilityToolSearch } from '@/modules/capability-supply/tool-sourc
 import type { SourceFreshnessState } from '@/modules/common/freshness'
 import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
 import { isMoneyRefusal } from '@/modules/money/public'
+import { isRecord } from '@/modules/common/is-record'
+import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import { callPublicSourceQuery, createConvexServerFunctionAssertion, sourceQuery, type ConvexServerFunctionAssertion } from './convex-source'
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000
 const MAX_PROBE_TIMEOUT_MS = 5_000
+const PAYMENT_READINESS_OPERATION = 'moneyReadiness:readForServer'
+const PAYMENT_READINESS_SCOPE = 'money_readiness:read'
+const paymentReadinessQuery = sourceQuery<{ environment: PaymentEnvironment; serviceAuth: ConvexServerFunctionAssertion }, PaymentReadinessView>(PAYMENT_READINESS_OPERATION)
 
 type ReadinessCheck = Readonly<{
   status: 'ready' | 'failed'
@@ -139,14 +145,14 @@ export type ServerReadinessResult =
   | Readonly<{
       status: 'ready'
       deployment: WebReadinessDeployment
-      checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
+      checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck; payments?: ReadinessCheck }>
       diagnostics: ReadinessDiagnostics
       commercial: CommercialReadiness
     }>
   | Readonly<{
       status: 'not_ready'
       deployment: WebReadinessDeployment
-      checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
+      checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck; payments?: ReadinessCheck }>
       diagnostics: ReadinessDiagnostics
       commercial: CommercialReadiness
     }>
@@ -183,16 +189,26 @@ export async function readServerReadiness(
       checks: {
         config: { status: 'failed', code: config.code },
         convex: { status: 'failed', code: 'convex_probe_skipped' },
+        ...(deployment.paymentEnvironment === 'production'
+          ? { payments: { status: 'failed' as const, code: 'payments_unavailable' } } : {}),
       },
       diagnostics,
       commercial: await commercialPromise,
     }
   }
 
-  const [convex, commercial] = await Promise.all([
+  const production = deployment.paymentEnvironment === 'production'
+  const [convex, commercial, paymentView] = await Promise.all([
     probeConvex(config.convexUrl, options.fetch ?? globalThis.fetch, options.timeoutMs),
     commercialPromise,
+    production ? readBackendPaymentReadiness(env, config.convexUrl, options.fetch ?? globalThis.fetch, options.timeoutMs) : undefined,
   ])
+  // Commercial reads can finish after the query. Authority is still evaluated
+  // at response completion; a previously green response cannot extend expiry.
+  const payments: ReadinessCheck | undefined = production
+    ? freshPaymentReadiness(paymentView, Date.now())
+      ? { status: 'ready' } : { status: 'failed', code: 'payments_unavailable' }
+    : undefined
   if (convex.status === 'failed') {
     return {
       status: 'not_ready',
@@ -200,6 +216,7 @@ export async function readServerReadiness(
       checks: {
         config: { status: 'ready' },
         convex,
+        ...(payments === undefined ? {} : { payments }),
       },
       diagnostics,
       commercial,
@@ -207,15 +224,63 @@ export async function readServerReadiness(
   }
 
   return {
-    status: 'ready',
+    status: payments?.status === 'failed' ? 'not_ready' : 'ready',
     deployment,
     checks: {
       config: { status: 'ready' },
       convex,
+      ...(payments === undefined ? {} : { payments }),
     },
     diagnostics,
     commercial,
   }
+}
+
+/**
+ * Requires a statically admitted production origin and exact signed environment.
+ * Ensures bounded read-only transport, including response body cancellation.
+ * Invariant: no Clerk session, provider effect, raw error or detailed public code.
+ * On violation: undefined; the aggregate gate returns only payments_unavailable.
+ */
+async function readBackendPaymentReadiness(env: StringEnvironment, convexUrl: string, fetchImpl: typeof fetch, timeoutMs?: number): Promise<PaymentReadinessView | undefined> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), boundedProbeTimeout(timeoutMs))
+  try {
+    const command = { environment: 'production' as const }
+    const serviceAuth = await createConvexServerFunctionAssertion({
+      operation: PAYMENT_READINESS_OPERATION, scope: PAYMENT_READINESS_SCOPE, command, env,
+    })
+    if (controller.signal.aborted) return undefined
+    const view = await callPublicSourceQuery(paymentReadinessQuery, { ...command, serviceAuth }, {
+      env, fetch: async (input, init) => {
+        const response = await fetchImpl(input, { ...init, redirect: 'error', signal: controller.signal })
+        if (response.redirected || (response.url !== '' && new URL(response.url).origin !== new URL(convexUrl).origin)) {
+          throw new Error('readiness_backend_identity_invalid')
+        }
+        return response
+      },
+    })
+    return controller.signal.aborted ? undefined : view
+  } catch {
+    return undefined
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function freshPaymentReadiness(value: unknown, now: number): boolean {
+  const clock = (input: unknown): input is number => typeof input === 'number' && Number.isSafeInteger(input) && input >= 0
+  if (!isRecord(value) || value.kind !== 'ready' || value.environment !== 'production' || value.code !== null
+    || !clock(value.checkedAt) || value.checkedAt > now || !clock(value.expiresAt) || value.expiresAt <= now
+    || value.expiresAt > value.checkedAt + PAYMENT_READINESS_MAX_VALIDITY_MS || !isRecord(value.checks)
+    || Object.keys(value.checks).length !== PAYMENT_READINESS_CHECK_KEYS.length) return false
+  const checks = value.checks
+  const expiresAt = value.expiresAt
+  return PAYMENT_READINESS_CHECK_KEYS.every(key => {
+    const check = checks[key]
+    return isRecord(check) && check.kind === 'passed' && clock(check.validUntil)
+      && check.validUntil > now && check.validUntil >= expiresAt
+  })
 }
 
 /** Bounds a probe timeout the same way `probeConvex` does, shared by every commercial sub-check. */

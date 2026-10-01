@@ -226,3 +226,35 @@ describe('payment readiness read-only refresh', () => {
     expect(f.runMutation).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('web static subset from aggregate readiness diagnostics', () => {
+  function diagnostic() {
+    return { type: 'about:blank', title: 'Unavailable', detail: 'Required server readiness checks did not pass.',
+      status: 503, kind: 'UNAVAILABLE', code: 'server_not_ready', retryable: true,
+      checks: { config: 'ready', convex: 'ready', payments: { status: 'failed', code: 'payments_unavailable' } },
+      deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://fixture.convex.cloud' } }
+  }
+  it('publishes static web pass from a genuine aggregate503 while preserving unsupported sanctions failure', async () => {
+    io.web.mockResolvedValue(Response.json(diagnostic(), { status: 503, headers: { 'content-type': 'application/problem+json' } }))
+    const f = actionFixture()
+    await refreshPaymentReadiness(f.ctx)
+    expect(f.snapshot().checks.web_configuration).toEqual({ kind: 'passed', validUntil: NOW + 600_000 })
+    expect(f.snapshot().checks.sanctions).toEqual({ kind: 'failed', code: 'trm_tenant_contract_unavailable' })
+  })
+  it.each(['code', 'type', 'kind', 'body_status', 'content_type', 'static', 'world', 'origin', 'redirect'] as const)(
+    'refuses an invalid503 %s without converting it into static readiness', async defect => {
+      const body = diagnostic()
+      if (defect === 'code') body.code = 'gateway_unavailable'
+      if (defect === 'type') body.type = 'https://foreign.example/problem'
+      if (defect === 'kind') body.kind = 'INVALID_ARGUMENT'
+      if (defect === 'body_status') body.status = 500
+      if (defect === 'static') body.checks.config = 'failed'
+      if (defect === 'world') body.deployment.paymentEnvironment = 'production'
+      if (defect === 'origin') body.deployment.convexOrigin = 'https://foreign.convex.cloud'
+      const response = Response.json(body, { status: 503, headers: { 'content-type': defect === 'content_type' ? 'application/json' : 'application/problem+json' } })
+      if (defect === 'redirect') Object.defineProperty(response, 'redirected', { value: true })
+      io.web.mockResolvedValue(response)
+      expect(await readWebConfiguration(process.env, 'sandbox', NOW + 60_000)).toMatchObject({ kind: 'failed' })
+    },
+  )
+})

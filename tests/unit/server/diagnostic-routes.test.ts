@@ -1,5 +1,24 @@
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test'
+import { makeFunctionReference } from 'convex/server'
+import type { ActionCtx } from '../../../convex/_generated/server'
+import schema from '../../../convex/schema'
+import { readWebConfiguration, refreshPaymentReadiness } from '../../../convex/lib/money/readiness/refresh'
+import { backendPaymentReadinessDigest, paymentReadinessExpiresAt, sealPaymentReadinessSnapshot, type PaymentReadinessSnapshot, type PaymentReadinessChecks } from '@/modules/money/payment-readiness'
+import { getFunctionName } from 'convex/server'
+import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ToolSearchResult } from '@/modules/capability-supply/tool-projection'
+
+const readinessIo = vi.hoisted(() => ({ web: vi.fn(), cdp: vi.fn(), ledger: vi.fn(), chain: vi.fn() }))
+vi.mock('@/modules/network-guard/server', () => ({ sendGuardedHttpRequest: readinessIo.web }))
+vi.mock('@/modules/capability-supply/server', async importOriginal => ({
+  ...await importOriginal<typeof import('@/modules/capability-supply/server')>(), readCdpX402CustodyReadiness: readinessIo.cdp,
+}))
+vi.mock('@/modules/money/formance', async importOriginal => ({
+  ...await importOriginal<typeof import('@/modules/money/formance')>(), readFormanceHealth: readinessIo.ledger,
+}))
+vi.mock('../../../convex/lib/money/treasury/chainObservation', () => ({ readTreasuryChainObservation: readinessIo.chain }))
 
 const mocks = vi.hoisted(() => ({
   captureClientError: vi.fn((payload: unknown) => {
@@ -32,6 +51,12 @@ import { readNamesOnlyReadinessDiagnostics, readServerReadiness } from '@/lib/se
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { SOURCE_WRITE_FAMILIES } from '@/lib/deployment/manifest'
+
+
+function readyPaymentView(validUntil = Date.now() + 60_000): PaymentReadinessView {
+  return { kind: 'ready', environment: 'production', checkedAt: Date.now(), expiresAt: validUntil, code: null,
+    checks: Object.fromEntries(PAYMENT_READINESS_CHECK_KEYS.map(key => [key, { kind: 'passed', validUntil }])) as PaymentReadinessView['checks'] }
+}
 
 const secret = 'iak1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 
@@ -121,7 +146,8 @@ describe('operational diagnostics routes', () => {
     // reads a live deployment (a running local backend made these tests
     // report `catalogue: fresh`). Commercial cases override per test.
     setPublicSourceTransportForTests({
-      query: vi.fn(async () => ({ kind: 'unavailable' as const, refreshState: 'none' as const })),
+      query: vi.fn(async reference => getFunctionName(reference) === 'moneyReadiness:readForServer'
+        ? readyPaymentView() : { kind: 'unavailable' as const, refreshState: 'none' as const }),
       mutation: vi.fn(),
       action: vi.fn(),
     } as never)
@@ -733,5 +759,159 @@ describe('operational diagnostics routes', () => {
         commercial: { catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: true },
       })
     })
+  })
+})
+
+describe('production aggregate payment readiness', () => {
+  let paymentView: unknown
+  const query = vi.fn(async (reference: Parameters<typeof getFunctionName>[0]) => getFunctionName(reference) === 'moneyReadiness:readForServer'
+    ? paymentView : { kind: 'unavailable', refreshState: 'none' })
+  beforeEach(() => {
+    paymentView = readyPaymentView()
+    query.mockReset()
+    query.mockImplementation(async reference => getFunctionName(reference) === 'moneyReadiness:readForServer'
+      ? paymentView : { kind: 'unavailable', refreshState: 'none' })
+    setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never)
+  })
+  afterEach(() => { setPublicSourceTransportForTests(undefined); vi.restoreAllMocks(); vi.unstubAllEnvs() })
+  const request = () => new Request('https://ae.example/api/ready')
+  const readyFetch = () => vi.fn(async () => new Response(null, { status: 200 }))
+  it.each(['missing', 'provider_failed', 'expired', 'incomplete', 'wrong_world', 'future_clock', 'invalid_clock'] as const)(
+    'returns generic503 for %s evidence and preserves HEAD status without detailed checks', async defect => {
+      const view = readyPaymentView()
+      if (defect === 'missing') paymentView = undefined
+      if (defect === 'provider_failed') paymentView = { ...view, kind: 'not_ready', code: 'private_provider_detail',
+        checks: { ...view.checks, sanctions: { kind: 'failed', code: 'private_sanctions_detail' } } }
+      if (defect === 'expired') paymentView = { ...view, expiresAt: Date.now() }
+      if (defect === 'incomplete') paymentView = { ...view, checks: { web_configuration: view.checks.web_configuration } }
+      if (defect === 'wrong_world') paymentView = { ...view, environment: 'sandbox' }
+      if (defect === 'future_clock') paymentView = { ...view, checkedAt: Date.now() + 10_000 }
+      if (defect === 'invalid_clock') paymentView = { ...view, expiresAt: Number.NaN }
+      const options = { env: productionReadinessEnvironment(), fetch: readyFetch(), nodeMajor: 22 }
+      const response = await handleReadyRequest(request(), options)
+      expect(response.status).toBe(503)
+      const body = await response.json()
+      expect(body).toMatchObject({ type: 'about:blank', code: 'server_not_ready', status: 503,
+        checks: { config: 'ready', convex: 'ready', payments: { status: 'failed', code: 'payments_unavailable' } } })
+      const serialized = JSON.stringify(body)
+      for (const privateValue of ['private_provider_detail', 'private_sanctions_detail', 'configurationDigest', 'evidenceDigest', 'cdp-key-secret', 'scopes', 'serviceAuth']) expect(serialized).not.toContain(privateValue)
+      const head = await handleReadyRequest(request(), options, true)
+      expect(head.status).toBe(503)
+      expect(head.headers.get('content-type')).toBe(response.headers.get('content-type'))
+      expect(head.headers.get('cache-control')).toBe('no-store')
+      expect(await head.text()).toBe('')
+    },
+  )
+  it('returns200 only for the complete fresh production view and leaves development static', async () => {
+    const env = productionReadinessEnvironment()
+    const response = await handleReadyRequest(request(), { env, fetch: readyFetch(), nodeMajor: 22 })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ checks: { config: 'ready', convex: 'ready', payments: 'ready' } })
+    paymentView = undefined
+    query.mockClear()
+    const development = await handleReadyRequest(request(), { env: { ...env, AE_DEPLOYMENT_ENVIRONMENT: 'development' }, fetch: readyFetch(), nodeMajor: 22 })
+    expect(development.status).toBe(200)
+    expect((await development.json()).checks).toEqual({ config: 'ready', convex: 'ready' })
+    expect(query.mock.calls.some(([reference]) => getFunctionName(reference) === 'moneyReadiness:readForServer')).toBe(false)
+  })
+  it('rechecks expiry after a delayed commercial probe', async () => {
+    let now = Date.now()
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    paymentView = readyPaymentView(now + 1000)
+    let releaseSearch: (() => void) | undefined
+    const searchBarrier = new Promise<void>(resolve => { releaseSearch = resolve })
+    let observedPayment: (() => void) | undefined
+    const paymentBarrier = new Promise<void>(resolve => { observedPayment = resolve })
+    query.mockImplementation(async reference => {
+      if (getFunctionName(reference) === 'moneyReadiness:readForServer') { observedPayment?.(); return paymentView }
+      return { kind: 'unavailable', refreshState: 'none' }
+    })
+    toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce(async () => { await searchBarrier; return { kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: '', appliedFilters: {}, ranking: [], navigation: [] } })
+    const pending = handleReadyRequest(request(), { env: productionReadinessEnvironment(), fetch: readyFetch(), nodeMajor: 22 })
+    await paymentBarrier
+    // Drain the SDK adapter's awaited return chain while search stays pending
+    // and the evidence is fresh, then expire it before response completion.
+    await new Promise<void>(resolve => setImmediate(resolve))
+    now += 1000
+    releaseSearch?.()
+    const response = await pending
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+  })
+  it('bootstraps actual canonical503 web evidence through refresh/store/read without concealing sanctions, then recovers on admitted evidence', async () => {
+    const now = Date.now()
+    const env = { ...productionReadinessEnvironment(), AE_SITE_URL: 'https://ae.example', CONVEX_CLOUD_URL: 'https://convex.example' }
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value)
+    const modules = Object.fromEntries(Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
+      .map(([path, load]) => [path.replace('../../../convex/', './'), load]))
+    const backend = convexTest(schema, modules)
+    const publish = makeFunctionReference<'mutation', { snapshot: PaymentReadinessSnapshot }, { kind: 'published'; replayed: boolean } | { kind: 'refused'; code: string }>('moneyReadiness:publish')
+    const registeredRead = makeFunctionReference<'query', { environment: 'sandbox' | 'production'; serviceAuth: import('@/lib/server/convex-source').ConvexServerFunctionAssertion }, PaymentReadinessView>('moneyReadiness:readForServer')
+    setPublicSourceTransportForTests({
+      query: async (reference: Parameters<typeof getFunctionName>[0], args: { environment: 'sandbox' | 'production'; serviceAuth: import('@/lib/server/convex-source').ConvexServerFunctionAssertion }) =>
+        getFunctionName(reference) === 'moneyReadiness:readForServer' ? await backend.query(registeredRead, args) : { kind: 'unavailable', refreshState: 'none' },
+      mutation: vi.fn(), action: vi.fn(),
+    } as never)
+    const options = { env, fetch: readyFetch(), nodeMajor: 22 }
+    const initial = await handleReadyRequest(request(), options)
+    expect(initial.status).toBe(503)
+    expect((await initial.clone().json()).checks).toEqual({ config: 'ready', convex: 'ready', payments: { status: 'failed', code: 'payments_unavailable' } })
+    readinessIo.web.mockImplementation(async () => await handleReadyRequest(request(), options))
+    expect(await readWebConfiguration(process.env, 'production', now + 60_000)).toEqual({ kind: 'passed', validUntil: now + 60_000 })
+    readinessIo.cdp.mockResolvedValue({ kind: 'ready' })
+    readinessIo.ledger.mockResolvedValue({ kind: 'ready' })
+    readinessIo.chain.mockResolvedValue({ kind: 'observed', blockTimestamp: now })
+    const passed = { kind: 'passed' as const, validUntil: now + 60_000 }
+    const action = {
+      runQuery: vi.fn(async () => ({ reference_rate: passed, commercial_policy: passed, treasury: passed })),
+      runMutation: async (_reference: unknown, args: { snapshot: PaymentReadinessSnapshot }) => await backend.mutation(publish, args),
+    } as unknown as ActionCtx
+    expect(await refreshPaymentReadiness(action)).toEqual({ kind: 'published', replayed: false })
+    const rows = await backend.run(ctx => ctx.db.query('moneyPaymentReadiness').collect())
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.checks.web_configuration.kind).toBe('passed')
+    expect(rows[0]?.checks.sanctions).toEqual({ kind: 'failed', code: 'trm_tenant_contract_unavailable' })
+    expect((await handleReadyRequest(request(), options)).status).toBe(503)
+    // This separately admitted fixture proves the existing consumer's recovery;
+    // it is not proof that a live sanctions provider is currently implemented.
+    const checks = readyPaymentView(now + 60_000).checks as PaymentReadinessChecks
+    const startedAt = rows[0]!.startedAt + 1
+    vi.spyOn(Date, 'now').mockReturnValue(startedAt + 1)
+    await backend.mutation(publish, { snapshot: sealPaymentReadinessSnapshot({ environment: 'production',
+      configurationDigest: backendPaymentReadinessDigest(process.env), startedAt, completedAt: startedAt + 1,
+      expiresAt: paymentReadinessExpiresAt(startedAt, checks), checks }) })
+    expect((await handleReadyRequest(request(), options)).status).toBe(200)
+  })
+  it.each(['network', 'partial_body', 'redirect'] as const)('bounds actual Convex SDK %s failure without exposing transport details', async failure => {
+    setPublicSourceTransportForTests(undefined)
+    vi.stubEnv('CONVEX_URL', undefined)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
+    const env: Record<string, string> = { ...productionReadinessEnvironment(), CONVEX_URL: 'https://fixture.convex.cloud', VITE_CONVEX_URL: 'https://fixture.convex.cloud' }
+    let aborted = false
+    const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
+      if (init?.method !== 'POST') return new Response(null, { status: 200 })
+      expect(init.redirect).toBe('error')
+      expect(String(init.body)).not.toContain(env.AE_CONVEX_SERVER_FUNCTION_TOKEN)
+      if (failure === 'redirect') {
+        const response = Response.json({ status: 'success', value: readyPaymentView() })
+        Object.defineProperty(response, 'redirected', { value: true })
+        return response
+      }
+      const signal = init.signal
+      if (signal == null) throw new Error('missing_abort_signal')
+      if (failure === 'network') return await new Promise<Response>((_resolve, reject) => {
+        const abort = () => { aborted = true; reject(new DOMException('private-network-details', 'AbortError')) }
+        if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true })
+      })
+      return new Response(new ReadableStream({ start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"status":"success","value":'))
+        const abort = () => { aborted = true; controller.error(new DOMException('private-body-details', 'AbortError')) }
+        if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true })
+      } }), { headers: { 'content-type': 'application/json' } })
+    })
+    const response = await handleReadyRequest(request(), { env, fetch: fetchImpl, timeoutMs: 25, nodeMajor: 22 })
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+    if (failure !== 'redirect') expect(aborted).toBe(true)
   })
 })

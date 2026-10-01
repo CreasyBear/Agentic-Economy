@@ -1,6 +1,6 @@
 # Journey SLI alerts
 
-Create each rule in the destination that actually receives its events. Web metrics can use Sentry; backend journey logs require a log destination. Do not script the Sentry API. Each rule is one journey.
+Create each rule in the destination that actually receives its events. Web metrics can use Sentry; backend journey logs require a log destination. Do not script the Sentry API. Each rule is one journey. Until delivery and a test notification are verified, the rule is not operational.
 
 ## What is counted
 
@@ -27,6 +27,12 @@ For journey logs, use Convex's native **PostHog log stream** to the existing US 
 
 Sources verified 1 October 2026: [Convex exception reporting](https://docs.convex.dev/production/integrations/exception-reporting), [Convex log streams](https://docs.convex.dev/production/integrations/log-streams). No custom bridge or new monitoring service is required. If the connected log product cannot express the ratio and minimum together, retain the query as a dashboard and use a verified supported alert; do not substitute a misleading ratio.
 
+Use the receiver's log-based rules until an explicit, tested metric
+transformation exists. Count each terminal event through one representation.
+Record the receiving destination, rule, responder and test notification/acknowledgement
+before claiming alert coverage. Missing delivery is unavailable evidence, not a
+healthy zero-event window.
+
 Do not fire a ratio when the window has fewer events than the minimum. One failure in an empty window is not a ratio.
 
 ## Search
@@ -43,7 +49,12 @@ Results returned are good. An error is not.
 | Window | 15 minutes |
 | Minimum | 20 valid events (`journey:search`) |
 
-Logs alert, if the metric is not in the project yet: count lines containing `[ae.journey]` and `"journey":"search"` and `"outcome":"error"`, divided by lines containing `[ae.journey]` and `"journey":"search"`. Same threshold, window, and minimum.
+Logs alert, once the receiver contains these events: count lines containing
+`[ae.journey]`, `"journey":"search"` and `"outcome":"error"`, divided by valid
+Search lines (`match`, `scoped`, `noMatch` or `error`). Alert **above `0.05`**,
+using the same 15-minute window and minimum of 20 valid events. This failure ratio
+is equivalent to the success ratio being below `0.95`: one error in 20 is exactly
+the boundary; two errors in 20 cross it.
 
 ## Quote
 

@@ -3018,6 +3018,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "public",
+    "module": "moneyReadiness",
+    "method": "readForServer",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "moneyReadiness",
     "method": "readInternal",

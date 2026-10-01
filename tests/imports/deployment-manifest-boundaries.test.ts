@@ -32,6 +32,7 @@ describe('deployment manifest import seam', () => {
       'deployment-config',
       'convex-source',
       'source-authority',
+      'production-payment-readiness',
     ])
   })
 })

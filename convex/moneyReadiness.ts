@@ -1,9 +1,10 @@
+import { serviceAssertion } from './serviceAssertion'
 import { readPaymentReadinessSourceChecks, paymentReadinessSourceChecksValue } from './lib/money/readiness/sourceChecks'
 import { v } from 'convex/values'
-import { internalMutation, internalQuery } from './_generated/server'
+import { internalMutation, internalQuery, query } from './_generated/server'
 import { paymentReadinessEnvironmentValue, paymentReadinessSnapshotValue, paymentReadinessViewValue,
   type PaymentReadinessView } from '@/modules/money/payment-readiness'
-import { publishPaymentReadiness, publishPaymentReadinessResultValue, readPaymentReadiness } from './lib/money/readiness/store'
+import { publishPaymentReadiness, publishPaymentReadinessResultValue, readPaymentReadiness, readPaymentReadinessForServer } from './lib/money/readiness/store'
 
 export const readInternal = internalQuery({
   args: { environment: paymentReadinessEnvironmentValue, now: v.number() },
@@ -19,4 +20,10 @@ export const readSourceChecks = internalQuery({
   args: { environment: paymentReadinessEnvironmentValue, now: v.number() },
   returns: paymentReadinessSourceChecksValue,
   handler: readPaymentReadinessSourceChecks,
+})
+
+export const readForServer = query({
+  args: { environment: paymentReadinessEnvironmentValue, serviceAuth: serviceAssertion },
+  returns: paymentReadinessViewValue,
+  handler: readPaymentReadinessForServer,
 })
