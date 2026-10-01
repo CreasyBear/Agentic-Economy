@@ -80,6 +80,19 @@ skipped (1 unit, 61 integration, 14 browser; 3 integration todo). This proves th
 local source and runtime refactor; production admission, alert delivery and the
 coordinated backend/web release remain the delivery goal's open acceptance work.
 
+React Doctor changed-scope review against `e84d9112e`: 5 error-level and 36 warning
+advisories remain; this is not a clean scanner result. Four error diagnostics flag
+upstream height/width/margin animation: the dismissible Alert path is unused here,
+and the filter menu's small back control intentionally changes layout (with a
+reduced-motion path). The observer diagnostic misses `useReflowGlide`'s explicit
+ResizeObserver/MutationObserver disconnection and animation cleanup on unmount.
+Retain the maintained components after actual browser inspection. Other warnings
+include existing/shared function complexity, stable disclosure indices, explicit
+table roles needed by the mobile CSS layout and shared Motion imports. Account
+search intentionally separates an unsubmitted draft from the route query; the
+effect synchronizes browser navigation without remounting or losing input focus.
+No scanner rules were disabled and no score was uploaded.
+
 Deliver a working founder operating console on the existing `/admin` surface.
 Joel can sign in, understand actual marketplace traction and money, find an
 affected Account or purchase, take a supported authorized action, and verify its
