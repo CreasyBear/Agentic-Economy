@@ -135,14 +135,21 @@ export function prepareFormanceSettledSaleRefund(input: FormanceSettledSaleRefun
 
 /** Exact booked effects are the financial evidence; metadata alone cannot prove
  * amounts or destinations. Zero sends may be omitted by the native engine. */
-export function managedCallPostingsMatch(
+export function formanceCommandPostingsMatch(
   command: FormanceMoneyCommand,
   postings: readonly { source: string; destination: string; asset: string; amountUnits: string }[],
 ): boolean {
   type Leg = readonly [string, string, string]
-  const variables = command.variables
+  const variables: Readonly<Record<string, string>> = command.template === 'PROMO_GRANTED' || command.template === 'PROMO_EXPIRED'
+    ? { ...command.variables, world: 'world' } : command.variables
   let legs: readonly Leg[]
   switch (command.template) {
+    case 'PROMO_GRANTED':
+      legs = [['world', 'destination', 'amount']]
+      break
+    case 'PROMO_EXPIRED':
+      legs = [['source', 'world', 'amount']]
+      break
     case 'CALL_RESERVED_AUD':
       legs = [
         ['account_available', 'call_reserved', 'buyer_amount'],

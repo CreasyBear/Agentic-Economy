@@ -11,9 +11,12 @@ import { compareConvexSnapshots, ConvexSnapshotDiagnostic, readConvexSnapshot } 
 import { compareRestoreArchives } from '../../tools/release/convex-restore'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { createSourceWriteAdmission, sourceWriteCommandBodyDigest, sourceWriteCommandDigest } from '@/modules/security/source-write-admission'
+import type { AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import { createFormanceContext, executeFormanceMoneyCommand, installPackage4FormanceSchema,
   readFormanceHealth, readFormanceTransactionByReference } from '@/modules/money/formance'
 import { adjustFormanceSpendingPeriod, bookFormanceFundingSettlement, prepareFormancePromotionalCreditGrant,
+  prepareFormancePromotionalCreditExpiry,
   refundFormanceSettledSale, releaseFormanceManagedCall, reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
   type FormanceManagedCallBooking } from '@/modules/money/formance-workflows'
 import { bookFormanceTreasuryBatch } from '@/modules/money/formance-treasury'
@@ -746,6 +749,192 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
       if (cleaned.every(result => result.status === 'fulfilled')) rmSync(root, { recursive: true, force: true })
     }
     if (failures.length > 0) throw new AggregateError(failures, 'financial_restore_proof_failed')
+    console.log(JSON.stringify(summary))
+  }, 900_000)
+})
+
+
+/** Requires original admin intent and a surviving ledger; synthetic identity/MFA
+ * only. Ensures native archive replay cannot issue credit twice or manufacture
+ * missing approval. Expiry resumes its frozen revision. No chain delivery claim. */
+describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
+  || process.env.AE_FORMANCE_INTEGRATION !== 'true')('native promotional recovery after Convex restore', () => {
+  it('recovers approved grants and frozen expiry once, refusing missing authority and conflicting postings', async () => {
+    type Evidence = { grants: Doc<'moneyPromotionalGrants'>[]; operations: Doc<'operationKeys'>[]; audits: Doc<'auditEvents'>[] }
+    type Work = { kind: 'grant' | 'expiry'; grantRef: string; accountRef: string; environment: 'sandbox';
+      amountUnits: string; expiresAt: number; commandDigest: string; revision: number }
+    const root = mkdtempSync(join(tmpdir(), 'ae-convex-promo-restore-'))
+    const source = join(root, 'source'), target = join(root, 'target')
+    const allocated = await ports(5), suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const project = `ae-convex-promo-${suffix}`, secret = randomUUID() + randomUUID()
+    const configuration = { environment: 'sandbox' as const, ledger: project,
+      gatewayUrl: `http://127.0.0.1:${allocated[4]}`, requestTimeoutMs: 10_000 }
+    const context = createFormanceContext(configuration)
+    const docker = async (args: string[]) => (await runFile('docker', ['compose', '--project-name', project,
+      '-f', resolve('tests/config/native-money/compose.yml'), ...args], { timeout: 120_000,
+      env: { ...process.env, AE_NATIVE_MONEY_PORT: String(allocated[4]) }, maxBuffer: 4 * 1024 * 1024 })).stdout
+    const command = (directory: string, args: string[]) => runConvexCommand({ sourceRoot, isolatedRoot: directory,
+      args, retainBackendOnSuccess: ['run', 'data', 'export', 'import'].includes(args[0] ?? '') })
+    const invoke = async <T>(directory: string, name: string, args: object = {}, identity?: object): Promise<T> => {
+      const { stdout } = await command(directory, ['run', name, JSON.stringify(args),
+        ...(identity === undefined ? [] : ['--identity', JSON.stringify(identity)])])
+      return (stdout.trim() === '' ? null : JSON.parse(stdout)) as T
+    }
+    const inspect = async (directory: string): Promise<Evidence> => JSON.parse(
+      await invoke<string>(directory, 'financialRestoreProof:inspectPromotional')) as Evidence
+    const snapshot = async () => {
+      const result = await readFormanceRestoreSnapshot(configuration)
+      if (result.kind !== 'available') throw new Error(result.code)
+      return result.snapshot.summary
+    }
+    const stops: Array<() => Promise<void>> = [], failures: unknown[] = []
+    let summary: object | undefined
+    try {
+      console.log('Promotional restore: start isolated ledger and two Convex deployments')
+      await docker(['up', '--detach', '--wait', '--wait-timeout', '90'])
+      const deadline = Date.now() + 30_000
+      let healthy = false
+      while (!healthy && Date.now() < deadline) {
+        try {
+          const response = await context.sdk.getVersions({ retries: { strategy: 'none' }, timeoutMs: 2_000 })
+          healthy = response.getVersionsResponse?.versions.some(v => v.name === 'ledger' && v.health) === true
+        } catch { /* Bounded readiness only, before any financial write. */ }
+        if (!healthy) await new Promise(done => setTimeout(done, 250))
+      }
+      expect(healthy).toBe(true)
+      expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+      expect(await readFormanceHealth(context)).toMatchObject({ kind: 'ready' })
+      for (const [index, directory] of [source, target].entries()) {
+        mkdirSync(directory); installFixture(directory)
+        await command(directory, ['dev', '--once', '--skip-push', '--local-cloud-port', String(allocated[index * 2]),
+          '--local-site-port', String(allocated[index * 2 + 1]), '--local-backend-version', backendVersion])
+        // Admission immediately schedules processing. Leave source Formance absent
+        // so the pending authority survives without an uncontrolled native write.
+        const environment = { AE_DEPLOYMENT_ENVIRONMENT: 'development',
+          CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid', AE_SOURCE_WRITE_SECRET: secret,
+          ...(index === 0 ? {} : { AE_FORMANCE_ENVIRONMENT: 'sandbox',
+            AE_FORMANCE_GATEWAY_URL: configuration.gatewayUrl, AE_FORMANCE_LEDGER: configuration.ledger }) }
+        for (const [name, value] of Object.entries(environment)) await command(directory, ['env', 'set', name, value])
+        stops.push(await startConvexDev({ sourceRoot, isolatedRoot: directory, backendVersion }))
+      }
+      const accountRef = await invoke<string>(source, 'financialRestoreProof:seedPromotionalOwner')
+      const identity = { subject: 'user_financial_restore', issuer: 'https://release-proof.invalid',
+        exp: Math.floor(Date.now() / 1_000) + 86_400, tokenIdentifier: 'https://release-proof.invalid|user_financial_restore' }
+      expect(await invoke(source, 'interactiveAuthority:materializeCurrentInteractiveAuthority', {}, identity)).toBeTruthy()
+      const refs = new Map<string, string>()
+      for (const label of ['valid', 'missing-authority', 'conflict']) {
+        const input = { action: 'grant_promotional_credit' as const,
+          input: { accountRef, environment: 'sandbox' as const, amountUnits: '10000000', expiresAt: Date.now() + 180_000 },
+          reasonCode: 'onboarding' as const, evidenceRefs: ['evidence:disposable-promotional-restore'],
+          operationKey: `restore:${label}`, correlationId: `restore:${label}`, approval: { kind: 'execute' as const },
+          proof: { reverificationId: `test:mfa:${randomUUID()}`, firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0,
+            subject: identity.subject, evidenceObservedAt: Date.now() } }
+        const request = { method: 'POST', initiatorOrigin: 'https://release-proof.invalid', targetOrigin: 'https://release-proof.invalid',
+          targetPath: '/__test/promotional-restore', targetQuery: '', bodyDigest: sourceWriteCommandBodyDigest(input) }
+        const signed = { ...input, sourceWriteRequest: request, sourceWrite: await createSourceWriteAdmission({
+          scope: 'admin_operator', operationKey: input.operationKey, correlationId: input.correlationId,
+          commandDigest: sourceWriteCommandDigest(input), request, now: Date.now(), env: { AE_SOURCE_WRITE_SECRET: secret } }) }
+        const receipt = await invoke<AdminCommandReceipt<'grant_promotional_credit'>>(source, 'moneyPromotionalCredit:grant', signed, identity)
+        expect(receipt).toMatchObject({ kind: 'pending', action: 'grant_promotional_credit' })
+        if (receipt.kind !== 'pending' || receipt.effectRefs[0] === undefined) throw new Error('proof_grant_not_admitted')
+        refs.set(label, receipt.effectRefs[0])
+      }
+      // Wait for the deliberately unconfigured scheduled workers before freezing.
+      for (const grantRef of refs.values()) expect(await invoke(source, 'moneyPromotionalCredit:process', { grantRef })).toBe(false)
+      const archived = await inspect(source)
+      expect(archived.grants).toHaveLength(3)
+      expect(archived.grants.every(row => row.bookingState === 'pending' && row.availableUnits === '0')).toBe(true)
+      expect(archived.operations.every(row => row.status === 'in_progress')).toBe(true)
+      expect(archived.audits.filter(row => row.eventType === 'money.promotional_credit_requested')).toHaveLength(3)
+      const archive = join(root, 'pending-grants.zip')
+      await command(source, ['export', '--include-file-storage', '--path', archive])
+      await stops[0]!()
+      const native = new Map<string, { reference: string; id: string }>()
+      for (const label of ['valid', 'conflict']) {
+        const row = archived.grants.find(row => row.grantRef === refs.get(label))!
+        const prepared = prepareFormancePromotionalCreditGrant({ grantRef: row.grantRef, accountRef: row.accountRef,
+          amountUnits: row.amountUnits, expiresAt: row.expiresAt, commandDigest: row.commandDigest, revision: 1 })
+        if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+        // One conflict has valid digests but wrong native amount. Replay must
+        // compare postings, not just the command's declared metadata.
+        const submitted = label === 'conflict' ? { ...prepared.command,
+          variables: { ...prepared.command.variables, amount: 'AUD/6 9999999' } } : prepared.command
+        expect(await executeFormanceMoneyCommand(context, submitted)).toMatchObject({ kind: 'completed' })
+        const transaction = await readFormanceTransactionByReference(context, prepared.command.commandRef)
+        if (transaction.kind !== 'found') throw new Error('proof_native_grant_missing')
+        native.set(row.grantRef, { reference: prepared.command.commandRef, id: transaction.transactionId })
+      }
+      const baseline = await snapshot()
+      await command(target, ['import', archive, '--replace', '--yes'])
+      expect(await inspect(target)).toEqual(archived)
+      await invoke(target, 'financialRestoreProof:removePromotionalApproval', { grantRef: refs.get('missing-authority')! })
+      const before = await inspect(target)
+      const processGrant = (grantRef: string) => invoke<boolean>(target, 'moneyPromotionalCredit:process', { grantRef })
+      for (const label of ['valid', 'missing-authority', 'conflict']) {
+        const grantRef = refs.get(label)!
+        expect(await Promise.all([processGrant(grantRef), processGrant(grantRef)]))
+          .toEqual(label === 'valid' ? [true, true] : [false, false])
+        expect(await snapshot()).toEqual(baseline)
+      }
+      const recovered = await inspect(target)
+      const grantRef = refs.get('valid')!, original = native.get(grantRef)!
+      const booked = recovered.grants.find(row => row.grantRef === grantRef)!
+      expect(booked).toMatchObject({ bookingState: 'booked', availableUnits: '10000000', transactionRef: original.reference })
+      const operation = recovered.operations.find(row => row.key === 'restore:valid')!
+      expect(operation.status).toBe('succeeded')
+      const receipt = JSON.parse(operation.resultJson!)
+      expect(receipt).toMatchObject({ kind: 'completed', effectRefs: [grantRef, original.reference] })
+      expect(operation.resultHash).toBe(canonicalDigest(receipt))
+      expect(recovered.audits.filter(row => row.eventType === 'money.promotional_credit_granted')).toHaveLength(1)
+      for (const label of ['missing-authority', 'conflict']) {
+        const old = before.grants.find(row => row.grantRef === refs.get(label))!
+        const after = recovered.grants.find(row => row.grantRef === old.grantRef)!
+        expect(after).toEqual({ ...old, nextWorkAt: after.nextWorkAt, updatedAt: after.updatedAt })
+        expect(recovered.operations.find(row => row.key === `restore:${label}`)).toEqual(before.operations.find(row => row.key === `restore:${label}`))
+      }
+      expect(await readFormanceTransactionByReference(context, original.reference)).toMatchObject({ kind: 'found', transactionId: original.id })
+      console.log('Promotional restore: grant recovered; export frozen expiry before native completion')
+      while (Date.now() <= booked.expiresAt) await new Promise(done => setTimeout(done, Math.min(1_000, booked.expiresAt - Date.now() + 1)))
+      const expiry = await invoke<Work>(target, 'moneyPromotionalCredit:claimWork', { grantRef })
+      expect(expiry).toMatchObject({ kind: 'expiry', revision: 1, amountUnits: '10000000' })
+      const frozen = await inspect(target), expiryArchive = join(root, 'pending-expiry.zip')
+      await command(target, ['export', '--include-file-storage', '--path', expiryArchive])
+      const { kind: _kind, environment: _environment, ...expiryInput } = expiry
+      const preparedExpiry = prepareFormancePromotionalCreditExpiry(expiryInput)
+      if (preparedExpiry.kind !== 'prepared') throw new Error(preparedExpiry.code)
+      expect(await executeFormanceMoneyCommand(context, preparedExpiry.command)).toMatchObject({ kind: 'completed' })
+      const expiryNative = await readFormanceTransactionByReference(context, preparedExpiry.command.commandRef)
+      if (expiryNative.kind !== 'found') throw new Error('proof_native_expiry_missing')
+      const expiryBaseline = await snapshot()
+      await command(target, ['import', expiryArchive, '--replace', '--yes'])
+      expect(await inspect(target)).toEqual(frozen)
+      const expiryResults = await Promise.all([processGrant(grantRef), processGrant(grantRef)])
+      expect(expiryResults).toContain(true)
+      const expired = await inspect(target)
+      expect(expired.grants.find(row => row.grantRef === grantRef)).toMatchObject({ bookingState: 'booked', availableUnits: '0', expiryRevision: 1 })
+      expect(expired.grants.find(row => row.grantRef === grantRef)?.pendingExpiry).toBeUndefined()
+      expect(expired.operations).toEqual(recovered.operations)
+      expect(expired.audits.filter(row => row.eventType === 'money.promotional_credit_expired')).toHaveLength(1)
+      expect(await processGrant(grantRef)).toBe(true)
+      expect((await inspect(target)).audits).toEqual(expired.audits)
+      expect(await snapshot()).toEqual(expiryBaseline)
+      expect(await readFormanceTransactionByReference(context, preparedExpiry.command.commandRef))
+        .toMatchObject({ kind: 'found', transactionId: expiryNative.transactionId })
+      summary = { grantsAdmitted: 3, recovered: 1, missingAuthorityRefused: 1, wrongPostingRefused: 1,
+        frozenExpiryRecovered: 1, duplicateNativeTransactions: 0, sourceStoppedBeforeRecovery: true,
+        nativeGrantId: original.id, nativeExpiryId: expiryNative.transactionId, ledgerUnchangedOnRecovery: true,
+        syntheticMfa: true, chainOrProviderDeliveryProven: false }
+    } catch (error) { failures.push(error) }
+    finally {
+      const stopped = await Promise.allSettled(stops.map(stop => stop()))
+      const cleanup = await Promise.allSettled([terminateIsolatedProcesses(source), terminateIsolatedProcesses(target),
+        docker(['down', '--volumes', '--remove-orphans'])])
+      for (const result of [...stopped, ...cleanup]) if (result.status === 'rejected') failures.push(result.reason)
+      if (cleanup.every(result => result.status === 'fulfilled')) {
+        try { rmSync(root, { recursive: true, force: true }) } catch (error) { failures.push(error) }
+      }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'promotional_restore_proof_failed')
     console.log(JSON.stringify(summary))
   }, 900_000)
 })

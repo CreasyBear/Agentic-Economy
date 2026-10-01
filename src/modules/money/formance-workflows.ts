@@ -8,13 +8,20 @@ import {
   readFormanceTransactionByReference,
   type FormanceContext,
   type FormanceMoneyResult,
+  type FormanceMoneyCommand,
+  type FormanceReferenceReadResult,
 } from './formance'
 import { completed, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult, type FormanceReleaseReadResult } from './formance-result'
 import {
   prepareFormanceSettledSaleRefund,
-  managedCallPostingsMatch,
+  formanceCommandPostingsMatch,
   type FormanceSettledSaleRefund,
 } from './internal/formance-settled-sale-refund'
+import {
+  prepareFormancePromotionalCreditGrant,
+  prepareFormancePromotionalCreditExpiry,
+  type FormancePromotionalCreditBooking,
+} from './internal/formance-promotional-credit'
 import {
   balanceAccount,
   balanceAsset,
@@ -93,6 +100,53 @@ export async function bookFormanceFundingReversal(
   return executePrepared(context, prepareFormanceFundingReversal(input))
 }
 
+export async function grantFormancePromotionalCredit(
+  context: FormanceContext,
+  input: FormancePromotionalCreditBooking,
+): Promise<FormanceMoneyResult> {
+  return executePromotionalCredit(context, prepareFormancePromotionalCreditGrant(input))
+}
+
+export async function expireFormancePromotionalCredit(
+  context: FormanceContext,
+  input: FormancePromotionalCreditBooking,
+): Promise<FormanceMoneyResult> {
+  return executePromotionalCredit(context, prepareFormancePromotionalCreditExpiry(input))
+}
+
+/** Requires the original valid grant or frozen expiry command. Ensures completion
+ * only after exact reference/template/all metadata/world postings are confirmed.
+ * Invariant: retain the maintained writer's schema/idempotency/revision behavior;
+ * no existing conflict can create another posting. This is history, not current
+ * global spendability or reconstruction of lost administrative approval.
+ * On violation: preflight conflict refuses before writes; unavailable preflight
+ * retains the existing no-write result. Failed confirmation after a possible
+ * write is uncertain at the original reference, never submission-proven-absent.
+ */
+async function executePromotionalCredit(
+  context: FormanceContext,
+  prepared: PreparedCommand,
+): Promise<FormanceMoneyResult> {
+  if (prepared.kind === 'refused') return prepared
+  const command: FormanceMoneyCommand = prepared.command
+  const matches = (actual: Extract<FormanceReferenceReadResult, { kind: 'found' }>): boolean =>
+    actual.reference === command.commandRef && actual.template === command.template
+    && Object.entries(command.metadata).every(([key, value]) => actual.metadata[key] === value)
+    && formanceCommandPostingsMatch(command, actual.postings)
+  const existing = await readFormanceTransactionByReference(context, command.commandRef)
+  if (existing.kind === 'setup_required') return refused(existing.code)
+  if (existing.kind === 'unavailable') return unavailable(existing.code)
+  if (existing.kind === 'found' && !matches(existing)) return refused('formance_promotional_credit_evidence_invalid')
+  // Retain the original schema gate and native writer even for proven replay.
+  const posted = await executeFormanceMoneyCommand(context, command)
+  if (posted.kind !== 'completed') return posted
+  const actual = await readFormanceTransactionByReference(context, command.commandRef)
+  if (actual.kind === 'setup_required') return refused(actual.code)
+  if (actual.kind !== 'found') return unknown(command.commandRef)
+  if (!matches(actual)) return refused('formance_promotional_credit_evidence_invalid')
+  return posted
+}
+
 export async function reserveFormanceManagedCall(
   context: FormanceContext,
   input: FormanceManagedCallBooking,
@@ -128,7 +182,7 @@ export async function readFormanceManagedCallReservation(
       if (actual?.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
       if (actual?.kind !== 'found' || actual.reference !== expected.commandRef
         || actual.template !== expected.template
-        || !managedCallPostingsMatch(expected, actual.postings)
+        || !formanceCommandPostingsMatch(expected, actual.postings)
         || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
         return Object.freeze({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })
       }
@@ -192,7 +246,7 @@ export async function readFormanceManagedCallRelease(
       if (actual?.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: actual.code })
       if (actual?.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
       if (actual?.kind !== 'found' || actual.reference !== expected.commandRef
-        || actual.template !== expected.template || !managedCallPostingsMatch(expected, actual.postings)
+        || actual.template !== expected.template || !formanceCommandPostingsMatch(expected, actual.postings)
         || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
         return Object.freeze({ kind: 'refused', code: 'formance_release_evidence_invalid' })
       }
@@ -251,7 +305,7 @@ export async function readFormanceManagedCallSettlement(
     if (actual.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
     if (actual.kind !== 'found' || actual.reference !== expected.commandRef
       || actual.template !== expected.template
-      || !managedCallPostingsMatch(expected, actual.postings)
+      || !formanceCommandPostingsMatch(expected, actual.postings)
       || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
       return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
     }
@@ -295,7 +349,7 @@ export async function refundFormanceSettledSale(
     if (actual.kind !== 'found') return unknown(command.commandRef)
     if (actual.template !== command.template || actual.reference !== command.commandRef
       || Object.entries(command.metadata).some(([key, value]) => actual.metadata[key] !== value)
-      || !managedCallPostingsMatch(command, actual.postings)) return refused('formance_refund_evidence_invalid')
+      || !formanceCommandPostingsMatch(command, actual.postings)) return refused('formance_refund_evidence_invalid')
   }
   return posted
 }

@@ -1689,3 +1689,122 @@ live-money acceptance remain open. New Provider reversals remain disabled withou
 verified returned USDC. No public API, schema, dependency, customer flow or
 live-money change occurred. Local native accounting proof is not chain or
 Provider-delivery proof.
+
+### Stage 29 — recover approved promotional grant and expiry work
+
+Inspection found maintained grant/expiry producers and a one-minute admitted
+reconciliation worker. Two gaps remain: native promotional replay checks only
+template and command/idempotency digests, and local grant completion can accept
+a dangling requested-audit reference or an unrelated pending operation receipt.
+Close those existing boundaries and prove their recovery across a stale archive.
+
+Contract for the maintained promotional workflow:
+
+- **Requires:** the original grant input, actor, operation key, correlation,
+  command digest, requested audit and bound pending operation receipt/hash.
+  Native work must use its original stable reference and explicit revision.
+  Expiry requires the original booked grant and exact frozen pending expiry.
+  Keep source/target effect writers stopped apart from selected recovery.
+- **Ensures:** complete exact native metadata and postings are confirmed before
+  local completion. The original grant, admin operation receipt and completion
+  audit converge atomically once; frozen expiry clears once and preserves late
+  returns for their next expiry revision. No second native transaction on replay.
+- **Invariant:** no new approval, substituted actor or reconstructed lost audit.
+  Validate surviving authority before returning pending grant work and again at
+  completion. Preserve purchased credit, original expiry and reference identity.
+  Expired returns remain unavailable for spending. Housekeeping retry timestamps
+  may renew; financial balances, audit and completed receipts remain idempotent.
+- **On violation:** absent/conflicting original authority cannot issue or finish
+  a grant. Native missing/conflicting proof cannot finish local work; unavailable
+  confirmation retains uncertainty and the original retry identity. Transactional
+  failures roll back. Historical grant proof alone does not establish current
+  global availability when later Calls or expiry advanced beyond the snapshot.
+
+Idempotency analysis: native grant/expiry is money movement; retain the maintained
+stable grant/revision reference and idempotency key, and strengthen only its
+evidence confirmation. Local credit initialization, admin receipt completion and
+completion audit share the pending-to-booked transaction. Expiry freezes its
+amount/revision before I/O; duplicate finishes cannot consume returned credit
+under an older revision. Keep the existing worker and admitted sweep.
+
+Complexity decision: reuse the canonical promotional builders, native reference
+read and local operation/audit records. One scoped promotional confirmation path
+for the two existing callers and a shared pending-grant evidence check remove
+duplicated assumptions; no schema, service, dependency or public workflow is
+needed. Preserve existing replay/result contracts where they express the outcome;
+use an explicit internal refusal if a known invalid pending grant would otherwise
+be reported as no work. Extend native archive proof with original grant/expiry
+windows and authority/evidence conflicts, using the existing disposable runtime.
+Source Formance stays unconfigured during genuine admin admission so its immediate
+scheduled action cannot post before the archive. Synthetic fixture MFA is not a
+claim of interactive Clerk verification or production authorization.
+
+The native proof reuses the existing two-deployment archive runtime. Its only
+fixture extraction shares the canonical synthetic owner already needed by report
+admission and promotional admission; it removes duplicate identity setup without
+introducing a production abstraction. Keep a separate promotional test case so
+Call/treasury fixtures do not become prerequisites for a grant. Frozen expiry is
+exported and reimported after the native expiry posts. Existing allocation tests
+cover late returns and next revisions; do not claim these as a new real Call proof.
+
+Review found a queue-liveness consequence: refusing invalid authority before
+renewing its retry timestamp could leave 25 bad grants permanently at the front
+of the due-work page. Keep the existing retry-clock renewal for explicit refusals,
+with no balance, operation, audit or native write. Verify that a later valid grant
+becomes visible after the refused batch; this preserves bounded worker progress.
+
+Review also requires checking a frozen expiry's stored command reference and
+revision against the canonical grant/revision before native work. Otherwise a
+corrupted locator could allow the native expiry yet permanently reject its local
+completion. Reject that conflict with the same bounded retry behavior.
+
+Operational recovery uses the maintained `moneyPromotionalCredit:process` worker
+and admitted reconciliation sweep. First bind the restored target to its original
+payment environment and surviving ledger, stop/drain other financial writers,
+and confirm the original grant operation, requested audit and pending receipt
+survive. For recovery that must perform zero new accounting writes, establish the
+complete original native grant/expiry transaction before processing: this worker
+is also the ordinary producer and can issue an authorized missing transaction.
+Missing approval history requires investigation; do not fabricate it or replace
+it with a fresh approval. An expired return remains excluded from spending and
+is queued under its next expiry revision. Keep payments closed until later Calls,
+refunds and other post-snapshot effects are reconciled too.
+
+Native reproduction (Node 22/npm 11.5.1):
+
+```sh
+AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'native promotional|refund=true'
+```
+
+Stage 29 acceptance (1 October): 190 focused money/Convex cases pass, including
+exact native effects, lost acknowledgement, post-write read uncertainty, original
+admin evidence loss before/during I/O, concurrent completion, queue fairness and
+frozen expiry identity. Independent review's queue starvation and expiry locator
+findings are fixed and verified; `npm run check` passes with zero dependency cycles.
+
+The native grant/expiry restore and existing refund regression both pass in
+397.85 seconds, including disposable setup/cleanup. Three genuine admin grants
+were archived pending. One recovered concurrently from its original native
+posting; missing requested-audit history and a deliberately wrong native amount
+refused without issuing credit. The valid grant then resumed an exported frozen
+expiry once after its native expiry transaction had already posted. Original
+transaction IDs and complete native ledger summaries stayed unchanged during
+recovery, with one grant completion audit and one expiry audit. Four unchanged
+native scenarios were intentionally skipped by the selected test filter.
+
+Keep #286 and #256 open. This proves the stated surviving promotional accounting
+and approval history with synthetic identity/MFA, not live Clerk verification,
+chain payment, Provider delivery, current global spendability or lost-history
+reconstruction. Other restore consumers, hosted retention/RPO/RTO, production
+provisioning, full development paid-Call proof and explicitly authorized real-money
+drills remain outstanding. No public API/schema/dependency/customer-flow change,
+production mutation or live-money movement occurred.
+
+The full development/sandbox release gate also passes under Node 22/npm 11.5.1:
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`.
+It verifies generated Convex output, public-build integrity, clean types, 7,554
+unit cases, 2,664 integration-suite cases, 75 import checks, 31 SEO cases, 16 browser
+journeys, 18 accessibility cases and reproducible CLI packaging. Counts overlap;
+one unit skip, 60 integration skips and three todos remain. The native proof ran
+separately above. Both disposable native deployments and Compose projects were
+removed and independently checked.

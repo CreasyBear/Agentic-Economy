@@ -5,11 +5,62 @@ import { bindWorkloadCronActionContext } from '../../platform/workloadCron/conse
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue, type WorkloadCronSnapshot } from '../../platform/workloadCron/context'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { promotionalCreditReference } from '@/modules/money/public'
 import { validateAuditEvent } from '@/modules/observability/public'
 import { persistAuditEvent } from '../../security/audit/persistence'
+import type { Doc } from '../../../_generated/dataModel'
+import { parseAdminOperationReceipt } from '../../adminConsole/commands/idempotency'
+import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
+import { isRecord } from '@/modules/common/is-record'
+
+// Requires surviving original intent, not current admin membership or reconstructed approval.
+// Ensures claim and completion bind the same pending receipt, requested audit and grant input.
+// Invariant: no native work or local credit initialization from missing/conflicting authority.
+// On violation: refuse financial work; claim may renew only its retry clocks to avoid queue
+// starvation. Completion is inert. Expiry remains governed by its frozen booked revision.
+// One bounded read shared by the two transactional consumers avoids divergent evidence checks.
+async function readPendingGrantAuthority(
+  ctx: Pick<MutationCtx, 'db'>,
+  row: Doc<'moneyPromotionalGrants'>,
+): Promise<Doc<'operationKeys'> | null> {
+  if (row.auditEventRef === undefined || row.grantRef !== canonicalDigest({
+    format: 'ae.promotional-credit-grant:v1', actorRef: row.actorRef, operationKey: row.operationKey,
+    input: { accountRef: row.accountRef, environment: row.environment, amountUnits: row.amountUnits, expiresAt: row.expiresAt },
+  })) return null
+  const operationName = 'admin:grant_promotional_credit'
+  const operation = await ctx.db.query('operationKeys').withIndex('by_actor_operation_key', q => q
+    .eq('actorRef', row.actorRef).eq('operationName', operationName).eq('key', row.operationKey)).unique()
+  if (operation === null || operation.scope !== 'admin_operator' || operation.actorKind !== 'admin'
+    || operation.status !== 'in_progress' || operation.resultJson === undefined || operation.resultHash === undefined
+    || !isCanonicalDigest(operation.requestHash)) return null
+  const expectedAuditRef = `audit:money.promotional_credit_requested:${canonicalDigest({
+    actorRef: row.actorRef, operationName, key: row.operationKey, requestHash: operation.requestHash,
+  })}`
+  if (row.auditEventRef !== expectedAuditRef) return null
+  const audit = await ctx.db.query('auditEvents').withIndex('by_eventId', q => q.eq('eventId', expectedAuditRef)).unique()
+  if (audit === null || audit.eventType !== 'money.promotional_credit_requested'
+    || audit.actorKind !== 'admin' || audit.actorRef !== row.actorRef
+    || audit.targetType !== 'account' || audit.targetRef !== row.accountRef
+    || audit.idempotencyKey !== row.operationKey || audit.correlationId !== row.correlationId
+    || audit.reasonCode !== row.reasonCode || audit.beforeState !== 'absent' || audit.afterState !== 'pending'
+    || canonicalDigest(audit.evidenceRefs) !== canonicalDigest(row.evidenceRefs)) return null
+  try {
+    const receipt = parseAdminOperationReceipt(operation.resultJson, operation.resultHash, 'grant_promotional_credit')
+    if (receipt.kind !== 'pending' || receipt.auditEventRef !== expectedAuditRef
+      || receipt.correlationId !== row.correlationId || receipt.effectRefs.length !== 1
+      || receipt.effectRefs[0] !== row.grantRef) return null
+    const payload: unknown = JSON.parse(audit.redactedPayloadJson)
+    if (!isRecord(payload) || audit.payloadHash !== canonicalDigest(payload)
+      || payload.commandDigest !== row.commandDigest || payload.reasonCode !== row.reasonCode
+      || payload.permission !== ADMIN_ACTION_PERMISSION.grant_promotional_credit
+      || canonicalDigest(payload.evidenceRefs) !== canonicalDigest(row.evidenceRefs)) return null
+  } catch {
+    return null
+  }
+  return operation
+}
 
 const workValue = v.object({
   kind: v.union(v.literal('grant'), v.literal('expiry')),
@@ -17,13 +68,17 @@ const workValue = v.object({
   amountUnits: v.string(), expiresAt: v.number(), commandDigest: v.string(), revision: v.number(),
 })
 export const grantRefArgs = v.object({ grantRef: v.string() })
-export const claimWorkResult = v.union(v.null(), workValue)
-export const claimWorkHandler = async (ctx: MutationCtx, args: Infer<typeof grantRefArgs>) => {
+export const claimWorkResult = v.union(v.null(), workValue, v.object({
+  kind: v.literal('refused'), code: v.union(v.literal('promotional_credit_authority_invalid'), v.literal('promotional_credit_expiry_invalid')),
+}))
+export const claimWorkHandler = async (ctx: MutationCtx, args: Infer<typeof grantRefArgs>): Promise<Infer<typeof claimWorkResult>> => {
   const row = await ctx.db.query('moneyPromotionalGrants').withIndex('by_grantRef', q => q.eq('grantRef', args.grantRef)).unique()
   if (row === null || row.environment !== deploymentPaymentEnvironment(env)) return null
   const now = Date.now()
   if (row.bookingState === 'pending') {
+    const authority = await readPendingGrantAuthority(ctx, row)
     await ctx.db.patch(row._id, { nextWorkAt: now + 60_000, updatedAt: now })
+    if (authority === null) return { kind: 'refused', code: 'promotional_credit_authority_invalid' }
     return {
       kind: 'grant' as const, grantRef: row.grantRef, accountRef: row.accountRef, environment: row.environment,
       amountUnits: row.amountUnits, expiresAt: row.expiresAt, commandDigest: row.commandDigest, revision: 1,
@@ -31,6 +86,12 @@ export const claimWorkHandler = async (ctx: MutationCtx, args: Infer<typeof gran
   }
   if (row.pendingExpiry !== undefined) {
     await ctx.db.patch(row._id, { nextWorkAt: now + 60_000, updatedAt: now })
+    const pending = row.pendingExpiry
+    if (row.bookingState !== 'booked' || !Number.isSafeInteger(pending.revision) || pending.revision <= 0
+      || pending.revision !== row.expiryRevision
+      || pending.commandRef !== promotionalCreditReference(row.grantRef, pending.revision, 'expire')) {
+      return { kind: 'refused', code: 'promotional_credit_expiry_invalid' }
+    }
     return {
       kind: 'expiry' as const, grantRef: row.grantRef, accountRef: row.accountRef, environment: row.environment,
       amountUnits: row.pendingExpiry.amountUnits, expiresAt: row.expiresAt,
@@ -75,13 +136,12 @@ export const finishWorkHandler = async (ctx: MutationCtx, args: Infer<typeof fin
     || row.commandDigest !== args.commandDigest || row.expiresAt !== args.expiresAt) return false
   const now = Date.now()
   if (args.kind === 'grant') {
-    if (row.bookingState === 'booked') return row.transactionRef === transactionRef
-    if (row.bookingState !== 'pending' || args.revision !== 1
-      || row.amountUnits !== args.amountUnits
+    if (args.revision !== 1 || row.amountUnits !== args.amountUnits
       || transactionRef !== promotionalCreditReference(row.grantRef, 1, 'grant')) return false
-    const operation = await ctx.db.query('operationKeys').withIndex('by_actor_operation_key', q => q
-      .eq('actorRef', row.actorRef).eq('operationName', 'admin:grant_promotional_credit').eq('key', row.operationKey)).unique()
-    if (operation === null || operation.status !== 'in_progress' || row.auditEventRef === undefined) return false
+    if (row.bookingState === 'booked') return row.transactionRef === transactionRef
+    if (row.bookingState !== 'pending') return false
+    const operation = await readPendingGrantAuthority(ctx, row)
+    if (operation === null || row.auditEventRef === undefined) return false
     const eventId = brandNonEmpty(`audit:money.promotional_credit_granted:${canonicalDigest({ grantRef: row.grantRef, transactionRef })}`, 'AuditEventId')
     const payload = { grantRef: row.grantRef, commandDigest: row.commandDigest, transactionRef, requestAuditEventRef: row.auditEventRef }
     const audit = validateAuditEvent({
@@ -114,8 +174,10 @@ export const finishWorkHandler = async (ctx: MutationCtx, args: Infer<typeof fin
   }
   const pending = row.pendingExpiry
   if (row.bookingState !== 'booked' || pending === undefined
+    || !Number.isSafeInteger(pending.revision) || pending.revision <= 0 || pending.revision !== row.expiryRevision
     || pending.revision !== args.revision || pending.amountUnits !== args.amountUnits
-    || pending.commandRef !== transactionRef) return false
+    || pending.commandRef !== transactionRef
+    || transactionRef !== promotionalCreditReference(row.grantRef, pending.revision, 'expire')) return false
   const payload = { grantRef: row.grantRef, revision: args.revision, amountUnits: args.amountUnits, transactionRef }
   const audit = validateAuditEvent({
     eventId: brandNonEmpty(`audit:money.promotional_credit_expired:${canonicalDigest(payload)}`, 'AuditEventId'),
@@ -151,6 +213,7 @@ export const processResult = v.boolean()
 export const processHandler = async (ctx: ActionCtx, args: Infer<typeof grantRefArgs>): Promise<boolean> => {
   const work = await ctx.runMutation(internal.moneyPromotionalCredit.claimWork, args)
   if (work === null) return true
+  if (work.kind === 'refused') return false
   const { kind: _, environment: _environment, ...booking } = work
   void _
   void _environment

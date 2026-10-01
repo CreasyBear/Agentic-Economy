@@ -14,9 +14,8 @@ import type {
   FormanceSpendingPeriodAdjustment,
 } from './gateway'
 import {
-  executeFormanceMoneyCommand,
-  prepareFormancePromotionalCreditGrant,
-  prepareFormancePromotionalCreditExpiry,
+  grantFormancePromotionalCredit,
+  expireFormancePromotionalCredit,
   adjustFormanceSpendingPeriod,
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
@@ -124,15 +123,13 @@ export async function reverseProviderSettlementHandler(_ctx: unknown, args: Form
 export async function grantPromotionalCreditHandler(_ctx: unknown, args: FormancePromotionalCreditBooking) {
   const context = configuredContext()
   if (context.kind === 'setup_required') return { kind: 'refused' as const, code: context.code, retryable: false as const }
-  const prepared = prepareFormancePromotionalCreditGrant(args)
-  return prepared.kind === 'refused' ? prepared : convexMoneyResult(await executeFormanceMoneyCommand(context.context, prepared.command))
+  return convexMoneyResult(await grantFormancePromotionalCredit(context.context, args))
 }
 
 export async function expirePromotionalCreditHandler(_ctx: unknown, args: FormancePromotionalCreditBooking) {
   const context = configuredContext()
   if (context.kind === 'setup_required') return { kind: 'refused' as const, code: context.code, retryable: false as const }
-  const prepared = prepareFormancePromotionalCreditExpiry(args)
-  return prepared.kind === 'refused' ? prepared : convexMoneyResult(await executeFormanceMoneyCommand(context.context, prepared.command))
+  return convexMoneyResult(await expireFormancePromotionalCredit(context.context, args))
 }
 
 export async function refundSettledSaleHandler(_ctx: unknown, args: FormanceSettledSaleRefund) {

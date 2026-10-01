@@ -1,7 +1,7 @@
 import { Workpool, type WorkId } from '@convex-dev/workpool'
 import { makeFunctionReference } from 'convex/server'
 import { v } from 'convex/values'
-import { action, internalMutation as mutation, internalQuery as query } from '../../convex/_generated/server'
+import { action, internalMutation as mutation, internalQuery as query, type MutationCtx } from '../../convex/_generated/server'
 import { components, internal } from '../../convex/_generated/api'
 import { bookingFromRows } from '../../convex/lib/money/managedCall/booking'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -28,6 +28,31 @@ export const admitReport = action({
   handler: async (ctx, args): Promise<string> => JSON.stringify(await ctx.runMutation(internal.capabilityCallReports.admit, args)),
 })
 
+// Both report and promotional proofs use the same canonical synthetic owner.
+async function seedOwner(ctx: MutationCtx, now: number): Promise<void> {
+  const accountRef = ownerAccountRef
+  const ownershipRef = `own_${ownerSegment}`, bindingRef = `eib_${ownerSegment}`
+  const credentialRef = `crd_${ownerSegment}`
+  const action = { actorPrincipalRef: ownerPrincipalRef, activeAccountRef: accountRef,
+    correlationRef: 'financial-restore-owner', idempotencyRef: 'financial-restore-owner' }
+  await ctx.db.insert('principals', { principalRef: ownerPrincipalRef, kind: 'human',
+    displayName: 'Financial restore fixture owner', lifecycle: 'active', revision: 1, createdAt: now, updatedAt: now })
+  await ctx.db.insert('accounts', { accountRef, displayName: 'Financial restore fixture Account',
+    lifecycle: 'active', recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: ownerPrincipalRef, creationIdempotencyRef: 'financial-restore-owner',
+    initialOwnershipRef: ownershipRef, currentOwnershipRef: ownershipRef, revision: 1,
+    createdAt: now, updatedAt: now, lastAction: action })
+  await ctx.db.insert('accountOwnerships', { ownershipRef, accountRef, ownerPrincipalRef,
+    lifecycle: 'active', changeKind: 'creation', revision: 1, createdAt: now, createdBy: action })
+  await ctx.db.insert('externalIdentityBindings', { bindingRef, principalRef: ownerPrincipalRef,
+    providerNamespace: 'clerk/user', providerIdentifier: ownerTokenIdentifier,
+    providerState: { kind: 'known', value: 'active' }, lifecycle: 'active', credentialGeneration: 1,
+    bindIdempotencyRef: 'financial-restore-owner', revision: 1, createdAt: now, updatedAt: now })
+  await ctx.db.insert('credentials', { credentialRef, bindingRef, principalRef: ownerPrincipalRef,
+    type: 'provider_token', lifecycle: 'active', generation: 1, issueIdempotencyRef: 'financial-restore-owner',
+    revision: 1, issuedAt: now, expiresAt: (Math.floor(now / 1_000) + 86_400) * 1_000, updatedAt: now })
+}
+
 export const seed = mutation({
   args: { toolJson: v.string(), now: v.number(), unbound: v.boolean(), reportOwner: v.optional(v.boolean()),
     release: v.optional(v.boolean()) }, returns: v.null(),
@@ -37,26 +62,7 @@ export const seed = mutation({
     if (reportOwner === true) {
       // Canonical owner facts are synthetic fixture data. Genuine report admission
       // still resolves this identity and arms its credential expiry itself.
-      const ownershipRef = `own_${ownerSegment}`, bindingRef = `eib_${ownerSegment}`
-      const credentialRef = `crd_${ownerSegment}`
-      const action = { actorPrincipalRef: ownerPrincipalRef, activeAccountRef: accountRef,
-        correlationRef: 'financial-restore-owner', idempotencyRef: 'financial-restore-owner' }
-      await ctx.db.insert('principals', { principalRef: ownerPrincipalRef, kind: 'human',
-        displayName: 'Financial restore fixture owner', lifecycle: 'active', revision: 1, createdAt: now, updatedAt: now })
-      await ctx.db.insert('accounts', { accountRef, displayName: 'Financial restore fixture Account',
-        lifecycle: 'active', recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-        creationActorPrincipalRef: ownerPrincipalRef, creationIdempotencyRef: 'financial-restore-owner',
-        initialOwnershipRef: ownershipRef, currentOwnershipRef: ownershipRef, revision: 1,
-        createdAt: now, updatedAt: now, lastAction: action })
-      await ctx.db.insert('accountOwnerships', { ownershipRef, accountRef, ownerPrincipalRef,
-        lifecycle: 'active', changeKind: 'creation', revision: 1, createdAt: now, createdBy: action })
-      await ctx.db.insert('externalIdentityBindings', { bindingRef, principalRef: ownerPrincipalRef,
-        providerNamespace: 'clerk/user', providerIdentifier: ownerTokenIdentifier,
-        providerState: { kind: 'known', value: 'active' }, lifecycle: 'active', credentialGeneration: 1,
-        bindIdempotencyRef: 'financial-restore-owner', revision: 1, createdAt: now, updatedAt: now })
-      await ctx.db.insert('credentials', { credentialRef, bindingRef, principalRef: ownerPrincipalRef,
-        type: 'provider_token', lifecycle: 'active', generation: 1, issueIdempotencyRef: 'financial-restore-owner',
-        revision: 1, issuedAt: now, expiresAt: (Math.floor(now / 1_000) + 86_400) * 1_000, updatedAt: now })
+      await seedOwner(ctx, now)
     }
     const priced = quoteManagedX402BuyerAud({ environment: 'sandbox', requiredUsdcAtomicUnits: '500000',
       observedAt: now, referenceRate: { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: now } })
@@ -235,5 +241,40 @@ export const inspectReports = query({
         usage: call.usage ?? null, marketFacts })
     }
     return JSON.stringify(records.sort((left, right) => left.call.callRef.localeCompare(right.call.callRef)))
+  },
+})
+
+
+export const seedPromotionalOwner = mutation({
+  args: {}, returns: v.string(),
+  handler: async (ctx): Promise<string> => {
+    if (await ctx.db.query('accounts').first()) throw new Error('proof_already_seeded')
+    await seedOwner(ctx, Date.now())
+    await ctx.db.insert('adminMemberships', { clerkUserId: 'user_financial_restore',
+      tokenIdentifier: ownerTokenIdentifier, role: 'owner_admin', state: 'active',
+      grantedBy: 'disposable-restore-proof', grantedAt: Date.now() })
+    return ownerAccountRef
+  },
+})
+
+export const inspectPromotional = query({
+  args: {}, returns: v.string(),
+  handler: async (ctx): Promise<string> => JSON.stringify({
+    grants: (await ctx.db.query('moneyPromotionalGrants').collect()).sort((a, b) => a.grantRef.localeCompare(b.grantRef)),
+    operations: (await ctx.db.query('operationKeys').collect()).sort((a, b) => a.key.localeCompare(b.key)),
+    audits: (await ctx.db.query('auditEvents').collect()).sort((a, b) => a.eventId.localeCompare(b.eventId)),
+  }),
+})
+
+// Deliberate lost-history falsifier, available only in this disposable fixture.
+export const removePromotionalApproval = mutation({
+  args: { grantRef: v.string() }, returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const grant = await ctx.db.query('moneyPromotionalGrants').withIndex('by_grantRef', q => q.eq('grantRef', args.grantRef)).unique()
+    if (!grant?.auditEventRef) throw new Error('proof_grant_missing')
+    const audit = await ctx.db.query('auditEvents').withIndex('by_eventId', q => q.eq('eventId', grant.auditEventRef!)).unique()
+    if (audit === null) throw new Error('proof_audit_missing')
+    await ctx.db.delete(audit._id)
+    return null
   },
 })
