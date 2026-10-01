@@ -10,6 +10,8 @@ import { backendPaymentReadinessDigest, failedPaymentReadinessChecks, paymentRea
   type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import type { PublishPaymentReadinessResult } from '../../../convex/lib/money/readiness/store'
 import schema from '../../../convex/schema'
+import { seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const modules = Object.fromEntries(Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
   .map(([path, load]) => [path.replace('../../../convex/', './'), load]))
@@ -25,6 +27,12 @@ beforeEach(() => {
     AE_FORMANCE_ACCESS_CLIENT_ID: 'fixture-client', AE_FORMANCE_ACCESS_CLIENT_SECRET: 'private-formance-fixture',
     AE_FORMANCE_REQUEST_TIMEOUT_MS: '5000', CDP_API_KEY_ID: 'fixture-key',
     CDP_API_KEY_SECRET: 'private-cdp-fixture', CDP_WALLET_SECRET: 'private-wallet-fixture',
+    AE_X402_CUSTODY_ENABLED: 'true', AE_X402_CUSTODY_MAX_ATOMIC: '10000', AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000',
+    AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: '100000', AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: '10000',
+    AE_X402_CDP_ACCOUNT_NAME: 'readiness-fixture', AE_X402_CDP_EXPECTED_EVM_ADDRESS: `0x${'1'.repeat(40)}`,
+    AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
+    AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+    AE_X402_CDP_POLICY_RULES_DIGEST: canonicalDigest('readiness-fixture-policy'),
     AE_X402_CDP_CREDENTIAL_GENERATION: '1', AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://rpc-a.example.test","https://rpc-b.example.test"]}',
     AE_SITE_URL: 'https://app.example.test', CONVEX_CLOUD_URL: 'https://fixture.convex.cloud',
   })) vi.stubEnv(name, value)
@@ -49,8 +57,99 @@ const storedRows = (backend: ReturnType<typeof convexTest>) => backend.run(async
 const view = (backend: ReturnType<typeof convexTest>, now = NOW) => backend.query(read, { environment: 'production', now })
 
 describe('payment readiness evidence publication and admission view', () => {
+  it('requires current treasury source facts despite a sealed passing provider row, without writing', async () => {
+    const backend = convexTest(schema, modules)
+    const evidence = snapshot()
+    await backend.mutation(publish, { snapshot: evidence })
+    const before = await storedRows(backend)
+    expect(await view(backend)).toMatchObject({ kind: 'not_ready', code: 'treasury_observation_stale',
+      checkedAt: evidence.completedAt, expiresAt: evidence.expiresAt,
+      checks: { treasury: { kind: 'failed', code: 'treasury_observation_stale' }, formance: evidence.checks.formance } })
+    expect(await storedRows(backend)).toEqual(before)
+  })
+
+  it('a newer red report defeats cached and late green evidence, then genuine current health recovers', async () => {
+    const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    const original = snapshot()
+    await backend.mutation(publish, { snapshot: original })
+    expect(await view(backend)).toMatchObject({ kind: 'ready' })
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve', cashCheck: {
+      kind: 'mismatch', code: 'treasury_cash_difference', checkedCount: 1,
+      expectedUnits: '100010000', observedUnits: '100030000', differenceUnits: '20000', evidenceRefs: ['transfer:unexplained'],
+    } })
+    expect(await view(backend, NOW + 1)).toMatchObject({ kind: 'not_ready', code: 'treasury_reconciliation_required',
+      checkedAt: original.completedAt, expiresAt: original.expiresAt })
+    // This producer started before the red report and completes afterward.
+    const late = snapshot({ startedAt: NOW - 500, completedAt: NOW + 1 })
+    expect(await backend.mutation(publish, { snapshot: late })).toEqual({ kind: 'published', replayed: false })
+    const before = await storedRows(backend)
+    expect(await view(backend, NOW + 1)).toMatchObject({ kind: 'not_ready', checkedAt: late.completedAt,
+      expiresAt: late.expiresAt, code: 'treasury_reconciliation_required',
+      checks: { treasury: { kind: 'failed', code: 'treasury_reconciliation_required' }, web_configuration: late.checks.web_configuration } })
+    expect(await storedRows(backend)).toEqual(before)
+    vi.mocked(Date.now).mockReturnValue(NOW + 2)
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve' })
+    expect(await view(backend, NOW + 2)).toEqual({ kind: 'ready', environment: 'production',
+      checkedAt: late.completedAt, expiresAt: late.expiresAt, code: null, checks: late.checks })
+    expect(await storedRows(backend)).toEqual(before)
+  })
+
+  it.each(['unavailable', 'old_report', 'old_observation', 'capacity', 'foreign_wallet'] as const)(
+    'current %s treasury facts defeat otherwise passing evidence', async fault => {
+      const backend = convexTest(schema, modules)
+      await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+      await backend.mutation(publish, { snapshot: snapshot() })
+      await backend.run(async ctx => {
+        const report = await ctx.db.query('moneyTreasurySnapshots').first()
+        const observation = await ctx.db.query('moneyTreasuryObservations').first()
+        if (report === null || observation === null) throw new Error('fixture_treasury_facts_missing')
+        if (fault === 'old_report') await ctx.db.patch(report._id, { snapshotAt: NOW - 20 * 60_000 })
+        if (fault === 'old_observation') await ctx.db.patch(observation._id, { observedAt: NOW - 10 * 60_000 })
+        if (fault === 'foreign_wallet') await ctx.db.patch(report._id, { custodyIdentityDigest: canonicalDigest('other-wallet') })
+      })
+      if (fault === 'unavailable' || fault === 'capacity') {
+        vi.mocked(Date.now).mockReturnValue(NOW + 1)
+        await seedTreasuryReadinessFacts(backend, { observation: 'preserve',
+          ...(fault === 'unavailable' ? { cashCheck: { kind: 'unavailable' as const, code: 'native_read_unavailable' } } : { availableUnits: '0' }) })
+      }
+      const before = await storedRows(backend)
+      const code = fault === 'old_observation' ? 'treasury_observation_stale'
+        : fault === 'old_report' || fault === 'foreign_wallet' ? 'treasury_reconciliation_stale'
+        : fault === 'capacity' ? 'treasury_capacity_unavailable' : 'treasury_reconciliation_required'
+      expect(await view(backend, Date.now())).toMatchObject({ kind: 'not_ready', code })
+      expect(await storedRows(backend)).toEqual(before)
+    },
+  )
+
+  it('keeps sandbox evidence semantics without requiring production treasury facts', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    const backend = convexTest(schema, modules)
+    const evidence = snapshot({ environment: 'sandbox' })
+    await backend.mutation(publish, { snapshot: evidence })
+    expect(await backend.query(read, { environment: 'sandbox', now: NOW })).toMatchObject({ kind: 'ready', checks: evidence.checks })
+  })
+
+  it('shortens the view expiry to a newer report\'s older chain evidence without rewriting provider evidence', async () => {
+    const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    const evidence = snapshot({ checks: passedChecks(NOW + 60_000) })
+    await backend.mutation(publish, { snapshot: evidence })
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve', chainBlockTimestamp: NOW + 1 - 20 * 60_000 + 1000 })
+    const before = await storedRows(backend)
+    expect(await view(backend, NOW + 1)).toEqual({ kind: 'ready', environment: 'production',
+      checkedAt: evidence.completedAt, expiresAt: NOW + 1001, code: null,
+      checks: { ...evidence.checks, treasury: { kind: 'passed', validUntil: NOW + 1001 } } })
+    vi.mocked(Date.now).mockReturnValue(NOW + 1001)
+    expect(await view(backend, NOW + 1001)).toMatchObject({ kind: 'not_ready', code: 'treasury_reconciliation_required' })
+    expect(await storedRows(backend)).toEqual(before)
+  })
+
   it('publishes complete fresh evidence and returns only sanitized status', async () => {
     const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     const evidence = snapshot()
     expect(await backend.mutation(publish, { snapshot: evidence })).toEqual({ kind: 'published', replayed: false })
     const result = await view(backend)
@@ -98,6 +197,7 @@ describe('payment readiness evidence publication and admission view', () => {
 
   it('refuses different evidence from the same probe start without overwriting', async () => {
     const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     const evidence = snapshot()
     await backend.mutation(publish, { snapshot: evidence })
     const competing = snapshot({ checks: { ...passedChecks(), treasury: { kind: 'failed', code: 'treasury_capacity_unavailable' } } })
@@ -123,6 +223,7 @@ describe('payment readiness evidence publication and admission view', () => {
   ])('invalidates whitespace changes to exact-value configuration %s', async (name, value) => {
     vi.stubEnv(name, value)
     const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     const evidence = snapshot()
     await backend.mutation(publish, { snapshot: evidence })
     expect(await view(backend)).toMatchObject({ kind: 'ready' })
@@ -142,6 +243,7 @@ describe('payment readiness evidence publication and admission view', () => {
 
   it('replaces old evidence with fresh evidence for the rotated configuration', async () => {
     const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     await backend.mutation(publish, { snapshot: snapshot({ startedAt: NOW - 2000 }) })
     vi.stubEnv('CDP_API_KEY_SECRET', 'rotated-secret')
     expect(await backend.mutation(publish, { snapshot: snapshot() })).toEqual({ kind: 'published', replayed: false })
@@ -239,6 +341,7 @@ describe('registered server-authorized payment readiness read', () => {
   beforeEach(() => vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', SERVICE_KEY))
   it('reads exact current evidence without an interactive identity or writes, and expires at backend time', async () => {
     const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     const evidence = snapshot({ checks: passedChecks(NOW + 1000) })
     await backend.mutation(publish, { snapshot: evidence })
     const before = await storedRows(backend)

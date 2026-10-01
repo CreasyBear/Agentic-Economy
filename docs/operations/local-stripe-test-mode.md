@@ -1,6 +1,6 @@
 # Local Stripe test mode: reaching tier 1
 
-Tier 1 = a funded sandbox Account that can complete a paid Call, on a local machine, with no scripts and no fixtures: real Stripe test mode driven by the owner in a browser, a real webhook via the Stripe CLI, and a real x402 testnet leg for the provider payment. Local only — see Section 5.
+This guide covers the optional local Stripe test-mode funding path: owner checkout in a browser, a real webhook via the Stripe CLI, and a separate Base Sepolia x402 payment to an external Provider. The chosen alpha funding path uses admitted promotional credit and does not require Stripe. Either funding path still needs spending authority and genuine custody, treasury and Provider evidence to complete a paid Call. This guide does not establish that live acceptance; see Section 5.
 
 ## 1. Stripe test mode
 
@@ -49,9 +49,11 @@ npm run --silent ae -- doctor --base-url http://127.0.0.1:3024 --json
 
 ## 3. x402 testnet leg (provider payment)
 
-CDP custody env, read in `convex/capabilityQuotes.ts:204-215` and declared in `src/modules/capability-supply/internal/x402-custody-configuration.ts:9-19`: `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`, `AE_X402_CDP_ACCOUNT_NAME`, `AE_X402_CDP_EXPECTED_EVM_ADDRESS`, `AE_X402_CDP_ACCOUNT_POLICY_ID`, `AE_X402_CDP_PROJECT_POLICY_ID`, `AE_X402_CDP_POLICY_RULES_DIGEST`, `AE_X402_CDP_CREDENTIAL_GENERATION`, `AE_X402_CUSTODY_ENABLED`, `AE_X402_CUSTODY_MAX_ATOMIC`, `AE_X402_CUSTODY_DAILY_MAX_ATOMIC`, plus `AE_X402_RPC_URLS_JSON` — all optional Convex env (`convex/convex.config.ts:24-38`), required together in production (`x402-payment` manifest group). Sandbox network is Base Sepolia / USDC (`base-sepolia-usdc-exact`, `eip155:84532`, `0x036CbD53842c5426634e7929541eC2318f3dCF7e`, `src/modules/capability-supply/internal/x402-payment-profile.ts:2-16,34-40`).
+Configure the isolated development custody bundle in Convex: `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`, `AE_X402_CDP_ACCOUNT_NAME`, `AE_X402_CDP_EXPECTED_EVM_ADDRESS`, `AE_X402_CDP_ACCOUNT_POLICY_ID`, `AE_X402_CDP_PROJECT_POLICY_ID`, `AE_X402_CDP_POLICY_RULES_DIGEST`, `AE_X402_CDP_CREDENTIAL_GENERATION`, and `AE_X402_CUSTODY_ENABLED=true`. Managed signing also requires all four positive USDC atomic-unit caps: `AE_X402_CUSTODY_MAX_ATOMIC`, `AE_X402_CUSTODY_DAILY_MAX_ATOMIC`, `AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC`, and `AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC`. These requirements apply to sandbox signing too; missing limits refuse admission. The live account, attached account/project policies, address and policy digest must match this configuration (`src/modules/capability-supply/internal/x402-custody-configuration.ts`, `src/modules/money/x402-spend-admission.ts`). Sandbox uses Base Sepolia / USDC (`eip155:84532`, `0x036CbD53842c5426634e7929541eC2318f3dCF7e`; `src/modules/capability-supply/internal/x402-payment-profile.ts`).
 
-Provider spend is gated on a `moneyTreasuryObservations` row (`convex/moneyTreasury.ts:9-68`, read back by `treasurySpendableUnits`, `convex/capabilityQuotes.ts:219`). **Unverified/gap**: no command in this repo calls `recordObservation` outside unit tests (`tests/unit/convex/money-treasury.test.ts` via `convexTest`); there is no documented operator path to populate this table locally — it would need a manual `npx convex run moneyTreasury:recordObservation` with hand-assembled CDP balance evidence.
+Use `npm run dev:local` to declare `AE_DEPLOYMENT_ENVIRONMENT=development` in both runtimes. Configure `AE_X402_RPC_URLS_JSON` with one or two distinct public HTTPS Base Sepolia RPC endpoints, and fund the configured custody address with test USDC. The maintained `observe x402 treasury` workload runs every five minutes: `convex/moneyTreasuryObservation.ts` reads the official CDP balance API and records genuine observation evidence, then reconciles finalized on-chain deposits into the native ledger. It requires admitted workload authority and a provisioned sandbox Formance ledger configured by `AE_FORMANCE_ENVIRONMENT=sandbox`, `AE_FORMANCE_GATEWAY_URL`, and `AE_FORMANCE_LEDGER`; a non-loopback gateway also requires `AE_FORMANCE_ACCESS_CLIENT_ID` and `AE_FORMANCE_ACCESS_CLIENT_SECRET`. The local starter does not start or provision Formance. The separate `reconcile treasury balances` workload runs every fifteen minutes and publishes the treasury snapshot. Inspect `/admin/treasury` for source freshness and reconciliation state; configuration alone is not evidence of readiness. These producers are registered through `convex/crons.ts` and `convex/lib/platform/workloadCron/scheduled.ts`; do not fabricate balance evidence or invoke the internal observation mutation with hand-assembled values.
+
+Every actual signature also requires a fresh recorded payee-screening clear. The real TRM Wallet Screening adapter currently returns unavailable until the tenant-entitled contract is connected (`src/modules/money/x402-payee-screening.server.ts`), so this configuration cannot yet establish a real paid-Call pass.
 
 The local package5 reference provider has been removed. Paid sandbox Calls use an external Base Sepolia x402 endpoint named by `AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN` and `AE_PACKAGE5_FIXTURE_X402_PAY_TO`. Those values are deployment facts, not a server in this repo.
 
@@ -59,10 +61,10 @@ Base Sepolia test ETH/USDC come from the public Coinbase/Base faucet: https://po
 
 ## 4. Tiers
 
-- **Tier 0** = loopback, no credentials: discovery pass, quoting skipped (readiness probe cannot reach loopback), purchase names the missing Stripe setup.
-- **Tier 1** = hosted HTTPS origin plus Stripe test keys and the CDP/x402 bundle: full loop.
+- **Tier 0** = loopback diagnostics without the paid-Call prerequisites: discovery can pass while quoting is skipped where a readiness probe cannot reach its endpoint. Diagnostics are not paid-Call evidence.
+- **Tier 1 evidence** = an authenticated owner with spending authority and available Account credit, a ready treasury and screening provider, and a genuine external Base Sepolia Tool completing the Quote → Call → settlement → receipt flow. For this guide's optional Stripe path, fund the Account through test checkout and its webhook; the promo-only alpha uses admitted promotional credit instead.
 
-The sandbox counterparty is the app's own `POST /api/v1/sandbox-reference`; the hourly readiness probe observes it on hosted origins.
+The app's own `POST /api/v1/sandbox-reference` is an unpaid reference Tool, and its readiness probe requires a reachable hosted origin. The separate paid testnet Tool uses the external `AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN` and `AE_PACKAGE5_FIXTURE_X402_PAY_TO` facts above. An unpaid reference response cannot prove x402 settlement.
 
 `ae doctor` does print a `tier:` line. Use `ae doctor --json` and read `groups` plus each check's `summary`/`nextCommand` for the tier name.
 

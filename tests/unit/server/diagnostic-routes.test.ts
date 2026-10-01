@@ -3,6 +3,8 @@ import { convexTest } from 'convex-test'
 import { makeFunctionReference } from 'convex/server'
 import type { ActionCtx } from '../../../convex/_generated/server'
 import schema from '../../../convex/schema'
+import { seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
+import { TREASURY_SNAPSHOT_MAX_AGE_MS } from '@/modules/money/treasury-report'
 import { readWebConfiguration, refreshPaymentReadiness } from '../../../convex/lib/money/readiness/refresh'
 import { backendPaymentReadinessDigest, paymentReadinessExpiresAt, sealPaymentReadinessSnapshot, type PaymentReadinessSnapshot, type PaymentReadinessChecks } from '@/modules/money/payment-readiness'
 import { getFunctionName } from 'convex/server'
@@ -838,7 +840,7 @@ describe('production aggregate payment readiness', () => {
     expect(response.status).toBe(503)
     expect((await response.json()).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
   })
-  it('bootstraps actual canonical503 web evidence through refresh/store/read without concealing sanctions, then recovers on admitted evidence', async () => {
+  it('bootstraps real readiness boundaries, then respects current treasury failure and shortened expiry', async () => {
     const now = Date.now()
     const env = { ...productionReadinessEnvironment(), AE_SITE_URL: 'https://ae.example', CONVEX_CLOUD_URL: 'https://convex.example' }
     for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value)
@@ -847,9 +849,14 @@ describe('production aggregate payment readiness', () => {
     const backend = convexTest(schema, modules)
     const publish = makeFunctionReference<'mutation', { snapshot: PaymentReadinessSnapshot }, { kind: 'published'; replayed: boolean } | { kind: 'refused'; code: string }>('moneyReadiness:publish')
     const registeredRead = makeFunctionReference<'query', { environment: 'sandbox' | 'production'; serviceAuth: import('@/lib/server/convex-source').ConvexServerFunctionAssertion }, PaymentReadinessView>('moneyReadiness:readForServer')
+    let paymentObserved: ((view: PaymentReadinessView) => void) | undefined
     setPublicSourceTransportForTests({
-      query: async (reference: Parameters<typeof getFunctionName>[0], args: { environment: 'sandbox' | 'production'; serviceAuth: import('@/lib/server/convex-source').ConvexServerFunctionAssertion }) =>
-        getFunctionName(reference) === 'moneyReadiness:readForServer' ? await backend.query(registeredRead, args) : { kind: 'unavailable', refreshState: 'none' },
+      query: async (reference: Parameters<typeof getFunctionName>[0], args: { environment: 'sandbox' | 'production'; serviceAuth: import('@/lib/server/convex-source').ConvexServerFunctionAssertion }) => {
+        if (getFunctionName(reference) !== 'moneyReadiness:readForServer') return { kind: 'unavailable', refreshState: 'none' }
+        const result = await backend.query(registeredRead, args)
+        paymentObserved?.(result)
+        return result
+      },
       mutation: vi.fn(), action: vi.fn(),
     } as never)
     const options = { env, fetch: readyFetch(), nodeMajor: 22 }
@@ -877,10 +884,43 @@ describe('production aggregate payment readiness', () => {
     const checks = readyPaymentView(now + 60_000).checks as PaymentReadinessChecks
     const startedAt = rows[0]!.startedAt + 1
     vi.spyOn(Date, 'now').mockReturnValue(startedAt + 1)
+    const treasury = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     await backend.mutation(publish, { snapshot: sealPaymentReadinessSnapshot({ environment: 'production',
       configurationDigest: backendPaymentReadinessDigest(process.env), startedAt, completedAt: startedAt + 1,
       expiresAt: paymentReadinessExpiresAt(startedAt, checks), checks }) })
     expect((await handleReadyRequest(request(), options)).status).toBe(200)
+    vi.mocked(Date.now).mockReturnValue(startedAt + 2)
+    const treasuryExpiresAt = startedAt + 1002
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve',
+      chainBlockTimestamp: treasuryExpiresAt - TREASURY_SNAPSHOT_MAX_AGE_MS })
+    let releaseSearch: (() => void) | undefined
+    const searchBarrier = new Promise<void>(resolve => { releaseSearch = resolve })
+    const paymentBarrier = new Promise<PaymentReadinessView>(resolve => { paymentObserved = resolve })
+    toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce(async () => {
+      await searchBarrier
+      return { kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: '', appliedFilters: {}, ranking: [], navigation: [] }
+    })
+    const pending = handleReadyRequest(request(), options)
+    const currentView = await paymentBarrier
+    await new Promise<void>(resolve => setImmediate(resolve))
+    vi.mocked(Date.now).mockReturnValue(treasuryExpiresAt)
+    releaseSearch?.()
+    const expired = await pending
+    expect(currentView).toMatchObject({ kind: 'ready', expiresAt: treasuryExpiresAt,
+      checks: { treasury: { kind: 'passed', validUntil: treasuryExpiresAt } } })
+    expect(expired.status).toBe(503)
+    paymentObserved = undefined
+    vi.mocked(Date.now).mockReturnValue(treasuryExpiresAt + 1)
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve', cashCheck: {
+      kind: 'mismatch', code: 'treasury_cash_difference', checkedCount: 1, expectedUnits: '200000000', observedUnits: '190000000',
+      differenceUnits: '-10000000', evidenceRefs: [treasury.snapshotRef],
+    } })
+    const drifted = await handleReadyRequest(request(), options)
+    expect(drifted.status).toBe(503)
+    const outward = await drifted.text()
+    expect(JSON.parse(outward).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+    expect(outward).not.toContain('treasury_reconciliation_required')
+    expect(outward).not.toContain(treasury.snapshotRef)
   })
   it.each(['network', 'partial_body', 'redirect'] as const)('bounds actual Convex SDK %s failure without exposing transport details', async failure => {
     setPublicSourceTransportForTests(undefined)

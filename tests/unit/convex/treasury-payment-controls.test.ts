@@ -1,6 +1,5 @@
 import { makeFunctionReference } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { sealTreasurySnapshot } from '@/modules/money/treasury-report'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import { internal } from '../../../convex/_generated/api'
@@ -9,8 +8,8 @@ import { readTreasuryControlState } from '../../../convex/lib/adminConsole/actio
 import { readAgentPaymentAdmission } from '../../../convex/lib/money/treasury/paymentAdmission'
 import { convexTestWithMarketComponents, ownerAdmin, type ConvexFixtureBackend, type ConvexFixtureAdmin } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
-import { seedPaymentReadiness } from '../../helpers/payment-readiness-fixture'
-import { observeHealthyReadiness, publishCurrentTool, seedAgent, seedCommercialPolicies, testRef, validCustodyEnvironment, recordTreasuryObservation,
+import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
+import { observeHealthyReadiness, publishCurrentTool, seedAgent, seedCommercialPolicies, testRef, validCustodyEnvironment,
   prepareSubjects, formanceSnapshot } from '../../helpers/quote-fixtures'
 
 const pauseRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
@@ -19,7 +18,12 @@ const pauseRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_pay
 // operation, one winner per reviewed state, and only the current human root's
 // Admin role admits paid preparation. Refusal preserves launch/purchase state.
 // These tests do not substitute provider calls or native ledger evidence.
-beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+  for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
+  vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
+  vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '10000')
+})
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 async function pauseCommand(
@@ -102,7 +106,10 @@ async function paidAuthorityFixture(suffix: string, rootIsAdmin: boolean, ready 
   })
   await backend.finishAllScheduledFunctions(() => undefined)
   await observeHealthyReadiness(backend, tool, suffix)
-  if (ready) await seedPaymentReadiness(backend)
+  if (ready) {
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
+  }
   const paymentAuthority = { environment: 'production' as const, accountRef: tool.accountRef,
     grantRef: agent.grant.grantRef, grantGeneration: agent.grant.generation }
   const prepare = async (key: string) => await backend.mutation(internal.capabilityQuotes.prepareFinancialSubjects,
@@ -268,8 +275,9 @@ describe('independent production paid preparation authority evaluation', () => {
     expect(await fixture.purchases()).toEqual(before)
   })
 
-  it('refuses an unused paid Quote after readiness expires while replaying an accepted Call', async () => {
+  it.each(['expiry', 'newer_drift'] as const)('refuses new purchases after %s while replaying an accepted Call', async fault => {
     const fixture = await paidAuthorityFixture('readiness-call-replay', true, false)
+    await seedTreasuryReadinessFacts(fixture.backend, { observation: 'create' })
     const evidence = await seedPaymentReadiness(fixture.backend, { validityMs: 30_000 })
     const input = { request: 'Perth' }
     const subjects = await prepareSubjects(fixture.backend, fixture.agent, fixture.tool.toolRef, input, 'readiness-call-replay')
@@ -295,18 +303,36 @@ describe('independent production paid preparation authority evaluation', () => {
     const unused = await issue('unused')
     expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, accepted)).toMatchObject({ kind: 'reserved' })
     const before = await fixture.purchases()
-    vi.spyOn(Date, 'now').mockReturnValue(evidence.expiresAt)
+    const admissionAt = fault === 'expiry' ? evidence.expiresAt : Date.now() + 1
+    vi.spyOn(Date, 'now').mockReturnValue(admissionAt)
+    if (fault === 'newer_drift') {
+      await seedTreasuryReadinessFacts(fixture.backend, { observation: 'preserve', cashCheck: {
+        kind: 'mismatch', code: 'treasury_cash_difference', checkedCount: 1,
+        expectedUnits: '100010000', observedUnits: '100030000', differenceUnits: '20000', evidenceRefs: ['transfer:unexplained'],
+      } })
+      // Publishing fresh green does not overwrite the newer treasury verdict.
+      await seedPaymentReadiness(fixture.backend)
+      expect(await fixture.prepare('newer-drift')).toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
+    }
     expect(await fixture.backend.mutation(internal.capabilityQuotes.issueQuote, {
       operationKey: 'readiness:quote:after-expiry', correlationId: 'readiness:quote:after-expiry',
       principal: fixture.agent.principal, toolRef: fixture.tool.toolRef, input, formance: formanceSnapshot(subjects),
     })).toMatchObject({ kind: 'refused', code: 'payments_not_ready', retryable: true })
-    expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, { ...unused, now: evidence.expiresAt }))
+    expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, { ...unused, now: admissionAt }))
       .toMatchObject({ kind: 'refused', code: 'operation_not_ready', retryable: true,
         nextAction: expect.stringContaining('temporarily unavailable') })
     expect(await fixture.purchases()).toEqual(before)
-    expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, { ...accepted, now: evidence.expiresAt }))
+    expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, { ...accepted, now: admissionAt }))
       .toMatchObject({ kind: 'replayed', reservation: { callRef: accepted.callRef } })
     expect(await fixture.purchases()).toEqual(before)
+    if (fault === 'newer_drift') {
+      const admin = await ownerAdmin(fixture.backend, 'user_drift-pause-owner')
+      expect(await admin.mutation(pauseRef, await pauseCommand(admin, 'readiness:drift:pause', true)))
+        .toMatchObject({ kind: 'completed', code: 'payments_paused' })
+      expect(await fixture.backend.mutation(internal.capabilityCalls.reserve, { ...accepted, now: admissionAt }))
+        .toMatchObject({ kind: 'replayed', reservation: { callRef: accepted.callRef } })
+      expect(await fixture.purchases()).toEqual(before)
+    }
   })
 })
 
@@ -345,32 +371,6 @@ describe('production readiness cannot block emergency pause', () => {
 // The approval-race test exercises a resume that is otherwise ready. Health
 // refusal behavior is independently covered through the registered snapshot API.
 async function seedHealthyTreasury(backend: ConvexFixtureBackend) {
-  for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
-  vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
-  vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '10000')
-  await recordTreasuryObservation(backend, 'resume-race', { totalUnits: '110000', bufferUnits: '10000' })
-  const now = Date.now()
-  const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: now })
-  if (context.kind !== 'available') throw new Error(context.code)
-  const zero = { kind: 'matched' as const, checkedCount: 0, expectedUnits: '0', observedUnits: '0', differenceUnits: '0' }
-  const snapshot = sealTreasurySnapshot({
-    snapshotAt: now, environment: 'production', custodyRef: context.identity.custodyRef,
-    custodyGeneration: context.identity.custodyGeneration, custodyIdentityDigest: canonicalDigest(context.identity),
-    ledger: { kind: 'available', observedAt: now, availableUnits: '100000', committedUnits: '0', bufferUnits: '10000',
-      payments24hUnits: '0', payments7dUnits: '0', paymentBasis: 'gross_provider_payments',
-      purchasedAvailableAudUnits: '0', purchasedReservedAudUnits: '0', promotionalAvailableAudUnits: '0', promotionalReservedAudUnits: '0' },
-    chain: { kind: 'available', observedAt: now, blockTimestamp: now, blockNumber: '100',
-      blockHash: `0x${'a'.repeat(64)}`, totalUnits: '110000', caughtUp: true },
-    referenceRate: { kind: 'unavailable', code: 'not_needed_for_payment_resume' },
-    spending: { kind: 'available', observedAt: now, windowStartsAt: now - 86_400_000,
-      settledUnits: '0', liabilityUnits: '0', maximumUnits: '100000' },
-    inFlight: { kind: 'available', observedAt: now, count: 0, amountUnits: '0', oldestAt: null,
-      overdueCount: 0, overdueUnits: '0', calls: [], listedCallsComplete: true },
-    checks: { cash: { ...zero, checkedCount: 1, expectedUnits: '110000', observedUnits: '110000' },
-      settlements: zero, funding: zero, reservations: zero },
-    rawCashDifferenceUnits: '0', cashTimingAdjustmentUnits: '0', historyStartedAt: now,
-    deposits: [], depositsComplete: true, alerts: [],
-  })
-  expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })).toMatchObject({ kind: 'published' })
+  await seedTreasuryReadinessFacts(backend, { observation: 'create' })
   await seedPaymentReadiness(backend)
 }

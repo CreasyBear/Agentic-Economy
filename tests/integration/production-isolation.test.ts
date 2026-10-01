@@ -8,10 +8,10 @@ import { evaluateCommercialPolicyGate } from '@/modules/money/public'
 import { convexTestWithMarketComponents, createTestAgentPrincipal, publishedBusinessOwner } from '../helpers/convex-fixtures'
 import { issueBuyerAgent } from '../helpers/issued-buyer-agent'
 import { withSourceWrite } from '../helpers/source-write-admission'
-import { seedPaymentReadiness } from '../helpers/payment-readiness-fixture'
+import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../helpers/payment-readiness-fixture'
 import {
   formanceSnapshot, observeHealthyReadiness, prepareSubjects, publishCurrentTool,
-  seedAgent, seedCommercialPolicies, recordTreasuryObservation, withCustodyEnvironment,
+  seedAgent, seedCommercialPolicies, recordTreasuryObservation, withCustodyEnvironment, validCustodyEnvironment,
 } from '../helpers/quote-fixtures'
 
 const reserve = anyApi.moneyAccountFunding?.reserve
@@ -27,6 +27,9 @@ if (sandboxGate.kind !== 'admitted') throw new Error('sandbox_policy_fixture_mis
 beforeEach(() => {
   vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
   vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+  for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
+  vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
+  vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '100000')
 })
 afterEach(() => { vi.unstubAllEnvs() })
 
@@ -48,6 +51,7 @@ describe('production financial boundary isolation', () => {
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, tool, suffix)
     await observeHealthyReadiness(backend, sandboxTool, `${suffix}-sandbox-tool`)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     await seedPaymentReadiness(backend)
     const input = { request: 'Perth' }
     const subjects = await prepareSubjects(backend, buyer, tool.toolRef, input, suffix)
@@ -91,19 +95,37 @@ describe('production financial boundary isolation', () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
     try {
       await recordTreasuryObservation(backend, suffix, { observedAt: now - 30 * 60_000 })
-      const fresh = await withCustodyEnvironment(async () => {
+      const observationBefore = await backend.run(ctx => ctx.db.query('moneyTreasuryObservations').collect())
+      // The current production gate rejects this observation before Quote
+      // subjects, even at the former thirty-minute capacity boundary.
+      const atFormerBoundary = await withCustodyEnvironment(async () => {
+        await seedTreasuryReadinessFacts(backend, { observation: 'preserve', availableUnits: '9000000' })
         await seedPaymentReadiness(backend)
-        return await prepareSubjects(backend, buyer, tool.toolRef, { request: 'Perth' }, `${suffix}:fresh`)
+        return await backend.mutation(internal.capabilityQuotes.prepareFinancialSubjects,
+          await withSourceWrite('protected_action', {
+            operationKey: `${suffix}:boundary:prepare`, correlationId: `${suffix}:boundary:prepare`,
+            principal: buyer.principal, toolRef: tool.toolRef, input: { request: 'Perth' },
+          }))
       })
-      expect(fresh.treasury).toMatchObject({ targetUnits: '9000000' })
+      expect(atFormerBoundary).toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
       clock.mockReturnValue(now + 1)
       const stale = await withCustodyEnvironment(async () => {
+        await seedTreasuryReadinessFacts(backend, { observation: 'preserve', availableUnits: '9000000' })
         await seedPaymentReadiness(backend)
-        return await prepareSubjects(backend, buyer, tool.toolRef, { request: 'Perth' }, `${suffix}:stale`)
+        return await backend.mutation(internal.capabilityQuotes.prepareFinancialSubjects,
+          await withSourceWrite('protected_action', {
+            operationKey: `${suffix}:stale:prepare`, correlationId: `${suffix}:stale:prepare`,
+            principal: buyer.principal, toolRef: tool.toolRef, input: { request: 'Perth' },
+          }))
       })
-      expect(stale.treasury).toBeUndefined()
+      expect(stale).toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
+      expect(stale).not.toHaveProperty('treasury')
+      expect(await backend.run(ctx => ctx.db.query('moneyTreasuryObservations').collect())).toEqual(observationBefore)
       expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').collect())).toEqual([])
+      expect(await backend.run(ctx => ctx.db.query('capabilityCalls').collect())).toEqual([])
       expect(await backend.run(ctx => ctx.db.query('moneyProviderObligations').collect())).toEqual([])
+      expect(await backend.run(ctx => ctx.db.query('moneyX402PaymentAttempts').collect())).toEqual([])
+      expect(await backend.run(ctx => ctx.db.query('moneyX402SpendReservations').collect())).toEqual([])
     } finally {
       clock.mockRestore()
     }
@@ -118,6 +140,7 @@ describe('production financial boundary isolation', () => {
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, tool, suffix)
     const input = { request: 'Perth' }
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
     await seedPaymentReadiness(backend)
     const subjects = await prepareSubjects(backend, buyer, tool.toolRef, input, suffix)
     const quote = await backend.mutation(internal.capabilityQuotes.issueQuote, {

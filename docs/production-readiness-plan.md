@@ -1977,3 +1977,85 @@ integration alone is not log delivery. No monitoring destination was provisioned
 Keep #276, #286 and #256 open for hosted readiness/alert/restore evidence, the
 entitled screening adapter, the full development paid Call and authorized
 real-money drills. The preserved development stack was untouched.
+
+### Stage 32 — current treasury state governs production admission
+
+The #275 audit found that a newer red treasury report can coexist with a still
+fresh green payment-readiness row until its next refresh. The shared reader must
+honor the current treasury source before returning production `ready`.
+
+Requires: sealed, fresh payment evidence for the current backend configuration,
+plus the existing treasury health contract for the current custody identity in
+the same query or admission transaction.
+
+Ensures: a newer mismatch, unavailable/stale reconciliation or observation, wallet
+identity mismatch, or exhausted capacity refuses new production spending through
+all existing readiness consumers. A late green readiness producer cannot undo
+that refusal. The view retains the provider evidence's actual observation time and
+projects the current treasury refusal without modifying the sealed stored row.
+For a passing current treasury check, the view's expiry and treasury validity
+cannot exceed either the stored evidence or the current source's expiry. A newer
+report can contain an older still-fresh chain timestamp, so its earlier deadline
+must remain visible to HTTP completion and UI expiry checks.
+
+Invariant: payment audience and authority remain distinct from readiness. Pause
+still executes without readiness. Accepted Call replay and financial recovery
+stay outside the new-purchase gate. Sandbox admission behavior stays unchanged.
+
+On violation: return `not_ready` with the existing bounded treasury refusal code;
+admission continues to return `payments_not_ready`, with no purchase effects.
+Recovery requires genuinely healthy current treasury facts and fresh provider
+evidence; never extend evidence lifetime or substitute an older wallet's report.
+
+COMPLEXITY: share the existing treasury readiness check between the readiness
+producer and reader; it composes `treasuryResumeRefusal` with source expiry. This adds
+the existing indexed snapshot, observation and bounded exposure reads to a
+potentially passing production read (exposure history limit: 256). It removes
+the refresh race for every consumer without a second status store, schema change,
+external call or audience mutation. Publication-only invalidation would require
+another fence against an already-running green producer; separate checks in each
+consumer would duplicate policy. Keep one composition at the existing boundary.
+
+Verify registered publication/read and real paid preparation, Quote/new Call,
+owner access, pause and accepted replay. Exercise newer red evidence, late green
+publication, current identity, shortened expiry and healthy recovery. These local tests
+establish admission semantics; they do not establish hosted treasury/provider
+acceptance. Root owns integration and heavy execution; workers own disjoint files.
+
+Stage 32 acceptance (1 October): current treasury health now governs every
+otherwise-passing production readiness read, including paid preparation, Quote
+issuance, unused-Quote Call reservation, owner payment access and public readiness.
+Registered regressions prove that a newer red report defeats both cached green
+evidence and a late green publication, without changing the stored provider
+evidence. Healthy current facts restore readiness within the original lifetime.
+Accepted Calls still replay before and after emergency Pause; refused new
+purchases leave purchase rows unchanged. Invalid current observation clocks or
+amounts refuse before arithmetic and never fall back to an older observation.
+
+Independent review identified and closed the shorter-expiry case: a newer report
+can carry older still-fresh chain evidence. Both the view expiry and treasury
+validity now use the earlier deadline. The real registered server read plus a
+delayed commercial probe proves HTTP 503 at that exact deadline; a new mismatch
+also returns sanitized 503 immediately. No new API, schema or dependency was added.
+
+Validation under Node 22.22.0/npm 11.5.1:
+
+- Focused readiness, admission, Quote, control, diagnostic and isolation suites:
+  227 passing tests. `npm run check` passes with zero dependency cycles.
+- `AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+  passes: anonymous Convex code generation, build integrity, clean types, 7,614
+  unit tests, 2,696 integration/Convex tests, 31 SEO checks, 16 public browser
+  checks, 18 accessibility checks and reproducible CLI packaging. The existing
+  environment-dependent skips and three integration TODOs remain unproven.
+- `AE_FORMANCE_INTEGRATION=true AE_FORMANCE_GATEWAY_URL=http://127.0.0.1:45369 npm test -- tests/integration/capability-call-workpool.test.ts --no-file-parallelism -t 'standard-production mainnet|refuses mainnet payment drift'`
+  passes both affected native-ledger cases. A dedicated disposable Formance 2.4.14
+  stack exercised settlement/replay and drift refusal/release; its containers,
+  network and volume were removed and their absence verified. CDP, screening and
+  chain responses remain explicit test fixtures; this is not a real-money drill.
+
+The local Stripe guide now names all four caps, the maintained scheduled treasury
+producers and the separate paid testnet Tool. Stripe remains optional for the
+promo-only alpha. Keep #275, #276 and #256 open for remaining operational acceptance:
+entitled screening, provisioned environment facts, genuine development paid Call,
+hosted alert/restore evidence and authorized real-money drills. The preserved
+development stack was untouched.

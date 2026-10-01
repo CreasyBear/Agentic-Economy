@@ -2,6 +2,7 @@ import { verifyCustomerRequestServiceAssertion, type CustomerRequestServiceAsser
 import { v, type Infer } from 'convex/values'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
+import { readTreasuryPaymentReadinessCheck } from '../treasury/health'
 import { backendPaymentReadinessDigest, failedPaymentReadinessChecks, PAYMENT_READINESS_CHECK_KEYS,
   PAYMENT_READINESS_MAX_PROBE_AGE_MS, validPaymentReadinessSnapshot,
   type PaymentReadinessSnapshot, type PaymentReadinessView } from '@/modules/money/payment-readiness'
@@ -45,8 +46,11 @@ export async function publishPaymentReadiness(
 
 /**
  * Requires the admission's server timestamp (or an explicit query observation timestamp).
- * Ensures only fresh current-config complete passing checks can return ready.
+ * Ensures only fresh current-config complete passing checks and current production
+ * treasury health can return ready. A later red report supersedes cached green.
  * Invariant: snapshot/credential digests and raw configuration never enter the view.
+ * The stored seal and provider timestamps remain unchanged; this current-source
+ * check adds no writes, external reads, audience change or recovery gate.
  * On violation: not_ready with bounded failed checks; no writes or fabricated pass.
  */
 export async function readPaymentReadiness(
@@ -67,6 +71,16 @@ export async function readPaymentReadiness(
     checkedAt: evidence.completedAt, expiresAt: evidence.expiresAt }
   const firstFailure = PAYMENT_READINESS_CHECK_KEYS.map(key => evidence.checks[key])
     .find(check => check.kind === 'failed' || check.validUntil <= now)
+  if (firstFailure === undefined && environment === 'production' && evidence.checks.treasury.kind === 'passed') {
+    const current = await readTreasuryPaymentReadinessCheck(ctx, environment, now)
+    if (current.kind === 'failed') return { kind: 'not_ready', environment,
+      checkedAt: evidence.completedAt, expiresAt: evidence.expiresAt, code: current.code,
+      checks: { ...evidence.checks, treasury: current } }
+    const storedTreasury = evidence.checks.treasury
+    return { kind: 'ready', environment, checkedAt: evidence.completedAt,
+      expiresAt: Math.min(evidence.expiresAt, current.validUntil), code: null,
+      checks: { ...evidence.checks, treasury: { kind: 'passed', validUntil: Math.min(storedTreasury.validUntil, current.validUntil) } } }
+  }
   return { kind: firstFailure === undefined ? 'ready' : 'not_ready', environment,
     checkedAt: evidence.completedAt, expiresAt: evidence.expiresAt,
     code: firstFailure === undefined ? null : firstFailure.kind === 'failed' ? firstFailure.code : 'readiness_expired',

@@ -1,8 +1,8 @@
 import { makeFunctionReference } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { convexTestWithMarketComponents, ownerAdmin } from '../../../../tests/helpers/convex-fixtures'
-import { seedAgent, testRef } from '../../../../tests/helpers/quote-fixtures'
-import { seedPaymentReadiness } from '../../../../tests/helpers/payment-readiness-fixture'
+import { seedAgent, testRef, validCustodyEnvironment } from '../../../../tests/helpers/quote-fixtures'
+import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../../../../tests/helpers/payment-readiness-fixture'
 import { readAgentPaymentAdmission, readPaymentsAudience, type PaymentAdmissionResult } from './paymentAdmission'
 
 const ownerAccess = makeFunctionReference<'query', { environment: 'production' | 'sandbox' }, PaymentAdmissionResult | { kind: 'refused'; code: 'authentication_required' | 'environment_mismatch' }>('platformLaunch:readOwnerPaymentAccess')
@@ -38,14 +38,49 @@ async function adminDelegationFixture(ready = true) {
     })
   })
   const input = { environment: 'production' as const, accountRef: root.accountRef, grantRef: agent.grant.grantRef, grantGeneration: agent.grant.generation }
-  if (ready) await seedPaymentReadiness(backend)
+  if (ready) {
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
+  }
   return { backend, admin, root, rootGrantRef, input }
 }
 
-beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+  for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
+  vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
+  vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '10000')
+})
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 describe('live payment audience admission', () => {
+  it('new drift supersedes cached and late green for both Agent and owner access; healthy source recovers', async () => {
+    const fixture = await adminDelegationFixture()
+    const now = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(now + 1)
+    await seedTreasuryReadinessFacts(fixture.backend, { observation: 'preserve', cashCheck: {
+      kind: 'mismatch', code: 'treasury_cash_difference', checkedCount: 1,
+      expectedUnits: '100010000', observedUnits: '100030000', differenceUnits: '20000', evidenceRefs: ['transfer:unexplained'],
+    } })
+    await seedPaymentReadiness(fixture.backend)
+    const before = await fixture.backend.run(async ctx => ({
+      readiness: await ctx.db.query('moneyPaymentReadiness').collect(), launch: await ctx.db.query('platformLaunch').collect(),
+      calls: await ctx.db.query('capabilityCalls').collect(),
+    }))
+    expect(await fixture.backend.run(ctx => readAgentPaymentAdmission(ctx, fixture.input, Date.now())))
+      .toEqual({ kind: 'refused', code: 'payments_not_ready' })
+    expect(await fixture.admin.query(ownerAccess, { environment: 'production' }))
+      .toEqual({ kind: 'refused', code: 'payments_not_ready' })
+    expect(await fixture.backend.run(async ctx => ({
+      readiness: await ctx.db.query('moneyPaymentReadiness').collect(), launch: await ctx.db.query('platformLaunch').collect(),
+      calls: await ctx.db.query('capabilityCalls').collect(),
+    }))).toEqual(before)
+    vi.mocked(Date.now).mockReturnValue(now + 2)
+    await seedTreasuryReadinessFacts(fixture.backend, { observation: 'preserve' })
+    expect(await fixture.backend.run(ctx => readAgentPaymentAdmission(ctx, fixture.input, Date.now()))).toEqual({ kind: 'allowed' })
+    expect(await fixture.admin.query(ownerAccess, { environment: 'production' })).toEqual({ kind: 'allowed' })
+  })
+
   it('defaults production to Admins and development to everyone', async () => {
     const backend = convexTestWithMarketComponents()
     expect(await backend.run((ctx) => readPaymentsAudience(ctx, 'production'))).toBe('admins')

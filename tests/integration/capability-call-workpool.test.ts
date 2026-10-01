@@ -53,7 +53,7 @@ import {
   quoteAudAccountFunding,
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
-import { seedPaymentReadiness } from '../helpers/payment-readiness-fixture'
+import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../helpers/payment-readiness-fixture'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
@@ -515,6 +515,7 @@ describe('capability Call Workpool lifecycle', () => {
         input,
       } = await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
       await seedCommercialPolicies(backend, Date.now())
+      await seedTreasuryReadinessFacts(backend, { observation: 'preserve', availableUnits: '9990000' })
       await seedPaymentReadiness(backend)
       const deliveries: string[] = []
       const providerRequests: Array<{ url: string; paid: boolean }> = []
@@ -694,6 +695,7 @@ describe('capability Call Workpool lifecycle', () => {
       const { backend, published, buyer, resource, readBalance, signedAuthorizations, input } =
         await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
       await seedCommercialPolicies(backend, Date.now())
+      await seedTreasuryReadinessFacts(backend, { observation: 'preserve', availableUnits: '9990000' })
       await seedPaymentReadiness(backend)
       const original = resource.paymentRequired
       const cases = [
