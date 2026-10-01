@@ -51,7 +51,12 @@ test.describe('developer discovery', () => {
     for (const path of ['/api/discovery/schema', '/api/discovery/examples']) {
       const response = await request.get(path)
       expect(response.status()).toBe(503)
-      expect(await response.json()).not.toHaveProperty('kind')
+      expect(response.headers()['content-type']).toBe('application/problem+json')
+      expect(response.headers()['cache-control']).toBe('no-store')
+      expect(response.headers()['retry-after']).toBe('5')
+      expect(await response.json()).toMatchObject({
+        status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,
+      })
     }
   })
 

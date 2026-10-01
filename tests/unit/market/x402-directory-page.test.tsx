@@ -10,6 +10,9 @@ import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/to
 import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
 import { marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
 import type * as DemandFunctions from '@/modules/market-demand/market-demand.functions'
+// The rate-limit setup preloads degrade and its telemetry dependency. Reload
+// that graph so this file's capture mock observes the real degrade calls.
+vi.hoisted(() => vi.resetModules())
 const owner = vi.hoisted(() => ({ userId: 'alice' as string | null }))
 const listSavedToolsForOwner = vi.hoisted(() => vi.fn())
 const saveToolForOwner = vi.hoisted(() => vi.fn())
