@@ -9,7 +9,7 @@ import {
   type FormanceContext,
   type FormanceMoneyResult,
 } from './formance'
-import { completed, refused, unavailable, unknown } from './formance-result'
+import { completed, refused, unavailable, unknown, type FormanceSettlementReadResult } from './formance-result'
 import {
   prepareFormanceSettledSaleRefund,
   settledSalePostingsMatch,
@@ -52,6 +52,7 @@ export * from './internal/formance-transaction-templates'
 export * from './internal/formance-promotional-credit'
 export { prepareFormanceSettledSaleRefund }
 export type { FormanceSettledSaleRefund }
+export type { FormanceSettlementReadResult } from './formance-result'
 
 export type FormanceDisplayBalanceResult =
   | Readonly<{
@@ -114,6 +115,57 @@ export async function settleFormanceManagedCall(
 }
 
 /**
+ * Requires: the original valid frozen booking and its configured native ledger.
+ * Ensures: confirms only the complete ordered settlement with exact native
+ *   references, templates, metadata and postings reconstructed from that booking.
+ * Invariant: read-only; accounting evidence does not establish delivery or
+ *   authorize a replacement payment, release or refund.
+ * On violation: missing/partial/conflicting evidence refuses; unavailable reads
+ *   remain unavailable and never establish absence of an earlier payment.
+ */
+export async function readFormanceManagedCallSettlement(
+  context: FormanceContext,
+  booking: FormanceManagedCallBooking,
+): Promise<FormanceSettlementReadResult> {
+  // References depend on the original Call/Quote/stage, not on the external
+  // evidence. This digest only derives the references; native proof follows.
+  const identity = prepareFormanceManagedCallSettlement({
+    booking, externalEvidenceDigest: booking.x402RequirementDigest,
+  })
+  if (identity.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  }
+  const saleRef = identity.bulk.commands[0]?.commandRef
+  if (saleRef === undefined) return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  const sale = await readFormanceTransactionByReference(context, saleRef)
+  if (sale.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: sale.code })
+  if (sale.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: sale.code })
+  if (sale.kind !== 'found' || !/^[a-f0-9]{64}$/u.test(sale.metadata.external_evidence_digest ?? '')) {
+    return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  }
+  const original = prepareFormanceManagedCallSettlement({
+    booking, externalEvidenceDigest: `sha256:${sale.metadata.external_evidence_digest}`,
+  })
+  if (original.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  }
+  for (const [index, expected] of original.bulk.commands.entries()) {
+    const actual = index === 0 ? sale : await readFormanceTransactionByReference(context, expected.commandRef)
+    if (actual.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: actual.code })
+    if (actual.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
+    if (actual.kind !== 'found' || actual.reference !== expected.commandRef
+      || actual.template !== expected.template
+      || !settledSalePostingsMatch(expected, actual.postings)
+      || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+      return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+    }
+  }
+  return Object.freeze({ kind: 'confirmed',
+    transactionRefs: Object.freeze(original.bulk.commands.map(command => command.commandRef)),
+  })
+}
+
+/**
  * CONTRACT: refundFormanceSettledSale(context, input)
  *   Requires: the frozen booking and the complete ordered native settlement
  *     references, plus a canonical digest of the approved refund report.
@@ -131,36 +183,12 @@ export async function refundFormanceSettledSale(
 ): Promise<FormanceMoneyResult> {
   const prepared = prepareFormanceSettledSaleRefund(input)
   if (prepared.kind === 'refused') return prepared
-  const saleRef = input.originalSettlementRefs[0]
-  if (saleRef === undefined) return refused('formance_settled_sale_evidence_invalid')
-  const sale = await readFormanceTransactionByReference(context, saleRef)
-  if (sale.kind === 'setup_required') return refused(sale.code)
-  if (sale.kind === 'unavailable') return unavailable(sale.code)
-  if (sale.kind !== 'found' || !/^[a-f0-9]{64}$/u.test(sale.metadata.external_evidence_digest ?? '')) {
+  const original = await readFormanceManagedCallSettlement(context, input.booking)
+  if (original.kind === 'refused') return refused(original.code)
+  if (original.kind === 'unavailable') return unavailable(original.code)
+  if (original.transactionRefs.length !== input.originalSettlementRefs.length
+    || original.transactionRefs.some((reference, index) => reference !== input.originalSettlementRefs[index])) {
     return refused('formance_settled_sale_evidence_invalid')
-  }
-
-  const original = prepareFormanceManagedCallSettlement({
-    booking: input.booking,
-    externalEvidenceDigest: `sha256:${sale.metadata.external_evidence_digest}`,
-  })
-  if (original.kind === 'refused'
-    || original.bulk.commands.length !== input.originalSettlementRefs.length) {
-    return refused('formance_settled_sale_evidence_invalid')
-  }
-  for (const [index, expected] of original.bulk.commands.entries()) {
-    if (input.originalSettlementRefs[index] !== expected.commandRef) {
-      return refused('formance_settled_sale_evidence_invalid')
-    }
-    const actual = index === 0 ? sale : await readFormanceTransactionByReference(context, expected.commandRef)
-    if (actual.kind === 'setup_required') return refused(actual.code)
-    if (actual.kind === 'unavailable') return unavailable(actual.code)
-    if (actual.kind !== 'found' || actual.reference !== expected.commandRef
-      || actual.template !== expected.template
-      || !settledSalePostingsMatch(expected, actual.postings)
-      || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
-      return refused('formance_settled_sale_evidence_invalid')
-    }
   }
   const posted = await executePreparedBulk(context, prepared)
   if (posted.kind !== 'completed') return posted

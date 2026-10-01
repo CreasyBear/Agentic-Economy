@@ -8,6 +8,7 @@ import {
   readFormanceAccount,
   validateFormanceMoneyCommand,
   type FormanceContext,
+  type FormanceMoneyCommand,
 } from '@/modules/money/formance'
 import {
   adjustFormanceSpendingPeriod,
@@ -20,6 +21,8 @@ import {
   prepareFormanceCapacitySync,
   syncFormanceCapacity,
   readFormanceSpendingPeriod,
+  readFormanceManagedCallSettlement,
+  refundFormanceSettledSale,
   type FormanceManagedCallBooking,
 } from '@/modules/money/formance-workflows'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/freshness'
@@ -334,6 +337,203 @@ describe('native Formance spending-period workflows', () => {
       kind: 'setup_required',
       code: 'formance_unsafe_integer',
     })
+  })
+})
+
+type SettlementPosting = { source: string; destination: string; asset: string; amount: bigint }
+type SettlementRow = {
+  id: bigint; reference: string; template: string; metadata: Record<string, string>;
+  postings: SettlementPosting[]; reverted?: boolean
+}
+
+function settlementPostings(command: FormanceMoneyCommand): SettlementPosting[] {
+  // These are the required financial legs, specified independently of the
+  // production matcher. Canonical builders supply only the command envelope.
+  const legs: readonly (readonly [string, string, string])[] = command.template === 'BUYER_SALE_SETTLED'
+    ? [['call_reserved', 'revenue', 'revenue_amount'], ['call_reserved', 'tax', 'tax_amount'],
+        ['legal_reserved', 'legal_settled', 'exposure_amount'],
+        ...(command.variables.agent_reserved === undefined
+          ? [['daily_reserved', 'daily_spent', 'daily_amount'], ['monthly_reserved', 'monthly_spent', 'monthly_amount']] as const
+          : [['agent_reserved', 'agent_spent', 'budget_amount']] as const)]
+    : command.template === 'PROVIDER_SETTLED'
+      ? [['treasury_committed', 'provider_settlement', 'amount'], ['obligation_accrued', 'obligation_settled', 'amount']]
+      : command.template === 'CALL_PROMO_SETTLED' ? [['source', 'destination', 'amount']]
+        : []
+  if (legs.length === 0) throw new Error('Unexpected settlement template')
+  return legs.flatMap(([sourceKey, destinationKey, amountKey]) => {
+    const source = command.variables[sourceKey]
+    const destination = command.variables[destinationKey]
+    const monetary = command.variables[amountKey]?.match(/^(AUD|USDC)\/6 (0|[1-9]\d*)$/u)
+    if (source === undefined || destination === undefined || monetary?.[1] === undefined || monetary[2] === undefined) {
+      throw new Error('Missing expected settlement leg')
+    }
+    return monetary[2] === '0' ? [] : [{ source, destination, asset: `${monetary[1]}/6`, amount: BigInt(monetary[2]) }]
+  })
+}
+
+function settlementFixture(booking = managedCallBooking()) {
+  const externalEvidenceDigest = `sha256:${'c'.repeat(64)}`
+  const prepared = prepareFormanceManagedCallSettlement({ booking, externalEvidenceDigest })
+  if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+  const rows = new Map<string, SettlementRow>(prepared.bulk.commands.map((command, index) => [command.commandRef, {
+    id: BigInt(index + 1), reference: command.commandRef, template: command.template,
+    metadata: { ...command.metadata }, postings: settlementPostings(command),
+  }]))
+  const ledger = {
+    listTransactions: vi.fn(async ({ query }: { query: { $match: { reference: string } } }) => {
+      const row = rows.get(query.$match.reference)
+      return { v2TransactionsCursorResponse: { cursor: { data: row === undefined ? [] : [row] } } }
+    }),
+    createBulk: vi.fn(), createTransaction: vi.fn(),
+  }
+  const context = {
+    configuration: {
+      environment: 'sandbox', gatewayUrl: 'http://127.0.0.1:8080', ledger: 'test-ledger', requestTimeoutMs: 1_000,
+    }, sdk: { ledger: { v2: ledger } },
+  } as unknown as FormanceContext
+  const refs = prepared.bulk.commands.map(command => command.commandRef)
+  const rowAt = (index: number) => {
+    const row = rows.get(refs[index] ?? '')
+    if (row === undefined) throw new Error('Missing fixture settlement')
+    return row
+  }
+  const noWrites = () => {
+    expect(ledger.createBulk).not.toHaveBeenCalled()
+    expect(ledger.createTransaction).not.toHaveBeenCalled()
+  }
+  return { booking, context, rows, refs, rowAt, ledger, noWrites }
+}
+
+describe('read-only original managed Call settlement proof', () => {
+  it.each(['legacy', 'period', 'promotional'] as const)('confirms complete %s accounting using native evidence, without writing', async kind => {
+    const booking: FormanceManagedCallBooking = {
+      ...managedCallBooking(kind === 'legacy' ? undefined : spendingPeriods()),
+      ...(kind === 'promotional' ? { promotionalCreditAllocation: {
+        version: 'ae.promotional-credit-allocation:v1' as const, purchasedUnits: '40',
+        grants: [{ grantRef: 'promo:one', amountUnits: '60', expiresAt: periodAt + 1 }],
+      } } : {}),
+    }
+    const fixture = settlementFixture(booking)
+    // Posting order is not financial meaning. The original native digest is
+    // deliberately different from the booking's requirement digest.
+    fixture.rowAt(0).postings.reverse()
+    const before = structuredClone([...fixture.rows])
+    const results = await Promise.all(Array.from({ length: 3 }, async () =>
+      await readFormanceManagedCallSettlement(fixture.context, booking)))
+    for (const result of results) expect(result).toEqual({ kind: 'confirmed', transactionRefs: fixture.refs })
+    expect(await readFormanceManagedCallSettlement(fixture.context, booking)).toEqual(results[0])
+    expect([...fixture.rows]).toEqual(before)
+    fixture.noWrites()
+  })
+
+  it.each([
+    ['Call', { callRef: 'call:changed' }], ['Quote', { quoteRef: 'quote:changed' }],
+    ['idempotency key', { idempotencyKey: 'changed-key' }], ['account', { accountRef: 'account:changed' }],
+    ['amount', { buyerAmountUnits: '101', buyerRevenueUnits: '100' }],
+    ['Provider amount', { providerAmountUnits: '51' }], ['generation', { treasuryGeneration: 2 }],
+  ] satisfies readonly (readonly [string, Partial<FormanceManagedCallBooking>])[])(
+    'refuses changed original %s instead of submitting a replacement', async (_label, patch) => {
+      const fixture = settlementFixture()
+      expect(await readFormanceManagedCallSettlement(fixture.context, { ...fixture.booking, ...patch })).toEqual({
+        kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
+      })
+      fixture.noWrites()
+    },
+  )
+
+  it('refuses malformed booking before reading native state', async () => {
+    const fixture = settlementFixture()
+    expect(await readFormanceManagedCallSettlement(fixture.context, { ...fixture.booking, buyerTaxUnits: '-1' })).toEqual({
+      kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
+    })
+    expect(fixture.ledger.listTransactions).not.toHaveBeenCalled()
+    fixture.noWrites()
+  })
+
+  it.each([0, 1])('refuses missing settlement member %i without treating absence as permission', async index => {
+    const fixture = settlementFixture()
+    fixture.rows.delete(fixture.refs[index] ?? '')
+    const result = await readFormanceManagedCallSettlement(fixture.context, fixture.booking)
+    expect(result).toEqual({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+    expect(result).not.toHaveProperty('submissionProvenAbsent')
+    fixture.noWrites()
+  })
+
+  it('requires every original metadata value on every settlement member', async () => {
+    const baseline = settlementFixture()
+    for (const index of [0, 1]) for (const key of Object.keys(baseline.rowAt(index).metadata)) {
+      const fixture = settlementFixture()
+      fixture.rowAt(index).metadata[key] = key === 'external_evidence_digest' ? 'd'.repeat(64) : 'changed'
+      expect(await readFormanceManagedCallSettlement(fixture.context, fixture.booking), `${index}:${key}`).toEqual({
+        kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
+      })
+      fixture.noWrites()
+    }
+  })
+
+  it('refuses a missing promotional grant posting even when buyer and Provider settlements exist', async () => {
+    const booking: FormanceManagedCallBooking = { ...managedCallBooking(spendingPeriods()), promotionalCreditAllocation: {
+      version: 'ae.promotional-credit-allocation:v1', purchasedUnits: '40',
+      grants: [{ grantRef: 'promo:one', amountUnits: '60', expiresAt: periodAt + 1 }],
+    } }
+    const fixture = settlementFixture(booking)
+    fixture.rows.delete(fixture.refs[2] ?? '')
+    expect(await readFormanceManagedCallSettlement(fixture.context, booking)).toEqual({
+      kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
+    })
+    fixture.noWrites()
+  })
+
+  it.each(['amount', 'source', 'destination', 'asset', 'missing', 'extra', 'template'] as const)(
+    'refuses native %s conflict despite matching command metadata', async alteration => {
+      const fixture = settlementFixture()
+      const row = fixture.rowAt(1)
+      const first = row.postings[0]
+      if (first === undefined) throw new Error('Missing Provider posting')
+      if (alteration === 'amount') first.amount += 1n
+      if (alteration === 'source') first.source = 'accounts:wrong'
+      if (alteration === 'destination') first.destination = 'accounts:wrong'
+      if (alteration === 'asset') first.asset = 'AUD/6'
+      if (alteration === 'missing') row.postings.pop()
+      if (alteration === 'extra') row.postings.push({ ...first })
+      if (alteration === 'template') row.template = 'CALL_RELEASED_USDC'
+      expect(await readFormanceManagedCallSettlement(fixture.context, fixture.booking)).toEqual({
+        kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
+      })
+      fixture.noWrites()
+    },
+  )
+
+  it.each(['reverted', 'unsafe', 'duplicate'] as const)('rejects %s native evidence through the maintained reader', async kind => {
+    const fixture = settlementFixture()
+    const row = fixture.rowAt(1)
+    if (kind === 'reverted') row.reverted = true
+    if (kind === 'unsafe') row.id = BigInt(Number.MAX_SAFE_INTEGER) + 1n
+    if (kind === 'duplicate') fixture.ledger.listTransactions.mockImplementation(async ({ query }) => {
+      const candidate = fixture.rows.get(query.$match.reference)
+      return { v2TransactionsCursorResponse: { cursor: { data: candidate === undefined ? [] : [candidate, candidate] } } }
+    })
+    const codes = { reverted: 'formance_reference_reverted', unsafe: 'formance_unsafe_integer', duplicate: 'formance_reference_conflict' }
+    expect(await readFormanceManagedCallSettlement(fixture.context, fixture.booking)).toEqual({ kind: 'refused', code: codes[kind] })
+    fixture.noWrites()
+  })
+
+  it.each([0, 1])('keeps source failure at member %i unavailable, with no absence claim or write', async index => {
+    const fixture = settlementFixture()
+    fixture.ledger.listTransactions.mockImplementation(async ({ query }) => {
+      if (query.$match.reference === fixture.refs[index]) throw new Error('Native boundary unavailable')
+      const row = fixture.rows.get(query.$match.reference)
+      return { v2TransactionsCursorResponse: { cursor: { data: row === undefined ? [] : [row] } } }
+    })
+    expect(await readFormanceManagedCallSettlement(fixture.context, fixture.booking)).toEqual({
+      kind: 'unavailable', code: 'formance_read_unavailable',
+    })
+    // The existing write/refund surface retains its own pre-write failure
+    // contract even though the shared read does not assert submission absence.
+    expect(await refundFormanceSettledSale(fixture.context, {
+      booking: fixture.booking, originalSettlementRefs: fixture.refs, reportDigest: DIGEST_A,
+    })).toEqual({ kind: 'unavailable', code: 'formance_read_unavailable', submissionProvenAbsent: true })
+    fixture.noWrites()
   })
 })
 

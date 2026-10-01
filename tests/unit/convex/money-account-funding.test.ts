@@ -370,6 +370,7 @@ describe('Account AUD funding through Formance', () => {
   })
 
   it('prepares one exact booking and finalizes only the returned Formance reference', async () => {
+    vi.useFakeTimers()
     const commandRef = 'account-funding:formance-one'
     const backend = convexTestWithWorkers()
     const fixture = await publishedBusinessOwner(backend, 'formance-account-funding')
@@ -419,7 +420,8 @@ describe('Account AUD funding through Formance', () => {
     )).resolves.toEqual({
       kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef,
     })
-    await backend.finishAllScheduledFunctions(() => undefined)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.finishInProgressScheduledFunctions()
     const rows = await fundingRows(backend, commandRef)
     expect(rows).toMatchObject({
       command: { state: 'succeeded', appliedTransactionRef: formanceTransactionRef },

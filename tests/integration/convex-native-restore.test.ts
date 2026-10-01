@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -9,6 +9,17 @@ import { describe, expect, it } from 'vitest'
 import { copyReleaseSource, runConvexCommand, startConvexDev, terminateIsolatedProcesses } from '../../tools/release/convex-anonymous-runtime'
 import { compareConvexSnapshots, ConvexSnapshotDiagnostic, readConvexSnapshot } from '../../tools/release/convex-snapshot-compare'
 import { compareRestoreArchives } from '../../tools/release/convex-restore'
+
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { createFormanceContext, executeFormanceMoneyCommand, installPackage4FormanceSchema,
+  readFormanceHealth, readFormanceTransactionByReference } from '@/modules/money/formance'
+import { adjustFormanceSpendingPeriod, bookFormanceFundingSettlement, prepareFormancePromotionalCreditGrant,
+  reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
+  type FormanceManagedCallBooking } from '@/modules/money/formance-workflows'
+import { bookFormanceTreasuryBatch } from '@/modules/money/formance-treasury'
+import { readFormanceRestoreSnapshot } from '@/modules/money/formance-restore'
+import type { Doc } from '../../convex/_generated/dataModel'
+import { buildDevelopmentPublishedToolEvidence } from '../unit/capability-supply/fixtures/development-published-tool-evidence'
 
 const runFile = promisify(execFile)
 const sourceRoot = resolve('.')
@@ -25,8 +36,8 @@ function completeRowCount(stdout: string, limit: number): number {
   return lines.length
 }
 
-async function ports(): Promise<number[]> {
-  const servers = Array.from({ length: 4 }, () => createServer())
+async function ports(count = 4): Promise<number[]> {
+  const servers = Array.from({ length: count }, () => createServer())
   try {
     for (const server of servers) await new Promise<void>((done, reject) => {
       server.once('error', reject); server.listen(0, '127.0.0.1', done)
@@ -60,6 +71,8 @@ export default defineSchema({ ...original.tables,
   writeFileSync(join(convex, 'restoreProof.ts'), readFileSync(resolve('tests/fixtures/convex-restore-proof.ts'), 'utf8')
     .replace('../../convex/_generated/api', './_generated/api'))
   writeFileSync(join(convex, 'workRecoveryProof.ts'), readFileSync(resolve('tests/fixtures/convex-work-recovery-proof.ts'), 'utf8')
+    .replaceAll('../../convex/', './'))
+  writeFileSync(join(convex, 'financialRestoreProof.ts'), readFileSync(resolve('tests/fixtures/convex-financial-restore-proof.ts'), 'utf8')
     .replaceAll('../../convex/', './'))
   // Suppress application crons in both disposable copies: no provider work or expiry during the data proof.
   writeFileSync(join(convex, 'crons.ts'), "import { cronJobs } from 'convex/server'\nexport default cronJobs()\n")
@@ -349,6 +362,192 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true')('native Co
       }
     }
     if (failures.length > 0) throw new AggregateError(failures, 'restore_proof_failed')
+    console.log(JSON.stringify(summary))
+  }, 900_000)
+})
+
+/** A stale application archive must not rewind the independently surviving ledger.
+ * Requires source/target effect writers stopped and drained before reconciliation.
+ * Ensures original accounting evidence is recovered with zero native money writes;
+ * missing/conflicting evidence preserves the hold. This does not prove chain settlement,
+ * delivery, later remedies or complete application restore.
+ */
+describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
+  || process.env.AE_FORMANCE_INTEGRATION !== 'true')('native financial recovery after Convex restore', () => {
+  it('repairs post-snapshot settlements while preserving holds and the complete native ledger', async () => {
+    type Record = { call: Doc<'capabilityCalls'>; quote: Doc<'capabilityQuotes'>;
+      booking: FormanceManagedCallBooking; obligation: Doc<'moneyProviderObligations'> | null; workState: string }
+    const root = mkdtempSync(join(tmpdir(), 'ae-convex-money-restore-'))
+    const source = join(root, 'source'), target = join(root, 'target')
+    const allocated = await ports(5)
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const project = `ae-convex-money-${suffix}`
+    const configuration = { environment: 'sandbox' as const, ledger: `ae-convex-money-${suffix}`,
+      gatewayUrl: `http://127.0.0.1:${allocated[4]}`, requestTimeoutMs: 10_000 }
+    const context = createFormanceContext(configuration)
+    const docker = async (args: string[]) => (await runFile('docker', ['compose', '--project-name', project,
+      '-f', resolve('tests/config/native-money/compose.yml'), ...args], { timeout: 120_000,
+      env: { ...process.env, AE_NATIVE_MONEY_PORT: String(allocated[4]) }, maxBuffer: 4 * 1024 * 1024 })).stdout
+    const command = async (directory: string, args: string[]) => runConvexCommand({ sourceRoot, isolatedRoot: directory,
+      args, retainBackendOnSuccess: ['run', 'data', 'export', 'import'].includes(args[0] ?? '') })
+    const invoke = async <T>(directory: string, name: string, args: object = {}): Promise<T> => {
+      const { stdout } = await command(directory, ['run', name, JSON.stringify(args)])
+      return (stdout.trim() === '' ? null : JSON.parse(stdout)) as T
+    }
+    const inspect = async (directory: string): Promise<Record[]> => JSON.parse(
+      await invoke<string>(directory, 'financialRestoreProof:inspect')) as Record[]
+    const snapshot = async () => {
+      const value = await readFormanceRestoreSnapshot(configuration)
+      if (value.kind !== 'available') throw new Error(value.code)
+      return value.snapshot.summary
+    }
+    const stops: Array<() => Promise<void>> = [], failures: unknown[] = []
+    let summary: object | undefined
+    try {
+      console.log('Financial restore: start isolated native ledger and two Convex deployments')
+      await docker(['up', '--detach', '--wait', '--wait-timeout', '90'])
+      const deadline = Date.now() + 30_000
+      let healthy = false
+      while (!healthy && Date.now() < deadline) {
+        try {
+          const response = await context.sdk.getVersions({ retries: { strategy: 'none' }, timeoutMs: 2_000 })
+          healthy = response.getVersionsResponse?.versions.some(v => v.name === 'ledger' && v.version === 'v2.4.14' && v.health) === true
+        } catch { /* Startup only: retry bounded native readiness before any booking. */ }
+        if (!healthy) await new Promise(done => setTimeout(done, 250))
+      }
+      expect(healthy).toBe(true)
+      expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+      expect(await readFormanceHealth(context)).toMatchObject({ kind: 'ready' })
+      for (const [index, directory] of [source, target].entries()) {
+        mkdirSync(directory); installFixture(directory)
+        await command(directory, ['dev', '--once', '--skip-push', '--local-cloud-port', String(allocated[index * 2]),
+          '--local-site-port', String(allocated[index * 2 + 1]), '--local-backend-version', backendVersion])
+        for (const [name, value] of Object.entries({ AE_DEPLOYMENT_ENVIRONMENT: 'development',
+          CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid', AE_FORMANCE_ENVIRONMENT: 'sandbox',
+          AE_FORMANCE_GATEWAY_URL: configuration.gatewayUrl, AE_FORMANCE_LEDGER: configuration.ledger })) {
+          await command(directory, ['env', 'set', name, value])
+        }
+        stops.push(await startConvexDev({ sourceRoot, isolatedRoot: directory, backendVersion }))
+      }
+      const now = Date.now(), digest = canonicalDigest({ proof: 'financial-restore' })
+      await invoke(source, 'financialRestoreProof:seed', { toolJson: JSON.stringify(buildDevelopmentPublishedToolEvidence().tool), now })
+      const seeded = await inspect(source)
+      expect(seeded).toHaveLength(4)
+      const first = seeded[0]!.booking
+      expect(await bookFormanceFundingSettlement(context, { commandRef: 'funding:restore', idempotencyKey: 'funding:restore',
+        accountRef: first.accountRef, processorRef: 'processor:restore', principalUnits: '1000000', serviceFeeUnits: '1',
+        taxUnits: '1', totalUnits: '1000002', policyDigest: digest, externalEvidenceDigest: digest })).toMatchObject({ kind: 'completed' })
+      for (const periodKind of ['day', 'month'] as const) {
+        const period = periodKind === 'day' ? first.spendingPeriods!.daily : first.spendingPeriods!.monthly
+        expect(await adjustFormanceSpendingPeriod(context, { principalRef: first.principalRef, periodKind,
+          ...period, previousLimitUnits: '0', targetLimitUnits: period.limitUnits, authorityDigest: digest })).toMatchObject({ kind: 'completed' })
+      }
+      expect(await syncFormanceCapacity(context, { commandRef: 'capacity:restore', idempotencyKey: 'capacity:restore',
+        kind: 'legal_customer_exposure', subjectRef: first.legalCustomerRef, generation: 1, targetUnits: '10000000',
+        policyDigest: digest, externalEvidenceDigest: digest })).toMatchObject({ kind: 'completed' })
+      const identity = { environment: 'sandbox' as const, custodyRef: first.treasuryRef, custodyGeneration: 1,
+        network: 'eip155:84532', asset: '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
+        address: `0x${'2'.repeat(40)}`, bufferTargetUnits: '1000000' }
+      expect(await bookFormanceTreasuryBatch(context, identity, { batchRef: digest, custodyRef: first.treasuryRef,
+        custodyGeneration: 1, previousCheckpoint: null, previousBufferUnits: '0', bufferIncreaseUnits: '1000000',
+        observation: { kind: 'observed', environment: 'sandbox', network: identity.network, asset: identity.asset,
+          address: identity.address, fromBlock: '100', checkpoint: { blockNumber: '100', blockHash: `0x${'4'.repeat(64)}`,
+            balanceUnits: '10000000' }, blockTimestamp: now, transfers: [], caughtUp: true, observedAt: now },
+        state: { kind: 'pending' }, createdAt: now })).toMatchObject({ kind: 'completed' })
+      for (const { booking } of seeded) {
+        for (const grant of booking.promotionalCreditAllocation!.grants) {
+          const prepared = prepareFormancePromotionalCreditGrant({ ...grant, accountRef: booking.accountRef, commandDigest: digest })
+          if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+          expect(await executeFormanceMoneyCommand(context, prepared.command)).toMatchObject({ kind: 'completed' })
+        }
+        const reservation = await reserveFormanceManagedCall(context, booking)
+        if (reservation.kind !== 'completed') throw new Error(JSON.stringify(reservation))
+        expect(await invoke(source, 'moneyManagedCall:attachReservation', { callRef: booking.callRef,
+          transactionRefs: reservation.transactionRefs })).toEqual({ kind: 'attached', replayed: false })
+      }
+      await invoke(source, 'workloadCron:ensurePlatformWorkloadIdentities')
+      await command(source, ['run', 'lib:stop', '{"name":"main"}', '--component', 'workpool/batchWorker'])
+      const archived = await inspect(source)
+      const archive = join(root, 'before-settlement.zip')
+      await command(source, ['export', '--include-file-storage', '--path', archive])
+      await stops[0]!()
+      console.log('Financial restore: source stopped; create post-snapshot native settlements')
+      const native = new Map<string, { refs: readonly string[]; ids: string[] }>()
+      for (const { booking } of seeded.filter(row => !row.call.callRef.endsWith(':missing'))) {
+        const settlement = await settleFormanceManagedCall(context, { booking, externalEvidenceDigest: canonicalDigest({ effect: booking.callRef }) })
+        if (settlement.kind !== 'completed') throw new Error(JSON.stringify(settlement))
+        const ids = []
+        for (const ref of settlement.transactionRefs) {
+          const transaction = await readFormanceTransactionByReference(context, ref)
+          if (transaction.kind !== 'found') throw new Error('proof_native_transaction_missing')
+          ids.push(transaction.transactionId)
+        }
+        native.set(booking.callRef, { refs: settlement.transactionRefs, ids })
+        if (booking.callRef.endsWith(':conflict')) {
+          await context.sdk.ledger.v2.addMetadataOnTransaction({ ledger: configuration.ledger, id: BigInt(ids[1]!),
+            requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-provider-evidence', schemaVersion: 'v1.5.0' })
+        }
+      }
+      const ledgerBaseline = await snapshot()
+      await command(target, ['import', archive, '--replace', '--yes'])
+      expect(await inspect(target)).toEqual(archived)
+      await command(target, ['run', 'lib:stop', '{"name":"main"}', '--component', 'workpool/batchWorker'])
+      await command(target, ['run', 'loop:updateRunStatus', '{}', '--component', 'workpool'])
+      const workload = await invoke(target, 'workloadCron:admit', { name: 'reconcile due facilitator invocations' })
+      expect(await invoke(target, 'capabilityCalls:quarantineRestoredDispatches', { workload,
+        dispatches: archived.map(({ call }) => ({ callRef: call.callRef, expectedWorkId: call.workId })) }))
+        .toEqual({ kind: 'accepted', quarantined: 4, replayed: 0 })
+      await command(target, ['run', 'lib:start', '{"name":"main"}', '--component', 'workpool/batchWorker'])
+      const retireDeadline = Date.now() + 60_000
+      let held = await inspect(target)
+      while (held.some(row => row.workState !== 'finished') && Date.now() < retireDeadline) {
+        await new Promise(done => setTimeout(done, 500)); held = await inspect(target)
+      }
+      expect(held.every(row => row.workState === 'finished')).toBe(true)
+      expect(held.every(row => row.call.formanceFinancialState === 'outcome_unknown'
+        && row.call.reconciliation?.disposition === 'manual_review')).toBe(true)
+      const recover = (callRef: string) => invoke(target, 'moneyManagedCallLifecycle:reconcileSettlement', { callRef, now: Date.now() })
+      for (const row of held) {
+        const positive = row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')
+        expect(await recover(row.call.callRef)).toMatchObject(positive
+          ? { kind: 'accepted', state: 'settled', replayed: false }
+          : { kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+        expect(await snapshot()).toEqual(ledgerBaseline)
+      }
+      const recovered = await inspect(target)
+      for (const row of recovered) {
+        const before = held.find(value => value.call.callRef === row.call.callRef)!
+        const expected = native.get(row.call.callRef)
+        if (row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')) {
+          expect(row).toEqual({ ...before, call: { ...before.call, formanceFinancialState: 'settled',
+            formanceSettlementRefs: expected!.refs, buyerSaleTransactionRef: expected!.refs[0], updatedAt: row.call.updatedAt },
+          obligation: { ...before.obligation, state: 'settled', settlementTransactionRef: expected!.refs[1],
+            evidenceRefs: [...new Set([...before.obligation!.evidenceRefs, ...expected!.refs])],
+            settledAt: row.obligation!.settledAt, updatedAt: row.obligation!.updatedAt } })
+          expect(await Promise.all([recover(row.call.callRef), recover(row.call.callRef)]))
+            .toEqual(Array.from({ length: 2 }, () => ({ kind: 'accepted', state: 'settled', replayed: true })))
+        } else expect(row).toEqual(before)
+      }
+      expect(await inspect(target)).toEqual(recovered)
+      expect(await snapshot()).toEqual(ledgerBaseline)
+      for (const { refs, ids } of native.values()) for (const [index, ref] of refs.entries()) {
+        expect(await readFormanceTransactionByReference(context, ref)).toMatchObject({ kind: 'found', transactionId: ids[index] })
+      }
+      summary = { evidenceClass: 'native-convex-financial-restore', verification: 'PASS', recovered: 2,
+        refused: 2, manualHoldsPreserved: 4, nativeWritesDuringRecovery: 0, ledger: ledgerBaseline,
+        originalTransactionIdsPreserved: true, sourceStopped: true, chainOrDeliveryProven: false }
+    } catch (error) { failures.push(error) }
+    finally {
+      const stopped = await Promise.allSettled(stops.map(stop => stop()))
+      const cleaned = await Promise.allSettled([terminateIsolatedProcesses(source), terminateIsolatedProcesses(target)])
+      for (const result of [...stopped, ...cleaned]) if (result.status === 'rejected') failures.push(result.reason)
+      try {
+        await docker(['down', '--volumes', '--remove-orphans', '--timeout', '10'])
+        expect((await docker(['ps', '--all', '--quiet'])).trim()).toBe('')
+      } catch (error) { failures.push(error) }
+      if (cleaned.every(result => result.status === 'fulfilled')) rmSync(root, { recursive: true, force: true })
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'financial_restore_proof_failed')
     console.log(JSON.stringify(summary))
   }, 900_000)
 })

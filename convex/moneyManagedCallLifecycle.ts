@@ -1,7 +1,7 @@
 import { internalQuery, internalMutation, internalAction } from './_generated/server'
 import { readReservationArgs, readReservationResult, readReservationHandler } from './lib/money/managedCall/reservationRead'
 import { markPossiblySubmittedArgs, markPossiblySubmittedResult, markPossiblySubmittedHandler, markOutcomeUnknownArgs, markOutcomeUnknownResult, markOutcomeUnknownHandler, finalizeReleaseArgs, finalizeReleaseResult, finalizeReleaseHandler, finalizeSettlementArgs, finalizeSettlementResult, finalizeSettlementHandler } from './lib/money/managedCall/transitions'
-import { releaseBeforeSubmissionArgs, releaseBeforeSubmissionResult, releaseBeforeSubmissionHandler, settleArgs, settleResult, settleHandler } from './lib/money/managedCall/lifecycleActions'
+import { releaseBeforeSubmissionArgs, releaseBeforeSubmissionResult, releaseBeforeSubmissionHandler, settleArgs, settleResult, settleHandler, reconcileSettlementArgs, reconcileSettlementResult, reconcileSettlementHandler } from './lib/money/managedCall/lifecycleActions'
 import { validateX402ReleaseProofArgs, validateX402ReleaseProofResult, validateX402ReleaseProofHandler, releaseBeforeSubmissionWithX402ProofArgs, releaseBeforeSubmissionWithX402ProofResult, releaseBeforeSubmissionWithX402ProofHandler } from './lib/money/managedCall/x402Proof'
 import { resolveBuyerSaleSourcesArgs, resolveBuyerSaleSourcesResult, resolveBuyerSaleSourcesHandler } from './lib/money/managedCall/historySources'
 
@@ -51,6 +51,12 @@ export const settle = internalAction({
   args: settleArgs.fields,
   returns: settleResult,
   handler: settleHandler,
+})
+
+export const reconcileSettlement = internalAction({
+  args: reconcileSettlementArgs.fields,
+  returns: reconcileSettlementResult,
+  handler: reconcileSettlementHandler,
 })
 
 export const validateX402ReleaseProof = internalQuery({

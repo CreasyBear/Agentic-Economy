@@ -1,5 +1,11 @@
 [
   {
+    "file": "tests/fixtures/convex-financial-restore-proof.ts",
+    "line": 14,
+    "literal": "financialRestoreProof:noEffect",
+    "helper": "makeFunctionReference"
+  },
+  {
     "file": "tests/fixtures/convex-work-recovery-proof.ts",
     "line": 26,
     "literal": "workRecoveryProof:increment",

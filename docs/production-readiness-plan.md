@@ -1223,3 +1223,127 @@ Other restored consumers, hosted wiring, retention/RPO/RTO and live-money
 acceptance remain outstanding. Next, exercise held Calls against the native
 Formance ledger, including external money effects recorded after the snapshot;
 resolve from original financial evidence before allowing another purchase.
+
+## Stage 25 — recover original financial facts across a stale Convex snapshot
+
+Design thesis: repair a restored Call's original accounting facts from exact
+native ledger evidence without creating another financial effect or inventing
+delivery. Sluice selects the main workflow for the Convex/Node/native-ledger
+boundary. The existing settle action cannot serve this operator operation: when
+its references are absent, it submits a new bulk. Refund processing already
+contains the exact original-settlement proof; separate that read for reuse.
+
+Requires: a valid frozen Call/Quote booking, a compatible configured money world,
+local financial state eligible for reconciliation, and the original local
+reservation attachment and matching Provider obligation. Ensures: only a complete
+native settlement whose references, templates, metadata and postings match the
+original booking may restore the local financial and Provider-obligation facts.
+Recheck the booking digest, reservation attachment and obligation identity/state
+in the final mutation, including on replay. Invariant: no ledger write,
+new signature, Provider request, refund, credit release, replacement purchase or
+delivery/status inference; the original Call's manual hold and input persist.
+On violation: malformed, missing, partial, conflicting or unavailable evidence
+returns an explicit refusal/unavailability; changed bookings, missing local
+reservation/obligation facts and conflicting remedies or obligation states refuse
+local finalization. Every unsuccessful read leaves local state
+unchanged. A retry repeats the read and repairs the same original references.
+
+Type decision: a settlement observation is confirmed (with complete ordered
+references), refused, or unavailable. It must not reuse the write result's
+`submissionProvenAbsent` flag: a failed read says nothing about an earlier
+payment. Existing write/refund results retain their contracts.
+
+Idempotency and error strategy: the native operation is read-only. The local
+finalizer is one Convex transaction, with exact booking binding and existing
+state/remedy conflict controls; duplicate and concurrent calls converge on the
+same references without changing replay timestamps. Network failure is a
+recoverable read failure; native evidence conflicts refuse. An interruption
+between proof and local finalization leaves a replayable hold. Accounting
+settlement does not establish delivery or account for every later adjustment.
+
+Design review was completed against the settled requirements without an
+interview. Integrity is strong: proof, runtime adapter and transaction binding
+all serve the same repair. The main risks are mistaking absence for authority,
+accepting incomplete native evidence, and a stale local booking. Keep the proof
+in the existing workflow module and reuse it in refund verification. Reject a
+new reconciliation table, scheduling framework, automatic payment retry or UI
+step. The cost is one read result and two internal action registrations, plus
+an optional binding on the existing finalizer; the benefit is a real recovery
+operation that cannot write money. Bounded native reads and the existing
+component/ledger harnesses keep its scope contained.
+
+Verification must retain the native Formance ledger while restoring an older
+Convex archive, recover a post-snapshot settlement, and prove unchanged complete
+ledger state across recovery, replay and concurrent calls. Missing/conflicting
+evidence must retain the hold. Root owns the native integration and acceptance;
+bounded workers own the shared native proof and Convex consumer respectively.
+
+Operator use follows Stage 24 quarantine and retirement. Stop and drain effect
+writers in both the source and target, including other operators and remedy
+workers, before reading original financial evidence. Keep them stopped during
+this operation. The native proof is an observation of the original settlement;
+it cannot rule out a later refund, reversal, remedy or chain event. Retention
+and reconciliation of those later facts remain separate restore work.
+
+On the independently verified target, run the internal action
+`moneyManagedCallLifecycle:reconcileSettlement` with the original `callRef` and
+current millisecond `now`. It repairs eligible `possibly_submitted` or
+`outcome_unknown` accounting state; an already `settled` Call still requires a
+fresh exact native read before replay. A successful result is
+`{"kind":"accepted","state":"settled","replayed":false}`; matching repeated
+calls report `replayed:true`. Inspect the original settlement references and
+Provider obligation, and verify that the manual hold remains. A refusal retains
+the hold and requires investigation; it never authorizes a replacement payment,
+credit release, refund or completed delivery. This operation has no automatic
+scheduler and does not reopen execution or general purchasing.
+
+Final contract review identified a pre-attachment gap: an `outcome_unknown` Call
+can exist before the local reservation and Provider obligation are recorded.
+The new read-bound finalizer must refuse that incomplete local restore, and
+refuse a mismatched or subsequently reversed/disputed obligation, before any
+write or settled replay. Recovering the missing reservation/obligation is a
+separate operation; native settlement evidence alone does not make this local
+record complete. Existing unbound settlement callers retain their contract.
+
+### Stage 25 acceptance and handover
+
+The final native drill passed in 95.40 seconds on the pinned local Convex backend
+and the maintained disposable Formance stack. It takes a Convex archive after
+real native reservation, stops the source, then records original settlements in
+the surviving native ledger before importing the older application archive.
+After quarantine and dispatch retirement, the registered recovery action:
+
+- recovers two original settlements (mixed purchased/promotional and all-promotional);
+- refuses a missing settlement and a conflicting native Provider transaction;
+- retains all four manual holds, original inputs, Quotes, WorkIds and reservation references;
+- converges on concurrent replay without rewriting Call or obligation timestamps;
+- preserves every original native transaction ID and the complete ledger summary
+  (schema, accounts and transactions), establishing zero native money writes
+  across recovery, refusal and replay.
+
+The registered Convex boundary tests also establish changed-booking refusal,
+read unavailability without an absence claim, preserved payment-attempt records,
+missing attachment/obligation refusal, and protection of later obligation facts.
+The native fixture does not seed a real payment attempt or prove chain payment,
+Provider delivery, later refunds/reversals, or recovery of a missing local
+reservation/obligation. Both isolated deployments and the test's Compose project
+were removed after the drill; shared deployments were not used.
+
+Reproduce the native proof separately from the ordinary gate (which skips it):
+`AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'repairs post-snapshot settlements'`.
+
+Acceptance on Node 22/npm 11.5.1: `npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+passed. The gate includes seven-file isolated code generation, public build,
+clean types, 7,370 unit tests, 2,600 integration-suite tests, 75 import checks,
+31 SEO checks, 16 browser journeys, 18 accessibility cases and the reproducible
+CLI package. Suite counts overlap; one unit skip, 56 integration skips and three
+todos remain. Focused money/refund and recovery suites passed 97 cases. The
+funding suite passed 31 cases after its rendering assertion was corrected to
+advance and await scheduled work with the existing controlled-clock pattern.
+
+Keep #286 and #256 open. This stage repairs original accounting facts while
+retaining delivery uncertainty. Complete restore still needs missing local
+financial records, later adjustments, other consumers and hosted retention/RPO/RTO
+acceptance. Production provisioning and explicitly authorized live-money drills
+remain separate requirements. No merge, deployment or live-money action occurred.

@@ -3,9 +3,11 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 import type { ActionCtx } from '../../../convex/_generated/server'
+import type { Doc } from '../../../convex/_generated/dataModel'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import type { FormanceMoneyResult } from '@/modules/money/public'
+import type { FormanceMoneyResult, FormanceSettlementReadResult } from '@/modules/money/public'
 import { reserveFormanceBackedInvocation } from '../../../convex/lib/capabilityExecution/callLifecycle/callFinancialReservation'
+import { reconcileSettlementHandler } from '../../../convex/lib/money/managedCall/lifecycleActions'
 
 import schema from '../../../convex/schema'
 import { api, internal } from '../../../convex/_generated/api'
@@ -33,6 +35,34 @@ const toolRef = `operation:v1:${'d'.repeat(64)}`
 const reservationRefs = ['formance:reserve-aud', 'formance:reserve-usdc', 'formance:obligation']
 const releaseRefs = ['formance:release-aud', 'formance:release-usdc']
 const settlementRefs = ['formance:settle-buyer', 'formance:settle-provider']
+
+function settlementReadContext(
+  backend: ReturnType<typeof convexTest>,
+  read: () => Promise<FormanceSettlementReadResult>,
+) {
+  const nativeRead = vi.fn(async (reference: Parameters<ActionCtx['runAction']>[0], args: unknown) => {
+    expect(getFunctionName(reference)).toBe('moneyFormance:readManagedCallSettlement')
+    expect(args).toMatchObject({ callRef, quoteRef, accountRef, idempotencyKey: call().idempotencyKey })
+    return await read()
+  })
+  return {
+    nativeRead,
+    ctx: {
+      runQuery: (reference: Parameters<typeof backend.query>[0], args: never) => backend.query(reference, args),
+      runMutation: (reference: Parameters<typeof backend.mutation>[0], args: never) => backend.mutation(reference, args),
+      runAction: nativeRead,
+    } as unknown as ActionCtx,
+  }
+}
+
+async function settlementState(backend: ReturnType<typeof convexTest>) {
+  return await backend.run(async ctx => ({
+    call: await ctx.db.query('capabilityCalls').first(),
+    quote: await ctx.db.query('capabilityQuotes').first(),
+    obligations: await ctx.db.query('moneyProviderObligations').collect(),
+    paymentAttempts: await ctx.db.query('moneyX402PaymentAttempts').collect(),
+  }))
+}
 
 function commitment() {
   const priced = quoteManagedX402BuyerAud({ environment: 'sandbox', requiredUsdcAtomicUnits: '5000000', observedAt: now, referenceRate: { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: now } })
@@ -167,6 +197,281 @@ async function seedLostResult(backend: ReturnType<typeof convexTest>) {
     })
   })
 }
+
+describe('read-only original settlement reconciliation', () => {
+  async function heldFixture() {
+    const backend = convexTest(schema, convexModules)
+    await seedLostResult(backend)
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, {
+        attemptRef: 'attempt:lost',
+        reconciliation: { disposition: 'manual_review', reason: 'unknown_settlement', attemptCount: 0, nextAttemptAt: now },
+      })
+    })
+    return backend
+  }
+
+  // Observable contract: the native boundary alone is mocked. Real registered
+  // booking reads and transactional finalization preserve the held attempt and
+  // delivery evidence; neither failure nor replay grants absence/retry authority.
+  it.each(['accrued', 'held'] as const)('repairs %s accounting concurrently, preserves the manual hold and rereads on settled replay without timestamp inflation', async state => {
+    const backend = await heldFixture()
+    await backend.run(async dbCtx => {
+      const obligation = await dbCtx.db.query('moneyProviderObligations').first()
+      if (obligation === null) throw new Error('fixture_missing')
+      await dbCtx.db.patch(obligation._id, { state })
+    })
+    const before = await settlementState(backend)
+    const { ctx, nativeRead } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    const results = await Promise.all([0, 1].map(offset => reconcileSettlementHandler(ctx, { callRef, now: now + 10 + offset })))
+    expect(results).toContainEqual({ kind: 'accepted', state: 'settled', replayed: false })
+    expect(results).toContainEqual({ kind: 'accepted', state: 'settled', replayed: true })
+    const repaired = await settlementState(backend)
+    expect(repaired.call).toEqual({ ...before.call,
+      formanceFinancialState: 'settled', formanceSettlementRefs: settlementRefs,
+      buyerSaleTransactionRef: settlementRefs[0], updatedAt: repaired.call?.updatedAt })
+    expect(repaired.call?.updatedAt).toBeGreaterThanOrEqual(now + 10)
+    expect(repaired.call?.updatedAt).toBeLessThanOrEqual(now + 11)
+    expect(repaired.obligations).toHaveLength(1)
+    expect(repaired.obligations[0]).toEqual({ ...before.obligations[0], state: 'settled',
+      settlementTransactionRef: settlementRefs[1], evidenceRefs: [quoteRef, ...reservationRefs, ...settlementRefs],
+      settledAt: repaired.call?.updatedAt, updatedAt: repaired.call?.updatedAt })
+    expect(repaired.quote).toEqual(before.quote)
+    expect(repaired.paymentAttempts).toEqual(before.paymentAttempts)
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 100 })).toEqual({ kind: 'accepted', state: 'settled', replayed: true })
+    expect(await settlementState(backend)).toEqual(repaired)
+    expect(nativeRead).toHaveBeenCalledTimes(3)
+  })
+
+  it.each([
+    { kind: 'refused', code: 'formance_settlement_not_found' },
+    { kind: 'refused', code: 'formance_settlement_incomplete' },
+    { kind: 'refused', code: 'formance_reference_conflict' },
+    { kind: 'unavailable', code: 'formance_read_unavailable' },
+  ] as const)('preserves every original fact on $kind/$code', async evidence => {
+    const backend = await heldFixture()
+    const before = await settlementState(backend)
+    const { ctx, nativeRead } = settlementReadContext(backend, async () => evidence)
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 })).toEqual({ kind: 'refused', code: evidence.code })
+    expect(nativeRead).toHaveBeenCalledTimes(1)
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it.each(['reserved', 'released', 'reservation_pending'] as const)('refuses ineligible %s without a native request or writes', async financialState => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { formanceFinancialState: financialState })
+    })
+    const before = await settlementState(backend)
+    const { ctx, nativeRead } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 })).toEqual({ kind: 'refused', code: 'managed_call_state_conflict' })
+    expect(nativeRead).not.toHaveBeenCalled()
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it.each(['expired-unused:', 'paid-result-loss:'])('refuses an active %s remedy before reading native evidence', async leaseOwner => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row === null || row.reconciliation === undefined) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { reconciliation: { ...row.reconciliation, leaseOwner: `${leaseOwner}original` } })
+    })
+    const before = await settlementState(backend)
+    const { ctx, nativeRead } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 })).toEqual({ kind: 'refused', code: 'managed_call_remedy_in_progress' })
+    expect(nativeRead).not.toHaveBeenCalled()
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it('refuses missing booking material without reading native evidence', async () => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const quote = await ctx.db.query('capabilityQuotes').first()
+      if (quote === null) throw new Error('fixture_missing')
+      await ctx.db.delete(quote._id)
+    })
+    const before = await settlementState(backend)
+    const { ctx, nativeRead } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 })).toEqual({ kind: 'refused', code: 'managed_call_reservation_not_found' })
+    expect(nativeRead).not.toHaveBeenCalled()
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it('rejects a booking changed during the external read before repairing any local evidence', async () => {
+    const backend = await heldFixture()
+    const { ctx } = settlementReadContext(backend, async () => {
+      await backend.run(async dbCtx => {
+        const quote = await dbCtx.db.query('capabilityQuotes').first()
+        if (quote === null) throw new Error('fixture_missing')
+        await dbCtx.db.patch(quote._id, { policyGeneration: quote.policyGeneration + 1 })
+      })
+      return { kind: 'confirmed', transactionRefs: settlementRefs }
+    })
+    const before = await settlementState(backend)
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 })).toEqual({ kind: 'refused', code: 'managed_call_booking_changed' })
+    const after = await settlementState(backend)
+    expect(after.call).toEqual(before.call)
+    expect(after.obligations).toEqual(before.obligations)
+    expect(after.paymentAttempts).toEqual(before.paymentAttempts)
+    expect(after.quote?.policyGeneration).toBe((before.quote?.policyGeneration ?? 0) + 1)
+  })
+
+  it('rechecks booking binding before an already-settled finalizer replay', async () => {
+    const backend = await heldFixture()
+    const material = await backend.query(internal.moneyManagedCall.readBooking, { callRef })
+    if (material.kind !== 'available') throw new Error('fixture_missing')
+    const args = { callRef, transactionRefs: settlementRefs, now: now + 10, expectedBookingDigest: canonicalDigest(material.booking) }
+    expect(await backend.mutation(internal.moneyManagedCallLifecycle.finalizeSettlement, args)).toEqual({ kind: 'accepted', state: 'settled', replayed: false })
+    await backend.run(async ctx => {
+      const quote = await ctx.db.query('capabilityQuotes').first()
+      if (quote === null) throw new Error('fixture_missing')
+      await ctx.db.patch(quote._id, { policyGeneration: quote.policyGeneration + 1 })
+    })
+    const before = await settlementState(backend)
+    expect(await backend.mutation(internal.moneyManagedCallLifecycle.finalizeSettlement, { ...args, now: now + 100 }))
+      .toEqual({ kind: 'refused', code: 'managed_call_booking_changed' })
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it('refuses a genuine pre-attachment reservation uncertainty without reconstructing local accounting', async () => {
+    const backend = convexTest(schema, convexModules)
+    await backend.run(async ctx => {
+      await ctx.db.insert('capabilityQuotes', commitment())
+      await ctx.db.insert('capabilityCalls', call())
+    })
+    expect(await backend.mutation(internal.moneyManagedCall.markReservationUnknown, {
+      callRef, reference: 'formance:reserve-unknown', statusRef: 'formance:status-unknown',
+    })).toBe(true)
+    const before = await settlementState(backend)
+    const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 }))
+      .toEqual({ kind: 'refused', code: 'managed_call_reservation_evidence_invalid' })
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it.each(['missing digest', 'wrong cardinality', 'digest conflict'] as const)(
+    'refuses %s on the surviving reservation before any repair', async label => {
+      const backend = await heldFixture()
+      await backend.run(async ctx => {
+        const row = await ctx.db.query('capabilityCalls').first()
+        if (row === null) throw new Error('fixture_missing')
+        if (label === 'missing digest') await ctx.db.patch(row._id, { formanceReservationDigest: undefined })
+        else if (label === 'wrong cardinality') await ctx.db.patch(row._id, { formanceReservationRefs: reservationRefs.slice(0, 2) })
+        else await ctx.db.patch(row._id, { formanceReservationDigest: canonicalDigest('other-attachment') })
+      })
+      const before = await settlementState(backend)
+      const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+      expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 }))
+        .toEqual({ kind: 'refused', code: 'managed_call_reservation_evidence_invalid' })
+      expect(await settlementState(backend)).toEqual(before)
+    },
+  )
+
+  it('refuses a missing original obligation without recreating it', async () => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const obligation = await ctx.db.query('moneyProviderObligations').first()
+      if (obligation === null) throw new Error('fixture_missing')
+      await ctx.db.delete(obligation._id)
+    })
+    const before = await settlementState(backend)
+    const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 }))
+      .toEqual({ kind: 'refused', code: 'managed_call_obligation_missing' })
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it.each([
+    ['Call', { callRef: 'call:other' }], ['Tool', { toolRef: 'tool:other' }],
+    ['Provider', { providerRef: 'provider:other' }], ['buyer', { buyerAccountRef: 'account:other' }],
+    ['buyer amount', { buyerAmountUnits: '6000001' }], ['Provider amount', { providerAmountUnits: '5000001' }],
+  ] satisfies readonly (readonly [string, Partial<Doc<'moneyProviderObligations'>>])[])(
+    'refuses mismatched obligation %s without overwriting evidence', async (_label, patch) => {
+      const backend = await heldFixture()
+      await backend.run(async ctx => {
+        const obligation = await ctx.db.query('moneyProviderObligations').first()
+        if (obligation === null) throw new Error('fixture_missing')
+        await ctx.db.patch(obligation._id, patch)
+      })
+      const before = await settlementState(backend)
+      const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+      expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 }))
+        .toEqual({ kind: 'refused', code: 'managed_call_obligation_evidence_invalid' })
+      expect(await settlementState(backend)).toEqual(before)
+    },
+  )
+
+  it.each([
+    ['payable', { state: 'payable' }], ['reversed', { state: 'reversed' }], ['disputed', { state: 'disputed' }],
+    ['reversal pending', { reversalState: 'pending' }], ['reversal succeeded', { reversalState: 'succeeded' }],
+    ['reversal unknown', { reversalState: 'outcome_unknown' }],
+  ] satisfies readonly (readonly [string, Partial<Doc<'moneyProviderObligations'>>])[])(
+    'preserves later obligation disposition %s on recovery refusal', async (_label, patch) => {
+      const backend = await heldFixture()
+      await backend.run(async ctx => {
+        const obligation = await ctx.db.query('moneyProviderObligations').first()
+        if (obligation === null) throw new Error('fixture_missing')
+        await ctx.db.patch(obligation._id, patch)
+      })
+      const before = await settlementState(backend)
+      const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+      expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 }))
+        .toEqual({ kind: 'refused', code: 'managed_call_obligation_state_conflict' })
+      expect(await settlementState(backend)).toEqual(before)
+    },
+  )
+
+  it('refuses an already-settled obligation with a different original settlement reference', async () => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const obligation = await ctx.db.query('moneyProviderObligations').first()
+      if (obligation === null) throw new Error('fixture_missing')
+      await ctx.db.patch(obligation._id, { state: 'settled', settlementTransactionRef: 'formance:other-settlement' })
+    })
+    const before = await settlementState(backend)
+    const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 }))
+      .toEqual({ kind: 'refused', code: 'managed_call_obligation_settlement_conflict' })
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it('refuses settled Call replay with an incomplete held obligation', async () => {
+    const backend = await heldFixture()
+    await backend.mutation(internal.moneyManagedCallLifecycle.finalizeSettlement, { callRef, transactionRefs: settlementRefs, now: now + 5 })
+    await backend.run(async ctx => {
+      const obligation = await ctx.db.query('moneyProviderObligations').first()
+      if (obligation === null) throw new Error('fixture_missing')
+      await ctx.db.patch(obligation._id, { state: 'held' })
+    })
+    const before = await settlementState(backend)
+    const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 }))
+      .toEqual({ kind: 'refused', code: 'managed_call_obligation_state_conflict' })
+    expect(await settlementState(backend)).toEqual(before)
+  })
+
+  it('repairs the Call from an exact settled obligation without changing that later obligation fact', async () => {
+    const backend = await heldFixture()
+    await backend.run(async ctx => {
+      const obligation = await ctx.db.query('moneyProviderObligations').first()
+      if (obligation === null) throw new Error('fixture_missing')
+      await ctx.db.patch(obligation._id, { state: 'settled', settlementTransactionRef: settlementRefs[1], settledAt: now + 2, updatedAt: now + 2 })
+    })
+    const before = await settlementState(backend)
+    const { ctx } = settlementReadContext(backend, async () => ({ kind: 'confirmed', transactionRefs: settlementRefs }))
+    expect(await reconcileSettlementHandler(ctx, { callRef, now: now + 10 })).toEqual({ kind: 'accepted', state: 'settled', replayed: false })
+    const after = await settlementState(backend)
+    expect(after.obligations).toEqual(before.obligations)
+    expect(after.call).toEqual({ ...before.call, formanceFinancialState: 'settled',
+      formanceSettlementRefs: settlementRefs, buyerSaleTransactionRef: settlementRefs[0], updatedAt: now + 10 })
+    expect(after.paymentAttempts).toEqual(before.paymentAttempts)
+    expect(after.quote).toEqual(before.quote)
+  })
+})
 
 describe('paid Call with a lost response', () => {
   const transactionHash = `0x${'d'.repeat(64)}`

@@ -1,6 +1,8 @@
 "use node"
 
-import type { AccountCreditBalance, EligiblePromotionalGrant } from '@/modules/money/public'
+import type { AccountCreditBalance, EligiblePromotionalGrant, FormanceManagedCallBooking } from '@/modules/money/public'
+import type { Infer } from 'convex/values'
+import { managedCallSettlementReadResult } from './contracts'
 
 import {
   configuredContext,
@@ -12,7 +14,20 @@ import {
   readFormancePeriodSpend,
   readFormanceSpendingPeriod,
   readFormanceStatementPage,
+  readFormanceManagedCallSettlement,
 } from './gateway'
+
+export async function readManagedCallSettlementHandler(
+  _ctx: unknown,
+  args: FormanceManagedCallBooking,
+): Promise<Infer<typeof managedCallSettlementReadResult>> {
+  const context = configuredContext()
+  if (context.kind === 'setup_required') return { kind: 'refused', code: context.code }
+  const result = await readFormanceManagedCallSettlement(context.context, args)
+  return result.kind === 'confirmed'
+    ? { kind: 'confirmed', transactionRefs: [...result.transactionRefs] }
+    : result
+}
 export async function readPeriodSpendHandler(_ctx: unknown, args: {
   accountRef: string
   periodStartAt: number

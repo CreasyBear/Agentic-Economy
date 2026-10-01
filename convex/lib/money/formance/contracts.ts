@@ -7,6 +7,11 @@ export { accountHistoryResultValue, managedCallBookingArgs, spendingPeriodAdjust
 
 export const setupRequired = v.object({ kind: v.literal('setup_required'), code: v.string() })
 export const unavailable = v.object({ kind: v.literal('unavailable'), code: v.string() })
+export const managedCallSettlementReadResult = v.union(
+  v.object({ kind: v.literal('confirmed'), transactionRefs: v.array(v.string()) }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+  unavailable,
+)
 export const moneyResult = v.union(
   v.object({
     kind: v.literal('completed'),

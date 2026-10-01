@@ -1,7 +1,8 @@
 import { v, type Infer } from 'convex/values'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
-import type { FormanceManagedCallBooking, FormanceMoneyResult } from '../../../../src/modules/money/public'
+import type { FormanceManagedCallBooking, FormanceMoneyResult, FormanceSettlementReadResult } from '../../../../src/modules/money/public'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { transitionResult, type TransitionResult } from './transitions'
 
 type ManagedCallMaterial =
@@ -91,3 +92,30 @@ export const settleHandler = async (ctx: ActionCtx, args: Infer<typeof settleArg
       now: args.now,
     })
   }
+
+export const reconcileSettlementArgs = v.object({ callRef: v.string(), now: v.number() })
+export const reconcileSettlementResult = transitionResult
+// Requires the original executable booking and an eligible financial state.
+// Ensures only exact native settlement evidence repairs accounting; the mutation
+// rechecks the booking after this read. Invariant: no money write or delivery
+// inference, even on a locally settled replay. On violation: refuse without writes.
+export const reconcileSettlementHandler = async (
+  ctx: ActionCtx,
+  args: Infer<typeof reconcileSettlementArgs>,
+): Promise<TransitionResult> => {
+  const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: args.callRef })
+  if (material.kind !== 'available') return { kind: 'refused', code: 'managed_call_reservation_not_found' }
+  if (material.remedyInProgress) return { kind: 'refused', code: 'managed_call_remedy_in_progress' }
+  if (material.financialState !== 'possibly_submitted'
+    && material.financialState !== 'outcome_unknown'
+    && material.financialState !== 'settled') return { kind: 'refused', code: 'managed_call_state_conflict' }
+  const expectedBookingDigest = canonicalDigest(material.booking)
+  const result: FormanceSettlementReadResult = await ctx.runAction(internal.moneyFormance.readManagedCallSettlement, material.booking)
+  if (result.kind !== 'confirmed') return { kind: 'refused', code: result.code }
+  return await ctx.runMutation(internal.moneyManagedCallLifecycle.finalizeSettlement, {
+    callRef: args.callRef,
+    transactionRefs: [...result.transactionRefs],
+    expectedBookingDigest,
+    now: args.now,
+  })
+}

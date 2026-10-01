@@ -28,6 +28,12 @@ export type FormanceMoneyResult =
   | FormanceUnavailable
   | FormanceUnknown
 
+/** A read failure never proves that an earlier financial effect was absent. */
+export type FormanceSettlementReadResult =
+  | Readonly<{ kind: 'confirmed'; transactionRefs: readonly string[] }>
+  | Readonly<{ kind: 'refused'; code: string }>
+  | Readonly<{ kind: 'unavailable'; code: string }>
+
 export function completed(reference: string, replayed: boolean): FormanceCompleted {
   return Object.freeze({ kind: 'completed', transactionRefs: Object.freeze([reference]), replayed })
 }

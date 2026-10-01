@@ -2630,6 +2630,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "readManagedCallSettlement",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "readPeriodSpend",
     "kind": "action"
   },
@@ -2782,6 +2788,12 @@
     "module": "moneyManagedCallLifecycle",
     "method": "readReservation",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "reconcileSettlement",
+    "kind": "action"
   },
   {
     "visibility": "internal",
