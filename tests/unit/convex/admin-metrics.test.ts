@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../../convex/_generated/api'
-import { perthDayWindow } from '../../../convex/lib/adminConsole/metrics/dayWindow'
+import { perthDayWindow, shiftPerthDay } from '../../../convex/lib/adminConsole/metrics/dayWindow'
 import { recordMarketEvidenceFact } from '../../../convex/marketEvidence'
 import {
   convexTestWithMarketComponents,
@@ -184,6 +184,42 @@ describe('admin marketplace metrics', () => {
         { day: FIRST_DAY, attemptedCalls: 1, quotesCreated: 1 },
         { day: SECOND_DAY, attemptedCalls: 1, quotesCreated: 1 },
       ])
+  })
+
+  it('uses the selected period for totals and deduplicates Accounts across days', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['workspace:repeat'], true)
+    await seedDay(backend, SECOND_DAY, ['workspace:repeat'], true)
+    vi.setSystemTime(new Date('2026-10-15T04:00:00Z'))
+    for (let offset = 0; offset < 30; offset += 1) {
+      const day = shiftPerthDay('2026-10-14', -offset)
+      if (day === null) throw new Error('invalid fixture day')
+      await snapshot(backend, day)
+    }
+    const admin = await ownerAdmin(backend, 'user_admin-range')
+    const monthly = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_30' })
+    expect(monthly).toMatchObject({ coverageComplete: true, headline: {
+      settledCalls: 2, transactingWorkspaces: 1, successRate: 1,
+      settledCallValue: { units: '3000', exponent: 2, currency: 'AUD' },
+    } })
+    const weekly = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    expect(weekly).toMatchObject({ coverageComplete: true, headline: { settledCalls: 0, transactingWorkspaces: 0 } })
+  })
+
+  it('withholds growth when the previous week has incomplete coverage', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['workspace:prior'], true)
+    await snapshot(backend, FIRST_DAY)
+    vi.setSystemTime(new Date('2026-09-29T04:00:00Z'))
+    for (let offset = 0; offset < 7; offset += 1) {
+      const day = shiftPerthDay('2026-09-28', -offset)
+      if (day === null) throw new Error('invalid fixture day')
+      await snapshot(backend, day)
+    }
+    const admin = await ownerAdmin(backend, 'user_admin-incomplete-prior')
+    expect(await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' }))
+      .toMatchObject({ coverageComplete: true, wow: { settledCalls: null, attemptedCalls: null,
+        completedCalls: null, transactingWorkspaces: null, quotesCreated: null } })
   })
 
   it('writes exact daily metrics and replaces the same day idempotently', async () => {

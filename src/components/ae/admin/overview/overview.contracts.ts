@@ -35,8 +35,8 @@ export type AdminOverviewDataState =
     }>
 
 export const ADMIN_OVERVIEW_COPY = {
-  title: 'Overview',
-  description: 'Payment readiness, exceptions, and marketplace activity.',
+  title: 'Founder console',
+  description: 'Understand activity, investigate customer issues and keep money operations healthy.',
   adminBreadcrumb: 'Admin',
   configurationTitle: 'Payment readiness',
   configurationDescription: 'Current evidence for opening payments in this deployment.',

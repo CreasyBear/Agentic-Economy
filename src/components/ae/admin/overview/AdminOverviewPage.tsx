@@ -8,10 +8,11 @@ import { useAdminObjectSearch } from '../object-search/useAdminObjectSearch'
 import { AdminOverviewPageSkeleton } from './AdminOverviewPageSkeleton'
 import { ConfigurationBanner } from './components/ConfigurationBanner'
 import { OverviewExceptionsSection } from './components/OverviewExceptionsSection'
-import { OverviewMetricsSection } from './components/OverviewMetricsSection'
+import { OverviewMarketplaceActivity } from '../metrics/MarketplaceActivity'
+import { FounderDestinations } from './components/FounderDestinations'
 import { RecentlyViewed } from './components/RecentlyViewed'
 import { ADMIN_OVERVIEW_COPY } from './overview.contracts'
-import { useAdminOverview, useOverviewExceptions, useOverviewMetrics } from './useAdminOverview'
+import { useAdminOverview, useOverviewExceptions } from './useAdminOverview'
 
 export function AdminOverviewPage() {
   const data = useAdminOverview()
@@ -34,16 +35,18 @@ export function AdminOverviewPage() {
         />
       ) : (
         <div className="grid gap-section">
+          <ErrorBoundary fallback={<AeSection title={ADMIN_OVERVIEW_COPY.metricsTitle}><p role="status">{ADMIN_OVERVIEW_COPY.metricsUnavailable}</p><Link to="/admin/metrics">Open Metrics</Link></AeSection>}>
+            <OverviewMarketplaceActivity />
+          </ErrorBoundary>
+
+          <ErrorBoundary fallback={<AeSection title={ADMIN_OVERVIEW_COPY.exceptionsTitle}><p role="status">{ADMIN_OVERVIEW_COPY.exceptionsUnavailable}</p><Link to="/admin/exceptions">Open queues</Link></AeSection>}>
+            <OverviewExceptionsContainer />
+          </ErrorBoundary>
+          <FounderDestinations />
           <ConfigurationBanner readiness={data.paymentReadiness} />
           <AeSection title={ADMIN_OVERVIEW_COPY.searchTitle} description={ADMIN_OVERVIEW_COPY.searchDescription}>
             <AdminObjectSearchForm state={search.state} onSubmit={(input) => void search.submit(input)} />
           </AeSection>
-          <ErrorBoundary fallback={<AeSection title={ADMIN_OVERVIEW_COPY.exceptionsTitle}><p role="status">{ADMIN_OVERVIEW_COPY.exceptionsUnavailable}</p><Link to="/admin/exceptions">Open queues</Link></AeSection>}>
-            <OverviewExceptionsContainer />
-          </ErrorBoundary>
-          <ErrorBoundary fallback={<AeSection title={ADMIN_OVERVIEW_COPY.metricsTitle}><p role="status">{ADMIN_OVERVIEW_COPY.metricsUnavailable}</p><Link to="/admin/metrics">Open Metrics</Link></AeSection>}>
-            <OverviewMetricsContainer />
-          </ErrorBoundary>
           <RecentlyViewed rows={data.recent} />
         </div>
       )}
@@ -54,9 +57,4 @@ export function AdminOverviewPage() {
 function OverviewExceptionsContainer() {
   const state = useOverviewExceptions()
   return <OverviewExceptionsSection state={state} />
-}
-
-function OverviewMetricsContainer() {
-  const state = useOverviewMetrics()
-  return <OverviewMetricsSection state={state} />
 }

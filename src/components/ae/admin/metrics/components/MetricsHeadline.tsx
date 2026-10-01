@@ -1,12 +1,12 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { ADMIN_METRICS_COPY, type AdminMetricCard } from '../metrics.contracts'
+import { type AdminMetricCard } from '../metrics.contracts'
 
 export type MetricsHeadlineProps = Readonly<{ cards: readonly AdminMetricCard[] }>
 
 export function MetricsHeadline({ cards }: MetricsHeadlineProps) {
   return (
-    <AeSection title={ADMIN_METRICS_COPY.headlineTitle}>
-      <div className="grid gap-related sm:grid-cols-2 xl:grid-cols-4">
+    <AeSection title="Settled Call value" description="Recorded settled usage, including promotional credit. This is not net revenue or cash received.">
+      <div className="grid gap-related sm:grid-cols-2">
         {cards.map((card) => (
           <article key={card.label} className="rounded-card border border-border bg-card p-related">
             <p className="text-sm text-muted-foreground">{card.label}</p>

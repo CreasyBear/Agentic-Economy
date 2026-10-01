@@ -5,8 +5,8 @@ export type MetricsRatiosProps = Readonly<{ ratios: readonly AdminMetricRatio[] 
 
 export function MetricsRatios({ ratios }: MetricsRatiosProps) {
   return (
-    <AeSection title={ADMIN_METRICS_COPY.ratiosTitle}>
-      <dl className="grid gap-related sm:grid-cols-2 xl:grid-cols-5">
+    <AeSection title={ADMIN_METRICS_COPY.ratiosTitle} description="Returning activity share counts returning Workspace-days, not cohort retention. Purchase resolution is separate from delivery and settlement.">
+      <dl className="grid gap-related sm:grid-cols-2 xl:grid-cols-4">
         {ratios.map((ratio) => (
           <div key={ratio.label} className="rounded-card border border-border p-related">
             <dt className="text-sm text-muted-foreground">{ratio.label}</dt>

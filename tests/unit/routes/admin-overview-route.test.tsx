@@ -76,7 +76,7 @@ describe('admin overview route', () => {
     expect(screen.queryByRole('link', { name: 'Removal dispute · Opened' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Admission case · Submitted' }).getAttribute('href'))
       .toBe('/admin/exceptions?kind=admission_case&partition=submitted')
-    expect(screen.getByText('Unavailable')).toBeTruthy()
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
   })
 
 
@@ -93,13 +93,13 @@ describe('admin overview route', () => {
   it('contains a failed exception read to its shelf while metrics remain usable', () => {
     mocks.exceptions = new Error('injected_exceptions_read_rejection')
     mocks.metrics = {
-      days: [], latestDay: null,
+      coverageComplete: true, days: [], latestDay: null,
       headline: { settledCallValue: null, money: 'no_settled_usage', settledCalls: 4, successRate: 0.75, transactingWorkspaces: 2 },
     }
     render(<AdminOverviewPage />)
     expect(screen.getByText('Some exception sources are unavailable.')).toBeTruthy()
     expect(screen.getByText('4')).toBeTruthy()
-    expect(screen.getByText('75%')).toBeTruthy()
+    expect(within(screen.getByRole('tab', { name: /Transacting Accounts/ })).getByText('2')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open queues' })).toBeTruthy()
   })
 

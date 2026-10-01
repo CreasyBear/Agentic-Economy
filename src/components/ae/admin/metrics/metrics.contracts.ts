@@ -55,8 +55,8 @@ export const ADMIN_METRICS_RANGES: readonly Readonly<{
 ]
 
 export const ADMIN_METRICS_COPY = {
-  title: 'Metrics',
-  description: 'Daily marketplace activity and investor-reportable ratios.',
+  title: 'Marketplace metrics',
+  description: 'Observed marketplace activity, purchase quality and dated records.',
   adminBreadcrumb: 'Admin',
   rangeLabel: 'Reporting range',
   exportCsv: 'Export CSV',
@@ -65,9 +65,9 @@ export const ADMIN_METRICS_COPY = {
   settledCalls: 'Settled Calls',
   successRate: 'Success rate',
   transactingWorkspaces: 'Transacting Workspaces',
-  ratiosTitle: 'Ratios',
+  ratiosTitle: 'Purchase quality',
   quoteConversion: 'Quote conversion',
-  returningWorkspaceRate: 'Returning Workspace rate',
+  returningWorkspaceRate: 'Returning activity share',
   resolutionCoverage: 'Purchase resolution coverage',
   dailyTitle: 'Daily metrics',
   noDays: 'No metrics days recorded yet.',

@@ -68,13 +68,14 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
   initPromise ??= import('posthog-js')
     .then(({ default: posthog }) => {
       const config = readObservabilityClientConfig()
-      if (config.posthogKey === undefined) {
+      if (!config.enabled || config.posthogKey === undefined) {
         return false
       }
 
       posthog.init(config.posthogKey, {
         api_host: config.posthogHost,
         person_profiles: 'identified_only',
+        autocapture: false,
         capture_pageview: false,
         capture_pageleave: false,
         persistence: 'sessionStorage',

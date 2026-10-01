@@ -47,7 +47,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
       {
         label: ADMIN_METRICS_COPY.settledCalls,
         value: formatCount(report.headline.settledCalls),
-        delta: deltaLabel(report.wow.settledCalls),
+        delta: range === 'last_7' ? deltaLabel(report.wow.settledCalls) : ADMIN_METRICS_COPY.noComparison,
       },
       {
         label: ADMIN_METRICS_COPY.successRate,
@@ -57,7 +57,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
       {
         label: ADMIN_METRICS_COPY.transactingWorkspaces,
         value: formatCount(report.headline.transactingWorkspaces),
-        delta: deltaLabel(report.wow.transactingWorkspaces),
+        delta: range === 'last_7' ? deltaLabel(report.wow.transactingWorkspaces) : ADMIN_METRICS_COPY.noComparison,
       },
     ],
     ratios: [

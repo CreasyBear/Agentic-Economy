@@ -192,11 +192,12 @@ export async function readMarketplaceMetricsRange(
   const latest = allDays.filter((day) => day.day >= headlineFirstDay)
   const prior = allDays.filter((day) => day.day >= priorFirstDay && day.day < headlineFirstDay)
   const publishedEntityDay = (day: MarketplaceMetricDay) => rows.find((row) => row.day === day.day)?.entityDay ?? day.day
-  const [headlineWorkspaces, priorWorkspaces] = await Promise.all([
+  const [headlineWorkspaces, priorWorkspaces, rangeWorkspaces] = await Promise.all([
     distinctWorkspaces(ctx, latest.map(publishedEntityDay)),
     distinctWorkspaces(ctx, prior.map(publishedEntityDay)),
+    distinctWorkspaces(ctx, days.map(publishedEntityDay)),
   ])
-  const headlineMoney = sumMoney(latest)
+  const headlineMoney = sumMoney(days)
   const attempted = sum(days, 'attemptedCalls')
   const completed = sum(days, 'completedCalls')
   return {
@@ -207,9 +208,9 @@ export async function readMarketplaceMetricsRange(
     headline: {
       settledCallValue: headlineMoney,
       money: headlineMoney === null ? 'no_settled_usage' : 'settled_only',
-      settledCalls: sum(latest, 'settledCalls'),
-      successRate: ratio(sum(latest, 'completedCalls'), sum(latest, 'attemptedCalls')),
-      transactingWorkspaces: headlineWorkspaces,
+      settledCalls: sum(days, 'settledCalls'),
+      successRate: ratio(sum(days, 'completedCalls'), sum(days, 'attemptedCalls')),
+      transactingWorkspaces: rangeWorkspaces,
     },
     ratios: {
       successRate: ratio(completed, attempted),
@@ -218,11 +219,11 @@ export async function readMarketplaceMetricsRange(
       resolutionCoverage: ratio(sum(days, 'terminalCallsWithResolution'), sum(days, 'terminalCalls')),
     },
     wow: {
-      settledCalls: wow(sum(latest, 'settledCalls'), sum(prior, 'settledCalls')),
-      attemptedCalls: wow(sum(latest, 'attemptedCalls'), sum(prior, 'attemptedCalls')),
-      completedCalls: wow(sum(latest, 'completedCalls'), sum(prior, 'completedCalls')),
-      transactingWorkspaces: wow(headlineWorkspaces, priorWorkspaces),
-      quotesCreated: wow(sum(latest, 'quotesCreated'), sum(prior, 'quotesCreated')),
+      settledCalls: prior.length < 7 ? null : wow(sum(latest, 'settledCalls'), sum(prior, 'settledCalls')),
+      attemptedCalls: prior.length < 7 ? null : wow(sum(latest, 'attemptedCalls'), sum(prior, 'attemptedCalls')),
+      completedCalls: prior.length < 7 ? null : wow(sum(latest, 'completedCalls'), sum(prior, 'completedCalls')),
+      transactingWorkspaces: prior.length < 7 ? null : wow(headlineWorkspaces, priorWorkspaces),
+      quotesCreated: prior.length < 7 ? null : wow(sum(latest, 'quotesCreated'), sum(prior, 'quotesCreated')),
     },
   }
 }

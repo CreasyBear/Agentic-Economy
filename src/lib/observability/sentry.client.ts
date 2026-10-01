@@ -18,7 +18,7 @@ export function initSentryClient(router?: AnyRouter): boolean {
   if (!isTelemetryAllowedForCurrentRoute() || initialized) return initialized
 
   const config = readObservabilityClientConfig()
-  if (config.sentryDsn === undefined) {
+  if (!config.enabled || config.sentryDsn === undefined) {
     return false
   }
 
@@ -51,9 +51,7 @@ export function captureClientException(
   level?: 'warning' | 'error',
 ): void {
   if (!isTelemetryAllowedForCurrentRoute()) return
-  if (!initialized) {
-    initSentryClient()
-  }
+  if (!initialized && !initSentryClient()) return
 
   const safeError = sanitizeTelemetryError(error)
   const safeContext = context === undefined

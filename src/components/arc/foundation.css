@@ -1,0 +1,25 @@
+/* ARC foundation adapted to AE's existing design contract. Scoped to the installed block. */
+.ae-arc {
+  --surface: var(--ae-surface);
+  --surface-muted: var(--ae-surface-sunken);
+  --surface-raised: var(--ae-surface);
+  --text-secondary: var(--ae-muted-fg);
+  --text-muted: var(--ae-muted-fg);
+  --border-subtle: var(--ae-border);
+  --border-strong: var(--ae-border-strong);
+  --accent: var(--ae-brand);
+  --accent-strong: var(--ae-brand-strong);
+  --accent-subtle: var(--ae-brand-muted);
+  --font-body: var(--ae-font-sans);
+  --font-display: var(--ae-font-sans);
+  --tracking-body: -0.01em;
+  --duration-fast: 150ms;
+  --duration-standard: 220ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ae-arc :is(button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.dark .ae-arc { --accent: var(--primary); --accent-strong: var(--primary); }
