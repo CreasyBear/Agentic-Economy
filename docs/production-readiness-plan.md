@@ -2059,3 +2059,103 @@ promo-only alpha. Keep #275, #276 and #256 open for remaining operational accept
 entitled screening, provisioned environment facts, genuine development paid Call,
 hosted alert/restore evidence and authorized real-money drills. The preserved
 development stack was untouched.
+
+### Stage 33 — identify an unhealthy hosted release
+
+Fresh provider readback on 1 October found Vercel Preview
+`dpl_C8t9aH5aJLsyEgtQ9a7Pos4K11E6` at source
+`778fd1a76e7e0bef68fcca022b555f9d136e7b41`. Its actual `/api/ready`
+returns 503 (`deployment_manifest_invalid`), no declared payment environment,
+and backend `confident-squid-501`, which this session cannot access. Its
+`/api/v1/release` returns a generic 500: boot validation blocks the existing
+revision handler. An unhealthy deployment must still identify its source so an
+operator can distinguish configuration failure from the wrong release.
+
+Requires: exact router GET/HEAD `/api/v1/release`, passing the existing API request
+boundary. Ensures: the existing handler returns only a valid configured 40-character
+source revision (200), or `source_revision_unconfigured` (503); HEAD has no body
+and both are uncached even when unrelated boot/auth configuration is invalid.
+Invariant: release identity is not payment readiness or purchase authority.
+Writes, lookalike paths, server-function requests, protected routes and readiness
+retain their current guards. Reading identity performs no external or financial
+operation and does not mark boot validation successful.
+On violation: malformed requests retain normal admission; missing/invalid revision
+uses the existing 503 response, with no environment values or exception details.
+
+Extend the existing exact diagnostic predicate and its composed-middleware tests.
+No new abstraction, API shape, dependency or storage is needed. Verify actual
+release handlers through the middleware, refusal boundaries, and built HTTP
+behavior before checking the resulting hosted Preview. This does not authorize
+changing shared backend configuration or promoting the Preview.
+
+Error strategy: invalid unrelated configuration still terminates ordinary requests
+before their operations. For a release read, missing revision is a recoverable
+operator configuration fault handled by the existing typed HTTP 503 response.
+The read has the strong safety guarantee: failure leaves state and the boot cache
+unchanged. Recovery belongs to the deployment operator; no catch-all success,
+automatic retry, credential change or configuration repair is introduced.
+
+Inventory evidence (read-only; no provisioning, deployment or data mutation):
+
+- Official Vercel CLI 60.1.3 confirms primary project
+  `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, Node 22.x, and the exact Preview above.
+  Branch-specific Preview configuration for `codex/production-money` is absent;
+  the shared Preview name inventory has no `AE_DEPLOYMENT_ENVIRONMENT` or
+  Formance/CDP groups. Names alone do not establish valid credentials.
+- `aecon.ai` now resolves to website deployment
+  `dpl_2ZVETHERz2FHQKhxYUgL9ydqQ2f5` in `agentic-economy-website`; it is not
+  the application target recorded in the September 5 preflight.
+- Synthetic release `dpl_4eu4Fnn5EydfJybpixbY7t7h4QyZ` still reports
+  `6593dbe7b4b8f75304caeed5b468acc497b720f4`. Its 200 health/readiness and
+  unauthenticated Formance-edge 401 do not verify current payment behavior.
+  The legacy strict snapshot fails six unavailable checks with AWS, Stripe and
+  Cloudflare credentials deliberately unbound; those skips are not provider
+  failures or promo-only alpha Stripe requirements.
+- Convex CLI 1.45.0 can execute a sandboxed read-only query on development
+  `clever-crane-907`; it has no payment-readiness, treasury-observation or
+  treasury-snapshot rows. It is not the backend identified by this Preview.
+  Function metadata and named-query discovery both hit the provider's one-second
+  `apiSpec` timeout, so their deployed code version remains unverified. Neither
+  `confident-squid-501` nor historical `fastidious-barracuda-66` is accessible
+  to this CLI session; this is not evidence that either deployment is absent.
+- The deployment skill's registry/foundation/maturity references were deleted
+  by `326c1b422ae5ac1d5f162b793451dff2c22db0b2`, not moved. Their historical
+  contents are recoverable as described in `docs/README.md`. Current source,
+  this dated readback and #286 govern the next target choice; do not restore
+  historical identities as current facts.
+
+Joel subsequently confirmed development `cool-crab-306` and production
+`cautious-zebra-473`, both in `joel-chan/agentic-economy`. The corrected development
+readback succeeded after an initial provider 503/reconnect: no payment-readiness,
+treasury-observation or treasury-snapshot rows are present. Specific reads of
+`AE_DEPLOYMENT_ENVIRONMENT` and `AE_FORMANCE_ENVIRONMENT` both report absent.
+Its function-spec read also times out at the provider's one-second `apiSpec` limit;
+deployed source revision and matching service credentials remain unverified.
+Production was not queried or changed.
+
+These observations identify deployed resources but do not establish a verified or
+recoverable current money path. The next configuration boundary is the branch
+Preview and confirmed development backend, with matching existing authentication
+and provider bindings before any shared deployment change. Screening entitlement,
+actual paid-Call proof, hosted recovery/alerts and authorized real-money drills
+remain outstanding.
+
+Stage 33 acceptance (1 October): the existing diagnostic predicate now includes
+only exact GET/HEAD router release reads. Independent review found no admission
+or cache regression. The 98 focused tests pass. `npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+pass under Node 22.22.0/npm 11.5.1: anonymous code generation, public build,
+clean types, 7,626 unit and 2,696 integration tests, 75 import checks, 31 SEO
+checks, 16 browser checks, 18 accessibility checks and reproducible CLI packaging.
+Existing environment-dependent skips and three integration TODOs remain unproven.
+
+The actual built Vercel Node handler passed 50 loopback HTTP requests across five
+fresh processes: missing configuration, damaged Clerk keys, wrong environment,
+and missing/malformed release revision. GET/HEAD release returns 200 with the
+configured valid revision or controlled 503; both preserve no-store, request
+correlation and security headers, with an empty HEAD body. Readiness remains 503;
+ordinary/protected requests, writes and path lookalikes still fail boot admission.
+Composed unit tests separately prove that release reads do not prime the boot
+cache; their context-free router harness does not prove middleware correlation.
+All five HTTP processes exited and were independently checked absent. No provider
+credentials, financial state or production deployment was changed by these proofs.

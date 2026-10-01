@@ -17,13 +17,15 @@ import { boundaryCauseKind, captureBackendException } from '@/lib/observability/
 // This shared entry is also evaluated in the browser. Validate shared server
 // prerequisites on first request; operation-only config is checked where used.
 // Requires an exact safe router probe. Ensures diagnostics can explain invalid
-// boot/auth configuration without admitting pages, writes or server functions.
+// boot/auth configuration, including release identity, without admitting pages,
+// writes or server functions.
 // Invariant: skipping validation never marks its cache successful; readiness
 // still runs its own checks. All other requests retain the existing failure.
 function isRouterDiagnosticRead(ctx: { request: Request; handlerType: 'router' | 'serverFn' }): boolean {
   if (ctx.handlerType !== 'router' || (ctx.request.method !== 'GET' && ctx.request.method !== 'HEAD')) return false
   const path = new URL(ctx.request.url).pathname
-  return (path === '/api/health' || path === '/api/ready') && apiRequestBoundaryResponse(ctx.request) === undefined
+  return (path === '/api/health' || path === '/api/ready' || path === '/api/v1/release')
+    && apiRequestBoundaryResponse(ctx.request) === undefined
 }
 
 const bootEnvironmentMiddleware = createMiddleware().server(async (ctx) => {
@@ -163,7 +165,7 @@ export function clerkPreviewOrProductionMiddleware() {
     if (isPublicDocumentRequest(ctx.request, pathname)) return ctx.next()
     if (!browserChatSession && (pathname === '/mcp' || pathname.startsWith('/api/v1/'))) return ctx.next()
     // Construct auth only after exact router diagnostic/public-read admission:
-    // even broken auth configuration cannot intercept health/readiness.
+    // even broken auth configuration cannot intercept diagnostic reads.
     const clerk = clerkMiddleware(() => {
       // Machine handlers retain their own bearer admission; browser sessions
       // retain Clerk. This does not change either route's authentication policy.
