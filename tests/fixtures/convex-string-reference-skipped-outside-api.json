@@ -1,7 +1,7 @@
 [
   {
     "file": "tests/fixtures/convex-financial-restore-proof.ts",
-    "line": 14,
+    "line": 21,
     "literal": "financialRestoreProof:noEffect",
     "helper": "makeFunctionReference"
   },

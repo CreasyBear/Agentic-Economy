@@ -1460,3 +1460,118 @@ unverified. Native fixtures do not prove chain payment or Provider delivery;
 payment-attempt preservation is established by the registered boundary tests.
 Both scenarios removed their own deployments and Compose projects. No public API,
 storage schema, deployment or live-money change occurred.
+
+### Stage 27 — restore an approved pending buyer refund
+
+Inspection found the required producer and consumer already maintained. The
+native refund workflow proves the original settled sale, reads all canonical
+refund references before submission, and verifies exact metadata/postings after
+replay. `capabilityCallReports:process` consumes the surviving approved report and
+finishes its local records transactionally. This stage adds native restore proof
+for that failure window without another production recovery operation.
+
+Contract for recovery of a surviving pending report:
+
+- **Requires:** a complete restored archive containing the original admitted
+  report, completed/settled Call and receipt, frozen Quote/booking, original
+  purchase resolution and promotional grant records. The independently surviving
+  native ledger must contain the complete matching original settlement/refund.
+  Keep source and target effect writers stopped except the selected recovery.
+- **Ensures:** the maintained worker reuses the original refund transactions and
+  atomically posts the report, restores its promotional units once, updates the
+  receipt/usage and replaces the original Purchase resolution with refunded.
+- **Invariant:** retain delivery output, original receipt evidence, reporter and
+  approval material, settled Provider obligation and complete native ledger.
+  Repeated/concurrent processing cannot refund twice or restore grants twice.
+- **On violation:** conflicting native evidence leaves the report pending and
+  local financial facts intact; only its retry timestamps may advance. Missing
+  report material cannot be reconstructed from a native hash. Held Calls cannot
+  be promoted to delivered through this worker. Local transactional failures roll
+  back; the existing due-work retry retains the original report identity.
+
+Idempotency analysis: native refund submission is non-idempotent money movement,
+protected by stable Call/part/grant references, input-bound command digests and
+complete pre-read replay. `finishWork` contains the non-idempotent grant increment
+and resolution/projection writes; the pending-to-posted transition and all those
+writes share one Convex transaction. Posted replay returns before increments.
+Claim retry timestamps are intentionally renewable. No new idempotency mechanism
+is required by the inspected boundary.
+
+Complexity decision: extend the existing disposable fixture and financial
+archive/import case. The added cost is one scenario and fixture preparation of
+the original completed sale/report; the benefit is exercising real registered
+actions across stale application state and a surviving native ledger. Keep the
+existing deployment/cleanup harness and genuine report admission. Reject a new
+reader, repair table, generic framework or public workflow. No production schema,
+API, dependency or service change is planned.
+
+The disposable fixture exposes one action that forwards the authenticated owner
+to the real internal admission mutation, then stops before refund submission.
+This preserves native auth propagation while capturing the pending-report crash
+window; the fixture action is never copied into the production deployment.
+
+Verification covers mixed and wholly promotional refunds, concurrent recovery,
+inert posted replay, conflicting native evidence and absent report material.
+Compare complete ledger summaries and original transaction IDs, and inspect the
+report, receipt, usage, grants, original resolution history and Provider facts.
+This does not establish recovery when approval history was lost, refund absence,
+chain delivery, hosted recovery objectives or live-money readiness.
+
+Operator sequence: retain the deployment writer stop; verify the original pending
+report and its matching complete native refund before invoking
+`capabilityCallReports:process` with that `callRef`. This existing worker is a
+refund producer when no native refund exists, so it is not an absence probe or a
+general read-only reconciliation command. Inspect the posted report, exact
+original transaction references and repaired buyer records afterward; `true`
+alone is insufficient because a missing report also returns an inert success.
+Keep conflicting or missing approval evidence for investigation and leave global
+workers stopped until the remaining restore reconciliation is complete.
+
+### Stage 27 acceptance and handover
+
+The native approved-refund restore drill passed in 93.59 seconds including setup
+and cleanup. Genuine owner admission creates three pending reports before the
+archive; the source stops before their original refunds are posted on the
+surviving native ledger. After importing the older archive, registered recovery:
+
+- posts mixed purchased/promotional and wholly promotional refunds, restoring
+  each original grant once under concurrent processing;
+- preserves the delivered output, original receipt evidence, Quote, settled
+  Provider obligation, original report attribution/history and market facts;
+- updates receipt and usage to refunded and the Purchase resolution to refunded
+  with every party and monetary fact preserved;
+- refuses conflicting native refund evidence, advancing only retry timestamps,
+  and leaves a Call with no approved report entirely unchanged;
+- makes subsequent posted-report processing inert and native workflow replay
+  return the original references with `replayed:true`;
+- preserves the complete ledger summary and every original refund transaction ID
+  throughout recovery and replay, establishing zero new native accounting writes.
+
+Independent review closed one proof gap by comparing the full stored Purchase
+resolution, including parties and amounts. Native admission also required a
+realistic one-day credential expiry and the disposable public action described
+above; directly impersonating the owner at an internal CLI registration did not
+invoke that function. All temporary diagnostic changes were removed. Source and
+target deployments, the ledger Compose project and diagnostic scratch files were
+removed; independently inspected owned temporary-root and container counts are zero.
+
+The accepted native command was
+`AE_CONVEX_RESTORE_INTEGRATION=true AE_FORMANCE_INTEGRATION=true npm test -- tests/integration/convex-native-restore.test.ts --no-file-parallelism -t 'refund=true'`
+on Node 22/npm 11.5.1. It passed one scenario and intentionally skipped the three
+unchanged archive/reservation/settlement scenarios. This is synthetic delivery
+with genuine report admission, native money and registered recovery actions; it
+does not prove chain delivery or real-money execution.
+
+`npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+passed on Node 22/npm 11.5.1. The gate reproduced seven generated Convex files,
+built the public application, passed clean types, 7,432 unit tests, 2,630
+integration-suite tests, 75 import checks, 31 SEO checks, 16 browser journeys,
+18 accessibility cases and reproducible CLI packaging. Suite counts overlap;
+one unit skip, 58 integration skips and three todos remain. The ordinary gate
+skips the opt-in native drill, which passed separately above.
+
+Keep #286 and #256 open. Lost approval history, other restore consumers including
+release and Provider reversal, hosted retention/RPO/RTO and explicitly authorized
+live-money acceptance remain open. Production code, schema, dependencies and
+user-facing flows are unchanged.

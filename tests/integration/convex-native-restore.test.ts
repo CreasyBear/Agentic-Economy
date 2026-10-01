@@ -14,7 +14,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createFormanceContext, executeFormanceMoneyCommand, installPackage4FormanceSchema,
   readFormanceHealth, readFormanceTransactionByReference } from '@/modules/money/formance'
 import { adjustFormanceSpendingPeriod, bookFormanceFundingSettlement, prepareFormancePromotionalCreditGrant,
-  reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
+  refundFormanceSettledSale, reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
   type FormanceManagedCallBooking } from '@/modules/money/formance-workflows'
 import { bookFormanceTreasuryBatch } from '@/modules/money/formance-treasury'
 import { readFormanceRestoreSnapshot } from '@/modules/money/formance-restore'
@@ -374,7 +374,8 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true')('native Co
  */
 describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
   || process.env.AE_FORMANCE_INTEGRATION !== 'true')('native financial recovery after Convex restore', () => {
-  it.each([false, true])('repairs post-snapshot settlements while preserving holds and the complete native ledger (unbound=%s)', async (unbound) => {
+  it.each([{ unbound: false, refund: false }, { unbound: true, refund: false }, { unbound: false, refund: true }])(
+    'repairs post-snapshot settlements while preserving holds and the complete native ledger (unbound=$unbound, refund=$refund)', async ({ unbound, refund }) => {
     type Record = { call: Doc<'capabilityCalls'>; quote: Doc<'capabilityQuotes'>;
       booking: FormanceManagedCallBooking; obligation: Doc<'moneyProviderObligations'> | null; workState: string }
     const root = mkdtempSync(join(tmpdir(), 'ae-convex-money-restore-'))
@@ -430,7 +431,8 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
         stops.push(await startConvexDev({ sourceRoot, isolatedRoot: directory, backendVersion }))
       }
       const now = Date.now(), digest = canonicalDigest({ proof: 'financial-restore' })
-      await invoke(source, 'financialRestoreProof:seed', { toolJson: JSON.stringify(buildDevelopmentPublishedToolEvidence().tool), now, unbound })
+      await invoke(source, 'financialRestoreProof:seed', { toolJson: JSON.stringify(buildDevelopmentPublishedToolEvidence().tool),
+        now, unbound, ...(refund ? { reportOwner: true } : {}) })
       const seeded = await inspect(source)
       expect(seeded).toHaveLength(4)
       const first = seeded[0]!.booking
@@ -467,15 +469,6 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
             transactionRefs: reservation.transactionRefs })).toEqual({ kind: 'attached', replayed: false })
         }
       }
-      await invoke(source, 'workloadCron:ensurePlatformWorkloadIdentities')
-      await command(source, ['run', 'lib:stop', '{"name":"main"}', '--component', 'workpool/batchWorker'])
-      const archived = await inspect(source)
-      const archive = join(root, 'before-settlement.zip')
-      await command(source, ['export', '--include-file-storage', '--path', archive])
-      await stops[0]!()
-      console.log('Financial restore: source stopped; create post-snapshot native settlements')
-      const native = new Map<string, { refs: readonly string[]; ids: string[] }>()
-      const reservations = new Map<string, { refs: readonly string[]; ids: string[] }>()
       const originalIds = async (refs: readonly string[]) => {
         const ids = []
         for (const ref of refs) {
@@ -485,114 +478,232 @@ describe.skipIf(process.env.AE_CONVEX_RESTORE_INTEGRATION !== 'true'
         }
         return ids
       }
-      for (const { booking } of seeded.filter(row => !row.call.callRef.endsWith(':missing'))) {
-        if (unbound) {
-          const reservation = await reserveFormanceManagedCall(context, booking)
-          if (reservation.kind !== 'completed') throw new Error(JSON.stringify(reservation))
-          const ids = await originalIds(reservation.transactionRefs)
-          reservations.set(booking.callRef, { refs: reservation.transactionRefs, ids })
-          if (booking.callRef.endsWith(':conflict')) {
-            await context.sdk.ledger.v2.addMetadataOnTransaction({ ledger: configuration.ledger, id: BigInt(ids[2]!),
-              requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-reservation-evidence', schemaVersion: 'v1.5.0' })
-            continue
+      if (refund) {
+        type ReportRecord = Omit<Record, 'workState'> & {
+          report: Doc<'paidCallReports'> | null; grants: Doc<'moneyPromotionalGrants'>[];
+          resolution: Doc<'purchaseResolutionRecords'>; projection: Doc<'capabilityCallProjections'>;
+          marketFacts: Doc<'marketEvidenceFacts'>[]
+        }
+        const inspectReports = async (directory: string): Promise<ReportRecord[]> => JSON.parse(
+          await invoke<string>(directory, 'financialRestoreProof:inspectReports')) as ReportRecord[]
+        const settlements = []
+        for (const { booking } of seeded) {
+          const result = await settleFormanceManagedCall(context, { booking,
+            externalEvidenceDigest: canonicalDigest({ effect: booking.callRef }) })
+          if (result.kind !== 'completed') throw new Error(JSON.stringify(result))
+          settlements.push({ callRef: booking.callRef, transactionRefs: [...result.transactionRefs] })
+        }
+        await invoke(source, 'financialRestoreProof:completeSales', { settlements, now: Date.now() })
+        const identity = { subject: 'user_financial_restore', issuer: 'https://release-proof.invalid', exp: Math.floor(now / 1_000) + 86_400,
+          tokenIdentifier: 'https://release-proof.invalid|user_financial_restore' }
+        for (const label of ['paid', 'promo', 'conflict']) {
+          const callRef = `call:financial-restore:${label}`
+          const response = await command(source, ['run', 'financialRestoreProof:admitReport', JSON.stringify({ callRef }),
+            '--identity', JSON.stringify(identity)])
+          expect(JSON.parse(JSON.parse(response.stdout))).toMatchObject({ kind: 'pending', callRef })
+        }
+        const archived = await inspectReports(source)
+        expect(archived.filter(row => row.report?.state === 'pending')).toHaveLength(3)
+        expect(archived.every(row => row.call.state === 'completed' && row.resolution.terminalState === 'completed'
+          && row.obligation?.state === 'settled' && row.call.usage?.chargeState === 'paid'
+          && row.grants.length === 1 && row.grants.every(grant => grant.availableUnits === '0'))).toBe(true)
+        expect(archived.filter(row => row.report !== null).every(row => row.marketFacts.length === 1)).toBe(true)
+        const archive = join(root, 'before-refund.zip')
+        await command(source, ['export', '--include-file-storage', '--path', archive])
+        await stops[0]!()
+        console.log('Refund restore: source stopped; post original approved refunds on surviving native ledger')
+        const native = new Map<string, { refs: readonly string[]; ids: string[] }>()
+        for (const { report } of archived) {
+          if (report === null) continue
+          const result = await refundFormanceSettledSale(context, { booking: report.booking,
+            originalSettlementRefs: report.originalSettlementRefs, reportDigest: report.reportDigest })
+          if (result.kind !== 'completed') throw new Error(JSON.stringify(result))
+          const ids = await originalIds(result.transactionRefs)
+          native.set(report.callRef, { refs: result.transactionRefs, ids })
+          if (report.callRef.endsWith(':conflict')) {
+            await context.sdk.ledger.v2.addMetadataOnTransaction({ ledger: configuration.ledger, id: BigInt(ids[0]!),
+              requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-refund-evidence', schemaVersion: 'v1.5.0' })
           }
         }
-        const settlement = await settleFormanceManagedCall(context, { booking, externalEvidenceDigest: canonicalDigest({ effect: booking.callRef }) })
-        if (settlement.kind !== 'completed') throw new Error(JSON.stringify(settlement))
-        const ids = await originalIds(settlement.transactionRefs)
-        native.set(booking.callRef, { refs: settlement.transactionRefs, ids })
-        if (booking.callRef.endsWith(':conflict')) {
-          await context.sdk.ledger.v2.addMetadataOnTransaction({ ledger: configuration.ledger, id: BigInt(ids[1]!),
-            requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-provider-evidence', schemaVersion: 'v1.5.0' })
-        }
-      }
-      const ledgerBaseline = await snapshot()
-      await command(target, ['import', archive, '--replace', '--yes'])
-      expect(await inspect(target)).toEqual(archived)
-      await command(target, ['run', 'lib:stop', '{"name":"main"}', '--component', 'workpool/batchWorker'])
-      await command(target, ['run', 'loop:updateRunStatus', '{}', '--component', 'workpool'])
-      let held = await inspect(target)
-      if (unbound) {
-        expect(held.every(row => row.workState === 'absent' && row.obligation === null
-          && row.call.formanceReservationRefs === undefined && row.call.formanceReservationDigest === undefined)).toBe(true)
-        const repair = (callRef: string) => invoke(target, 'moneyManagedCallLifecycle:reconcileReservation', { callRef, now: Date.now() })
-        for (const before of held) {
+        const ledgerBaseline = await snapshot()
+        await command(target, ['import', archive, '--replace', '--yes'])
+        expect(await inspectReports(target)).toEqual(archived)
+        const process = (callRef: string) => invoke<boolean>(target, 'capabilityCallReports:process', { callRef })
+        for (const before of archived) {
           const positive = before.call.callRef.endsWith(':paid') || before.call.callRef.endsWith(':promo')
-          const results = await Promise.all([repair(before.call.callRef), repair(before.call.callRef)])
-          if (positive) {
-            expect(results).toContainEqual({ kind: 'accepted', state: 'outcome_unknown', replayed: false })
-            expect(results).toContainEqual({ kind: 'accepted', state: 'outcome_unknown', replayed: true })
-          } else expect(results).toEqual(Array.from({ length: 2 }, () => ({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })))
+          expect(await Promise.all([process(before.call.callRef), process(before.call.callRef)]))
+            .toEqual(before.call.callRef.endsWith(':conflict') ? [false, false] : [true, true])
+          const after = (await inspectReports(target)).find(row => row.call.callRef === before.call.callRef)!
+          expect(await snapshot()).toEqual(ledgerBaseline)
+          if (!positive) {
+            expect(after).toEqual({ ...before, report: before.report === null ? null : {
+              ...before.report, nextWorkAt: after.report!.state === 'pending' ? after.report!.nextWorkAt : undefined,
+              updatedAt: after.report!.updatedAt } })
+            continue
+          }
+          const original = native.get(before.call.callRef)!
+          expect(before.call.result?.kind).toBe('completed')
+          if (before.call.result?.kind !== 'completed' || after.call.result?.kind !== 'completed') throw new Error('proof_delivery_missing')
+          const originalReceipt = before.call.result.receipt
+          expect(after.call.result).toEqual({ ...before.call.result, usage: after.call.result.usage,
+            receipt: { ...originalReceipt, state: 'refunded', refundState: 'released', transactionRef: original.refs[0],
+              accountingTransactionRefs: [...before.report!.originalSettlementRefs, ...original.refs] } })
+          expect(after.call.usage).toEqual({ ...before.call.usage, chargeState: 'refunded',
+            transactionRef: original.refs[0], observedAt: after.call.usage!.observedAt })
+          expect(after.call.result.usage).toEqual(after.call.usage)
+          expect(after.call).toEqual({ ...before.call, result: after.call.result, usage: after.call.usage,
+            formanceFinancialState: 'released', formanceReleaseRefs: original.refs, updatedAt: after.call.updatedAt })
+          if (before.report?.state !== 'pending' || after.report?.state !== 'posted') throw new Error('proof_report_transition_missing')
+          const { nextWorkAt, ...originalReport } = before.report
+          expect(nextWorkAt).toBeLessThanOrEqual(after.report.postedAt)
+          expect(after.report).toEqual({ ...originalReport, state: 'posted',
+            buyerRefundTransactionRef: original.refs[0], transactionRefs: original.refs,
+            postedAt: after.report.postedAt, updatedAt: after.report.updatedAt })
+          expect(after.report.originalResolution.recordDigest).toBe(before.resolution.recordDigest)
+          expect(after.resolution).toEqual({ ...before.resolution, terminalState: 'refunded', paymentState: 'released',
+            resolutionRef: after.resolution.resolutionRef, recordDigest: after.resolution.recordDigest,
+            resolvedAt: after.resolution.resolvedAt })
+          expect(after.projection).toMatchObject({ state: 'completed', deliveryState: 'delivered', paymentState: 'released' })
+          expect(after.grants).toEqual(before.grants.map(grant => ({ ...grant, availableUnits: grant.amountUnits,
+            updatedAt: after.grants.find(row => row.grantRef === grant.grantRef)!.updatedAt })))
+          expect(after.quote).toEqual(before.quote)
+          expect(after.obligation).toEqual(before.obligation)
+          expect(after.marketFacts).toEqual(before.marketFacts)
+        }
+        const recovered = await inspectReports(target)
+        for (const row of recovered.filter(value => value.report?.state === 'posted')) {
+          expect(await Promise.all([process(row.call.callRef), process(row.call.callRef)])).toEqual([true, true])
+          expect(await refundFormanceSettledSale(context, { booking: row.report!.booking,
+            originalSettlementRefs: row.report!.originalSettlementRefs, reportDigest: row.report!.reportDigest }))
+            .toMatchObject({ kind: 'completed', replayed: true, transactionRefs: native.get(row.call.callRef)!.refs })
+        }
+        expect(await inspectReports(target)).toEqual(recovered)
+        expect(await snapshot()).toEqual(ledgerBaseline)
+        for (const { refs, ids } of native.values()) for (const [index, ref] of refs.entries()) {
+          expect(await readFormanceTransactionByReference(context, ref)).toMatchObject({ kind: 'found', transactionId: ids[index] })
+        }
+        summary = { evidenceClass: 'native-convex-approved-refund-restore', verification: 'PASS', recovered: 2,
+          conflictingRefundRefused: 1, missingReportUnchanged: 1, originalTransactionIdsPreserved: true,
+          nativeWritesDuringRecovery: 0, ledger: ledgerBaseline, sourceStopped: true, approvalHistoryLossRecovered: false }
+      } else {
+        await invoke(source, 'workloadCron:ensurePlatformWorkloadIdentities')
+        await command(source, ['run', 'lib:stop', '{"name":"main"}', '--component', 'workpool/batchWorker'])
+        const archived = await inspect(source)
+        const archive = join(root, 'before-settlement.zip')
+        await command(source, ['export', '--include-file-storage', '--path', archive])
+        await stops[0]!()
+        console.log('Financial restore: source stopped; create post-snapshot native settlements')
+        const native = new Map<string, { refs: readonly string[]; ids: string[] }>()
+        const reservations = new Map<string, { refs: readonly string[]; ids: string[] }>()
+        for (const { booking } of seeded.filter(row => !row.call.callRef.endsWith(':missing'))) {
+          if (unbound) {
+            const reservation = await reserveFormanceManagedCall(context, booking)
+            if (reservation.kind !== 'completed') throw new Error(JSON.stringify(reservation))
+            const ids = await originalIds(reservation.transactionRefs)
+            reservations.set(booking.callRef, { refs: reservation.transactionRefs, ids })
+            if (booking.callRef.endsWith(':conflict')) {
+              await context.sdk.ledger.v2.addMetadataOnTransaction({ ledger: configuration.ledger, id: BigInt(ids[2]!),
+                requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-reservation-evidence', schemaVersion: 'v1.5.0' })
+              continue
+            }
+          }
+          const settlement = await settleFormanceManagedCall(context, { booking, externalEvidenceDigest: canonicalDigest({ effect: booking.callRef }) })
+          if (settlement.kind !== 'completed') throw new Error(JSON.stringify(settlement))
+          const ids = await originalIds(settlement.transactionRefs)
+          native.set(booking.callRef, { refs: settlement.transactionRefs, ids })
+          if (booking.callRef.endsWith(':conflict')) {
+            await context.sdk.ledger.v2.addMetadataOnTransaction({ ledger: configuration.ledger, id: BigInt(ids[1]!),
+              requestBody: { command_digest: '0'.repeat(64) }, idempotencyKey: 'proof:conflicting-provider-evidence', schemaVersion: 'v1.5.0' })
+          }
+        }
+        const ledgerBaseline = await snapshot()
+        await command(target, ['import', archive, '--replace', '--yes'])
+        expect(await inspect(target)).toEqual(archived)
+        await command(target, ['run', 'lib:stop', '{"name":"main"}', '--component', 'workpool/batchWorker'])
+        await command(target, ['run', 'loop:updateRunStatus', '{}', '--component', 'workpool'])
+        let held = await inspect(target)
+        if (unbound) {
+          expect(held.every(row => row.workState === 'absent' && row.obligation === null
+            && row.call.formanceReservationRefs === undefined && row.call.formanceReservationDigest === undefined)).toBe(true)
+          const repair = (callRef: string) => invoke(target, 'moneyManagedCallLifecycle:reconcileReservation', { callRef, now: Date.now() })
+          for (const before of held) {
+            const positive = before.call.callRef.endsWith(':paid') || before.call.callRef.endsWith(':promo')
+            const results = await Promise.all([repair(before.call.callRef), repair(before.call.callRef)])
+            if (positive) {
+              expect(results).toContainEqual({ kind: 'accepted', state: 'outcome_unknown', replayed: false })
+              expect(results).toContainEqual({ kind: 'accepted', state: 'outcome_unknown', replayed: true })
+            } else expect(results).toEqual(Array.from({ length: 2 }, () => ({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })))
+            expect(await snapshot()).toEqual(ledgerBaseline)
+          }
+          const repaired = await inspect(target)
+          for (const row of repaired) {
+            const before = held.find(value => value.call.callRef === row.call.callRef)!
+            const original = reservations.get(row.call.callRef)
+            const positive = row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')
+            if (!positive) { expect(row).toEqual(before); continue }
+            expect(row).toEqual({ ...before, call: { ...before.call,
+              formanceReservationRefs: original!.refs, formanceReservationDigest: canonicalDigest({
+                format: 'ae.formance-managed-call-reservation:v1', callRef: row.call.callRef, transactionRefs: original!.refs }),
+              formanceFinancialState: 'outcome_unknown', state: 'reconciliation_required', dispatchState: 'reconciliation_required',
+              result: row.call.result, reconciliation: row.call.reconciliation, updatedAt: row.call.updatedAt }, obligation: row.obligation })
+            expect(row.call.result).toMatchObject({ kind: 'reconciliation_required', callRef: row.call.callRef, evidence: { retry: 'reconcile_before_retry' } })
+            expect(row.call.reconciliation).toMatchObject({ disposition: 'manual_review', reason: 'unknown_settlement' })
+            expect(row.obligation).toMatchObject({ obligationRef: `provider-obligation:${row.call.callRef}`, callRef: row.call.callRef,
+              toolRef: row.booking.toolRef, providerRef: row.booking.providerRef, buyerAccountRef: row.booking.accountRef,
+              buyerAmountUnits: row.booking.buyerAmountUnits, providerAmountUnits: row.booking.providerAmountUnits,
+              buyerAsset: 'AUD', buyerExponent: 6, providerAsset: 'USDC', providerExponent: 6,
+              state: 'held', settlementMethod: 'managed_x402', payoutEligibility: 'ineligible_x402',
+              evidenceRefs: [row.booking.quoteRef, ...original!.refs] })
+            expect(await repair(row.call.callRef)).toEqual({ kind: 'accepted', state: 'outcome_unknown', replayed: true })
+          }
+          expect(await inspect(target)).toEqual(repaired)
+          held = repaired
+        } else {
+          const workload = await invoke(target, 'workloadCron:admit', { name: 'reconcile due facilitator invocations' })
+          expect(await invoke(target, 'capabilityCalls:quarantineRestoredDispatches', { workload,
+            dispatches: archived.map(({ call }) => ({ callRef: call.callRef, expectedWorkId: call.workId })) }))
+            .toEqual({ kind: 'accepted', quarantined: 4, replayed: 0 })
+          await command(target, ['run', 'lib:start', '{"name":"main"}', '--component', 'workpool/batchWorker'])
+          const retireDeadline = Date.now() + 60_000
+          while (held.some(row => row.workState !== 'finished') && Date.now() < retireDeadline) {
+            await new Promise(done => setTimeout(done, 500)); held = await inspect(target)
+          }
+          expect(held.every(row => row.workState === 'finished')).toBe(true)
+          expect(held.every(row => row.call.formanceFinancialState === 'outcome_unknown'
+            && row.call.reconciliation?.disposition === 'manual_review')).toBe(true)
+        }
+        const recover = (callRef: string) => invoke(target, 'moneyManagedCallLifecycle:reconcileSettlement', { callRef, now: Date.now() })
+        for (const row of held) {
+          const positive = row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')
+          expect(await recover(row.call.callRef)).toMatchObject(positive
+            ? { kind: 'accepted', state: 'settled', replayed: false }
+            : { kind: 'refused', code: unbound ? 'managed_call_state_conflict' : 'formance_settled_sale_evidence_invalid' })
           expect(await snapshot()).toEqual(ledgerBaseline)
         }
-        const repaired = await inspect(target)
-        for (const row of repaired) {
+        const recovered = await inspect(target)
+        for (const row of recovered) {
           const before = held.find(value => value.call.callRef === row.call.callRef)!
-          const original = reservations.get(row.call.callRef)
-          const positive = row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')
-          if (!positive) { expect(row).toEqual(before); continue }
-          expect(row).toEqual({ ...before, call: { ...before.call,
-            formanceReservationRefs: original!.refs, formanceReservationDigest: canonicalDigest({
-              format: 'ae.formance-managed-call-reservation:v1', callRef: row.call.callRef, transactionRefs: original!.refs }),
-            formanceFinancialState: 'outcome_unknown', state: 'reconciliation_required', dispatchState: 'reconciliation_required',
-            result: row.call.result, reconciliation: row.call.reconciliation, updatedAt: row.call.updatedAt }, obligation: row.obligation })
-          expect(row.call.result).toMatchObject({ kind: 'reconciliation_required', callRef: row.call.callRef, evidence: { retry: 'reconcile_before_retry' } })
-          expect(row.call.reconciliation).toMatchObject({ disposition: 'manual_review', reason: 'unknown_settlement' })
-          expect(row.obligation).toMatchObject({ obligationRef: `provider-obligation:${row.call.callRef}`, callRef: row.call.callRef,
-            toolRef: row.booking.toolRef, providerRef: row.booking.providerRef, buyerAccountRef: row.booking.accountRef,
-            buyerAmountUnits: row.booking.buyerAmountUnits, providerAmountUnits: row.booking.providerAmountUnits,
-            buyerAsset: 'AUD', buyerExponent: 6, providerAsset: 'USDC', providerExponent: 6,
-            state: 'held', settlementMethod: 'managed_x402', payoutEligibility: 'ineligible_x402',
-            evidenceRefs: [row.booking.quoteRef, ...original!.refs] })
-          expect(await repair(row.call.callRef)).toEqual({ kind: 'accepted', state: 'outcome_unknown', replayed: true })
+          const expected = native.get(row.call.callRef)
+          if (row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')) {
+            expect(row).toEqual({ ...before, call: { ...before.call, formanceFinancialState: 'settled',
+              formanceSettlementRefs: expected!.refs, buyerSaleTransactionRef: expected!.refs[0], updatedAt: row.call.updatedAt },
+            obligation: { ...before.obligation, state: 'settled', settlementTransactionRef: expected!.refs[1],
+              evidenceRefs: [...new Set([...before.obligation!.evidenceRefs, ...expected!.refs])],
+              settledAt: row.obligation!.settledAt, updatedAt: row.obligation!.updatedAt } })
+            expect(await Promise.all([recover(row.call.callRef), recover(row.call.callRef)]))
+              .toEqual(Array.from({ length: 2 }, () => ({ kind: 'accepted', state: 'settled', replayed: true })))
+          } else expect(row).toEqual(before)
         }
-        expect(await inspect(target)).toEqual(repaired)
-        held = repaired
-      } else {
-        const workload = await invoke(target, 'workloadCron:admit', { name: 'reconcile due facilitator invocations' })
-        expect(await invoke(target, 'capabilityCalls:quarantineRestoredDispatches', { workload,
-          dispatches: archived.map(({ call }) => ({ callRef: call.callRef, expectedWorkId: call.workId })) }))
-          .toEqual({ kind: 'accepted', quarantined: 4, replayed: 0 })
-        await command(target, ['run', 'lib:start', '{"name":"main"}', '--component', 'workpool/batchWorker'])
-        const retireDeadline = Date.now() + 60_000
-        while (held.some(row => row.workState !== 'finished') && Date.now() < retireDeadline) {
-          await new Promise(done => setTimeout(done, 500)); held = await inspect(target)
-        }
-        expect(held.every(row => row.workState === 'finished')).toBe(true)
-        expect(held.every(row => row.call.formanceFinancialState === 'outcome_unknown'
-          && row.call.reconciliation?.disposition === 'manual_review')).toBe(true)
-      }
-      const recover = (callRef: string) => invoke(target, 'moneyManagedCallLifecycle:reconcileSettlement', { callRef, now: Date.now() })
-      for (const row of held) {
-        const positive = row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')
-        expect(await recover(row.call.callRef)).toMatchObject(positive
-          ? { kind: 'accepted', state: 'settled', replayed: false }
-          : { kind: 'refused', code: unbound ? 'managed_call_state_conflict' : 'formance_settled_sale_evidence_invalid' })
+        expect(await inspect(target)).toEqual(recovered)
         expect(await snapshot()).toEqual(ledgerBaseline)
+        for (const { refs, ids } of [...native.values(), ...reservations.values()]) for (const [index, ref] of refs.entries()) {
+          expect(await readFormanceTransactionByReference(context, ref)).toMatchObject({ kind: 'found', transactionId: ids[index] })
+        }
+        summary = { evidenceClass: 'native-convex-financial-restore', verification: 'PASS', recovered: 2,
+          reservationsRepaired: unbound ? 2 : 0, refused: 2, manualHoldsPreserved: unbound ? 2 : 4,
+          nativeWritesDuringRecovery: 0, ledger: ledgerBaseline,
+          originalTransactionIdsPreserved: true, sourceStopped: true, chainOrDeliveryProven: false }
       }
-      const recovered = await inspect(target)
-      for (const row of recovered) {
-        const before = held.find(value => value.call.callRef === row.call.callRef)!
-        const expected = native.get(row.call.callRef)
-        if (row.call.callRef.endsWith(':paid') || row.call.callRef.endsWith(':promo')) {
-          expect(row).toEqual({ ...before, call: { ...before.call, formanceFinancialState: 'settled',
-            formanceSettlementRefs: expected!.refs, buyerSaleTransactionRef: expected!.refs[0], updatedAt: row.call.updatedAt },
-          obligation: { ...before.obligation, state: 'settled', settlementTransactionRef: expected!.refs[1],
-            evidenceRefs: [...new Set([...before.obligation!.evidenceRefs, ...expected!.refs])],
-            settledAt: row.obligation!.settledAt, updatedAt: row.obligation!.updatedAt } })
-          expect(await Promise.all([recover(row.call.callRef), recover(row.call.callRef)]))
-            .toEqual(Array.from({ length: 2 }, () => ({ kind: 'accepted', state: 'settled', replayed: true })))
-        } else expect(row).toEqual(before)
-      }
-      expect(await inspect(target)).toEqual(recovered)
-      expect(await snapshot()).toEqual(ledgerBaseline)
-      for (const { refs, ids } of [...native.values(), ...reservations.values()]) for (const [index, ref] of refs.entries()) {
-        expect(await readFormanceTransactionByReference(context, ref)).toMatchObject({ kind: 'found', transactionId: ids[index] })
-      }
-      summary = { evidenceClass: 'native-convex-financial-restore', verification: 'PASS', recovered: 2,
-        reservationsRepaired: unbound ? 2 : 0, refused: 2, manualHoldsPreserved: unbound ? 2 : 4,
-        nativeWritesDuringRecovery: 0, ledger: ledgerBaseline,
-        originalTransactionIdsPreserved: true, sourceStopped: true, chainOrDeliveryProven: false }
     } catch (error) { failures.push(error) }
     finally {
       const stopped = await Promise.allSettled(stops.map(stop => stop()))
