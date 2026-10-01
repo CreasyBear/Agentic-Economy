@@ -2296,3 +2296,52 @@ backend. Joel's authoritative Infisical Development project choice remains
 pending. Authenticated use, provider readiness, a paid development Call, full
 restore/alerts and explicitly authorized live-money drills remain unverified.
 Production `cautious-zebra-473` was not queried or changed.
+
+
+### Stage 36 — bind the branch Preview to confirmed development
+
+The scoped target is Vercel project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`
+(`agentic-economy`, `creasybears-projects`), Preview branch
+`codex/production-money`, and confirmed Convex development `cool-crab-306`.
+The starting source is `464dc1ba792e08db91ab39b6edd548401d5cce85`; its protected
+Preview is `dpl_5WenDR1D9Wh4gHzNt3ATUjsSkGqE`. The fresh native inventory has no
+branch-specific environment entries. Shared Preview settings still refer to the
+older backend and lack matching Clerk/source-write families for this journey.
+Names alone do not establish credential validity or generation.
+
+**Requires:** exact project, Preview target and branch selectors for every edit;
+matching browser/server Convex origins; explicit development money environment.
+**Ensures:** the next branch build selects `cool-crab-306` for browser and server
+reads, with canonical links and site attribution bound to the same branch.
+**Invariant:** this does not provide authentication, request authority, provider
+configuration, scheduler authority or payment readiness. Production and other
+branches are outside the change. No secret is read, copied or relabelled.
+**On violation:** existing configuration, authentication and payment refusals
+remain in force; no readiness override or credential fallback is introduced.
+
+Only these existing non-secret settings are selected:
+
+| Setting | Branch value |
+| --- | --- |
+| `AE_DEPLOYMENT_ENVIRONMENT` | `development` |
+| `CONVEX_URL` | `https://cool-crab-306.convex.cloud` |
+| `VITE_CONVEX_URL` | `https://cool-crab-306.convex.cloud` |
+| `AE_CANONICAL_BASE_URL` | `https://agentic-economy-git-codex-production-money-creasybears-projects.vercel.app` |
+| `SITE_URL` | `https://agentic-economy-git-codex-production-money-creasybears-projects.vercel.app` |
+
+There are no maintained consumers of the inherited `VITE_SITE_URL` or
+`VITE_CONVEX_SITE_URL`; do not add duplicate overrides. Keep the Formance
+environment declaration with its complete, provenance-checked provider binding.
+No new code, schema, dependency or deployment wrapper is needed. The existing
+Preview boot class deliberately permits missing live-operation configuration;
+public HTTP readiness here does not prove authenticated use or a paid Call.
+Hosted writes still require their specific source-write family and matching
+backend credentials; the legacy root key cannot replace missing family keys.
+
+Rollback of this configuration consists of removing only these five new Preview
+branch entries with the native `env rm <name> preview codex/production-money`
+command, exact project and scope, then redeploying the previous Preview as needed.
+It does not roll back the separately deployed Convex backend. Verification is
+native branch inventory, exact release identity, actual readiness origin/money
+world, free public reads and continued unauthenticated refusal. Credential and
+paid-Call proof remain dependent on the pending Infisical Development source.
