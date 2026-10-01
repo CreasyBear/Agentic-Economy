@@ -720,3 +720,143 @@ stack. It does not establish production quiescence, cloud PITR/RPO/RTO, Convex
 records/files/jobs, deployed alerts or complete application recovery. Those
 remain #286 runtime work. No cloud provisioning, deployment, provider generation
 or live-money movement was performed.
+
+## Stage 21 — terms and trust that describe the actual alpha
+
+Sluice routes #280 as a main-channel content and UI boundary. Reuse the existing
+legal document layout and current route, receipt and credit components. Apply
+cognitive-load-auditor to disclosures beside Run, credit and reports, and
+contract-enforcer to the promises those surfaces make. This is a reviewable draft;
+the contracting entity and contact ownership remain pending Joel. It changes no
+Call charging, screening, refund eligibility or spending-authority rule.
+
+Requires: claims trace to current source and the agreed promo-only principal
+alpha. Ensures: terms, privacy and the seven trust topics explain credit draw,
+uncertain outcomes, report limits, Provider data release and support consistently;
+the footer, credit sheet and human-facing Call receipts link to that explanation.
+Invariant: aecon's Seller role remains separate from Provider and payment
+recipient; 2xx delivery is not a quality promise; report limits never disclaim
+mandatory remedies; expired promotional credit is not revived. No unspecified
+liability cap, seller verification, provider privacy guarantee or all-money-system
+status claim is introduced. On missing evidence: state the limit and offer Support,
+without inventing legal entity, retention periods or processor locations.
+
+Quote preparation can already send mapped real input before payment. The existing
+pre-Run panel will disclose that next to the selected Provider and inputs, with
+no extra approval step. The current report response already returns the remaining
+daily allowance; show that amount and its UTC reset instead of hardcoding a policy
+count. Where existing funding constraints refuse card funding, the credit sheet
+must not advertise an actionable checkout; an existing pending funding attempt
+must retain its status and balance checks. No new alpha profile or funding policy.
+
+Cognitive-load decision: keep one primary Run or money action, plus a secondary
+trust link. The trust page's seven named topics are a scannable document index,
+not seven choices required before spending. Keep inputs, recipient, price and
+charge timing together; show current report allowance rather than require recall.
+Funding unavailability should remove an unusable choice rather than open a blank
+checkout tab. Reuse the established document and control styles; verify compact
+and desktop rendering, link targets, unavailable/pending states and accessibility.
+
+Complexity decision: keep the existing legal page/contract/route pattern for
+one trust page. Reuse the existing funding constraint result as UI state and the
+existing report allowance; add no service, dependency, policy flag or general
+legal-content framework. Root owns final copy, route/link integration and
+acceptance; bounded workers may prepare content or implement the credit presenter.
+Focused behavior tests, React Doctor, `npm run check`, rendered inspection and the
+release gate will establish the changed guarantees. Publication and operational
+claims remain separate from a passing local draft.
+
+The funding state follows unidirectional-flow-enforcer: existing server balance
+and constraints responses become owner-bound state; the panel derives checkout
+availability from those responses. A failed constraints request does not erase a
+successful promotional balance read. Before submission, re-read the policy and
+reject a changed user or Account. A pending attempt retains its original key and
+Account. Completion requires the maintained `readAccountFundingServer` result for
+that command and idempotency key, which returns success only after the funding
+posting is recorded, plus a refreshed balance for the original Account. A balance
+increase alone can be a refund or another top-up and must not clear the attempt.
+Missing, refused or unknown command evidence retains uncertainty and the same key.
+A confirmed failed payment stops polling with a visible failure and no automatic
+Call continuation; only that terminal attempt may be cleared for a new top-up.
+A check timeout is not payment finality: pause polling, retain the original key,
+keep checkout disabled and offer one Check payment action for that same attempt.
+This replaces the numeric balance heuristic with an existing producer/consumer
+contract; it adds no backend endpoint, storage schema or second payment state machine.
+Reloading must also retain uncertainty: reuse the existing command-and-key recovery
+storage, restore that locator before permitting funding, and authenticate a pending
+command candidate with the original key. Missing or wrong-Account evidence keeps
+the attempt available for recovery. Recovery stays accessible when paying is off;
+it does not require a new spending approval.
+
+The funding adapter must preserve the same contract for every consumer. Requires:
+a durable reservation precedes the provider call. Ensures: any returned uncertainty
+after invoking the provider includes that original command reference, even if
+binding evidence or recording uncertainty refuses. Invariant: an ordinary refusal
+must not imply that a post-provider attempt had no effect. On failure: return the
+existing outcome-unknown variant and recover the same command; preserve definite
+pre-provider validation/reservation refusals. This changes result classification,
+not the public union, financial policy, provider operation or ledger state machine.
+
+The idempotency-guardian and error-strategist review covers both funding start and
+funding read: start reserves the original command and creates or recovers checkout;
+read can bind payment evidence and finish the existing ledger posting. Those
+external effects are protected by the existing command/key and posting contract.
+The UI retains that identity across transport loss, delayed posting, timeout and
+reload. A typed `funding_pending` or `funding_outcome_unknown` start refusal can
+follow an external effect, so it is recovery evidence, not permission to clear the
+key. These recoverable failures provide a basic guarantee: valid credit remains
+visible, the original attempt remains recoverable and no replacement starts.
+Retryable reads keep polling within the existing ten-minute bound; after that,
+Check payment resumes the same attempt. A definite terminal failure does not
+continue the Call. No new service, backend retry policy or expiry is introduced.
+
+The privacy draft now names the actual conditional approval-email delivery path
+in `convex/notificationDelivery.ts`, along with Clerk, Convex, Formance, Coinbase,
+RPC services, Sentry and configured model/ranking hosts. It does not claim their
+retention, countries or training policies are all verified. Publication still
+needs the legal entity, contact ownership, retention schedule and processor
+locations. The [OAIC APP 1 guidance](https://www.oaic.gov.au/privacy/australian-privacy-principles/australian-privacy-principles-guidelines/chapter-1-app-1-open-and-transparent-management-of-personal-information)
+supports the contact, complaint, access/correction and overseas-recipient review;
+the [ACCC remedy guidance](https://www.accc.gov.au/business/problem-with-a-product-or-service-you-sold/repair-replace-refund-cancel)
+supports keeping mandatory remedies separate from the limited self-service route.
+No proposed liability cap or default promotional expiry becomes a new commitment.
+
+### Stage 21 acceptance — 1 October 2026
+
+The terms, privacy and seven-topic Trust centre are reviewable alpha drafts.
+The footer, Add credit sheet, full and inline Call receipts, and funding documents
+link to Trust. Pre-Run copy names the Provider role and the possibility of sending
+real inputs during price checks. Reporting shows the source's actual allowance
+and UTC reset. None of these links adds a purchase approval or discards Run inputs.
+
+Funding now uses current source constraints, preserves real promotional balances
+when constraints fail, and requires exact command/key evidence plus a refreshed
+original Account balance before continuing. Tests establish no completion from
+an unrelated balance increase; no new checkout during uncertainty; retained
+recovery across timeout, reload, missing/wrong locators and Account changes;
+and usable recovery while spending is off. Server-side post-provider refusals
+retain the original command even when evidence binding or uncertainty recording
+fails. Definite pre-provider refusals remain ordinary refusals. Independent review
+of the final producer and consumer is clean; 59 focused funding tests pass.
+
+Browser inspection at 1440px and 390px confirms all three documents render,
+Trust anchors work, and compact layouts have no horizontal overflow or JavaScript
+errors. Review images are under `output/review/stage21/` and are not source files.
+React Doctor is 90/100 with no errors and five control-flow complexity warnings
+in the existing UI controls. The branches express real states; no wrapper or
+suppression was added to change the score.
+
+`npm run check` and the full `npm run gate` pass: anonymous Convex generation,
+public build integrity, clean types, 7,223 unit tests, 2,480 integration tests,
+4 type tests, 75 import checks, TypeScript standards, 31 SEO checks, 16 browser
+journeys, 18 accessibility checks and reproducible CLI packaging. The ordinary
+gate still has one unit skip, 54 integration skips and three todos. The corrected
+public-semantic and discovery fixtures now reflect the new draft and Trust route.
+
+Publication still needs the contracting entity, contact ownership, retention and
+processor-location facts. A lost start response with no observable command locator
+retains uncertainty and Support; it does not infer success from credit movement.
+These tests do not establish live Stripe operation, hosted money readiness or legal
+approval. No production deployment, paid provider generation or live-money movement
+was performed. Next is the Convex records/files restore proof and explicit evidence
+of the scheduled work that snapshots omit, under #286.

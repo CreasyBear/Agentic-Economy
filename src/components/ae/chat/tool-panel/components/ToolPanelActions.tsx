@@ -12,6 +12,11 @@ export function ToolPanelActions({ view, statusId, onRun, onRunAgain }: ToolPane
       {view.runFailure === undefined ? null : <p role="status" className="break-words text-sm text-muted-foreground">
         {view.runFailure === 'not_sent' ? chatToolPanel.runNotSent : chatToolPanel.runOutcomeUnknown}
       </p>}
+      <p className="break-words text-sm text-muted-foreground">
+        These inputs can be sent to the selected Tool Provider during price checks, before payment.{' '}
+        <a href="/trust#data" target="_blank" rel="noreferrer" aria-label="How your data is handled (opens in a new tab)"
+          className="underline underline-offset-4">How your data is handled</a>
+      </p>
       {view.submission === 'outcome_unknown' ? null : view.submission === 'submitted' ? (
         <>
           <p role="status" className="break-words text-sm text-muted-foreground">{chatToolPanel.submitted}</p>

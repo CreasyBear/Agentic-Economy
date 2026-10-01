@@ -255,7 +255,7 @@ function ExecuteNextAction({ projection }: Readonly<{
   projection: Extract<ToolCardProjection, { kind: 'execute' }>
 }>) {
   const suggestedNextAction = projection.suggestedNextAction
-  if (suggestedNextAction === undefined) return null
+  if (suggestedNextAction === undefined || projection.state === 'reconciliation_required' || projection.state === 'refused') return null
   if (suggestedNextAction.href !== undefined) {
     return (
       <a
@@ -316,10 +316,11 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
             {...(signedThread === undefined ? {} : { signedThread })} />}
           {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
         </CardFooter>
-      ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined
-        && projection.state !== 'reconciliation_required' && projection.state !== 'refused' ? (
-        <CardFooter>
+      ) : projection.kind === 'execute' ? (
+        <CardFooter className="flex flex-wrap gap-related">
           <ExecuteNextAction projection={projection} />
+          <a href="/trust" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
+            className="inline-flex min-h-touch items-center text-sm text-muted-foreground underline underline-offset-4">Trust centre</a>
         </CardFooter>
       ) : null}
     </Card>

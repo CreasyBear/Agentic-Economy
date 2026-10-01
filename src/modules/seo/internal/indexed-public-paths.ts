@@ -10,6 +10,7 @@ export const indexedPublicPagePaths = [
   '/about',
   '/support',
   '/status',
+  '/trust',
   '/privacy',
   '/terms',
   '/privacy/remove-business',

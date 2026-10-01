@@ -1,12 +1,13 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { useServerFn } from '@tanstack/react-start'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { AUD_EXPONENT, quoteAudAccountFunding, type MoneyRefusal } from '@/modules/money/public'
 import {
   beginAccountFundingServer,
   readAccountFundingBalanceServer,
+  readAccountFundingServer,
   readAccountFundingConstraintsServer,
 } from '@/modules/money/money.functions'
 import type {
@@ -14,11 +15,12 @@ import type {
   AccountFundingConstraints,
   AccountFundingOutcomeUnknownResult,
 } from '@/modules/money/server'
-import { randomId, persistFundingAttempt, readStoredFundingAttempt } from '@/components/ae/console/credit-top-up-storage'
+import { randomId, persistFundingAttempt, readStoredFundingAttempt, persistRecovery, readStoredRecovery, clearStoredRecovery } from '@/components/ae/console/credit-top-up-storage'
 import { topUpErrorCopy } from '@/components/ae/console/credit-top-up-format'
-import type { AddCreditAmount } from './add-credit.contracts'
+import type { AddCreditAmount, AddCreditPaymentStatus } from './add-credit.contracts'
 
 type AvailableBalance = Extract<AccountFundingBalance, { kind: 'available' }>
+type OwnedResult<T> = Readonly<{ userId: string; value: T }>
 
 const POLL_INTERVAL_MS = 3_000
 const POLL_LIMIT_MS = 10 * 60 * 1_000
@@ -29,76 +31,107 @@ function fundingProblemCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownR
   return topUpErrorCopy(result)
 }
 
+/**
+ * Requires: current authenticated owner and confirmed funding constraints before checkout.
+ * Ensures: unavailable constraints never reserve a tab; balance survives a constraints outage.
+ * Invariant: source results flow through owner-bound hook state to read-only panel props;
+ * availability is derived, never separately stored. Only the exact command/key read proves
+ * funding completion, followed by a fresh balance read for its original Account.
+ * A saved unresolved key restores paused recovery and blocks a new amount, even before effects.
+ * On violation: refuse locally; a submitted/unknown attempt keeps its original recovery key.
+ */
 export function useAddCredit(open: boolean, onFunded: () => void) {
   const { userId } = useAuth()
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFundingBalance = useServerFn(readAccountFundingBalanceServer)
+  const readAccountFunding = useServerFn(readAccountFundingServer)
   const readAccountFundingConstraints = useServerFn(readAccountFundingConstraintsServer)
   const [selected, setSelected] = useState<AddCreditAmount>(5)
-  const [balance, setBalance] = useState<Pick<AvailableBalance['balance'], 'units' | 'exponent'> | null>(null)
+  const [balanceState, setBalanceState] = useState<OwnedResult<AvailableBalance> | null>(null)
+  const [constraintsState, setConstraintsState] = useState<(OwnedResult<AccountFundingConstraints> & Readonly<{ accountRef: string | null }>) | null>(null)
+  const balance = balanceState !== null && balanceState.userId === userId ? balanceState.value : null
+  const constraints = constraintsState !== null && constraintsState.userId === userId
+    && balance !== null && constraintsState.accountRef === balance.accountRef ? constraintsState.value : null
+  const currentUserIdRef = useRef(userId)
   const [busy, setBusy] = useState(false)
-  const [waitingForCredit, setWaitingForCredit] = useState(false)
+  const [paymentStatus, setPaymentStatus] = useState<AddCreditPaymentStatus>(() =>
+    userId !== null && userId !== undefined && readStoredFundingAttempt(userId) !== undefined ? 'paused' : 'idle')
+  const waitingForCredit = paymentStatus !== 'idle'
   const [problem, setProblem] = useState<string | null>(null)
-  const baselineRef = useRef<bigint | null>(null)
-  const constraintsRef = useRef<AccountFundingConstraints | null>(null)
+  const pendingAttemptRef = useRef<Readonly<{ accountRef?: string; idempotencyKey: string; commandRef?: string }> | null>(null)
   const onFundedRef = useRef(onFunded)
   const idempotencyKeyRef = useRef<string | undefined>(undefined)
   const previousUserIdRef = useRef<string | null | undefined>(undefined)
   const beginInFlightRef = useRef(false)
-  const waitingForCreditRef = useRef(waitingForCredit)
   const pollDeadlineRef = useRef<number | null>(null)
 
-
-  useEffect(() => {
-    onFundedRef.current = onFunded
-    waitingForCreditRef.current = waitingForCredit
-  }, [onFunded, waitingForCredit])
-
-  useEffect(() => {
-    if (previousUserIdRef.current === userId) return
-    previousUserIdRef.current = userId
-    idempotencyKeyRef.current = userId === null || userId === undefined
-      ? undefined
-      : readStoredFundingAttempt(userId)
-    baselineRef.current = null
-    constraintsRef.current = null
-    pollDeadlineRef.current = null
-    waitingForCreditRef.current = false
-    setWaitingForCredit(false)
-    setBalance(null)
+  useLayoutEffect(() => {
+    currentUserIdRef.current = userId
   }, [userId])
 
   useEffect(() => {
-    if (!open) return
+    onFundedRef.current = onFunded
+  }, [onFunded])
+
+  useLayoutEffect(() => {
+    if (previousUserIdRef.current === userId) return
+    previousUserIdRef.current = userId
+    const savedKey = userId === null || userId === undefined ? undefined : readStoredFundingAttempt(userId)
+    const recovery = userId === null || userId === undefined ? undefined : readStoredRecovery(userId)
+    idempotencyKeyRef.current = savedKey
+    pendingAttemptRef.current = savedKey === undefined ? null : {
+      idempotencyKey: savedKey,
+      ...(recovery !== undefined && 'commandRef' in recovery && recovery.idempotencyKey === savedKey
+        ? { commandRef: recovery.commandRef } : {}),
+    }
+    setConstraintsState(null)
+    pollDeadlineRef.current = null
+    setPaymentStatus(savedKey === undefined ? 'idle' : 'paused')
+    setBusy(false)
+    setProblem(null)
+    setBalanceState(null)
+  }, [userId])
+
+  useEffect(() => {
+    if (!open || userId === null || userId === undefined) {
+      setConstraintsState(null)
+      return
+    }
 
     let active = true
-    if (!waitingForCreditRef.current) {
-      baselineRef.current = null
-      setBalance(null)
-    }
-    constraintsRef.current = null
+    if (pendingAttemptRef.current === null) setBalanceState(null)
+    setConstraintsState(null)
     setProblem(null)
     setBusy(true)
 
     async function loadInitialState() {
+      if (userId === null || userId === undefined) return
       try {
-        const [nextBalance, nextConstraints] = await Promise.all([
+        const [balanceResult, constraintsResult] = await Promise.allSettled([
           readAccountFundingBalance(),
           readAccountFundingConstraints(),
         ])
-        if (!active) return
-        if (nextBalance.kind !== 'available') {
-          setProblem(fundingProblemCopy(nextBalance))
+        if (!active || currentUserIdRef.current !== userId) return
+        if (balanceResult.status === 'rejected') {
+          captureClientExceptionOnClient(balanceResult.reason)
+          setProblem('We could not load your available balance. Contact Support if this continues.')
+        } else if (balanceResult.value.kind !== 'available') {
+          setProblem(fundingProblemCopy(balanceResult.value))
         } else {
-          if (!waitingForCreditRef.current) baselineRef.current = BigInt(nextBalance.balance.units)
-          setBalance(nextBalance.balance)
+          setBalanceState({ userId, value: balanceResult.value })
         }
-        constraintsRef.current = nextConstraints
-        if (nextConstraints.kind !== 'available') setProblem(fundingProblemCopy(nextConstraints))
+        if (constraintsResult.status === 'fulfilled') {
+          setConstraintsState({ userId, value: constraintsResult.value,
+            accountRef: balanceResult.status === 'fulfilled' && balanceResult.value.kind === 'available'
+              ? balanceResult.value.accountRef : null })
+        } else {
+          captureClientExceptionOnClient(constraintsResult.reason)
+          setProblem('We could not confirm card funding availability. Your available credit is shown separately.')
+        }
         setBusy(false)
       } catch (cause) {
         captureClientExceptionOnClient(cause)
-        if (active) {
+        if (active && currentUserIdRef.current === userId) {
           setProblem('We could not load your available balance and funding limits. Try again in a moment.')
           setBusy(false)
         }
@@ -112,9 +145,8 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
   }, [open, readAccountFundingBalance, readAccountFundingConstraints, userId])
 
   useEffect(() => {
-    if (!open || !waitingForCredit) return
-    const baseline = baselineRef.current
-    if (baseline === null) return
+    if (!open || paymentStatus !== 'checking' || userId === null || userId === undefined) return
+    if (pendingAttemptRef.current === null) return
 
     let active = true
     let pollInFlight = false
@@ -122,25 +154,81 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
     pollDeadlineRef.current = deadline
 
     async function pollBalance() {
-      if (!active || pollInFlight || Date.now() >= deadline) return
+      if (!active || userId === null || userId === undefined || pollInFlight || Date.now() >= deadline) return
       pollInFlight = true
       try {
+        let attempt = pendingAttemptRef.current
+        if (attempt === null) return
         const current = await readAccountFundingBalance()
-        if (!active || Date.now() >= deadline || current.kind !== 'available') return
-        setBalance((previous) => previous?.units === current.balance.units
-          && previous.exponent === current.balance.exponent ? previous : current.balance)
-        if (baseline !== null && BigInt(current.balance.units) > baseline) {
+        if (!active || currentUserIdRef.current !== userId || pendingAttemptRef.current !== attempt
+          || Date.now() >= deadline || current.kind !== 'available') return
+        if (attempt.accountRef !== undefined && current.accountRef !== attempt.accountRef) {
+          setBalanceState(null)
+          setConstraintsState(null)
+          setProblem('This payment belongs to another account. Return to that account or contact Support before trying again.')
+          setPaymentStatus('paused')
+          return
+        }
+        setBalanceState({ userId, value: current })
+        // A lost start response may leave only this candidate; the exact read authenticates its key.
+        const commandRef = attempt.commandRef ?? current.pendingTopup?.commandRef
+        if (commandRef === undefined) {
+          setPaymentStatus('paused')
+          setProblem('The original payment could not be identified. Check again or contact Support before starting another payment.')
+          return
+        }
+        const payment = await readAccountFunding({ data: { commandRef, idempotencyKey: attempt.idempotencyKey } })
+        if (!active || currentUserIdRef.current !== userId || pendingAttemptRef.current !== attempt
+          || Date.now() >= deadline) return
+        if (payment.kind === 'refused') {
+          if (payment.retryable) return
+          setPaymentStatus('paused')
+          setProblem('The original payment could not be confirmed. Return to its account and check again, or contact Support.')
+          return
+        }
+        // The command/key read authenticates this provisional reload Account before binding it.
+        if (attempt.accountRef === undefined || attempt.commandRef === undefined) {
+          attempt = { ...attempt, accountRef: current.accountRef, commandRef }
+          pendingAttemptRef.current = attempt
+        }
+        persistRecovery(userId, { commandRef, idempotencyKey: attempt.idempotencyKey })
+        if (payment.evidence.status === 'failed') {
           clearInterval(pollTimer)
           clearTimeout(limitTimer)
           pollDeadlineRef.current = null
-          baselineRef.current = null
-          constraintsRef.current = null
-          setBusy(false)
-          setWaitingForCredit(false)
-          if (userId !== null && userId !== undefined) persistFundingAttempt(userId)
+          pendingAttemptRef.current = null
+          persistFundingAttempt(userId)
+          clearStoredRecovery(userId)
           idempotencyKeyRef.current = undefined
-          onFundedRef.current()
+          setBusy(false)
+          setPaymentStatus('idle')
+          setProblem('The card payment did not complete. No credit was added.')
+          return
         }
+        if (payment.evidence.status !== 'succeeded') return
+        // The exact read can fulfill the ledger posting; refresh after it, never infer from a delta.
+        const credited = await readAccountFundingBalance()
+        if (!active || currentUserIdRef.current !== userId || pendingAttemptRef.current !== attempt
+          || Date.now() >= deadline || credited.kind !== 'available') return
+        if (credited.accountRef !== attempt.accountRef) {
+          setBalanceState(null)
+          setConstraintsState(null)
+          setProblem('This payment belongs to another account. Return to that account or contact Support before trying again.')
+          setPaymentStatus('paused')
+          return
+        }
+        setBalanceState({ userId, value: credited })
+        clearInterval(pollTimer)
+        clearTimeout(limitTimer)
+        pollDeadlineRef.current = null
+        pendingAttemptRef.current = null
+        setConstraintsState(null)
+        setBusy(false)
+        setPaymentStatus('idle')
+        persistFundingAttempt(userId)
+        clearStoredRecovery(userId)
+        idempotencyKeyRef.current = undefined
+        onFundedRef.current()
       } catch (cause) {
         captureClientExceptionOnClient(cause)
       } finally {
@@ -153,9 +241,9 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       if (!active) return
       clearInterval(pollTimer)
       pollDeadlineRef.current = null
-      setWaitingForCredit(false)
+      setPaymentStatus('paused')
       setBusy(false)
-      setProblem('Balance checks stopped after 10 minutes. Check your available balance before trying again.')
+      setProblem('Payment checks stopped after 10 minutes. Check the original payment again or contact Support before trying another payment.')
     }, Math.max(0, deadline - Date.now()))
 
     return () => {
@@ -163,10 +251,20 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       clearInterval(pollTimer)
       clearTimeout(limitTimer)
     }
-  }, [open, readAccountFundingBalance, userId, waitingForCredit])
+  }, [open, paymentStatus, readAccountFunding, readAccountFundingBalance, userId])
+
+  const checkPayment = useCallback(() => {
+    if (!open || paymentStatus !== 'paused' || pendingAttemptRef.current === null
+      || userId === null || userId === undefined || currentUserIdRef.current !== userId) return
+    pollDeadlineRef.current = null
+    setProblem(null)
+    setPaymentStatus('checking')
+  }, [open, paymentStatus, userId])
 
   const begin = useCallback(async () => {
-    if (!open || beginInFlightRef.current || busy || waitingForCredit) return
+    if (!open || userId === null || userId === undefined || currentUserIdRef.current !== userId
+      || readStoredFundingAttempt(userId) !== undefined || pendingAttemptRef.current !== null
+      || constraints?.kind !== 'available' || beginInFlightRef.current || busy || waitingForCredit) return
     setProblem(null)
     // Reserve a tab in the click handler before the asynchronous funding request.
     const checkoutWindow = window.open('about:blank', '_blank')
@@ -179,34 +277,45 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
     setBusy(true)
     let fundingStartSubmitted = false
     try {
-      const [currentBalance, constraints] = await Promise.all([
+      const [currentBalance, freshConstraints] = await Promise.all([
         readAccountFundingBalance(),
         readAccountFundingConstraints(),
       ])
+      if (currentUserIdRef.current !== userId) {
+        checkoutWindow.close()
+        return
+      }
+      setConstraintsState({ userId, value: freshConstraints,
+        accountRef: currentBalance.kind === 'available' ? currentBalance.accountRef : null })
       if (currentBalance.kind !== 'available') {
         checkoutWindow.close()
         setProblem(fundingProblemCopy(currentBalance))
         setBusy(false)
         return
       }
-      if (constraints.kind !== 'available') {
+      if (balance === null || currentBalance.accountRef !== balance.accountRef) {
         checkoutWindow.close()
-        setProblem(fundingProblemCopy(constraints))
+        setConstraintsState(null)
+        setProblem('Your account changed. Close and reopen Add credit before starting a payment.')
         setBusy(false)
         return
       }
-      baselineRef.current = BigInt(currentBalance.balance.units)
-      constraintsRef.current = constraints
-      setBalance(currentBalance.balance)
+      if (freshConstraints.kind !== 'available') {
+        checkoutWindow.close()
+        setProblem(fundingProblemCopy(freshConstraints))
+        setBusy(false)
+        return
+      }
+      setBalanceState({ userId, value: currentBalance })
 
       const units = BigInt(selected) * AMOUNT_UNITS
       const policy = {
-        minimumPrincipalUnits: BigInt(constraints.minimumPrincipalUnits),
-        maximumPrincipalUnits: BigInt(constraints.maximumPrincipalUnits),
-        incrementUnits: BigInt(constraints.incrementUnits),
-        serviceFeeBps: constraints.serviceFeeBps,
-        taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
-        legalCustomerMaximumAccessibleUnits: BigInt(constraints.legalCustomerMaximumAccessibleUnits),
+        minimumPrincipalUnits: BigInt(freshConstraints.minimumPrincipalUnits),
+        maximumPrincipalUnits: BigInt(freshConstraints.maximumPrincipalUnits),
+        incrementUnits: BigInt(freshConstraints.incrementUnits),
+        serviceFeeBps: freshConstraints.serviceFeeBps,
+        taxOnServiceFeeBps: freshConstraints.taxOnServiceFeeBps,
+        legalCustomerMaximumAccessibleUnits: BigInt(freshConstraints.legalCustomerMaximumAccessibleUnits),
       }
       if (quoteAudAccountFunding(units, policy) === undefined) {
         checkoutWindow.close()
@@ -218,24 +327,42 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       const idempotencyKey = idempotencyKeyRef.current ?? `account-funding:${randomId()}`
       idempotencyKeyRef.current = idempotencyKey
       if (userId !== null && userId !== undefined) persistFundingAttempt(userId, idempotencyKey)
+      pendingAttemptRef.current = { accountRef: currentBalance.accountRef, idempotencyKey }
       fundingStartSubmitted = true
       const result = await beginAccountFunding({
         data: {
           amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
-          expectedPolicyDigest: constraints.policyDigest,
+          expectedPolicyDigest: freshConstraints.policyDigest,
           idempotencyKey,
         },
       })
+      if (result.kind !== 'refused') persistRecovery(userId, { commandRef: result.commandRef, idempotencyKey })
+      if (currentUserIdRef.current !== userId) {
+        checkoutWindow.close()
+        return
+      }
+      if (result.kind !== 'refused') pendingAttemptRef.current = { accountRef: currentBalance.accountRef, idempotencyKey, commandRef: result.commandRef }
       if (result.kind === 'outcome_unknown') {
         checkoutWindow.close()
         setProblem(fundingProblemCopy(result))
-        setWaitingForCredit(true)
+        setPaymentStatus('checking')
         setBusy(false)
         return
       }
       if (result.kind === 'refused') {
+        if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') {
+          checkoutWindow.close()
+          setProblem(fundingProblemCopy(result))
+          setPaymentStatus('checking')
+          setBusy(false)
+          return
+        }
+        pendingAttemptRef.current = null
         checkoutWindow.close()
-        if (userId !== null && userId !== undefined) persistFundingAttempt(userId)
+        if (userId !== null && userId !== undefined) {
+          persistFundingAttempt(userId)
+          clearStoredRecovery(userId)
+        }
         idempotencyKeyRef.current = undefined
         setProblem(fundingProblemCopy(result))
         setBusy(false)
@@ -243,26 +370,28 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       }
       if (result.session.kind !== 'hosted_redirect' || result.session.checkoutUrl === undefined) {
         checkoutWindow.close()
-        setProblem('Secure checkout is unavailable. Keep this chat open while we check for your credit.')
-        setWaitingForCredit(true)
+        setProblem('Secure checkout is unavailable. Keep this chat open while we check your payment and credit.')
+        setPaymentStatus('checking')
         setBusy(false)
         return
       }
       checkoutWindow.location.replace(result.session.checkoutUrl)
-      setWaitingForCredit(true)
+      setPaymentStatus('checking')
       setBusy(false)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       checkoutWindow.close()
+      if (currentUserIdRef.current !== userId) return
+      setConstraintsState(null)
       setProblem(fundingStartSubmitted
-        ? 'We could not confirm whether checkout started. Keep this chat open while we check your balance.'
+        ? 'We could not confirm whether checkout started. Keep this chat open while we check the original payment and balance.'
         : 'We could not confirm your balance and funding limits. Try again in a moment.')
-      if (fundingStartSubmitted) setWaitingForCredit(true)
+      if (fundingStartSubmitted) setPaymentStatus('checking')
       setBusy(false)
     } finally {
       beginInFlightRef.current = false
     }
-  }, [beginAccountFunding, busy, open, readAccountFundingBalance, readAccountFundingConstraints, selected, userId, waitingForCredit])
+  }, [balance, beginAccountFunding, busy, constraints, open, readAccountFundingBalance, readAccountFundingConstraints, selected, userId, waitingForCredit])
 
-  return { selected, setSelected, begin, busy, problem, balance, waitingForCredit }
+  return { selected, setSelected, begin, busy, problem, balance, constraints, paymentStatus, checkPayment }
 }

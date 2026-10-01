@@ -23,6 +23,10 @@ describe('buyer money cards', () => {
     expect(screen.getByText('A$0.01 per Call')).toBeInTheDocument()
     expect(screen.getByText('A$0.01')).toBeInTheDocument()
     expect(screen.getByText('AUD 0.000001')).toBeInTheDocument()
+    const trust = screen.getByRole('link', { name: 'Trust centre (opens in a new tab)' })
+    expect(trust).toHaveAttribute('href', '/trust')
+    expect(trust).toHaveAttribute('target', '_blank')
+    expect(trust).toHaveAttribute('rel', 'noreferrer')
   })
 
   it('never presents an unconverted source USDC amount as the buyer Quote', () => {

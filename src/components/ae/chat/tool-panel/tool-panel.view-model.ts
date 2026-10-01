@@ -91,7 +91,7 @@ export function projectToolPanel(args: Readonly<{
     && value !== undefined && validation?.errors.length === 0 && input !== undefined && !inputTooLong
     ? chatToolPanel.waitForResponse : undefined
   const seller = props.option.seller === undefined ? undefined
-    : `${props.option.seller.kind === 'provider' ? 'Sold by' : 'Listed on'} ${props.option.seller.name}`
+    : `${props.option.seller.kind === 'provider' ? 'Provider:' : 'Listed on'} ${props.option.seller.name}`
 
   return {
     heading: props.option.name,

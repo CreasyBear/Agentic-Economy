@@ -35,6 +35,12 @@ export function CallReceiptWorkspace({
             Get help
           </Link>
           <Link
+            to="/trust"
+            className={cn(buttonVariants({ variant: 'ghost' }), 'min-h-touch')}
+          >
+            Trust centre
+          </Link>
+          <Link
             to="/activity"
             className={cn(buttonVariants({ variant: 'ghost' }), 'min-h-touch')}
           >

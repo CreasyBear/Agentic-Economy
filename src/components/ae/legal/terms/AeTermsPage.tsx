@@ -20,6 +20,7 @@ export function AeTermsPage() {
       title={termsTitle}
       description={termsDescription}
       lastUpdated={termsLastUpdated}
+      version="Alpha draft for review"
       sections={termsSections}
       intro={(
         <p>
@@ -34,7 +35,9 @@ export function AeTermsPage() {
           {termsClosingLead}{' '}
           <Link to="/privacy" className="text-primary underline underline-offset-4">
             {termsClosingLink}
-          </Link>.
+          </Link>. For practical guidance, see the{' '}
+          <Link to="/trust" className="text-primary underline underline-offset-4">Trust centre</Link>{' '}
+          or <Link to="/support" className="text-primary underline underline-offset-4">contact Support</Link>.
         </p>
       )}
     />

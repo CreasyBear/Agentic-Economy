@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TrustRouteImport } from './routes/trust'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as StatusRouteImport } from './routes/status'
@@ -163,6 +164,11 @@ import { Route as OperatorOwnerSettingsAccountSplatRouteImport } from './routes/
 import { Route as ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.public.$fundingSessionId'
 import { Route as OperatorOwnerSupplyConnectionsOauthCallbackRouteImport } from './routes/_operator/owner.supply.connections.oauth.callback'
 
+const TrustRoute = TrustRouteImport.update({
+  id: '/trust',
+  path: '/trust',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -994,6 +1000,7 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/trust': typeof TrustRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
@@ -1148,6 +1155,7 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/trust': typeof TrustRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
@@ -1304,6 +1312,7 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/trust': typeof TrustRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
@@ -1460,6 +1469,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
+    | '/trust'
     | '/$slug/ucp'
     | '/.well-known/$'
     | '/.well-known/api-catalog'
@@ -1614,6 +1624,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
+    | '/trust'
     | '/$slug/ucp'
     | '/.well-known/$'
     | '/.well-known/api-catalog'
@@ -1769,6 +1780,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
+    | '/trust'
     | '/$slug/ucp'
     | '/.well-known/$'
     | '/.well-known/api-catalog'
@@ -1925,6 +1937,7 @@ export interface RootRouteChildren {
   StatusRoute: typeof StatusRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  TrustRoute: typeof TrustRoute
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
@@ -2005,6 +2018,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/trust': {
+      id: '/trust'
+      path: '/trust'
+      fullPath: '/trust'
+      preLoaderRoute: typeof TrustRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -3375,6 +3395,7 @@ const rootRouteChildren: RootRouteChildren = {
   StatusRoute: StatusRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  TrustRoute: TrustRoute,
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
   DotwellKnownHttpMessageSignaturesDirectoryRoute:

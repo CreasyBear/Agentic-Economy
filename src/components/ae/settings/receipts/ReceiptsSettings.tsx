@@ -121,6 +121,10 @@ export function ReceiptsSettings({
         </SettingsRow></div>
       })}
     </SettingsGroup>
+    <p className="text-sm text-muted-foreground">
+      <a href="/trust#receipts" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
+        className="underline underline-offset-4">Trust centre</a>
+    </p>
     {(invoiceHistoryHasMore || invoiceHistoryLoadingMore) && <div className="flex justify-center pt-4">
       <Button type="button" variant="outline" disabled={invoiceHistoryLoadingMore} onClick={onLoadMore}>
         {invoiceHistoryLoadingMore ? 'Loading older top-ups…' : 'Load older top-ups'}

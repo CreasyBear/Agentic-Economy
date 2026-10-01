@@ -24,6 +24,22 @@ const options: readonly OptionView[] = [
 afterEach(cleanup)
 
 describe('generative chat leaves', () => {
+  it.each(['completed', 'pending', 'needs_authority', 'refused', 'reconciliation_required'] as const)(
+    'keeps Trust accessible on a %s Call without adding an unsafe retry', (state) => {
+      render(<ToolCard projection={{ kind: 'execute', toolId: 'tool.call', title: 'Lookup',
+        state, toolRefs: ['tool:lookup'], callRef: 'call:lookup', facts: [], summary: 'Recorded Call status',
+        suggestedNextAction: { kind: 'navigate', label: 'View receipt', href: '/calls/call%3Alookup' },
+      }} />)
+      const trust = screen.getByRole('link', { name: 'Trust centre (opens in a new tab)' })
+      expect(trust).toHaveAttribute('href', '/trust')
+      expect(trust).toHaveAttribute('target', '_blank')
+      if (state === 'refused' || state === 'reconciliation_required') {
+        expect(screen.queryByRole('link', { name: 'View receipt' })).not.toBeInTheDocument()
+      } else {
+        expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', '/calls/call%3Alookup')
+      }
+    },
+  )
   it('renders streaming markdown answer as the primary text', () => {
     render(<AnswerBlock view={{ markdown: '**Live answer** about exchange', streaming: true }} />)
     expect(screen.getByRole('region', { name: 'Answer' })).toHaveAttribute('aria-busy', 'true')
@@ -66,7 +82,7 @@ describe('generative chat leaves', () => {
   it('renders seller and readiness honestly; selection and comparison remain separate', () => {
     const onSelect = vi.fn(), onCompare = vi.fn()
     render(<OptionsGrid view={{ options, comparedIds: [] }} onSelect={onSelect} onCompare={onCompare} />)
-    expect(screen.getByText('Sold by Acme')).toBeInTheDocument()
+    expect(screen.getByText('Provider: Acme')).toBeInTheDocument()
     expect(screen.getByText('Listed on example.com')).toBeInTheDocument()
     expect(screen.getByText('Used 1,200× this month')).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: 'Compare' })[0]!)

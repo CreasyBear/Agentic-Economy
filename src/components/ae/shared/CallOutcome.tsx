@@ -27,11 +27,13 @@ export function CallOutcome({ view }: CallOutcomeProps) {
           { label: 'Call reference', value: <span className="break-all font-mono text-xs">{view.callRef}</span> },
         ]} />
       </CardContent>
-      {view.receiptHref === undefined ? null : (
-        <CardFooter>
+      <CardFooter className="flex flex-wrap gap-related">
+        {view.receiptHref === undefined ? null : (
           <a href={view.receiptHref} className={buttonVariants({ variant: 'outline', className: 'min-h-touch focus-visible:outline-2 focus-visible:outline-offset-2' })}>View Call receipt</a>
-        </CardFooter>
-      )}
+        )}
+        <a href="/trust" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
+          className="inline-flex min-h-touch items-center text-sm text-muted-foreground underline underline-offset-4">Trust centre</a>
+      </CardFooter>
     </Card>
   )
 }

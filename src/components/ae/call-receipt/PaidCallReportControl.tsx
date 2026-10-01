@@ -119,6 +119,7 @@ export function PaidCallReportControl({
       {paidLabel === undefined ? null : <Badge variant="secondary" className="w-fit">{view?.kind === 'posted' ? 'Credit returned' : paidLabel}</Badge>}
       {view?.kind === 'eligible' ? (
         <div className="grid gap-intra">
+          <p className="text-muted-foreground">Reports remaining today: {view.remainingToday}. Resets at midnight UTC.</p>
           <p>{view.expiredPromotionalUnits === '0'
             ? `Return ${amount(view.amountUnits)} credit for an answer that was not useful.`
             : 'Return this purchase to its original credit sources if the answer was not useful.'}</p>

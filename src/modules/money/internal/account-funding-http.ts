@@ -398,16 +398,16 @@ export async function beginAccountFundingThroughSource(
   )
   if (isMoneyRefusal(payment)) {
     const mapped = fundingProviderRefusal(payment)
-    if (mapped.code !== 'funding_outcome_unknown') return mapped
+    // The provider may already have acted; every consumer needs this exact recovery locator.
+    if (mapped.code !== 'funding_outcome_unknown') return fundingOutcomeUnknown(reserved.command)
     if (reserved.command.externalRef === undefined
-      && Date.now() < reserved.command.providerRecoveryDeadlineAt) return mapped
+      && Date.now() < reserved.command.providerRecoveryDeadlineAt) return fundingOutcomeUnknown(reserved.command)
     return await markFundingOutcomeUnknown(reserved.command, context)
   }
   const bound = await bindFundingEvidence(reserved.command.commandRef, payment.evidence, context)
-  if (isMoneyRefusal(bound)) return bound
-  if (payment.evidence.status === 'succeeded') {
-    if (bound.command.state === 'pending') return refusal('funding_pending', true)
-    if (bound.command.state !== 'succeeded') return refusal('funding_outcome_unknown', true)
+  if (isMoneyRefusal(bound)) return fundingOutcomeUnknown(reserved.command)
+  if (payment.evidence.status === 'succeeded' && bound.command.state !== 'succeeded') {
+    return fundingOutcomeUnknown(reserved.command)
   }
   return { kind: 'ok', commandRef: reserved.command.commandRef, session: payment }
 }
@@ -496,7 +496,7 @@ async function markFundingOutcomeUnknown(
     sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     sourceWrite,
   })
-  return isMoneyRefusal(marked) ? marked : fundingOutcomeUnknown(marked.command)
+  return fundingOutcomeUnknown(isMoneyRefusal(marked) ? command : marked.command)
 }
 
 function createAccountFundingProvider(

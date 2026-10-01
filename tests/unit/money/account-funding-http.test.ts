@@ -456,7 +456,8 @@ describe('Account AUD funding HTTP boundary', () => {
     }))
   })
 
-  it('does not return a paid recovery session before its durable funding booking succeeds', async () => {
+  it.each(['pending', 'source_write_denied', 'payment_binding_invalid'] as const)(
+    'retains the original recovery command after paid-provider evidence meets %s', async (binding) => {
     const durable = { ...command(), externalRef: 'cs_paid_recovery_pending' }
     const payment = {
       kind: 'hosted_redirect' as const,
@@ -479,7 +480,9 @@ describe('Account AUD funding HTTP boundary', () => {
     }
     sourceMocks.callSourceMutation
       .mockResolvedValueOnce({ kind: 'accepted', command: durable })
-      .mockResolvedValueOnce({ kind: 'accepted', command: { ...durable, state: 'pending' } })
+      .mockResolvedValueOnce(binding === 'pending'
+        ? { kind: 'accepted', command: { ...durable, state: 'pending' } }
+        : { kind: 'refused', code: binding, retryable: false })
     const provider = {
       createOrRecoverCreditPayment: vi.fn().mockResolvedValue(payment),
       readCreditPayment: vi.fn(),
@@ -488,7 +491,31 @@ describe('Account AUD funding HTTP boundary', () => {
     await expect(beginAccountFundingThroughSource(input, {}, {
       resolveOwnerId: async () => 'owner-1',
       provider,
-    })).resolves.toEqual({ kind: 'refused', code: 'funding_pending', retryable: true })
+    })).resolves.toEqual({ kind: 'outcome_unknown', code: 'funding_outcome_unknown', retryable: false,
+      commandRef: durable.commandRef, status: 'outcome_unknown' })
+    expect(provider.createOrRecoverCreditPayment).toHaveBeenCalledOnce()
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    { providerCode: 'credit_topup_outcome_unknown', deadline: Number.MAX_SAFE_INTEGER },
+    { providerCode: 'payment_binding_invalid', deadline: Number.MAX_SAFE_INTEGER },
+    { providerCode: 'credit_topup_outcome_unknown', deadline: 0 },
+  ] as const)('retains the original locator after provider refusal $providerCode with deadline $deadline', async ({ providerCode, deadline }) => {
+    const durable = command({ providerRecoveryDeadlineAt: deadline })
+    sourceMocks.callSourceMutation
+      .mockResolvedValueOnce({ kind: 'accepted', command: durable })
+      .mockResolvedValueOnce({ kind: 'refused', code: 'source_write_denied', retryable: false })
+    const provider = {
+      createOrRecoverCreditPayment: vi.fn().mockResolvedValue({ kind: 'refused', code: providerCode, retryable: true }),
+      readCreditPayment: vi.fn(),
+    }
+    await expect(beginAccountFundingThroughSource(input, {}, {
+      resolveOwnerId: async () => 'owner-1', provider,
+    })).resolves.toEqual({ kind: 'outcome_unknown', code: 'funding_outcome_unknown', retryable: false,
+      commandRef: durable.commandRef, status: 'outcome_unknown' })
+    expect(provider.createOrRecoverCreditPayment).toHaveBeenCalledOnce()
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(deadline === 0 ? 2 : 1)
   })
 
   it('uses live Stripe configuration only as a production policy gate signal', async () => {

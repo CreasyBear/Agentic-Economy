@@ -1,4 +1,7 @@
+import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
+
 export type AddCreditAmount = 5 | 10 | 20
+export type AddCreditPaymentStatus = 'idle' | 'checking' | 'paused'
 
 export type AddCreditSheetProps = Readonly<{
   open: boolean
@@ -21,9 +24,11 @@ export type AddCreditPanelProps = Readonly<{
   onSelect: (amount: AddCreditAmount) => void
   onBegin: () => void
   busy: boolean
-  waitingForCredit: boolean
+  paymentStatus: AddCreditPaymentStatus
+  onCheckPayment: () => void
   problem: string | null
-  balanceLabel: string | null
+  balance: Extract<AccountFundingBalance, { kind: 'available' }> | null
+  constraints: AccountFundingConstraints | null
   shortfallTooLarge: boolean
 }>
 

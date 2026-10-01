@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { formatDisplayAmount } from '@/modules/money/public'
 import type { AddCreditSheetProps } from './add-credit.contracts'
 import { suggestedAddCreditAmount } from './add-credit.contracts'
 import { AddCreditPanel } from './components/AddCreditPanel'
@@ -23,15 +22,17 @@ export function AddCreditSheet({
     onOpenChange(false)
     onFunded()
   }, [onFunded, onOpenChange])
-  const creditStepActive = open && signedIn && payingOn
+  const creditStepActive = open && signedIn
   const {
     selected,
     setSelected,
     begin,
     busy,
-    waitingForCredit,
+    paymentStatus,
+    checkPayment,
     problem,
     balance,
+    constraints,
   } = useAddCredit(creditStepActive, handleFunded)
 
   useEffect(() => {
@@ -39,10 +40,6 @@ export function AddCreditSheet({
     setSignInHref(`/sign-in?redirect_url=${encodeURIComponent(window.location.href)}`)
     setSelected(amount)
   }, [amount, open, setSelected, shortfall?.exponent, shortfall?.units])
-
-  const balanceLabel = balance === null
-    ? null
-    : formatDisplayAmount({ currency: 'AUD', units: balance.units, exponent: balance.exponent })
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -61,11 +58,17 @@ export function AddCreditSheet({
           onSelect={setSelected}
           onBegin={begin}
           busy={busy}
-          waitingForCredit={waitingForCredit}
+          paymentStatus={paymentStatus}
+          onCheckPayment={checkPayment}
           problem={problem}
-          balanceLabel={balanceLabel}
+          balance={balance}
+          constraints={constraints}
           shortfallTooLarge={exceedsLargest}
         />
+        <a href="/trust" target="_blank" rel="noreferrer"
+          className="mt-5 w-fit text-sm text-muted-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
+          Trust centre (opens in a new tab)
+        </a>
       </SheetContent>
     </Sheet>
   )

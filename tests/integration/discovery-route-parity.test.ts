@@ -375,7 +375,7 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
   // Literal static GETs advertised by llms/sitemap. These routes have no
   // business-catalog dependency, so they cannot fall through to pageMatch.
   if (path === '/for-agents' || path === '/for-providers' || path === '/privacy/remove-business'
-    || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy'
+    || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy' || path === '/trust'
     || path === '/support' || path === '/status' || path === '/SKILL.md' || path === '/glossary.md'
     || path === '/openapi.json' || path === '/api/v1/release' || path === '/api/v1/catalogue-status') {
     return route.method === 'GET'

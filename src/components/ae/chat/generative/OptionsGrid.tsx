@@ -31,7 +31,7 @@ export function OptionsGrid({ view, onSelect, onCompare, onReview, openToolRef, 
                   {toolChoiceReadinessLabel(option.readiness)}
                 </p> : null}
                 {option.usage ? <p className="break-words text-muted-foreground">{option.usage}</p> : null}
-                {option.seller ? <p className="break-words text-muted-foreground">{option.seller.kind === 'provider' ? 'Sold by' : 'Listed on'} {option.seller.name}</p> : null}
+                {option.seller ? <p className="break-words text-muted-foreground">{option.seller.kind === 'provider' ? 'Provider:' : 'Listed on'} {option.seller.name}</p> : null}
               </div>
               {readOnly ? null : <div className="flex min-w-0 flex-wrap gap-2">
                 {option.quoteable ? (

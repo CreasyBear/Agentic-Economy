@@ -45,6 +45,8 @@ it('renders real top-up receipt actions and exports invoice rows without linking
   expect(screen.getByText('A$5.78')).toBeInTheDocument()
   expect(screen.getByText('A$0.53 GST included')).toBeInTheDocument()
   expect(screen.getByText('Paid')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Trust centre (opens in a new tab)' }))
+    .toHaveAttribute('href', '/trust#receipts')
   expect(container.querySelector('a[href^="/calls/"]')).toBeNull()
 
   fireEvent.click(screen.getByRole('button', { name: 'Tax invoice' }))
