@@ -15,8 +15,8 @@ const noEffectRef = makeFunctionReference<'mutation', Record<string, never>, nul
 export const noEffect = mutation({ args: {}, returns: v.null(), handler: async () => null })
 
 export const seed = mutation({
-  args: { toolJson: v.string(), now: v.number() }, returns: v.null(),
-  handler: async (ctx, { toolJson, now }): Promise<null> => {
+  args: { toolJson: v.string(), now: v.number(), unbound: v.boolean() }, returns: v.null(),
+  handler: async (ctx, { toolJson, now, unbound }): Promise<null> => {
     if (await ctx.db.query('capabilityCalls').first()) throw new Error('proof_already_seeded')
     const priced = quoteManagedX402BuyerAud({ environment: 'sandbox', requiredUsdcAtomicUnits: '500000',
       observedAt: now, referenceRate: { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: now } })
@@ -28,7 +28,7 @@ export const seed = mutation({
       const toolRef = `operation:v1:${'d'.repeat(64)}`
       const inputJson = JSON.stringify({ label })
       const inputDigest = canonicalDigest({ label })
-      const workId = await pool.enqueueMutation(ctx, noEffectRef, {}, { runAt: now + 86_400_000 })
+      const workId = unbound ? undefined : await pool.enqueueMutation(ctx, noEffectRef, {}, { runAt: now + 86_400_000 })
       await ctx.db.insert('capabilityQuotes', {
         quoteRef, principalId: 'principal:financial-restore', accountRef: 'account:financial-restore',
         credentialId: 'credential:financial-restore', applicationRef: 'application:financial-restore',
@@ -56,8 +56,9 @@ export const seed = mutation({
         credentialId: 'credential:financial-restore', applicationRef: 'application:financial-restore',
         toolRef, idempotencyKey: `key:${callRef}`, environment: 'sandbox', grantRef: 'grant:financial-restore',
         grantGeneration: 1, policyDigest: digest, grantExpiresAt: now + 86_400_000, toolJson, inputJson, inputDigest,
-        requestDigest: digest, formanceFinancialState: 'reservation_pending', state: 'pending', dispatchState: 'enqueued',
-        result: { kind: 'pending', callRef, toolRef, retryAfterMs: 1000 }, workId,
+        requestDigest: digest, formanceFinancialState: 'reservation_pending', state: 'pending',
+        result: { kind: 'pending', callRef, toolRef, retryAfterMs: 1000 },
+        ...(workId === undefined ? {} : { workId, dispatchState: 'enqueued' as const }),
         promotionalCreditAllocation: { version: 'ae.promotional-credit-allocation:v1',
           purchasedUnits: label === 'promo' ? '0' : '300000', grants: [{ grantRef: `promo:${callRef}`,
             amountUnits: label === 'promo' ? '600000' : '300000', expiresAt: now + 86_400_000 }] },
@@ -75,12 +76,13 @@ export const inspect = query({
     const records = []
     for (const call of calls) {
       const quote = await ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', call.quoteRef!)).unique()
-      if (quote === null || call.workId === undefined) throw new Error('proof_material_missing')
+      if (quote === null) throw new Error('proof_material_missing')
       const booking = bookingFromRows(call, quote)
       if (booking === null) throw new Error('proof_booking_invalid')
       const obligation = await ctx.db.query('moneyProviderObligations')
         .withIndex('by_obligationRef', q => q.eq('obligationRef', `provider-obligation:${call.callRef}`)).unique()
-      records.push({ call, quote, booking, obligation, workState: (await pool.status(ctx, call.workId as WorkId)).state })
+      records.push({ call, quote, booking, obligation,
+        workState: call.workId === undefined ? 'absent' : (await pool.status(ctx, call.workId as WorkId)).state })
     }
     return JSON.stringify(records.sort((left, right) => left.call.callRef.localeCompare(right.call.callRef)))
   },

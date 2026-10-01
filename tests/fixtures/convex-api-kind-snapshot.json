@@ -2630,6 +2630,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "readManagedCallReservation",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "readManagedCallSettlement",
     "kind": "action"
   },
@@ -2761,6 +2767,12 @@
   },
   {
     "visibility": "internal",
+    "module": "moneyManagedCall",
+    "method": "repairReservation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
     "module": "moneyManagedCallLifecycle",
     "method": "finalizeRelease",
     "kind": "mutation"
@@ -2788,6 +2800,12 @@
     "module": "moneyManagedCallLifecycle",
     "method": "readReservation",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "reconcileReservation",
+    "kind": "action"
   },
   {
     "visibility": "internal",

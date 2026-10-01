@@ -1347,3 +1347,116 @@ retaining delivery uncertainty. Complete restore still needs missing local
 financial records, later adjustments, other consumers and hosted retention/RPO/RTO
 acceptance. Production provisioning and explicitly authorized live-money drills
 remain separate requirements. No merge, deployment or live-money action occurred.
+
+### Stage 26 — recover missing reservation records under a manual hold
+
+The next restore boundary is a surviving native reservation whose local Call
+attachment or canonical Provider obligation is absent. A restored Call may have
+no WorkId because reservation precedes dispatch. Ordinary attachment can reopen
+that Call, so recovery needs a separate internal action and transactional repair
+inside the existing managed-Call concerns.
+
+Contract-enforcer, idempotency-guardian and error-strategist conclusions:
+
+- **Requires:** stopped and drained source/target effect writers and remedy
+  operators; the original executable frozen booking; a consumed Quote; exact
+  native proof of every original reservation command, metadata value and posting.
+  A Call with a WorkId must already have the existing manual unknown-settlement
+  hold. An unbound Call can enter that hold atomically with repair.
+- **Ensures:** restore compatible missing attachment fields and the canonical
+  Provider obligation, held pending reconciliation. Recheck the booking digest
+  and all surviving local facts within the transaction. Preserve original input,
+  Quote, WorkId, authority, payment attempts, controls, financial locators and an
+  existing uncertainty result. Exact concurrent replay performs no timestamp or
+  evidence rewrite. The existing settlement reconciliation can then consume the
+  repaired accounting facts.
+- **Invariant:** zero native money writes; reservation history establishes
+  neither current spendability nor payment absence. Recovery leaves financial
+  uncertainty and a manual hold; it grants no retry, release or delivery success.
+  Ordinary reservation claim, attachment and unknown-result writers respect that
+  hold. Existing non-manual reservation recovery retains its behavior.
+- **On violation:** missing, partial, reverted or conflicting native evidence
+  refuses; unavailable reads stay unavailable. Changed booking, conflicting local
+  attachment/obligation, active remedies and later released, settled, disputed or
+  reversed facts refuse before any local write. Retain evidence for investigation.
+
+Type-driven design uses an explicit confirmed/refused/unavailable native read
+result. Confirmed contains the complete ordered references, with no absence or
+retry field. A distinct repair operation makes historical accounting recovery
+separate from ordinary reservation authority without changing stored schemas.
+
+The complexity/design review keeps the producer's exact command builder and the
+existing native reference reader and posting matcher. Eight reads per batch bound
+the maximum 103-command reservation without lowering the supported grant limit.
+The cost is two internal action registrations and one internal mutation, plus
+four template cases in the existing matcher. The benefit is recovery of the real
+pre-attachment failure window. Reject a new table, generic repair framework,
+automatic retry, payment submission or user-facing step. The settled product and
+financial boundaries supply the design constraints; no new design interview is
+needed. Root owns integration and acceptance; bounded workers own the native
+proof and the Convex consumer in separate files.
+
+Verification will archive genuine unbound Calls before reservation, stop the
+source, create their original native reservations and settlements, restore the
+older application state, then invoke the registered repair and settlement
+actions. Complete ledger summaries and original transaction IDs must stay
+unchanged. Missing/conflicting evidence must refuse without local mutation;
+focused tests cover local conflicts, stale booking, later facts, duplicate and
+concurrent repair, and late ordinary writers against the manual hold.
+
+Operator sequence: retain the source/target and remedy-writer stop from Stage 25.
+If the restored Call has a WorkId, complete Stage 24 quarantine and retirement
+first. For an original unbound Call, run
+`moneyManagedCallLifecycle:reconcileReservation` with its `callRef` and current
+millisecond `now`. The successful result is
+`{"kind":"accepted","state":"outcome_unknown","replayed":false}`; a matching
+repeat returns `replayed:true`. Inspect the complete original reservation refs,
+held canonical Provider obligation and manual unknown-settlement hold. Then use
+Stage 25 `reconcileSettlement` if original settlement is present in the native
+ledger. Both operations preserve delivery uncertainty. Refusal requires evidence
+investigation and gives no permission to release credits or retry payment. A
+missing original native reservation leaves the restored local record unchanged;
+keep the deployment stopped while resolving that uncertainty.
+
+### Stage 26 acceptance and handover
+
+Both native financial restore scenarios passed in 381.60 seconds including
+disposable environment setup and cleanup. The earlier attached-reservation
+scenario remains green. The new scenario archives four genuine unbound Calls
+before native reservation, local attachment or Provider obligation; stops the
+source; and creates original reservations/settlements in the surviving ledger.
+After restoring the older application archive, the registered operations:
+
+- reconstruct two complete reservation attachments and held Provider obligations,
+  covering mixed purchased/promotional and all-promotional consideration;
+- converge on concurrent initial repair and inert replay, then recover both
+  original settlements through the existing settlement reconciliation action;
+- retain the original Quotes, inputs, absent WorkIds and manual uncertainty;
+- refuse missing and conflicting reservation evidence without local changes;
+- preserve complete ledger summaries and every original reservation/settlement
+  transaction ID, proving zero native money writes during recovery and replay.
+
+The 159 focused workflow/refund and managed-Call tests passed. They additionally
+cover stale booking, local partial/conflicting facts, later dispositions,
+unavailable reads, preserved payment attempts, delayed ordinary writers, and
+the full 103-member reservation with at most eight reads in flight. Independent
+review found and closed a compatibility defect: a genuine uncertain-payment
+receipt retains the first reservation reference. Repair now preserves that
+proven locator and refuses foreign or later references.
+
+On Node 22/npm 11.5.1, `npm run check` and
+`AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate`
+passed. The gate reproduced seven generated Convex files, built the public app,
+passed clean types, 7,432 unit tests, 2,630 integration-suite tests, 75 import
+checks, 31 SEO checks, 16 browser journeys, 18 accessibility cases and reproducible
+CLI packaging. Counts overlap across suites; one unit skip, 57 integration skips
+and three todos remain. The ordinary gate skips native drills; the Stage 25
+opt-in command now runs both financial restore scenarios.
+
+Keep #286 and #256 open. This closes original reservation attachment/obligation
+loss without reopening execution. Later adjustments, other restore consumers,
+hosted retention/RPO/RTO and explicitly authorized live-money acceptance remain
+unverified. Native fixtures do not prove chain payment or Provider delivery;
+payment-attempt preservation is established by the registered boundary tests.
+Both scenarios removed their own deployments and Compose projects. No public API,
+storage schema, deployment or live-money change occurred.

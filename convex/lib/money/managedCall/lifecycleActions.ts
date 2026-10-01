@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
-import type { FormanceManagedCallBooking, FormanceMoneyResult, FormanceSettlementReadResult } from '../../../../src/modules/money/public'
+import type { FormanceManagedCallBooking, FormanceMoneyResult, FormanceSettlementReadResult, FormanceReservationReadResult } from '../../../../src/modules/money/public'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { transitionResult, type TransitionResult } from './transitions'
 
@@ -117,5 +117,28 @@ export const reconcileSettlementHandler = async (
     transactionRefs: [...result.transactionRefs],
     expectedBookingDigest,
     now: args.now,
+  })
+}
+
+export const reconcileReservationArgs = v.object({ callRef: v.string(), now: v.number() })
+export const reconcileReservationResult = transitionResult
+// Historical native evidence permits only local accounting repair under a
+// manual hold. The mutation revalidates booking and local facts after this read;
+// it never grants reservation authority or removes original uncertainty.
+export async function reconcileReservationHandler(
+  ctx: ActionCtx,
+  args: Infer<typeof reconcileReservationArgs>,
+): Promise<TransitionResult> {
+  const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: args.callRef })
+  if (material.kind !== 'available') return { kind: 'refused', code: 'managed_call_reservation_not_found' }
+  if (material.remedyInProgress) return { kind: 'refused', code: 'managed_call_remedy_in_progress' }
+  if (material.financialState === 'settled' || material.financialState === 'released') {
+    return { kind: 'refused', code: 'managed_call_state_conflict' }
+  }
+  const expectedBookingDigest = canonicalDigest(material.booking)
+  const result: FormanceReservationReadResult = await ctx.runAction(internal.moneyFormance.readManagedCallReservation, material.booking)
+  if (result.kind !== 'confirmed') return { kind: 'refused', code: result.code }
+  return await ctx.runMutation(internal.moneyManagedCall.repairReservation, {
+    callRef: args.callRef, transactionRefs: [...result.transactionRefs], expectedBookingDigest, now: args.now,
   })
 }

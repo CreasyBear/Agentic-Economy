@@ -135,7 +135,7 @@ export function prepareFormanceSettledSaleRefund(input: FormanceSettledSaleRefun
 
 /** Exact booked effects are the financial evidence; metadata alone cannot prove
  * amounts or destinations. Zero sends may be omitted by the native engine. */
-export function settledSalePostingsMatch(
+export function managedCallPostingsMatch(
   command: FormanceMoneyCommand,
   postings: readonly { source: string; destination: string; asset: string; amountUnits: string }[],
 ): boolean {
@@ -143,6 +143,18 @@ export function settledSalePostingsMatch(
   const variables = command.variables
   let legs: readonly Leg[]
   switch (command.template) {
+    case 'CALL_RESERVED_AUD':
+      legs = [
+        ['account_available', 'call_reserved', 'buyer_amount'],
+        ['legal_available', 'legal_reserved', 'exposure_amount'],
+        ...(variables.agent_available === undefined
+          ? [['daily_available', 'daily_reserved', 'daily_amount'], ['monthly_available', 'monthly_reserved', 'monthly_amount']] as const
+          : [['agent_available', 'agent_reserved', 'budget_amount']] as const),
+      ]
+      break
+    case 'PROVIDER_OBLIGATION_ACCRUED':
+      legs = [['expense', 'obligation', 'amount']]
+      break
     case 'BUYER_SALE_SETTLED':
       legs = [
         ['call_reserved', 'revenue', 'revenue_amount'], ['call_reserved', 'tax', 'tax_amount'],
@@ -160,6 +172,8 @@ export function settledSalePostingsMatch(
         ['legal_settled', 'legal_available', 'exposure_amount']]
       break
     case 'CALL_PROMO_SETTLED':
+    case 'CALL_RESERVED_USDC':
+    case 'CALL_PROMO_RESERVED':
     case 'CALL_PROMO_REFUNDED':
     case 'CALL_SPEND_REFUNDED':
       legs = [['source', 'destination', 'amount']]

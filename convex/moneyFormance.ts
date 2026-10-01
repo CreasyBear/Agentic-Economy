@@ -6,7 +6,7 @@ import {
   accountHistoryResultValue, buyerAdjustmentArgs,
   capacitySyncArgs, displayBalanceArgs, displayBalanceResult, finalizeManagedCallArgs,
   fundingBookingArgs, healthResult, installationResult,
-  managedCallBookingArgs, managedCallSettlementReadResult, moneyResult, periodSpendResult,
+  managedCallBookingArgs, managedCallSettlementReadResult, managedCallReservationReadResult, moneyResult, periodSpendResult,
   readAccountHistoryArgs, readPeriodSpendArgs, readStatementPageArgs,
   releaseExpiredUnusedCallArgs, releaseManagedCallArgs, reverseProviderSettlementArgs,
   spendingPeriodAdjustmentValue, spendingPeriodArgs, spendingPeriodResult,
@@ -17,7 +17,7 @@ import { healthHandler, installSchemaHandler } from './lib/money/formance/gatewa
 import {
   readAccountHistoryHandler, readCreditBalanceHandler,
   readDisplayBalanceHandler, readPeriodSpendHandler, readSpendingPeriodHandler,
-  readStatementPageHandler, readManagedCallSettlementHandler,
+  readStatementPageHandler, readManagedCallSettlementHandler, readManagedCallReservationHandler,
 } from './lib/money/formance/reads'
 import {
   adjustSpendingPeriodHandler, bookBuyerAdjustmentHandler, bookFundingReversalHandler,
@@ -64,6 +64,9 @@ export const reserveManagedCall = internalAction({
 })
 export const readManagedCallSettlement = internalAction({
   args: managedCallBookingArgs, returns: managedCallSettlementReadResult, handler: readManagedCallSettlementHandler,
+})
+export const readManagedCallReservation = internalAction({
+  args: managedCallBookingArgs, returns: managedCallReservationReadResult, handler: readManagedCallReservationHandler,
 })
 export const releaseManagedCall = internalAction({
   args: releaseManagedCallArgs, returns: moneyResult, handler: releaseManagedCallHandler,

@@ -34,6 +34,12 @@ export type FormanceSettlementReadResult =
   | Readonly<{ kind: 'refused'; code: string }>
   | Readonly<{ kind: 'unavailable'; code: string }>
 
+/** Original booking history, not evidence of current reserved capacity. */
+export type FormanceReservationReadResult =
+  | Readonly<{ kind: 'confirmed'; transactionRefs: readonly string[] }>
+  | Readonly<{ kind: 'refused'; code: string }>
+  | Readonly<{ kind: 'unavailable'; code: string }>
+
 export function completed(reference: string, replayed: boolean): FormanceCompleted {
   return Object.freeze({ kind: 'completed', transactionRefs: Object.freeze([reference]), replayed })
 }

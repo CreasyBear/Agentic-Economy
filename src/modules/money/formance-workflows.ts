@@ -9,10 +9,10 @@ import {
   type FormanceContext,
   type FormanceMoneyResult,
 } from './formance'
-import { completed, refused, unavailable, unknown, type FormanceSettlementReadResult } from './formance-result'
+import { completed, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult } from './formance-result'
 import {
   prepareFormanceSettledSaleRefund,
-  settledSalePostingsMatch,
+  managedCallPostingsMatch,
   type FormanceSettledSaleRefund,
 } from './internal/formance-settled-sale-refund'
 import {
@@ -52,7 +52,7 @@ export * from './internal/formance-transaction-templates'
 export * from './internal/formance-promotional-credit'
 export { prepareFormanceSettledSaleRefund }
 export type { FormanceSettledSaleRefund }
-export type { FormanceSettlementReadResult } from './formance-result'
+export type { FormanceSettlementReadResult, FormanceReservationReadResult } from './formance-result'
 
 export type FormanceDisplayBalanceResult =
   | Readonly<{
@@ -98,6 +98,45 @@ export async function reserveFormanceManagedCall(
   input: FormanceManagedCallBooking,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallReservation(input))
+}
+
+/**
+ * Requires: the original valid frozen booking and its configured native ledger.
+ * Ensures: confirms the complete ordered original reservation only when every
+ *   native reference, template, expected metadata value and posting matches.
+ * Invariant: no writes; this proves historical booking, not current capacity,
+ *   payment absence, delivery or authority to release/retry the payment.
+ * On violation: missing/partial/reverted/conflicting evidence refuses; failed
+ *   reads remain unavailable. At most eight native reads run in each batch.
+ */
+export async function readFormanceManagedCallReservation(
+  context: FormanceContext,
+  booking: FormanceManagedCallBooking,
+): Promise<FormanceReservationReadResult> {
+  const prepared = prepareFormanceManagedCallReservation(booking)
+  if (prepared.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })
+  }
+  const commands = prepared.bulk.commands
+  for (let offset = 0; offset < commands.length; offset += 8) {
+    const batch = commands.slice(offset, offset + 8)
+    const reads = await Promise.all(batch.map(async command =>
+      await readFormanceTransactionByReference(context, command.commandRef)))
+    for (const [index, expected] of batch.entries()) {
+      const actual = reads[index]
+      if (actual?.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: actual.code })
+      if (actual?.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
+      if (actual?.kind !== 'found' || actual.reference !== expected.commandRef
+        || actual.template !== expected.template
+        || !managedCallPostingsMatch(expected, actual.postings)
+        || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+        return Object.freeze({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })
+      }
+    }
+  }
+  return Object.freeze({ kind: 'confirmed',
+    transactionRefs: Object.freeze(commands.map(command => command.commandRef)),
+  })
 }
 
 export async function releaseFormanceManagedCall(
@@ -155,7 +194,7 @@ export async function readFormanceManagedCallSettlement(
     if (actual.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
     if (actual.kind !== 'found' || actual.reference !== expected.commandRef
       || actual.template !== expected.template
-      || !settledSalePostingsMatch(expected, actual.postings)
+      || !managedCallPostingsMatch(expected, actual.postings)
       || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
       return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
     }
@@ -199,7 +238,7 @@ export async function refundFormanceSettledSale(
     if (actual.kind !== 'found') return unknown(command.commandRef)
     if (actual.template !== command.template || actual.reference !== command.commandRef
       || Object.entries(command.metadata).some(([key, value]) => actual.metadata[key] !== value)
-      || !settledSalePostingsMatch(command, actual.postings)) return refused('formance_refund_evidence_invalid')
+      || !managedCallPostingsMatch(command, actual.postings)) return refused('formance_refund_evidence_invalid')
   }
   return posted
 }

@@ -22,6 +22,7 @@ import {
   syncFormanceCapacity,
   readFormanceSpendingPeriod,
   readFormanceManagedCallSettlement,
+  readFormanceManagedCallReservation,
   refundFormanceSettledSale,
   type FormanceManagedCallBooking,
 } from '@/modules/money/formance-workflows'
@@ -346,20 +347,33 @@ type SettlementRow = {
   postings: SettlementPosting[]; reverted?: boolean
 }
 
-function settlementPostings(command: FormanceMoneyCommand): SettlementPosting[] {
+function managedCallNativePostings(command: FormanceMoneyCommand): SettlementPosting[] {
   // These are the required financial legs, specified independently of the
   // production matcher. Canonical builders supply only the command envelope.
-  const legs: readonly (readonly [string, string, string])[] = command.template === 'BUYER_SALE_SETTLED'
-    ? [['call_reserved', 'revenue', 'revenue_amount'], ['call_reserved', 'tax', 'tax_amount'],
+  let legs: readonly (readonly [string, string, string])[]
+  switch (command.template) {
+    case 'BUYER_SALE_SETTLED': legs = [
+        ['call_reserved', 'revenue', 'revenue_amount'], ['call_reserved', 'tax', 'tax_amount'],
         ['legal_reserved', 'legal_settled', 'exposure_amount'],
         ...(command.variables.agent_reserved === undefined
           ? [['daily_reserved', 'daily_spent', 'daily_amount'], ['monthly_reserved', 'monthly_spent', 'monthly_amount']] as const
-          : [['agent_reserved', 'agent_spent', 'budget_amount']] as const)]
-    : command.template === 'PROVIDER_SETTLED'
-      ? [['treasury_committed', 'provider_settlement', 'amount'], ['obligation_accrued', 'obligation_settled', 'amount']]
-      : command.template === 'CALL_PROMO_SETTLED' ? [['source', 'destination', 'amount']]
-        : []
-  if (legs.length === 0) throw new Error('Unexpected settlement template')
+          : [['agent_reserved', 'agent_spent', 'budget_amount']] as const),
+      ]; break
+    case 'PROVIDER_SETTLED': legs = [
+        ['treasury_committed', 'provider_settlement', 'amount'], ['obligation_accrued', 'obligation_settled', 'amount'],
+      ]; break
+    case 'CALL_RESERVED_AUD': legs = [
+        ['account_available', 'call_reserved', 'buyer_amount'], ['legal_available', 'legal_reserved', 'exposure_amount'],
+        ...(command.variables.agent_available === undefined
+          ? [['daily_available', 'daily_reserved', 'daily_amount'], ['monthly_available', 'monthly_reserved', 'monthly_amount']] as const
+          : [['agent_available', 'agent_reserved', 'budget_amount']] as const),
+      ]; break
+    case 'PROVIDER_OBLIGATION_ACCRUED': legs = [['expense', 'obligation', 'amount']]; break
+    case 'CALL_RESERVED_USDC':
+    case 'CALL_PROMO_RESERVED':
+    case 'CALL_PROMO_SETTLED': legs = [['source', 'destination', 'amount']]; break
+    default: throw new Error('Unexpected managed Call template')
+  }
   return legs.flatMap(([sourceKey, destinationKey, amountKey]) => {
     const source = command.variables[sourceKey]
     const destination = command.variables[destinationKey]
@@ -371,13 +385,14 @@ function settlementPostings(command: FormanceMoneyCommand): SettlementPosting[] 
   })
 }
 
-function settlementFixture(booking = managedCallBooking()) {
+function managedCallNativeFixture(booking = managedCallBooking(), stage: 'reservation' | 'settlement' = 'settlement') {
   const externalEvidenceDigest = `sha256:${'c'.repeat(64)}`
-  const prepared = prepareFormanceManagedCallSettlement({ booking, externalEvidenceDigest })
+  const prepared = stage === 'reservation' ? prepareFormanceManagedCallReservation(booking)
+    : prepareFormanceManagedCallSettlement({ booking, externalEvidenceDigest })
   if (prepared.kind !== 'prepared') throw new Error(prepared.code)
   const rows = new Map<string, SettlementRow>(prepared.bulk.commands.map((command, index) => [command.commandRef, {
     id: BigInt(index + 1), reference: command.commandRef, template: command.template,
-    metadata: { ...command.metadata }, postings: settlementPostings(command),
+    metadata: { ...command.metadata }, postings: managedCallNativePostings(command),
   }]))
   const ledger = {
     listTransactions: vi.fn(async ({ query }: { query: { $match: { reference: string } } }) => {
@@ -413,7 +428,7 @@ describe('read-only original managed Call settlement proof', () => {
         grants: [{ grantRef: 'promo:one', amountUnits: '60', expiresAt: periodAt + 1 }],
       } } : {}),
     }
-    const fixture = settlementFixture(booking)
+    const fixture = managedCallNativeFixture(booking)
     // Posting order is not financial meaning. The original native digest is
     // deliberately different from the booking's requirement digest.
     fixture.rowAt(0).postings.reverse()
@@ -433,7 +448,7 @@ describe('read-only original managed Call settlement proof', () => {
     ['Provider amount', { providerAmountUnits: '51' }], ['generation', { treasuryGeneration: 2 }],
   ] satisfies readonly (readonly [string, Partial<FormanceManagedCallBooking>])[])(
     'refuses changed original %s instead of submitting a replacement', async (_label, patch) => {
-      const fixture = settlementFixture()
+      const fixture = managedCallNativeFixture()
       expect(await readFormanceManagedCallSettlement(fixture.context, { ...fixture.booking, ...patch })).toEqual({
         kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
       })
@@ -442,7 +457,7 @@ describe('read-only original managed Call settlement proof', () => {
   )
 
   it('refuses malformed booking before reading native state', async () => {
-    const fixture = settlementFixture()
+    const fixture = managedCallNativeFixture()
     expect(await readFormanceManagedCallSettlement(fixture.context, { ...fixture.booking, buyerTaxUnits: '-1' })).toEqual({
       kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
     })
@@ -451,7 +466,7 @@ describe('read-only original managed Call settlement proof', () => {
   })
 
   it.each([0, 1])('refuses missing settlement member %i without treating absence as permission', async index => {
-    const fixture = settlementFixture()
+    const fixture = managedCallNativeFixture()
     fixture.rows.delete(fixture.refs[index] ?? '')
     const result = await readFormanceManagedCallSettlement(fixture.context, fixture.booking)
     expect(result).toEqual({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
@@ -460,9 +475,9 @@ describe('read-only original managed Call settlement proof', () => {
   })
 
   it('requires every original metadata value on every settlement member', async () => {
-    const baseline = settlementFixture()
+    const baseline = managedCallNativeFixture()
     for (const index of [0, 1]) for (const key of Object.keys(baseline.rowAt(index).metadata)) {
-      const fixture = settlementFixture()
+      const fixture = managedCallNativeFixture()
       fixture.rowAt(index).metadata[key] = key === 'external_evidence_digest' ? 'd'.repeat(64) : 'changed'
       expect(await readFormanceManagedCallSettlement(fixture.context, fixture.booking), `${index}:${key}`).toEqual({
         kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
@@ -476,7 +491,7 @@ describe('read-only original managed Call settlement proof', () => {
       version: 'ae.promotional-credit-allocation:v1', purchasedUnits: '40',
       grants: [{ grantRef: 'promo:one', amountUnits: '60', expiresAt: periodAt + 1 }],
     } }
-    const fixture = settlementFixture(booking)
+    const fixture = managedCallNativeFixture(booking)
     fixture.rows.delete(fixture.refs[2] ?? '')
     expect(await readFormanceManagedCallSettlement(fixture.context, booking)).toEqual({
       kind: 'refused', code: 'formance_settled_sale_evidence_invalid',
@@ -486,7 +501,7 @@ describe('read-only original managed Call settlement proof', () => {
 
   it.each(['amount', 'source', 'destination', 'asset', 'missing', 'extra', 'template'] as const)(
     'refuses native %s conflict despite matching command metadata', async alteration => {
-      const fixture = settlementFixture()
+      const fixture = managedCallNativeFixture()
       const row = fixture.rowAt(1)
       const first = row.postings[0]
       if (first === undefined) throw new Error('Missing Provider posting')
@@ -505,7 +520,7 @@ describe('read-only original managed Call settlement proof', () => {
   )
 
   it.each(['reverted', 'unsafe', 'duplicate'] as const)('rejects %s native evidence through the maintained reader', async kind => {
-    const fixture = settlementFixture()
+    const fixture = managedCallNativeFixture()
     const row = fixture.rowAt(1)
     if (kind === 'reverted') row.reverted = true
     if (kind === 'unsafe') row.id = BigInt(Number.MAX_SAFE_INTEGER) + 1n
@@ -519,7 +534,7 @@ describe('read-only original managed Call settlement proof', () => {
   })
 
   it.each([0, 1])('keeps source failure at member %i unavailable, with no absence claim or write', async index => {
-    const fixture = settlementFixture()
+    const fixture = managedCallNativeFixture()
     fixture.ledger.listTransactions.mockImplementation(async ({ query }) => {
       if (query.$match.reference === fixture.refs[index]) throw new Error('Native boundary unavailable')
       const row = fixture.rows.get(query.$match.reference)
@@ -537,6 +552,177 @@ describe('read-only original managed Call settlement proof', () => {
   })
 })
 
+
+function reservationBooking(kind: 'legacy' | 'period' | 'mixed' | 'all_promotional'): FormanceManagedCallBooking {
+  return { ...managedCallBooking(kind === 'legacy' ? undefined : spendingPeriods()),
+    ...(kind === 'mixed' || kind === 'all_promotional' ? { promotionalCreditAllocation: {
+      version: 'ae.promotional-credit-allocation:v1' as const,
+      purchasedUnits: kind === 'mixed' ? '40' : '0',
+      grants: [{ grantRef: 'promo:one', amountUnits: kind === 'mixed' ? '60' : '100', expiresAt: periodAt + 1 }],
+    } } : {}),
+  }
+}
+
+function maximumReservationBooking(): FormanceManagedCallBooking {
+  return { ...managedCallBooking(spendingPeriods()), promotionalCreditAllocation: {
+    version: 'ae.promotional-credit-allocation:v1', purchasedUnits: '0',
+    grants: Array.from({ length: 100 }, (_value, index) => ({
+      grantRef: `promo:${index}`, amountUnits: '1', expiresAt: periodAt + 1,
+    })),
+  } }
+}
+
+describe('read-only original managed Call reservation proof', () => {
+  it.each(['legacy', 'period', 'mixed', 'all_promotional'] as const)(
+    'confirms exact original %s booking without money writes or capacity claims', async kind => {
+      const fixture = managedCallNativeFixture(reservationBooking(kind), 'reservation')
+      fixture.rowAt(0).postings.reverse()
+      const before = structuredClone([...fixture.rows])
+      const results = await Promise.all([0, 1].map(async () =>
+        await readFormanceManagedCallReservation(fixture.context, fixture.booking)))
+      for (const result of results) expect(result).toEqual({ kind: 'confirmed', transactionRefs: fixture.refs })
+      expect(await readFormanceManagedCallReservation(fixture.context, fixture.booking)).toEqual(results[0])
+      expect([...fixture.rows]).toEqual(before)
+      fixture.noWrites()
+    },
+  )
+
+  it('recognizes original reservation history after later settlement without reading current spendability', async () => {
+    const booking = reservationBooking('mixed')
+    const fixture = managedCallNativeFixture(booking, 'reservation')
+    const settled = managedCallNativeFixture(booking)
+    for (const [reference, row] of settled.rows) fixture.rows.set(reference, row)
+    const before = structuredClone([...fixture.rows])
+    expect(await readFormanceManagedCallReservation(fixture.context, booking)).toEqual({
+      kind: 'confirmed', transactionRefs: fixture.refs,
+    })
+    expect(fixture.ledger.listTransactions.mock.calls.map(([args]) => args.query.$match.reference)).toEqual(fixture.refs)
+    expect([...fixture.rows]).toEqual(before)
+    fixture.noWrites()
+  })
+
+  it.each([
+    ['Call', { callRef: 'call:other' }], ['Quote', { quoteRef: 'quote:other' }],
+    ['idempotency', { idempotencyKey: 'other-key' }], ['buyer', { accountRef: 'account:other' }],
+    ['amount', { buyerAmountUnits: '101', buyerRevenueUnits: '100' }],
+    ['generation', { treasuryGeneration: 2 }], ['requirement digest', { x402RequirementDigest: DIGEST_A }],
+  ] satisfies readonly (readonly [string, Partial<FormanceManagedCallBooking>])[])(
+    'refuses changed original %s rather than matching native history to new material', async (_label, patch) => {
+      const fixture = managedCallNativeFixture(managedCallBooking(), 'reservation')
+      expect(await readFormanceManagedCallReservation(fixture.context, { ...fixture.booking, ...patch })).toEqual({
+        kind: 'refused', code: 'formance_reservation_evidence_invalid',
+      })
+      fixture.noWrites()
+    },
+  )
+
+  it('refuses invalid booking before native reads', async () => {
+    const fixture = managedCallNativeFixture(managedCallBooking(), 'reservation')
+    expect(await readFormanceManagedCallReservation(fixture.context, { ...fixture.booking, providerAmountUnits: '-1' })).toEqual({
+      kind: 'refused', code: 'formance_reservation_evidence_invalid',
+    })
+    expect(fixture.ledger.listTransactions).not.toHaveBeenCalled()
+    fixture.noWrites()
+  })
+
+  it.each([0, 1, 2, 3])('refuses missing native member %i without a partial confirmation or absence claim', async index => {
+    const fixture = managedCallNativeFixture(reservationBooking('mixed'), 'reservation')
+    fixture.rows.delete(fixture.refs[index] ?? '')
+    const result = await readFormanceManagedCallReservation(fixture.context, fixture.booking)
+    expect(result).toEqual({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })
+    expect(result).not.toHaveProperty('submissionProvenAbsent')
+    fixture.noWrites()
+  })
+
+  it('checks every expected metadata value for buyer, treasury, obligation and promotional members', async () => {
+    const baseline = managedCallNativeFixture(reservationBooking('mixed'), 'reservation')
+    for (const index of [0, 1, 2, 3]) for (const key of Object.keys(baseline.rowAt(index).metadata)) {
+      const fixture = managedCallNativeFixture(reservationBooking('mixed'), 'reservation')
+      fixture.rowAt(index).metadata[key] = 'changed'
+      expect(await readFormanceManagedCallReservation(fixture.context, fixture.booking), `${index}:${key}`).toEqual({
+        kind: 'refused', code: 'formance_reservation_evidence_invalid',
+      })
+      fixture.noWrites()
+    }
+  })
+
+  it.each(['amount', 'source', 'destination', 'asset', 'missing', 'extra', 'template'] as const)(
+    'checks native %s for all four reservation templates despite exact metadata', async alteration => {
+      for (const index of [0, 1, 2, 3]) {
+        const fixture = managedCallNativeFixture(reservationBooking('mixed'), 'reservation')
+        const row = fixture.rowAt(index)
+        const first = row.postings[0]
+        if (first === undefined) throw new Error('Missing reservation posting')
+        if (alteration === 'amount') first.amount += 1n
+        if (alteration === 'source') first.source = 'accounts:wrong'
+        if (alteration === 'destination') first.destination = 'accounts:wrong'
+        if (alteration === 'asset') first.asset = first.asset === 'AUD/6' ? 'USDC/6' : 'AUD/6'
+        if (alteration === 'missing') row.postings.pop()
+        if (alteration === 'extra') row.postings.push({ ...first })
+        if (alteration === 'template') row.template = 'PROVIDER_SETTLED'
+        expect(await readFormanceManagedCallReservation(fixture.context, fixture.booking)).toEqual({
+          kind: 'refused', code: 'formance_reservation_evidence_invalid',
+        })
+        fixture.noWrites()
+      }
+    },
+  )
+
+  it.each(['reverted', 'unsafe', 'duplicate'] as const)('rejects %s original transaction through the native reader', async kind => {
+    const fixture = managedCallNativeFixture(reservationBooking('mixed'), 'reservation')
+    const row = fixture.rowAt(2)
+    if (kind === 'reverted') row.reverted = true
+    if (kind === 'unsafe') row.id = BigInt(Number.MAX_SAFE_INTEGER) + 1n
+    if (kind === 'duplicate') fixture.ledger.listTransactions.mockImplementation(async ({ query }) => {
+      const candidate = fixture.rows.get(query.$match.reference)
+      return { v2TransactionsCursorResponse: { cursor: { data: candidate === undefined ? [] : [candidate, candidate] } } }
+    })
+    const codes = { reverted: 'formance_reference_reverted', unsafe: 'formance_unsafe_integer', duplicate: 'formance_reference_conflict' }
+    expect(await readFormanceManagedCallReservation(fixture.context, fixture.booking)).toEqual({ kind: 'refused', code: codes[kind] })
+    fixture.noWrites()
+  })
+
+  it('preserves source failure as unavailable without proving original submission absent', async () => {
+    const fixture = managedCallNativeFixture(managedCallBooking(), 'reservation')
+    fixture.ledger.listTransactions.mockRejectedValue(new Error('Native boundary unavailable'))
+    expect(await readFormanceManagedCallReservation(fixture.context, fixture.booking)).toEqual({
+      kind: 'unavailable', code: 'formance_read_unavailable',
+    })
+    fixture.noWrites()
+  })
+
+  it('supports all 100 grants in ordered batches with no more than eight native reads in flight', async () => {
+    const fixture = managedCallNativeFixture(maximumReservationBooking(), 'reservation')
+    let active = 0
+    let maximumActive = 0
+    fixture.ledger.listTransactions.mockImplementation(async ({ query }) => {
+      active++
+      maximumActive = Math.max(maximumActive, active)
+      await Promise.resolve()
+      active--
+      const row = fixture.rows.get(query.$match.reference)
+      return { v2TransactionsCursorResponse: { cursor: { data: row === undefined ? [] : [row] } } }
+    })
+    expect(fixture.refs).toHaveLength(103)
+    expect(await readFormanceManagedCallReservation(fixture.context, fixture.booking)).toEqual({
+      kind: 'confirmed', transactionRefs: fixture.refs,
+    })
+    expect(maximumActive).toBe(8)
+    expect(active).toBe(0)
+    expect(fixture.ledger.listTransactions.mock.calls.map(([args]) => args.query.$match.reference)).toEqual(fixture.refs)
+    fixture.noWrites()
+  })
+
+  it.each([7, 8])('finishes the failed batch at member %i and never reads subsequent batches', async index => {
+    const fixture = managedCallNativeFixture(maximumReservationBooking(), 'reservation')
+    fixture.rows.delete(fixture.refs[index] ?? '')
+    expect(await readFormanceManagedCallReservation(fixture.context, fixture.booking)).toEqual({
+      kind: 'refused', code: 'formance_reservation_evidence_invalid',
+    })
+    expect(fixture.ledger.listTransactions).toHaveBeenCalledTimes(index === 7 ? 8 : 16)
+    fixture.noWrites()
+  })
+})
 
 describe('promotional funding ledger commands', () => {
   it.each(['0', '40', '100'])('books only purchased consideration when promotional units are %s', promo => {
