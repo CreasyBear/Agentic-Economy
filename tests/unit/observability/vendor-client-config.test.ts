@@ -7,6 +7,11 @@ vi.mock('@sentry/react', () => ({ init: mocks.sentryInit, captureException: mock
 beforeEach(() => { vi.resetModules(); vi.clearAllMocks(); window.history.replaceState(null, '', '/'); })
 afterEach(() => vi.unstubAllEnvs())
 describe('telemetry configuration boundaries', () => {
+  it('isolates the test runtime from locally configured vendor credentials', async () => {
+    const config = await import('@/lib/observability/config')
+    expect(config.readObservabilityClientConfig().enabled).toBe(false)
+    expect(config.readObservabilityServerConfig().enabled).toBe(false)
+  })
   it('uses explicit events with replay and automatic DOM capture disabled', async () => {
     vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')
     const client = await import('@/lib/observability/posthog.client')
@@ -23,6 +28,29 @@ describe('telemetry configuration boundaries', () => {
     const sentry = await import('@/lib/observability/sentry.server')
     expect(sentry.initSentryServer()).toBe(false)
     expect(mocks.sentryInit).not.toHaveBeenCalled()
+  })
+  it('does not initialize product analytics on an admin record or capture its activity', async () => {
+    vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')
+    window.history.replaceState(null, '', '/admin/accounts?q=private-account-name')
+    const client = await import('@/lib/observability/posthog.client')
+    client.initPostHogClient()
+    client.captureClientProductEvent('account_opened')
+    await vi.dynamicImportSettled()
+    expect(mocks.init).not.toHaveBeenCalled()
+    expect(mocks.capture).not.toHaveBeenCalled()
+  })
+  it('stops an initialized product client after admin navigation without treating later work as acquisition', async () => {
+    vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')
+    const client = await import('@/lib/observability/posthog.client')
+    client.captureClientProductEvent('market_opened')
+    await vi.waitFor(() => expect(mocks.capture).toHaveBeenCalledWith('market_opened', {}))
+    mocks.capture.mockClear()
+    window.history.replaceState(null, '', '/admin')
+    client.captureClientProductEvent('account_opened')
+    window.history.replaceState(null, '', '/market')
+    client.captureClientProductEvent('operator_investigation')
+    await vi.dynamicImportSettled()
+    expect(mocks.capture).not.toHaveBeenCalled()
   })
   it('honors the disable switch despite configured vendor keys', async () => {
     vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')

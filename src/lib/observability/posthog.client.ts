@@ -15,6 +15,16 @@ import {
 let initialized = false
 let posthogClient: PostHog | undefined
 let initPromise: Promise<boolean> | undefined
+let adminAnalyticsBlocked = false
+
+// Admin browsing is operational work, not acquisition. Once this page runtime
+// visits admin, exclude its product analytics until a fresh page load. Sentry's
+// independently redacted error reporting remains available.
+function productAnalyticsAllowed(): boolean {
+  if (typeof window === 'undefined') return false
+  adminAnalyticsBlocked ||= /^\/admin(?:\/|$)/.test(window.location.pathname)
+  return !adminAnalyticsBlocked && isTelemetryAllowedForCurrentRoute()
+}
 
 export function initPostHogClient(router?: AnyRouter): boolean {
   if (initialized) {
@@ -30,9 +40,9 @@ export function initPostHogClient(router?: AnyRouter): boolean {
 }
 
 export function captureClientFunnelEvent(input: FunnelCaptureInput): void {
-  if (typeof window === 'undefined' || !isTelemetryAllowedForCurrentRoute()) return
+  if (!productAnalyticsAllowed()) return
   void ensurePostHogClient().then((ready) => {
-    if (!ready || posthogClient === undefined) {
+    if (!ready || posthogClient === undefined || !productAnalyticsAllowed()) {
       return
     }
 
@@ -44,9 +54,9 @@ export function captureClientFunnelEvent(input: FunnelCaptureInput): void {
 }
 
 export function captureClientProductEvent(event: string, properties?: Record<string, unknown>): void {
-  if (typeof window === 'undefined' || !isTelemetryAllowedForCurrentRoute()) return
+  if (!productAnalyticsAllowed()) return
   void ensurePostHogClient().then((ready) => {
-    if (!ready || posthogClient === undefined) {
+    if (!ready || posthogClient === undefined || !productAnalyticsAllowed()) {
       return
     }
 
@@ -62,11 +72,12 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
     return Promise.resolve(false)
   }
   securePrivateRecordLocation(window.location, window.history)
-  if (!isTelemetryAllowedForCurrentRoute()) return Promise.resolve(false)
+  if (!productAnalyticsAllowed()) return Promise.resolve(false)
   if (initialized) return Promise.resolve(true)
 
   initPromise ??= import('posthog-js')
     .then(({ default: posthog }) => {
+      if (!productAnalyticsAllowed()) return false
       const config = readObservabilityClientConfig()
       if (!config.enabled || config.posthogKey === undefined) {
         return false
@@ -101,7 +112,7 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
 function registerPostHogPageviews(posthog: PostHog, router: AnyRouter | undefined): void {
   const capturePageview = () => {
     securePrivateRecordLocation(window.location, window.history)
-    if (!isTelemetryAllowedForCurrentRoute()) return
+    if (!productAnalyticsAllowed()) return
     const pathname = safeTelemetryPath(window.location)
     posthog.capture('$pageview', { $current_url: pathname, ae_pathname: pathname })
   }

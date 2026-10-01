@@ -462,7 +462,7 @@ describe('operational diagnostics routes', () => {
   })
 
   it('returns 204 when telemetry is disabled and keeps wrong methods on RFC 9457', async () => {
-    vi.stubEnv('SENTRY_DSN', '')
+    vi.stubEnv('AE_DISABLE_OBSERVABILITY', 'true')
     const disabled = await handleClientErrorRequest(clientRequest(JSON.stringify({ message: 'ignored' })))
     expect(disabled.status).toBe(204)
     expect(mocks.captureClientError).not.toHaveBeenCalled()

@@ -71,6 +71,25 @@ authorized/refused reads and exports, contextual navigation, and supported
 command pending/replay/confirmed states. Record deployment and runtime evidence
 separately from local source checks.
 
+Telemetry error strategy: the live development diagnostic exposed a programmer
+error in the privacy scrubber: arrays became objects, invalidating Sentry's
+exception/frame/breadcrumb schema. Requires: arbitrary telemetry values, including
+nested arrays and cycles. Ensures: a redacted copy with array order and shape
+preserved. Invariant: input remains unchanged and repeated references are not
+misclassified as cycles. On violation: unreadable elements are filtered locally;
+cycles and excessive depth stay bounded. The reporting boundary remains nothrow
+for business requests, while transport recovery belongs to the existing SDK.
+Keep the small array branch in the existing scrubber; no new reporting wrapper or
+retry loop. Regression evidence covers real Sentry event shapes, secret removal,
+unchanged inputs, repeated references, cycles and throwing element getters.
+Admin visits also stop product analytics for that page runtime, including later
+SPA navigation; Sentry remains separately redacted. Fresh public visits continue
+to measure acquisition without counting founder console work as product usage.
+Vitest now blanks inherited Sentry/PostHog credentials; SDK contract tests opt in
+with fake keys and mocked transports. The isolated Playwright source-proof server
+disables telemetry. This prevents routine negative test cases becoming vendor
+incidents; it does not disable telemetry in the actual local or hosted app.
+
 ### Current acceptance evidence
 
 - The full source release gate passed on 1 October: 7,577 unit tests; 2,674
@@ -107,14 +126,32 @@ Live rollout observations (1 October): Vercel `agentic-economy` serves
 `app.aecon.ai` from main `d104a80099214df0500e54850b5a5a4b96cfbc9c`.
 Convex's project lists development `cool-crab-306` and production
 `cautious-zebra-473`; its production page reports the last deployment 17 days
-earlier. These observations do not prove the web deployment's backend binding.
-Do not promote this console by redeploying that older main revision.
+earlier. Vercel's saved Production `CONVEX_URL` and `VITE_CONVEX_URL` both target
+`https://cautious-zebra-473.convex.cloud`. Current HTTP readback at 11:48:59 UTC
+returned `/api/ready` 503 with `deployment_manifest_invalid`,
+`convex_probe_skipped`, and `sellable: false`. Saved target settings and HTTP
+readiness are distinct evidence. Do not promote this console by redeploying that
+older main revision. A matching web/backend release must repair these actual
+foundation failures before production acceptance.
+
+Application telemetry proof: the real local app sent a `/market` pageview and
+attribution events to PostHog project 491802. After fixing the scrubber and
+restarting the app, the diagnostic API returned HTTP 204 and Sentry received
+`FounderConsoleAcceptance` at 12:06:09 UTC, event
+`a63996fbb304444794e683243f7cac3d`, issue
+[7765827546](https://agentic-economy.sentry.io/issues/7765827546/), correctly tagged
+`development`, with exception frames and breadcrumbs intact. These establish
+application-to-vendor receipt, not production receipt or email delivery. The
+PostHog acquisition dashboard keeps production/browser filters, describes repeat
+Account activity accurately, and links to the gated AE console instead of a
+disabled replay surface. Test-origin vendor issues from the earlier inherited
+configuration remain historical development evidence; tests now isolate keys.
 
 Native Convex Sentry exception reporting and PostHog log streaming are blocked
 by the current Starter plan. Professional is US$25/member/month plus usage;
 Joel's plan decision remains pending. The console itself does not depend on that
-upgrade. Actual deployed-app telemetry, alert delivery, matched release and
-hosted founder admission remain open acceptance work.
+upgrade. Production-app telemetry, alert delivery, matched release and hosted
+founder admission remain open acceptance work.
 
 ## Brief and boundary
 
@@ -167,4 +204,4 @@ Check metric/range semantics and gaps using behavioral tests. Exercise anonymous
 - Reused [PostHog founder acquisition dashboard](https://us.posthog.com/project/491802/dashboard/1778627), saved production-environment and browser-library filters, corrected identity guidance and removed unsupported retention/autocapture-funnel tiles without deleting their underlying insights. Browser identities remain session-scoped. Cross-session Customer retention is not yet measured.
 - Reused the existing Sentry error monitor and confirmed its high-priority email alert is enabled. It targets suggested assignees or recently active members. No new subscription, access grant or duplicate project was created. Alert email delivery and the Convex journey log-drain/SLI alerts remain unverified.
 
-Release boundary: this branch started from `codex/production-money` at `9405d77f0` and subsequently integrated `b113cc332`. Keep it compatible with that work without changing the shared checkout. Deliver a reviewed matching backend and web release, then verify hosted founder admission, refused access, production event receipt, snapshot coverage and alert delivery. The complete source gate and local browser acceptance are evidence for review, not a production release.
+Release boundary: this branch started from `codex/production-money` at `9405d77f0` and subsequently integrated `b113cc332` and `86abf7d37`. Review against `codex/production-money`, preserving the shared checkout. Vercel branch previews only build the web application; its current build command does not deploy matching Convex functions. Deliver a reviewed matching backend and web release, then verify hosted founder admission, refused access, production event receipt, snapshot coverage and alert delivery. The complete source gate and local browser acceptance are evidence for review, not a production release.
