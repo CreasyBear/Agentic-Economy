@@ -43,7 +43,7 @@ const FAILURE_REASONS: Readonly<Record<string, string>> = {
   cdp_custody_configuration_invalid: 'The required CDP custody configuration is incomplete or invalid.',
   formance_component_version_drift: 'The installed ledger version does not match the required version.',
   reference_rate_stale: 'The USDC/AUD reference rate is missing or stale.',
-  web_readiness_identity_mismatch: 'The live web deployment points to a different backend or money environment.',
+  web_readiness_identity_mismatch: 'The live web deployment has not passed its configuration and backend identity checks.',
 }
 
 /**

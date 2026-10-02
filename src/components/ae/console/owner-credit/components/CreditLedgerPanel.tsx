@@ -1,4 +1,4 @@
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { BillingHistory } from '@/components/arc/blocks/billing-overview/billing-overview'
 import { AccountHistory } from '@/components/ae/console/AeAccountHistoryTable'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -17,8 +17,7 @@ export function CreditLedgerPanel({
   onCreditRefresh,
 }: CreditLedgerPanelProps) {
   return (
-    <AeSection
-      id="ledger"
+    <div id="ledger"><BillingHistory
       title="Credit history"
       description="Booked Account transactions are shown once by transaction identity, newest recorded transaction first."
     >
@@ -30,6 +29,6 @@ export function CreditLedgerPanel({
         unavailable={unavailable.history === true}
         {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
       />
-    </AeSection>
+    </BillingHistory></div>
   )
 }

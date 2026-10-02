@@ -14,11 +14,11 @@
 .arc-market.arc-team-loading { display: grid; min-width: 0; gap: var(--space-8); }
 .arc-market .arc-team-loading-title { display: grid; min-width: 0; gap: var(--space-2); }
 
-.arc-team-members .ae-settings-group {
-  gap: var(--space-4);
+.arc-team-members [data-settings-group-header] {
+  margin-bottom: var(--space-4);
 }
 
-.arc-team-members .ae-settings-group-header {
+.arc-team-members [data-settings-group-header] {
   padding-inline: var(--space-6);
 }
 
@@ -197,7 +197,7 @@
     padding-block: var(--space-4);
   }
 
-  .arc-team-members .ae-settings-group-header {
+  .arc-team-members [data-settings-group-header] {
     padding-inline: var(--space-4);
   }
 

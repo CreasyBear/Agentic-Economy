@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import '../../../../../tests/setup/jsdom-platform'
 
@@ -45,6 +45,10 @@ it('renders real top-up receipt actions and exports invoice rows without linking
   expect(screen.getByText('A$5.78')).toBeInTheDocument()
   expect(screen.getByText('A$0.53 GST included')).toBeInTheDocument()
   expect(screen.getByText('Paid')).toBeInTheDocument()
+  const historyRow = screen.getByRole('row', { name: /Account top-up/u })
+  expect(within(historyRow).getByText('A$5.78')).toBeInTheDocument()
+  expect(within(historyRow).getByRole('button', { name: 'Tax invoice' })).toBeInTheDocument()
+  expect(within(historyRow).getByRole('button', { name: 'Stripe receipt' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Trust centre (opens in a new tab)' }))
     .toHaveAttribute('href', '/trust#receipts')
   expect(container.querySelector('a[href^="/calls/"]')).toBeNull()
