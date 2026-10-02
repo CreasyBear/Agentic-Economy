@@ -444,7 +444,8 @@ function validateProductionClerkCredentials(
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
   }
   const webhookSecret = present(environment, 'CLERK_WEBHOOK_SIGNING_SECRET')
-  if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
+  const webhookPattern = /^whsec_(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)$/u
+  if (webhookSecret !== undefined && !webhookPattern.test(webhookSecret)) {
     add('malformed', 'clerk_webhook_signing_secret_invalid', ['CLERK_WEBHOOK_SIGNING_SECRET'], 'clerk')
   }
 }

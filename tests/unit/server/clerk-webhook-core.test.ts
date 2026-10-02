@@ -1,8 +1,37 @@
+import { createHmac } from 'node:crypto'
+import { verifyWebhook } from '@clerk/tanstack-react-start/webhooks'
 import { describe, expect, it, vi } from 'vitest'
 
 import { MAX_CLERK_WEBHOOK_BODY_BYTES, verifyClerkWebhookRequest } from '@/lib/server/clerk-webhook-core'
 
 describe('verifyClerkWebhookRequest', () => {
+  it('verifies a Base64 Clerk secret with the real SDK and rejects a changed body', async () => {
+    const key = Buffer.alloc(32, 251)
+    key[0] = 255
+    const signingSecret = `whsec_${key.toString('base64')}`
+    expect(signingSecret).toMatch(/[+]/)
+    expect(signingSecret).toMatch(/[/]/)
+    expect(signingSecret).toMatch(/=$/)
+    const body = JSON.stringify({ type: 'session.created', data: { id: 'sess_1' } })
+    const deliveryRef = 'msg_signed_1'
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const signature = createHmac('sha256', key).update(`${deliveryRef}.${timestamp}.${body}`).digest('base64')
+    const incoming = (payload: string) => new Request('https://aecon.example.test/api/clerk/webhook', {
+      method: 'POST', body: payload,
+      headers: { 'svix-id': deliveryRef, 'svix-timestamp': timestamp, 'svix-signature': `v1,${signature}` },
+    })
+    const verify = (request: Request) => verifyWebhook(request, { signingSecret })
+
+    expect(await verifyClerkWebhookRequest(incoming(body), verify)).toMatchObject({
+      kind: 'verified', webhook: { deliveryRef, event: { type: 'session.created', data: { id: 'sess_1' } } },
+    })
+    const altered = await verifyClerkWebhookRequest(incoming(body.replace('sess_1', 'sess_2')), verify)
+    expect(altered.kind).toBe('rejected')
+    if (altered.kind !== 'rejected') return
+    expect(altered.response.status).toBe(400)
+    expect(await altered.response.text()).not.toContain(signingSecret)
+  })
+
   it.each([
     ['an undeclared length', {}],
     ['a declared length', { 'content-length': String(6 * 64 * 1024) }],
