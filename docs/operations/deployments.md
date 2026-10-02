@@ -66,14 +66,31 @@ The 2 October inventory found two distinct failures:
    change updates it within the existing dependency range and checks emitted
    server modules as part of every build. Acceptance is recorded in Stage 42
    of the readiness record.
-2. **Production binding gap:** Vercel Production has no
-   `AE_DEPLOYMENT_ENVIRONMENT` declaration, while
-   `AE_FORMANCE_ENVIRONMENT=sandbox` and the configured gateway is
-   `https://formance-alpha.aecon.ai`. These bindings cannot be called a
-   production money environment or fixed by relabeling the existing ledger.
+2. **Production binding gap:** the initial inventory had no
+   `AE_DEPLOYMENT_ENVIRONMENT` declaration. Stage 43 sets it to `production`
+   in Vercel Production and Convex `cautious-zebra-473`, and deploys the current
+   backend. The existing Formance binding remains `sandbox` at
+   `https://formance-alpha.aecon.ai`; production correctly refuses it. The
+   declaration does not establish production money readiness.
+
+Stage 43 also enables Clerk authenticator/backup-code support, stores the
+production identity and authority settings in Infisical, aligns the Vercel
+authority bindings, and creates an isolated, unfunded CDP production project.
+Its wallet and policies are pending approved signing ceilings. The Clerk
+webhook's native test reaches the application but remains blocked by the
+incomplete boot configuration; delivery is not accepted evidence yet.
+
+The existing AWS Formance footprint is `ae-alpha`: one private host and a
+Multi-AZ RDS database, with nightly Melbourne backup copies. Repairing the
+CloudWatch Agent configuration restored disk/memory observations and all eight
+alarms are currently OK. The alert topic still has no subscriber and an actual
+restore has not been proved. A separate production footprint versus a new
+production boundary sharing the existing infrastructure remains an explicit
+cost/isolation decision; the alpha ledger is preserved.
 
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
-Joel confirmed that production Formance is not provisioned yet;
+Joel selected the existing AWS self-hosted Formance route; a production ledger
+is not provisioned yet, and
 [#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) is the next setup
 step. Complete the actual production Formance, custody, RPC, screening, alert and
 backup/restore prerequisites, bind one coherent production environment, and
