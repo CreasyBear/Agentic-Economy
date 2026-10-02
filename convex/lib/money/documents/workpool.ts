@@ -55,7 +55,9 @@ export const completeDocumentWorkHandler = async (ctx: MutationCtx, { workId, co
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', context.documentRef))
       .unique()
-    if (row === null || row.workId !== workId || row.state === 'issued') return null
+    // Attachment committed independently of the action acknowledgement. A late
+    // worker failure cannot retire the canonical files or undo readiness to sign.
+    if (row === null || row.workId !== workId || row.state === 'issued' || row.state === 'awaiting_signature') return null
     if (result.kind !== 'success') {
       const now = Date.now()
       const failureCode = result.kind === 'canceled' ? 'document_work_canceled' : 'document_work_failed'

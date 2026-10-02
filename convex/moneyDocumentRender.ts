@@ -9,13 +9,14 @@ import { action, internalAction, type ActionCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
+import { degradeBackend } from '../src/lib/observability/degrade-backend'
 
 type RenderDocument = Readonly<{
   documentRef: string
   renderInputJson: string
   renderInputDigest: string
   templateVersion: string
-  state: 'rendering' | 'issued'
+  state: 'rendering' | 'awaiting_signature' | 'issued'
   fileId?: Id<'_storage'>
   fileDigest?: string
   csvFileId?: Id<'_storage'>
@@ -119,6 +120,19 @@ function renderCsv(rows: DisplayRow[]): string {
   return ['field,value', ...rows.map(([label, value]) => `${safeCsvCell(label)},${safeCsvCell(value)}`)].join('\r\n') + '\r\n'
 }
 
+/** Requires IDs proven unattached by this attempt. Cleanup failure must never
+ * turn a confirmed canonical attachment into a failed render. */
+async function deleteUnattachedFiles(ctx: ActionCtx, fileIds: readonly Id<'_storage'>[]): Promise<void> {
+  for (const fileId of fileIds) {
+    try { await ctx.storage.delete(fileId) }
+    catch (cause) { degradeBackend(cause, undefined, { site: 'moneyDocumentRenderCleanup', reason: 'source_unavailable' }) }
+  }
+}
+
+/** Requires frozen render material. Ensures a canonical attachment or a visible
+ * failure; unknown acknowledgement preserves every potentially attached byte.
+ * Storage and the attachment mutation are separate commits: readback, not
+ * rollback, resolves uncertainty. Existing Workpool retries read the same row. */
 async function renderAndAttach(
   ctx: ActionCtx,
   document: RenderDocument,
@@ -126,17 +140,25 @@ async function renderAndAttach(
   if (document.fileId !== undefined && document.csvFileId !== undefined) {
     return { kind: 'available' as const, fileId: document.fileId }
   }
+  if (document.state !== 'rendering') throw new Error('money_document_attachment_incomplete')
   const { title, rows } = displayRows(document)
   const html = renderHtml(document, title, rows)
   const csv = renderCsv(rows)
   const fileDigest = canonicalDigest(html)
   const csvFileDigest = canonicalDigest(csv)
   let fileId: Id<'_storage'> | undefined
-  let csvFileId: Id<'_storage'> | undefined
+  let csvFileId: Id<'_storage'>
   try {
     fileId = await ctx.storage.store(new Blob([html], { type: 'text/html;charset=utf-8' }))
     csvFileId = await ctx.storage.store(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const attached = await ctx.runMutation(attachRenderedFileRef, {
+  } catch (error) {
+    // Nothing has been submitted to the document mutation yet.
+    if (fileId !== undefined) await deleteUnattachedFiles(ctx, [fileId])
+    throw error
+  }
+  let attached: AttachResult
+  try {
+    attached = await ctx.runMutation(attachRenderedFileRef, {
       documentRef: document.documentRef,
       renderInputDigest: document.renderInputDigest,
       fileId,
@@ -145,21 +167,27 @@ async function renderAndAttach(
       csvFileDigest,
       renderedAt: Date.now(),
     })
-    if (attached.kind === 'refused') throw new Error('money_document_render_conflict')
-    if (attached.fileId !== fileId) await ctx.storage.delete(fileId)
-    if (attached.csvFileId !== csvFileId) await ctx.storage.delete(csvFileId)
-    return { kind: 'available' as const, fileId: attached.fileId }
   } catch (error) {
-    if (fileId !== undefined) await ctx.storage.delete(fileId)
-    if (csvFileId !== undefined) await ctx.storage.delete(csvFileId)
-    throw error
+    const recorded = await ctx.runQuery(readQueuedForRenderRef, { documentRef: document.documentRef })
+    if (recorded === null || recorded.renderInputDigest !== document.renderInputDigest
+      || recorded.fileId === undefined || recorded.csvFileId === undefined
+      || recorded.fileDigest !== fileDigest || recorded.csvFileDigest !== csvFileDigest) throw error
+    attached = { kind: 'replayed', fileId: recorded.fileId, csvFileId: recorded.csvFileId }
   }
+  if (attached.kind === 'refused') {
+    await deleteUnattachedFiles(ctx, [fileId, csvFileId])
+    throw new Error('money_document_render_conflict')
+  }
+  const canonical = attached
+  await deleteUnattachedFiles(ctx, [fileId, csvFileId]
+    .filter(candidate => candidate !== canonical.fileId && candidate !== canonical.csvFileId))
+  return { kind: 'available' as const, fileId: canonical.fileId }
 }
 
 export const renderOwnerDocument = action({
   args: { documentRef: v.string() },
   returns: v.object({ kind: v.literal('available'), fileId: v.id('_storage') }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ kind: 'available'; fileId: Id<'_storage'> }> => {
     const document = await ctx.runQuery(readForRenderRef, args)
     if (document === null) throw new Error('money_document_not_found')
     return await renderAndAttach(ctx, document)
@@ -169,7 +197,7 @@ export const renderOwnerDocument = action({
 export const renderQueuedDocument = internalAction({
   args: { documentRef: v.string() },
   returns: v.object({ kind: v.literal('available'), fileId: v.id('_storage') }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ kind: 'available'; fileId: Id<'_storage'> }> => {
     const document = await ctx.runQuery(readQueuedForRenderRef, args)
     if (document === null) throw new Error('money_document_not_ready')
     return await renderAndAttach(ctx, document)
