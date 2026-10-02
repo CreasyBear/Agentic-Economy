@@ -15,6 +15,7 @@ import {
 } from '@/modules/security/source-write-admission'
 import { isRecord } from '@/modules/common/is-record'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { resolveCanonicalOrigin } from './canonical-url'
 
 export { sourceWriteRequestFromAdmission }
 
@@ -118,6 +119,15 @@ function requestAdmissionContext(
   options: { bodyDigest: string } = { bodyDigest: SOURCE_WRITE_NO_BODY_DIGEST },
 ): SourceWriteAdmissionRequest {
   const url = new URL(request.url)
+  // Requires Vercel ingress, its exact HTTPS assertion and the canonical host.
+  // Ensures TLS termination preserves the public scheme in signed requests.
+  // Invariant: no forwarded host, browser Origin, path or query is substituted.
+  // On violation, retain the actual URL; existing origin checks still apply.
+  if (process.env.VERCEL === '1' && url.protocol === 'http:'
+    && request.headers.get('x-forwarded-proto') === 'https') {
+    const canonical = new URL(resolveCanonicalOrigin(request))
+    if (canonical.protocol === 'https:' && canonical.host === url.host) url.protocol = 'https:'
+  }
   return {
     method: request.method,
     initiatorOrigin: request.headers.get('Origin') ?? refererOrigin(request.headers.get('Referer')) ?? url.origin,
