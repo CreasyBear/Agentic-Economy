@@ -587,6 +587,7 @@ import type * as lib_principalAccount_interactiveAuthority_provisioning from "..
 import type * as lib_principalAccount_interactiveAuthority_readFacts from "../lib/principalAccount/interactiveAuthority/readFacts.js";
 import type * as lib_principalAccount_interactiveAuthority_resolveCurrent from "../lib/principalAccount/interactiveAuthority/resolveCurrent.js";
 import type * as lib_principalAccount_interactiveAuthority_scheduledReconcile from "../lib/principalAccount/interactiveAuthority/scheduledReconcile.js";
+import type * as lib_principalAccount_interactiveAuthority_sessionProof from "../lib/principalAccount/interactiveAuthority/sessionProof.js";
 import type * as lib_principalAccount_interactiveAuthority_shared from "../lib/principalAccount/interactiveAuthority/shared.js";
 import type * as lib_principalAccount_interactiveCredential_arm from "../lib/principalAccount/interactiveCredential/arm.js";
 import type * as lib_principalAccount_interactiveCredential_contracts from "../lib/principalAccount/interactiveCredential/contracts.js";
@@ -1319,6 +1320,7 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/interactiveAuthority/readFacts": typeof lib_principalAccount_interactiveAuthority_readFacts;
   "lib/principalAccount/interactiveAuthority/resolveCurrent": typeof lib_principalAccount_interactiveAuthority_resolveCurrent;
   "lib/principalAccount/interactiveAuthority/scheduledReconcile": typeof lib_principalAccount_interactiveAuthority_scheduledReconcile;
+  "lib/principalAccount/interactiveAuthority/sessionProof": typeof lib_principalAccount_interactiveAuthority_sessionProof;
   "lib/principalAccount/interactiveAuthority/shared": typeof lib_principalAccount_interactiveAuthority_shared;
   "lib/principalAccount/interactiveCredential/arm": typeof lib_principalAccount_interactiveCredential_arm;
   "lib/principalAccount/interactiveCredential/contracts": typeof lib_principalAccount_interactiveCredential_contracts;

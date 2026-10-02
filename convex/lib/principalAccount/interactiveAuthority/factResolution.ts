@@ -28,7 +28,7 @@ import {
   type AuthorityMutationSource,
 } from './shared'
 import type { InteractiveAuthorityFacts } from './contracts'
-import { readCurrentClerkSessionCreation } from './clerk'
+import { requireCurrentInteractiveSession } from './sessionProof'
 
 export async function resolveInteractiveAuthorityContext(
   source: AuthorityMutationSource,
@@ -105,6 +105,9 @@ export async function resolveInteractiveAuthorityFactsForToken(
   if (binding.providerState.kind !== 'known' || binding.providerState.value !== 'active') {
     throw new InteractiveAuthorityError('binding_untrusted')
   }
+  // Scheduled reconciliation has no new user presentation and retains the
+  // exact admitted credential/revision comparison in scheduledReconcile.
+  if (identity !== undefined) await requireCurrentInteractiveSession(db, identity, binding)
 
   const credential = requireExactlyOne(
     await db
@@ -170,9 +173,6 @@ export async function resolveInteractiveAuthorityFactsForToken(
   }
   if (principal.kind !== 'human') {
     throw new InteractiveAuthorityError('principal_kind_invalid')
-  }
-  if (identity !== undefined) {
-    await readCurrentClerkSessionCreation(db, identity, canonicalPrincipalRef, binding.bindingRef)
   }
 
   const activeAccountResolution = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)
