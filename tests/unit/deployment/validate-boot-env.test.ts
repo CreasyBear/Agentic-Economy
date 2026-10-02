@@ -13,7 +13,7 @@ function liveConfiguration(): Record<string, string> {
     AE_CANONICAL_BASE_URL: 'https://ae.example', CONVEX_URL: 'https://convex.example',
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'source-token',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example', CLERK_SECRET_KEY: 'sk_live_example',
-    CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example', CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_example',
+    CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example', CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_d2ViaG9vay1zaWduaW5nLXNlY3JldA==',
     AE_FORMANCE_ENVIRONMENT: 'production', AE_FORMANCE_GATEWAY_URL: 'https://formance.example',
     AE_FORMANCE_LEDGER: 'agentic-economy-production',
     AE_FORMANCE_ACCESS_CLIENT_ID: 'access-client', AE_FORMANCE_ACCESS_CLIENT_SECRET: 'private-access-secret',
@@ -75,7 +75,7 @@ describe('ensureBootEnvironmentValidated', () => {
     vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_live_example')
     vi.stubEnv('CLERK_SECRET_KEY', 'sk_live_example')
     vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://clerk.example')
-    vi.stubEnv('CLERK_WEBHOOK_SIGNING_SECRET', 'whsec_example')
+    vi.stubEnv('CLERK_WEBHOOK_SIGNING_SECRET', 'whsec_d2ViaG9vay1zaWduaW5nLXNlY3JldA==')
     for (const family of ['BILLING', 'PROTECTED', 'CATALOG', 'OPERATOR', 'REPAIR', 'SESSION']) {
       vi.stubEnv(`AE_SOURCE_WRITE_KEY_${family}`, `${family.toLowerCase()}:0123456789abcdef0123456789abcdef`)
     }

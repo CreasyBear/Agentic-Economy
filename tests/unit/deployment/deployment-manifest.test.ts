@@ -18,7 +18,7 @@ function productionEnvironment(): Record<string, string> {
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
-    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_live_example',
+    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_d2ViaG9vay1zaWduaW5nLXNlY3JldA==',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
     AE_CHAT_PROXY_SECRET: 'chat-proxy-secret-value-long-enough',
@@ -232,6 +232,23 @@ describe('deployment manifest validator', () => {
       expect.objectContaining({ kind: 'malformed', code: 'clerk_secret_key_invalid', names: ['CLERK_SECRET_KEY'] }),
     ]))
   })
+
+  it.each(['whsec_+/8=', 'whsec_+w==', 'whsec_+/v7'])(
+    'accepts the standard Base64 alphabet and padding in a Clerk webhook secret: %s', secret => {
+      expect(validateDeploymentManifest({ ...productionEnvironment(), CLERK_WEBHOOK_SIGNING_SECRET: secret }).ok).toBe(true)
+    },
+  )
+
+  it.each(['whsec_', 'whsec_live_example', 'whsec_abc', 'whsec_abc==', 'whsec_ab=c', 'whsec_abcd====', 'whsec_ab cd', 'other_abcd'])(
+    'rejects malformed Clerk webhook secret encoding: %s', secret => {
+      const result = validateDeploymentManifest({ ...productionEnvironment(), CLERK_WEBHOOK_SIGNING_SECRET: secret })
+      expect(result.ok).toBe(false)
+      expect(result.findings).toContainEqual({
+        kind: 'malformed', code: 'clerk_webhook_signing_secret_invalid', names: ['CLERK_WEBHOOK_SIGNING_SECRET'], scope: 'clerk',
+      })
+      expect(JSON.stringify(result)).not.toContain(secret)
+    },
+  )
 
   it('requires a canonical origin and a valid Clerk webhook signing secret', () => {
     const result = validateDeploymentManifest({
