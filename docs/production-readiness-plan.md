@@ -2878,3 +2878,113 @@ project cleanup nor repaired server output proves real-money readiness.
 Joel confirmed that production Formance has not yet been provisioned. Production
 provisioning is the next step; this cleanup does not create a new paid service,
 change custody or move funds.
+
+## Stage 43 — production credentials, runtime alignment and live prerequisites
+
+Joel authorized unblocking full production readiness and selected the existing
+self-hosted AWS Formance route. This stage remains **in progress**. Configured
+provider accounts, a successful release and a passing source gate do not prove
+the twenty real Calls and failure drills required by #287.
+
+### Completed capability and observed limits — 2 October 2026
+
+| Boundary | Verified result | Remaining acceptance |
+| --- | --- | --- |
+| Clerk | Pro activated; authenticator and backup codes enabled, without making MFA mandatory for ordinary sign-in | The production owner still needs personal enrollment and authenticated journey proof |
+| Secret authority | Infisical production deployment folder contains the live Clerk, canonical URL, Sentry and production source-authority settings; production authority secrets are distinct from staging | No automatic production secret sync is claimed |
+| Vercel | Production-only authority/Clerk entries applied from the vault; readable key IDs and issuer match; obsolete Autumn, Meilisearch and Novu bindings removed from Production while Preview entries remain | Sensitive values cannot be independently read back from Vercel; deployed authenticated behavior remains the acceptance test |
+| Clerk webhook | Existing endpoint subscribes to all eleven implemented event types; owning signing secret bound; provider-native sample reaches the application | Sample `msg_3K7hGcW7Qy527digULljp3u6hPL` returned 500 because boot configuration was incomplete, before signature verification; successful delivery remains unproved |
+| Convex | Tested main `eac5566991f5332b7b40686e7184de616eee85e3` deployed to `cautious-zebra-473`; typed production declaration set; live readiness queries and scheduled workload authority respond | Formance, custody, Base RPC, commercial-policy approval, treasury evidence and TRM remain refused/unavailable |
+| CDP | Isolated `Agentic Economy Production` project created; explicitly approved API key and Wallet Secret stored in Infisical; authenticated readback reports zero accounts and zero policies | Account/policies wait for the production custody ceilings; credentials are not yet runtime-bound and no wallet was funded or signature requested |
+| AWS telemetry | Existing CloudWatch configuration association rerun successfully; disk and memory metrics now arrive and all eight `ae-alpha` alarms report OK; the declared SNS email subscription was restored | Subscription confirmation and alert delivery remain unproved |
+
+Both application runtimes now explicitly declare production. The alpha
+Formance environment remains sandbox. `readFormanceConfiguration` rejects
+that disagreement before provider work; the declaration is not a promotion of
+the alpha ledger. The new CDP project is separate from the old Sepolia custody
+account. Public readiness remains 503 and no financial acceptance is claimed.
+
+Vercel deployment `dpl_kUVMTTNB49JQcyB6RBDuRayZnKUB` is READY and assigned to
+`app.aecon.ai`, serving the same `eac556699` source as Convex. Deployed probes
+return health 200, `/api/v1/release` 200 with that full source revision, and
+readiness 503 with `paymentEnvironment: production` and `sellable: false`.
+The CDP API key currently has only the temporary policy-management permission;
+remove it after provisioning and before runtime binding. It has no Coinbase
+portfolio trading, transfer or private-key-export grant.
+
+### Clerk secret validation contract and release evidence
+
+The owning Svix endpoint issued a standard Base64 signing secret. The manifest
+incorrectly required the Base64URL alphabet and rejected valid `+`, `/` and
+padding. [PR #293](https://github.com/CreasyBear/Agentic-Economy/pull/293) fixes
+only Clerk's static format validator and updates the synthetic test secrets.
+Stripe's separate signing-secret format is unchanged.
+
+**Requires:** a nonempty, correctly grouped and padded provider Base64 value
+after `whsec_`. **Ensures:** the real provider format passes static production
+validation. **Invariant:** the installed Clerk verifier still authenticates the
+exact request bytes. **On violation:** malformed configuration or a tampered
+payload is refused without returning credential material. No wrapper,
+dependency or signature-verification replacement was introduced.
+
+The installed Clerk SDK accepts a correctly signed local request and rejects
+body tampering with 400. The manifest, boot and diagnostic packet tests pass
+159/159; the actual owning secret passes the corrected validator in private.
+`npm run check` and `npm run gate` pass under Node 22.22.0/npm 11.5.1: 7,699 unit
+tests (one skipped), 2,701 integration tests (61 skipped, three todo), 75 import
+boundary checks, four type contracts, 31 SEO checks, 16 browser journeys
+(14 configured skips),
+18 accessibility cases, the CLI package and the public build. These prove the
+source contract, not successful production webhook delivery.
+
+The Convex dry run validated the existing data. A full data/file export was
+retained before deployment: snapshot `1790914455413606938`, 275,165 bytes,
+413 archive entries, successful CRC validation, SHA-256
+`c008b76a75a5e39e5601c956e416036245a2de73e7cde99ebb37b5c199739d1f`.
+The initial push refused the missing typed environment declaration; after its
+explicit production binding, deployment succeeded. Obsolete indexes were
+removed by the release; records were not deleted. The snapshot is rollback
+material, not an exercised restore proof.
+
+### AWS production decision and remaining live prerequisites
+
+Native AWS/SSM reads confirm one existing `ae-alpha` private `t4g.large` host
+and encrypted, private, deletion-protected PostgreSQL 16.13 Multi-AZ
+`db.t4g.medium`, with seven-day PITR and completed nightly Melbourne copies.
+The ledger is version 2.4.12 with 45 transactions, 53 accounts and schemas
+1.3.0/1.4.0. Source now pins Ledger 2.4.14. No ledger upgrade, restore, new
+production infrastructure or financial mutation was performed in this stage.
+
+The missing host metrics came from the September install/configure association
+ordering: configuration ran before the agent was installed. Rerunning the
+existing configure association fixed it; no speculative IaC correction was
+needed. The current database backups do not substitute for a restored database
+and full ledger equality/idempotency proof.
+
+The retained OpenTofu state records an unconfirmed email subscription to
+`joel@agentic-economy.ai`, while the live topic had no subscriber. Restoring
+that exact endpoint on `ae-alpha-package4-alerts` produced one pending
+subscription at 04:39 UTC; the confirmation request was handed to Joel.
+The recipient and topic are unchanged. No passing notification drill is
+claimed before confirmation and observed receipt.
+
+Cost Explorer's 24–30 September daily spend was approximately US$8.90–9.67,
+or roughly US$290/month at that observed rate. Duplicating the declared host
+and Multi-AZ database could put the combined footprint around US$550–600/month,
+above the existing US$400 alert budget. This is an estimate from current spend,
+not a vendor quote. Joel's choice between a separate production stack and a
+new production service/ledger sharing the existing host/database is pending;
+the latter shares failure and maintenance domains and needs a bounded design.
+
+Production signing ceilings also await Joel's decision: the proposed initial
+limits are US$0.50 per signature, US$10 per rolling day globally, US$2 per payee
+per day and US$0.50 for a new payee. These are **proposed, not approved or
+installed**. They do not replace the separate buyer AUD authority limits.
+
+TRM Wallet Screening still requires the tenant-entitled API contract and
+access. The current adapter deliberately returns
+`trm_tenant_contract_unavailable`; the separate public sanctions API cannot
+silently replace it. No vendor enquiry was sent. Two independent production
+Base RPC providers, production commercial-policy approval, treasury evidence,
+alert delivery, a restore drill, owner MFA and the real-Call matrix remain
+outstanding. The production foundation gate and launch gate remain closed.
