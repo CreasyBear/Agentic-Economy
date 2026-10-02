@@ -72,7 +72,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/monthly cap/i)
     expect(screen.getByText(/A\$145\.20/i)).toBeInTheDocument()
     expect(screen.getByText(/A\$500\.00/i)).toBeInTheDocument()
-    expect(screen.getByRole('meter')).toHaveAttribute('aria-valuenow', '29')
+    expect(screen.getByRole('meter')).toHaveAttribute('value', '29')
     expect(screen.getByRole('meter')).toHaveAttribute('aria-valuetext', 'A$145.20 spent of A$500.00 monthly cap (29%)')
     expect(screen.queryByText(/approaching monthly limit/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/monthly spending limit reached/i)).not.toBeInTheDocument()

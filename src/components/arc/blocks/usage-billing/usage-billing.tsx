@@ -7,10 +7,6 @@
  * Source TSX SHA-256 0a21e1888b3f0421a1c031803f5578bb5e2cb6b191da970eece9cc57dafb212a. */
 import { useId, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
-
-import { motionTokens } from '../../lib/motion-tokens'
-
 import styles from './usage-billing.module.css'
 
 export interface UsageBillingMeterProps {
@@ -27,7 +23,6 @@ export interface UsageBillingMeterProps {
 }
 
 export function UsageBillingMeter({ summary, action, meter }: UsageBillingMeterProps) {
-  const reduce = !!useReducedMotion()
   return <div className={`arc-market ${styles.root}`}><div className={styles.panel}>
     <div className={styles.spendHead}><div className={styles.stat}>{summary}</div>{action}</div>
     {meter === undefined ? null : <ul className={styles.meterList}>
@@ -35,11 +30,14 @@ export function UsageBillingMeter({ summary, action, meter }: UsageBillingMeterP
         <div className={styles.meterHead}>
           <span className={styles.meterName}>{meter.tone !== 'ok' && <AlertTriangle size={14} aria-hidden="true" />}{meter.name}</span>
         </div>
-        {meter.percent === undefined ? null : <div className={styles.track} role="meter" aria-label={`${meter.percent}% of monthly spending cap used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={meter.percent} aria-valuetext={meter.valueText}>
-          {/* Arc's smooth preset keeps the source meter's no-overshoot behavior,
-              so motion never visually exceeds the authoritative utilization. */}
-          <motion.span className={styles.used} initial={reduce ? false : { scaleX: 0 }} animate={{ scaleX: meter.percent / 100 }} transition={reduce ? { duration: 0 } : motionTokens.spring.smooth} />
-        </div>}
+        {meter.percent === undefined ? null : <>
+          <meter className={styles.srOnly} min={0} max={100} value={meter.percent}
+            aria-label={`${meter.percent}% of monthly spending cap used`} aria-valuetext={meter.valueText} />
+          <div className={styles.track} aria-hidden="true">
+            {/* Land at the authoritative value on mount; tokenized changes never overshoot. */}
+            <span className={styles.used} style={{ transform: `scaleX(${meter.percent / 100})` }} />
+          </div>
+        </>}
         <div className={styles.meterFoot}><span className={styles.meterNote}>{meter.note}</span></div>
         {meter.notice}
       </li>

@@ -3,13 +3,11 @@
  * https://uiarc.dev/components/blocks/security-settings
  * Upstream security-settings.tsx SHA-256:
  * 3609e832d4a55be80402d0da7db029b7b58795e241eac6ccc85dfab54fd714e4
- * Embeds its header/section framing and shared-layout rail in the host frame. Live content
+ * Embeds its header/section framing and page rail in the host frame. Live content
  * replaces the sample MFA, password, backup-code and session implementations.
  */
 import { useId } from 'react'
 import type { ReactNode } from 'react'
-import { LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react'
-import { motionTokens } from '../../lib/motion-tokens'
 import styles from './security-settings.module.css'
 
 export type SecuritySettingsProps = Readonly<{
@@ -43,21 +41,14 @@ export type SecuritySettingsNavigationProps = Readonly<{
 
 /** The host supplies its real routed links; the rail only marks the active page. */
 export function SecuritySettingsNavigation({ activePage, profile, security }: SecuritySettingsNavigationProps) {
-  const id = useId()
-  const reduce = useReducedMotion()
-  return <MotionConfig reducedMotion="user">
-    <LayoutGroup id={id}>
-      <nav aria-label="Account pages" className={styles.navigation}>
-        <ul className={styles.rail}>
-          {([{ page: 'profile', link: profile }, { page: 'security', link: security }] as const).map(({ page, link }) =>
-            <li key={page} className={styles.railItem} data-state={activePage === page ? 'current' : 'next'}>
-              {activePage === page && <motion.span layoutId="security-page-rail" className={styles.railHighlight}
-                transition={reduce ? { duration: 0 } : motionTokens.spring.morph} aria-hidden="true" />}
-              {link}
-            </li>,
-          )}
-        </ul>
-      </nav>
-    </LayoutGroup>
-  </MotionConfig>
+  return <nav aria-label="Account pages" className={styles.navigation}>
+    <ul className={styles.rail}>
+      {([{ page: 'profile', link: profile }, { page: 'security', link: security }] as const).map(({ page, link }) =>
+        <li key={page} className={styles.railItem} data-state={activePage === page ? 'current' : 'next'}>
+          {activePage === page && <span className={styles.railHighlight} aria-hidden="true" />}
+          {link}
+        </li>,
+      )}
+    </ul>
+  </nav>
 }

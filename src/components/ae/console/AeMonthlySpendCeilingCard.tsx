@@ -3,7 +3,7 @@
  * Missing spend withholds utilization instead of claiming zero; funding never grants authority. */
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { UsageBillingMeter } from '@/components/arc/blocks/usage-billing/usage-billing'
@@ -43,6 +43,34 @@ export interface AeMonthlySpendCeilingCardProps {
     ceilingUnits: string
     expectedRevision: number
   }) => Promise<void> | void
+}
+
+function MonthlySpendCapView({ enabled, spend, ceiling, percent, tone, notice, onEdit }: {
+  enabled: boolean | undefined
+  spend: string | undefined
+  ceiling: string
+  percent: number
+  tone: 'ok' | 'warning' | 'critical'
+  notice: ReactNode
+  onEdit: () => void
+}) {
+  const summary = enabled === undefined ? <span>Monthly spending cap unavailable.</span>
+    : !enabled ? <span>Off. Prepaid credit and Agent policies still apply.</span>
+      : <><strong>{spend ?? ceiling}</strong><span>{spend === undefined ? 'Monthly cap; monthly spend is unavailable.' : `spent of ${ceiling} monthly cap (${percent}%)`}</span></>
+  return <SettingsGroup title="Monthly spending cap" description="Limit paid Calls across your workspace; Agent spending policies still apply.">
+    <UsageBillingMeter
+      summary={<><p className="arc-monthly-label">Current limit</p><p role="status" aria-live="polite" className="arc-monthly-value">{summary}</p></>}
+      action={enabled === undefined ? null : <Button type="button" variant="secondary" onClick={onEdit}>{enabled ? 'Edit limit' : 'Set limit'}</Button>}
+      meter={enabled ? {
+        name: 'Monthly usage',
+        percent: spend === undefined ? undefined : percent,
+        valueText: spend === undefined ? 'Monthly spend is unavailable.' : `${spend} spent of ${ceiling} monthly cap (${percent}%)`,
+        tone,
+        note: 'Resets at the start of the next month.',
+        notice,
+      } : undefined}
+    />
+  </SettingsGroup>
 }
 
 export function AeMonthlySpendCeilingCard({
@@ -197,30 +225,9 @@ export function AeMonthlySpendCeilingCard({
 
   return (
     <>
-      <SettingsGroup title="Monthly spending cap" description="Limit paid Calls across your workspace; Agent spending policies still apply.">
-        <UsageBillingMeter
-          summary={<>
-              <p className="arc-monthly-label">Current limit</p>
-              <p role="status" aria-live="polite" className="arc-monthly-value">
-                {settings === undefined ? <span>Monthly spending cap unavailable.</span> : resolvedSettings.enabled ? <>
-                  <strong>{spendKnown ? spendFormatted : ceilingFormatted}</strong>
-                  <span>{spendKnown ? `spent of ${ceilingFormatted} monthly cap (${percent}%)` : 'Monthly cap; monthly spend is unavailable.'}</span>
-                </> : <span>Off. Prepaid credit and Agent policies still apply.</span>}
-              </p>
-          </>}
-          action={settings === undefined ? null : <Button type="button" variant="secondary" onClick={() => { resetDialogForm(); setDialogOpen(true) }}>
-              {resolvedSettings.enabled ? 'Edit limit' : 'Set limit'}
-            </Button>}
-          meter={settings !== undefined && resolvedSettings.enabled ? {
-            name: 'Monthly usage',
-            percent: spendKnown ? percent : undefined,
-            valueText: `${spendFormatted} spent of ${ceilingFormatted} monthly cap (${percent}%)`,
-            tone: band === 'normal' ? 'ok' : band === 'exceeded' ? 'critical' : 'warning',
-            note: 'Resets at the start of the next month.',
-            notice: renderCardAlertSlot(),
-          } : undefined}
-        />
-      </SettingsGroup>
+      <MonthlySpendCapView enabled={settings?.enabled} spend={spendKnown ? spendFormatted : undefined}
+        ceiling={ceilingFormatted} percent={percent} tone={band === 'normal' ? 'ok' : band === 'exceeded' ? 'critical' : 'warning'}
+        notice={renderCardAlertSlot()} onEdit={() => { resetDialogForm(); setDialogOpen(true) }} />
 
       <Drawer
         open={dialogOpen}

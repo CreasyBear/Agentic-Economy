@@ -16,7 +16,7 @@
 .meterName svg { flex: none; color: var(--warning); }
 .meter[data-tone="critical"] .meterName svg { color: var(--danger); }
 .track { position: relative; height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: var(--surface-muted); }
-.used { position: absolute; inset: 0; border-radius: inherit; transform-origin: left center; background: var(--accent); transition: background-color var(--duration-considered) var(--ease-standard); }
+.used { position: absolute; inset: 0; border-radius: inherit; transform-origin: left center; background: var(--accent); transition: transform var(--duration-standard) var(--ease-standard), background-color var(--duration-considered) var(--ease-standard); }
 .meter[data-tone="warning"] .used { background: var(--warning); }
 .meter[data-tone="critical"] .used { background: var(--danger); }
 .meterFoot { color: var(--text-muted); font-size: var(--text-sm); }
