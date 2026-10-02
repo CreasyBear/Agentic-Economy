@@ -57,6 +57,8 @@ const CDP_SDK_IMPORT = /(?:from|import)\s*\(?\s*["']@coinbase\/cdp-sdk["']/
 // excludes node_modules from the graph, so (like the CDP SDK above) this
 // leaf is detected by reading the importing file's own source text.
 const SENTRY_NODE_IMPORT = /(?:from|import)\s*\(?\s*["']@sentry\/node["']/
+// Clerk's web-server entry imports filesystem storage even when its auth helper is unused.
+const CLERK_SERVER_IMPORT = /(?:from|import)\s*\(?\s*["']@clerk\/tanstack-react-start\/server["']/
 
 function isValueEdge(dependency: DepcruiseDependency): boolean {
   // Type-only import/export specifiers are erased at compile time and
@@ -84,6 +86,10 @@ function importsSentryNodeDirectly(source: string): boolean {
   return isRepoFile(source) && SENTRY_NODE_IMPORT.test(fileText(source))
 }
 
+function importsClerkServerDirectly(source: string): boolean {
+  return isRepoFile(source) && CLERK_SERVER_IMPORT.test(fileText(source))
+}
+
 function importsCryptoAsValue(module: DepcruiseModule): boolean {
   return module.dependencies.some(
     (dependency) =>
@@ -96,7 +102,8 @@ const NODE_ONLY_MODULES = new Set(
     (module) =>
       importsCryptoAsValue(module)
       || importsCdpSdkDirectly(module.source)
-      || importsSentryNodeDirectly(module.source),
+      || importsSentryNodeDirectly(module.source)
+      || importsClerkServerDirectly(module.source),
   ).map((module) => module.source),
 )
 
@@ -130,7 +137,7 @@ function findNodeOnlyPath(start: string): readonly string[] | undefined {
 }
 
 describe('node-only modules stay out of the default Convex runtime', () => {
-  it('keeps @coinbase/cdp-sdk and node:crypto unreachable from every convex/*.ts file without "use node"', () => {
+  it('keeps Node-only packages and node:crypto unreachable from every convex/*.ts file without "use node"', () => {
     const defaultRuntimeConvexFiles = MODULES.map((module) => module.source).filter(
       (source) =>
         source.startsWith('convex/') &&

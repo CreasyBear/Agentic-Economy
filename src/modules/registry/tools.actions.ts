@@ -27,7 +27,8 @@ import {
   type SearchResult,
   type SupplyProjectionFreshness,
 } from './tool-choice-contracts'
-import { compactDirectoryRows, compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
+import { compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
+import { compactDirectoryRows } from './internal/compact-directory-projection'
 import { resolveToolCompare } from './internal/tool-compare-resolution'
 import { rankCompactDirectoryRows, rankToolSearchForRegistry, TOOL_SEARCH_ASSESSMENT_LIMIT, type RegistryToolAssessment } from './tool-reranker'
 import {
