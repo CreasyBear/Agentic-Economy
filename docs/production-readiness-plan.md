@@ -2896,7 +2896,7 @@ the twenty real Calls and failure drills required by #287.
 | Clerk webhook | Existing endpoint subscribes to all eleven implemented event types; owning signing secret bound; provider-native sample reaches the application | Sample `msg_3K7hGcW7Qy527digULljp3u6hPL` returned 500 because boot configuration was incomplete, before signature verification; successful delivery remains unproved |
 | Convex | Tested main `eac5566991f5332b7b40686e7184de616eee85e3` deployed to `cautious-zebra-473`; typed production declaration set; live readiness queries and scheduled workload authority respond | Formance, custody, Base RPC, commercial-policy approval, treasury evidence and TRM remain refused/unavailable |
 | CDP | Isolated `Agentic Economy Production` project created; explicitly approved API key and Wallet Secret stored in Infisical; authenticated readback reports zero accounts and zero policies | Account/policies wait for the production custody ceilings; credentials are not yet runtime-bound and no wallet was funded or signature requested |
-| AWS telemetry | Existing CloudWatch configuration association rerun successfully; disk and memory metrics now arrive and all eight `ae-alpha` alarms report OK | SNS has no subscriber; alert delivery is not proved |
+| AWS telemetry | Existing CloudWatch configuration association rerun successfully; disk and memory metrics now arrive and all eight `ae-alpha` alarms report OK; the declared SNS email subscription was restored | Subscription confirmation and alert delivery remain unproved |
 
 Both application runtimes now explicitly declare production. The alpha
 Formance environment remains sandbox. `readFormanceConfiguration` rejects
@@ -2960,6 +2960,13 @@ ordering: configuration ran before the agent was installed. Rerunning the
 existing configure association fixed it; no speculative IaC correction was
 needed. The current database backups do not substitute for a restored database
 and full ledger equality/idempotency proof.
+
+The retained OpenTofu state records an unconfirmed email subscription to
+`joel@agentic-economy.ai`, while the live topic had no subscriber. Restoring
+that exact endpoint on `ae-alpha-package4-alerts` produced one pending
+subscription at 04:39 UTC; the confirmation request was handed to Joel.
+The recipient and topic are unchanged. No passing notification drill is
+claimed before confirmation and observed receipt.
 
 Cost Explorer's 24–30 September daily spend was approximately US$8.90–9.67,
 or roughly US$290/month at that observed rate. Duplicating the declared host
