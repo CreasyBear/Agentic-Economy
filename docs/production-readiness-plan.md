@@ -3587,3 +3587,36 @@ interactive credentials for that owner are now revoked. The browser returns to
 sign-in. This establishes provider revocation, bound-user callback admission
 and application authority invalidation; no user deletion or machine-agent
 revocation is performed.
+
+## Stage 53 — restore fresh-session authority after revocation
+
+The completed MFA sign-in creates a new Clerk session at 13:31:57 UTC, and its
+signed `session.created` observation reaches Convex at 13:31:59 UTC. The
+application nevertheless refuses authority: recovery incorrectly depends on
+the standard JWT `exp` claim, which Convex does not expose in this presentation.
+The native Clerk session integration is already active.
+
+**Requires:** a verified Clerk identity and, after revocation, signed creation
+evidence for its exact session strictly after the binding's cutoff.
+**Ensures:** fresh sign-in can issue one current credential generation; repeated
+or concurrent materialization converges on that generation. **Invariant:** old,
+ended and revoked sessions cannot use the recovered generation; cutoffs never
+decrease, and existing revoked credentials remain revoked. **On violation:**
+deny authority without changing credentials or the cutoff. Missing creation
+evidence remains retryable after webhook delivery.
+
+The change adds one optional cutoff to the existing identity binding and one
+shared proof helper for issuance, renewal and authenticated reads. This avoids
+separate proof rules and steady-state history scans. There is no new service,
+dependency, session table or provider call. Legacy reads derive the cutoff
+without writing; successful materialization stores it. The legacy derivation
+checks both revoked credentials and signed audit history, including a later
+revocation that had no remaining credential to change. Because legacy profile
+audits omitted the security action, those updates conservatively count toward
+the initial cutoff. Each legacy history is capped at 256 rows; overflow refuses
+authority rather than using a truncated cutoff.
+
+Native production census finds two active Clerk bindings, with 40 credentials
+on the affected binding and one on the other. The affected owner has seven
+audit rows; the conservative cutoff remains 13:24:57 UTC, before the fresh
+session. The source fix and production schema deployment remain under review.

@@ -6,6 +6,9 @@ import { verifyCustomerRequestServiceAssertion, type CustomerRequestServiceAsser
 import { createPackage3AuditEvent } from '../../../../src/modules/observability/public'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../../../../src/modules/principal-account/external-identity/public'
 import { env, type MutationCtx } from '../../../_generated/server'
+import type { Doc } from '../../../_generated/dataModel'
+import { InteractiveAuthorityError } from '../../principalAccount/interactiveAuthority/errors'
+import { readInteractiveSessionRevocationCutoff } from '../../principalAccount/interactiveAuthority/sessionProof'
 import { persistAuditEvent } from '../audit/persistence'
 import { observationArgs, type ObservationResult } from './contracts'
 import { revokeMachineAgentsForCreatorObservation } from './machineCascade'
@@ -66,11 +69,24 @@ export const recordClerkSecurityEventForServerHandler = async (ctx: MutationCtx,
       return { kind: 'refused', code: 'authority_conflict' }
     }
 
+    let revocationCutoff: number | undefined
+    if (observation.securityAction === 'revoke_interactive_credentials') {
+      try {
+        revocationCutoff = Math.max(
+          await readInteractiveSessionRevocationCutoff(ctx.db, binding),
+          observation.observedAt,
+        )
+      } catch (error) {
+        if (error instanceof InteractiveAuthorityError) return { kind: 'refused', code: 'authority_conflict' }
+        throw error
+      }
+    }
     return await persistObservation(ctx, observation, {
       accountRef: account.accountRef,
       principalRef: principal.principalRef,
       bindingRef: binding.bindingRef,
-    })
+      binding,
+    }, revocationCutoff)
 }
 
 async function validServiceAssertion(
@@ -98,6 +114,7 @@ function validObservation(value: ClerkSecurityObservation): boolean {
     && providerIdentifierPattern.test(value.providerIdentifier)
     && Number.isSafeInteger(value.observedAt)
     && value.observedAt >= 0
+    && (value.securityAction !== 'revoke_interactive_credentials' || value.observedAt > 0)
     && (value.profileDisplayName === undefined
       || (typeof value.profileDisplayName === 'string'
         && value.profileDisplayName.length > 0
@@ -107,7 +124,8 @@ function validObservation(value: ClerkSecurityObservation): boolean {
 async function persistObservation(
   ctx: Pick<MutationCtx, 'db'>,
   observation: ClerkSecurityObservation,
-  authority: Readonly<{ accountRef: string; principalRef: string; bindingRef: string }>,
+  authority: Readonly<{ accountRef: string; principalRef: string; bindingRef: string; binding: Doc<'externalIdentityBindings'> }>,
+  revocationCutoff: number | undefined,
 ): Promise<ObservationResult> {
   const digestValue = observation.deliveryRefHash.slice('sha256:'.length)
   const eventRef = `audit:clerk:${digestValue}`
@@ -117,13 +135,14 @@ async function persistObservation(
   const commandDigest = canonicalDigest(observation)
   const projection = eventProjection(observation, authority.accountRef)
   if (existing !== null) {
-    return existing.activeAccountRef === authority.accountRef
+    const sameObservation = existing.activeAccountRef === authority.accountRef
       && existing.eventType === projection.eventType
       && existing.targetType === projection.targetType
       && existing.targetRef === projection.targetRef
       && existing.payloadHash === commandDigest
-      ? { kind: 'accepted', status: 'replayed', eventRef }
-      : { kind: 'refused', code: 'event_conflict' }
+    if (!sameObservation) return { kind: 'refused', code: 'event_conflict' }
+    await advanceSessionRevocationCutoff(ctx, authority.binding, revocationCutoff)
+    return { kind: 'accepted', status: 'replayed', eventRef }
   }
 
   const toolRef = `clerk:${digestValue}`
@@ -149,6 +168,7 @@ async function persistObservation(
   })
   if (!audit.valid) throw new Error(`clerk_security_audit_invalid:${audit.reason}`)
   await persistAuditEvent(ctx.db, audit.event)
+  await advanceSessionRevocationCutoff(ctx, authority.binding, revocationCutoff)
   if (observation.profileDisplayName !== undefined) {
     const principal = await ctx.db.query('principals')
       .withIndex('by_principalRef', (index) => index.eq('principalRef', authority.principalRef))
@@ -176,6 +196,22 @@ async function persistObservation(
     await revokeMachineAgentsForCreatorObservation(ctx, observation, authority, createdAt, toolRef)
   }
   return { kind: 'accepted', status: 'applied', eventRef }
+}
+
+// The audit, monotonic cutoff and credential revocation commit together.
+// Duplicate deliveries change nothing once initialized; delayed deliveries
+// cannot lower the cutoff, even when no active credential remains to revoke.
+async function advanceSessionRevocationCutoff(
+  ctx: Pick<MutationCtx, 'db'>,
+  binding: Doc<'externalIdentityBindings'>,
+  cutoff: number | undefined,
+): Promise<void> {
+  if (cutoff === undefined || cutoff === binding.interactiveSessionsRevokedBefore) return
+  await ctx.db.patch(binding._id, {
+    interactiveSessionsRevokedBefore: cutoff,
+    revision: binding.revision + 1,
+    updatedAt: Date.now(),
+  })
 }
 
 async function revokeInteractiveCredentialsForObservation(

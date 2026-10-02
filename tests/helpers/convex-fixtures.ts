@@ -168,6 +168,7 @@ export async function ownerAdmin(
         principalRef: canonicalPrincipalRef,
         providerNamespace: 'clerk/user',
         providerIdentifier: identity.tokenIdentifier,
+        interactiveSessionsRevokedBefore: 0,
         providerState: { kind: 'known', value: 'active' },
         lifecycle: 'active',
         credentialGeneration: 1,
