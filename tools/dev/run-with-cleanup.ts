@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const PROCESS_LIST_ARGS = ['-axo', 'pid=,ppid=,command=']
+const PROCESS_LIST_ARGS = ['-axo', 'pid=,ppid=,pgid=,command=']
 const TRANSIENT_CACHE_PATHS = [
   'node_modules/.vite',
   'node_modules/.cache',
@@ -23,7 +23,7 @@ const BROWSER_EXECUTABLE = /(?:^|[\/\s])(?:google chrome|chrom(?:e|ium)?|firefox
 const PROTECTED_PROFILE = /\borca\b|omp-chrome-profile|(?:^|[\/_=\s-])interactive(?:[\/_.\s-]|$)/i
 const SIGNAL_EXIT_CODES: Record<string, number> = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 }
 
-type ProcessEntry = { pid: number, ppid: number, command: string }
+type ProcessEntry = { pid: number, ppid: number, pgid: number, command: string }
 
 type Cli = {
   cleanupOnly: boolean
@@ -85,9 +85,9 @@ async function listProcesses(): Promise<ProcessEntry[] | null> {
     })
     const processes: ProcessEntry[] = []
     for (const line of stdout.split('\n')) {
-      const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line)
+      const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(line)
       if (match === null) continue
-      processes.push({ pid: Number(match[1]), ppid: Number(match[2]), command: match[3] ?? '' })
+      processes.push({ pid: Number(match[1]), ppid: Number(match[2]), pgid: Number(match[3]), command: match[4] ?? '' })
     }
     return processes
   } catch {
@@ -132,19 +132,23 @@ function isProtected(command: string): boolean {
   return PROTECTED_PROFILE.test(command)
 }
 
-function selectBrowserProcesses(processes: ProcessEntry[], baseline: Map<number, ProcessEntry> | null): number[] {
-  if (baseline === null) return []
+// Requires the recorded POSIX child group and readable process metadata.
+// Ensures only this invocation's test browsers are selected. Unrelated groups
+// and preexisting processes remain untouched; missing ownership selects nothing.
+function selectBrowserProcesses(processes: ProcessEntry[], baseline: Map<number, ProcessEntry> | null, ownedPgid: number | null): number[] {
+  if (baseline === null || ownedPgid === null || ownedPgid <= 0) return []
   const byPid = processMap(processes)
   const children = childMap(processes)
   const selected = new Set<number>()
 
   for (const entry of processes) {
-    if (entry.pid === process.pid || baseline.has(entry.pid)) continue
+    if (entry.pid === process.pid || baseline.has(entry.pid) || entry.pgid !== ownedPgid) continue
     if (!isTestBrowser(entry.command)) continue
     selected.add(entry.pid)
     for (const descendant of descendantsOf(entry.pid, children)) {
       const descendantInfo = byPid.get(descendant)
-      if (descendantInfo !== undefined && !baseline.has(descendant) && !isProtected(descendantInfo.command)) {
+      if (descendantInfo !== undefined && descendantInfo.pgid === ownedPgid
+        && !baseline.has(descendant) && !isProtected(descendantInfo.command)) {
         selected.add(descendant)
       }
     }
@@ -225,10 +229,11 @@ async function terminateBrowsers(pids: readonly number[], processes: ProcessEntr
   return { count: terminated.size, failures }
 }
 
-async function cleanup({ baseline, cleanupOnly, dryRun }: {
+async function cleanup({ baseline, cleanupOnly, dryRun, ownedPgid }: {
   baseline: Map<number, ProcessEntry> | null
   cleanupOnly: boolean
   dryRun: boolean
+  ownedPgid: number | null
 }): Promise<void> {
   // Build-tool caches are shared with a concurrently running Vite server.
   // Deleting them after an ordinary test run invalidates the live module graph
@@ -243,7 +248,7 @@ async function cleanup({ baseline, cleanupOnly, dryRun }: {
     const processes = await listProcesses()
     if (processes === null) warning = true
     else {
-      const pids = selectBrowserProcesses(processes, baseline)
+      const pids = selectBrowserProcesses(processes, baseline, ownedPgid)
       browsers = await terminateBrowsers(pids, processes, dryRun)
     }
   }
@@ -269,12 +274,21 @@ function runCommand(command: string, args: string[], env: Record<string, string 
       env,
       shell: false,
       stdio: 'inherit',
+      // POSIX starts this invocation in its own process group. Descendants
+      // retain the group even after the direct child exits.
+      detached: process.platform !== 'win32',
     })
     const forwardSignal = (signal: NodeJS.Signals) => {
       try {
-        child.kill(signal)
+        // The command runs in its own POSIX group, so cancellation must reach
+        // ordinary descendants as well as the direct child.
+        if (process.platform !== 'win32' && typeof child.pid === 'number' && child.pid > 0) {
+          process.kill(-child.pid, signal)
+        } else {
+          child.kill(signal)
+        }
       } catch {
-        // The child may have exited between the signal and this handler.
+        // The group may have exited between the signal and this handler.
       }
     }
     const signalHandlers: Record<string, () => void> = {
@@ -313,7 +327,11 @@ async function main(): Promise<number> {
   try {
     if (!cli.cleanupOnly) result = await runCommand(cli.command, cli.args, cli.env)
   } finally {
-    await cleanup({ baseline, cleanupOnly: cli.cleanupOnly, dryRun: cli.dryRun })
+    await cleanup({
+      baseline, cleanupOnly: cli.cleanupOnly, dryRun: cli.dryRun,
+      ownedPgid: process.platform !== 'win32' && typeof result.child?.pid === 'number'
+        ? result.child.pid : null,
+    })
   }
 
   if (result.error !== null) {
