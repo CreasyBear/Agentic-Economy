@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL
-const sourcePort = process.env.AE_E2E_PORT === undefined ? 3020 : Number(process.env.AE_E2E_PORT)
+const sourcePort = process.env.PLAYWRIGHT_TEST_PORT === undefined ? 3020 : Number(process.env.PLAYWRIGHT_TEST_PORT)
 if (!Number.isInteger(sourcePort) || sourcePort < 1024 || sourcePort > 65535) {
-  throw new Error('AE_E2E_PORT must be an integer between 1024 and 65535.')
+  throw new Error('PLAYWRIGHT_TEST_PORT must be an integer between 1024 and 65535.')
 }
 const sourceBaseUrl = `http://127.0.0.1:${sourcePort}`
 
