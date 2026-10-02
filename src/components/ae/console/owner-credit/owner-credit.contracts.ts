@@ -11,6 +11,7 @@ export type AeOwnerCreditProps = Readonly<{
   balanceLoading?: boolean
   historyLoading?: boolean
   constraintsLoading?: boolean
+  administrationLoading?: boolean
   accountFundingPort?: AccountFundingPort
   fundingConstraints?: AccountFundingConstraints
   onCreditRefresh?: () => void | Promise<void>

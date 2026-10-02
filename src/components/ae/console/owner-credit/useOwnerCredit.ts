@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 
 import type { AeOwnerCreditProps } from '@/components/ae/console/owner-credit/owner-credit.contracts'
@@ -56,6 +56,8 @@ export function useOwnerCredit(): AeOwnerCreditProps {
   const [balanceLoading, setBalanceLoading] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(true)
   const [constraintsLoading, setConstraintsLoading] = useState(true)
+  const [administrationLoading, setAdministrationLoading] = useState(true)
+  const administrationRequest = useRef(0)
   const [unavailable, setUnavailable] = useState({
     balance: false,
     history: false,
@@ -116,6 +118,8 @@ export function useOwnerCredit(): AeOwnerCreditProps {
   }, [readFundingConstraints])
 
   const loadAdministration = useCallback(async () => {
+    const request = ++administrationRequest.current
+    setAdministrationLoading(true)
     const [nextDocuments, nextReconciliation, nextObligations] = await Promise.allSettled([
       readDocuments({ data: {} }),
       readReconciliation({ data: {} }),
@@ -124,6 +128,7 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     for (const result of [nextDocuments, nextReconciliation, nextObligations]) {
       if (result.status === 'rejected') captureClientExceptionOnClient(result.reason)
     }
+    if (request !== administrationRequest.current) return
     if (nextDocuments.status === 'fulfilled') setDocuments(nextDocuments.value.page)
     if (nextReconciliation.status === 'fulfilled') setReconciliationCases(nextReconciliation.value.page)
     if (nextObligations.status === 'fulfilled') setProviderObligations(nextObligations.value.page)
@@ -133,6 +138,7 @@ export function useOwnerCredit(): AeOwnerCreditProps {
       reconciliation: nextReconciliation.status === 'rejected',
       obligations: nextObligations.status === 'rejected',
     }))
+    setAdministrationLoading(false)
   }, [readDocuments, readObligations, readReconciliation])
 
   const load = useCallback(async () => {
@@ -142,6 +148,7 @@ export function useOwnerCredit(): AeOwnerCreditProps {
 
   useEffect(() => {
     void load()
+    return () => { administrationRequest.current += 1 }
   }, [load])
 
   return {
@@ -151,6 +158,7 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     balanceLoading,
     historyLoading,
     constraintsLoading,
+    administrationLoading,
     accountFundingPort,
     ...(fundingConstraints === undefined ? {} : { fundingConstraints }),
     onCreditRefresh: load,

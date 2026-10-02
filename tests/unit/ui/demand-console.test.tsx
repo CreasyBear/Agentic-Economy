@@ -3,7 +3,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
@@ -15,10 +15,39 @@ import { toast } from '@/lib/ui/toast'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
 import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
 import { AeOwnerCredit } from '@/components/ae/console/owner-credit/AeOwnerCredit'
+import { CreditAccountingPanel } from '@/components/ae/console/owner-credit/components/CreditAccountingPanel'
+import { useOwnerCredit } from '@/components/ae/console/owner-credit/useOwnerCredit'
+import type { MoneyDocumentView } from '@/lib/server/money-documents.functions'
 import type { AccountHistoryResult, CreditPaymentSession } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingBeginInput, AccountFundingConstraints } from '@/modules/money/server'
 
 const clerkIdentity = vi.hoisted(() => ({ userId: 'user_owner' }))
+const creditReads = vi.hoisted(() => ({
+  balance: vi.fn(), history: vi.fn(), constraints: vi.fn(), begin: vi.fn(), funding: vi.fn(),
+  documents: vi.fn(), reconciliation: vi.fn(), obligations: vi.fn(),
+  statement: vi.fn(), dailyClose: vi.fn(), sign: vi.fn(), render: vi.fn(), capture: vi.fn(),
+}))
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@tanstack/react-start')>(),
+  useServerFn: (fn: unknown) => fn,
+}))
+vi.mock('@/modules/money/money.functions', () => ({
+  readAccountFundingBalanceServer: creditReads.balance,
+  readAccountFundingConstraintsServer: creditReads.constraints,
+  beginAccountFundingServer: creditReads.begin,
+  readAccountFundingServer: creditReads.funding,
+}))
+vi.mock('@/lib/server/call-history.functions', () => ({ readOwnerAccountHistoryServer: creditReads.history }))
+vi.mock('@/lib/server/money-documents.functions', () => ({
+  readOwnerMoneyDocumentsServer: creditReads.documents,
+  readOwnerMoneyReconciliationServer: creditReads.reconciliation,
+  readOwnerProviderObligationsServer: creditReads.obligations,
+  createOwnerStatementServer: creditReads.statement,
+  createOwnerDailyCloseServer: creditReads.dailyClose,
+  signOwnerDailyCloseServer: creditReads.sign,
+  renderOwnerMoneyDocumentServer: creditReads.render,
+}))
+vi.mock('@/lib/observability/capture-client-exception', () => ({ captureClientExceptionOnClient: creditReads.capture }))
 vi.mock('@clerk/tanstack-react-start', () => ({
   useAuth: () => ({ userId: clerkIdentity.userId }),
 }))
@@ -156,6 +185,119 @@ afterEach(() => {
 function openLedger() {
   fireEvent.click(screen.getByRole('tab', { name: 'Ledger' }))
 }
+
+describe('owner credit administration reads', () => {
+  const emptyPage = { page: [], continueCursor: '', isDone: true }
+  const document: MoneyDocumentView = {
+    documentRef: 'document:original', kind: 'statement', amountUnits: '12500000', residualUnits: '0',
+    sourceTransactionRefs: ['transaction:one'], policyRefs: ['policy:one'], policyDigest: 'a'.repeat(64),
+    renderInputDigest: 'b'.repeat(64), templateVersion: 'ae.money-document:html:v1',
+    state: 'issued', sourceCount: 1, rendered: true, createdAt: 1_788_120_000_000,
+  }
+  function deferredPage() {
+    let resolve!: (value: { page: MoneyDocumentView[]; continueCursor: string; isDone: boolean }) => void
+    let reject!: (reason: Error) => void
+    const promise = new Promise<{ page: MoneyDocumentView[]; continueCursor: string; isDone: boolean }>((done, fail) => {
+      resolve = done
+      reject = fail
+    })
+    return { promise, resolve, reject }
+  }
+  function Accounting() {
+    const props = useOwnerCredit()
+    return <>
+      <button type="button" onClick={() => { void props.onCreditRefresh?.() }}>Refresh accounting</button>
+      <CreditAccountingPanel {...props} />
+    </>
+  }
+  function expectPending() {
+    expect(screen.getByRole('group', { name: 'Accounting records' }).getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByText('Loading accounting records…')).toBeTruthy()
+  }
+  function expectNoEmptySuccess() {
+    expect(screen.queryByText('No accounting documents yet')).toBeNull()
+    expect(screen.queryByText('No reconciliation differences')).toBeNull()
+    expect(screen.queryByText('No Provider obligations')).toBeNull()
+  }
+  beforeEach(() => {
+    creditReads.balance.mockReset().mockResolvedValue(accountBalance)
+    creditReads.history.mockReset().mockResolvedValue(emptyAccountHistory)
+    creditReads.constraints.mockReset().mockResolvedValue(fundingConstraints)
+    creditReads.documents.mockReset().mockResolvedValue(emptyPage)
+    creditReads.reconciliation.mockReset().mockResolvedValue(emptyPage)
+    creditReads.obligations.mockReset().mockResolvedValue(emptyPage)
+  })
+
+  it('waits for all administration reads before presenting successful empty results', async () => {
+    const pending = deferredPage()
+    creditReads.documents.mockReturnValueOnce(pending.promise)
+    render(<Accounting />)
+    expectPending()
+    expectNoEmptySuccess()
+    await act(async () => { pending.resolve(emptyPage) })
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Accounting records' }).getAttribute('aria-busy')).toBe('false'))
+    expect(screen.getByText('No accounting documents yet')).toBeTruthy()
+    expect(screen.getByText('No reconciliation differences')).toBeTruthy()
+    expect(screen.getByText('No Provider obligations')).toBeTruthy()
+    expect(screen.queryByText('Loading accounting records…')).toBeNull()
+  })
+
+  it('turns delayed read failures into unavailable states without an intermediate empty success', async () => {
+    const pending = deferredPage()
+    creditReads.documents.mockReturnValueOnce(pending.promise)
+    creditReads.reconciliation.mockReturnValueOnce(pending.promise)
+    creditReads.obligations.mockReturnValueOnce(pending.promise)
+    render(<Accounting />)
+    expectPending()
+    expectNoEmptySuccess()
+    await act(async () => { pending.reject(new Error('administration unavailable')) })
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Accounting records' }).getAttribute('aria-busy')).toBe('false'))
+    expect(screen.getByText('Documents unavailable')).toBeTruthy()
+    expect(screen.getByText('Reconciliation unavailable')).toBeTruthy()
+    expect(screen.getByText('Provider obligations unavailable')).toBeTruthy()
+    expectNoEmptySuccess()
+  })
+
+  it.each([true, false])('preserves settled records and lets only the newest refresh publish (older first: %s)', async (olderFirst) => {
+    const older = deferredPage(), newer = deferredPage()
+    creditReads.documents.mockResolvedValueOnce({ ...emptyPage, page: [document] })
+      .mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise)
+    render(<Accounting />)
+    await screen.findByText('document:original')
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh accounting' }))
+    expectPending()
+    expect(screen.getByText('document:original')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh accounting' }))
+    if (olderFirst) {
+      await act(async () => { older.resolve({ ...emptyPage, page: [{ ...document, documentRef: 'document:stale' }] }) })
+      expectPending()
+      expect(screen.getByText('document:original')).toBeTruthy()
+      expect(screen.queryByText('document:stale')).toBeNull()
+    }
+    await act(async () => { newer.resolve({ ...emptyPage, page: [{ ...document, documentRef: 'document:newest' }] }) })
+    await screen.findByText('document:newest')
+    if (!olderFirst) {
+      await act(async () => { older.resolve({ ...emptyPage, page: [{ ...document, documentRef: 'document:stale' }] }) })
+    }
+    expect(screen.getByText('document:newest')).toBeTruthy()
+    expect(screen.queryByText('document:stale')).toBeNull()
+    expect(screen.queryByText('document:original')).toBeNull()
+    expect(screen.getByRole('group', { name: 'Accounting records' }).getAttribute('aria-busy')).toBe('false')
+  })
+
+  it('ignores an older failure after the latest refresh has succeeded', async () => {
+    const older = deferredPage()
+    creditReads.documents.mockReturnValueOnce(older.promise)
+      .mockResolvedValueOnce({ ...emptyPage, page: [document] })
+    render(<Accounting />)
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh accounting' }))
+    await screen.findByText('document:original')
+    await act(async () => { older.reject(new Error('stale request failed')) })
+    expect(screen.getByText('document:original')).toBeTruthy()
+    expect(screen.queryByText('Documents unavailable')).toBeNull()
+    expect(screen.getByRole('group', { name: 'Accounting records' }).getAttribute('aria-busy')).toBe('false')
+  })
+})
 
 describe('promotional credit presentation', () => {
   it('shows total and its funding sources without substituting total for purchased credit', () => {

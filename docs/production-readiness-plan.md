@@ -2988,3 +2988,66 @@ silently replace it. No vendor enquiry was sent. Two independent production
 Base RPC providers, production commercial-policy approval, treasury evidence,
 alert delivery, a restore drill, owner MFA and the real-Call matrix remain
 outstanding. The production foundation gate and launch gate remain closed.
+
+## Stage 44 — alert delivery and authenticated recovery acceptance
+
+### Existing AWS alert route — 2 October 2026
+
+The operator confirmed the restored SNS subscription. Native readback now shows
+`PendingConfirmation: false` for the existing `joel@agentic-economy.ai` endpoint
+on `ae-alpha-package4-alerts`. The session used the expected
+`Package4ReleaseOpenTofu` role in account `197716152388`.
+
+Before the controlled drill, `ae-alpha-k3s-cpu` was OK, its only alarm action was
+the existing SNS topic, and the last three five-minute CPU averages were
+8.5–9.4%. At 04:54:29 UTC, a temporary ALARM state with correlation
+`ae-alert-20261002T0454Z` exercised that action. CloudWatch recorded success;
+SNS reported one delivered notification and zero failures. Normal metric
+evaluation restored OK at 04:56:11 UTC, without a manual reset. All eight alpha
+alarms then reported OK with actions enabled. The alarm configuration, workload
+and financial state were unchanged.
+
+This proves CloudWatch-to-SNS notification delivery for the existing AWS
+foundation. The recipient's inbox confirmation remains pending. It does not
+prove application-level Sentry alerts, production ledger recovery or financial
+readiness; the restore and production foundation gates remain open.
+
+### Authenticated owner recovery and Account records
+
+The existing required security journey failed on obsolete labels and routes.
+Scoped assertions now follow the current Profile and Agent-key controls,
+require the loaded security-history table, and retain Provider-connection and
+earnings/setup navigation. This corrected journey passed against staging
+`1eac65e7190c60555690b649a3e43b89a17eebf1` in 18.8 seconds. Those application
+surfaces are unchanged between that deployed revision and main `bacc1a3f7`.
+This proves recovery navigation and honest containment status, not a new
+revocation or production MFA drill.
+
+The Account journey now tests Credit, documents, reconciliation and Calls
+independently of opening Stripe Checkout. The separate Checkout test remains
+required when the full suite runs; it compares the displayed quote with the
+exact checkout total instead of a historical fixed fee. No new skip, test flag,
+dependency or provider substitution was added.
+
+Independent review found a false-empty state in the actual Account screen:
+document, reconciliation and obligation arrays started empty before their
+requests completed. The change exposes one existing-panel loading state and
+keeps the latest request authoritative during overlapping refreshes.
+
+**Requires:** authenticated owner record reads. **Ensures:** pending reads are
+visibly loading; successful empty results appear only after the current batch
+settles. **Invariant:** settled records remain visible during refresh, and an
+older response cannot replace newer records, failure status or completion.
+**On violation:** the existing unavailable state remains explicit. The browser
+test waits for the named accounting group to finish before accepting records.
+The existing hook and panel remain the boundary; one loading flag and request
+generation avoid a new state library or request wrapper.
+
+All 47 existing Account/console tests pass, including five deferred-response
+cases for pending/empty results, delayed failure, both refresh completion orders
+and stale failure after newer success. Independent review accepted the resulting
+contract. The deployed Account journey remains **unproved**: its balance read
+returns `formance_configuration_invalid`. Native Convex readback confirms
+`courteous-finch-213` declares development/sandbox but has no Formance gateway or
+ledger binding. This is a provider-binding gap, not an accepted empty balance.
+No Checkout session or financial transaction was created by these proofs.
