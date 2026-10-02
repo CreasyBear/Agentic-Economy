@@ -2755,6 +2755,13 @@ boundary, with no state mutation or automatic retry. Two rendering regressions
 failed before the guard on null/undefined; all six error-presentation cases use
 the real Router context and preserve the prior copy.
 
+The patched generator reorders `routeTree.gen.ts`. A comparison of all 155
+route imports and 154 route declarations confirms the same imports, paths,
+identities and parents; the multiset of nonblank lines is unchanged. Commit the
+native generated order so the build-integrity gate can prove regeneration is
+stable. Vercel's application Preview accepts and builds the patched dependency
+set; this is distinct from the retired sandbox-project failure below.
+
 The separate `agentic-economy-sandbox-tools` preview fails because its Vercel
 root directory still names the deleted reference-provider fixture. Restoring
 that retired fixture is not part of this application merge. GitHub's kernel
