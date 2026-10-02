@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import arcButton from '@/components/arc/button/button.module.css'
+import '../CommandPanelComposition.css'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
@@ -64,23 +64,23 @@ export function ToolDetailPage({
       tabIndex={-1}
       role="region"
       aria-label="Tool details"
-      className="flex min-h-0 flex-1 flex-col gap-related overflow-y-auto outline-none"
+      className="arc-market arc-command-detail"
     >
       {state.kind === 'loading' ? (
-        <p role="status" className="px-gutter py-section text-sm text-muted-foreground">
+        <p role="status" className="arc-market arc-command-status">
           Loading Tool…
         </p>
       ) : null}
       {state.kind === 'unavailable' ? (
-        <div className="grid gap-intra px-gutter py-section">
-          <p className="text-sm font-medium text-foreground">Tool unavailable</p>
-          <p className="text-sm text-muted-foreground">
+        <div className="arc-market arc-command-recovery">
+          <p className="arc-command-detail-title">Tool unavailable</p>
+          <p>
             “{state.toolRef}” could not be inspected right now.
           </p>
           <Link
             to="/market"
             onClick={onNavigate}
-            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch justify-self-start')}
+            className={`${arcButton.button} ${arcButton.primary} ${arcButton.md}`}
           >
             Browse current Tools
           </Link>

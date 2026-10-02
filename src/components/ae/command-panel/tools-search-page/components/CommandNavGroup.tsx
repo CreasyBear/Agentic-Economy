@@ -4,6 +4,8 @@ import { CommandGroup, CommandItem } from '@/components/ui/command'
 
 import type { CommandNavigationItem, CommandQuickAction } from '../tools-search-page.contracts'
 
+import './CommandResultsComposition.css'
+
 export type CommandNavGroupProps = Readonly<{
   isActive: boolean
   navItems: readonly CommandNavigationItem[]
@@ -21,7 +23,7 @@ export function CommandNavGroup({
 }: CommandNavGroupProps) {
   if (navItems.length === 0) return null
   return (
-    <CommandGroup heading="Navigation">
+    <CommandGroup heading="Navigation" className="arc-market arc-command-result-group">
       {navItems.map((item) => {
         const Icon = item.icon
         const value = `ae-nav:${item.href}`
@@ -35,12 +37,14 @@ export function CommandNavGroup({
               if (item.opensSettings !== undefined) onOpenSettings?.(item.opensSettings)
               else onNavigate?.(item.href)
             }}
-            className="min-h-touch gap-intra px-gutter py-intra"
+            className="arc-command-result-row"
           >
-            <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="truncate text-sm font-medium text-foreground">{item.label}</span>
-              <span className="truncate font-mono text-xs text-muted-foreground">
+            <Icon aria-hidden="true" className="size-5 shrink-0 arc-command-result-icon" />
+            <span className="arc-command-result-copy">
+              <span className="arc-command-result-title">{item.label}</span>
+              <span className={item.opensSettings !== undefined
+                ? 'arc-command-result-meta'
+                : 'arc-command-result-meta arc-command-result-reference'}>
                 {item.opensSettings !== undefined ? 'Opens here · task unchanged' : item.href}
               </span>
             </span>
@@ -68,7 +72,7 @@ export function CommandQuickActionsGroup({
 }: CommandQuickActionsGroupProps) {
   if (quickActions.length === 0) return null
   return (
-    <CommandGroup heading="Quick Actions">
+    <CommandGroup heading="Quick Actions" className="arc-market arc-command-result-group">
       {quickActions.map((action) => {
         const Icon = action.icon
         const value = `ae-action:${action.id}`
@@ -82,12 +86,12 @@ export function CommandQuickActionsGroup({
               if (action.id === 'toggle-theme') onToggleTheme?.()
               else if (action.href !== undefined) onNavigate?.(action.href)
             }}
-            className="min-h-touch gap-intra px-gutter py-intra"
+            className="arc-command-result-row"
           >
-            <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="truncate text-sm font-medium text-foreground">{action.label}</span>
-              <span className="truncate text-xs text-muted-foreground">{action.description}</span>
+            <Icon aria-hidden="true" className="size-5 shrink-0 arc-command-result-icon" />
+            <span className="arc-command-result-copy">
+              <span className="arc-command-result-title">{action.label}</span>
+              <span className="arc-command-result-meta">{action.description}</span>
             </span>
           </CommandItem>
         )

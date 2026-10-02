@@ -1,6 +1,7 @@
-import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import './SecurityHistoryComposition.css'
 
 const recoveryChecks: ReadonlyArray<{
   title: string
@@ -31,33 +32,40 @@ const recoveryChecks: ReadonlyArray<{
 
 export function AeCompromiseRecoveryChecklist() {
   return (
-    <SettingsGroup
-      title="If you suspect compromise"
-      description="Review independent sources. Opening this checklist does not revoke access."
-    >
-      <Alert className="my-4">
-        <AlertTitle>This page does not mark the account contained</AlertTitle>
-        <AlertDescription>
-          Resetting MFA alone does not revoke existing sessions, Agent credentials,
-          Provider connection authority.
-          <p className="mt-1 text-xs text-muted-foreground">
-            A$0.00 affected — opening this list does not revoke sessions or Agents.
-          </p>
-        </AlertDescription>
-      </Alert>
-      <ol aria-label="Compromise recovery checks">
-        {recoveryChecks.map((check) => (
-          <li key={check.title}>
-            <SettingsRow label={check.title} description={check.description}>
-              {check.href ? (
-                <a href={check.href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-                  {check.href === '/support' ? 'Contact support' : 'Review'}
-                </a>
-              ) : <span className="text-muted-foreground">Review separately</span>}
-            </SettingsRow>
-          </li>
-        ))}
-      </ol>
-    </SettingsGroup>
+    <div className="arc-market arc-security-recovery">
+      <SettingsGroup
+        title="If you suspect compromise"
+        description="Review independent sources. Opening this checklist does not revoke access."
+      >
+        <Alert className="arc-security-warning">
+          <AlertTitle>This page does not mark the account contained</AlertTitle>
+          <AlertDescription>
+            Resetting MFA alone does not revoke existing sessions, Agent credentials,
+            Provider connection authority.
+            <p className="arc-security-financial-impact">
+              A$0.00 affected — opening this list does not revoke sessions or Agents.
+            </p>
+          </AlertDescription>
+        </Alert>
+        <ol aria-label="Compromise recovery checks" className="arc-security-recovery-list">
+          {recoveryChecks.map((check, index) => (
+            <li key={check.title} className="arc-security-check">
+              <span className="arc-security-check-number" aria-hidden="true">{index + 1}</span>
+              <div className="arc-security-check-copy">
+                <h3>{check.title}</h3>
+                <p>{check.description}</p>
+              </div>
+              <div className="arc-security-check-action">
+                {check.href ? (
+                  <a href={check.href} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-security-review-link`}>
+                    {check.href === '/support' ? 'Contact support' : 'Review'}
+                  </a>
+                ) : <span className="arc-security-review-separately">Review separately</span>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </SettingsGroup>
+    </div>
   )
 }

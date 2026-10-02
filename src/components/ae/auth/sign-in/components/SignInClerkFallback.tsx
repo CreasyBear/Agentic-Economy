@@ -1,14 +1,14 @@
+import { Skeleton } from '@/components/ui/skeleton'
+import '@/components/ae/website/AuthComposition.css'
+
 export function SignInClerkFallback() {
   return (
     <div
       data-slot="ae-site-auth-clerk-fallback"
-      className="grid min-h-96 w-full gap-related"
+      className="arc-market arc-auth-loading"
       aria-hidden
     >
-      <div className="min-h-touch bg-muted" />
-      <div className="min-h-touch bg-foreground/20" />
-      <div className="min-h-touch border border-border bg-muted/40" />
-      <div className="min-h-touch border border-border bg-muted/40" />
+      {[0, 1, 2, 3].map(index => <Skeleton key={index} className="arc-auth-loading-field" />)}
     </div>
   )
 }

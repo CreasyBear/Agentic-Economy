@@ -99,4 +99,22 @@ describe('ChatHeader', () => {
     expect(screen.getByText(/Sign in to keep your chats/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/sign-in')
   })
+  it('preserves exact credit/share authority and emits commands without submitting a surrounding form', () => {
+    const onNewChat = vi.fn(), onIssueShare = vi.fn(), onRevokeShare = vi.fn(), onCopyShare = vi.fn(), onSubmit = vi.fn()
+    render(<form onSubmit={onSubmit}><ChatHeader authenticated threadId="private-thread" threadTitle="Weather procurement" busy={false}
+      shareState="active" sharePath="/s/exact-share-token" copied={false} balanceLabel="A$10.01"
+      mobileHistory={null} mobileOpen={false} onMobileOpenChange={() => undefined} onToggleHistory={() => undefined}
+      onNewChat={onNewChat} onIssueShare={onIssueShare} onRevokeShare={onRevokeShare} onCopyShare={onCopyShare} /></form>)
+    expect(screen.getByRole('link', { name: 'Available credit A$10.01' }).getAttribute('href')).toBe('/owner/credit')
+    expect((screen.getByRole('textbox', { name: chatHistory.shareLabel }) as HTMLInputElement).value).toBe('/s/exact-share-token')
+    fireEvent.click(screen.getByRole('button', { name: chatHistory.newChat }))
+    fireEvent.click(screen.getByRole('button', { name: chatHistory.shareGet }))
+    fireEvent.click(screen.getByRole('button', { name: chatHistory.shareRevoke }))
+    fireEvent.click(screen.getByRole('button', { name: chatHistory.copy }))
+    expect(onNewChat).toHaveBeenCalledOnce()
+    expect(onIssueShare).toHaveBeenCalledOnce()
+    expect(onRevokeShare).toHaveBeenCalledOnce()
+    expect(onCopyShare).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
 })

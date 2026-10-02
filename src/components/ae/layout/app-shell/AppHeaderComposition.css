@@ -1,0 +1,128 @@
+/* Adapted from Arc UI page-header source SHA-256: 70bd6338c6dedb44eae5392dfb623d1f2da7d152cdcc2d3e646b3149e8704cea. */
+.arc-market.arc-app-header,
+.arc-market.arc-app-header *,
+.arc-market.arc-app-header *::before,
+.arc-market.arc-app-header *::after,
+.arc-market.arc-app-header__drawer,
+.arc-market.arc-app-header__drawer *,
+.arc-market.arc-app-header__drawer *::before,
+.arc-market.arc-app-header__drawer *::after {
+  box-sizing: border-box;
+}
+
+.arc-market.arc-app-header .arc-app-header__bar {
+  display: flex;
+  min-width: 0;
+  min-height: var(--header-height);
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-4);
+  row-gap: var(--space-2);
+}
+
+.arc-market.arc-app-header .arc-app-header__bar > * {
+  min-width: 0;
+}
+
+.arc-market.arc-app-header .arc-app-header__lead {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.arc-market.arc-app-header .arc-app-header__bar--minimal {
+  justify-content: space-between;
+}
+
+.arc-market.arc-app-header .arc-app-header__bar--minimal .arc-app-header__lead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.arc-market.arc-app-header .arc-app-header__bar--minimal .arc-app-header__actions {
+  margin-inline-start: auto;
+}
+
+.arc-market.arc-app-header .arc-app-header__brand {
+  display: inline-flex;
+  min-width: var(--control-height-md);
+  min-height: var(--control-height-md);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  text-decoration: none;
+}
+
+.arc-market.arc-app-header .arc-app-header__title {
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: clamp(14px, 2vw, 20px);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.arc-market.arc-app-header .arc-app-header__actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.arc-market.arc-app-header .arc-app-header__actions > * {
+  min-width: 0;
+}
+
+.arc-market.arc-app-header .arc-app-header__actions :is(a, button) {
+  min-height: var(--control-height-md);
+}
+
+.arc-market.arc-app-header .arc-app-header__desktop-sign-in {
+  display: none;
+}
+
+.arc-market.arc-app-header .arc-public-menu-trigger {
+  display: inline-flex;
+}
+
+@media (min-width: 768px) {
+  .arc-market.arc-app-header .arc-app-header__desktop-sign-in {
+    display: inline-flex;
+  }
+
+  .arc-market.arc-app-header .arc-public-menu-trigger {
+    display: none;
+  }
+}
+
+.arc-market.arc-app-header__drawer {
+  --drawer-size: min(20rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+}
+
+.arc-market.arc-app-header__drawer > div {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 0;
+}
+
+.arc-market.arc-app-header__drawer .arc-app-header__drawer-footer {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding: var(--space-4);
+  padding-block-end: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+}

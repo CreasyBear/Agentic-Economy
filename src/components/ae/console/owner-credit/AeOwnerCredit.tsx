@@ -1,6 +1,8 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
+import './CreditComposition.css'
+
 import { CreditAccountingPanel } from './components/CreditAccountingPanel'
 import { CreditFundPanel } from './components/CreditFundPanel'
 import { CreditLedgerPanel } from './components/CreditLedgerPanel'
@@ -22,7 +24,7 @@ export function AeOwnerCredit(props: AeOwnerCreditProps) {
   const defaultSection = sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash)
 
   return (
-    <div className="grid gap-section">
+    <div className="arc-market arc-credit-root">
       {openReconciliation > 0 ? (
         <Alert>
           <AlertTitle>Reconciliation needs attention</AlertTitle>
@@ -31,26 +33,26 @@ export function AeOwnerCredit(props: AeOwnerCreditProps) {
           </AlertDescription>
         </Alert>
       ) : null}
-      <Tabs defaultValue={defaultSection} className="gap-section">
+      <Tabs defaultValue={defaultSection} className="arc-credit-tabs">
         <TabsList
           variant="line"
           aria-label="Credit sections"
-          className="max-w-full justify-start overflow-x-auto"
+          className="arc-credit-tabs__list"
         >
           {ownerCreditSectionNavigation.map(({ id, label }) => (
-            <TabsTrigger key={id} value={id}>{label}</TabsTrigger>
+            <TabsTrigger key={id} value={id} className="arc-credit-tabs__trigger">{label}</TabsTrigger>
           ))}
         </TabsList>
-        <TabsContent value="fund">
+        <TabsContent value="fund" className="arc-credit-tabs__content">
           <CreditFundPanel {...props} />
         </TabsContent>
-        <TabsContent value="ledger">
+        <TabsContent value="ledger" className="arc-credit-tabs__content">
           <CreditLedgerPanel {...props} />
         </TabsContent>
       </Tabs>
-      <details className="rounded-card border border-border p-gutter">
-        <summary className="cursor-pointer font-medium">Accounting records and administration</summary>
-        <div className="mt-related">
+      <details className="arc-credit-accounting">
+        <summary>Accounting records and administration</summary>
+        <div className="arc-credit-accounting__content">
           <CreditAccountingPanel {...props} />
         </div>
       </details>

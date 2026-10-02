@@ -2,7 +2,9 @@
 import { ErrorBoundary } from '@sentry/react'
 import { useEffect, useState } from 'react'
 import { PlusIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import '@/components/arc/chat/ChatComposition.css'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 
 import { ChatTranscript } from '../../ChatTranscript'
@@ -47,24 +49,24 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
   if (model.signInToThread !== undefined) {
     return (
       <AeChatPage header={null} dock={null}>
-        <div className="mx-auto flex w-full max-w-prose flex-col gap-4 px-4 py-16">
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in to open this chat</h1>
-          <p className="text-muted-foreground">This conversation is private. Sign in to return to this page.</p>
-          <a href={model.signInToThread.href} className="inline-flex min-h-10 w-fit items-center rounded-md bg-foreground px-4 text-sm text-background">Sign in</a>
+        <div className="arc-chat-private">
+          <h1>Sign in to open this chat</h1>
+          <p>This conversation is private. Sign in to return to this page.</p>
+          <a href={model.signInToThread.href} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>Sign in</a>
         </div>
       </AeChatPage>
     )
   }
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+    <div className="arc-market arc-chat arc-chat-workspace">
       {model.showHistoryRail ? (
-        <aside aria-label="Conversation history" className={`hidden h-full shrink-0 flex-col border-r border-border bg-card text-foreground md:flex ${historyOpen ? 'w-64' : 'w-12'}`}>
+        <aside aria-label="Conversation history" className="arc-chat-sidebar" data-expanded={historyOpen}>
           {historyOpen
             ? <ErrorBoundary key={`${model.header.threadId}:${historyVersion}`}
-                fallback={<RecoveryNotice className="m-3" reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} />}>
+                fallback={<RecoveryNotice className="arc-chat-sidebar-recovery" reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} />}>
                 {model.createHistoryPanel('rail')}
               </ErrorBoundary>
-            : <Button type="button" variant="ghost" size="icon" className="m-1 min-h-10 min-w-10" aria-label="New chat" onClick={model.header.onNewChat}><PlusIcon aria-hidden="true" /></Button>}
+            : <Button type="button" variant="ghost" size="sm" className="arc-chat-sidebar-new" aria-label="New chat" onClick={model.header.onNewChat}><PlusIcon aria-hidden="true" /></Button>}
         </aside>
       ) : null}
       <AeChatPage
@@ -78,7 +80,7 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
               ownerChatEnabled={ownerChatEnabled}
               mobileHistory={model.showHistoryRail ? (
                 <ErrorBoundary key={`${model.header.threadId}:${historyVersion}`}
-                  fallback={<RecoveryNotice className="m-3" reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} />}>
+                  fallback={<RecoveryNotice className="arc-chat-sidebar-recovery" reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} />}>
                   {model.createHistoryPanel('history', () => setMobileOpen(false))}
                 </ErrorBoundary>
               ) : null}
@@ -91,9 +93,9 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
         dock={null}
         {...model.pageBusy ? { busy: true } : {}}
       >
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="arc-chat-live-main">
           {offline ? (
-            <div className="px-4 pt-3">
+            <div className="arc-chat-offline">
               <RecoveryNotice reason="network_offline" onRetry={retryConnection} onEdit={focusPrompt} />
             </div>
           ) : null}
@@ -102,11 +104,11 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
             enableSpendingBusy={enableSpendingBusy}
             {...(onAddCredit === undefined ? {} : { onAddCredit })}
             {...(onEnableSpending === undefined ? {} : { onEnableSpending })} />
-          <div className="sticky bottom-0 z-10 w-full shrink-0 bg-background pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
-            <div className="mx-auto grid w-full max-w-[1200px] grid-cols-12 gap-x-2 px-[5px] sm:px-0">
-              <div className="col-span-12 min-w-0 md:col-start-3 md:col-span-8">
+          <div className="arc-chat-composer-dock">
+            <div className="arc-chat-composer-page">
+              <div className="arc-chat-composer-slot">
                 {empty && model.transcript.onStarter ? (
-                  <div className="mb-3"><ChatSuggestedActions onPick={model.transcript.onStarter} /></div>
+                  <div className="arc-chat-starters"><ChatSuggestedActions onPick={model.transcript.onStarter} /></div>
                 ) : null}
                 <ChatComposer {...model.composer} />
               </div>

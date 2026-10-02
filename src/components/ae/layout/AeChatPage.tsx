@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import './ChatPageComposition.css'
 
 type AeChatAskPageProps = {
   kind?: 'ask'
@@ -25,11 +26,11 @@ export function AeChatPage(props: AeChatAskPageProps | AeChatSharedPageProps) {
         id="main-content"
         data-shell-mode="chat"
         tabIndex={-1}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+        className="arc-market arc-chat arc-chat-page"
         aria-label="Shared chat"
       >
         {props.header}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{props.children}</div>
+        <div className="arc-chat-page-content">{props.children}</div>
       </main>
     )
   }
@@ -39,12 +40,12 @@ export function AeChatPage(props: AeChatAskPageProps | AeChatSharedPageProps) {
       id="main-content"
       data-shell-mode="chat"
       tabIndex={-1}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+      className="arc-market arc-chat arc-chat-page"
       aria-label="Chat"
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="arc-chat-page-main">
         {props.header}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-busy={props.busy === true}>
+        <div className="arc-chat-page-content" aria-busy={props.busy === true}>
           {props.children}
         </div>
         {props.dock}

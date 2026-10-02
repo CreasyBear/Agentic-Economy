@@ -1,0 +1,348 @@
+/*
+ * Arc source CSS references retrieved 2026-10-01:
+ * drawer.module.css SHA-256 aa27fdf0aa995285f0cf513fcf355b037018c2a1a72c63fac4909a40055a7dd2
+ * security-settings.module.css SHA-256 60cbc94070f39d27308bebc2a5e0c294a91bf5a932babde7dcbf41185ba6ad8c
+ * Drawer structure and security settings density adapted for secret-key reveal.
+ */
+.arc-market.arc-key-reveal-drawer {
+  --drawer-size: min(90vw, 620px);
+  width: var(--drawer-size);
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.arc-market.arc-key-reveal-drawer[data-side="right"] {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.arc-market.arc-key-reveal-drawer > div:last-child {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--space-6);
+  padding-block-end: max(var(--space-6), env(safe-area-inset-bottom, 0px));
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-environment-row {
+  display: flex;
+  min-width: 0;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-display-name {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-environment {
+  display: inline-flex;
+  min-height: var(--space-6);
+  flex: none;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding-inline: var(--space-3);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-environment[data-environment="production"] {
+  border-color: var(--ae-warning-ring);
+  background: var(--ae-warning-subtle);
+  color: var(--ae-warning-foreground);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-reveal-scroll {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-warning {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: var(--space-4) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-1) var(--space-3);
+  border: 1px solid var(--ae-warning-ring);
+  border-radius: var(--radius-control);
+  padding: var(--space-3) var(--space-4);
+  background: var(--ae-warning-subtle);
+  color: var(--ae-warning-foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-warning > svg {
+  width: var(--space-4);
+  height: var(--space-4);
+  color: var(--warning);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-warning [data-slot="alert-title"] {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-warning [data-slot="alert-description"] {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-secret-group {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-secret-label,
+.arc-market.arc-key-reveal-drawer .arc-key-quickstart-label {
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-secret-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-secret-value {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex: 1 1 auto;
+  align-items: center;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding-inline: var(--space-3);
+  background: var(--surface-muted);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-secret-revealed {
+  user-select: all;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-secret-masked {
+  letter-spacing: .02em;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-icon-button {
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  flex: none;
+  padding-inline: 0;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-status {
+  min-height: var(--space-4);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-status-error {
+  color: var(--danger);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-quickstart {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-tabs {
+  width: 100%;
+  min-width: 0;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-tabs [data-slot="tabs-list"].arc-key-tab-list {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: none;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: var(--radius-control);
+  padding: var(--space-1);
+  background: var(--surface-muted);
+  scrollbar-width: thin;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-tabs [data-slot="tabs-trigger"].arc-key-tab {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding-inline: var(--space-2);
+  white-space: nowrap;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-tab-destination {
+  min-height: var(--space-8);
+  margin: 0;
+  padding-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-snippet-region {
+  min-width: 0;
+  overflow-y: auto;
+  border-radius: var(--radius-control);
+  scrollbar-width: thin;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-tab-content {
+  margin-top: 0;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-download-row {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-1);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-status {
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+  align-items: flex-start;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-3);
+  background: var(--surface-muted);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  flex: none;
+  margin-top: 7px;
+  border-radius: var(--radius-pill);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-dot-warning {
+  background: var(--warning);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-dot-success {
+  background: var(--success);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-title,
+.arc-market.arc-key-reveal-drawer .arc-key-connection-description {
+  min-width: 0;
+  margin: 0;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-title {
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-connection-description {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-ack-row {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-ack-label {
+  min-width: 0;
+  min-height: 44px;
+  flex: 1 1 auto;
+  cursor: pointer;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-dismiss-alert {
+  flex: none;
+  margin: var(--space-2) 0 0;
+  color: var(--warning);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-key-reveal-drawer .arc-key-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding-top: var(--space-4);
+}
+
+@media (max-width: 639px) {
+  .arc-market.arc-key-reveal-drawer > div:last-child {
+    padding: var(--space-4);
+    padding-block-end: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+  }
+}

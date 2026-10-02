@@ -4,6 +4,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { projectFoundCallPurchaseStatus, type CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 import type { FoundCallStatus } from '@/lib/call-recovery/call-status-page-types'
+import './ReceiptComposition.css'
 
 export function CallSummarySection({ result, receiptView: view }: Readonly<{
   result: FoundCallStatus
@@ -20,7 +21,7 @@ export function CallSummarySection({ result, receiptView: view }: Readonly<{
     ?? (view.receipt === undefined ? undefined : Date.parse(view.receipt.issuedAt))
   const agent = result.ownerContext?.agent.currentDisplayName
   return (
-    <section className="grid min-w-0 gap-related" aria-label="Call summary">
+    <section className="arc-market arc-call-summary" aria-label="Call summary">
       <CallOutcome view={{
         callRef: result.callRef,
         label: view.statusLabel,

@@ -4,7 +4,8 @@ import { useRef, useState } from 'react'
 import { useAuth } from '@clerk/tanstack-react-start'
 
 import { Command, CommandEmpty, CommandList } from '@/components/ui/command'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import arcButton from '@/components/arc/button/button.module.css'
 import {
   searchMarketTools,
   type MarketToolSearchInput,
@@ -26,6 +27,7 @@ import {
 import { useCommandPaletteSelection } from './useCommandPaletteSelection'
 import { useMarketToolSearch } from './useMarketToolSearch'
 import { useSavedMarketNeed } from './useSavedMarketNeed'
+import '../CommandPanelComposition.css'
 
 type ToolsSearchPageProps = Readonly<{
   isActive?: boolean
@@ -110,7 +112,7 @@ export function ToolsSearchPage({
       value={selection.selectedValue}
       onValueChange={selection.handleSelectedValueChange}
       onKeyDown={selection.handleKeyDown}
-      className="min-h-0 flex-1 [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:border-border [&_[data-slot=command-input-wrapper]]:px-gutter [&_[data-slot=command-input-wrapper]]:focus-within:border-foreground/25 [&_[data-slot=command-input]]:text-sm [&_[data-slot=command-item][data-selected=true]]:bg-accent/90"
+      className="arc-market arc-command-search"
     >
       <CommandPaletteInput
         inputRef={inputRef}
@@ -124,7 +126,6 @@ export function ToolsSearchPage({
       <CommandList
         label={trimmedQuery === '' ? 'Recently inspected Tools' : 'Matching Tools'}
         aria-busy={isAwaitingChoices}
-        className="min-h-0 max-h-none flex-1 overscroll-contain"
       >
         <CommandNavGroup
           isActive={isActive}
@@ -150,8 +151,8 @@ export function ToolsSearchPage({
           onClearPendingIntent={selection.clearPendingIntent}
         />
         {nextPage !== undefined ? (
-          <div className="px-gutter py-intra">
-            <Button type="button" size="sm" className="min-h-touch"
+          <div className="arc-command-search-action">
+            <Button type="button" size="md"
               onClick={() => setContinuation({ ...nextPage, forQuery: trimmedQuery })}>
               Next page
             </Button>
@@ -173,32 +174,32 @@ export function ToolsSearchPage({
           </CommandEmpty>
         ) : null}
         {saveNeed !== undefined && status.kind === 'empty' && status.query === saveNeed.query ? (
-          <div className="grid gap-intra px-gutter pb-section">
-            {!showCommandEmpty ? <p className="text-sm text-muted-foreground">{status.message}</p> : null}
+          <div className="arc-command-search-action">
+            {!showCommandEmpty ? <p>{status.message}</p> : null}
             {isSignedIn ? (
               savedNeed === undefined ? (
-                <Button type="button" size="sm" className="min-h-touch w-fit"
+                <Button type="button" size="md"
                   disabled={saveBusy || checkedNeedQuery !== saveNeed.query}
                   onClick={() => { void saveCurrentNeed() }}>
                   {saveBusy ? 'Saving…' : checkedNeedQuery === saveNeed.query ? 'Save this need' : 'Checking saved needs…'}
                 </Button>
               ) : (
-                <div className="flex flex-wrap items-center gap-intra text-sm">
+                <div className="arc-command-search-saved">
                   <span>Saved need · {savedNeed.requestRef}{savedNeed.kind === 'matched' ? ` · ${savedNeed.matchedCount} matching Tools` : ''}</span>
-                  <Button type="button" variant="outline" size="sm" className="min-h-touch"
+                  <Button type="button" variant="secondary" size="md"
                     disabled={saveBusy} onClick={() => { void withdrawCurrentNeed() }}>
                     {saveBusy ? 'Withdrawing…' : 'Withdraw'}
                   </Button>
                 </div>
               )
             ) : isSignedIn === false ? (
-              <a href="/sign-in" className="inline-flex min-h-touch w-fit items-center rounded-md px-3 text-sm font-medium text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
+              <a href="/sign-in" className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md}`}>
                 Sign in to save this need
               </a>
             ) : null}
-            {saveError !== undefined ? <p role="alert" className="text-sm text-destructive">{saveError}</p> : null}
+            {saveError !== undefined ? <p role="alert">{saveError}</p> : null}
             {saveError !== undefined && checkedNeedQuery !== saveNeed.query && !showCommandEmpty ? (
-              <Button type="button" variant="outline" size="sm" className="min-h-touch w-fit"
+              <Button type="button" variant="secondary" size="md"
                 onClick={() => setSearchAttempt((attempt) => attempt + 1)}>Try again</Button>
             ) : null}
           </div>

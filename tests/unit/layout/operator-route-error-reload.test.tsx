@@ -63,19 +63,18 @@ describe('OperatorRouteError router recovery', () => {
 
     expect(within(alert).getAllByRole('button')).toHaveLength(1)
     expect(button.getAttribute('type')).toBe('button')
-    expect(button.classList.contains('min-h-touch')).toBe(true)
     expect(statusLink.getAttribute('href')).toBe('/status')
-    expect(statusLink.classList.contains('min-h-touch')).toBe(true)
     expect(alert.textContent).not.toContain('private upstream credential')
     expect(document.querySelectorAll('h1, [data-slot="alert-title"]')).toHaveLength(1)
     expect(alert.textContent).toContain('Try again, or check system status.')
     expect(alert.textContent).not.toContain('Nothing was charged')
   })
 
-  it('uses charge reassurance only on money routes', () => {
-    routeStateMocks.pathname = '/owner/credit'
+  it.each(['/owner/credit', '/calls/call_123', '/owner/settings/receipts', '/activity'])('does not infer a payment outcome from a read failure at %s', (pathname) => {
+    routeStateMocks.pathname = pathname
     render(<OperatorRouteError error={new Error('route failed')} />)
-    expect(screen.getByRole('alert').textContent).toContain('Nothing was charged.')
+    expect(screen.getByRole('alert').textContent).not.toContain('Nothing was charged.')
+    expect(screen.getByRole('alert').textContent).toContain('Try again, or check system status.')
   })
 
   it('retains nested parent chrome with one Settings heading', () => {
@@ -106,7 +105,8 @@ describe('OperatorRouteError router recovery', () => {
 
     expect(routeStateMocks.invalidate).toHaveBeenCalledTimes(1)
     expect(retry).toHaveProperty('disabled', true)
-    expect(retry.textContent).toBe('Trying again…')
+    expect(screen.getByRole('button', { name: 'Trying again…' })).toBe(retry)
+    expect(retry.getAttribute('aria-busy')).toBe('true')
 
     finishRetry?.()
     await waitFor(() => expect(retry).toHaveProperty('disabled', false))

@@ -1,8 +1,9 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/messages.tsx and components/chat/message.tsx (Apache-2.0).
 import { ErrorBoundary } from '@sentry/react'
 import { useEffect, useRef, useState } from 'react'
+import '@/components/arc/chat/ChatComposition.css'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { ArrowDownIcon } from 'lucide-react'
 import { Marker, MarkerContent } from '@/components/ui/marker'
 import { Message, MessageContent } from '@/components/ui/message'
@@ -68,7 +69,7 @@ type ChatTranscriptProps = ChatTranscriptViewProps & Readonly<{
   onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: RunIntent) => void
 }>
 
-const TRANSCRIPT_COLUMN = 'mx-auto grid w-full content-start max-w-[1200px] grid-cols-12 gap-x-2 gap-y-5 px-[5px] py-6 sm:px-0 md:gap-y-7'
+const TRANSCRIPT_COLUMN = 'arc-chat-transcript'
 const PANEL_EXIT_DURATION_MS = 150
 
 export function ChatTranscript({
@@ -212,7 +213,7 @@ export function ChatTranscript({
   const clarify = clarifyPresentation(turns)
   if (turns.length === 0 && pending) {
     return (
-      <div className={`min-h-0 flex-1 content-start ${TRANSCRIPT_COLUMN} [&>*]:col-span-12 md:[&>*]:col-start-3 md:[&>*]:col-span-8`} aria-busy="true">
+      <div className={`min-h-0 flex-1 content-start ${TRANSCRIPT_COLUMN}`} aria-busy="true">
         <p className="sr-only" role="status">{chatLoading}</p>
         <Skeleton className="h-16 w-full max-w-prose" />
         <Skeleton className="ml-auto h-16 w-full max-w-prose" />
@@ -222,8 +223,8 @@ export function ChatTranscript({
   if (turns.length === 0) {
     return (
       <div className="relative min-h-0 w-full flex-1 bg-background">
-        <div className="absolute inset-x-0 top-[38.2%] mx-auto grid w-full max-w-[1200px] -translate-y-1/2 grid-cols-12 gap-x-2 px-[5px] sm:px-0">
-          <div className="col-span-12 min-w-0 md:col-start-3 md:col-span-8">
+        <div className="arc-chat-empty-column absolute inset-x-0 top-[38.2%] mx-auto -translate-y-1/2">
+          <div className="min-w-0">
             <ChatGreeting />
           </div>
         </div>
@@ -243,7 +244,7 @@ export function ChatTranscript({
             aria-relevant="additions text"
           >
             {loadEarlier === undefined ? null : (
-              <div className="col-span-12 flex min-h-touch items-center justify-center">
+              <div className="flex min-h-touch items-center justify-center">
                 {loadEarlier.hasMore ? (
                   <Button
                     type="button"
@@ -294,7 +295,7 @@ export function ChatTranscript({
                 return { ...current, [turn.id]: ids.includes(id) ? ids.filter(value => value !== id) : ids.length < 4 ? [...ids, id] : ids }
               })
               return (
-              <MessageScrollerItem key={turn.id} messageId={turn.id} scrollAnchor={turn.role === 'user'} className="col-span-12 min-w-0 md:col-start-3 md:col-span-8">
+              <MessageScrollerItem key={turn.id} messageId={turn.id} scrollAnchor={turn.role === 'user'} className="min-w-0">
                 <article aria-label={turn.role === 'user' ? 'You' : 'Assistant'} className="group/message w-full">
                   <Message align={turn.role === 'user' ? 'end' : 'start'}>
                     <MessageContent>
@@ -376,7 +377,7 @@ export function ChatTranscript({
                                       aria-label="Tool input" inert={!panelOpen}
                                       className="grid gap-3 rounded-card border border-border bg-card p-4">
                                       <p role="status" className="text-sm text-muted-foreground">{chatToolPanel.unavailable}</p>
-                                      <Button type="button" variant="outline" className="min-h-touch"
+                                      <Button type="button" variant="secondary" className="min-h-touch"
                                         onClick={() => closePanel(turn.id, panelOption.id, panelId)}>{chatToolPanel.cancel}</Button>
                                     </section>
                                   }
@@ -456,7 +457,7 @@ export function ChatTranscript({
               />
             )}
             {thinking ? (
-              <MessageScrollerItem messageId="thinking" className="col-span-12 md:col-start-3 md:col-span-8">
+              <MessageScrollerItem messageId="thinking">
                 <p className="text-sm text-muted-foreground" role="status">{chatThinking}</p>
               </MessageScrollerItem>
             ) : null}

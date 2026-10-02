@@ -9,8 +9,9 @@ import {
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { formatExactAmount } from '@/modules/money/public'
+import './AccessDecisionsComposition.css'
 import { AUDIT_COPY, type AdminApprovalProposal, type PendingApprovalsActionsProps } from './audit.contracts'
 
 export function PendingApprovalsActions({ proposals, now, role, actorRef, paginationStatus, onLoadMore }: PendingApprovalsActionsProps) {
@@ -21,16 +22,17 @@ export function PendingApprovalsActions({ proposals, now, role, actorRef, pagina
 
   return (
     <AeSection title={ADMIN_AUDIT_ACTION_COPY.approvalActionsTitle} description={ADMIN_AUDIT_ACTION_COPY.approvalActionsDescription}>
-      {proposals.length === 0 ? <p>{AUDIT_COPY.noPendingApprovals}</p> : (
-        <ul className="grid gap-intra">
+      <div className="arc-market arc-admin-approvals">
+      {proposals.length === 0 ? <p className="arc-admin-approvals-empty">{AUDIT_COPY.noPendingApprovals}</p> : (
+        <ul className="arc-admin-approval-list">
           {proposals.map((proposal) => {
             const material = proposal.commandJson === null
               ? null : parseAdminProposalCommand(proposal.action, proposal.commandJson)
             const canApprove = role === 'owner_admin' && proposal.proposerRef !== actorRef
               && proposal.expiresAt > now
             return (
-              <li key={proposal.proposalRef} className="flex flex-wrap items-center justify-between gap-intra rounded-lg border border-border p-gutter">
-                <div className="grid gap-1">
+              <li key={proposal.proposalRef} className="arc-admin-approval-row">
+                <div className="arc-admin-approval-facts">
                   <span className="font-medium">{ADMIN_ACTION_COPY[proposal.action]}</span>
                   <AeCopyReference label={ADMIN_AUDIT_ACTION_COPY.proposal} value={proposal.proposalRef} />
                   <AeCopyReference label={AUDIT_COPY.columnLabels.proposer} value={proposal.proposerRef} />
@@ -41,7 +43,7 @@ export function PendingApprovalsActions({ proposals, now, role, actorRef, pagina
                 {canApprove && material === null ? (
                   <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.proposalUnavailable}</AlertDescription></Alert>
                 ) : canApprove && material !== null ? (
-                  <Button type="button" variant="outline" className="min-h-touch" disabled={selected !== null} onClick={() => setSelected(proposal)}>
+                  <Button type="button" variant="secondary" size="md" disabled={selected !== null} onClick={() => setSelected(proposal)}>
                     {ADMIN_AUDIT_ACTION_COPY.approve}
                   </Button>
                 ) : null}
@@ -51,11 +53,12 @@ export function PendingApprovalsActions({ proposals, now, role, actorRef, pagina
         </ul>
       )}
       {paginationStatus === 'Exhausted' ? null : (
-        <Button type="button" variant="outline" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>{AUDIT_COPY.loadMore}</Button>
+        <Button type="button" variant="secondary" size="md" className="arc-admin-approvals-more" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>{AUDIT_COPY.loadMore}</Button>
       )}
       {role === 'owner_admin' && selected !== null && selected.proposerRef !== actorRef
         && command !== null
         ? approvalSheet(command, selected.proposalRef, onOpenChange) : null}
+      </div>
     </AeSection>
   )
 }

@@ -1,0 +1,29 @@
+/* Arc Pro integrations summary/action rows and metrics-dashboard measure rhythm.
+ * integrations.module.css SHA-256 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10.
+ * metrics-dashboard.module.css SHA-256 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9.
+ * Controller-owned deferred evidence and recovery stay unchanged. A connection
+ * count never implies a Tool is admitted or publicly available. */
+.arc-provider-workspace-summary { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-6); background: var(--surface); }
+.arc-provider-workspace-summary > div { display: grid; flex: 1 1 240px; min-width: 0; gap: var(--space-2); }
+.arc-provider-workspace-summary h3 { margin: 0; font-size: var(--text-lg); font-weight: 500; line-height: 1.4; }
+.arc-provider-workspace-summary p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-provider-workspace-readiness { display: grid; min-width: 0; gap: var(--space-4); }
+.arc-provider-workspace-metric { display: grid; min-width: 0; gap: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-6); background: var(--surface); }
+.arc-provider-workspace-metric h3 { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); font-weight: 500; }
+.arc-provider-workspace-metric p { margin: 0; font-size: clamp(24px, 3vw, 32px); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.025em; line-height: 1.3; overflow-wrap: anywhere; }
+.arc-provider-workspace-manage { justify-self: start; }
+.arc-provider-workspace { display: grid; min-width: 0; gap: var(--space-8); }
+.arc-provider-workspace-tool-results { display: grid; min-width: 0; gap: var(--space-6); }
+.arc-provider-workspace-tool-pages { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-4); }
+.arc-provider-offboarding { min-width: 0; }
+.arc-provider-offboarding-heading { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-provider-offboarding-heading h3 { margin: 0; font-size: var(--text-lg); font-weight: 500; line-height: 1.4; }
+.arc-provider-offboarding-heading p, .arc-provider-offboarding > p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-provider-offboarding-action { justify-self: start; }
+.arc-provider-offboarding-actions { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-3); }
+.arc-provider-workspace-administration { min-width: 0; border-top: 1px solid var(--border-subtle); padding-top: var(--space-6); }
+.arc-provider-workspace-administration > summary { display: flex; min-height: 44px; align-items: center; color: var(--foreground); font-size: var(--text-lg); font-weight: 500; cursor: pointer; }
+.arc-provider-workspace-administration > summary::before { width: 16px; flex: none; margin-right: var(--space-3); content: '+'; color: var(--text-muted); }
+.arc-provider-workspace-administration[open] > summary::before { content: '−'; }
+.arc-provider-workspace-administration > div { display: grid; min-width: 0; gap: var(--space-8); margin-top: var(--space-6); }
+@media (max-width: 479px) { .arc-provider-workspace-summary, .arc-provider-workspace-metric { padding: var(--space-4); } }

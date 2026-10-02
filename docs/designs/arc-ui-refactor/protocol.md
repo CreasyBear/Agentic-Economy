@@ -1,0 +1,688 @@
+# Arc refactor protocol
+
+**Owner:** Joel. **Established:** 2026-10-01. **Status:** long-running source-first implementation active; Tool market/main chat pilot implemented and source-tested; broad route sweep in progress.
+
+## Progress counter
+
+**Source pass: 381 / 454 view and presenter decisions checked (84%).** Integration with current `main` adds eight new presenters and removes the retired environment picker, changing the denominator from 447 to 454. These new production surfaces remain explicitly inventoried; this release lands the completed Arc work without claiming the remaining 73 decisions or deferred visual review are complete. Source acceptance does not establish visual acceptance.
+
+| Area | Source decisions checked | Remaining, including deferred |
+| --- | ---: | ---: |
+| Account and settings | 33 / 34 | 1 |
+| Agents | 45 / 45 | 0 |
+| Chat | 44 / 44 | 0 |
+| Market | 34 / 53 | 19 |
+| Money and activity | 21 / 22 | 1 |
+| Operator | 56 / 61 | 5 |
+| Provider | 50 / 50 | 0 |
+| Public and support | 42 / 43 | 1 |
+| Shared frames and primitives | 56 / 102 | 46 |
+
+**Route bindings: 36 / 65 reviewed; 29 remain.** Business companions are tracked separately and are not extra pages to redesign. Update these counters after each verified batch from the inventory, counting only `reviewing`, `verified` or explicitly `retained` presenters. Added or removed presenters change the denominator transparently.
+
+**Latest evidence:** The integrated current-main source passes `npm run check`, including zero dependency cycles, application/Convex types, 75 import cases and the standards check. The complete gate's unit and integration phases pass: 8,008 unit cases and 2,741 integration cases. Focused browser checks pass 10 cases at compact and wide widths, and all 18 automated accessibility cases pass. The complete gate is rerun for landing and its final result is recorded in the release PR. Evidence establishes keyboard topic selection, diagnostics, semantic document headings, skip-link focus, dialog focus return and compact overflow, alongside the existing query/layout/comparison and current-main money/authority contracts. Historical batch evidence below retains its original limitations; current-main integration resolves the former dependency-cycle blocker. Visual art-direction acceptance, five-width review, authenticated paid journeys and speed measurements remain deferred.
+
+**First implementation wave:** Tool market discovery/search, comparison and both Tool-detail surfaces. Joel selected this group and directed a creative, block-first refactor using Arc Pro and subagents.
+
+## Design thesis
+
+### Familiar, compact marketplace — 2026-10-02
+
+**Approved concept and first composition batch.** Joel authorized implementation after image generation. The built-in imagegen produced [the illustrative marketplace concept](concepts/marketplace-20261002.png), with its [exact prompt](concepts/marketplace-20261002.prompt.txt). It is a concept, not rendered runtime evidence. Keep existing live records, source-scoped prices, optional examples and authority rather than its sample records.
+
+Requires existing validated Market search and typed directory projections. Ensures Grid/Table changes only presentation, persists on Market navigation and back/refresh, and preserves current query/filter/cursor/selection values. Invariant: layout is absent from catalogue inputs, canonical search requests and loader dependencies; switching it must not reset or fetch the catalogue, saved state or comparison. On invalid URL layout omit it explicitly through existing validation; retain the table default. Search is an explicit catalogue submission with existing length validation, recipient disclosure and relevance semantics; the secondary native chat destination clears the previous guest session only for a normal same-tab activation. No Call or Quote is added to the market.
+
+Cost/keep decision: vendor actual Arc SearchField/Tabs/Select/SortableDataTable source for real catalogue callers, adapting headless primitives to the settled Base UI package; reuse existing ProductListing cards and projections for grid mode. Remove the oversized hero/duplicate search/sort strip rather than add another page framework. Existing server ordering remains authoritative and table columns are not locally sortable. Cold Luna owns exactly DirectoryHero, MarketHero and MarketHero.css; coordinator owns new Arc ports, Market URL/parent integration, record presenters, parity tests and census. Earlier CSS polish ownership has been released; preserve its current fixes. New keyboard, portal, selection or purchasing engines are not needed.
+
+Joel directed familiarity before uniqueness and actual Arc blocks/components rather than handrolled substitutes. The [20-item marketplace architecture](marketplace-composition.md) now governs the next market implementation: orient → browse → inspect → compare → act. Arc Pro Page composition, cognitive-load and Gestalt conclusions are applied to compact regions, state behavior and concrete parity checks. Public Replicate/OpenRouter/Hugging Face/Vercel/Raycast/Shopify patterns inform the structure, with research links beside the corresponding design inferences.
+
+Retain four real URL destinations, sourced records and published contract/example previews. Replace the large market prompt hero with compact catalogue orientation and a chat destination. Comparison remains the existing four-directory-Tool modal; totals retain their supplied scope. Grid/Table now uses the tested URL display preference; actual Tabs/Select sources use the existing Base UI primitives. Other missing controlled APIs/dependencies remain explicit future integration boundaries. Preserve current state engines and domain projections while adapting actual licensed source; an unused block import plus newly invented lookalike CSS is not adoption. The first catalogue composition is source-tested implementation; other regions remain source/API-verified planning. No visual acceptance is claimed.
+
+### Public Provider and Host catalogue — 2026-10-02
+
+The job is to inspect a sourced Business portfolio or directory Host, then follow a real offering with its admission and access facts visible. Adapt the inspected ProductDetail title/source split and ProductListing gallery geometry, replacing physical photos, quantity, cart, reviews and filter controls with the current identity, published summary, sourced facts and real offering records. The meaningful alternative, Integrations rows, compresses these discovery records but loses the existing per-offering explanation; retain the gallery. No extra preview overlay or motion is justified by the supplied data.
+
+Regions: native back/breadcrumb; Business or Host identity with native technical-source disclosure; real offering gallery with precise Admitted Tool, Catalogue-only or Human-request labels; a sticky published-facts/source panel for Business profiles. Empty collections retain their exact text. Invalid identity scopes render nothing. Loading mirrors these regions with hidden static shapes. Unavailable/error/not-public states retain the existing Arc recovery owner and exact retry/navigation policy.
+
+Requires existing typed projections, exact canonical admission joins, source provenance and supplied optional actions. Ensures full titles, summaries, readiness and projected prices, source references, native URLs, telephone/download/JSON consent behavior and optional action callbacks survive. Invariant: Host grouping is not Business identity; catalogue-only and human-request records do not become callable Tools; payment and authority are not inferred; price formatting stays in the existing projection. On violation preserve missing/unavailable/refusal states and never synthesize data, a purchase action or a verified identity. Source details remain native keyboard disclosures, and Save/Compare remain separate controls with exact pressed/disabled states.
+
+Cost/keep decision: one scoped family CSS file and native semantic elements replace legacy Card wrappers; use existing Arc Button styles, ToolFacts and page-state controllers. No new component API, state engine, dependency or transport. Full content wraps; the authored split folds at 900px and gallery at 560px. Licensed ProductDetail CSS SHA256 `1c4ea5f6f8d770e1448a6502080f6a8c9fab419a92f1828cb7435331a6723074`, ProductListing CSS `c73c3ea16c34eb857e4aac3d066648b6be8816f9f54db1e5dcda7fc4118a1cfb` from the inspected cached MCP source.
+
+Ownership: coordinator authored new `shared/ProviderCatalogueComposition.css` and owns ToolListingCard, Provider listing/loading/recovery pages, Host route, tests and census. Cold Luna owns exactly ProviderIdentity, ProviderPortfolio and HostGrouping with prescribed class mappings. The separate CSS polish task now owns the new family CSS audit as well as its existing reserved styles; preserve its changes. Source tests cover identity guards, admission/access distinctions, native destinations and exact callback behavior; no visual acceptance is claimed.
+
+### Provider closeout and settings route actions — 2026-10-02
+
+Full source/caller review shows the remaining live Provider parents are existing thin bindings: `AeProviderWorkspaceSkeleton` delegates to the real Arc inventory loading table, `AeOwnerProviderConnections` composes the actual Arc settings/connection list/form over its existing controller, and `AeConnectionHandoff` selects the actual Arc credential/OAuth/status leaves. Retain these seams rather than introduce another wrapper or state engine. The three playground presenters have no production caller; explicitly retain the dormant exports and engine until a real test transport is supplied. Do not claim their fictional zero-cost sandbox copy is a live capability.
+
+The settings routes still own four legacy action sites inside otherwise migrated Arc settings pages. Adapt those exact native actions to the existing Arc Button/button styles: Integrations' Open Tools and readback retry, Privacy's native download, Security activity's native profile link. Requires the same loader/search/session results; ensures exact destinations, download behavior, retry invalidation and state-specific omission; invariant: unavailable/conflicting connections cannot mutate, funding does not grant authority, account export stays a native download; on violation preserve the exact missing/conflict/unavailable copy and support recovery. No loader, validation, redirect, mutation, new pending state or API changes are needed. Cost/keep decision: two existing style imports and the actual Arc Button, no wrapper or new dependency; the already-authored SettingsPage remains the block owner.
+
+Cold Luna owns exactly the three settings route TSX files (`owner.settings.integrations`, `owner.settings.privacy`, `owner.settings.security-activity`). Coordinator owns Provider binding/caller decisions, market block adaptations, source census and final parity checks. Shared frame/rail styles, existing family CSS and Arc foundation remain with the separate CSS composition owner. Visual validation remains deferred.
+
+### Public entry and developer source wave — 2026-10-02
+
+The route trace confirms `/` redirects to `/market`, preserving `q` as `query`; `AeHomeLanding` and its instruction/browser subtree have no production render caller. Keep those dormant exports and their tests unchanged, with an explicit retention decision. Do not spend this wave redesigning an unreachable landing page or reintroduce a landing step.
+
+**About brief.** The job is to understand the product boundary, founder and current pre-launch status, then browse real Tools. Adapt the inspected `hero-section/HeroContent` split for the existing photograph and title; use its asymmetric copy rhythm for the founder article. Adapt `feature-bento`'s authored six-column sizing to the four real responsibility statements (wide, regular, half, half), with decorative semantic icons instead of invented product demos. Finish with the inspected `cta-section` centered composition and exact existing native actions. The meaningful alternative, Spotlight grid, adds a detail overlay without additional supplied content; reject that cost. No animation is necessary to explain these static facts. Empty optional hero children and secondary CTA remain absent. There is no data-fetch, mutation or inferred live product state in this page.
+
+**Developer brief.** Discovery is a read-only source/status workspace: four named regions for artifacts, public facts, source summary and read paths. Adapt DocsSidebar's readable article/outline geometry and Integrations' continuous records, keeping native artifact URLs and the full source/check/status tuple together. API reference uses the same reader geometry with a compact native contents disclosure, then ordered operation groups, exact code/template bodies, setup facts and problem/retry advice. An API playground would add execution authority that this reference does not own; reject it. Current versus stale versus unavailable artifacts are supplied observations, never simulated success. Empty facts and empty read paths keep their existing named states.
+
+**Requires:** Existing typed models and content, exact URLs, existing command-copy boundary. **Ensures:** Every original paragraph, operation, artifact status/origin/check time, authority warning, error next step and projected price is readable; native navigation and copied runnable commands are exact. **Invariant:** Read-only discovery does not grant authority; request templates stay explicitly non-runnable; exact money remains projected through its existing formatter; page loaders, robots, canonical metadata and source privacy remain unchanged. **On violation:** Do not synthesize a command, successful check, supply count, authority or price; preserve the source-defined missing/failure state. Local contents toggles change only their navigation visibility and never hide document content.
+
+**Complexity decision:** Keep the existing public page shell, typed view models and command-copy component. Add only scoped composition CSS and local native contents state where a long document benefits from it; no new framework, shared wrapper, transport or duplicate state engine. This removes repeated legacy Card/Section wrappers and grouping burden while preserving the settled boundaries. The About adaptations remain four current caller leaves; no speculative generic block API is introduced.
+
+**Ownership:** Cold Luna About hero slice owns `AeSiteAboutHero.tsx`, `AeSiteEditorial.tsx`, new `AboutStoryComposition.css`; cold Luna About closer slice owns `AeSiteFeatureGrid.tsx`, `AeSiteCtaBand.tsx`, new `AboutFeaturesComposition.css`. Coordinator owns developer discovery/API presenters/styles, relevant tests, About binding review and source/route census. Shared frame and `arc-market.css` styling is reserved for the separately assigned CSS composition work; preserve those changes. Final source checks begin only after each owner freezes its files. Visual/computer validation remains deferred.
+
+**Agent-readable preview:** The live Provider catalogue's JSON affordance retains the current controlled Dialog and fetch/query-alignment/clipboard state machine. Adapt the inspected Arc CodeBlock source viewport and Button actions inside this exact boundary. Requires a supplied URL and executed query; ensures the fetched disclosed JSON and field names remain exact, with explicit confirmation before copy; invariant: loading/failure cannot copy and successful copy alone shows confirmation; on fetch/copy failure, keep the existing error or unconfirmed state and native Cancel. The source block's automatic CopyButton/highlighter/morph engines would duplicate this consent boundary and add no useful content: keep only its authored source/header geometry, selectable full JSON, existing controller and one confirm action. Coordinator owns `AeAgentJsonAffordance.tsx` and new `AgentJsonComposition.css`; no generic JSON-viewer wrapper is added.
+
+**Arc source provenance:** Cached licensed HeroContent CSS `0fb963f57acb7e7f8104b8bbf69e52eb3460cd6379e646d1516fb4d15370017c`; FeatureBento CSS `43e65b9cb1f229c4d4e08075e681eec4c838d96ef583a606c9278686a45be725`; CTA CSS `e7aec16de66910b5e1a2c60af49dd6e7fa2490af9b92b7270b69346043acc99b`; DocsSidebar CSS `95bce32d5f9f17f14876b49459aebf601890c312d01b713d7d09105870a52efb`. MCP installation command re-confirmed for hero, feature-bento, CTA, docs-sidebar and integrations. Reuse the inspected cached source already retrieved by earlier waves; do not reinstall demo dependencies or overwrite the shared foundation.
+
+Make aecon a compelling place to discover, compare and acquire a bounded contribution by adapting complete Arc blocks to the real customer job.
+
+The unit of migration is a working page or coherent page region. Start with a complete block, preserve its authored composition and interaction, replace its sample data and commercial assumptions, and use components to fill specific gaps. Button counts inform coverage and verification; they do not determine the design process.
+
+Joel's direction authorizes substantial visual redesign: expressive cards, galleries, carousels, tables, blocks and motion. Keep the established aecon identity and truthful product facts. This direction supersedes the old visual implementation recipes on migrated pages. It does not change procurement, authority, privacy, pricing or recovery rules in [PRODUCT.md](../../../PRODUCT.md). The shared-layer owner updates affected sections of [DESIGN.md](../../../DESIGN.md) during foundation implementation so workers have one current visual contract.
+
+Avoid a uniform dashboard template. Discovery should invite exploration; comparison should externalize differences; detail should show the contribution and its published examples; operational records should support fast, exact decisions. Creative license applies to presentation, not invented market data or transitions.
+
+## Coverage and source evidence
+
+Source snapshot: `b63ddda5c4f4d1a88463daddbb32c472564b4051`; current file contents, including existing shared-checkout work, were hashed individually. Arc live MCP identified itself as `arc`, version `1.0.0`; authenticated Pro access was verified. Record installed source hashes at import time because the live registry is mutable.
+
+The [source inventory](source-inventory.csv) contains every non-test `.tsx`, `.ts` and `.css` file under `src/components/`, plus every TSX route. The [button/action-presentation inventory](action-inventory.csv) contains exact Button, button-style and native-button call sites resolved through TypeScript imports, including aliases. `ArcButtonLink` identifies native anchors and router Links whose classes directly reference the actual Arc button module; `arc_link_sites` records them separately from legacy `buttonVariants` calls. These are source presentation sites, not a rendered control count. Plain links, fields, summaries and other controls still require a complete interaction inventory in each page brief.
+
+| Census | Count | Meaning |
+| --- | ---: | --- |
+| Current source files | 812 | 749 component-area files and 63 TSX routes; reconciled after each stable broad batch |
+| Current visual/route files | 510 | 447 presenters plus 63 routes/layouts/redirects |
+| Current source companions | 302 | Hooks, contracts, styles and presentation helpers; context, not an instruction to rewrite business logic |
+| Active page surfaces | 55 | Market 4, buyer/account 20, Provider 6, operator 12, public/support/docs 10, chat 3 |
+| Route containers / redirects | 3 / 5 | Review shared containers once; redirects are not separate page redesigns |
+| Connected table implementations | 21 | 17 consumers of `AeRecordTable`, plus four directly connected domain tables |
+| Other table records | 4 | Three shared layers, including the new actual Arc table source; `DirectoryProvidersIndex` has no source runtime caller found |
+| Shared Button occurrences | 308 | 298 Arc and 10 legacy JSX sites across 141 import files |
+| Button-style sites | 133 | 14 legacy calls and 119 native Arc button-style links |
+| Other action sites | 35 | 32 native buttons and three deliberately retained dormant site buttons; no site icon buttons |
+| Current sources reviewing | 471 | 257 inventoried, one deferred and 83 retained; current-revision visual acceptance remains incomplete |
+
+The action census scans 468 non-test AE/Arc/route TSX files; upstream `ui` and `ai-elements` implementation files are inventoried separately. Source occurrence counts are not runtime control counts: a row action rendered in a loop counts once. Import-file counts are not occurrence counts.
+
+Areas and candidate batches in the CSV are routing hints. Trace callers before assigning ownership: a shared component can serve several groups, and an apparent old page can still export a live subcomponent. All rows start `inventoried`; census coverage is not proof of reachability, parity or migration.
+
+States: `inventoried → mapped → building → reviewing → verified`; alternatively `retained`, `retired` or `deferred` with a concrete reason. `verified` requires parity and visual evidence for the current source revision. Update the source hash after an integrated change; changed files reopen their evidence. Do not mark unchanged business-logic companions migrated merely because their page looks different.
+
+Reuse the previous read-only [.design-system audit](../../../.design-system/close.md) and [.migration market findings](../../../.migration/2026-09-30-aecon-audit/plan.md) as evidence. They are not current execution state. This is an in-place Arc refactor; the separate-source `migrate` CLI/replatform store is not applicable.
+
+## Arc Pro workflows
+
+Use authenticated MCP `get_skill`, beginning with `arc-pro`, plus the free `SKILL` and `checklist`. The [Pro skill index](https://uiarc.dev/docs/ai#pro-skills) is the authoritative retrieval entry point. Secrets remain environment-only; never print or commit `ARC_PRO_TOKEN`.
+
+| Work | Playbook | Required output or activity |
+| --- | --- | --- |
+| Program and slice mapping | `refactor-to-arc` | Current behaviors, block mapping, explicit translations, per-pattern parity |
+| Every page | `page-composition` | Audience/job/action/data, region map, every region's states before code |
+| Complete page implementation | `full-page-generation` | Brief, one install batch, actual data/callbacks, page/CSS, verification loop |
+| Shared foundation | `design-system-generation` | Scoped token overrides, measured light/dark contrast, actual control review |
+| Interaction design and review | `motion-recommendations` | Inventory, keep/change/remove decision, tokens, reversal and rapid activation tests |
+| Each completed page | `responsive-optimization` | Measure 320/390/768/1024/1440, fix, remeasure both themes |
+| Each completed page | `accessibility-audit` | Structure, names, keyboard, feedback, contrast/touch, motion; ranked fixes and retest |
+
+Retrieve `get_component` for every proposed ID. Skill prose has stale IDs: `audit-log`, `depth-cards` and `card-stack` were absent from the live MCP. Never invent an ID, prop or variant. Read licensed source as well as documentation; source defaults and declared accessibility are not acceptance evidence.
+
+The foundation and first Tool market/main chat patterns are implemented. The pilot passed 961 focused tests and the public build; full `check` stops at two existing chat dependency cycles. Current broad-wave verification is recorded per integrated batch. The broad source/code pass precedes browser review by Joel’s direction; do not perform visual/computer validation until that pass is complete or explicitly requested. Responsive and accessibility procedures below are acceptance instructions, not claims that measurements were performed.
+
+## Four-agent execution model
+
+Use cold native collaboration subagents with `model=gpt-6-luna`, `reasoning_effort=max`, `fork_turns=none`, as Joel explicitly directed on 2026-10-02. Maximum: one coordinator and three atomic workers. Every worker owns one to three specified files and receives exact block, layout, state and verification instructions; workers do not make design or scope decisions. The coordinator inspects source, selects blocks, checks contracts and integrates. Spawn a new cold worker for each atomic slice. These are subtasks of this chat, not new user-owned chats.
+
+| Role | Ownership |
+| --- | --- |
+| Coordinator | Briefs, exact file allocation, shared dependencies/theme/registry, coverage, integration and final checks |
+| Page worker A | One block/page slice and its existing observable tests |
+| Page worker B | A disjoint block/page slice and its existing observable tests |
+| Verifier | Read actual code and rendered behavior; does not author the slice being verified |
+
+The foundation is serial: one worker owns it while the other slots inspect block contracts and baselines. No page worker edits `components.json`, package files, globals, theme initialization, shared button/table engines or other workers' files. The coordinator need not write implementation code when a worker can own it.
+
+After installation, transfer each imported block TSX/CSS pair to its named page worker; shared Arc foundation, tokens and primitives stay with the foundation owner. Adapt the actual licensed block source rather than retaining an unused sample block beside a duplicate implementation. Record provenance and domain substitutions. File ownership transfers are explicit in the brief before edits.
+
+Use disjoint ownership in this shared checkout. Use an isolated worktree only when overlapping work needs isolation, based on the recorded current ref rather than an assumed remote default. Preserve existing dirty work; do not stash/reset/restore/clean or silently move unrelated changes. Installation and integrated check commands are serialized. A worker requests an ownership extension before editing outside its brief; the coordinator can resolve routine in-scope allocation without asking Joel again.
+
+### The repeatable slice
+
+1. **Inspect the job and baseline.** Trace the route, projection, controllers and tests. Inventory every interactive control, including plain links, fields, summaries, gestures and row navigation, not just the button-presentation census. Record current URLs, actions, empty/failure states and representative real records. Capture the actual baseline before edits. A shell with no usable backend is not a populated-page baseline.
+2. **Audition blocks.** Evaluate two or three live Arc blocks. Show one primary choice, meaningful alternative and why. Prefer adapting licensed block source over rebuilding its design from a pile of primitives. Reject a block only for a material fit/cost problem, not because its sample domain differs.
+3. **Write the page brief.** One job and state-appropriate primary action; region-to-block map; material facts; complete state table; intended signature interaction. State Requires/Ensures/Invariant/On violation for any changed boundary.
+4. **Inspect and install the source.** Fetch `get_component`, inspect real files/dependencies, then call `get_install_command` for the final set once. Run that command only after the shared owner reviews its concrete file/dependency footprint. Capture installed source hashes and local adaptations. Do not install a whole catalogue or Next.js to satisfy a single image import.
+5. **Adapt the block.** Create real shared source/style files before adding caller imports, and run integrated checks only after all owners have finalized their files. Keep the authored visual system and useful interaction; bind existing typed data and controllers. Remove sample actions, fake success, synthetic records and physical-product controls. Preserve callback promises, route state and exact money formatting.
+6. **Prove the slice.** Run its narrow existing tests, update layout-dependent tests to observable guarantees, and run `npm run check` after the integrated change. Verify every changed control, errors, retries, keyboard and responsive layouts.
+7. **Review independently.** Verifier checks contract conclusions against source and behavior, not a worker's statement that a skill was used. Review screenshots alongside interaction, not alone. Fix material findings and repeat affected checks.
+8. **Integrate and update coverage.** Mark only evidenced rows verified. Recheck shared-boundary changes against one untouched page. Continue the rolling window; remove legacy code only when its real callers are gone.
+
+No global button replacement, whole-engine table swap or site-wide codemod precedes a verified page pilot. Later codemods are for proven mechanical translations only, with a no-op second run; page composition remains authored work.
+
+## First wave: the Tool market
+
+**Audience:** Customers and Agents choosing an outside contribution. **Job:** find, compare and inspect a useful Tool. **Data:** existing route projections, saved-state hooks, comparison references and published examples. **Surface:** product market. Primary action is Search in browse, Compare in selection, and the existing state-derived action on detail.
+
+### Block choices and creative direction
+
+| Slice | Starting Arc block | Direction and adaptation |
+| --- | --- | --- |
+| Discover/search | Pro [`product-listing`](https://uiarc.dev/components/blocks/product-listing) | A Tool gallery: authored listing frame, filter sidebar/sheet, expressive item grid, view controls and quick actions. Replace apparel records with Tool projections; images become actual icons or truthful published-example previews. Keep real rank/order and distinct save/compare actions. |
+| Tool detail | Pro [`product-detail`](https://uiarc.dev/components/blocks/product-detail) | A contribution showroom: asymmetric identity/decision column beside an interactive example gallery; real inputs/outputs, Provider context and unfolding technical detail. One example displays directly; several form a gallery. Missing examples remain an explicit useful empty state. |
+| Comparison | Free [`comparison-table`](https://uiarc.dev/components/blocks/comparison-table) | A grouped decision matrix, sticky identities, deliberate alignment and differences view. On phones keep an identified anchor Tool beside a chosen peer. Preserve essential price/access/provenance independently of collapsible differences. |
+| Supporting patterns | [`carousel`](https://uiarc.dev/components/carousel), `card`, `filter-toolbar`, `sortable-data-table`, `code-block`, `json-viewer` | Fill gaps in the block adaptation. A short real collection carousel or a morphing inspection surface can be the signature interaction; do not duplicate motion on every region. |
+
+The Pro listing/detail source is compact: listing 325 TSX/181 CSS lines, detail 349 TSX/157 CSS lines at inspection. No file split is justified merely by this import. Both use `next/image` at an image leaf; adapt that leaf to native media/content for Vite. Their source price formatter rounds to zero decimals: replace it with existing projected price labels, never a newly hand-formatted buyer price. Listing `add()` increments a local bag; detail can simulate success without callbacks. Remove these physical-commerce transitions completely, replacing them with the existing inspect/save/compare or state-derived continuation.
+
+Preserve listing's authored frame/sidebar/grid/media/quick-action composition while replacing its local sample price/filter/sort engine with existing directory callbacks. Its handwritten mobile filter sheet focuses the panel but does not implement a proper focus trap: use an existing accessible Sheet or inspected Arc Drawer for that boundary. In detail, preserve the gallery/thumbnail/counter/accordion design; stable published-content slides replace photo objects. Text selection, copy buttons and interactive JSON must remain usable: do not let gallery drag or arrow interception capture those interactions, and make inactive slides inert.
+
+Verified block install command, to run during F0/M1 preparation after the registry configuration is present:
+
+```sh
+npx shadcn@latest add https://uiarc.dev/r/comparison-table.json @uiarc-pro/product-listing @uiarc-pro/product-detail
+```
+
+The Pro registry entry is `@uiarc-pro` with URL `https://uiarc.dev/r/pro/{name}.json` and an Authorization header referencing `${ARC_PRO_TOKEN}`. The registry declares Motion/Lucide/foundation, but not the Next image import; inspect transitive source, not only the dependency list. The shared owner installs exactly the final chosen block/component set through `get_install_command`.
+
+`product-gallery` remains a candidate for a Tool with real published sample media. Its required physical size/color options do not describe current Tool metadata. Do not fabricate photos, variants, ratings, stock, reviews or cart behavior to use it. `layout-morph` needs local image assets and was skipped by the registry install tool; it is not a wave-one dependency. `market-terminal` is a trading simulator and does not serve this customer job.
+
+### Ownership and integration order
+
+| Unit | Owned source | Verification boundary |
+| --- | --- | --- |
+| F0: foundation worker | New Arc vendor files, scoped bridge, `components.json`, package/lock, theme integration and affected `DESIGN.md` sections | Existing theme suites; contrast; one migrated sample and one untouched page, with portal content |
+| M1: gallery worker | `DirectoryHomeDiscovery`, `DirectoryIndexDiscovery`, `DirectoryToolCard`, `DirectoryToolList`, new listing-block adaptation and its CSS | Ranked collections, exact identities, saves/Compare, long content, cards/list, keyboard/touch |
+| M2: detail worker | `public-tool-detail/PublicToolDetail`, `DirectoryToolPage`, new detail-block adaptation and CSS; shared `ToolDetailFacts` only if exclusively assigned | Admitted versus directory-only surface, examples, disclosure, state-derived destination, truthful missing facts |
+| M3: comparison worker | `DirectoryComparison`, comparison adaptation and CSS | Exact selected references, two-to-four resolved Tools, missing/pending selections, dialog close/focus, mobile peer selection |
+| M4: market integration worker | `AeMarketPage`, `AeX402Directory`, filters and comparison tray; route files only when required | URL/history/cursors, retained results on error, search recipients, selected Tools across views/pages |
+| M5: Provider browse follow-on | `DirectoryProviderList`, `DirectoryProviderCards`, `DirectoryProviderHeader`, `src/routes/providers.$providerHost.tsx` and traced profile callers | Exact hostname grouping, Provider links and profile return state; rich browsing and responsive rows |
+
+M1 and M2 can run together after F0. M3 follows one of them while the other finishes; M4 is serial because it owns the parent state boundary. M5 is a queued market follow-on, not part of the selected search/comparison/Tool-detail pilot. `DirectoryProviderList` is actively called by the parent and must be accounted for; neither it nor the Provider-host route is declared migrated when M1–M4 complete. The verifier reviews completed units as a slot frees. This is a dependency order, not an arbitrary time estimate.
+
+### States required before implementation
+
+| Region | Loading | Empty | Failure | Available | Limited |
+| --- | --- | --- | --- | --- | --- |
+| Search/gallery | Final-layout skeleton; preserve loaded rows on continuation | No matches with valid next step | Inline retry with retained rows | Existing ranked results | Assessed-scope and recipient disclosures stay visible |
+| Filters | Existing staged values | No active filters | Existing invalid-input explanation | Existing multi-value controls | Explain browse-only applicability during query search; do not invent new server filtering |
+| Saved actions | Unknown/pending | Unselected | Existing save/read failure and retry | Acknowledged saved state | Unknown is not confidently unsaved |
+| Compare tray/matrix | Name pending selected references | No tray when none | Name unresolved/unavailable selections | Matrix for valid selections | Existing four-item cap; no silently dropped selection |
+| Examples/gallery | Reserved region if deferred | No published example | Plain-code fallback when published JSON cannot parse | Published input/output with provenance | Admitted detail currently has no published output example |
+| Detail action | Existing pending state | Existing alternatives destination | Source-unavailable retry | Existing next valid destination | Directory-only, missing recipient and setup-required remain distinct |
+
+### Cognitive-load conclusions
+
+Comparison currently makes a person carry facts between repeated cards. A matrix externalizes those facts and keeps identities visible. Group rows into Contribution, Inputs/outputs, Access/price and Evidence. Differences-only is a reading aid, not permission to hide material terms or uncertainty.
+
+Discovery is browsing, so visible choice volume is not itself a working-memory defect. Reduce scanning cost through genuine existing collections and a strong contribution preview. Keep saved and selected state visible across page changes. Detail's one decision stays beside the inputs, price context and effects it depends on; technical schema is progressively disclosed. Avoid a second filter system or Quick look that makes the user reconstruct a contradictory summary.
+
+## Contracts that every adaptation preserves
+
+```text
+Requires:
+  Existing typed projections, exact Tool/row identifiers, authority predicates,
+  validation and existing controllers. Distinguish action, navigation and submit.
+Ensures:
+  Each action reaches the same valid destination or domain command with the same
+  inputs. Pending/success/error reflect the actual result. Visual inspection,
+  comparison, sort and gallery interaction do not issue a purchase.
+Invariant:
+  Funding != authority; imported listing != admitted Tool; listed source price
+  != buyer Quote; Provider != Seller != recipient; settlement != delivery !=
+  purchase resolution. Preserve identity, operation keys, drafts, route state,
+  privacy, exact money, guards and failure/recovery semantics.
+On violation:
+  Preserve named unavailable/unknown/refusal states and existing recovery.
+  Never invent a success, silently retry a mutation, relax a limit, or infer a
+  commercial fact from a credential, wallet, icon or successful HTTP response.
+```
+
+The admitted `PublicToolDetail` and external `DirectoryToolPage` are separate contracts. The external directory page cannot acquire an AE Quote/Call by virtue of its new design. Material recipient/effect information stays at the decision, outside purely decorative or technical disclosure.
+
+### Action translation rules
+
+Existing Button uses Base UI `render`/`nativeButton`; Arc Button uses native attributes/ref, variants `primary/secondary/ghost/danger` and sizes `sm/md/lg`. Map intentionally, including existing icon sizes and outline/link variants.
+
+* Declare `type="button"` for commands and `type="submit"` for submissions. AE supplies a button default; inspected Arc source does not. The census has 31 unspecified types, including seven rendered links.
+* Keep router Links/anchors as links, retaining search/params/state, `reloadDocument`, download and target/rel. Direct `Button render={<Link/>}` cannot be copied as an Arc prop.
+* External Base UI `render={<ArcButton/>}` may compose because Arc forwards native props/ref. Prove focus and event behavior. Do not introduce an unsupported `asChild` API.
+* Arc `ActionButton` treats every resolved promise as success and does not forward the external ref. Use it only where domain-confirmed success/rejection and focus ownership are compatible. A handler that catches a refusal or returns void is not such a promise. Controlled `Button loading` remains appropriate for many AE actions.
+* Preserve synchronous duplicate guards, operation keys, actual retry semantics, form ownership and focus restoration. Do not add a second async-state controller because the block demo includes one.
+* Measured label spans impose nowrap/centering: explicitly redesign the 13 wrapping and 25 full-width sites; root class copying is insufficient. Dense rows do not need letter-by-letter success animation.
+
+### Table translation rules
+
+Use a block to compose a records page; prove its table against the actual family before replacing the engine. `AeRecordTable` owns controlled/internal sorting, filter recovery, retained rows, semantic headers, stable row/action IDs, roving/restored focus and controlled selection. Selection currently has shared tests but no production consumer passes it.
+
+Client sort in `sortable-data-table` is over supplied rows, not the whole catalog. Do not substitute it for server sort/cursors. Keep BigInt financial sorting and snapshot-matched deduplicated continuations in account history. Preserve mobile compact content and both exact IDs and provenance. A compatibility gap justifies retaining the existing headless state engine while adopting Arc's presentation; it does not justify reimplementing data semantics.
+
+The comparison block assumes a highlighted or first anchor column, not an unbiased recommendation engine. Label the anchor as a selected Tool. Unknown facts stay strings, not false boolean checks. Omit its immediate `doneLabel` feedback for any async continuation.
+
+Its source difference key compares only the stringified value, and its string renderer ignores `note`. Different provenance in notes can therefore disappear or look identical. Put price context, access, source attribution and uncertainty in explicit always-visible rows/content; do not rely on notes. The source CTA belongs only to the anchor column: preserve an exact/history-tagged Inspect Tool link for every selected Tool. Revalidate the selected mobile peer when comparison references change, including removals and unresolved entries.
+
+## Shared theme boundary and cost decisions
+
+The foundation cannot be imported globally as-is. AE and Arc share names including `--background`, `--accent`, `--font-display` and timing tokens with different meanings. AE uses `.dark`; Arc uses `data-theme`. Arc foundation also contains a global `:is(*:focus, *:focus-visible, *:focus-within)` outline reset.
+
+Scope the foundation and brand overrides to migrated surfaces and their portal roots. Use one theme owner to mirror the existing resolved appearance; no second storage key/controller. Portal content must carry the same scope and theme. Preserve visible keyboard position; Pro prose bans outlines while inspected Button source contains them, so deleting focus treatment mechanically is not a valid audit. Verify actual focus visibility in both themes, including untouched pages.
+
+Use the existing Manrope brand type and chalk/charcoal/forest facts as theme inputs. Let Arc's block geometry and interaction grammar create the new character. Set actual Arc tokens once; do not fight each component with Tailwind utilities or duplicate arbitrary palettes. Primary action color and accent text are distinct choices; inspect which tokens each imported block uses.
+
+Preliminary sRGB contrast calculations establish feasible inputs, not a rendered-theme pass:
+
+| Pair | Ratio |
+| --- | ---: |
+| Forest `#24543D` on chalk `#E8E4DA` | 6.86:1 |
+| Forest on raised `#F2EFE7` | 7.58:1 |
+| Charcoal/chalk | 14.51:1 |
+| Secondary `#595854` on chalk | 5.61:1 |
+| Dark secondary `#AAA89E` on `#1C1C1C` | 7.14:1 |
+| Existing dark focus `#B7E7CC` on `#1C1C1C` | 12.43:1 |
+| White control glyph on forest | 8.71:1 |
+
+Foundation implementation must complete the Pro theme contrast table for actual accent/subtle surfaces, control track/thumb/glyph and both themes, then review real imported controls. Palette ratios alone do not establish borders, disabled text or focus compliance.
+
+| Structural decision | Added cost | Specific benefit / alternative | Keep/remove |
+| --- | --- | --- | --- |
+| Scoped foundation/portal bridge | One style boundary and portal propagation | Prevents changing hundreds of untouched callers; alternative global import has demonstrated token/focus blast radius | Keep through coexistence; revisit scope only after full adoption |
+| One adapted file/CSS pair per authored block | Data/callback seam and licensed-source maintenance | Preserves complete block design while isolating AE semantics; alternative scattered primitive rewrite loses the block-first direction | Keep for actual page callers |
+| Whole-app universal Button adapter | Two component systems and translation API to maintain | No benefit over explicit pattern migration; hides incompatible link/type/async contracts | Do not add |
+| Replace every table engine immediately | Rebuild sort, cursors, keyboard and money behavior | No evidence that Arc demo engine meets all AE contracts | Do not do; prove family by family |
+| New backend/schema or UI data model | Cross-domain changes and rollout risk | No need to achieve the visual refactor | Exclude |
+| Permanent storybook/capture/lint infrastructure | Dependency and maintenance burden | Existing tests/browser tools suffice for the pilot | Exclude from this protocol |
+
+Design integrity review was performed directly against this protocol, without a separate interview. Integrity: strong if block ownership, single theme authority and behavior contracts remain intact. Main risks: importing sample commerce transitions, global theme spill and mistaking simulated feedback for acknowledgement. Cuts: trading widgets, apparel variants/cart, invented ratings/photos, duplicate controllers and unproven universal adapters. Exploit the constraints: actual published examples become the gallery content; four selections create a focused phone comparison; disjoint ownership keeps agent throughput useful.
+
+## Rollout queue
+
+| Batch | Surface and block-first objective |
+| --- | --- |
+| 00 | Scoped Arc foundation and shared contracts; serial prerequisite |
+| 01 | Tool gallery/search, comparison matrix and contribution detail; selected pilot |
+| 02 | Agents page and reusable records presentation; prove shared table contracts |
+| 03 | Provider workspace, Tool inventory/publishing/detail; adapt readiness and form blocks to server facts |
+| 04 | Usage/activity, credit, Calls and recovery; compose exact record blocks, keep money/state distinct |
+| 05 | Account/settings, keys, teams, privacy and setup; adapt complete settings/form blocks with real controllers |
+| 06 | Chat and embedded Tool choices; adapt AI conversation blocks without replacing AE stream/approval/history |
+| 07 | Operator/admin queues and object pages; records + drawers + exception actions, exact redaction/refusal semantics |
+| 08 | Shared public shell, Provider profile, developer/support/legal and remaining public views |
+
+After the market pilot, audition appropriate live blocks for each batch afresh. Examples such as `settings-page`, `api-keys`, `usage-billing` and `release-readiness` include sample/internal state and are candidates for licensed-source adaptation, not drop-in domain engines. Do not declare them chosen before inspecting that page's data and job.
+
+## Worker brief template
+
+```text
+You own: [exclusive files and slice]. You are not alone in this shared checkout.
+Preserve others' work; do not edit outside ownership, install packages, commit,
+change backend/API/schema, or modify global/shared foundations.
+
+Read AGENTS.md, PRODUCT.md, DESIGN.md and docs/designs/arc-ui-refactor/protocol.md.
+Read Arc free SKILL/checklist and Pro refactor-to-arc/page-composition; use the
+relevant full-page/motion/responsive/accessibility workflow. Use configured Arc
+MCP with environment-only Pro token; verify live IDs, props and actual source.
+
+Job/action/data: [page brief]. Starting block: [ID, inspected source, hash].
+Creative intent: [composition and signature interaction].
+Region/state map: [all regions and loading/empty/failure/available/limited].
+Contract: [Requires/Ensures/Invariant/On violation].
+Keep: [controllers, exact money/identity, routes, privacy, recovery].
+Existing tests: [exact commands]. Baseline evidence: [real captures/data].
+Full interaction inventory: [links/fields/summary/gestures/row navigation too].
+
+Adapt the licensed block, preserve the design, replace sample facts/actions,
+keep links as links and explicit action/submit types. Return real promises.
+Test observable behavior and relevant failure/retry/rapid activation cases.
+Run narrow checks; coordinator serializes the integrated npm run check.
+Return changed files, Arc IDs, behavior guarantees evidenced, test results,
+visual evidence, adaptations and any unresolved material issue. Report every
+simulated/default behavior; do not call an unrendered page visually verified.
+```
+
+The verifier reads the brief, diff, Arc source adaptations and existing tests; then exercises every changed control on the running page, including the failure states. It reports specific issues and guarantees proved, not an aesthetic score or a passing test count alone.
+
+## Verification and completion
+
+Run Node 22/npm 11.5.1. Use the README's `npm run dev:local` for a valid app, not a Vite-only shell. Existing setup/credentials remain local; do not fabricate auth or catalogue data to claim a populated runtime pass.
+
+Market behavior baseline and future slice commands:
+
+```sh
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx --no-install vitest run tests/unit/market tests/unit/routes/market-search.test.tsx tests/unit/routes/tool-detail-route.test.tsx
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx --no-install vitest run tests/unit/styles/theme-token-parity.test.ts tests/unit/theme/theme-mode.test.ts
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npm run check
+```
+
+Use the narrow relevant files from these groups after a small slice. Core evidence is `x402-directory-page`: identities/links/history, selection across page/filter/reload, comparison focus, tray flow, next/previous cursor hiding, retained rows/retry/stale-response rejection, source recipients and save identity. Discovery, filters, saved Tools, playground, detail containment and price suites add their specific guarantees. Current tests requiring comparison **articles** should change to assert the same factual/accessible behavior in the new matrix; do not preserve old markup merely to satisfy a layout assertion.
+
+Shared records use `tests/unit/operator/record-table-presence.test.tsx`. Consequential actions use confirm-dialog, admin-action-sheet and copy-reference suites as applicable. Keep existing test infrastructure. Any new test must cover changed behavior or a clear regression, not reproduce library internals.
+
+For each migrated page, measure all five Pro responsive widths in both themes, 200% zoom, long/unbroken content, unknown data, keyboard focus, Escape/return focus and touch targets. No sideways **page** scroll; a deliberate table viewport may scroll internally. Test animation reversal and five rapid activations, reduced motion, live async feedback and retained drafts/results after error. Autoplay stays off unless it has a real purpose and usable pause/reduced-motion behavior.
+
+Discovery already has collection carousels. Installing a different carousel is not evidence of improvement: compare the complete authored block composition, contribution previews, scanning cost and actual controls against the baseline. Record measured targets of at least 44px on touch with 8px separation, and text/control contrast for rendered states.
+
+Quick source-coverage check from the repository root (the CSVs remain the single coverage records):
+
+```sh
+python3 - <<'PY'
+from pathlib import Path
+import csv, hashlib
+base = Path('docs/designs/arc-ui-refactor')
+rows = list(csv.DictReader((base / 'source-inventory.csv').open()))
+actual = {str(p) for p in Path('src/components').rglob('*')
+          if p.is_file() and p.suffix in ('.tsx', '.ts', '.css')
+          and '.test.' not in p.name and '.spec.' not in p.name}
+actual |= {str(p) for p in Path('src/routes').rglob('*.tsx')}
+listed = [r['path'] for r in rows]
+assert len(listed) == len(set(listed)), 'Duplicate rows'
+assert set(listed) == actual, 'New/deleted source needs inventory reconciliation'
+assert all(hashlib.sha256(Path(r['path']).read_bytes()).hexdigest()
+           == r['source_sha256'] for r in rows), 'Source drift: refresh mappings/evidence'
+allowed = {'inventoried', 'mapped', 'building', 'reviewing', 'verified',
+           'retained', 'retired', 'deferred'}
+assert all(r['status'] in allowed for r in rows), 'Unknown status'
+assert all(r['decision'] for r in rows
+           if r['status'] in {'retained', 'retired', 'deferred'}), 'Missing reason'
+assert all(r['parity_evidence'] and r['visual_evidence'] for r in rows
+           if r['role'] in {'view', 'route-page', 'route-layout'}
+           and r['status'] == 'verified'), 'Missing verification evidence'
+print('Coverage structure and source hashes pass; inspect evidence before claiming migration')
+PY
+```
+
+Reconcile deleted files by removing them from the current source census and recording their old path/caller-zero evidence in the block's existing adaptation record; do not leave a nonexistent path in a census of current source. Regenerate action sites using the TypeScript compiler API import-aware method described in Coverage whenever a page's action markup changes. Plain links and other controls remain part of the required per-page interaction inventory.
+
+Coverage completion requires:
+
+* Every active page and reachable visual pattern is verified or deliberately retained with a concrete reason; dormant source is separately adjudicated.
+* Every table family preserves its observable contract; every action site is mapped, retained or removed with caller evidence.
+* No migrated slice still imports a superseded presentation pattern unintentionally. No old module is deleted while callers remain.
+* Current integrated source has passing relevant checks and independent visual/behavior evidence. Check-only and source-only results remain explicitly partial.
+* `npm run gate` passes before merge to main or alpha release. No direct main push. No staging whitepaper, strategy, workflow signal proposal or `output/`.
+
+## Protocol baseline validation record (before implementation)
+
+The following records the initial protocol-only work. Its pending implementation statements describe that baseline, not the current source.
+
+* CSV validation passed: exact 680-source census, unique paths, current per-file hashes, 464 valid button-presentation source locations and 24 table-family records. No migrated-status claim.
+* Independent source review confirmed the page/table census and parity boundaries. Findings were applied: explicitly queued Provider browse/profile coverage, plain-control inventory in page briefs, comparison notes/differences/link/peer adaptations, and explicit retained/deferred reasons.
+* Existing market/route/theme baseline command above passed **60 files, 725 tests**. This establishes current observable behavior; it does not prove a future Arc implementation or visual quality.
+* `npm run check` passed lint, then stopped at `deps:check`: **two existing `no-circular` violations against ceiling zero**. Typecheck/import/security stages later in that command did not run. Source product files were unchanged by this task; integration cannot be called green until this baseline issue is resolved.
+* Product migrations, installed Arc source, theme completion and rendered visual/accessibility/responsive evidence remain pending. No product packages were installed, no UI changed, and no merge or release was attempted.
+
+## Source-first broad wave, 2026-10-02
+
+Settings use `settings-page` sidebar/pane/group/row composition with existing guards; credit uses `wallet-card` plus `billing-overview`, preserving exact balance and payment controls; recovery/clarification reuse the licensed `agent-run` decision frame. Shared records use the actual `sortable-data-table` table, sort tint, phone fold and row motion while TanStack and existing roving-focus retain state. Administration uses the actual `metrics-dashboard` KPI/inspectable-chart composition with authoritative daily Call counts, exact preformatted money and withheld incomplete-range totals. Arc `drawer` presentation uses its CSS fallback over the existing Base UI dialog engine, keeping focus/modality and avoiding a second headless framework.
+
+Complexity decision: keep existing presenter and controller boundaries; imported block TSX/CSS pairs absorb authored presentation. Do not add generic stateful adapters, new data services or sample-data stores. Contracts: require existing typed projections and callbacks; ensure the same facts, references, native disabled/busy/focus and recovery guards; invariant money, funding, authority, delivery and purchase resolution remain separate. Missing or incomplete facts retain explicit refusals and withheld totals. Source-only cognitive analysis groups each job around its relevant facts/action, keeps decisions visible and uses 44px controls; rendered salience is unverified until deferred visual review.
+
+The integrated regions include team-member rows and invitations; Agent credentials; workspace, Provider name and tax fields; credit documents/reconciliation/history; security history and independent recovery checks; acknowledgement-gated key reveal and Agent setup drawers; activity summaries and scope controls; Provider connections, readiness, public status and earnings; and operator exception/provider scopes. These use actual `team-members`, `api-keys`, `billing-overview`, `security-settings`, `radio-cards`, `integrations`, `metrics-dashboard`, `segmented-control`, `code-block` and `drawer` sources. Their styles record source hashes. Existing Base UI selection/modal engines remain where they own keyboard, focus and dismissal behavior.
+
+Reference copying now follows the clipboard helper's real success/error callbacks. A denied clipboard write retains selectable content and reports failure without a success toast. Displayed command code remains separate from lazily resolved clipboard content, and hiding a secret removes its raw rendered text immediately.
+
+Stable-batch verification on Node 22/npm 11.5.1:
+
+* `npm run build` passed for the CLI package and public client/server build. A premature run during worker edits encountered temporary missing files; the settled run passed.
+* `npm run typecheck:release` passed independently of the check ratchet.
+* The broad UI command covering `tests/unit/ui`, `components`, `settings`, `feedback`, `layout`, `operator`, `admin-console`, `chat-ui`, chat header, two operator routes and the two changed wizard/workspace hook suites ran 98 files/641 cases: 640 passed and one obsolete sticky-header utility-class assertion failed. That assertion now checks the sticky marker and retained heading/description/actions; its five-case suite passed. The actual sticky CSS keeps the header offset and an opaque surface.
+* Focused command-copy/reference, key reveal, accounting, connection handoff, tax/navigation and operator scope checks passed. New scope checks establish keyboard focus/selection and distinguish unavailable, incomplete and zero counts. Tax field and confirmation checks retain validation, exact payloads, duplicate-submit guards and focus recovery.
+* `npm run check` passes lint, then stops at the existing two `no-circular` violations. The separate import-boundary run passed 25 files/74 cases. The previously identified TypeScript-standard verifier issue remains outside this presentation pass.
+* The preceding freeze reconciled 738 unique current paths and hashes and 457 action sites with zero unresolved imports. Reviewing indicates a source-tested region, not complete route conversion or visual acceptance. No current source is marked visually verified by these checks.
+
+The next source regions are remaining operator object/evidence/approval views, Provider landing and proof gallery, public/support/auth pages, remaining navigation and shared presentation, and their loading/empty/recovery states. Existing inventories continue to carry their individual decisions; shared header/table adoption alone does not finish those pages. Browser/computer validation remains deferred until the broad source sweep is complete or Joel requests it.
+
+### Integrated forms, decisions and Provider journeys
+
+The next stable source freeze adds Agent facts/disclosures and spending policy; shared editable/sandbox amount fields; operator command proposals, evidence/reason fields, receipts, audit scopes and object search; workspace close/transfer and Provider offboarding; source inspection, candidate selection, description assessment, publication review, Provider identity/setup; owner Tool status/overview and inventory; receipts/invoices and notification settings; credential/OAuth handoffs and the price revision dialog. Existing controllers, Base UI engines, TanStack state, canonical references, exact money formatters and native action guards remain in place. Scoped Arc source/styles replace presentation inside those regions, with 44px targets, readable copy, full factual text and phone wrapping. Added styles record retrieved reference hashes.
+
+The old Provider Tool playground adapter returned a fabricated HTTP 200, latency and verification timestamp after a source recheck. It now renders the actual recheck callback outcome with the original pending guard, and withholds that action without a real callback or the appropriate publication state. The unused standalone playground family remains deferred, with caller-zero evidence; its retained implementation is not treated as a migrated route.
+
+Source review fixed scoped selectors that incorrectly required an Arc ancestor on the same element, and diagnostic selectors that missed the nested Alert. The audit event picker now passes its real title to the existing cmdk engine, which owns the input's generated accessible name. Obsolete utility-class assertions were changed to check current step/completion, native action semantics, exact continuation URLs, row focus, unknown facts and actual tier selection. No product controller was rewritten to satisfy styling assertions.
+
+Verification for this freeze on Node 22/npm 11.5.1:
+
+* `npm run build` passed for CLI, public client/server and Nitro output; no deployment.
+* `npm run typecheck:release` passed.
+* `npm run test:imports` passed: 25 files, 74 tests.
+* The expanded UI/presenter command covered 141 files and 906 cases: 905 passed, with one remaining old `w-full` assertion in `offering-surfaces`. Its assertion now verifies the canonical continuation hash and native focus; the affected three-case suite passed. The broad command was not rerun after this test-only correction.
+* Focused suites additionally establish native masked credential behavior and pending guards; draft audit filters apply only on command; authoritative offboarding case/revision/idempotency, confirmation and focus recovery; actual source-recheck refusal without fabricated HTTP facts; and connection/spending raw amounts and sandbox presentation. Retained route tests cover refused cancellation and uncertain completion.
+* `npm run check` passes full lint, then stops at the same two `no-circular` violations; capability-supply internal cycles remain zero. The clean type/import/build runs establish those independent checks despite the existing ratchet stop.
+* That integrated forms freeze resolved 459 action sites with no unresolved imports: 216 Arc Buttons, 31 native Arc button-style links, 85 legacy Buttons, 88 legacy style calls, 30 other native buttons and nine site actions. All 758 current source paths and hashes reconcile. Statuses: 231 reviewing, 517 inventoried, seven deferred and three retained. Retained contracts lost only caller-zero presentation constants; business state/validation types remain unchanged.
+
+Rendered contrast, responsive measurements, sticky geometry and actual browser interaction remain unverified by source tests and are deferred by Joel's instruction. The goal remains active; subsequent work continues through the remaining regions before visual validation.
+
+
+### Provider landing, Admin records and Call receipt source integration
+
+This source freeze adds seven deliberate stylesheets and changes 31 existing presenters. It follows the same Arc Pro page-composition and refactor contracts. Two cold Luna Max workers owned only the Provider landing TSX/CSS pair and the proof-gallery TSX/CSS pair. The coordinator implemented and reviewed the related shared facts, FAQ, Admin and receipt boundaries. No browser or computer-use validation was performed.
+
+The Provider page auditions the authored HeroContent split layout against the waitlist Hero signup and simulated HeroRelay workflow. HeroContent fits the actual Add Tool decision: the adjacent feature-bento surface shows the three existing requirements. Waitlist and simulated workflow behavior are omitted because neither describes this page. The four setup instructions use static agent-run step geometry, with no checkmarks or invented progress. Product-listing geometry carries only the real published Tool names, Provider/category facts, readiness labels, summaries and canonical formatted prices; public inspection actions remain a separate group. Initial-three disclosure, keys, order, distinct empty/unavailable behavior, exact Add Tool destination and all authority, privacy and cost caveats remain. The shared FAQ now uses the actual Arc FAQ columns/list/trigger source over the same single-open, collapsible Base UI engine; exact question/answer keys and status navigation remain.
+
+Admin membership uses native fields and Arc actions over the same access gate, trim rules and command-review state. Pending approval rows keep actor, expiry and command availability next to the review action. Requires: current allowed role, another actor’s unexpired proposal and valid parsed material. Ensures: the same exact command input, proposal reference, reason, evidence and state digest reach the existing review sheet. Invariant: self-approval, malformed/expired material and unauthorized roles cannot open a new review; an already-open review retains its inspected snapshot, while the existing backend expiry and command/MFA boundary decide whether submission can take effect. On violation: retain the existing hidden action, refusal diagnostic or disabled control. Seven new presenter cases establish the permission, optional-token, expiry, material and pagination guarantees; existing command-sheet cases establish operation-key/evidence retention through MFA recovery. These tests do not establish a new backend guarantee.
+
+Admin record workspaces use the actual settings-page and sortable-data-table regions, full wrapping references, continuous related-record rows, Arc continuation controls and existing drawer engine. Exception state choices use the already installed Arc segmented control with a lookup restricted to the current kind’s canonical partitions. Counts retain partial/unavailable semantics, and table columns, IDs, sorting, paging, exact destinations, Provider suppression and dispute permissions remain. Shared fact rows retain native dt/dd, ReactNode values, definitions, density, mono/muted facts and caller classes. Their low-specificity geometry deliberately leaves established caller decision grids in control.
+
+Call receipts use recorded agent-run rows, usage-billing Before/After fact groups, settings fields and native technical disclosures. Requires: the existing typed receipt/purchase projection and callback availability. Ensures: the same exact money helpers, recorded versions, output copying and current valid recovery callbacks. Invariant: payment, delivery and purchase status remain separate; uncertain charge amounts stay omitted, checks remain read-only, and a reused request is a fresh purchase with the existing literal shell escaping and retry instructions. On violation: existing unavailable/unknown/cancel/reconciliation guards and recovery feedback remain. The Base UI resolution selector keeps its original engine and values, including its portal; native fields preserve raw edits, IDs, required flags, length limits and pending guards. Bounded previews retain their depth/item/text caps and the full literal JSON. Loading mirrors the new fact groups and remains busy with hidden shapes, without fabricated records or active actions. The obsolete tactile class export has zero remaining callers and was removed after those callers migrated.
+
+Complexity decision: keep the seven scoped stylesheets because each serves a real page or coherent family of existing callers. They isolate Arc-authored geometry and remove repeated legacy surfaces without new state engines, generic wrappers, dependencies or schema/API changes. Fields, reviews, callbacks, lifecycle state, currency formatting and recovery remain in the existing modules. The cost is seven local imports and stylesheets; the benefit is shared presentation across 31 real presenters, with existing typed boundaries intact. Rendered acceptance remains deferred.
+
+Verification for this freeze:
+
+* `npm test -- tests/unit/ui tests/unit/components tests/unit/settings tests/unit/feedback tests/unit/layout tests/unit/operator tests/unit/admin-console tests/unit/chat-ui tests/unit/chat/chat-header.test.tsx tests/unit/routes/admin-exceptions-route.test.tsx tests/unit/routes/admin-providers-route.test.tsx tests/unit/routes/admin-search-route.test.tsx tests/unit/routes/admin-overview-route.test.tsx tests/unit/routes/admin-call-object-route.test.tsx tests/unit/routes/call-status-route.test.tsx tests/unit/routes/owner-tool-detail-route.test.tsx tests/unit/routes/owner-provider-identity-outcome.test.tsx tests/unit/routes/owner-provider-connection-handoff-route.test.tsx src/components/ae`: 143 files, 931 cases pass. Focused receipt/view contract checks also pass: six files, 68 cases; focused Admin record checks: seven files, 25 cases. Retired eyebrow and skeleton-class assertions now check actual headings and hidden loading-region semantics.
+* `npm run typecheck:release`, `npm run test:imports` (25 files, 74 cases) and `npm run build`: pass. The build compiles CLI, client, server and Nitro; it does not deploy. Scoped lint and `git diff --check` pass. Full `npm run check` passes lint and still stops at the two pre-existing `src/modules/chat/tool-card.ts` cycles with `tool-card-price.ts` and `tool-card-search.ts`; later aggregate steps therefore did not run through that command. No merge, release or `gate` run.
+* That Provider/Admin/receipt freeze reconciled 765 source paths and hashes, 458 action sites, zero unresolved imports. Actions: 233 Arc Buttons, 37 native Arc button-style links, 67 legacy Buttons, 83 legacy style calls, 30 other native buttons and eight site actions. Statuses: 269 sources reviewing, 486 inventoried, seven deferred and three retained; 304 actions reviewing and 154 inventoried. Source/action aggregates and every evidence path reconcile. The prior 758-source/459-action freeze is historical.
+* Source review checks CSS scope against real DOM roots, semantic token availability, material text wrapping, native focus and the reduced-motion bridge. It does not claim five-width measurements, rendered contrast, sticky/overflow behavior or visual acceptance.
+
+
+### Chat leaves, account corrections and authentication source integration
+
+This source freeze adds nine deliberate stylesheets and changes 31 existing component sources. Four cold Luna Max workers each owned two or three explicitly prescribed files: code copying, saved-need records, the authentication frame and the correction form. The coordinator reviewed their actual DOM/CSS scopes, required missing standalone stylesheet imports and readable untruncated diagnostics, and integrated the transcript, sidebar, follow-ups, price, loading and legal regions. No browser or computer-use validation was performed.
+
+The block choices follow the user job. Tool results reuse the actual agent-run decision frame, product-listing gallery geometry and native sortable-data-table cells without adding a sorting engine. Existing signed-cursor continuation, external-listing restrictions, readiness labels, caller-formatted price, paid facts, recovery and receipt destinations remain. Follow-ups use ai-chat suggestion cards: only the supplied first three items render, and their exact callback edits the draft. Sources use ai-chat numbered rows with full titles and optional supplied attribution. Markdown retains GFM, skipHtml, safe HTTP-only links, image omission and exact fenced-code copying; OpenUI retains bound Tool lookup, child recursion and cursor redaction. Writing, clarification and empty states keep their existing meaning, with the decorative writing pulse removed. The old global prose selectors have zero remaining source callers and were removed after the actual caller migrated.
+
+The main chat and sidebar now use ai-chat main/sidebar/page geometry, with existing scroll and main focus owners, history cookie/rail/mobile state, error boundaries, real private-thread sign-in URL, offline recovery and composer callbacks intact. Hidden loading placeholders mirror the real regions. The approval jump still targets the actual pending Call. Two exact forwarding presenters and four share/history/approval/funding controllers are deliberately retained: they own typed/query/effect boundaries and delegate to independently migrated interiors. This is a source retention decision, not a claim that a new transport or funding-concurrency guarantee was tested.
+
+Account corrections use continuous settings fields and a real Arc submit over the existing Base UI Select and native field wrappers. Requires: the existing controlled form model and native submit event. Ensures: exact raw field values, reason payload, refs/IDs/descriptions/invalid associations, receipt and support destinations reach the existing controller. Invariant: pending or uncertain outcome still blocks another submission and entered data remains available for recovery. On violation: retain the existing field focus/error or uncertain-outcome diagnostic; add no retry or success fallback. The three existing outcome cases establish data retention, rejection of a blind duplicate after thrown or retryable failure, and actual recorded reference/status. Workspace fences and diagnostics preserve exact closure/transfer facts, owner/name/successor guards, confirmation, operation keys and MFA recovery. Team, Tax and workspace loading now mirror the actual row/field structure with hidden placeholders; the Tax revision/payload/idempotency controller is unchanged.
+
+Authentication auditions login-centered as static composition around Clerk's current engine. Its authored stage/card/header/footer geometry fits both existing routes, while demo passkeys, codes, timers, mode transitions and backdrops have no place in this boundary. Requires: current typed title/content/heading and Clerk props. Ensures: the exact headings, IDs, child well, redirects/account switch and legal links remain. Invariant: the desktop-only autofocus selector/effect/MutationObserver is unchanged; mobile and existing focus are not stolen. On violation: the existing Clerk/refusal/redirect boundary remains authoritative. Scoped controls use readable text, rounded Arc geometry and visible focus; the old browser-mock frame is replaced by the real route address. Hidden loading and actual route-address assertions replace obsolete wrapper/class assertions. Clerk appearance exports and authentication methods remain unchanged.
+
+Complexity decision: keep nine local stylesheets, reused by real existing callers and coherent page regions, plus additions to three existing family stylesheets. This cost isolates authored Arc geometry, retires global legacy prose and duplicated surface recipes, and preserves typed data/effect ownership. Reuse the installed Arc Button, ProductListing and DecisionPanel and the existing Clerk/Base UI/TanStack engines. No new dependencies, schema/API changes, generic page wrapper, synthetic run state, authority inference or price arithmetic is introduced. The shared price figure accepts the existing formatted string, and passing its indicative window still does not reinterpret that string.
+
+Verification for this freeze on Node 22/npm 11.5.1:
+
+* The integrated UI/presenter/source command passes 174 files and 1,121 cases. It includes the prior broad source sweep, all chat and website tests, market price/detail, auth redirect/single-account/neutral-entry and privacy outcome routes. Focused chat/layout passes 42 files/282 cases; settings/workspace passes 14 files/71 cases; price/detail/chat checks pass four files/34 cases. These establish the named projection, callback, focus, omission, refusal, duplicate-submit and existing command/MFA guarantees through observable behavior.
+* `npm run typecheck:release`, `npm run test:imports` (25 files/74 cases) and `npm run build` pass on the frozen source. The build compiles CLI, client/server and Nitro output; no deployment. `npm run check` passes lint and stops at the same two pre-existing chat-module dependency cycles (`no-circular: 2 > 0`), so its later aggregate stages did not run. No merge/release or `gate` run.
+* Twelve new/updated authored stylesheets parse through the existing PostCSS dependency, with no raw colors, gradients or weights above 500. Source review verifies same-element roots, portal roots, standalone imports, token availability, full wrapping and native focus/44px control geometry. `git diff --check` passes. Source checks establish authored properties, not rendered contrast, five-width overflow, sticky geometry or visual acceptance.
+* Current census reconciles all 774 paths/current hashes and 455 action sites with zero unresolved imports. Actions: 244 Arc Buttons, 40 native Arc button-style links, 58 legacy Buttons, 78 legacy style calls, 27 other native buttons and eight site actions. Statuses: 309 sources reviewing, 449 inventoried, seven deferred and nine retained; 318 actions reviewing and 137 inventoried. Every source and action parity-evidence entry names a concrete existing file. The prior 765-source/458-action freeze is historical.
+
+The long-running goal remains active. Continue with the remaining agent authorization/lifecycle, command/navigation, operator/public/support and route-specific interiors. Whole-page acceptance is never inferred only from a migrated header or shared control. Visual validation remains deferred until the source sweep is complete or Joel explicitly directs otherwise.
+
+### Agent consent, connection management and command source integration
+
+This freeze adds ten scoped stylesheets and changes 37 existing component sources. Five cold Luna Max workers owned two or three prescribed files each: authority choices, consent facts/outcomes, approval rows, connection/history records and command result rows. The coordinator integrated the complete consent/setup/directory/command regions and reviewed actual source. Review corrected missing Arc Button imports and standalone roots, cramped result columns, sub-14px material text and Alert column placement. No browser or computer-use validation was performed.
+
+Consent uses settings-page review/body/footer geometry, radio-cards for actual choices and agent-run evidence/outcomes. Roles-permissions is a poor fit for requested authority ceilings: it would imply editable permissions that this consent does not offer. Requires: the existing request, target choices, caller-owned controlled fields and current pending state. Ensures: unchanged authority/scope/replacement inputs, exact callbacks, references, query-matched continuation and outcome focus. Invariant: authority cannot broaden, missing targets or empty required selection still block approval, pending disables the same choices/actions, and compromise replacement remains the explicit danger action. On violation: preserve the existing field/error association, unavailable/refused outcome or recovery destination. The two obsolete presentation constants had zero callers and were removed; exact consent contracts and ceiling guards remain.
+
+Agent home/install uses integrations and security-settings regions with FAQ alternatives. Installation remains an ordered instruction sequence with the actual client commands and existing live connection check; it has no simulated completion. Approval rows show observed Call requests and full material facts. Requires: complete canonical approval facts and no active decision. Ensures: exact Tool/Call references, argument order and current approve/deny callback. Invariant: incomplete facts prohibit approval and one active decision disables every decision control. On violation: existing unavailable or disabled state remains. Directory status uses the existing controlled Arc segmented group and TanStack engine; local filtering, exact row destinations, revision-aware rename, selected-record lifecycle, diagnostic and focus ownership are unchanged. A keyboard case establishes Expired filtering and Home restoration to All without invoking record navigation.
+
+History and connection receipts use continuous integrations rows, sortable-data-table cells and a metrics strip. All formatters, status projection, time values, receipt links and currentTarget disconnect callbacks remain. One display defect was corrected: the optional settled-spend strip now follows the existing Agent completeness rule. Requires: complete amount coverage and an explicitly supplied amount. Ensures: canonical formatting of that amount, including explicit zero. Invariant: absent or partial amounts never become zero or an apparent total. On violation: show “Amount coverage incomplete.” Five observable cases cover complete zero, complete nonzero, absent amount and both partial-coverage combinations. No accounting arithmetic or domain projection changed.
+
+The command palette adapts actual Arc command-palette search/result/shortcut geometry over retained cmdk and Base UI modal engines. The static Arc sample search engine would lose AE's async/cursor/stack contracts, so it is omitted. Requires: the existing active page, async choices and typed detail result. Ensures: exact Unicode/IME/query handling, clear-before-action ordering, selection refs, price/expiry props, safe destinations, saved-need actions and focus restoration. Invariant: inactive results cannot dispatch, continuation matches the current query, pending/refused/uncertain branches keep their existing guards, and navigation completion resets the same deck. On violation: existing retry/browse/close or refusal feedback remains; no synthetic choice or success is generated. CommandPanelProvider is retained as an independently traced state/context seam. Three unchanged credit/lifecycle forwarding presenters were traced through their complete migrated interiors; shared route chrome remains separately queued.
+
+Complexity decision: keep ten local stylesheets and a small standalone diagnostic addition to the existing spending-policy stylesheet. Each serves a real page family; the cost is local imports and scoped geometry, and the benefit is removal of repeated legacy surfaces with full readable facts and stable actions. Existing state, money, authority, retry and modal engines remain authoritative. No dependencies, services, schema/API changes or generic orchestration layer were introduced. The free command-palette registry CSS hash is `f06e18253cecdb3797415629700b9c6c0fc0c0d4efc5504386be8ef44a47bcf8`; other block provenance is recorded in the authored stylesheets.
+
+Verification on Node 22/npm 11.5.1:
+
+* The integrated UI/presenter/source command passes 180 files and 1,217 cases, adding consent/caller-continuation and command-panel coverage to the previous broad command. Focused consent/home passes seven files/97 cases, command checks eight files/68 cases, credit/spending leaves three files/56 cases, and the final directory/owner-console checks two files/32 cases. The sole initial integrated failure was an ambiguous “Expired” selector after the visible scope was introduced; the assertion now targets the actual policy table. The integrated command was rerun and passes.
+* `npm run typecheck:release`, `npm run test:imports` (25 files/74 cases) and `npm run build` pass. The build compiles CLI, client/server and Nitro output without deploying. Scoped lint passes. `npm run check` passes lint and stops at the same two pre-existing chat-module dependency cycles; subsequent aggregate stages did not run through that command. No merge/release or `gate` run.
+* Eleven new/updated authored stylesheets parse with existing PostCSS, without raw colors, gradients or weights above 500. Source review checks DOM/portal roots, standalone imports, full wrapping, semantic tokens, native keyboard focus and authored 44px targets. These checks do not establish rendered contrast, five-width overflow, sticky geometry or visual acceptance.
+* Census reconciles 784 paths/current hashes and 461 action sites, with zero unresolved imports. Actions: 278 Arc Buttons, 52 native Arc button-style links, 25 legacy Buttons, 71 legacy style calls, 27 native buttons and eight site actions. Statuses: 357 sources reviewing, 409 inventoried, seven deferred and 11 retained; 364 actions reviewing and 97 inventoried. All evidence paths exist. The prior 774-source/455-action freeze is historical.
+
+The goal remains active. Remaining operator, public/support, shared chrome and route interiors continue through independently traced source decisions before visual validation.
+
+### Operator overview, object records and loading source integration
+
+This freeze adds four scoped stylesheets and changes 28 existing component sources. Two cold Luna Max workers owned three precisely prescribed files each: overview metric/configuration regions and queue/recent-record rows. The coordinator integrated the overview, source-authority review, four object presenters, five table leaves and eight loading presenters, and reviewed actual DOM/CSS/callback code. No visual or computer-use validation was performed.
+
+The overview uses actual metrics-dashboard KPI geometry and integrations continuous rows. Feature-bento was rejected for this region: operator queues need observed counts and exact destinations, rather than promotional features. Configuration remains truthful to the existing projection, including unavailable Formance. Search, exceptions and metrics keep independent query/error boundaries and their recovery links; partial counts, unavailable counts, empty states and supplied values retain their exact text. Native row links and copy actions remain independent. Container queries fold KPIs by the actual region width, including when the overview occupies two columns. Labels, formatted amounts and references wrap fully; no synthetic trend, counter or record was added.
+
+Four object views use settings-page's main/quiet-sidebar geometry with existing fact rows and related-record links. Requires: the current validated typed object projection. Ensures: exact status, timestamps, missing-fact labels, full copied references and related destinations. Invariant: Quote state, Tool source authority/readiness, Workspace membership/policy and Agent credentials remain their existing separate facts; null facts are not inferred. On violation: unchanged missing/refused/mismatched-kind recovery. The new observable Quote case establishes all four exact related destinations and literal references; loading establishes a named busy region with hidden shapes and no facts or actions. Five table leaves were independently traced through their complete columns and props: existing IDs, status/time projections, unknown environment, dispute callbacks and purchase-resolution destinations remain. They reuse the already ported Arc/TanStack table engine.
+
+Source-authority review uses native continuous settings facts and a real Arc review action. Requires: the same allowed role and reviewed publication/revision/digest material. Ensures: the same command action, input, targetRefs and controlled review sheet. Invariant: no verification action while access is loading, refused or lacks permission; no effect before the existing command-review/MFA boundary. On violation: the existing hidden action and visible read-only facts remain. Five existing/extended presenter cases establish owner access, exact material handoff/close, forbidden roles, refusal and loading. They establish no new backend guarantee.
+
+Eight loading presenters now mirror the actual settings, integrations, metric and record regions with hidden static shapes, retaining exact pending chrome and route inputs. Shared copyable references and feedback now use fourteen-pixel text; clipboard values, outcome toasts, timeout, accessibility and native Arc action remain. Two dormant metric presenters, MetricsHeadline and MetricsRatios, had no source/test/tool callers and were removed; the live MetricsDashboard owns those real regions. The native diagnostic leaf and typed object dispatch seam are deliberately retained. All twelve Admin route files were read in full and retained with explicit binding decisions: parameter/search parsing, metadata, authorized loaders, observation events, default/optional props, replace-navigation and pending/recovery branches remain exact. Their real interiors were inspected separately; shared frame/recovery remains queued, and route retention is not visual acceptance.
+
+Complexity decision: keep the four local stylesheets because they serve real overview and loading families, plus bounded additions to existing record and metrics styles. This removes duplicated legacy cards, dead presenters and opaque loading slabs without a new wrapper/state engine. The cost is scoped CSS and direct imports; the benefit is coherent related facts, readable references and preserved independent recovery. No dependencies, schema/API changes, business projections or new authority/payment transitions were introduced.
+
+Verification on Node 22/npm 11.5.1:
+
+* The integrated UI/presenter/source command passes 182 files and 1,230 cases. It adds the full object-route and source-authority-review suites to the previous 180-file command, including exact related-reference and access-loading cases. The earlier focused operator command passes six files/27 cases; final integrated evidence includes the subsequently completed queue and reference edits.
+* `npm run typecheck:release`, `npm run test:imports` (25 files/74 cases) and `npm run build` pass on the frozen source. The build compiles CLI, client/server and Nitro output without deploying. `npm run check` passes full lint and stops at the same two pre-existing chat dependency cycles; later aggregate stages do not run through it. No merge/release or `gate` run.
+* Six new/updated stylesheets parse through existing PostCSS without raw colors, gradients or weights above 500. Source review verifies standalone imports, real DOM/container roots, complete text wrapping and native controls. `git diff --check` passes. Five-width measurements, rendered contrast, sticky/overflow behavior and visual acceptance remain unverified and deferred by Joel.
+* All 786 current source paths/hashes and 464 action sites reconcile, with zero unresolved imports and all evidence paths present. Actions: 279 Arc Buttons, 56 native Arc button-style links, 24 legacy Buttons, 70 legacy style calls, 27 native buttons and eight site actions. Statuses: 387 sources reviewing, 367 inventoried, seven deferred and 25 retained; 369 actions reviewing and 95 inventoried. The previous 784-source/461-action freeze is historical.
+
+The source-first goal remains active. Next: public/support blocks, shared navigation and recovery, remaining account/Provider regions and their independently traced route bindings. Business companions remain context and are not restyled or reclassified merely to inflate migration coverage.
+
+
+### Navigation, recovery and loading source integration
+
+Navigation and recovery are source-complete in this freeze. Two cold Luna Max implementation workers owned the workspace menu/identity and header compositions; a separate cold worker inspected the finalized header, stylesheet and Drawer. The coordinator integrated the remaining frame, recovery, loading, theme, breadcrumbs and shortcuts. Exact public navigation destinations were established through the actual rendered drawer test, since those destinations were outside the verifier's three-file boundary. No visual/computer validation or merge was performed.
+
+The actual workspace-sidebar and page-header sources inform the continuous menu/mobile tray/header. Existing Base UI menu and Drawer engines retain keyboard, modal dismissal and focus ownership. Requires: the current router location, authenticated role/entitlement and existing controlled open state. Ensures: exact canonical destinations, entitled Admin visibility, active-page markers, organization invalidation, chat action slot, theme preference and breadcrumb references. Invariant: missing/error entitlement remains fail-closed, navigation does not grant authority, one current heading owner remains, and the mobile safe-area reserve stays paired with its tray. On violation: preserve the existing unavailable/hidden destinations and error capture. The Drawer now accepts an optional close label, preserving “Close public menu” while every other caller defaults to “Close.” The obsolete site icon action had zero production callers and was removed.
+
+Recovery uses actual empty-states/settings regions with native Arc retry and destination actions. Requires: the existing failure, correlation reference policy and current retry state. Ensures: the same router invalidation or page reload, awaited retry completion, catch/finally recovery, safe support reference and truthful available destinations. Invariant: a failed page does not establish any payment outcome; private error text remains absent. On violation: show the existing unavailable/refused state with recovery rather than infer success or charging. The unsupported “Nothing was charged” claim is removed from route and render recovery. Existing Convex/Clerk generation, token readiness, timing, mounted-session and online behavior remain unchanged.
+
+Loading shapes now reflect actual record, table, metric, field and market regions without pulsating placeholder motion. Exact preset inference, pending chrome, busy names, optional status description, parent-shell and role ownership remain. Hidden shapes contain no facts or active controls. The shortcut dialog uses the actual command-palette list/key composition over its existing modal/global-key engine. Editable-target, IME, repeat, Escape and focus guards remain. The listed Cmd B sidebar shortcut had no production handler and was removed; the question-mark description now says “Open keyboard shortcuts,” matching its existing action.
+
+Complexity decision: keep seven local authored stylesheets for real header/menu/frame, recovery, loading, shortcut and public navigation callers. The cost is scoped CSS/direct imports; the benefit is readable grouped destinations and recovery with existing engines and no generic navigation layer. Six pure forwarding/state seams were read completely and deliberately retained. Business companions are not counted as additional views. No dependencies, services, schema/API changes or payment/authority transitions were introduced.
+
+Verification on Node 22/npm 11.5.1:
+
+* Integrated UI/presenter checks pass 184 files / 1,242 cases. The new drawer case establishes the exact public links, named native close, focus entering the dialog, background exclusion from accessible queries and restored trigger focus. Focused navigation/provider-boundary checks pass three files / 45 cases. Retry tests establish pending disabled/busy state, duplicate prevention and awaited completion; four financial route cases establish absence of inferred charge claims. Theme/bootstrap/token checks pass two files / 20 cases. Layout assertions tied to obsolete CSS recipes now check native links, focus, safe-area reservation and accessible pending names.
+* `npm run typecheck:release`, `npm run test:imports` (25 files / 74 cases) and `npm run build` pass. Full lint passes; `npm run check` stops at the unchanged two existing chat dependency cycles. Later aggregate stages do not run through that command. Scoped lint after test repairs passes. `gate` remains a pre-merge requirement.
+* Seven authored stylesheets parse through existing PostCSS, with semantic colors and no raw colors, gradients or weights above 500. Source review verifies portal/same-element roots, explicit Arc-control responsive visibility, full wrapping, authored 44px controls, safe-area geometry and reduced-motion handling for the route progress indicator. Rendered contrast, five-width measurements and visual acceptance remain unverified.
+* Census reconciles 793 source paths/current hashes and 464 action sites, with zero unresolved imports and all evidence paths present. Actions: 289 Arc Buttons, 71 native Arc button-style links, 20 legacy Buttons, 57 legacy style calls, 23 native buttons and four site buttons. Source statuses: 415 reviewing, 339 inventoried, seven deferred and 32 retained. Action statuses: 394 reviewing and 70 inventoried. The preceding 786-source freeze is historical.
+
+The goal remains active and merge remains pending. Remaining source decisions: public/support 36, shared frames/primitives 52, market 23, Provider six, money/activity three and Agents one; 51 route bindings also require independent review. Continue with support/public blocks and the remaining runtime interiors, then resolve the dependency cycles and run the full pre-merge gate.
+
+
+### Support, status and footer composition briefs (source implementation complete)
+
+Audience/job: a Customer or Provider recovering from a problem or looking for help. Primary action: existing private support email draft. Actual Arc contact-section channels supply the topic rail, selected highlight and separate detail surface. The support-widget alternative introduces article/team/conversation sample state without an AE support transport; keep contact channels. Form/offices variants are outside this job. Channel labels are Current status, Agent connection, Private support and Developer issue; default Current status. Keep the safe Call reference and email action visible above every channel, with the existing credential/input/result warning. FAQ remains its own already migrated region.
+
+Requires: the existing parsed absent/valid/malformed Call reference and canonical origin. Ensures: exact Call/Calls, credit, Provider setup, Agent requirements, correction and public issue destinations; exact email draft and read-only diagnostic command. Invariant: topic selection changes only presentation, malformed references are never rendered or mailed, no retry/payment/connection result is fabricated, and inactive topic actions are absent. On violation: preserve existing malformed-reference guidance and canonical fallback. Keyboard arrows/Home/End choose and focus a topic; Tab reaches its current content. The selected highlight uses Arc morph tokens with an instant reduced-motion branch; facts swap directly without outgoing duplicate actions or height animation.
+
+Cognitive-load conclusion: four recognizable groups replace an undifferentiated action stack. The Call reference stays visible rather than requiring recall; private email is one persistent primary action. Advanced diagnostics remain disclosed only when requested. Complexity decision: one page-local typed selection plus one authored stylesheet over the existing section components; keep this local state for the real four-topic caller, without a new generic support framework, service or dependency.
+
+
+Status region brief: actual Arc integrations continuous row geometry fits the five observed probes, with a settings-page recovery region. A metrics-dashboard would require trends or uptime data that this projection does not supply. Requires: the existing loaded probe results, request references and checking state. Ensures: exact labels, supplied status/detail/time, clipboard values, recovery destinations and manual refresh callback. Invariant: platform probes do not establish individual Tool readiness or delivery/payment outcome; refresh retains the same disabled/busy/live-state and catch/finally behavior. On violation: retain existing checking/degraded/recovery guidance. The source hook and projection stay unchanged. One local stylesheet serves the actual health list, footer/recovery and canonical status badge; no new status engine or polling.
+
+
+Footer region brief: actual Arc site-footer columns plus cta-section split replace duplicated mobile/desktop navigation and overlaid photo copy. The existing closer photo remains decorative media alongside exact supplied text and actions. Requires: canonical footer columns, machine reload policy, brand assets, ABN/social facts and hideCloser. Ensures: one footer landmark, each public destination exactly once, native visible link groups at every width, the same optional closer and exact Business/social identity links. Invariant: no default Arc newsletter or synthetic system-health indicator, no new signup/result/transport. On violation: keep the supplied destination and safe native navigation. Keep one scoped stylesheet; existing navigation/copy contracts remain authoritative, with obsolete atmosphere/eyebrow removed only after zero production callers. No generic footer state engine is added.
+
+
+### Support, status and footer source integration
+
+Eleven existing presenters now use the inspected contact-section, integrations/settings, site-footer and cta-section sources. Three new page/family stylesheets are companions and do not increase the view denominator. Three cold Luna Max workers each owned exactly three specified files: support sections; status rows/recovery/footer; and the public footer TSX/CSS/contracts. The coordinator implemented the page compositions and behavioral tests, then reviewed every changed source against the briefs above.
+
+Support replaces the undifferentiated help stack with four local topics. The actual Arc morph highlight follows native roving tabs, while facts swap immediately and inactive actions leave the DOM. Existing safe reference and exact email action remain above all topics. Eleven support cases establish arrow/Home/End focus, one selected panel, absence of outgoing actions, reference/email persistence, exact destinations, canonical diagnostic command and malformed-reference exclusion. This does not introduce a support transport or establish a connection/payment result.
+
+Status uses the five supplied observations, exact copyable references and current refresh state. The projection, probe hook and catch/finally behavior remain unchanged. Existing status route and presentation suites establish current supplied labels, references, recovery links, degraded/loading behavior and live announcements. The support and status routes were read in full and deliberately retained as exact parser/loader/SEO bindings; they are not extra converted views.
+
+The public footer now has one canonical navigation set, four visible labelled regions and a split optional closer with the existing decorative photo. Exact destinations, machine reload policy, social/ABN identity links and hideCloser remain. Review found the Arc focus-ring token transparent in both local themes; the authored footer uses the existing visible ring token instead. Obsolete atmosphere/eyebrow facts had zero callers and were removed. Footer tests establish single destinations, full reload links, exact social/Business links, conditional closer and absence of invented signup or health claims. The remaining canonical footer contract is explicitly retained.
+
+Verification on Node 22/npm 11.5.1:
+
+* Integrated UI/presenter/source checks pass 186 files / 1,268 cases. Focused support/status/public-page/focus checks pass seven files / 52 cases. The integrated command adds support and status routes to the preceding 184-file sweep.
+* `npm run typecheck:release`, `npm run test:imports` (25 files / 74 cases) and `npm run build` pass. CLI/client/server/Nitro output builds without deployment. Full `npm run check` passes lint and stops at the same two existing chat dependency cycles; later aggregate stages do not run through that command. No merge or `gate` run.
+* All three authored stylesheets parse through existing PostCSS, with semantic colors, complete wrapping, real same-element/container roots, direct standalone imports and prescribed control geometry. The support highlight has an instant reduced-motion branch. `git diff --check` passes. Rendered contrast, five-width measurements and visual acceptance remain deferred and unverified.
+* Census reconciles 796 current source paths/hashes and 468 action sites, zero unresolved imports, and all evidence paths. Actions: 290 Arc Buttons, 84 native Arc button-style links, 19 legacy Buttons, 47 legacy style calls, 24 native buttons and four site buttons. Source statuses: 429 reviewing, 325 inventoried, seven deferred and 35 retained. Action statuses: 409 reviewing and 59 inventoried. The preceding 793-source freeze is historical.
+
+The source-first goal remains active. Remaining view decisions: shared frames/primitives 52, public/support 25, market 23, Provider six, money/activity three and Agents one; 49 route bindings also need independent review. Resolve the two dependency cycles and run the full gate before merging. These source counters are separate from deferred rendered acceptance.
+
+
+### Legal documents, remaining money and Agent source briefs (source implementation complete)
+
+Legal audience/job: read the published terms or privacy policy and locate a section without retaining a fifteen-item contents list in memory. Actual docs-sidebar reader/article/outline source supplies the bounded reading column and vertical outline. Comparison-table does not fit continuous legal prose; multi-step-form would hide required published text and fabricate decisions. Keep the existing native section anchors, article headings and company destinations. On narrow containers the complete contents moves above the text; no nested article scroller, sample author/version picker, filter/tree state or speculative scroll spy. Metadata follows the title rather than introducing a competing heading. The signature interaction is native section navigation with focusable actual headings and a persistent desktop outline.
+
+Requires: existing section IDs, ordered ReactNode paragraphs, exact metadata and optional intro/footer. Ensures: one real h1, all original legal wording and mailto/correction/OAIC/status/terms/privacy destinations, exact numbered h2 anchors, optional version/description/footer, supplied className and company active-page markers. Invariant: no policy, consent or legal meaning changes; anchor href and target IDs remain exact; text remains available without a JS disclosure. On violation: preserve native browser navigation and original supplied content. Two pure legal bindings will be retained after their existing contracts and route behavior are traced, rather than counted as new implementations.
+
+Funding audience/job: determine the observed state of this exact payment and take its permitted next action. Reuse the already ported empty-states/settings route-state composition with native Arc actions. Checkout-summary would introduce a new payment or sample discount; revenue-globe invents transactions; neither fits. Requires: existing discriminated FundingReturnViewState and read-only onCheck. Ensures: exact canonical amount formatter, all observed/unknown/failed/expired/awaiting/ready copy, current disabled refresh state, original session read, abort handling and navigation. Invariant: funding is not authority; refresh failure retains the last observation; uncertain/cancelled returns never offer a second payment or assert credit. On violation: retain current retry/unknown diagnostics. The reducer/schema/fetch controller remains unchanged and deliberately retained after full source review. Cancelled-route native links also use Arc while keeping private cache/no-referrer/noindex metadata.
+
+Calls audience/job: review attention and recent queues with identity, payment and purchase status beside the receipt action. Adapt actual sortable-data-table continuous rows over the already ported AeRecordTable engine; mobile uses continuous native record rows instead of legacy Cards. Requires: current projected row strings and keys. Ensures: unchanged columns/accessors/header-sort behavior, filter omission, count/caption, row IDs, native receipt URLs/names, unknown Agent fallback and every mobile fact. Invariant: caller-formatted money is never parsed or recomputed; payment, Call status and purchase status remain separate; no new selection/server filter. On violation: the existing explicit empty state remains. Full Call and Agent references wrap instead of ellipsis.
+
+Complexity decision: keep one scoped legal-reader stylesheet for two real document bindings, and one queue stylesheet for both attention/recent desktop/mobile presentations. Cost: two direct style imports; benefit: one readable document geometry and one continuous record geometry with no new state engines or wrappers. Funding uses existing installed Arc controls and route-state styles. The installation metadata for docs-sidebar/empty-states/sortable-data-table was checked; the licensed source is already available for adaptation, so no unused sample block or new dependency is installed. Cold worker ownership: document TSX/CSS (two files) and funding state/cancelled route (two files). The host rejected a second simultaneous worker at its thread limit, so the coordinator owns queue TSX/CSS (two files). Coordinator owns tests, route/controller retention decisions and integration.
+
+
+Agent landing companion brief: close the one remaining Agents presenter with actual HeroContent split geometry. The current real installation funnel becomes the right-hand live instructional region, beside the existing title/subhead and native Start setup anchor; the existing Arc FAQ remains below. HeroRelay's simulated workflow and the waitlist hero add facts or signup state that this route does not have. Requires: server canonicalBaseUrl, canonical AGENT_PAGE copy and the current install/FAQ presenters. Ensures: exact agent-hero/agent-setup/agent-faq references, one actual connection funnel, same canonical CLI clipboard commands, disclosure and status links. Invariant: installing is not confirmed connection or Spending policy; no simulated connected state, fabricated steps or extra account/payment action. On violation: keep the existing public route pending/recovery and canonical origin binding. Keep one local scoped stylesheet for this real caller, no new hero wrapper or state engine; a cold worker owns only AgentDoorPage TSX and that CSS. This adds one deliberate style import to the batch's complexity cost. Native anchor focus and existing disclosure supply the interaction; no entrance choreography is added.
+
+
+Legal outline review refinement before source acceptance: fifteen 44px contents links consume at least 660px on a narrow document. Source-only cognitive review identifies avoidable attention/scrolling cost before reading the policy. Use actual DocsReader's local outline-open boolean and mobile toggle instead: the index remains persistent on wide containers, while a named native 44px button reveals it below 820px. Requires: current typed sections and native button/hash navigation. Ensures: toggle aria-expanded/aria-controls match the local open state, exact anchors remain, selecting a section resets only the index disclosure, and every legal paragraph stays rendered regardless of index state. Invariant: no policy text, IDs, URL or consent/acceptance state changes; no effect, timer, transition or nested article scroller. On violation: native body reading and section navigation remain available. Keep this local state and useId because they remove a real 660px mobile navigation stack; no generic disclosure abstraction is justified. Coordinator owns this bounded review patch to the already frozen document TSX/CSS and its existing test.
+
+
+### Legal, money and Agent source integration
+
+This source batch closes seven view decisions: four Arc conversions (document reader, Calls queue, funding state and Agent landing) and three deliberate retentions (published privacy/Terms bindings and the funding read/reducer controller). Three new stylesheets are source companions, leaving the view denominator at 443. Three cold Luna Max workers each owned exactly two files for the document, funding actions and Agent landing. The coordinator implemented the Calls queue and tests, independently read every worker output, fixed an overly broad Agent focus selector, and adapted the actual DocsReader compact-index behavior after identifying a 660px narrow-layout contents stack.
+
+The document keeps every published paragraph, exact native section IDs/anchors, dates, optional version/intro/footer/description, caller class and canonical company destinations. Privacy mailto, correction, Terms and OAIC links remain; Terms availability and privacy links remain. The compact index affects only navigation disclosure: its native button names the index and carries a matching controls ID/open state; choosing an anchor closes only that index. Wide layouts keep the actual outline visible; narrow layouts reveal it on request. The body always renders and no policy/consent state is introduced. Source tests compare every rendered section paragraph to the original contract, exercise the disclosure, and check optional content and exact destinations.
+
+Calls now use continuous native mobile records and actual Arc receipt actions over the same table/sorting engine. Column IDs/accessors, row keys, desktop/mobile fact values, filter omission, receipt labels/URLs and explicit empty states remain. Full supplied references wrap. Funding uses the already ported empty-state/settings frame and native Arc actions. Existing strict schema, abort handling, same-session no-store reads, canonical money formatter and observed/unknown/refresh-failure reducer remain unchanged. Pending disables and marks only the existing read check busy; a failed refresh retains the observation. No second payment or authority inference is introduced. Cancelled returns retain private/no-store/no-referrer/noindex metadata and exact Credit/Agents destinations.
+
+The Agent landing adapts actual HeroContent split geometry to the one real installation funnel. Canonical headline, subhead, Start setup hash, section IDs, server origin, clipboard commands, disclosures, FAQ and status links remain. Source review verifies that the funnel renders once and installing does not become confirmed connection or Spending policy. Native anchor focus and existing disclosures provide the interaction without simulated setup or entrance animation.
+
+Six route files were read completely: privacy, Terms, funding return, cancelled funding, Calls and for-agents. Five unchanged parser/loader/head/nested-dispatch bindings are explicitly retained; cancelled funding's own actions are ported. Four unchanged legal/document/funding companion contracts are retained with exact content evidence and are not counted as redesigned views.
+
+Verification on Node 22/npm 11.5.1:
+
+* Integrated UI/presenter/source checks pass 190 files / 1,291 cases. The command adds Terms, funding return, Calls recovery and for-agents route bindings to the preceding 186-file sweep. Initial focused batch checks pass seven files / 46 cases. The later compact-index refinement adds one behavior case: final affected checks pass seven files / 47 cases, including both legal files / four cases. The earlier broad count is not presented as a rerun of that refinement.
+* Final `npm run typecheck:release`, `AE_CLI_PREBUILT=1 npm run test:imports` (25 files / 74 cases) and `npm run build` pass after the index refinement. CLI/client/server/Nitro compile without deployment. Full `npm run check` passes lint and again stops at the unchanged two chat dependency cycles; later aggregate stages do not run through it. `gate` remains required before merging.
+* All three authored stylesheets parse through existing PostCSS without raw colors, gradients or weights above 500. Review checks actual scoped roots, exact semantic tokens, native focus, full wrapping and 44px actions; local responsive index visibility uses the actual Arc pattern. Source properties do not establish five-width measurement, rendered contrast, overflow behavior or visual acceptance.
+* Current census reconciles 799 source paths/hashes, 469 action sites, zero unresolved imports and all evidence paths. Sources: 437 reviewing, 308 inventoried, 47 retained and seven deferred. Views: 323 reviewing, 17 retained, 99 inventoried and four deferred. Actions: 418 reviewing and 51 inventoried; 292 Arc Buttons, 90 native Arc button-style links, 17 legacy Buttons, 42 legacy style calls, 25 native buttons and three site buttons. The preceding 796-source freeze is historical.
+
+The source-first goal remains active. Remaining view decisions: shared frames/primitives 52, market 23, public/support 22 and Provider six, 103 total including four deferred; 43 route bindings remain. The action census also requires final parity review of legacy controls inside already composed pages, so a checked presenter is not a claim that every imported primitive has been replaced. Continue the actual home/About/developer and market/Provider regions, then independently decide each shared engine/primitive. Resolve dependency cycles and pass the full gate before merging; visual/computer validation remains deferred.
+
+
+### Public reference source integration evidence — 2026-10-02
+
+The eight actual conversions are the About hero/editorial/bento/CTA leaves, developer discovery and its continuous rows, API reference, and the Agent-readable JSON affordance. The coordinator reviewed the frozen worker source against the prescribed content/heading/image/native-action contracts and tightened root typography, wrapping, box sizing and scoped visible focus. The existing About brand-copy binding remains deliberately retained. Source traces identify 13 unreachable legacy public presenters (root landing and its website helper subtree), plus the market capability tile; keep their tested exports unchanged. `AeSiteType` has an auth heading type-only consumer, which does not make its legacy rendering recipes reachable. `AeViewBar` already uses the actual Arc table search/count geometry; its full controlled/filter/count/slot contract was reviewed against real table tests. No browser or visual acceptance is claimed.
+
+The newly exercised guarantees are exact public paragraphs and responsibility statements/ABN/support/editorial destinations; supplied artifact origin/status/check tuples and missing-fact/read-path omission; native compact contents controls and persistent document content; supplied runnable curl copied exactly versus non-runnable authority templates; projected exact price/error advice; JSON loading/failure copy refusal, exact query-aligned preview, selectable recovery after clipboard denial and native Cancel. Existing tests also preserve root-to-market search transfer, sanitized auth redirects, correction outcomes, Provider landing error data suppression and table filter/clear/sort behavior. Layout, theme contrast, actual overflow and rendered keyboard focus remain for the deferred visual/responsive phase.
+
+Node 22 / npm 11.5.1 evidence: `public-reference-focused.log` 20 files / 107 cases pass; `public-reference-final-focused.log` two files / eight cases pass after the final style refinements; `public-reference-types.log` release typecheck passes; `public-reference-build.log` CLI/public client/server/Nitro build passes; `public-reference-imports.log` 25 files / 74 cases pass against that prebuilt CLI. `public-reference-check.log` full lint passes and then fails at the same two existing chat cycles; later aggregate stages did not run through that command. Four authored CSS files pass PostCSS parsing and the no-raw-color/gradient/weight-above-500 source check; scoped diff checking passes. Logs and cached licensed sources remain under `/tmp/aecon-arc-build-20261001/`. No install, deployment, stage, commit, merge or push occurred.
+
+At this public-reference freeze, the action census contained 471 sites across 464 non-test AE/Arc/route TSX files, zero unresolved imports: 295 Arc Buttons, 93 native Arc button links, 27 native buttons, 14 legacy Buttons, 39 legacy button-style calls and three dormant site buttons. 426 action sites were reviewing, 42 inventoried and three deliberately retained. The source counter was 364/443 (332 reviewing, 32 retained), with 75 inventoried and four deferred views remaining; route bindings were 28/63. The historical census JSON is `public-reference-final-census.json`. Presenter completion does not substitute for final embedded-control review.
+
+### Provider/catalogue source integration evidence — 2026-10-02
+
+Seven catalogue presenters now use the actual licensed Arc identity/source and offering-gallery composition with Arc native actions: ProviderIdentity, ProviderPortfolio, HostGrouping, ToolListingCard, AeProviderListingPage, PublicBusinessNotFound and AePublicBusiness. The Host route uses the same family. Existing route/data projections retain exact Business/Host scope, canonical admission join, human-request distinction, native URLs, optional facts, price formatting and JSON consent ownership. Coordinator review caught and corrected the Host route's missing `cn` import before final verification. Three settings route files replace four embedded legacy action sites without changing loader, export, invalidation or recovery policy.
+
+Full source/caller decisions retain the already-Arc ToolFacts binding, three thin Provider bindings and three unreachable playground presenters. Their existing engines and tests remain; no fictional playground purchase is promoted to a live capability. Seven additional route bindings are reviewed, including the public Business and Host routes, Provider workspace/handoff and the three settings routes. The licensed source-adaptation and native-action contracts are recorded above; the separate CSS polish owner now owns ProviderCatalogueComposition.css.
+
+Verification on Node 22 / npm 11.5.1: `provider-catalogue-focused.log` passes 12 files / 96 cases; after correcting the new fixture to omit an optional href rather than explicitly assign undefined, `provider-catalogue-test-final.log` passes its four catalogue cases. These checks establish scope guards, precise admission labels and record order, exact projected price/native destinations, independent optional/pressed/disabled actions, hidden named pending content and native recovery. Provider/connection/settings suites exercise retained controller behavior; authenticated route journeys remain unmeasured. `provider-catalogue-types-final.log` release typecheck, `provider-catalogue-imports-final.log` 25 files / 74 import cases and `provider-catalogue-build-final.log` CLI/client/server/Nitro build pass. `provider-catalogue-check-final.log` passes full lint, then stops at the same two chat cycles; later aggregate stages do not execute through `check`. `gate` remains pending. No visual/computer validation, deployment, staging, commit, merge or push occurred.
+
+The reconciled freeze contains 804 source paths: 741 component-area files and 63 routes; 443 presenters and 298 companions. Presenter decisions are 339 reviewing plus 39 retained, 378/443 checked; 64 inventoried and one deferred remain. Market has 19 remaining decisions, shared 46, all other groups zero. Routes are 35/63 checked. Actions remain 471 sites: 298 Arc Buttons, 109 native Arc button links, 27 native buttons, 11 legacy Buttons, 23 legacy style calls and three dormant site buttons; 445 reviewing, seven retained and 19 inventoried. The source hashes, unique paths and action/source aggregate counts reconcile at the freeze; new-batch evidence paths exist and the import scan has zero unresolved imports. Later CSS-owner changes require the next hash refresh. The census JSON is `provider-catalogue-final-census.json`.
+
+The active source-first goal continues under the [familiar marketplace architecture](marketplace-composition.md). That planning artifact verifies 20 live Arc IDs/APIs/registry names and documents source constraints; it adds no completed presenter decisions. Resolve the remaining source decisions and dependency cycles, then pass the full gate before merge. Visual/responsive acceptance follows the source sweep.
+
+
+### Compact, table-first Market source integration — 2026-10-02
+
+Joel approved the image-first composition and then prioritized excellent, fast tables. The built-in imagegen created the retained illustrative concept and exact prompt before any new layout integration. Cold Luna's three-file header slice was inspected against the compact heading/control contract; coordinator integrated actual Arc SearchField/Tabs/Select/SortableDataTable source, using the settled Base UI package for headless behavior. Eight new source files add four presenters and four style companions; no package, schema or backend changes were made.
+
+Tool and Provider browse default to Arc tables. Catalogue rows use native `tr` elements with `animateRows=false`; column widths are not measured and local column sorting is disabled. Whole-catalogue order remains with the existing server sort controller. Optional grid mode reuses actual ProductListing/ProviderListing cards and projections. Provider counts describe these results; price/activity belong to the shown Tool. The filter controller now uses the Arc Drawer's single scroll region. Header search is explicit and validated; the native Agent link opens the existing chat destination. Layout is omitted from loader dependencies and catalogue inputs and survives refinements, paging, tabs, comparison and history. No new purchasing or focus engine was added.
+
+Verification: nine focused files establish 122 unique cases (final Market file: 51 after history-fixture correction; other eight: 71), covering query length/trim, no request while drafting/clearing, focus return, query/filter/layout/compare preservation, back/fresh render, exact native destinations, guest modifier clicks, shown-Tool source facts, four-item comparison/missing hydration, account saving, continuation and failed-page retry. `npm run typecheck:release`, `npm run test:imports` (25 files/74 cases) and `npm run build` pass. `npm run check` passes lint and then fails the inherited zero-cycle requirement with two chat cycles; it does not run its later stages. `npm run gate` and rendered/browser/performance measurement remain pending before merge. Evidence logs and the exact source/action freeze are retained under `/tmp/aecon-arc-build-20261001/`.
+
+Current source decision counter: 382/447 (85%), including four new reviewed Arc presenters; 65 unresolved view decisions and 27 route bindings remain. The 20-item architecture is the continuing composition plan, not a claim that all 20 items or all remaining views were finished in this batch.
+
+
+## Main integration, 2026-10-02
+
+The authorized release isolates the complete Arc working snapshot from unrelated strategy, whitepaper and research edits, then applies it three ways onto current main `87f983d0d`. Seventeen overlapping files require explicit integration. Current-main paid-Call reporting, promotional/purchased credit and expiry, funding-availability constraints, payment confirmation/retry protection, readiness timestamps and expiry, treasury approval audience/digest checks, Trust centre links and owner-admin bootstrap remain authoritative. The removed environment picker stays removed; credentials remain bound to the deployment environment. The Market preference tests follow main's renamed `.tsx` test.
+
+Requires current typed facts, permitted callbacks and source-owned lifecycle controllers. Ensures the Arc presentation preserves every current-main state, exact amount, valid next action and refusal/recovery guard. Invariant funding does not create authority, settlement does not prove delivery, and no presentation grants an approval or retries an uncertain payment. On violation the existing unavailable, refusal and confirmation states remain visible. Verification uses the complete repository check and release gate on the combined source, including the current-main regression tests; rendered visual acceptance and live paid purchases remain separate evidence.
+
+The refreshed census includes 825 sources (760 component/style/companion sources and 65 route bindings), 454 presenters and 497 action sites. The eight new current-main presenters and two routes stay explicitly pending for future Arc decisions. This release does not claim the broad source sweep is finished. The first full unit run exposed an expiry guard that hid an already-open approval review; current-main retained-review behavior is restored, and the existing commercial-policy cases verify identical inspected terms after the query changes or a proposal expires. New reviews still require an unexpired permitted proposal. Dependencies retain zero cycles on the combined source. Integration repaired the newly added command-resume, pending-credit status and Trust centre actions to use their existing Arc button imports/styles, and removed two unsafe non-null presentation assertions without changing projected values.
+
+
+The release verification also adapts the existing browser assertions to the actual Arc composition: Support diagnostics are reached through the keyboard-operated Agent connection tab, document contents and headings are distinguished semantically, and Market search is named Search Tools. Tests retain their focus, navigation, privacy, overflow and exact-destination guarantees. At compact width, topic metadata is hidden, so accessible tab selection uses the stable topic title. No production behavior was changed to accommodate these test updates. The backendless browser run emits existing current-main server-import and missing-backend diagnostics; the production server build and the explicit source-unavailable behavior remain verified.

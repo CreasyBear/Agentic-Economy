@@ -1,0 +1,229 @@
+/* Arc settings-page workspace/continuous rows SHA-256:
+ * e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Arc sortable-data-table source SHA-256:
+ * e13a086dba25df8a48aa2a5804d0400e5267125a7399d6d8fafbbdb9cd02b473.
+ * Existing tables, record links, command reviews and facts remain caller-owned. */
+.arc-market.arc-admin-record-workspace,
+.arc-market.arc-admin-evidence {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-8);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.arc-market .arc-admin-record-link {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-record-link:hover { text-decoration: underline; }
+.arc-market .arc-admin-record-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.arc-market .arc-admin-record-detail {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-record-detail > :where(span:first-child) { font-weight: 500; }
+.arc-market .arc-admin-record-detail :where(code, dl, dd, dt, span, time) {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-record-detail > code {
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.arc-market .arc-admin-record-detail > dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-3);
+  color: var(--text-secondary);
+}
+.arc-market .arc-admin-record-detail dd { margin: 0; }
+.arc-market .arc-admin-record-detail dt { color: var(--foreground); }
+.arc-market .arc-admin-record-context {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.arc-market.arc-admin-related-records {
+  align-content: start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface);
+}
+.arc-market .arc-admin-related-list { display: grid; min-width: 0; }
+.arc-market .arc-admin-related-row {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-block: var(--space-4);
+}
+.arc-market .arc-admin-related-row:last-child { border-bottom: 0; }
+.arc-market .arc-admin-related-row > span { font-weight: 500; }
+.arc-market.arc-admin-call-layout {
+  display: grid;
+  min-width: 0;
+  align-items: start;
+  gap: var(--space-8);
+}
+.arc-market.arc-admin-evidence-action {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+.arc-market.arc-admin-evidence-action > a { justify-self: start; }
+@media (min-width: 1024px) {
+  .arc-market.arc-admin-call-layout { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+@media (max-width: 479px) {
+  .arc-market.arc-admin-related-records { padding: var(--space-4); }
+}
+
+/* Settings main/quiet sidebar adapted to immutable object facts. No fixed
+ * scroller or dirty dock: route focus and canonical references stay owned by AE. */
+.arc-market.arc-admin-object-reference {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.arc-market.arc-admin-object-layout {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.arc-market.arc-admin-object-layout > .arc-section {
+  align-content: start;
+  padding: var(--space-6);
+}
+.arc-market.arc-admin-object-layout > .arc-section:first-child {
+  border-start-start-radius: inherit;
+  border-end-start-radius: inherit;
+}
+.arc-market.arc-admin-object-layout > .arc-section:last-child {
+  border-left: 1px solid var(--border);
+  border-start-end-radius: inherit;
+  border-end-end-radius: inherit;
+  background: color-mix(in oklch, var(--surface-muted) 50%, var(--surface));
+}
+.arc-market .arc-admin-object-related-list,
+.arc-market .arc-admin-object-call-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arc-market .arc-admin-object-related-row {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  padding-block: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-object-related-row + .arc-admin-object-related-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.arc-market .arc-admin-object-call-list .arc-admin-object-related-row:first-child {
+  padding-top: 0;
+}
+.arc-market.arc-admin-record-table-region { min-width: 0; }
+.arc-market.arc-admin-record-table-region :where(code, time, [data-slot="badge"]) {
+  min-width: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+@media (max-width: 859px) {
+  .arc-market.arc-admin-object-layout { grid-template-columns: minmax(0, 1fr); }
+  .arc-market.arc-admin-object-layout > .arc-section:first-child {
+    border-end-start-radius: 0;
+    border-start-end-radius: inherit;
+  }
+  .arc-market.arc-admin-object-layout > .arc-section:last-child {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    border-start-end-radius: 0;
+    border-end-start-radius: inherit;
+  }
+}
+@media (max-width: 479px) {
+  .arc-market.arc-admin-object-layout > .arc-section { padding: var(--space-4); }
+}
+.arc-market.arc-admin-source-review {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface);
+  font-family: var(--font-body);
+}
+.arc-market .arc-admin-source-facts {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+}
+.arc-market .arc-admin-source-fact {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  padding-block: 14px;
+}
+.arc-market .arc-admin-source-fact :where(dt, dd, code) {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-source-fact dt { color: var(--text-secondary); }
+.arc-market .arc-admin-source-fact dd { color: var(--foreground); }
+.arc-market .arc-admin-source-fact code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.arc-market.arc-admin-source-action {
+  justify-self: start;
+  max-width: 100%;
+}
+@media (max-width: 599px) {
+  .arc-market .arc-admin-source-fact { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 479px) {
+  .arc-market.arc-admin-source-review { padding: var(--space-4); }
+}

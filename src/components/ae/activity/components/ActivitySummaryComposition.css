@@ -1,0 +1,103 @@
+/*
+ * Adapted from licensed Arc Pro metrics-dashboard.
+ * Upstream TSX SHA-256: 1f39789beb44845ffaea58b92289d6b82b8cd160f82a0c99ca8bb5ff056e3730
+ * Upstream CSS SHA-256: 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9
+ * The four displayed facts stay sourced from ActivityMonthlySummaryView; this
+ * file adapts only their grouping and presentation, with no synthetic values.
+ */
+
+.arc-market.arc-activity-monthly-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.arc-activity-monthly-summary__metric {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--space-6);
+  overflow-wrap: anywhere;
+}
+
+.arc-activity-monthly-summary__metric + .arc-activity-monthly-summary__metric {
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.arc-activity-monthly-summary__label {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-activity-monthly-summary__value {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  color: var(--foreground);
+  font-size: calc(var(--text-3xl) + var(--space-1));
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: var(--leading-display);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-activity-pagination {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  max-width: 100%;
+  padding-block-start: var(--space-6);
+  border-block-start: 1px solid var(--border-subtle);
+  overflow-wrap: anywhere;
+}
+
+.arc-activity-pagination > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .arc-market.arc-activity-monthly-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .arc-activity-monthly-summary__metric:nth-child(2n + 1) {
+    border-inline-start: 0;
+  }
+
+  .arc-activity-monthly-summary__metric:nth-child(n + 3) {
+    border-block-start: 1px solid var(--border-subtle);
+  }
+}
+
+@media (max-width: 479px) {
+  .arc-market.arc-activity-monthly-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .arc-activity-monthly-summary__metric + .arc-activity-monthly-summary__metric {
+    border-block-start: 1px solid var(--border-subtle);
+    border-inline-start: 0;
+  }
+
+  .arc-activity-monthly-summary__metric:last-child .arc-activity-monthly-summary__value {
+    font-size: calc(var(--text-2xl) + var(--space-1));
+  }
+}

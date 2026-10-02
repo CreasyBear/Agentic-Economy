@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
+import arcButton from '@/components/arc/button/button.module.css'
 
 const serverMocks = vi.hoisted(() => ({
   readConsent: vi.fn(),
@@ -499,7 +500,7 @@ describe('/agent-access/authorize consent loading', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Suspected compromise/ }))
     expect(screen.getByText(/current authority is revoked first and is never reactivated/)).toBeTruthy()
     const replaceButton = screen.getByRole('button', { name: 'Revoke and replace credential' })
-    expect(replaceButton.getAttribute('data-variant')).toBe('destructive')
+    expect(replaceButton.className.split(' ')).toContain(arcButton.danger)
     fireEvent.click(replaceButton)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())

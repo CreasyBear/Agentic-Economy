@@ -1,0 +1,171 @@
+/* Arc Pro registry/blocks/product-listing/product-listing.module.css SHA-256:
+ * c73c3ea16c34eb857e4aac3d066648b6be8816f9f54db1e5dcda7fc4118a1cfb.
+ * Arc UI registry/components/sortable-data-table/sortable-data-table.module.css SHA-256:
+ * e13a086dba25df8a48aa2a5804d0400e5267125a7399d6d8fafbbdb9cd02b473.
+ * Arc UI registry/blocks/empty-states/empty-states.module.css SHA-256:
+ * 42487688955998bf6177fc6f5894775a29fb3fccb285f9ae8c4a9c987196598c.
+ * Cached references retrieved 2026-10-01; adapted with AE's scoped Arc tokens. */
+.arc-market .arc-owner-inventory-tool,
+.arc-market .arc-owner-inventory-row-content {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.arc-market .arc-owner-inventory-name,
+.arc-market .arc-owner-inventory-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-owner-inventory-name {
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+}
+
+.arc-market .arc-owner-inventory-summary {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-market .arc-owner-inventory-metric {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-owner-inventory-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arc-market .arc-owner-inventory-row {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-4) 0;
+}
+
+.arc-market .arc-owner-inventory-row:last-child {
+  border-bottom: 0;
+}
+
+.arc-market .arc-owner-inventory-compact-name {
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-owner-inventory-status {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.arc-market.arc-owner-inventory-status [data-slot='badge'] {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  overflow: visible;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-owner-inventory-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-owner-inventory-blocker {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-owner-inventory-action {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-owner-inventory-empty {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-owner-inventory-gate {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-owner-inventory-gate [data-slot='alert-title'] {
+  display: block;
+  min-width: 0;
+  overflow: visible;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.arc-market.arc-owner-inventory-gate [data-slot='alert-description'] {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-owner-inventory-gate [data-slot='alert-description'] p {
+  min-width: 0;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-owner-inventory-empty-action {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import type { AdminWorkspaceView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
 import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
+import '../../RecordWorkspaceComposition.css'
 import { ADMIN_OBJECT_PAGE_COPY, formatPerthTimestamp } from '../object-pages.contracts'
 
 export type WorkspaceObjectViewProps = Readonly<{
@@ -40,11 +41,11 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
       actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
       stickyHeader
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
+      <div className="arc-market arc-admin-object-reference">
         <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
         <AeCopyReference label={ADMIN_OBJECT_PAGE_COPY.referenceLabel} value={view.ref} />
       </div>
-      <div className="grid gap-section pb-page lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="arc-market arc-admin-object-layout">
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.detailsTitle}>
           <AeFactList facts={[
             { label: copy.lifecycle, value: status.label },
@@ -65,7 +66,7 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
           ]} />
         </AeSection>
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.relatedTitle}>
-          <p className="text-sm text-muted-foreground">{ADMIN_OBJECT_PAGE_COPY.noRelatedReferences}</p>
+          <p className="arc-admin-record-context">{ADMIN_OBJECT_PAGE_COPY.noRelatedReferences}</p>
         </AeSection>
         {grant === null ? null : (
           <AeSection title="Promotional credit" description="Grant expiring AUD credit to this Workspace after Admin review and ledger confirmation.">

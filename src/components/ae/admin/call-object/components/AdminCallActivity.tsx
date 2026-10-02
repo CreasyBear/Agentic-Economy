@@ -22,12 +22,12 @@ const columns: ColumnDef<AdminCallActivityRow>[] = [
   {
     accessorKey: 'eventType',
     header: ADMIN_CALL_OBJECT_COPY.eventTypeColumn,
-    cell: ({ row }) => <code className="text-xs">{row.original.eventType}</code>,
+    cell: ({ row }) => <code className="break-all text-sm">{row.original.eventType}</code>,
   },
   {
     accessorKey: 'actorRef',
     header: ADMIN_CALL_OBJECT_COPY.actorColumn,
-    cell: ({ row }) => <code className="break-all text-xs">{row.original.actorRef}</code>,
+    cell: ({ row }) => <code className="break-all text-sm">{row.original.actorRef}</code>,
   },
   {
     accessorKey: 'outcome',

@@ -3,6 +3,7 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 import { ChatCodeFence } from './ChatCodeFence'
+import './TranscriptComposition.css'
 
 export type ChatAssistantTextProps = Readonly<{
   text: string
@@ -28,7 +29,7 @@ function safeHttpUrl(value: string | undefined): string | undefined {
 
 export function ChatAssistantText({ text }: ChatAssistantTextProps) {
   return (
-    <div className="ae-chat-prose min-w-0 max-w-[68ch] text-foreground">
+    <div className="arc-market arc-chat arc-transcript-prose">
       <Markdown
         remarkPlugins={[remarkGfm]}
         skipHtml

@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react'
 
-import { Button } from '@/components/ui/button'
-import { Field, FieldLabel, FieldDescription } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/arc/button/button'
 import { SettingsGroup } from '../../settings-shell/components/SettingsSections'
 import type { TeamInviteFormProps } from '../team-roles.contracts'
+import '../TeamComposition.css'
 
 export function TeamInviteForm({ email, role, pending, message, error, emailError, onEmailChange, onRoleChange, onSubmit }: TeamInviteFormProps) {
   const emailRef = useRef<HTMLInputElement>(null)
@@ -14,20 +13,22 @@ export function TeamInviteForm({ email, role, pending, message, error, emailErro
   }, [emailError])
 
   return <SettingsGroup title="Invite a member" description="Invitations are sent to this workspace's linked identity organisation. Access is granted only after the invitation is accepted and recorded by Agentic Economy.">
-    <form onSubmit={onSubmit} className="grid max-w-lg gap-4 pt-4">
-      <Field data-invalid={emailError !== '' || undefined}>
-        <FieldLabel htmlFor="team-invite-email">Email address</FieldLabel>
-        <Input ref={emailRef} id="team-invite-email" type="email" autoComplete="email" required value={email} disabled={pending} aria-invalid={emailError !== '' || undefined} aria-describedby={emailError !== '' ? 'team-invite-email-error' : undefined} onChange={event => onEmailChange(event.currentTarget.value)} />
-        {emailError !== '' ? <FieldDescription id="team-invite-email-error">{emailError}</FieldDescription> : null}
-      </Field>
-      <Field><FieldLabel htmlFor="team-invite-role">Workspace role</FieldLabel>
-        <select id="team-invite-role" value={role} disabled={pending} onChange={event => onRoleChange(event.currentTarget.value as 'admin' | 'member')} className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">
+    <form onSubmit={onSubmit} className="arc-market arc-team-invite">
+      <div className="arc-team-invite-email-field" data-invalid={emailError !== '' || undefined}>
+        <label htmlFor="team-invite-email">Email address</label>
+        <input ref={emailRef} id="team-invite-email" type="email" autoComplete="email" required value={email} disabled={pending} aria-invalid={emailError !== '' || undefined} aria-describedby={emailError !== '' ? 'team-invite-email-error' : undefined} onChange={event => onEmailChange(event.currentTarget.value)} />
+        {emailError !== '' ? <p id="team-invite-email-error" className="arc-team-invite-help">{emailError}</p> : null}
+      </div>
+      <div className="arc-team-invite-role-field">
+        <label htmlFor="team-invite-role">Workspace role</label>
+        <select id="team-invite-role" value={role} disabled={pending} onChange={event => onRoleChange(event.currentTarget.value as 'admin' | 'member')}>
           <option value="member">Member</option><option value="admin">Admin</option>
-        </select><FieldDescription>Admins manage workspace settings. Members can use the workspace.</FieldDescription>
-      </Field>
-      <Button type="submit" className="justify-self-start" disabled={pending} aria-busy={pending}>{pending ? 'Sending…' : 'Send invitation'}</Button>
-      {message && <p role="status" className="text-sm text-foreground">{message}</p>}
-      {error && <p id="team-invite-error" role="alert" className="text-sm text-destructive">{error}</p>}
+        </select>
+        <p className="arc-team-invite-help">Admins manage workspace settings. Members can use the workspace.</p>
+      </div>
+      <Button type="submit" variant="primary" className="arc-team-invite-submit" disabled={pending} aria-busy={pending}>{pending ? 'Sending…' : 'Send invitation'}</Button>
+      {message && <p role="status" className="arc-team-invite-message">{message}</p>}
+      {error && <p id="team-invite-error" role="alert" className="arc-team-invite-error">{error}</p>}
     </form>
   </SettingsGroup>
 }

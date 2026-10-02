@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { appendWorkspaceSuffix } from '@/lib/workspace-label'
 import { readWorkspaceHeaderIdentityServer, type WorkspaceHeaderIdentity } from './workspace-identity.functions'
+import './WorkspaceNavigationComposition.css'
 
 export type AeWorkspaceIdentityProps = Readonly<{ inMenu?: boolean }>
 
@@ -30,6 +31,6 @@ export function AeWorkspaceIdentity({ inMenu = false }: AeWorkspaceIdentityProps
   const name = workspace === null ? 'Workspace' : workspace.clerkOrgId
     ? safeName ?? 'Workspace'
     : personName ? appendWorkspaceSuffix(personName) : safeName ?? 'Personal workspace'
-  return <span aria-label={`Workspace: ${name}`} title={name} className={inMenu ? 'block max-w-48 truncate px-2 text-xs font-medium text-foreground lg:hidden' : 'hidden min-w-0 max-w-28 truncate text-xs font-medium text-foreground lg:block xl:max-w-48'}>{name}</span>
+  return <span aria-label={`Workspace: ${name}`} title={name} className={`arc-market arc-workspace-identity ${inMenu ? 'arc-workspace-identity-menu' : 'arc-workspace-identity-inline'}`}>{name}</span>
 
 }

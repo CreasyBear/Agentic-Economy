@@ -2,9 +2,9 @@
 
 import { Link } from '@tanstack/react-router'
 
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
+import arcButton from '@/components/arc/button/button.module.css'
+import '../../CommandPanelComposition.css'
 
 import type { MarketToolSearchStatus, SearchRecoveryProps, ToolSearchNextPage } from '../tools-search-page.contracts'
 
@@ -27,7 +27,7 @@ export function ToolSearchStatus({
 }: ToolSearchStatusProps) {
   if (status.kind === 'idle') {
     return (
-      <p className="px-gutter py-section text-sm text-muted-foreground">
+      <p className="arc-market arc-command-status">
         {recentCount > 0
           ? `Recently inspected · ${recentCount}`
           : 'Search the Tool catalog by job, provider, or capability.'}
@@ -36,7 +36,7 @@ export function ToolSearchStatus({
   }
   if (status.kind === 'debouncing' || status.kind === 'loading') {
     return (
-      <p className="px-gutter py-section text-sm text-muted-foreground">
+      <p className="arc-market arc-command-status">
         Searching…
       </p>
     )
@@ -79,25 +79,25 @@ export function ToolSearchStatus({
 
 function SearchRecovery({ message, onRetry, onClear, onContinue, nextPage, isError = false }: SearchRecoveryProps) {
   return (
-    <div className="grid gap-intra px-gutter py-section">
-      <p role={isError ? 'alert' : undefined} className="text-sm text-muted-foreground">{message}</p>
-      <div className="flex flex-wrap gap-intra">
-        <Button type="button" size="sm" className="min-h-touch"
+    <div className="arc-market arc-command-recovery">
+      <p role={isError ? 'alert' : undefined} >{message}</p>
+      <div className="arc-command-recovery-actions">
+        <Button type="button" size="md"
           onClick={nextPage === undefined ? onRetry : () => onContinue(nextPage)}>
           {nextPage === undefined ? 'Try again' : 'Next page'}
         </Button>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
+          variant="secondary"
+          size="md"
           onClick={onClear}
-          className="min-h-touch"
+
         >
           Clear search
         </Button>
         <Link
           to="/market"
-          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'min-h-touch')}
+          className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md}`}
         >
           Browse current Tools
         </Link>

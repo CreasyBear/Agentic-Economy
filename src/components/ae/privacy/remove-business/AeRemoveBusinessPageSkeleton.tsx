@@ -1,5 +1,7 @@
+import './CorrectionComposition.css'
+
 export function AeRemoveBusinessPageSkeleton() {
   return (
-    <div className="w-full text-sm text-muted-foreground" aria-live="polite">Preparing correction form.</div>
+    <div className="arc-market arc-correction-preparing" aria-live="polite">Preparing correction form.</div>
   )
 }

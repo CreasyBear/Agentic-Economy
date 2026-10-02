@@ -8,8 +8,8 @@ import { FirstToolStep } from './components/FirstToolStep'
 import { OnboardingStepper } from './components/OnboardingStepper'
 import { ProviderIdentityFields, SUPPLIER_IDENTITY_ERROR_ID } from './components/ProviderIdentityFields'
 import type { AeSupplierOnboardingWizardProps } from './supplier-onboarding-wizard.contracts'
-import { SHELL, SLOT } from './supplier-onboarding-wizard.contracts'
 import { useSupplierOnboardingWizard } from './useSupplierOnboardingWizard'
+import './OnboardingComposition.css'
 
 export type { AeSupplierOnboardingWizardProps } from './supplier-onboarding-wizard.contracts'
 
@@ -26,12 +26,12 @@ export function AeSupplierOnboardingWizard({
   const { view } = wizard
 
   const diagnosticSlot = (
-    <div className={SLOT} aria-live="polite">
+    <div className="arc-provider-setup-diagnostic" aria-live="polite">
       {view.diagnostic !== undefined ? (
         <Alert id={SUPPLIER_IDENTITY_ERROR_ID} variant="destructive" className="py-2">
           <AlertCircleIcon className="size-4" />
-          <AlertTitle className="text-xs">{view.diagnostic.whatHappened}</AlertTitle>
-          <AlertDescription className="text-xs grid gap-0.5">
+          <AlertTitle>{view.diagnostic.whatHappened}</AlertTitle>
+          <AlertDescription>
             <span>{view.diagnostic.financialImpact}</span>
             <span>{view.diagnostic.nextStep}</span>
           </AlertDescription>
@@ -41,12 +41,12 @@ export function AeSupplierOnboardingWizard({
   )
 
   return (
-    <div className={`grid max-w-2xl gap-4 rounded-xl border bg-card p-6 shadow-xs ${SHELL}`}>
-      <div className="grid gap-1">
-        <h2 className="text-lg font-medium tracking-tight text-foreground">
+    <div className="arc-market arc-provider-setup-shell">
+      <div className="arc-provider-setup-heading">
+        <h2>
           Provider setup
         </h2>
-        <p className="text-xs text-muted-foreground">
+        <p>
           Set up your Provider profile, then add your first Tool.
         </p>
       </div>

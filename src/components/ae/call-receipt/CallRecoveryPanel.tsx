@@ -2,10 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -20,9 +19,9 @@ import type { CallReconciliationForm, CallStatusPageActions, FoundCallStatus } f
 import { canRefreshCallStatus } from '@/lib/call-recovery/call-status-refresh'
 
 import { projectFoundCallPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
-import { cn } from '@/lib/utils'
 
-import { CallReceiptStatusFeedback, callReceiptRefreshLabel, callReceiptTactilePressClassName } from './CallReceiptPrimitives'
+import { CallReceiptStatusFeedback, callReceiptRefreshLabel } from './CallReceiptPrimitives'
+import './ReceiptComposition.css'
 
 const RECONCILIATION_RESOLUTIONS = [
   { value: 'not_released', label: 'Effect not released' },
@@ -80,7 +79,7 @@ export function CallRecoveryPanel({
   if (!availability.visible) return null
 
   return (
-    <section className="grid gap-related border-t border-border pt-section" aria-labelledby="recovery-actions-title">
+    <section className="arc-market arc-call-recovery" aria-labelledby="recovery-actions-title">
       <h2 id="recovery-actions-title" className="sr-only">Call actions</h2>
       <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
       {actions?.autoRefresh ? <p className="text-sm text-muted-foreground" role="status">Status updates automatically while this page is visible.</p> : null}
@@ -118,12 +117,12 @@ function RecoveryPrimaryActions({
 
   return (
     <>
-      <div className="flex flex-wrap gap-intra">
+      <div className="arc-call-actions">
         {availability.needsReview ? (
           <Link
             to="/support"
             search={{ callRef }}
-            className={buttonVariants({ variant: 'outline', className: 'min-h-touch w-fit' })}
+            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
           >
             Get help with this Call
           </Link>
@@ -131,8 +130,8 @@ function RecoveryPrimaryActions({
         {availability.canRefreshNow ? (
           <Button
             type="button"
-            variant="outline"
-            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
+            variant="secondary"
+            size="md"
             disabled={availability.recoveryPending}
             onClick={() => { void actions?.onRefresh?.() }}
           >
@@ -142,8 +141,8 @@ function RecoveryPrimaryActions({
         {canCancel ? (
           <Button
             type="button"
-            variant={canReconcile ? 'secondary' : 'default'}
-            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
+            variant={canReconcile ? 'secondary' : 'primary'}
+            size="md"
             disabled={availability.recoveryPending}
             onClick={() => setCancelDialogOpen(true)}
           >
@@ -154,7 +153,8 @@ function RecoveryPrimaryActions({
           <Button
             type="submit"
             form={RECONCILIATION_FORM_ID}
-            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
+            variant="primary"
+            size="md"
             disabled={availability.recoveryPending}
           >
             {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation evidence'}
@@ -192,9 +192,9 @@ function AdvancedReconciliation({
   }
 
   return (
-    <form id={RECONCILIATION_FORM_ID} className="border-t border-border pt-related" onSubmit={submitReconciliation}>
-      <details>
-        <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Advanced evidence reconciliation</summary>
+    <form id={RECONCILIATION_FORM_ID} onSubmit={submitReconciliation}>
+      <details className="arc-call-disclosure">
+        <summary>Advanced evidence reconciliation</summary>
         <FieldGroup className="max-w-xl pt-related">
           <Field data-disabled={actions?.reconcilePending || undefined}>
             <FieldLabel htmlFor="reconciliation-resolution">Observed Provider outcome</FieldLabel>
@@ -205,10 +205,10 @@ function AdvancedReconciliation({
               disabled={recoveryPending}
               required
             >
-              <SelectTrigger id="reconciliation-resolution" className="min-h-touch w-full">
+              <SelectTrigger id="reconciliation-resolution" className="arc-call-native-control">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="arc-market arc-call-select-popup">
                 <SelectGroup>
                   <SelectItem value="not_released">Effect not released</SelectItem>
                   <SelectItem value="released">Effect released</SelectItem>
@@ -218,7 +218,7 @@ function AdvancedReconciliation({
           </Field>
           <Field data-disabled={actions?.reconcilePending || undefined}>
             <FieldLabel htmlFor="reconciliation-source">Evidence source</FieldLabel>
-            <Input
+            <input
               id="reconciliation-source"
               maxLength={300}
               value={source}
@@ -226,12 +226,12 @@ function AdvancedReconciliation({
               placeholder="Provider control plane"
               disabled={recoveryPending}
               required
-              className="min-h-touch"
+              className="arc-call-native-control"
             />
           </Field>
           <Field data-disabled={actions?.reconcilePending || undefined}>
             <FieldLabel htmlFor="reconciliation-reference">Evidence reference</FieldLabel>
-            <Input
+            <input
               id="reconciliation-reference"
               maxLength={300}
               value={evidenceRef}
@@ -239,7 +239,7 @@ function AdvancedReconciliation({
               placeholder="Provider event or incident reference"
               disabled={recoveryPending}
               required
-              className="min-h-touch"
+              className="arc-call-native-control"
             />
           </Field>
         </FieldGroup>

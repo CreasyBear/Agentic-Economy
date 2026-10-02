@@ -6,8 +6,8 @@ import { Link } from '@tanstack/react-router'
 
 import { SettingsEmptyState, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   downloadCsv, downloadJson, EXPORT_ERROR_IMPACT, EXPORT_ERROR_WHAT,
@@ -18,6 +18,7 @@ import { toast } from '@/lib/ui/toast'
 import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
 
 import { receiptDisplay, receiptExportRow } from './receipts.view-model'
+import './ReceiptsComposition.css'
 
 export type ReceiptsSettingsProps = Readonly<{
   invoiceHistoryRows?: readonly AeInvoiceHistoryRow[] | undefined
@@ -77,9 +78,9 @@ export function ReceiptsSettings({
   return <SettingsPage
     title="Receipts & invoices"
     description="Receipts for account credit top-ups, with tax invoices where available."
-    action={rows.length > 0 && !invoiceHistoryLoading ? <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" onClick={() => exportHistory('CSV')}><Download aria-hidden="true" />{invoiceHistoryHasMore ? 'Export shown CSV' : 'Export CSV'}</Button>
-      <Button type="button" variant="outline" onClick={() => exportHistory('JSON')}><Download aria-hidden="true" />{invoiceHistoryHasMore ? 'Export shown JSON' : 'Export JSON'}</Button>
+    action={rows.length > 0 && !invoiceHistoryLoading ? <div className="arc-receipt-actions">
+      <Button type="button" variant="secondary" size="md" onClick={() => exportHistory('CSV')}><Download aria-hidden="true" />{invoiceHistoryHasMore ? 'Export shown CSV' : 'Export CSV'}</Button>
+      <Button type="button" variant="secondary" size="md" onClick={() => exportHistory('JSON')}><Download aria-hidden="true" />{invoiceHistoryHasMore ? 'Export shown JSON' : 'Export JSON'}</Button>
     </div> : undefined}
   >
     <SettingsGroup title="Top-up history" description="Paid and reversed account funding. Tax invoices depend on your tax profile and the payment policy.">
@@ -91,26 +92,26 @@ export function ReceiptsSettings({
       </div> : rows.length === 0 && !invoiceHistoryHasMore && !invoiceHistoryLoadingMore ? <SettingsEmptyState
         title="No top-up receipts yet"
         description="When you add credit, your payment receipts and eligible tax invoices will appear here."
-        action={<Link to="/owner/credit" className={buttonVariants({ variant: 'outline' })}>Add credit</Link>}
+        action={<Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Add credit</Link>}
       /> : rows.map(row => {
         const display = receiptDisplay(row)
         const taxInvoice = row.taxInvoice
         const taxPending = pendingAction === `${row.commandRef}:tax`
         const stripePending = pendingAction === `${row.commandRef}:stripe`
-        return <div id={`funding-receipt-${row.commandRef}`} key={row.commandRef} className="scroll-mt-24"><SettingsRow label={row.description} description={display.date}>
-          <div className="flex min-w-0 flex-col gap-2 sm:items-end">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono tabular-nums">{display.amount}</span>
+        return <div id={`funding-receipt-${row.commandRef}`} key={row.commandRef} className="arc-market arc-receipt-record scroll-mt-24"><SettingsRow label={row.description} description={display.date}>
+          <div className="arc-receipt-content">
+            <div className="arc-receipt-summary">
+              <span className="arc-receipt-amount">{display.amount}</span>
               <Badge variant={row.status === 'succeeded' ? 'secondary' : 'outline'}>{display.status}</Badge>
             </div>
-            {display.gst && <span className="text-xs text-muted-foreground">{display.gst}</span>}
-            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
-              {taxInvoice?.kind === 'issued' && <Button type="button" variant="outline" disabled={pendingAction !== null} aria-busy={taxPending}
+            {display.gst && <span className="arc-receipt-note">{display.gst}</span>}
+            <div className="arc-receipt-actions">
+              {taxInvoice?.kind === 'issued' && <Button type="button" variant="secondary" size="md" disabled={pendingAction !== null} aria-busy={taxPending}
                 onClick={() => void openDocument(row, 'tax')}><Download aria-hidden="true" />Tax invoice</Button>}
-              {row.hasPaymentReceipt && <Button type="button" variant="outline" disabled={pendingAction !== null} aria-busy={stripePending}
+              {row.hasPaymentReceipt && <Button type="button" variant="secondary" size="md" disabled={pendingAction !== null} aria-busy={stripePending}
                 onClick={() => void openDocument(row, 'stripe')}><ExternalLink aria-hidden="true" />Stripe receipt</Button>}
             </div>
-            {taxInvoice?.kind === 'withheld' && <span className="text-xs text-muted-foreground">
+            {taxInvoice?.kind === 'withheld' && <span className="arc-receipt-note">
               {taxInvoice.reason === 'customer_tax_facts_missing' ? <>
                 Tax details missing. <Link to="/owner/settings/tax" className="text-primary underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">Update tax details</Link> to obtain an eligible invoice.
               </> : taxInvoice.reason === 'tax_invoice_not_generated' ? 'Tax invoice pending generation.'
@@ -125,8 +126,8 @@ export function ReceiptsSettings({
       <a href="/trust#receipts" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
         className="underline underline-offset-4">Trust centre</a>
     </p>
-    {(invoiceHistoryHasMore || invoiceHistoryLoadingMore) && <div className="flex justify-center pt-4">
-      <Button type="button" variant="outline" disabled={invoiceHistoryLoadingMore} onClick={onLoadMore}>
+    {(invoiceHistoryHasMore || invoiceHistoryLoadingMore) && <div className="arc-receipt-pagination">
+      <Button type="button" variant="secondary" size="md" disabled={invoiceHistoryLoadingMore} onClick={onLoadMore}>
         {invoiceHistoryLoadingMore ? 'Loading older top-ups…' : 'Load older top-ups'}
       </Button>
     </div>}

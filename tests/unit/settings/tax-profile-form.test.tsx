@@ -161,13 +161,13 @@ describe('TaxProfileForm', () => {
     expect(screen.getByLabelText(/postal code/i)).toHaveValue('2000')
   })
 
-  it('U7: live ABN input formats to spaced groups and uses monospace tabular classes', () => {
+  it('U7: live ABN input accepts numeric entry and formats to spaced groups', () => {
     const onSubmit = vi.fn()
     render(<TaxProfileForm initialData={{ kind: 'missing', revision: 0 }} onSubmit={onSubmit} />)
 
     const abnInput = screen.getByLabelText(/^abn$/i)
-    expect(abnInput.className).toMatch(/font-mono/)
-    expect(abnInput.className).toMatch(/tabular-nums/)
+    expect(abnInput).toHaveAttribute('inputmode', 'numeric')
+    expect(abnInput).toHaveAttribute('type', 'text')
 
     fireEvent.change(abnInput, { target: { value: '51824753556' } })
     expect(abnInput).toHaveValue('51 824 753 556')

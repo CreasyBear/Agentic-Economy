@@ -5,6 +5,8 @@ import { CommandItem } from '@/components/ui/command'
 
 import type { ToolSearchResultRowModel } from '../tools-search-page.contracts'
 
+import './CommandResultsComposition.css'
+
 export type ToolSearchResultRowProps = Readonly<{
   isActive: boolean
   row: ToolSearchResultRowModel
@@ -27,14 +29,14 @@ export function ToolSearchResultRow({
         onClearPendingIntent()
         onSelect(selectedToolRef)
       }}
-      className="min-h-touch gap-intra px-gutter py-intra"
+      className="arc-command-result-row arc-command-result-row--tool"
     >
-      <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className="truncate text-sm font-medium text-foreground">{row.title}</span>
-        <span className="truncate font-mono text-xs text-muted-foreground">{row.providerLine}</span>
-        <span className="truncate text-xs text-muted-foreground">{row.healthLabel}</span>
+      <span className="arc-command-result-copy">
+        <span className="arc-command-result-title">{row.title}</span>
+        <span className="arc-command-result-meta arc-command-result-reference">{row.providerLine}</span>
+        <span className="arc-command-result-meta">{row.healthLabel}</span>
       </span>
-      <span className="shrink-0 text-xs font-medium text-muted-foreground">
+      <span className="arc-command-result-price">
         <ToolPriceText
           price={row.priceLabel}
           {...(row.priceValidUntil !== undefined ? { validUntil: row.priceValidUntil } : {})}
@@ -66,11 +68,11 @@ export function ToolSearchRecentRow({
         onClearPendingIntent()
         onSelect(selectedToolRef)
       }}
-      className="min-h-touch gap-intra px-gutter py-intra"
+      className="arc-command-result-row arc-command-result-row--recent"
     >
-      <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className="text-sm font-medium text-foreground">Inspect recent Tool</span>
-        <span dir="ltr" className="truncate font-mono text-xs text-muted-foreground">
+      <span className="arc-command-result-copy">
+        <span className="arc-command-result-title">Inspect recent Tool</span>
+        <span dir="ltr" className="arc-command-result-meta arc-command-result-reference">
           {toolRef}
         </span>
       </span>

@@ -1,0 +1,157 @@
+/* Geometry adapted from Arc login-centered, using only its static stage/card/intro typography. Source SHA-256: CSS 21075028855c4ff8a2ede6986698fd04c339a1f1e57266c040d4e99b377dc40a; TSX e79231619ddc3b9267674b5508dedc34cc3ca89c2870da65abd2e3b41afb04bf. */
+.arc-market.arc-auth-stage {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  padding: var(--space-12) var(--space-6);
+}
+
+.arc-market.arc-auth-loading { display: grid; min-width: 0; min-height: 384px; width: 100%; align-content: start; gap: var(--space-4); }
+.arc-market .arc-auth-loading-field { min-width: 0; min-height: 44px; width: 100%; border-radius: var(--radius-control); }
+.arc-market.arc-auth-legal { display: grid; min-width: 0; gap: var(--space-3); color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.55; }
+.arc-market .arc-auth-legal p { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.arc-market .arc-auth-legal-link { display: inline-flex; min-height: 44px; max-width: 100%; align-items: center; color: var(--foreground); font-weight: 500; line-height: 1.55; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.arc-market .arc-auth-legal-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+
+.arc-market .arc-auth-stage-inner {
+  display: grid;
+  width: min(100%, 420px);
+  min-width: 0;
+  justify-items: center;
+  gap: var(--space-3);
+}
+
+.arc-market.arc-auth-panel {
+  display: grid;
+  width: min(100%, 420px);
+  min-width: 0;
+  gap: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  padding: var(--space-8);
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow-resting);
+  font-family: var(--font-body);
+  letter-spacing: var(--tracking-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-auth-intro {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.arc-market .arc-auth-eyebrow,
+.arc-market .arc-auth-title,
+.arc-market .arc-auth-description,
+.arc-market .arc-auth-footer {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-auth-eyebrow {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+}
+
+.arc-market .arc-auth-title {
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 400;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+  text-wrap: balance;
+}
+
+.arc-market .arc-auth-description {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
+}
+
+.arc-market .arc-auth-clerk-well {
+  width: 100%;
+  min-width: 0;
+  min-height: 384px;
+  overflow: visible;
+}
+
+.arc-market.arc-auth-panel :is(.cl-formButtonPrimary, .cl-socialButtonsBlockButton) {
+  min-height: 44px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.arc-market.arc-auth-panel .cl-formFieldInput {
+  min-height: 44px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-auth-panel :is(.cl-formButtonPrimary, .cl-socialButtonsBlockButton, .cl-formFieldInput):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.arc-market .arc-auth-footer {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-auth-panel :is(.arc-auth-footer a, .cl-footerActionLink) {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-auth-panel :is(.arc-auth-footer a, .cl-footerActionLink):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.arc-market .arc-auth-location {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .arc-market.arc-auth-stage { padding: var(--space-8) var(--space-4); }
+  .arc-market.arc-auth-panel {
+    border-radius: var(--radius-panel);
+    padding: var(--space-6);
+  }
+}
+
+@media (max-width: 400px) {
+  .arc-market.arc-auth-stage { padding-inline: var(--space-4); }
+  .arc-market.arc-auth-panel { padding-inline: var(--space-5); }
+  .arc-market .arc-auth-title { font-size: var(--text-2xl); }
+}

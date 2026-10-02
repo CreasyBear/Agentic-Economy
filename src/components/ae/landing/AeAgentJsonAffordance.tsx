@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,7 @@ import { CheckIcon, CodeIcon } from 'lucide-react'
 import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
 import { isRecord } from '@/modules/common/is-record'
 import { degrade } from '@/lib/observability/degrade'
+import './AgentJsonComposition.css'
 
 export type AeAgentJsonAffordanceProps = {
   agentJsonUrl: string
@@ -66,14 +67,14 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogTrigger
           render={
-            <Button type="button" variant="secondary" size="sm" onClick={() => void openPreview()}>
+            <Button type="button" variant="secondary" size="md" labelLayout="wrap" onClick={() => void openPreview()}>
               <CodeIcon aria-hidden="true" />
               Agent-readable data
             </Button>
           }
         />
         <DialogContent
-          className="max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto"
+          className="arc-market arc-agent-json max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto"
         >
           <DialogHeader>
             <DialogTitle>Agent-readable data</DialogTitle>
@@ -84,19 +85,20 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
             <p role="alert" className="text-muted-foreground">The data could not be loaded. Nothing was copied.</p>
           ) : null}
           {preview.status === 'ready' ? (
-            <>
-              <p className="text-sm text-muted-foreground">Fields: {preview.fields.join(', ') || 'none'}</p>
-              <pre aria-label="Agent-readable data" className="max-h-[50dvh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background p-4 font-mono text-sm text-foreground">{preview.text}</pre>
-            </>
+            <div className="arc-agent-json-source">
+              <p className="arc-agent-json-fields">Fields: {preview.fields.join(', ') || 'none'}</p>
+              <pre aria-label="Agent-readable data" tabIndex={0} className="arc-agent-json-pre">{preview.text}</pre>
+            </div>
           ) : null}
-          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" className="min-h-touch" onClick={() => setPreviewOpen(false)}>
+          <DialogFooter className="arc-agent-json-actions">
+            <Button type="button" variant="ghost" size="md" labelLayout="wrap" onClick={() => setPreviewOpen(false)}>
               Cancel
             </Button>
             <Button
               type="button"
-              variant="default"
-              className="min-h-touch"
+              variant="primary"
+              size="md"
+              labelLayout="wrap"
               disabled={preview.status !== 'ready' || copied}
               onClick={() => void confirmCopy()}
             >

@@ -1,0 +1,22 @@
+/* Arc integrations root/header/footer and settings-page pane geometry.
+ * Source SHA-256: 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10;
+ * e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Connection, lifecycle and approval state remain controller-owned. */
+.arc-market.arc-agent-home { display: grid; width: 100%; min-width: 0; margin-inline: auto; gap: var(--space-5); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
+.arc-market .arc-agent-home-actions { display: flex; min-width: 0; justify-content: flex-end; }
+.arc-market.arc-agent-connect-choice { display: grid; min-width: 0; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--foreground); }
+.arc-market .arc-agent-connect-title { margin: 0; font-size: var(--text-base); font-weight: 500; line-height: 1.4; }
+.arc-market .arc-agent-connect-description { max-width: 65ch; margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
+.arc-market .arc-agent-connect-actions { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-2); }
+.arc-market.arc-agent-connect-choice:focus-visible, .arc-market.arc-agent-install-region:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.arc-market.arc-agent-recovery { min-width: 0; padding: var(--space-4) var(--space-5); border-radius: var(--radius-panel); background: var(--surface); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
+.arc-market.arc-agent-recovery [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; color: inherit; font-size: var(--text-sm); font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
+.arc-market.arc-agent-recovery [data-slot="alert-description"] { display: grid; min-width: 0; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
+.arc-market.arc-agent-recovery p { margin: 0; }
+.arc-market .arc-agent-inline-action { max-width: 100%; justify-self: start; }
+.arc-market.arc-agent-pagination { display: grid; min-width: 0; justify-items: start; gap: var(--space-3); padding-block: var(--space-3); border-block-start: 1px solid var(--border); }
+.arc-market .arc-agent-pagination-issue { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
+.arc-market.arc-agent-empty-install { display: grid; min-width: 0; gap: var(--space-4); }
+.arc-market.arc-agent-add-section, .arc-market.arc-agent-resume-section { display: grid; min-width: 0; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.arc-market.arc-agent-install-region { min-width: 0; }
+@media (max-width: 559px) { .arc-market.arc-agent-connect-choice, .arc-market.arc-agent-add-section, .arc-market.arc-agent-resume-section, .arc-market.arc-agent-recovery { padding: var(--space-4); } .arc-market .arc-agent-home-actions { justify-content: flex-start; } }

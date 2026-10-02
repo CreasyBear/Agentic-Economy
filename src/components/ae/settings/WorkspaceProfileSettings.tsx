@@ -11,7 +11,7 @@ import {
 import type {
   ProviderWorkspaceIdentityDetailResult, ProviderWorkspacePublicStatusResult,
 } from '@/components/ae/offerings/provider-workspace.functions'
-import { Button } from '@/components/ui/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Skeleton } from '@/components/ui/skeleton'
 import { renameProviderDisplayNameServer } from '@/lib/server/owner-workspace.functions'
 import type { WorkspaceOrganizationBinding } from '@/lib/server/workspace-profile.functions'
@@ -36,7 +36,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
   const publicPath = catalog?.slug ?? provider?.slug
 
   return <SettingsPage title="Business profile" description="Manage your workspace identity and the provider profile buyers see."
-    action={<Button variant="outline" render={<Link to="/owner/operations" />}>View Tools</Button>}>
+    action={<Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>View Tools</Link>}>
     <SettingsGroup title="Workspace" description="The name used for your team and receipts; distinct from your public provider name.">
       <SettingsRow label="Workspace name" description="The name members see when working in this workspace.">
         {workspace === undefined ? <Skeleton className="h-10 w-64 max-w-full" aria-busy="true" />
@@ -72,7 +72,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
         </> : null}
       </> : <SettingsEmptyState title={identity.kind === 'not_applicable' ? 'No public provider profile yet' : 'Provider profile unavailable'}
         description={identity.kind === 'not_applicable' ? 'Set up your public provider profile when you are ready to list Tools.' : 'Try again in a moment; your workspace details remain available.'}
-        action={<Button variant="outline" render={<Link to="/owner/operations" />}>Open Tools</Button>} />}
+        action={<Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Open Tools</Link>} />}
     </SettingsGroup>
     <SettingsDangerZone description="Closing a workspace or transferring ownership affects every member and Tool.">
       <WorkspaceDangerZone />

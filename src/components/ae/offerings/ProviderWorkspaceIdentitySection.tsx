@@ -4,10 +4,9 @@ import { Suspense, type ComponentProps } from 'react'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Skeleton } from '@/components/ui/skeleton'
 import { appDestination } from '@/lib/navigation/app-navigation'
-import { cn } from '@/lib/utils'
 import { OwnershipConflict, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import type {
   ProviderWorkspaceIdentityDetailResult,
@@ -49,7 +48,7 @@ export function ProviderWorkspaceIdentitySection({
       ) : <UnavailableSummary title="Provider identity controls unavailable" retryLabel="Try provider identity again" onRetry={onRetryIdentity} /> : null}
       <a
         href={appDestination('settings').to}
-        className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+        className={['arc-market', buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'w-fit'].join(' ')}
       >
         Open Settings
       </a>

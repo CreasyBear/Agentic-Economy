@@ -2,20 +2,14 @@ import { Field as BaseField } from '@base-ui/react/field'
 import { Link } from '@tanstack/react-router'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { TACTILE } from '@/components/ae/settings/OwnerNotificationSettings'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
 
 import type { WorkspaceTransferPanelProps } from '../workspace-danger-zone.contracts'
 import { WorkspaceDangerDiagnosticSlot } from './WorkspaceDangerDiagnosticSlot'
+import '../WorkspaceDangerComposition.css'
 
 const OWNER_ONLY_COPY = 'Only the workspace owner can close the workspace or transfer ownership.'
-
-const SELECT_CLASS = `rounded-md border border-input bg-background px-3 py-2 ${TACTILE}`
-
-const SUMMARY_CLASS =
-  'font-sans text-base font-medium leading-snug tracking-tight text-foreground cursor-pointer'
 
 export function WorkspaceTransferPanel({
   callerIsOwner,
@@ -32,17 +26,17 @@ export function WorkspaceTransferPanel({
   onConfirmTransfer,
 }: WorkspaceTransferPanelProps) {
   return (
-    <section className="grid gap-4">
+    <section className="arc-market arc-workspace-danger-region">
       <details>
-        <summary className={SUMMARY_CLASS}>Transfer ownership</summary>
+        <summary className="arc-workspace-danger-summary">Transfer ownership</summary>
         {callerIsOwner ? (
-          <div className="mt-4 grid gap-4">
+          <div className="arc-workspace-danger-body">
             {transferCandidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="arc-workspace-danger-description">
                 Nobody else can receive ownership. <Link to="/owner/team" className="underline underline-offset-4">Invite someone from Team.</Link>
               </p>
             ) : (
-            <BaseField.Root className="grid gap-2 text-sm">
+            <BaseField.Root className="arc-workspace-danger-field">
               <Label>New workspace owner</Label>
               <select
                 aria-label="New workspace owner"
@@ -50,7 +44,7 @@ export function WorkspaceTransferPanel({
                 onChange={(event) => {
                   onSuccessorChange(event.target.value)
                 }}
-                className={SELECT_CLASS}
+                className="arc-workspace-danger-select"
               >
                 {transferCandidates.map((candidate) => (
                   <option key={candidate.principalRef} value={candidate.principalRef}>
@@ -63,8 +57,9 @@ export function WorkspaceTransferPanel({
             {transferCandidates.length === 0 ? null : (
             <Button
               type="button"
-              variant="outline"
-              className={cn('w-fit', TACTILE)}
+              variant="secondary"
+              size="md"
+              className="arc-workspace-danger-action"
               disabled={transferDisabled}
               onClick={onRequestTransfer}
             >
@@ -85,7 +80,7 @@ export function WorkspaceTransferPanel({
         ) : null}
       </details>
       {!callerIsOwner ? (
-        <p className="text-muted-foreground text-sm">{OWNER_ONLY_COPY}</p>
+        <p className="arc-workspace-danger-description">{OWNER_ONLY_COPY}</p>
       ) : null}
     </section>
   )

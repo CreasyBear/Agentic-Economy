@@ -1,0 +1,328 @@
+/*
+ * Arc Pro layout references licensed for these funding surfaces:
+ * checkout-summary.tsx SHA-256 ced954695b2f3f2143127085351434eaefe16fe5785b57eefb29d13d4faeb302
+ * checkout-summary.module.css SHA-256 7c94a626b4b251bf2212878b5aaaa7174f79c319dd4710c911eba4efe59957d2
+ * wallet-card.tsx SHA-256 c45b7c178b8d8f3fc965e1bf31e74b5b0a1de20d30c65c019ac518ccb0038e8d
+ * wallet-card.module.css SHA-256 b805dea481a38328eaeea85a14d17a95ae5ae341dde4af5bcac11e4dfe309060
+ * Adapted checkout line, total and primary-action geometry plus the wallet balance callout.
+ * Values, labels, callbacks and recovery remain owned by Agentic Economy source.
+ */
+
+.arc-funding-review,
+.arc-funding-quick {
+  --focus-ring: var(--accent-strong);
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: var(--space-4);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: var(--leading-body);
+}
+
+.arc-funding-review > *,
+.arc-funding-quick > * {
+  min-width: 0;
+}
+
+.arc-funding-review p,
+.arc-funding-quick p {
+  margin: 0;
+}
+
+.arc-funding-review [data-slot="alert"] {
+  border-radius: var(--radius-panel);
+}
+
+.arc-funding-form {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.arc-funding-amount-options {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.arc-funding-amount-options legend,
+.arc-funding-custom-amount label {
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.arc-funding-denominations,
+.arc-funding-recovery-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.arc-funding-review .arc-funding-denomination,
+.arc-funding-quick .arc-funding-denomination {
+  min-width: 64px;
+  min-height: 44px;
+  border-radius: var(--radius-pill);
+  padding-inline: var(--space-4);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.arc-funding-review .arc-funding-denomination[aria-pressed="true"],
+.arc-funding-quick .arc-funding-denomination[aria-pressed="true"] {
+  border-color: var(--control-on);
+  background: var(--control-on);
+  color: var(--control-glyph);
+}
+
+.arc-funding-custom-amount {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.arc-funding-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding-inline: var(--space-3);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+
+.arc-funding-input::placeholder {
+  color: var(--text-muted);
+}
+
+.arc-funding-input:focus-visible {
+  border-color: var(--accent-strong);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.arc-funding-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.arc-funding-help,
+.arc-funding-detail,
+.arc-funding-footnote {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.arc-funding-help,
+.arc-funding-footnote {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.arc-funding-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.arc-funding-summary {
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-funding-summary-message {
+  color: var(--text-secondary);
+}
+
+.arc-funding-lines {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.arc-funding-line {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: 5px;
+}
+
+.arc-funding-line dt {
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.arc-funding-line dd {
+  min-width: 0;
+  max-width: 100%;
+  flex: none;
+  margin: 0;
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.arc-funding-total {
+  align-items: center;
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.arc-funding-total dt {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.arc-funding-total dd {
+  font-family: var(--font-display);
+  font-size: calc(var(--text-2xl) + var(--space-1));
+  font-weight: 500;
+  letter-spacing: var(--tracking-display);
+  line-height: 1;
+}
+
+.arc-funding-detail {
+  overflow-wrap: anywhere;
+}
+
+.arc-funding-summary-action {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.arc-funding-review .arc-funding-pay {
+  width: 100%;
+  min-height: 52px;
+  font-size: var(--text-base);
+}
+
+.arc-funding-action {
+  min-height: 44px;
+}
+
+.arc-funding-balance {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--border-subtle);
+}
+
+.arc-funding-balance span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.arc-funding-balance strong {
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: calc(var(--text-2xl) + var(--space-1));
+  font-weight: 400;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.arc-funding-quick > p:first-child {
+  max-width: 64ch;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+}
+
+.arc-funding-link {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--foreground);
+  border-radius: var(--radius-control);
+  padding-inline: var(--space-4);
+  background: var(--foreground);
+  color: var(--background);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.arc-funding-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.arc-funding-loading {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.arc-funding-loading-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.arc-funding-skeleton-chip {
+  width: 72px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+}
+
+.arc-funding-skeleton-input {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-control);
+}
+
+.arc-funding-skeleton-summary {
+  width: 100%;
+  min-height: 216px;
+  border-radius: var(--radius-panel);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .arc-funding-link:hover {
+    opacity: .9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-funding-input,
+  .arc-funding-link {
+    transition: none;
+  }
+}

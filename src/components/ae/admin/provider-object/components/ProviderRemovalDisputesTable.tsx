@@ -1,6 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
@@ -42,7 +43,7 @@ function disputeColumns(onCloseDispute?: ProviderRemovalDisputesTableProps['onCl
 }
 export function ProviderRemovalDisputesTable({ rows, onCloseDispute }: ProviderRemovalDisputesTableProps) {
   return (
-    <AeSection title={PROVIDER_OBJECT_COPY.removalDisputesTitle}>
+    <AeSection className="arc-market arc-admin-record-table-region" title={PROVIDER_OBJECT_COPY.removalDisputesTitle}>
       <AeRecordTable
         columns={disputeColumns(onCloseDispute)}
         data={rows}

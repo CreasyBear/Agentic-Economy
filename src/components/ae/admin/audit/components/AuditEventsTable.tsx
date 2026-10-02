@@ -4,7 +4,8 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import '../../RecordWorkspaceComposition.css'
 import {
   AUDIT_COPY,
   type AdminAuditRowModel,
@@ -26,11 +27,11 @@ const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
     cell: ({ row }) => {
       const admin = row.original.admin
       return (
-        <div className="grid min-w-64 gap-intra">
-          <span className="font-medium text-foreground">{auditEventLabel(row.original.eventType)}</span>
-          <code className="font-mono text-xs text-muted-foreground">{row.original.eventType}</code>
+        <div className="arc-admin-record-detail">
+          <span>{auditEventLabel(row.original.eventType)}</span>
+          <code>{row.original.eventType}</code>
           {admin === null ? null : (
-            <dl className="grid gap-1 border-l border-border pl-3 text-xs text-muted-foreground">
+            <dl>
               <div className="flex flex-wrap gap-1">
                 <dt className="font-medium text-foreground">{AUDIT_COPY.columnLabels.permission}:</dt>
                 <dd>{admin.permission}</dd>
@@ -55,7 +56,7 @@ const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
     accessorKey: 'actorRef',
     header: AUDIT_COPY.columnLabels.actor,
     cell: ({ row }) => (
-      <AeCopyReference label={AUDIT_COPY.columnLabels.actor} value={row.original.actorRef} className="[&_code]:inline-block [&_code]:max-w-40 [&_code]:truncate" />
+      <AeCopyReference label={AUDIT_COPY.columnLabels.actor} value={row.original.actorRef} />
     ),
   },
   {
@@ -64,11 +65,11 @@ const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
     cell: ({ row }) => row.original.targetRef === null || row.original.targetType === null
       ? row.original.targetLabel
       : (
-          <div className="grid gap-1">
+          <div className="arc-admin-record-detail">
             {row.original.targetHref === null
-              ? <span className="text-xs text-muted-foreground">{row.original.targetType}</span>
-              : <a className="text-xs font-medium text-foreground underline-offset-4 hover:underline" href={row.original.targetHref}>{row.original.targetType}</a>}
-            <AeCopyReference label={AUDIT_COPY.columnLabels.target} value={row.original.targetRef} className="[&_code]:inline-block [&_code]:max-w-40 [&_code]:truncate" />
+              ? <span>{row.original.targetType}</span>
+              : <a className="arc-admin-record-link" href={row.original.targetHref}>{row.original.targetType}</a>}
+            <AeCopyReference label={AUDIT_COPY.columnLabels.target} value={row.original.targetRef} />
           </div>
         ),
   },
@@ -76,9 +77,9 @@ const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
     accessorKey: 'outcomeRaw',
     header: AUDIT_COPY.columnLabels.outcome,
     cell: ({ row }) => (
-      <div className="grid gap-1">
+      <div className="arc-admin-record-detail">
         <Badge variant="outline">{auditOutcomeLabel(row.original.outcomeRaw)}</Badge>
-        {row.original.outcomeRaw === null ? null : <code className="font-mono text-xs text-muted-foreground">{row.original.outcomeRaw}</code>}
+        {row.original.outcomeRaw === null ? null : <code>{row.original.outcomeRaw}</code>}
       </div>
     ),
   },
@@ -104,7 +105,7 @@ export function AuditEventsTable({ rows, filtered, paginationStatus, onLoadMore 
         emptyMessage={emptyMessage}
       />
       {paginationStatus === 'CanLoadMore' ? (
-        <Button type="button" variant="outline" className="justify-self-start" onClick={onLoadMore}>
+        <Button type="button" variant="secondary" size="md" className="justify-self-start" onClick={onLoadMore}>
           {AUDIT_COPY.loadMore}
         </Button>
       ) : null}

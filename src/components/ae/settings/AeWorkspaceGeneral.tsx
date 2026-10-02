@@ -6,10 +6,9 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { ProviderNameEditor } from '@/components/ae/settings/ProviderNameEditor'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspace.functions'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicOwnerStatusRouteReadbackResult } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-import { cn } from '@/lib/utils'
 
 export function AeWorkspaceGeneral({
   result,
@@ -46,7 +45,7 @@ export function AeWorkspaceGeneral({
         action={
           <Link
             to="/for-providers"
-            className={cn(buttonVariants(), 'min-h-touch')}
+            className={`arc-market ${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}
           >
             Review Provider setup
           </Link>
@@ -57,14 +56,14 @@ export function AeWorkspaceGeneral({
 
   if (result.kind === 'unavailable') {
     return (
-      <Alert variant="destructive">
+        <Alert variant="destructive" className="arc-market">
         <AlertTitle>Provider identity is unavailable</AlertTitle>
         <AlertDescription className="flex flex-wrap items-center gap-3">
           <span>Try again in a moment. If this keeps happening, open Help.</span>
           <Link
             to="/owner/operations"
             hash="provider-identity"
-            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
           >
             Try again
           </Link>

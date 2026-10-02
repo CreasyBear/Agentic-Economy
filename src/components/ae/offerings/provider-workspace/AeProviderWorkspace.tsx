@@ -81,7 +81,7 @@ function AvailableWorkspaceBody({
   )
 
   return (
-    <div className="grid gap-section">
+    <div className="arc-market arc-provider-workspace">
       {inventory.tools.length === 0 && (
         <AeSupplierOnboardingWizard currentStep="first_tool" providerName={inventory.provider.name} />
       )}
@@ -107,9 +107,9 @@ function AvailableWorkspaceBody({
         onCloseEarnings={sheets.closeEarnings}
         onRetryEarnings={sheets.loadEarnings}
       />
-      <details className="rounded-card border border-border p-4" open={location.hash === 'provider-identity' || undefined}>
-        <summary className="cursor-pointer font-medium">Provider settings and administration</summary>
-        <div className="mt-6 grid gap-section">
+      <details className="arc-provider-workspace-administration" open={location.hash === 'provider-identity' || undefined}>
+        <summary>Provider settings and administration</summary>
+        <div>
           <ProviderWorkspaceIdentitySection
             providerName={inventory.provider.name}
             identityOpen={sheets.identityOpen}

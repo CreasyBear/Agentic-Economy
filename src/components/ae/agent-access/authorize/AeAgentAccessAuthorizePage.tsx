@@ -4,8 +4,8 @@ import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/authori
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import '../authorize-form/ConsentComposition.css'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 import type { AgentAccessAuthorizeLoaded } from './authorize.contracts'
@@ -16,7 +16,7 @@ function OpenAgentsLink() {
   return (
     <Link
       to="/agent-access"
-      className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+      className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-consent-page-outcome-link`}
     >
       Open Agents
     </Link>
@@ -35,7 +35,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
   if (loaded.kind === 'outcome_unknown') {
     return (
       <AeOperatorPage operatorRole="owner" title="Review Agent access" description="Confirm the current result before taking another action." currentPath="/agent-access">
-        <AeSettingsStack>
+        <AeSettingsStack className="arc-market arc-consent-page-outcome">
           <Alert variant="destructive">
             <AlertTitle>Check the current access status</AlertTitle>
             <AlertDescription>
@@ -51,7 +51,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
   if (loaded.kind === 'succeeded') {
     return (
       <AeOperatorPage operatorRole="owner" title="Review Agent access" description="This request has already completed." currentPath="/agent-access">
-        <AeSettingsStack>
+        <AeSettingsStack className="arc-market arc-consent-page-outcome">
           <Alert>
             <AlertTitle>Access approved</AlertTitle>
             <AlertDescription>
@@ -68,7 +68,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
     const presentation = presentConnectionProblem({ code: loaded.code })
     return (
       <AeOperatorPage operatorRole="owner" title="Review Agent access" description="This request cannot be used." currentPath="/agent-access">
-        <AeSettingsStack>
+        <AeSettingsStack className="arc-market arc-consent-page-outcome">
           <Alert variant="destructive">
             <AlertTitle>{presentation.heading}</AlertTitle>
             <AlertDescription>
@@ -83,7 +83,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
   }
   return (
     <AeOperatorPage operatorRole="owner" title="Review Agent access" description="Choose what this Agent may do, then approve or decline." currentPath="/agent-access">
-      <AeSettingsStack>
+      <AeSettingsStack className="arc-market arc-consent-page-outcome">
         <Alert variant="destructive">
           <AlertTitle>This access request is missing a code</AlertTitle>
           <AlertDescription>

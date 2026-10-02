@@ -7,19 +7,11 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import arcButton from '@/components/arc/button/button.module.css'
+import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
 import { Progress } from '@/components/ui/progress'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-view-model'
@@ -34,6 +26,7 @@ import {
   monthlyUtilizationPercent,
   scopeLabel,
 } from './agent-operator-console-model'
+import './AgentDirectoryComposition.css'
 
 export type AeAgentDirectoryTableProps = Readonly<{
   directoryItems: readonly AgentDirectoryItem[]
@@ -71,7 +64,7 @@ export function AeAgentDirectoryTable({
         accessorFn: (item) => item.displayName,
         header: ({ column }) => <AeOperatorSortableHeader label="Agent" column={column} />,
         cell: ({ row }) => (
-          <div className="grid gap-1">
+          <div className="arc-agent-directory-cell">
             <InlineEditField
               value={row.original.displayName}
               label={`Rename ${row.original.displayName} (${environmentLabel(row.original.environment)} · ${row.original.principalRef})`}
@@ -83,8 +76,8 @@ export function AeAgentDirectoryTable({
                 displayName,
               ) ?? false}
             />
-            <Badge variant="outline" className="w-fit">{environmentLabel(row.original.environment)}</Badge>
-            <span className="break-all font-mono text-xs text-muted-foreground" title={row.original.principalRef}>
+            <Badge variant="outline" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
+            <span className="arc-agent-directory-reference" title={row.original.principalRef}>
               {row.original.principalRef}
             </span>
           </div>
@@ -108,9 +101,9 @@ export function AeAgentDirectoryTable({
           const current = currentAuthorityLabel(row.original.status, row.original.authorityMode)
           if (!authorityIsHistorical(row.original.status)) return current
           return (
-            <div className="grid gap-1">
+            <div className="arc-agent-directory-cell">
               <span>{current}</span>
-              <span className="text-xs text-muted-foreground">Previous authority: {scopeLabel(row.original.authorityMode)}</span>
+              <span className="arc-agent-directory-note">Previous authority: {scopeLabel(row.original.authorityMode)}</span>
             </div>
           )
         },
@@ -124,12 +117,12 @@ export function AeAgentDirectoryTable({
           const percent = monthlyUtilizationPercent(row.original)
           if (percent === undefined) {
             return (
-              <span className="text-xs text-muted-foreground">{spendText}</span>
+              <span className="arc-agent-directory-note">{spendText}</span>
             )
           }
           return (
-            <div className="grid gap-1.5 min-w-[120px]">
-              <span className="font-mono tabular-nums text-xs">{spendText}</span>
+            <div className="arc-agent-directory-utilization">
+              <span className="arc-agent-directory-money">{spendText}</span>
               <Progress
                 value={percent}
                 className="h-1.5"
@@ -150,7 +143,7 @@ export function AeAgentDirectoryTable({
             <time
               dateTime={timestampIso(lastSeenAt)}
               title={formatTimestamp(lastSeenAt)}
-              className="font-mono tabular-nums text-xs"
+              className="arc-agent-directory-date"
             >
               {formatRelativeTime(lastSeenAt)}
             </time>
@@ -164,7 +157,7 @@ export function AeAgentDirectoryTable({
         cell: ({ row }) => {
           const status = agentStatusLabel(row.original.status)
           const variant = agentStatusBadgeVariant(row.original.status)
-          return <Badge variant={variant}>{status}</Badge>
+          return <Badge variant={variant} className="arc-agent-directory-state">{status}</Badge>
         },
       },
     ],
@@ -173,35 +166,40 @@ export function AeAgentDirectoryTable({
 
   if (agentsPhase === 'unloaded') {
     return (
-      <AeRecordTable
-        columns={columns}
-        data={[]}
-        caption="Agents"
-        countLabel="agents"
-        loading
-        hideFilter
-      />
+      <div className="arc-market arc-agent-directory">
+          <AeRecordTable
+            columns={columns}
+            data={[]}
+            caption="Agents"
+            countLabel="agents"
+            loading
+            hideFilter
+          />
+      </div>
     )
   }
 
   if (directoryItems.length === 0) {
     return (
-      <AeEmptyState
-        title="No agent is connected yet"
-        description="Start setup from the agent and approve the request to create access you can revoke."
-        action={
-          <a
-            href={missingAgentNextAction.href}
-            className={cn(buttonVariants(), 'min-h-touch')}
-          >
-            {missingAgentNextAction.label}
-          </a>
-        }
-      />
+      <div className="arc-market arc-agent-directory">
+        <AeEmptyState
+          title="No agent is connected yet"
+          description="Start setup from the agent and approve the request to create access you can revoke."
+          action={
+            <a
+              href={missingAgentNextAction.href}
+              className={`${arcButton.button} ${arcButton.primary} ${arcButton.md}`}
+            >
+              {missingAgentNextAction.label}
+            </a>
+          }
+        />
+      </div>
     )
   }
 
   return (
+    <div className="arc-market arc-agent-directory">
     <AeRecordTable
       columns={columns}
       data={filteredItems}
@@ -210,23 +208,18 @@ export function AeAgentDirectoryTable({
       filterPlaceholder="Filter agents…"
       hideFilter={directoryItems.length <= 1}
       action={
-        <Select
+        <SegmentedControl
+          label="Filter by status"
           value={statusFilter}
           onValueChange={(val) => setStatusFilter(val as typeof statusFilter)}
-        >
-          <SelectTrigger className="w-[160px]" aria-label="Filter by status">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="connected">Connected</SelectItem>
-              <SelectItem value="attention">Needs attention</SelectItem>
-              <SelectItem value="expired">Expired</SelectItem>
-              <SelectItem value="disconnected">Disconnected</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+          options={[
+            { value: 'all', label: 'All statuses' },
+            { value: 'connected', label: 'Connected' },
+            { value: 'attention', label: 'Needs attention' },
+            { value: 'expired', label: 'Expired' },
+            { value: 'disconnected', label: 'Disconnected' },
+          ]}
+        />
       }
       getRowId={(item) => item.principalRef}
       {...(getAgentHref === undefined
@@ -250,5 +243,6 @@ export function AeAgentDirectoryTable({
             },
           })}
     />
+    </div>
   )
 }

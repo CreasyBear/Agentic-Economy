@@ -2,12 +2,12 @@ import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useState } from 'react'
 
+import { Button } from '@/components/arc/button/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import '@/components/ae/supply/supplier-onboarding-wizard/ProviderIdentityComposition.css'
 import { providerIdentityError } from './provider-workspace-projection'
 import { ensureProviderBusinessServer } from './provider-identity.functions'
 
@@ -59,23 +59,23 @@ export function ProviderIdentityForm() {
   }
 
   return (
-    <div className="grid max-w-xl gap-related">
-      <Alert><AlertTitle>Create your provider identity</AlertTitle><AlertDescription>This starts an unpublished provider workspace. Once an exact Tool passes verification, agents can find it through search and it is listed under your Provider.</AlertDescription></Alert>
-      <FieldGroup>
-        <Field data-invalid={error !== undefined || undefined}>
-          <FieldLabel htmlFor="provider-name">Provider name</FieldLabel>
-          <Input id="provider-name" value={providerName} disabled={pending} onChange={(event) => { setProviderName(event.currentTarget.value); setError(undefined) }} />
-          <FieldDescription>The name agents will see after an Tool is verified and published.</FieldDescription>
+    <div className="arc-market arc-provider-identity-form">
+      <Alert className="arc-provider-identity-notice"><AlertTitle>Create your provider identity</AlertTitle><AlertDescription className="arc-provider-identity-notice-description">This starts an unpublished provider workspace. Once an exact Tool passes verification, agents can find it through search and it is listed under your Provider.</AlertDescription></Alert>
+      <FieldGroup className="arc-provider-identity-fields">
+        <Field className="arc-provider-identity-field" data-invalid={error !== undefined || undefined}>
+          <FieldLabel className="arc-provider-identity-label" htmlFor="provider-name">Provider name</FieldLabel>
+          <input data-slot="input" className="arc-provider-identity-input" id="provider-name" value={providerName} disabled={pending} onChange={(event) => { setProviderName(event.currentTarget.value); setError(undefined) }} />
+          <FieldDescription className="arc-provider-identity-description">The name agents will see after an Tool is verified and published.</FieldDescription>
         </Field>
-        <Field data-invalid={error !== undefined || undefined}>
-          <FieldLabel htmlFor="provider-website">Provider website</FieldLabel>
-          <Input id="provider-website" type="url" placeholder="https://api.example.com" value={providerWebsite} disabled={pending} onChange={(event) => { setProviderWebsite(event.currentTarget.value); setError(undefined) }} />
-          <FieldDescription>Use the HTTPS origin that controls the provider endpoint.</FieldDescription>
-          {error === undefined ? null : <FieldError>{error}</FieldError>}
+        <Field className="arc-provider-identity-field" data-invalid={error !== undefined || undefined}>
+          <FieldLabel className="arc-provider-identity-label" htmlFor="provider-website">Provider website</FieldLabel>
+          <input data-slot="input" className="arc-provider-identity-input arc-provider-identity-mono" id="provider-website" type="url" placeholder="https://api.example.com" value={providerWebsite} disabled={pending} onChange={(event) => { setProviderWebsite(event.currentTarget.value); setError(undefined) }} />
+          <FieldDescription className="arc-provider-identity-description">Use the HTTPS origin that controls the provider endpoint.</FieldDescription>
+          {error === undefined ? null : <FieldError className="arc-provider-identity-error">{error}</FieldError>}
         </Field>
       </FieldGroup>
-      <Button type="button" className="justify-self-start min-h-touch" disabled={pending || outcomeUnknown} aria-busy={pending || undefined} onClick={() => void submit()}>{pending ? 'Creating provider…' : outcomeUnknown ? 'Outcome not confirmed' : 'Create provider workspace'}</Button>
-      {outcomeUnknown ? <Button type="button" variant="secondary" className="justify-self-start min-h-touch" disabled={pending} onClick={() => { setPending(true); void router.invalidate().then(() => setOutcomeUnknown(false)).catch((cause) => { captureClientExceptionOnClient(cause); setError('Provider status is still unavailable. No new workspace state is claimed.') }).finally(() => setPending(false)) }}>Reload provider status</Button> : null}
+      <Button variant="primary" size="md" type="button" className="arc-provider-identity-submit" disabled={pending || outcomeUnknown} aria-busy={pending || undefined} onClick={() => void submit()}>{pending ? 'Creating provider…' : outcomeUnknown ? 'Outcome not confirmed' : 'Create provider workspace'}</Button>
+      {outcomeUnknown ? <Button variant="secondary" size="md" type="button" className="arc-provider-identity-reload" disabled={pending} onClick={() => { setPending(true); void router.invalidate().then(() => setOutcomeUnknown(false)).catch((cause) => { captureClientExceptionOnClient(cause); setError('Provider status is still unavailable. No new workspace state is claimed.') }).finally(() => setPending(false)) }}>Reload provider status</Button> : null}
     </div>
   )
 }

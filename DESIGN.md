@@ -2,10 +2,43 @@
 
 **Status:** active product design contract
 
-**Revised:** 2026-09-21
+**Revised:** 2026-10-01
 Aligned to aecon brand guidelines (PDF, 2026-09). The lived visual reference is
 `/market?view=discover` (`DirectoryHero.tsx`, `DirectoryHomeDiscovery.tsx`,
 `DirectoryToolCard.tsx`).
+
+## Arc Tool market pilot
+
+Joel's 1 October direction replaces the existing listing recipes with Arc
+blocks on the migrated Tool discovery/search, comparison and detail surfaces.
+Compose those regions from the licensed Arc `product-listing`, `product-detail`
+and `comparison-table` sources: a contribution gallery, a published-example
+showroom and a grouped decision matrix. Use expressive geometry and purposeful
+interaction while retaining exact identities, prices, provenance and valid
+next actions. Physical-product carts, invented media, ratings and simulated
+success do not describe a Tool.
+
+The pilot uses `.arc-market` on each block and its portal roots. Arc foundation
+is scoped there; `src/styles/arc-market.css` maps the existing AE palette and
+Manrope fonts onto its tokens. The existing `.dark` appearance owner controls
+both systems. Keep Arc's concentric 18/26/34px control/panel/surface radius scale,
+44px control heights, 400/500 interface type and source motion presets within
+this scope. Forest is the light accent; mint is the dark accent. Main purchase
+and navigation actions may retain charcoal/chalk emphasis. Sentence-case labels,
+visible keyboard focus and reduced-motion behavior remain required.
+
+These block recipes supersede the ExtraLight, uppercase-eyebrow, compact-radius
+and 150/220/300ms recipes below only on migrated surfaces. Unmigrated pages keep
+their current system. Provider browse/profile remains a separate queued slice.
+The contract and coverage inventory live in
+[the Arc refactor protocol](./docs/designs/arc-ui-refactor/protocol.md).
+
+The scoped bridge adds one CSS boundary instead of per-block palettes or a
+second theme controller. Shared motion presets and the `motion` package support
+the actual listing/detail sources; retain them for those callers. Do not add
+unused catalogue components, a general compatibility wrapper or Next.js for an
+image leaf. Arc's global outline suppression is deliberately omitted because
+keyboard focus must remain visible.
 
 ## Current app and market direction
 

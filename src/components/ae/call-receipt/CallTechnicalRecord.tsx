@@ -2,7 +2,7 @@
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
@@ -17,13 +17,14 @@ import { CallMoneyFacts } from './CallMoneyFacts'
 import { CallOutputPreview } from './CallOutputPreview'
 import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallReceiptFact, CallReceiptRef } from './CallReceiptPrimitives'
+import './ReceiptComposition.css'
 
 export function CallTechnicalRecord({ result, view }: Readonly<{ result: FoundCallStatus; view: CallReceiptView }>) {
   const ownerContext = result.ownerContext
   return (
-    <details className="border-t border-border pt-related">
-      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical details</summary>
-      <div className="grid gap-section pt-related">
+    <details className="arc-market arc-call-disclosure">
+      <summary>Technical details</summary>
+      <div className="arc-call-disclosure-body">
         <AeFactList facts={[
           { label: "Call reference", value: <CallReceiptRef label="Call reference" value={result.callRef} />, mono: true },
           { label: "Tool reference", value: <CallReceiptRef label="Tool reference" value={result.toolRef} />, mono: true },
@@ -64,11 +65,11 @@ function CallSuggestedNextAction({ result }: Readonly<{ result: FoundCallStatus 
 
 function MachineReadableReceipt({ view }: Readonly<{ view: CallReceiptView }>) {
   return (
-    <details>
-      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">
+    <details className="arc-market arc-call-disclosure">
+      <summary>
         Machine-readable receipt
       </summary>
-      <pre className="mt-related max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground"><code>{JSON.stringify(view, null, 2)}</code></pre>
+      <pre className="arc-call-recorded-output"><code>{JSON.stringify(view, null, 2)}</code></pre>
     </details>
   )
 }
@@ -128,9 +129,9 @@ function ResultDetails({ result }: Readonly<{ result: CallResult }>) {
 export function CallRequestSection({ input }: Readonly<{ input: FoundCallStatus['previousInput'] }>) {
   if (input === undefined) return null
   return (
-    <details className="rounded-card border border-border px-gutter">
-      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Request</summary>
-      <pre className="mb-gutter max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm"><code>{JSON.stringify(input, null, 2)}</code></pre>
+    <details className="arc-market arc-call-disclosure">
+      <summary>Request</summary>
+      <pre className="arc-call-recorded-output"><code>{JSON.stringify(input, null, 2)}</code></pre>
     </details>
   )
 }
@@ -146,18 +147,18 @@ function RecordedCallOutput({ output }: Readonly<{ output: Extract<CallResult, {
   return (
     <AeSection title="Output">
       {typeof output === 'string' ? (
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-muted p-gutter text-sm text-foreground"><code>{text === '' ? 'Empty text' : text}</code></pre>
+        <pre className="arc-call-recorded-output"><code>{text === '' ? 'Empty text' : text}</code></pre>
       ) : (
-        <div className="max-h-96 overflow-auto rounded-card bg-muted p-gutter"><CallOutputPreview value={output} /></div>
+        <div className="arc-call-recorded-output"><CallOutputPreview value={output} /></div>
       )}
-      <Button type="button" variant="outline" className="min-h-touch w-fit" onClick={() => { void clipboard.copy() }}>
+      <Button type="button" variant="secondary" size="md" className="w-fit" onClick={() => { void clipboard.copy() }}>
         {clipboard.isCopied ? 'Output copied' : 'Copy output'}
       </Button>
       {clipboard.status === 'failed' ? <p role="status" className="text-sm text-muted-foreground">{typeof output === 'string' ? 'Copy failed. Select the output above and copy it manually.' : 'Copy failed. Open full JSON below and copy it manually.'}</p> : null}
       {typeof output === 'string' ? null : (
-        <details>
-          <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">View full JSON</summary>
-          <pre className="mt-related max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-muted p-gutter text-xs text-foreground"><code>{text}</code></pre>
+        <details className="arc-call-disclosure">
+          <summary>View full JSON</summary>
+          <pre className="arc-call-recorded-output"><code>{text}</code></pre>
         </details>
       )}
     </AeSection>

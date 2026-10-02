@@ -2,8 +2,7 @@ import { cn } from '@/lib/utils'
 import { CopyIcon } from 'lucide-react'
 import { useState } from 'react'
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button, type ButtonSize, type ButtonVariant } from '@/components/arc/button/button'
 
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
@@ -19,20 +18,22 @@ type AeCopyPublicUrlButtonProps = {
   statusClassName?: string
 }
 
-const buttonVariantMap: Record<AeCopyPublicUrlButtonVariant, 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'> = {
-  default: 'default',
-  outline: 'outline',
+// Keep existing caller options at this product boundary; all actions use Arc
+// variants and a minimum 44px target without spreading legacy props into Arc.
+const buttonVariantMap: Record<AeCopyPublicUrlButtonVariant, ButtonVariant> = {
+  default: 'primary',
+  outline: 'secondary',
   secondary: 'secondary',
   ghost: 'ghost',
-  destructive: 'destructive',
-  link: 'link',
+  destructive: 'danger',
+  link: 'ghost',
 }
 
-const buttonSizeMap: Record<AeCopyPublicUrlButtonSize, 'default' | 'sm' | 'lg' | 'icon'> = {
-  default: 'default',
-  sm: 'sm',
+const buttonSizeMap: Record<AeCopyPublicUrlButtonSize, ButtonSize> = {
+  default: 'md',
+  sm: 'md',
   lg: 'lg',
-  icon: 'icon',
+  icon: 'md',
 }
 
 export function AeCopyPublicUrlButton({
@@ -80,6 +81,7 @@ export function AeCopyPublicUrlButton({
         type="button"
         variant={buttonVariantMap[variant]}
         size={buttonSizeMap[size]}
+        className={cn('arc-market', size === 'icon' && 'size-11 shrink-0 p-0')}
         aria-label={label}
         onClick={handleCopy}
       >
@@ -92,14 +94,14 @@ export function AeCopyPublicUrlButton({
         </p>
       )}
       {copyFailed ? (
-        <Input
+        <input
           aria-label="Public page URL"
           aria-describedby={copyNotice === undefined ? undefined : copyStatusId}
           value={publicUrl ?? publicPath}
           readOnly
           onFocus={(event) => event.currentTarget.select()}
           onClick={(event) => event.currentTarget.select()}
-          className="basis-full min-w-0 bg-background text-foreground"
+          className="h-11 basis-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground"
         />
       ) : null}
     </>

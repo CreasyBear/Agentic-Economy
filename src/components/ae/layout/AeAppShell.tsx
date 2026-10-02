@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 
 import { AeAppHeader } from './app-shell/AeAppHeader'
 import { useAppShellState } from './app-shell/useAppShellState'
+import './AppFrameComposition.css'
 
 function usePublicDocumentFocus(pathname: string) {
   const previousPathRef = useRef<string | undefined>(undefined)
@@ -50,7 +51,7 @@ export function AeAppShell({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className={cn('flex min-h-svh flex-col', chatFrame ? 'h-svh overflow-hidden' : null)}
+      className={cn('arc-market arc-app-frame', chatFrame ? 'h-svh overflow-hidden' : null)}
       style={{ '--header-height': '4rem' } as CSSProperties}
     >
       <a

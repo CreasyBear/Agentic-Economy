@@ -1,9 +1,11 @@
-import { TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
+import { ChevronDownIcon } from 'lucide-react'
+
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
-import { Button } from '@/components/ui/button'
+import { Button as ArcButton } from '@/components/arc/button/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { cn } from '@/lib/utils'
+
+import './AgentRecordComposition.css'
 
 import { AgentFactsDisclosure } from './AgentFactsDisclosure'
 import type { AgentRecordSheetProps } from '../agent-operator-console.contracts'
@@ -38,12 +40,12 @@ export function AgentRecordSheet({
       {...(description === undefined ? {} : { description, facts: headerFacts })}
     >
       {!showSheetBody ? null : (
-        <div className="mt-4 grid gap-3">
+        <div className="arc-market arc-agent-record-body">
           {recoveryCopy === undefined ? null : (
-            <p className="text-sm text-muted-foreground">{recoveryCopy}</p>
+            <p>{recoveryCopy}</p>
           )}
-          <p className="text-sm text-muted-foreground">Counts and settled charges cover Calls created in the current UTC calendar month. Released or refunded payments are excluded. This is not a net-spend statement.</p>
-          {showActivityTruncatedNote ? <p className="text-sm text-muted-foreground">Recent activity shows only the latest 50 Calls by creation time; monthly counts cover the full period when available.</p> : null}
+          <p>Counts and settled charges cover Calls created in the current UTC calendar month. Released or refunded payments are excluded. This is not a net-spend statement.</p>
+          {showActivityTruncatedNote ? <p>Recent activity shows only the latest 50 Calls by creation time; monthly counts cover the full period when available.</p> : null}
           <AgentFactsDisclosure label="Spending policy" facts={spendingPolicyFacts}>
             {spendingLimitsForm}
           </AgentFactsDisclosure>
@@ -54,27 +56,35 @@ export function AgentRecordSheet({
             {authorizedTools}
           </AgentFactsDisclosure>
           {connectionReceipts}
-          <Collapsible>
+          <Collapsible className="arc-market arc-agent-disclosure">
             <CollapsibleTrigger
               render={
-                <Button type="button" variant="ghost" className="w-fit min-h-touch">
+                <ArcButton
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  labelLayout="between"
+                  className="arc-agent-disclosure-trigger"
+                >
                   Technical details
-                </Button>
+                  <ChevronDownIcon className="size-4" aria-hidden="true" />
+                </ArcButton>
               }
             />
-            <CollapsibleContent className="grid gap-3 pt-2">
+            <CollapsibleContent className="arc-agent-disclosure-content">
               <AeFactList density="compact" facts={technicalFacts} />
               {credentialHistory}
               {agentHistory}
-              <Button
+              <ArcButton
                 type="button"
-                variant="destructive"
+                variant="danger"
+                size="md"
                 disabled={removeAgentDisabled}
                 onClick={(event) => onRemoveAgent(event.currentTarget)}
-                className={cn('w-fit min-h-touch', TACTILE)}
+                className="arc-agent-remove-action"
               >
                 Remove agent everywhere
-              </Button>
+              </ArcButton>
             </CollapsibleContent>
           </Collapsible>
         </div>

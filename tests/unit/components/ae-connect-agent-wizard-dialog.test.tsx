@@ -24,6 +24,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByLabelText(/agent name/i)).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /sandbox/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /production/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Authority mode' })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /browse only/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /ask each time/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /work within limits/i })).toBeInTheDocument()

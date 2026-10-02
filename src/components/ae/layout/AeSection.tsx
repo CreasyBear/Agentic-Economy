@@ -1,7 +1,10 @@
-import { ChevronRightIcon } from 'lucide-react'
+/* Arc settings-page pane/group composition for existing section callers.
+ * Requires caller-owned facts and actions; ensures the same heading/anchor/ref
+ * contract. No state, commands or recovery are owned by this layout. */
 import { useId, type ReactNode, type Ref } from 'react'
 
 import { cn } from '@/lib/utils'
+import './SectionComposition.css'
 
 type AeSectionProps = {
   title: string
@@ -15,67 +18,33 @@ type AeSectionProps = {
 export function AeSection({ title, description, children, id, className, headingRef }: AeSectionProps) {
   const generatedTitleId = useId()
   const titleId = `${generatedTitleId}-title`
+  const descriptionId = `${generatedTitleId}-description`
 
   return (
     <section
       aria-labelledby={titleId}
-      className={cn('grid scroll-mt-anchor gap-related', className)}
+      aria-describedby={description === undefined ? undefined : descriptionId}
+      className={cn('arc-market arc-section', className)}
       {...(id === undefined ? {} : { id })}
     >
-      <div className="grid gap-intra">
+      <header className="arc-section-header">
         <h2
           ref={headingRef}
           id={titleId}
           tabIndex={headingRef === undefined ? undefined : -1}
-          className="font-sans text-base font-medium leading-snug tracking-tight text-foreground"
+          className="arc-section-title"
         >
           {title}
         </h2>
         {description === undefined ? null : (
-          <p className="max-w-[65ch] text-pretty text-sm leading-normal text-muted-foreground">{description}</p>
+          <p id={descriptionId} className="arc-section-description">{description}</p>
         )}
-      </div>
+      </header>
       {children}
     </section>
   )
 }
 
 export function AeSettingsStack({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('grid w-full gap-section pb-page', className)}>{children}</div>
-}
-
-type AeSettingsRowProps = {
-  title: string
-  description?: string
-  href?: string
-  action?: ReactNode
-}
-
-export function AeSettingsRow({ title, description, href, action }: AeSettingsRowProps) {
-  const content = (
-    <>
-      <span className="grid min-w-0 flex-1 gap-intra">
-        <span className="font-medium text-foreground">{title}</span>
-        {description === undefined ? null : (
-          <span className="text-pretty text-sm text-muted-foreground">{description}</span>
-        )}
-      </span>
-      {action === undefined ? (
-        href === undefined ? null : <ChevronRightIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-      ) : (
-        action
-      )}
-    </>
-  )
-  const className = 'flex min-h-touch items-center gap-related rounded-md border border-border px-gutter py-intra transition-colors hover:bg-muted/40'
-
-  if (href === undefined) {
-    return <div className={className}>{content}</div>
-  }
-
-  return (
-    <a href={href} className={className}>
-      {content}
-    </a>
-  )
+  return <div className={cn('arc-market arc-settings-stack', className)}>{children}</div>
 }

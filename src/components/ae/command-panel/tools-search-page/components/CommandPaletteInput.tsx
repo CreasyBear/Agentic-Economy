@@ -3,6 +3,7 @@
 import type { RefObject } from 'react'
 
 import { CommandInput } from '@/components/ui/command'
+import '../../CommandPanelComposition.css'
 
 export type CommandPaletteInputProps = Readonly<{
   inputRef: RefObject<HTMLInputElement | null>
@@ -25,7 +26,6 @@ export function CommandPaletteInput({
       placeholder="Search Tools…"
       value={query}
       onValueChange={onValueChange}
-      className="h-12 py-0"
     />
   )
 }

@@ -4,7 +4,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import {
   readAccountSecurityHistoryServer,
 } from '@/modules/security/account-security.functions'
@@ -82,7 +82,7 @@ export function AeAccountSecurityHistory({ initialResult }: AeAccountSecurityHis
       description="Observed session, Agent, connection and account actions. Filter or load older events below."
     >
       {result.kind === 'unavailable' ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="arc-market">
           <AlertTitle>Security history is temporarily unavailable.</AlertTitle>
           <AlertDescription className="grid gap-1">
             <p>
@@ -98,7 +98,9 @@ export function AeAccountSecurityHistory({ initialResult }: AeAccountSecurityHis
               type="button"
               variant="secondary"
               disabled={loading}
-              className="mt-2 min-w-[8.5rem] enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+              size="md"
+              aria-busy={loading || undefined}
+              className="mt-4 justify-self-start"
               onClick={() => void load(null)}
             >
               {loading ? 'Trying again…' : 'Try again'}

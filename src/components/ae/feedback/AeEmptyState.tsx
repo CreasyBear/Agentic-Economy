@@ -1,9 +1,9 @@
-import { Inbox } from 'lucide-react'
 import type { MouseEvent, ReactNode } from 'react'
 import { toast } from 'sonner'
 
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
+import { INBOX_PATHS, INBOX_VIEW } from '@/components/arc/empty-states/empty-states-art'
+import './EmptyStateComposition.css'
 
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-fast ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
@@ -13,6 +13,9 @@ export type AeEmptyStateRecipe = Readonly<{
   readonly label: string
   readonly onSelect: () => void
 }>
+
+// Requires authoritative copy/actions. Ensures the empty state never invents activity or success.
+// Existing callback/toast behavior stays caller-owned; Arc's sample scene switch/timers are omitted.
 
 export function AeEmptyState({
   title,
@@ -67,20 +70,20 @@ export function AeEmptyState({
   return (
     <div
       role={resolvedRole}
-      className={cn(
-        'grid place-content-center justify-items-center gap-related py-page text-center',
-        compact ? undefined : 'min-h-64',
-      )}
+      className="arc-market arc-empty-state"
+      data-compact={compact || undefined}
     >
-      <span
-        aria-hidden="true"
-        className="inline-flex size-16 items-center justify-center rounded-md border border-border text-muted-foreground [&_svg]:size-8"
-      >
-        {icon ?? <Inbox aria-hidden="true" />}
-      </span>
-      <div className="grid max-w-md gap-intra">
-        <TitleTag className="text-lg font-medium tracking-tight text-foreground">{title}</TitleTag>
-        <p className="text-pretty text-sm text-muted-foreground">{description}</p>
+      {icon === undefined ? (
+        <div className="arc-empty-stage" aria-hidden="true">
+          <svg className="arc-empty-art" viewBox={`0 0 ${INBOX_VIEW.width} ${INBOX_VIEW.height}`} focusable="false">
+            {INBOX_PATHS.map((path, index) => <path key={index} className="arc-empty-shape"
+              data-kind={path.kind} data-tone={path.tone} d={path.d} opacity={path.opacity} strokeDasharray={path.dash} />)}
+          </svg>
+        </div>
+      ) : <span className="arc-empty-icon" aria-hidden="true">{icon}</span>}
+      <div className="arc-empty-copy">
+        <TitleTag className="arc-empty-title">{title}</TitleTag>
+        <p className="arc-empty-description">{description}</p>
       </div>
       {financialReassurance === undefined ? (
         <div className="min-h-5" aria-hidden="true" />
@@ -90,17 +93,16 @@ export function AeEmptyState({
         </p>
       )}
       <div
-        className="flex min-h-touch flex-wrap items-center justify-center gap-intra"
+        className="arc-empty-actions"
         onClick={handleActionWellClick}
       >
         {recipes?.map((recipe) => (
           <Button
             key={recipe.id}
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             data-empty-recipe=""
-            className={TACTILE}
             onClick={() => runRecipe(recipe)}
           >
             {recipe.label}

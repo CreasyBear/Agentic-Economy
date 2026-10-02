@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { readAgentSecurityHistoryServer } from '@/modules/security/account-security.functions'
 import {
   appendAccountSecurityHistoryPage,
@@ -11,6 +11,7 @@ import {
   type AccountSecurityHistoryResult,
 } from '@/modules/security/account-security'
 import { degrade } from '@/lib/observability/degrade'
+import './home/AgentHomeComposition.css'
 
 export function AeAgentSecurityHistory({ principalRef }: Readonly<{ principalRef: string }>) {
   return <AgentSecurityHistoryFrame key={principalRef} principalRef={principalRef} />
@@ -77,7 +78,7 @@ function AgentSecurityHistoryFrame({ principalRef }: Readonly<{ principalRef: st
 
   if (result.kind === 'unavailable') {
     return (
-      <Alert variant="destructive">
+      <Alert variant="destructive" className="arc-market arc-agent-recovery">
         <AlertTitle>Agent history unavailable</AlertTitle>
         <AlertDescription>
           <p>No newer Agent state is being claimed. Credential and connection state above remains authoritative.</p>

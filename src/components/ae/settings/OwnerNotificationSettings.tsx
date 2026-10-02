@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { Switch } from '@/components/ui/switch'
+import { Switch } from '@base-ui/react/switch'
 import { toast } from '@/lib/ui/toast'
 import {
   PREFERENCE_SWITCHES,
@@ -14,9 +14,7 @@ import type {
   OwnerNotificationSettingsProps,
   PreferenceSwitchProps,
 } from './owner-settings.contracts'
-
-export const TACTILE =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+import './NotificationSettingsComposition.css'
 
 function PreferenceSwitch({
   id,
@@ -28,14 +26,20 @@ function PreferenceSwitch({
 }: PreferenceSwitchProps) {
   return (
     <SettingsRow label={label} description={description}>
-      <Switch
+      <Switch.Root
         id={id}
         aria-label={label}
         checked={checked}
         disabled={disabled}
-        className={TACTILE}
+        nativeButton
+        render={<button type="button" />}
+        className="arc-market arc-notification-switch"
         onCheckedChange={onToggle}
-      />
+      >
+        <span className="arc-notification-track" aria-hidden="true">
+          <Switch.Thumb className="arc-notification-thumb" />
+        </span>
+      </Switch.Root>
     </SettingsRow>
   )
 }
@@ -67,7 +71,7 @@ export function OwnerNotificationSettings({
 
   const controlsDisabled = disabled || pending
   return (
-    <div className="grid min-w-0 gap-6">
+    <div className="arc-market arc-notification-settings">
       {PREFERENCE_SWITCHES.length > 0 ? (
         <SettingsGroup title="Email alerts" description="Sent to the primary email verified in your Profile.">
           {PREFERENCE_SWITCHES.map(({ key, label, description }) => (
@@ -88,13 +92,13 @@ export function OwnerNotificationSettings({
           ))}
         </SettingsGroup>
       ) : null}
-      <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+      <div className="arc-notification-status" role="status" aria-live="polite">
         {updateDiagnostic ? (
-          <div className="grid gap-1 text-sm text-muted-foreground">
+          <div className="arc-notification-diagnostic">
             <p>
               <strong>What happened:</strong> {updateDiagnostic.whatHappened}
             </p>
-            <p className="font-mono text-xs tabular-nums">
+            <p className="arc-notification-impact">
               <strong>Financial impact:</strong> {updateDiagnostic.financialImpact}
             </p>
             <p>

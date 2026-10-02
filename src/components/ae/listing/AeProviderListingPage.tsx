@@ -5,7 +5,8 @@ import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAfford
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { ProviderIdentity } from '@/components/ae/shared/ProviderIdentity'
 import { ProviderPortfolio } from '@/components/ae/shared/ProviderPortfolio'
-import { buttonVariants } from '@/components/ui/button-variants'
+import arcButtonStyles from '@/components/arc/button/button.module.css'
+import '@/components/ae/shared/ProviderCatalogueComposition.css'
 import { cn } from '@/lib/utils'
 import { telUri } from '@/lib/ui/tel-uri'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
@@ -39,19 +40,19 @@ export function AeProviderListingPage({ catalog, agentJsonUrl, service, supply, 
   })
   const name = { kind: 'present' as const, value: catalog.name, sourceRef: catalog.businessId, provenance: 'business_published' as const, scope: 'business' as const }
   const summary = service?.description === undefined ? undefined : { ...name, value: service.description }
-  return <article className="ae-rail grid min-w-0 gap-section pb-page pt-section">
+  return <article className="ae-rail arc-provider-catalogue">
     <nav aria-label="Breadcrumb"><ListingBackLink {...(backFrom === undefined ? {} : { from: backFrom })} {...(backThreadId === undefined ? {} : { threadId: backThreadId })} /></nav>
     <ProviderIdentity name={name} {...(summary === undefined ? {} : { summary })} {...(websiteHref === undefined ? {} : { href: websiteHref })} />
-    <div className="grid min-w-0 gap-section lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+    <div className="arc-provider-layout">
       <ProviderPortfolio offerings={offerings} otherOfferings={otherOfferings} />
-      <aside aria-label="Provider information" className="grid min-w-0 gap-section lg:sticky lg:top-20">
-        <section className="grid gap-related"><h2 className="text-title font-medium">About this Provider</h2><p className="text-sm text-muted-foreground">Published Business portfolio. A listed endpoint is not callable through AE unless it is exactly joined to an admitted Tool.</p>
+      <aside aria-label="Provider information" className="arc-provider-aside">
+        <section><h2>About this Provider</h2><p>Published Business portfolio. A listed endpoint is not callable through AE unless it is exactly joined to an admitted Tool.</p>
           <AeFactList facts={[{ label: 'Category', value: catalog.category }, { label: 'Last indexed', value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time> }, ...(catalog.responseTimeMinutes === undefined ? [] : [{ label: 'Published response time', value: `${catalog.responseTimeMinutes} min` }])]} />
-          {websiteHref === undefined ? null : <a href={websiteHref} target="_blank" rel="noreferrer" aria-label="Provider website (opens in a new tab)" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch min-w-0 justify-between whitespace-normal text-left')}>Provider website<ArrowUpRightIcon className="shrink-0" aria-hidden="true" /></a>}
-          {catalog.businessContext.kind !== 'local_human' || catalog.businessContext.publishedPhone === undefined ? null : <a href={telUri(catalog.businessContext.publishedPhone)} className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Phone provider</a>}
+          {websiteHref === undefined ? null : <a href={websiteHref} target="_blank" rel="noreferrer" aria-label="Provider website (opens in a new tab)" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md, 'justify-between text-left')}>Provider website<ArrowUpRightIcon className="shrink-0" aria-hidden="true" /></a>}
+          {catalog.businessContext.kind !== 'local_human' || catalog.businessContext.publishedPhone === undefined ? null : <a href={telUri(catalog.businessContext.publishedPhone)} className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>Phone provider</a>}
         </section>
-        <details className="rounded-card border border-border bg-card"><summary className="flex min-h-touch cursor-pointer items-center gap-intra px-gutter py-related text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"><BracesIcon className="size-4" aria-hidden="true" />Agent-readable catalogue</summary><div className="grid gap-intra border-t border-border px-gutter py-related"><p className="text-sm text-muted-foreground">Inspect the public JSON projection without parsing this page.</p><AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} /></div></details>
-        <Link to="/privacy/remove-business" className="min-h-touch content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">Correct or remove this Provider</Link>
+        <details className="arc-provider-json"><summary><BracesIcon className="size-4" aria-hidden="true" />Agent-readable catalogue</summary><div><p>Inspect the public JSON projection without parsing this page.</p><AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} /></div></details>
+        <Link to="/privacy/remove-business" className="arc-provider-text-link">Correct or remove this Provider</Link>
       </aside>
     </div>
   </article>
@@ -62,6 +63,6 @@ export function ListingFirstScreen({ catalog }: Readonly<{ catalog: PublicBusine
 }
 
 function ListingBackLink({ from, threadId }: Readonly<{ from?: 'thread'; threadId?: string }>) {
-  if (from === 'thread' && threadId !== undefined) return <Link to="/t/$threadId" params={{ threadId }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}><ArrowLeftIcon aria-hidden="true" />Back to result</Link>
-  return <Link to="/market" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}><ArrowLeftIcon aria-hidden="true" />Browse Market</Link>
+  if (from === 'thread' && threadId !== undefined) return <Link to="/t/$threadId" params={{ threadId }} className={cn(arcButtonStyles.button, arcButtonStyles.ghost, arcButtonStyles.md)}><ArrowLeftIcon aria-hidden="true" />Back to result</Link>
+  return <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.ghost, arcButtonStyles.md)}><ArrowLeftIcon aria-hidden="true" />Browse Market</Link>
 }

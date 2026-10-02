@@ -3,9 +3,6 @@ import type { OnChangeFn, SortingState } from '@tanstack/react-table'
 
 import type { OwnerOfferingSummary } from '@/components/ae/offerings/provider-workspace-projection'
 
-export const TACTILE_PRESS_CLASS =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
 export const OWNER_OFFERINGS_COPY = {
   callsColumn: 'Calls',
   emptyAction: 'Add Tool',

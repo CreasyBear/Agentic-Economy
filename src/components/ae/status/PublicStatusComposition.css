@@ -1,0 +1,18 @@
+/* Arc Pro page-header identity/action grouping and metrics-dashboard fact grid.
+ * metrics-dashboard.module.css SHA-256 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9.
+ * AE keeps every public readback disposition, trust, support and access mapping.
+ * Preview remains explicit and does not enable a share action. */
+.arc-public-status { display: grid; min-width: 0; gap: var(--space-6); }
+.arc-public-status-header { display: flex; min-width: 0; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: var(--space-6); }
+.arc-public-status-identity { display: grid; flex: 1 1 240px; min-width: 0; gap: var(--space-2); }
+.arc-public-status-identity h2 { margin: 0; font-size: clamp(24px, 3vw, 32px); font-weight: 500; letter-spacing: -.025em; line-height: 1.25; overflow-wrap: anywhere; }
+.arc-public-status-identity p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-public-status-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.arc-public-status-preview { border: 1px solid var(--border); border-radius: var(--radius-pill); padding: var(--space-1) var(--space-2); color: var(--text-secondary); font-size: var(--text-sm); }
+.arc-market .arc-public-status-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-6); border-block: 1px solid var(--border-subtle); padding-block: var(--space-6); }
+.arc-public-status-facts > div { display: grid; min-width: 0; align-content: start; gap: var(--space-2); }
+.arc-public-status-limitations { display: grid; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.arc-public-status-limitations > li { min-width: 0; border-bottom: 1px solid var(--border-subtle); padding-block: var(--space-4); overflow-wrap: anywhere; }
+.arc-public-status-next { min-width: 0; margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+@media (max-width: 767px) { .arc-market .arc-public-status-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479px) { .arc-market .arc-public-status-facts { grid-template-columns: minmax(0, 1fr); } }

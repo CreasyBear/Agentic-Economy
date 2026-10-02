@@ -3,8 +3,7 @@ import type { ReactNode } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
 import { projectCallReceipt, type CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 
 import type {
@@ -16,7 +15,7 @@ import type {
 } from '@/lib/call-recovery/call-status-page-types'
 
 import { CallMoneyFacts } from './CallMoneyFacts'
-import { CallReceiptIssue, CallReceiptRefreshButton, CallReceiptRef, CallReceiptStatusFeedback, callReceiptTactilePressClassName } from './CallReceiptPrimitives'
+import { CallReceiptIssue, CallReceiptRefreshButton, CallReceiptRef, CallReceiptStatusFeedback } from './CallReceiptPrimitives'
 import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallReceiptWorkspace } from './CallReceiptWorkspace'
 import { CallRecoveryPanel } from './CallRecoveryPanel'
@@ -25,14 +24,15 @@ import { CallReuseActions } from './CallReuseActions'
 import { CallSummarySection } from './CallSummarySection'
 import { PaidCallReportControl } from './PaidCallReportControl'
 import { machineLabel } from './call-receipt-format'
+import './ReceiptComposition.css'
 
 function MachineReadableReceipt({ view }: Readonly<{ view: CallReceiptView }>) {
   return (
-    <details>
-      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">
+    <details className="arc-market arc-call-disclosure">
+      <summary>
         Machine-readable receipt
       </summary>
-      <pre className="mt-related max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground"><code>{JSON.stringify(view, null, 2)}</code></pre>
+      <pre className="arc-call-recorded-output"><code>{JSON.stringify(view, null, 2)}</code></pre>
     </details>
   )
 }
@@ -43,9 +43,9 @@ function CallReceiptTechnicalShell({
   children,
 }: Readonly<{ callRef: string; receiptView: CallReceiptView; children?: ReactNode }>) {
   return (
-    <details className="border-t border-border pt-related">
-      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical record</summary>
-      <div className="grid gap-section pt-related">
+    <details className="arc-market arc-call-disclosure">
+      <summary>Technical record</summary>
+      <div className="arc-call-disclosure-body">
         <CallReceiptRef value={callRef} />
         <CallReceiptTimeline stages={receiptView.stages} />
         {children}
@@ -65,7 +65,7 @@ export function CallStatusUnchangedView({
   return (
     <CallReceiptWorkspace callRef={result.callRef} description="Checking whether this exact Call has changed.">
       <section
-        className="grid min-h-[12rem] gap-related rounded-xl border border-border bg-card p-4"
+        className="arc-market arc-call-barrier"
         aria-labelledby="unchanged-receipt-title"
       >
         <div className="flex flex-wrap items-start justify-between gap-intra">
@@ -73,7 +73,7 @@ export function CallStatusUnchangedView({
           <CallReceiptRef value={result.callRef} />
         </div>
         <div className="grid gap-intra">
-          <h2 id="unchanged-receipt-title" className="text-base font-medium leading-snug tracking-tight text-foreground">
+          <h2 id="unchanged-receipt-title" className="arc-call-heading">
             No status change
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -83,8 +83,9 @@ export function CallStatusUnchangedView({
         {actions?.onRefresh === undefined ? null : (
           <Button
             type="button"
-            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
-            variant="outline"
+            className="w-fit"
+            variant="secondary"
+            size="md"
             disabled={actions.refreshPending === true}
             onClick={() => { void actions.onRefresh?.() }}
           >
@@ -194,7 +195,7 @@ function CallReceiptBarrierHeader({
 }>) {
   return (
     <>
-      <div className="grid gap-related">
+      <div className="arc-market arc-call-barrier">
         <Badge variant="warning" className="w-fit">{badgeLabel}</Badge>
         <CallReceiptRef value={callRef} />
         {showRefresh && actions !== undefined ? (

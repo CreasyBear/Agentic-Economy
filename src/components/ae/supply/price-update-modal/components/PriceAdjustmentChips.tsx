@@ -1,11 +1,11 @@
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
 
 import {
   PERCENT_ADJUSTMENTS,
-  TACTILE,
   TIER_CHIP_VALUES,
   type PriceAdjustmentChipsProps,
 } from '../price-update-modal.contracts'
+import '../PriceRevisionComposition.css'
 
 export function PriceAdjustmentChips({
   priceAud,
@@ -15,44 +15,40 @@ export function PriceAdjustmentChips({
 }: PriceAdjustmentChipsProps) {
   return (
     <>
-      <div className="grid gap-2">
-        <span className="text-xs font-medium text-muted-foreground">Adjust by percentage</span>
-        <div className="flex flex-wrap gap-2">
+      <div className="arc-price-revision-adjustments">
+        <span>Adjust by percentage</span>
+        <div className="arc-price-revision-adjustment-actions">
           {PERCENT_ADJUSTMENTS.map((chip) => (
-            <button
+            <Button
               key={chip.label}
               type="button"
-              className={cn(
-                'inline-flex min-h-touch items-center rounded-full border border-border bg-container px-3 py-1 font-mono text-xs font-medium tabular-nums text-foreground hover:bg-muted/60',
-                TACTILE,
-              )}
+              variant="secondary"
+              size="md"
               aria-pressed={false}
               disabled={pending}
               onClick={() => onPercentageAdjustment(chip.factor)}
             >
               {chip.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
-      <div className="grid gap-2">
-        <span className="text-xs font-medium text-muted-foreground">Set tier price</span>
-        <div className="flex flex-wrap gap-2">
+      <div className="arc-price-revision-adjustments">
+        <span>Set tier price</span>
+        <div className="arc-price-revision-adjustment-actions">
           {TIER_CHIP_VALUES.map((chipValue) => (
-            <button
+            <Button
               key={chipValue}
               type="button"
-              className={cn(
-                'inline-flex min-h-touch items-center rounded-full border border-border bg-container px-3 py-1 font-mono text-xs font-medium tabular-nums text-foreground hover:bg-muted/60',
-                TACTILE,
-              )}
+              variant="secondary"
+              size="md"
               aria-pressed={priceAud === chipValue}
               disabled={pending}
               onClick={() => onTierValue(chipValue)}
             >
               A${chipValue}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

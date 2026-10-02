@@ -1,19 +1,14 @@
 import { Field as BaseField } from '@base-ui/react/field'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { TACTILE } from '@/components/ae/settings/OwnerNotificationSettings'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/arc/button/button'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
 
 import type { WorkspaceClosePanelProps } from '../workspace-danger-zone.contracts'
 import { DecommissionFenceList } from './DecommissionFenceList'
+import '../WorkspaceDangerComposition.css'
 
 const OWNER_ONLY_COPY = 'Only the workspace owner can close the workspace or transfer ownership.'
-
-const SUMMARY_CLASS =
-  'font-sans text-base font-medium leading-snug tracking-tight text-foreground cursor-pointer'
 
 export function WorkspaceClosePanel({
   callerIsOwner,
@@ -31,22 +26,23 @@ export function WorkspaceClosePanel({
   onConfirmClose,
 }: WorkspaceClosePanelProps) {
   return (
-    <section className="grid gap-4">
+    <section className="arc-market arc-workspace-danger-region">
       <details>
-        <summary className={SUMMARY_CLASS}>Close workspace</summary>
+        <summary className="arc-workspace-danger-summary">Close workspace</summary>
         {callerIsOwner ? (
-          <div className="mt-4 grid gap-4">
+          <div className="arc-workspace-danger-body">
             {fencesPresent ? (
               <DecommissionFenceList fenceMessages={fenceMessages} />
             ) : (
-              <p className="text-muted-foreground text-sm">
+              <p className="arc-workspace-danger-description">
                 Close is allowed. Confirming it ends this workspace.
               </p>
             )}
-            <BaseField.Root className="grid gap-2 text-sm">
+            <BaseField.Root className="arc-workspace-danger-field">
               <Label>Type the workspace name to confirm</Label>
-              <div className="flex flex-wrap items-center gap-3">
-                <Input
+              <div className="arc-workspace-danger-confirmation">
+                <input
+                  className="arc-workspace-danger-input"
                   type="text"
                   aria-label="Type workspace name to confirm"
                   value={confirmationName}
@@ -59,9 +55,10 @@ export function WorkspaceClosePanel({
             </BaseField.Root>
             <Button
               type="button"
-              variant="destructive"
+              variant="danger"
+              size="md"
               disabled={closeDisabled}
-              className={cn('w-fit', TACTILE)}
+              className="arc-workspace-danger-action"
               onClick={onRequestClose}
             >
               Close workspace
@@ -81,7 +78,7 @@ export function WorkspaceClosePanel({
         ) : null}
       </details>
       {!callerIsOwner ? (
-        <p className="text-muted-foreground text-sm">{OWNER_ONLY_COPY}</p>
+        <p className="arc-workspace-danger-description">{OWNER_ONLY_COPY}</p>
       ) : null}
     </section>
   )

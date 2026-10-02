@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { AeSiteSection } from './AeSiteSection'
-import { AeSiteEyebrow, AeSiteHeading } from './AeSiteType'
+import './AboutStoryComposition.css'
 
 export type AeSiteAboutHeroProps = Readonly<{
   label: string
@@ -11,7 +10,7 @@ export type AeSiteAboutHeroProps = Readonly<{
   children?: ReactNode
 }>
 
-/** Port of aecon.ai's Dusk hero-section-7 split editorial hero. */
+/** Arc HeroContent split with the published About copy and existing photograph. */
 export function AeSiteAboutHero({
   label,
   title,
@@ -20,21 +19,24 @@ export function AeSiteAboutHero({
   children,
 }: AeSiteAboutHeroProps) {
   return (
-    <AeSiteSection labelledBy="about-hero" rhythm="section" clip={false} className="overflow-hidden">
-      <div className="relative mx-auto grid max-w-7xl items-center gap-6 px-6 md:gap-12 lg:grid-cols-2">
-        <div>
-          <AeSiteEyebrow>{label}</AeSiteEyebrow>
-          <div className="mt-3 flex max-w-xl flex-col gap-6 md:mt-6">
-            <AeSiteHeading as="h1" size="lg" id="about-hero" enter>
-              {title}
-            </AeSiteHeading>
-            <p className="max-w-md text-lg leading-relaxed text-muted-foreground">
-              {description}
-            </p>
-            {children === undefined ? null : <div className="flex flex-wrap gap-3">{children}</div>}
-          </div>
+    <section
+      className="arc-market arc-about-story arc-about-hero"
+      aria-labelledby="about-hero"
+    >
+      <div className="arc-about-story-inner arc-about-hero-inner">
+        <div className="arc-about-hero-copy">
+          <h1 className="arc-about-hero-title" id="about-hero">
+            {title}
+          </h1>
+          <p className="arc-about-story-label">{label}</p>
+          <p className="arc-about-story-description arc-about-hero-description">
+            {description}
+          </p>
+          {children === undefined ? null : (
+            <div className="arc-about-hero-actions">{children}</div>
+          )}
         </div>
-        <div className="relative aspect-16/7 overflow-hidden rounded-3xl sm:aspect-5/3 lg:ml-auto lg:aspect-5/4 lg:w-full lg:max-w-xl">
+        <div className="arc-about-hero-media">
           <img
             src={image}
             sizes="(max-width: 1023px) calc(100vw - 48px), (max-width: 1279px) calc(50vw - 48px), 576px"
@@ -42,10 +44,10 @@ export function AeSiteAboutHero({
             alt=""
             width={1200}
             height={960}
-            className="size-full object-cover"
+            className="arc-about-hero-image"
           />
         </div>
       </div>
-    </AeSiteSection>
+    </section>
   )
 }

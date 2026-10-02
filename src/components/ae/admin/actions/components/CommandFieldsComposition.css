@@ -1,0 +1,120 @@
+.arc-command-field {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.arc-market.arc-command-evidence {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  gap: var(--space-2);
+}
+
+.arc-market .arc-command-field-label {
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.arc-market .arc-command-evidence > .arc-command-field-label {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.arc-market .arc-command-field-input,
+.arc-market .arc-command-field-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: var(--space-3);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.arc-market .arc-command-field-input:focus-visible,
+.arc-market .arc-command-field-select:focus-visible {
+  border-color: var(--control-on);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+.arc-market .arc-command-field-input[readonly] {
+  background: var(--surface-muted);
+}
+
+.arc-market .arc-command-evidence-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-3) 0;
+}
+
+.arc-market .arc-command-evidence-label {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  cursor: pointer;
+}
+
+.arc-market .arc-command-evidence-label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-command-evidence-checkbox {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--control-on);
+}
+
+.arc-market .arc-command-evidence-checkbox:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.arc-market .arc-command-field-description {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-command-reason-menu {
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: 6px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-floating);
+}
+
+.arc-market.arc-command-reason-menu .arc-command-reason-option {
+  min-height: 44px;
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}

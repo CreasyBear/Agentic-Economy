@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { Button } from '@/components/arc/button/button'
 import type { OwnerSupplySourceAssessmentInput } from '@/modules/capability-supply/source-first-owner'
 import type { SupplySourceAssessment } from '@/modules/capability-supply/source-first-owner'
 import type { SupplyNativeStartProps } from './supply-source-native-start-presentation'
+import './SourceCandidatesComposition.css'
 
 type Suggestion = Extract<SupplySourceAssessment, { kind: 'suggested' }>
 type ReviewState = { kind: 'idle' | 'loading' | 'unavailable' }
@@ -43,22 +45,22 @@ export function SupplySourceSuggestion({ input, disabled, onAssess, onUse }: Rea
     }
   }
 
-  return <div className="grid gap-intra" aria-label="Source description suggestion">
-    <p className="text-sm text-muted-foreground">Choose useful wording from your source with Jev. Review it before using it.</p>
+  return <DecisionPanel aria-label="Source description suggestion" className="arc-source-description-review">
+    <p className="arc-source-description-guidance">Choose useful wording from your source with Jev. Review it before using it.</p>
     {'suggestion' in review ? <>
-      <p className="whitespace-pre-line rounded-md border border-border p-3 text-sm">{review.suggestion.description}</p>
-      <p className="text-xs text-muted-foreground">Copied from the source description and field descriptions. You can edit it before publication.</p>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" className="min-h-touch" disabled={disabled || review.kind === 'verifying'} onClick={() => void assess('verify')}>
+      <p className="arc-source-description-copy">{review.suggestion.description}</p>
+      <p className="arc-source-description-guidance">Copied from the source description and field descriptions. You can edit it before publication.</p>
+      <div className="arc-source-description-actions">
+        <Button type="button" variant="secondary" size="md" disabled={disabled || review.kind === 'verifying'} onClick={() => void assess('verify')}>
           {review.kind === 'verifying' ? 'Checking source…' : 'Use description'}
         </Button>
-        <Button type="button" variant="ghost" className="min-h-touch" disabled={disabled || review.kind === 'verifying'} onClick={() => setReview({ kind: 'idle' })}>Keep current description</Button>
+        <Button type="button" variant="ghost" size="md" disabled={disabled || review.kind === 'verifying'} onClick={() => setReview({ kind: 'idle' })}>Keep current description</Button>
       </div>
     </> : <>
-      {review.kind === 'unavailable' ? <p role="status" className="text-sm text-muted-foreground">No current suggestion is available. Keep editing your description, or try again.</p> : null}
-      <Button type="button" variant="outline" className="min-h-touch justify-self-start" disabled={disabled || review.kind === 'loading'} onClick={() => void assess('suggest')}>
+      {review.kind === 'unavailable' ? <p role="status" className="arc-source-description-guidance">No current suggestion is available. Keep editing your description, or try again.</p> : null}
+      <Button type="button" variant="secondary" size="md" className="arc-source-description-suggest" disabled={disabled || review.kind === 'loading'} onClick={() => void assess('suggest')}>
         {review.kind === 'loading' ? 'Reading source…' : 'Suggest from source'}
       </Button>
     </>}
-  </div>
+  </DecisionPanel>
 }

@@ -7,14 +7,12 @@ import {
   ownerToolProtocolBadgeVariant,
   type OwnerOfferingSummary,
 } from '@/components/ae/offerings/provider-workspace-projection'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
 
 import {
   OWNER_OFFERINGS_COPY,
-  TACTILE_PRESS_CLASS,
   type OwnerOfferingStatusClusterProps,
   type OwnerOfferingsTableProps,
 } from '../owner-offerings.contracts'
@@ -26,6 +24,7 @@ import {
   formatOwnerOfferingCalls,
   ownerOfferingAvailabilityPresentation,
 } from '../owner-offerings.view-model'
+import './OwnerInventoryComposition.css'
 
 export function OwnerOfferingsTable({
   offerings,
@@ -55,9 +54,9 @@ export function OwnerOfferingsTable({
         matchesOwnerOfferingInventory(row.original, String(filterVal)),
       header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
       cell: ({ row }) => (
-        <div className="grid min-w-[12rem] gap-0.5">
-          <span className="font-medium">{row.original.offering.name}</span>
-          <span className="line-clamp-2 text-xs text-muted-foreground">{row.original.offering.summary}</span>
+        <div className="arc-owner-inventory-tool">
+          <span className="arc-owner-inventory-name">{row.original.offering.name}</span>
+          <span className="arc-owner-inventory-summary">{row.original.offering.summary}</span>
         </div>
       ),
     },
@@ -74,7 +73,7 @@ export function OwnerOfferingsTable({
       enableGlobalFilter: false,
       header: ({ column }) => <AeOperatorSortableHeader label="Price" column={column} />,
       cell: ({ row }) => (
-        <span className="font-mono text-xs tabular-nums text-foreground">
+        <span className="font-mono arc-owner-inventory-metric">
           {row.original.pricingLabel ?? '—'}
         </span>
       ),
@@ -85,7 +84,7 @@ export function OwnerOfferingsTable({
       enableGlobalFilter: false,
       header: ({ column }) => <AeOperatorSortableHeader label={OWNER_OFFERINGS_COPY.callsColumn} column={column} />,
       cell: ({ row }) => (
-        <span className="font-mono text-xs tabular-nums text-foreground">
+        <span className="font-mono arc-owner-inventory-metric">
           {formatOwnerOfferingCalls(row.original)}
         </span>
       ),
@@ -113,37 +112,41 @@ export function OwnerOfferingsTable({
       }}
       {...(hasLifecyclePresentation ? {
         compactContent: compactOfferings.length === 0 && trimmedFilter.length > 0 ? (
-          <div className="flex min-h-24 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+          <div className="arc-market arc-owner-inventory-empty">
             <span>No tools match &apos;{trimmedFilter}&apos;</span>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
-              className={TACTILE_PRESS_CLASS}
+              variant="secondary"
+              size="md"
+              className="arc-owner-inventory-reset"
               onClick={() => onFilterChange?.('')}
             >
               Reset filter
             </Button>
           </div>
         ) : (
-          <ul ref={compactRootRef} className="m-0 list-none divide-y divide-border p-0" data-testid="provider-workspace-compact-list">
+          <ul
+            ref={compactRootRef}
+            className="arc-market arc-owner-inventory-list"
+            data-testid="provider-workspace-compact-list"
+          >
             {compactOfferings.map((item) => {
               const action = item.continuation ?? {
                 label: 'Open Tool',
                 href: `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`,
               }
               return (
-                <li key={item.offering.offeringRef} className="grid min-w-0 gap-related py-related">
-                  <div className="grid gap-2">
-                    <h3 className="break-words font-medium">{item.offering.name}</h3>
+                <li key={item.offering.offeringRef} className="arc-owner-inventory-row">
+                  <div className="arc-owner-inventory-row-content">
+                    <h3 className="arc-owner-inventory-compact-name">{item.offering.name}</h3>
                     <OwnerOfferingStatusCluster item={item} />
-                    <div className="flex items-center gap-2 font-mono text-xs tabular-nums text-muted-foreground">
+                    <div className="arc-owner-inventory-meta font-mono">
                       <span>{item.pricingLabel ?? '—'}</span>
                       <span>·</span>
                       <span>{formatOwnerOfferingCalls(item)}</span>
                     </div>
                     {item.blocker === undefined ? null : (
-                      <span className="text-xs text-muted-foreground">{item.blocker}</span>
+                      <span className="arc-owner-inventory-blocker">{item.blocker}</span>
                     )}
                   </div>
                   <a
@@ -151,11 +154,7 @@ export function OwnerOfferingsTable({
                     data-ae-row-action-id={item.offering.offeringRef}
                     aria-label={`${action.label} for ${item.offering.name}`}
                     onFocus={() => onActiveRowActionIdChange?.(item.offering.offeringRef)}
-                    className={cn(
-                      buttonVariants({ variant: 'secondary' }),
-                      'min-h-touch w-full whitespace-normal',
-                      TACTILE_PRESS_CLASS,
-                    )}
+                    className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-owner-inventory-action`}
                   >
                     {action.label}
                   </a>
@@ -186,7 +185,7 @@ function OwnerOfferingStatusCluster({
   )
   const availability = ownerOfferingAvailabilityPresentation(item.availability)
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="arc-market arc-owner-inventory-status">
       <Badge variant={lifecycle.variant}>{lifecycle.label}</Badge>
       {availability === undefined ? null : (
         <Badge variant={availability.variant} className="gap-1.5">
@@ -202,7 +201,7 @@ function OwnerOfferingStatusCluster({
         <Badge variant={ownerToolProtocolBadgeVariant(item.protocolLabel)}>{item.protocolLabel}</Badge>
       )}
       {showBlocker && item.blocker !== undefined ? (
-        <span className="text-xs text-muted-foreground">{item.blocker}</span>
+        <span className="arc-owner-inventory-blocker">{item.blocker}</span>
       ) : null}
     </div>
   )

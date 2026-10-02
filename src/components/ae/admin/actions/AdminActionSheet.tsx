@@ -1,6 +1,6 @@
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { ADMIN_ACTION_COPY, ADMIN_ACTION_SHEET_COPY, type AdminActionSheetProps } from './actions.contracts'
 import { AuditPreview } from './components/AuditPreview'
 import { EvidenceRefsPicker } from './components/EvidenceRefsPicker'
@@ -17,26 +17,26 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
     || (command.submittedRequest === null && ['evidence', 'proof', 'preview', 'confirm'].includes(command.phase) && (props.approval?.kind !== 'approve' || command.phase === 'confirm'))
   )
   const action = command.allowed && command.phase === 'reason' ? (
-    <Button type="button" className="min-h-touch" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
+    <Button type="button" size="md" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
   ) : command.allowed && (command.phase === 'evidence' || command.phase === 'proof') ? (
-    <Button type="button" className="min-h-touch" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
+    <Button type="button" size="md" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
   ) : command.allowed && command.phase === 'preview' ? (
-    <Button type="button" className="min-h-touch" disabled={command.pending} onClick={() => {
+    <Button type="button" size="md" disabled={command.pending} onClick={() => {
       if (command.pending) return
       if (destructive) command.next()
       else void command.submit()
     }}>{destructive ? ADMIN_ACTION_SHEET_COPY.continue : ADMIN_ACTION_SHEET_COPY.submit}</Button>
   ) : command.allowed && command.phase === 'confirm' ? (
-    <Button type="button" variant="destructive" className="min-h-touch" disabled={command.pending} onClick={() => { if (!command.pending) void command.submit() }}>
+    <Button type="button" variant="danger" size="md" disabled={command.pending} onClick={() => { if (!command.pending) void command.submit() }}>
       {ADMIN_ACTION_SHEET_COPY.confirm}
     </Button>
   ) : command.phase === 'submitting' ? (
-    <Button type="button" disabled aria-busy="true">{ADMIN_ACTION_SHEET_COPY.processing}</Button>
+    <Button type="button" size="md" disabled aria-busy="true">{ADMIN_ACTION_SHEET_COPY.processing}</Button>
   ) : null
 
   if (props.open && command.minimized) return <div className="grid gap-intra" role="status">
     <p className="text-sm">{ADMIN_ACTION_COPY[props.action]}: {command.pending ? 'response pending' : command.receipt !== null ? 'receipt available' : command.error === ADMIN_ACTION_SHEET_COPY.unavailable ? 'outcome unknown' : 'review retained'}. Resume to check the outcome before leaving or reloading.</p>
-    <Button type="button" variant="outline" onClick={command.resume}>Resume command</Button>
+    <Button type="button" variant="secondary" size="md" onClick={command.resume}>Resume command</Button>
   </div>
 
   return (
@@ -47,12 +47,12 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
       description={ADMIN_ACTION_SHEET_COPY.description}
       action={(
         <>
-          {showBack ? <Button type="button" variant="outline" className="min-h-touch" onClick={command.back}>{ADMIN_ACTION_SHEET_COPY.back}</Button> : null}
+          {showBack ? <Button type="button" variant="secondary" size="md" onClick={command.back}>{ADMIN_ACTION_SHEET_COPY.back}</Button> : null}
           {action}
         </>
       )}
     >
-      <div className="flex flex-col gap-4 py-4">
+      <div className="arc-market flex min-w-0 flex-col gap-6 py-4">
         {command.allowed ? null : <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.permission}</AlertDescription></Alert>}
         {command.phase === 'receipt' && command.receipt?.kind === 'refused' && command.receipt.code === 'mfa_reverification_required'
           ? <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.mfaRequired} <a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Account security</a></AlertDescription></Alert>

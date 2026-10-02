@@ -2,6 +2,7 @@ import { useRouterState } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
+import './AppFrameComposition.css'
 
 const routeProgressStartDelayMs = 75
 const routeProgressCreepDelayMs = 200
@@ -64,13 +65,13 @@ export function RouteProgressBar() {
       data-progress-bar="true"
       data-phase={phase}
       className={cn(
-        'pointer-events-none fixed inset-x-0 top-0 z-30 h-0.5 overflow-hidden transition-opacity duration-200 ease-out motion-reduce:transition-none',
+        'arc-market arc-route-progress',
         isVisible ? 'opacity-100' : 'opacity-0',
       )}
     >
       <div
         className={cn(
-          'h-full w-full origin-left bg-foreground transition-transform duration-300 ease-out motion-reduce:scale-x-100 motion-reduce:transform-none motion-reduce:transition-none',
+          'arc-route-progress-fill',
           progressScaleClassByPhase[phase],
         )}
       />

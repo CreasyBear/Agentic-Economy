@@ -1,3 +1,6 @@
+/* Arc Pro ai-chat header/thread composition with live shared transcript data.
+ * Pagination cursors, privacy and read-only semantics remain caller-owned.
+ * Sample composer/menus and local demo messages are omitted. */
 import { useConvex, useQuery } from 'convex/react'
 import { LockKeyholeIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -5,9 +8,9 @@ import { createPortal } from 'react-dom'
 
 import { api } from '../../../../convex/_generated/api'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Empty, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { Button } from '@/components/arc/button/button'
+import './SharedChatComposition.css'
 import { Skeleton } from '@/components/ui/skeleton'
 import { chatShared } from '@/lib/public/chat-ia'
 
@@ -16,7 +19,7 @@ import { useChatHeaderSlot } from './chat-session/useChatHeaderSlot'
 import type { TranscriptMessage } from './presentation'
 
 const PAGE_SIZE = 20
-const TRANSCRIPT_COLUMN = 'mx-auto w-full max-w-3xl gap-section px-gutter py-section'
+const TRANSCRIPT_COLUMN = 'arc-market arc-chat arc-shared-column'
 
 function projectSharedPage(
   page: readonly { id: string; role: 'user' | 'assistant'; parts: TranscriptMessage['parts'] }[],
@@ -60,14 +63,14 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
   const slot = useChatHeaderSlot()
   const title = initial?.title ?? chatShared.fallbackTitle
   const sharedBar = (
-    <>
-      <LockKeyholeIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-sm font-medium">{title}</h1>
-        <p className={slot === null ? 'text-xs text-muted-foreground' : 'sr-only'}>{chatShared.detail}</p>
+    <div className="arc-market arc-chat arc-shared-bar">
+      <LockKeyholeIcon aria-hidden="true" className="arc-shared-lock" />
+      <div className="arc-shared-title-group">
+        <h1 className="arc-shared-title" title={title}>{title}</h1>
+        <p className={slot === null ? 'arc-shared-description' : 'sr-only'}>{chatShared.detail}</p>
       </div>
-      <Badge variant="outline">{chatShared.badge}</Badge>
-    </>
+      <span className="arc-shared-read-only">{chatShared.badge}</span>
+    </div>
   )
 
   async function onLoadMore() {
@@ -91,7 +94,7 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
     <AeChatPage
       kind="shared"
       header={slot === null ? (
-        <header className="flex min-h-14 shrink-0 items-center gap-related border-b border-border px-gutter">
+        <header className="arc-market arc-chat arc-shared-header">
           {sharedBar}
         </header>
       ) : createPortal(sharedBar, slot)}
@@ -104,20 +107,16 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
           <Skeleton className="h-10 w-2/3 max-w-prose" />
         </div>
       ) : messages.length === 0 ? (
-        <Empty className="min-h-0 flex-1 border-0">
-          <EmptyHeader>
-            <EmptyDescription>{chatShared.empty}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <div className="arc-market arc-chat arc-shared-empty"><AeEmptyState compact title="No shared messages" description={chatShared.empty} /></div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="arc-market arc-chat arc-shared-thread">
           <ChatTranscript messages={messages} readOnly />
           {isDone ? null : (
             <div className={`flex shrink-0 justify-center ${TRANSCRIPT_COLUMN}`}>
               <Button
                 type="button"
                 variant="secondary"
-                className="min-h-touch"
+                aria-busy={loadingMore}
                 disabled={loadingMore}
                 onClick={() => void onLoadMore()}
               >

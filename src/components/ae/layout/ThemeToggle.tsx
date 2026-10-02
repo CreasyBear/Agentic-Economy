@@ -2,9 +2,8 @@
 
 import { Monitor, Moon, Sun } from 'lucide-react'
 
-import { TACTILE } from '@/components/ae/feedback/AeEmptyState'
 import { useAppearance } from '@/components/ae/theme/ThemeProvider'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { Button } from '@/components/arc/button/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,11 +11,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { cn } from '@/lib/utils'
 import {
   DEFAULT_APPEARANCE_PREFERENCE,
   type AppearancePreference,
 } from '@/lib/theme/theme-mode'
+import './app-shell/WorkspaceNavigationComposition.css'
 
 type ThemeOption = { value: AppearancePreference; label: string; icon: typeof Sun }
 
@@ -41,25 +40,17 @@ export function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label={`Appearance: ${currentLabel}`}
-        className={cn(
-          buttonVariants({
-            variant: 'ghost',
-            size: 'icon',
-          }),
-          'size-8 shrink-0',
-          TACTILE,
-        )}
+        render={<Button type="button" variant="ghost" size="md" className="arc-market arc-workspace-menu-trigger" aria-label={`Appearance: ${currentLabel}`} />}
       >
         <ActiveIcon aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side="top" className="min-w-[9.5rem]">
+      <DropdownMenuContent align="end" side="top" className="arc-market arc-workspace-menu arc-theme-menu">
         <DropdownMenuRadioGroup
           value={preference}
           onValueChange={(value) => setPreference(value as AppearancePreference)}
         >
           {OPTIONS.map(({ value, label, icon: Icon }) => (
-            <DropdownMenuRadioItem key={value} value={value}>
+            <DropdownMenuRadioItem key={value} value={value} className="arc-theme-menu-item">
               <Icon aria-hidden="true" className="size-4" />
               {label}
             </DropdownMenuRadioItem>

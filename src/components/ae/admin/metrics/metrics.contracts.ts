@@ -27,6 +27,13 @@ export type AdminMetricDayRow = Readonly<{
   terminalCalls: string
   terminalCallsWithResolution: string
 }>
+export type AdminMetricCallPoint = Readonly<{
+  day: string
+  attemptedCalls: number
+  completedCalls: number
+  uncertainCalls: number
+}>
+
 export type AdminMetricsDataState =
   | Readonly<{ kind: 'loading' }>
   | Readonly<{ kind: 'refused' }>
@@ -38,6 +45,7 @@ export type AdminMetricsDataState =
       coverageDescription: string
       partialDays: readonly string[]
       days: readonly AdminMetricDayRow[]
+      dailyCalls: readonly AdminMetricCallPoint[]
     }>
 export type AdminMetricsPageProps = Readonly<{
   range: MarketplaceMetricsRange

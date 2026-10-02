@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -41,7 +41,7 @@ describe('public route containment', () => {
     expect(screen.getByRole('link', { name: 'Check system status' }).getAttribute('href')).toBe('/status')
   })
 
-  it('allows only one authoritative read invalidation while retry is pending', () => {
+  it('allows only one authoritative read invalidation while retry is pending', async () => {
     const deferred = Promise.withResolvers<void>()
     const { router } = renderAt(<RouteError error={new Error('hidden')} />)
     const invalidate = vi.spyOn(router, 'invalidate').mockImplementation(() => deferred.promise as never)
@@ -52,7 +52,9 @@ describe('public route containment', () => {
 
     expect(invalidate).toHaveBeenCalledTimes(1)
     expect((retry as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Trying again…' })).toBe(retry)
     deferred.resolve()
+    await waitFor(() => expect((retry as HTMLButtonElement).disabled).toBe(false))
   })
 
   it('drops oversized or empty correlation values', () => {

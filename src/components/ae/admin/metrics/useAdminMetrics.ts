@@ -25,6 +25,12 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
   if (report === undefined) return { kind: 'loading' }
   if ('kind' in report) return { kind: 'refused' }
   const requestedDays = range === 'last_7' ? 7 : range === 'last_30' ? 30 : 90
+  // Requires authoritative snapshot counts. Ensures the chart receives the same
+  // recorded daily counts without parsing formatted money or inferring missing days.
+  // Invariant: incomplete range totals remain withheld by the existing coverage guard.
+  const dailyCalls = report.days.map(({ day, attemptedCalls, completedCalls, uncertainCalls }) => ({
+    day, attemptedCalls, completedCalls, uncertainCalls,
+  }))
   if (report.headline === null || report.ratios === null || report.wow === null) return {
     kind: 'ready',
     coverageComplete: false,
@@ -33,6 +39,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
     ratios: [],
     days: report.days.map(toDayRow),
     partialDays: report.partialDays,
+    dailyCalls,
   }
   return {
     kind: 'ready',
@@ -68,6 +75,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
     ],
     days: report.days.map(toDayRow),
     partialDays: report.partialDays,
+    dailyCalls,
   }
 }
 

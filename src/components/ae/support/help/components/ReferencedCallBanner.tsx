@@ -1,8 +1,9 @@
 import type { ReferencedCallBannerProps } from '../help.contracts'
+import '../SupportComposition.css'
 
 export function ReferencedCallBanner({ callRef }: ReferencedCallBannerProps) {
   return (
-    <div className="rounded-card border border-border bg-muted/40 px-related py-related text-sm">
+    <div className="arc-market arc-support-reference">
       Referenced Call: {callRef}
     </div>
   )

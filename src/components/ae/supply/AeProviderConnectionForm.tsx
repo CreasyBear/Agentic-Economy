@@ -2,12 +2,11 @@ import { Link } from '@tanstack/react-router'
 import type { FormEvent, RefObject } from 'react'
 
 import { SettingsEmptyState, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { isAbsoluteHttpsResourceUrl } from '@/lib/operator/supply-compatibility'
-import { cn } from '@/lib/utils'
 import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
+import './ProviderConnectionFormComposition.css'
 
 export type AeProviderConnectionFormProps = Readonly<{
   canConnect: boolean
@@ -56,12 +55,12 @@ export function AeProviderConnectionForm({
 }: AeProviderConnectionFormProps) {
   const urlInvalid = resourceUrl.trim().length > 0 && !isAbsoluteHttpsResourceUrl(resourceUrl)
   return (
-    <>
+    <div className="arc-market arc-provider-connection-form-region">
       {canConnect ? (
-        <form className="grid gap-3" onSubmit={onSubmit}>
-          <div className="grid gap-1.5">
+        <form className="arc-provider-connection-form" onSubmit={onSubmit}>
+          <div className="arc-provider-connection-field">
             <label htmlFor="provider-x402-resource-url" className="text-sm font-medium text-foreground">x402 resource URL</label>
-            <Input
+            <input
               ref={resourceUrlInputRef}
               id="provider-x402-resource-url"
               name="resourceUrl"
@@ -76,14 +75,15 @@ export function AeProviderConnectionForm({
               aria-invalid={urlInvalid || undefined}
               aria-describedby={urlInvalid ? 'provider-x402-resource-url-error' : 'provider-x402-resource-url-hint'}
               required
+              className="arc-provider-connection-input"
             />
             {urlInvalid ? <p id="provider-x402-resource-url-error" role="alert" className="text-sm text-destructive">Provide an absolute public HTTPS endpoint without credentials or a fragment.</p> : <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>}
           </div>
-          <div className="grid max-w-40 gap-1.5">
+          <div className="arc-provider-connection-field arc-provider-connection-method">
             <label htmlFor="provider-x402-method" className="text-sm font-medium text-foreground">Request method</label>
             <select
               id="provider-x402-method"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              className="arc-provider-connection-input"
               value={method}
               disabled={busy !== undefined || fieldsLocked}
               onChange={(event) => onMethodChange(event.currentTarget.value === 'GET' ? 'GET' : 'POST')}
@@ -97,7 +97,7 @@ export function AeProviderConnectionForm({
           </SettingsRow>
           {inspection === undefined ? null : (
             <SettingsRow label="Observed payment lane" description="The exact challenge returned by this endpoint.">
-              <div className="grid min-w-0 gap-1 text-left sm:text-right">
+              <div className="arc-provider-payment-lane">
                 <span>Amount: {inspection.amount}</span>
                 <span>Network: {inspection.network}</span>
                 <span className="break-all">Asset: {inspection.asset}</span>
@@ -105,11 +105,12 @@ export function AeProviderConnectionForm({
               </div>
             </SettingsRow>
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="arc-provider-connection-form-actions">
             <Button
               type="button"
               variant="secondary"
-              className="min-h-touch"
+              size="md"
+              aria-busy={busy === 'inspect' || undefined}
               disabled={busy !== undefined || !isAbsoluteHttpsResourceUrl(resourceUrl)}
               onClick={onInspect}
             >
@@ -118,13 +119,14 @@ export function AeProviderConnectionForm({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-touch"
+              size="md"
+              aria-busy={busy === 'claim' || undefined}
               disabled={busy !== undefined || inspection === undefined || claimSignature !== undefined}
               onClick={onProvePayeeControl}
             >
               {claimSignature !== undefined ? 'Payee control proved' : busy === 'claim' ? 'Waiting for wallet…' : 'Prove payee control'}
             </Button>
-            <Button type="submit" className="min-h-touch" disabled={busy !== undefined || refreshRequired || inspection === undefined || claimSignature === undefined}>
+            <Button type="submit" variant="primary" size="md" aria-busy={busy === 'new' || undefined} disabled={busy !== undefined || refreshRequired || inspection === undefined || claimSignature === undefined}>
               {busy === 'new'
                 ? reauthorizing ? 'Reauthorizing…' : 'Connecting…'
                 : reauthorizing ? 'Reauthorize verified endpoint' : 'Connect verified endpoint'}
@@ -133,7 +135,7 @@ export function AeProviderConnectionForm({
               <Button
                 type="button"
                 variant="ghost"
-                className="min-h-touch"
+                size="md"
                 disabled={busy !== undefined}
                 onClick={onCancelReauthorization}
               >
@@ -149,7 +151,7 @@ export function AeProviderConnectionForm({
           action={
             <Link
               to="/owner/operations"
-              className={cn(buttonVariants(), 'min-h-touch')}
+              className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md].join(' ')}
             >
               Create provider workspace
             </Link>
@@ -166,13 +168,14 @@ export function AeProviderConnectionForm({
         <Button
           type="button"
           variant="secondary"
-          className="min-h-touch justify-self-start"
+          size="md"
+          className="arc-provider-connection-refresh"
           disabled={busy !== undefined}
           onClick={onRefresh}
         >
           Reload current connections
         </Button>
       ) : null}
-    </>
+    </div>
   )
 }

@@ -16,7 +16,6 @@ vi.mock('@tanstack/react-router', () => ({
 
 import {
   AeOwnerOfferingsList,
-  TACTILE_PRESS_CLASS,
   type OwnerOfferingSummary,
 } from '@/components/ae/offerings/AeOwnerOfferings'
 import { ownerToolPricingLabel } from '@/components/ae/offerings/provider-workspace-projection'
@@ -104,12 +103,10 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     render(<AeOwnerOfferingsList offerings={withoutCalls} />)
 
     expect(screen.getAllByText('ABN Checker').length).toBeGreaterThan(0)
-    const calls = screen.getAllByText('—').find((node) =>
-      node.className.includes('text-foreground'),
-    )
-    expect(calls).toBeDefined()
-    expect(calls?.className).toContain('font-mono')
-    expect(calls?.className).toContain('tabular-nums')
+    const row = screen.getAllByRole('row').find(node => within(node).queryByText('ABN Checker') !== null)
+    expect(row).toBeDefined()
+    if (row === undefined) throw new Error('ABN Checker row missing')
+    expect(within(row).getAllByRole('cell')[3]).toHaveTextContent('—')
     expect(screen.queryByText('3 access paths')).not.toBeInTheDocument()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
@@ -144,18 +141,18 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     })).toBe('USDC 0.010000 / call')
   })
 
-  it('T4: renders quick actions with accessible labels, links, and tactile press class', () => {
+  it('T4: retains the accessible Tool destination and native focus', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
     const openTool = screen.getAllByRole('link', { name: 'Open Tool for Australian Tax Calculator' })[0]
     expect(openTool).toBeDefined()
     expect(openTool?.getAttribute('href')).toBe('/owner/operations/tax-calculator')
-    expect(openTool?.className).toContain('active:scale-[0.96]')
+    openTool?.focus()
+    expect(document.activeElement).toBe(openTool)
 
     expect(screen.queryByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeNull()
 
-    expect(TACTILE_PRESS_CLASS).toContain('motion-reduce:active:scale-100')
   })
 
   it('T5: filters inventory by name, summary, protocol, price, Calls, and references', () => {
@@ -200,7 +197,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
 
     const emptyMessages = screen.getAllByText("No tools match 'xyz'")
     expect(emptyMessages.length).toBeGreaterThanOrEqual(1)
-    expect(emptyMessages.some((node) => node.closest('div')?.className.includes('min-h-24'))).toBe(true)
+    expect(screen.queryByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toBeNull()
 
     const resetButtons = screen.getAllByRole('button', { name: 'Reset filter' })
     expect(resetButtons.length).toBeGreaterThan(0)

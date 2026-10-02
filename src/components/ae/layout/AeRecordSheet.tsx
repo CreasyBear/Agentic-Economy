@@ -1,15 +1,8 @@
 import type { ReactNode } from 'react'
 
+import { Button as ArcButton } from '@/components/arc/button/button'
+import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
-import { Button } from '@/components/ui/button'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 
 type AeRecordSheetProps = {
   open: boolean
@@ -31,29 +24,32 @@ export function AeRecordSheet({
   children,
 }: AeRecordSheetProps) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
-        <SheetHeader className="border-b border-border">
-          <SheetTitle className="text-base font-medium tracking-tight">{title}</SheetTitle>
-          {description === undefined ? null : (
-            <SheetDescription>{description}</SheetDescription>
-          )}
-        </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-gutter">
-          {facts === undefined || facts.length === 0 ? null : (
-            <AeFactList facts={facts} />
-          )}
-          {children}
-        </div>
-        {action === undefined ? null : (
-          <SheetFooter className="border-t border-border">
-            {action}
-            <Button type="button" variant="ghost" className="min-h-touch" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-          </SheetFooter>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent
+        side="right"
+        title={title}
+        {...(description === undefined ? {} : { description })}
+      >
+        {facts === undefined || facts.length === 0 ? null : (
+          <AeFactList facts={facts} />
         )}
-      </SheetContent>
-    </Sheet>
+        {children}
+        {action === undefined ? null : (
+          <footer
+            className="sticky bottom-0 mt-6 flex flex-col gap-2 border-t border-border pt-4"
+            style={{ background: 'var(--surface-raised)' }}
+          >
+            {action}
+            <ArcButton
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+            >
+              Close
+            </ArcButton>
+          </footer>
+        )}
+      </DrawerContent>
+    </Drawer>
   )
 }

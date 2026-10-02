@@ -341,22 +341,16 @@ describe('owner mobile navigation', () => {
     expect(within(screen.getByRole('menu')).getByText('Admin')).toBeTruthy()
   })
 
-  it('keeps the mobile safe-area inset on the root frame', async () => {
+  it('reserves the mobile safe area and keeps navigation links keyboard reachable', async () => {
     renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const content = document.querySelector('[data-shell="app-content"]')
-    expect(mobileNav.classList.contains('md:hidden')).toBe(true)
-    expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
     expect(content?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
-    expect(screen.getByTestId('operator-content').classList.contains('ae-rail')).toBe(true)
-    const pageStack = screen.getByTestId('operator-page-stack')
-    expect(pageStack.classList.contains('gap-section')).toBe(true)
-    expect(pageStack.classList.contains('content-start')).toBe(true)
     for (const link of within(mobileNav).getAllByRole('link')) {
-      expect(link.classList.contains('min-h-touch')).toBe(true)
-      expect(link.classList.contains('min-w-touch')).toBe(true)
-      expect(link.classList.contains('focus-visible:ring-2')).toBe(true)
+      expect(link.tagName).toBe('A')
+      link.focus()
+      expect(document.activeElement).toBe(link)
     }
   })
 })

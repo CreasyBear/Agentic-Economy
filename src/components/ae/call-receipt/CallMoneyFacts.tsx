@@ -6,6 +6,7 @@ import type { CallReceiptView } from '@/modules/capability-execution/call-receip
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 
 import { machineLabel } from './call-receipt-format'
+import './ReceiptComposition.css'
 
 export function CallMoneyFacts({ view }: Readonly<{ view: CallReceiptView }>) {
   return (
@@ -13,19 +14,19 @@ export function CallMoneyFacts({ view }: Readonly<{ view: CallReceiptView }>) {
       title="Money before and after the call"
       description="Buyer authorization is the pre-call ceiling. The recorded outcome is shown separately; missing facts stay missing."
     >
-      <div className="grid gap-section">
-        <div className="grid gap-related">
-          <h3 className="text-sm font-medium text-foreground">Before</h3>
-          <p className="text-sm text-muted-foreground">Quoted components and buyer authorization.</p>
+      <div className="arc-market arc-call-money-comparison">
+        <div className="arc-call-money-group">
+          <h3>Before</h3>
+          <p className="arc-call-context">Quoted components and buyer authorization.</p>
           {view.receipt === undefined ? (
-            <p className="text-sm text-muted-foreground">No public pre-call money receipt is attached to this record.</p>
+            <p className="arc-call-context">No public pre-call money receipt is attached to this record.</p>
           ) : <ReceiptAuthorizationFacts receipt={view.receipt} />}
         </div>
-        <div className="grid gap-related">
-          <h3 className="text-sm font-medium text-foreground">After</h3>
-          <p className="text-sm text-muted-foreground">Recorded settlement, refund, or uncertainty.</p>
+        <div className="arc-call-money-group">
+          <h3>After</h3>
+          <p className="arc-call-context">Recorded settlement, refund, or uncertainty.</p>
           {view.usage === undefined && view.receipt === undefined ? (
-            <p className="text-sm text-muted-foreground">No post-call money fact is recorded yet.</p>
+            <p className="arc-call-context">No post-call money fact is recorded yet.</p>
           ) : <ReceiptSettlementFacts usage={view.usage} receipt={view.receipt} />}
         </div>
       </div>

@@ -1,23 +1,15 @@
 import { Link } from '@tanstack/react-router'
+import { Button as ArcButton } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
-import {
-  AeSiteBody,
-  AeSiteFaq,
-  AeSiteButton,
-  AeSiteEyebrow,
-  AeSiteHeading,
-  AeSiteHeadingPair,
-  AeSiteHeroIntro,
-  AeSiteSection,
-} from '@/components/ae/website'
+import { AeSiteFaq } from '@/components/ae/website'
 import { PROVIDER_FAQ } from '@/content/provider-copy'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
 import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
+import './ProviderLandingComposition.css'
 
 export const SUPPLY_OFFER_SENTENCE = 'Connect a Tool you already run. Agentic Economy checks what agents can buy.'
 
@@ -53,101 +45,112 @@ export function AeSupplyLanding({
   onRetry?: () => void
 }>) {
   return (
-    <>
-      <AeSiteSection labelledBy="supply-hero" rhythm="hero" scheme="muted">
-        <AeSiteHeroIntro>
-          <AeSiteHeadingPair>
-            <div className="grid w-full max-w-xl justify-items-start gap-3">
-              <AeSiteEyebrow>Providers</AeSiteEyebrow>
-              <AeSiteHeading as="h1" size="lg" id="supply-hero">
-                Add a Tool.
-              </AeSiteHeading>
+    <div className="arc-market arc-provider-landing">
+      <section className="arc-provider-hero" aria-labelledby="supply-hero">
+        <div className="arc-provider-hero-inner">
+          <div className="arc-provider-hero-copy">
+            <h1 className="arc-provider-hero-title" id="supply-hero">Add a Tool.</h1>
+            <p className="arc-provider-hero-description">{SUPPLY_OFFER_SENTENCE}</p>
+            <div className="arc-provider-hero-actions">
+              <Link
+                to="/owner/operations/new"
+                className={[
+                  buttonStyles.button,
+                  buttonStyles.primary,
+                  buttonStyles.lg,
+                  'arc-provider-action',
+                ].join(' ')}
+              >
+                Add Tool
+              </Link>
             </div>
-            <div className="w-full max-w-lg">
-              <AeSiteBody muted size="sm">
-                {SUPPLY_OFFER_SENTENCE}
-              </AeSiteBody>
-            </div>
-          </AeSiteHeadingPair>
-          <div className="flex flex-wrap items-center gap-related">
-            <AeSiteButton asChild>
-              <Link to="/owner/operations/new">Add Tool</Link>
-            </AeSiteButton>
           </div>
-        </AeSiteHeroIntro>
-      </AeSiteSection>
-      {sourceError === undefined ? null : (
-        <AeSiteSection ariaLabel="Provider recovery" scheme="canvas">
-          <Alert variant="destructive" className="max-w-3xl">
-            <AlertTitle>Provider information is unavailable</AlertTitle>
-            <AlertDescription>
-              <p>{sourceError}</p>
-              {onRetry === undefined ? null : (
-                <Button type="button" variant="outline" className="mt-intra min-h-touch" onClick={onRetry}>
-                  Try again
-                </Button>
-              )}
-            </AlertDescription>
-          </Alert>
-        </AeSiteSection>
-      )}
-      <AeSiteSection ariaLabel="Check provider fit" scheme="canvas">
-        <div className="grid max-w-3xl gap-page">
-          <div className="grid gap-intra">
-            <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
-            <AeSiteHeading as="h2" size="md">Check whether your Tool is a fit.</AeSiteHeading>
-            <AeSiteBody muted size="sm">
-              List one x402 Tool an agent can search, inspect, and call. Paste the public HTTPS endpoint. This page does not ask for OpenAPI, MCP, an API key, or a private key.
-            </AeSiteBody>
-          </div>
-          <ul className="m-0 grid gap-intra pl-5 text-sm text-muted-foreground">
-            {SUPPLY_REQUIREMENTS.map((item) => <li key={item}>{item}</li>)}
-          </ul>
-          <p className="text-sm text-muted-foreground">
-            A check may reach the configured upstream. Use an example that is safe there and assume it may consume provider quota or cost. A successful check does not publish the Tool, create earnings, or guarantee delivery. Timing depends on the source and current requirements; check the current status rather than relying on an estimate.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract.
-          </p>
-          <ul className="m-0 grid list-none gap-0 p-0" aria-label="Supported source paths">
-            {SUPPLY_SOURCE_FIT.map((source) => (
-              <li key={source.title} className="grid gap-intra border-b border-border py-related last:border-b-0">
-                <h3 className="font-medium text-foreground">{source.title}</h3>
-                <p className="text-sm text-muted-foreground">{source.body}</p>
-              </li>
-            ))}
-          </ul>
+          <aside className="arc-provider-requirements" aria-labelledby="supply-requirements-heading">
+            <h2 className="arc-provider-requirements-title" id="supply-requirements-heading">
+              Before you sign in
+            </h2>
+            <ul className="arc-provider-requirement-list">
+              {SUPPLY_REQUIREMENTS.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </aside>
         </div>
-      </AeSiteSection>
-      <AeSiteSection scheme="surface">
-        <AeCollectionRail kicker="How to add" title="Steps to add a Tool" titleId="supply-publish-steps">
-          <ol className="m-0 grid gap-0 p-0">
+      </section>
+      {sourceError === undefined ? null : (
+        <section className="arc-provider-error" aria-label="Provider recovery">
+          <div className="arc-provider-error-inner">
+            <Alert variant="destructive" className="arc-provider-error-alert">
+              <AlertTitle>Provider information is unavailable</AlertTitle>
+              <AlertDescription>
+                <p>{sourceError}</p>
+                {onRetry === undefined ? null : (
+                  <ArcButton type="button" variant="secondary" size="md" className="arc-provider-action" onClick={onRetry}>
+                    Try again
+                  </ArcButton>
+                )}
+              </AlertDescription>
+            </Alert>
+          </div>
+        </section>
+      )}
+      <section className="arc-provider-fit" aria-labelledby="supply-fit-heading">
+        <div className="arc-provider-fit-inner">
+          <div className="arc-provider-fit-copy">
+            <h2 className="arc-provider-section-title" id="supply-fit-heading">Check whether your Tool is a fit.</h2>
+            <p>
+              List one x402 Tool an agent can search, inspect, and call. Paste the public HTTPS endpoint. This page does not ask for OpenAPI, MCP, an API key, or a private key.
+            </p>
+            <p>
+              A check may reach the configured upstream. Use an example that is safe there and assume it may consume provider quota or cost. A successful check does not publish the Tool, create earnings, or guarantee delivery. Timing depends on the source and current requirements; check the current status rather than relying on an estimate.
+            </p>
+            <p>
+              Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract.
+            </p>
+          </div>
+          {SUPPLY_SOURCE_FIT.map((source) => (
+            <article className="arc-provider-source-card" key={source.title} aria-labelledby="supply-source-fit-heading">
+              <h3 className="arc-provider-source-title" id="supply-source-fit-heading">{source.title}</h3>
+              <p className="arc-provider-source-copy">{source.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="arc-provider-steps" aria-labelledby="supply-publish-steps">
+        <div className="arc-provider-steps-inner">
+          <header className="arc-provider-steps-header">
+            <h2 className="arc-provider-steps-title" id="supply-publish-steps">Steps to add a Tool</h2>
+          </header>
+          <ol className="arc-provider-steps-list">
             {SUPPLY_STEPS.map((step) => (
-              <li key={step.number} className="grid gap-intra border-b border-border py-related last:border-b-0">
-                <AeSiteHeading as="h3" size="sm">{step.title}</AeSiteHeading>
-                <AeSiteBody muted size="sm">{step.detail}</AeSiteBody>
+              <li key={step.number} className="arc-provider-step">
+                <span className="arc-provider-step-node" aria-hidden="true">{step.number}</span>
+                <div className="arc-provider-step-copy">
+                  <h3 className="arc-provider-step-title">{step.title}</h3>
+                  <p className="arc-provider-step-detail">{step.detail}</p>
+                </div>
               </li>
             ))}
           </ol>
-        </AeCollectionRail>
-      </AeSiteSection>
-      <AeSiteSection ariaLabel="Listing control" scheme="canvas">
-        <div className="grid max-w-3xl gap-section">
-          <AeSiteBody muted>
-            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup checks do not create settled earnings or payouts.
-          </AeSiteBody>
         </div>
-      </AeSiteSection>
+      </section>
+      <section className="arc-provider-listing-control" aria-label="Listing control">
+        <div className="arc-provider-listing-inner">
+          <p className="arc-provider-listing-copy">
+            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup checks do not create settled earnings or payouts.
+          </p>
+        </div>
+      </section>
       {sourceError === undefined ? (
-        <AeSiteSection ariaLabel="What agents can inspect" scheme="surface">
-          <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
-        </AeSiteSection>
+        <section className="arc-provider-proof" aria-label="What agents can inspect">
+          <div className="arc-provider-proof-inner">
+            <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
+          </div>
+        </section>
       ) : null}
       <AeSiteFaq
         labelledBy="provider-faq-heading"
         title={PROVIDER_FAQ.heading}
         questions={PROVIDER_FAQ.questions}
       />
-    </>
+    </div>
   )
 }

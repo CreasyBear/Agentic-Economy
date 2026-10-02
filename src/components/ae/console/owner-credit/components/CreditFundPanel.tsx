@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
+import { Button } from '@/components/arc/button/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDisplayAmount } from '@/modules/money/public'
 
@@ -51,88 +51,92 @@ export function CreditFundPanel({
             : `Available credit ${formatDisplayAmount(balance)}.`
 
   return (
-    <div id="fund" className="grid gap-related">
-      <p className="max-w-[65ch] text-pretty text-sm leading-normal text-muted-foreground">
+    <div id="fund" className="arc-credit-fund">
+      <p className="arc-credit-fund__intro">
         Browsing is free. Paid Calls reserve AUD from this Account and remain subject to each Agent’s spending policy.
       </p>
       <p className="sr-only" aria-live="polite">
         {creditStatus}
       </p>
-      {balanceLoading && accountBalance === undefined ? (
-        <div className="grid gap-intra rounded-card border border-border bg-card p-gutter" aria-busy="true" aria-label="Loading Credit">
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-11 w-48" />
-          <Skeleton className="h-4 w-72 max-w-full" />
-        </div>
-      ) : balanceUnavailable ? (
-        <Alert>
-          <AlertTitle>Credit unavailable</AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center gap-related">
-            <span>No balance is being inferred. Refresh to read the authoritative Account balance.</span>
-            {onCreditRefresh === undefined ? null : (
-              <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
-                {balanceLoading ? 'Refreshing…' : 'Refresh balance'}
-              </Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <div className="grid gap-intra rounded-card border border-border bg-card p-gutter">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Available credit</p>
-          <p className="font-mono text-2xl font-medium tracking-tight tabular-nums">
-            {balance === undefined ? 'Checking…' : formatDisplayAmount(balance)}
-          </p>
-          {purchasedBalance === undefined || promotionalBalance === undefined ? null : (
-            <dl className="grid gap-1 text-sm text-muted-foreground">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <dt>Purchased credit</dt>
-                <dd className="font-mono tabular-nums text-foreground">{formatDisplayAmount(purchasedBalance)}</dd>
-              </div>
-              {promotionalBalance === undefined ? null : (
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <dt>Promotional credit</dt>
-                  <dd className="font-mono tabular-nums text-foreground">{formatDisplayAmount(promotionalBalance)}</dd>
+      <div className="arc-credit-fund__regions">
+        {balanceLoading && accountBalance === undefined ? (
+          <section className="arc-credit-balance arc-credit-balance--loading" aria-busy="true" aria-label="Loading Credit">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-11 w-48" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </section>
+        ) : balanceUnavailable ? (
+          <section className="arc-credit-balance arc-credit-balance--unavailable" aria-label="Available credit">
+            <Alert>
+              <AlertTitle>Credit unavailable</AlertTitle>
+              <AlertDescription className="arc-credit-alert__description">
+                <span>No balance is being inferred. Refresh to read the authoritative Account balance.</span>
+                {onCreditRefresh === undefined ? null : (
+                  <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
+                    {balanceLoading ? 'Refreshing…' : 'Refresh balance'}
+                  </Button>
+                )}
+              </AlertDescription>
+            </Alert>
+          </section>
+        ) : (
+          <section className="arc-credit-balance" aria-label="Available credit">
+            <p className="arc-credit-balance__label">Available credit</p>
+            <p className="arc-credit-balance__amount">
+              {balance === undefined ? 'Checking…' : formatDisplayAmount(balance)}
+            </p>
+            {purchasedBalance === undefined || promotionalBalance === undefined ? null : (
+              <dl className="arc-credit-balance__breakdown grid gap-1 text-sm text-muted-foreground">
+                <div className="arc-credit-balance__fact-row flex flex-wrap items-baseline justify-between gap-2">
+                  <dt>Purchased credit</dt>
+                  <dd className="font-mono tabular-nums text-foreground">{formatDisplayAmount(purchasedBalance)}</dd>
                 </div>
-              )}
-            </dl>
-          )}
-          {promotionalBalance !== undefined && promotionalBalance.units !== '0' && expiryLabel !== undefined ? (
-            <p className="text-sm text-muted-foreground">Next promotional credit expiry: {expiryLabel}.</p>
-          ) : null}
-          <p className="text-sm text-muted-foreground">
-            {balanceLocked
-              ? 'Locked for reconciliation; new paid Calls are refused.'
-              : 'Available for admitted paid Calls. Agent spending policies still apply.'}
-          </p>
-        </div>
-      )}
-      {balanceRefreshUnavailable ? (
-        <Alert>
-          <AlertTitle>Balance could not be refreshed</AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center gap-related">
-            <span>The last authoritative balance remains visible; it has not been replaced with an inferred amount.</span>
-            {onCreditRefresh === undefined ? null : (
-              <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
-                {balanceLoading ? 'Refreshing…' : 'Try balance again'}
-              </Button>
+                {promotionalBalance === undefined ? null : (
+                  <div className="arc-credit-balance__fact-row flex flex-wrap items-baseline justify-between gap-2">
+                    <dt>Promotional credit</dt>
+                    <dd className="font-mono tabular-nums text-foreground">{formatDisplayAmount(promotionalBalance)}</dd>
+                  </div>
+                )}
+              </dl>
             )}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <div className="grid gap-related">
-        <div className="grid gap-intra">
-          <h3 className="text-sm font-medium">Add funds</h3>
-          <p className="text-sm text-muted-foreground">Review the exact credit, fee, and total before continuing to secure payment.</p>
-        </div>
-        <AeAccountFundingPanel
-          {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
-          {...(fundingConstraints === undefined ? {} : { constraints: fundingConstraints })}
-          constraintsLoading={constraintsLoading}
-          {...(accountBalance === undefined ? {} : { accountBalance })}
-          {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
-        />
+            {promotionalBalance !== undefined && promotionalBalance.units !== '0' && expiryLabel !== undefined ? (
+              <p className="arc-credit-balance__meta">Next promotional credit expiry: {expiryLabel}.</p>
+            ) : null}
+            <p className="arc-credit-balance__meta">
+              {balanceLocked
+                ? 'Locked for reconciliation; new paid Calls are refused.'
+                : 'Available for admitted paid Calls. Agent spending policies still apply.'}
+            </p>
+            {balanceRefreshUnavailable ? (
+              <Alert className="arc-credit-balance__refresh-alert">
+                <AlertTitle>Balance could not be refreshed</AlertTitle>
+                <AlertDescription className="arc-credit-alert__description">
+                  <span>The last authoritative balance remains visible; it has not been replaced with an inferred amount.</span>
+                  {onCreditRefresh === undefined ? null : (
+                    <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
+                      {balanceLoading ? 'Refreshing…' : 'Try balance again'}
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+          </section>
+        )}
+        <section className="arc-credit-fund__add">
+          <div className="arc-credit-fund__add-heading">
+            <h3>Add funds</h3>
+            <p>Review the exact credit, fee, and total before continuing to secure payment.</p>
+          </div>
+          <AeAccountFundingPanel
+            {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
+            {...(fundingConstraints === undefined ? {} : { constraints: fundingConstraints })}
+            constraintsLoading={constraintsLoading}
+            {...(accountBalance === undefined ? {} : { accountBalance })}
+            {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
+          />
+        </section>
       </div>
-      <div className="flex flex-wrap gap-4 text-sm">
+      <div className="arc-credit-fund__links">
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/spending">Configure spending defaults</Link>
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/receipts">View receipts &amp; invoices</Link>
       </div>

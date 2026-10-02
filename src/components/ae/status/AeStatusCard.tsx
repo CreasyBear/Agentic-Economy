@@ -3,9 +3,7 @@ import { ExternalLinkIcon } from 'lucide-react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
-import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
@@ -15,6 +13,7 @@ import {
   offeringSupportToAeStatus,
   trustTierToAeStatus,
 } from '@/lib/ui/business-status-mapping'
+import './PublicStatusComposition.css'
 
 type AeStatusCardProps = {
   readback: PublicOwnerStatusRouteReadback<PublicBusinessCatalogApiV2Dto>
@@ -39,17 +38,17 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
       : `${readback.catalog.category} — ${readback.catalog.businessContext.website}`
 
   return (
-    <section aria-labelledby={titleId} className="grid gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <h2 id={titleId} className="text-base font-medium text-foreground">
+    <section aria-labelledby={titleId} className="arc-market arc-public-status">
+      <header className="arc-public-status-header">
+        <div className="arc-public-status-identity">
+          <h2 id={titleId}>
             {readback.catalog.name}
           </h2>
-          <p className="text-sm text-muted-foreground">{location}</p>
+          <p>{location}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="arc-public-status-actions">
           {isPreview ? (
-            <Badge variant="outline">Preview</Badge>
+            <span className="arc-public-status-preview">Preview</span>
           ) : (
             <AeCopyPublicUrlButton
               slug={readback.catalog.slug}
@@ -57,13 +56,14 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
               size="sm"
             />
           )}
-          <a href={readback.publicUrl} className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+          <a href={readback.publicUrl} className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>
             <ExternalLinkIcon aria-hidden="true" />
             {isPreview ? 'Open preview' : 'Open page'}
           </a>
         </div>
-      </div>
+      </header>
       <AeFactList
+        className="arc-public-status-facts"
         facts={[
           {
             label: 'Disposition',
@@ -84,7 +84,7 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         ]}
       />
       {readback.unavailableCapabilities.length === 0 ? null : (
-        <ul className="m-0 grid list-none gap-3 border-t border-border p-0 pt-4">
+        <ul className="arc-public-status-limitations">
           {readback.unavailableCapabilities.map((capability) => (
             <li key={capability.label}>
               <p className="font-medium text-foreground">{capability.label}</p>
@@ -93,7 +93,7 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
           ))}
         </ul>
       )}
-      <p className="text-sm text-muted-foreground">{readback.nextAction}</p>
+      <p className="arc-public-status-next">{readback.nextAction}</p>
     </section>
   )
 }

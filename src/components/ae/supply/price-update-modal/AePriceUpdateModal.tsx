@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import {
   Dialog,
   DialogContent,
@@ -9,13 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
 
 import { PriceAdjustmentChips } from './components/PriceAdjustmentChips'
 import { PriceDeltaPreview } from './components/PriceDeltaPreview'
 import { PriceRevisionAmountField } from './components/PriceRevisionAmountField'
 import { PriceRevisionDiagnosticSlot } from './components/PriceRevisionDiagnosticSlot'
-import { TACTILE } from './price-update-modal.contracts'
 import {
   computeGstPresentation,
   formatAudLabel,
@@ -24,8 +22,7 @@ import {
   parsePositiveAudInput,
 } from './price-revision-preview'
 import { usePriceRevisionForm } from './usePriceRevisionForm'
-
-export { TACTILE } from './price-update-modal.contracts'
+import './PriceRevisionComposition.css'
 
 export function AePriceUpdateModal({
   open,
@@ -72,7 +69,7 @@ export function AePriceUpdateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="arc-market arc-price-revision-dialog">
         <DialogHeader>
           <DialogTitle>Update Price & Publish New Revision</DialogTitle>
           <DialogDescription>
@@ -80,10 +77,10 @@ export function AePriceUpdateModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
+        <div className="arc-price-revision-body">
           <div
             role="status"
-            className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground"
+            className="arc-price-revision-reassurance"
           >
             Existing quotes locked by agents remain valid until their 15-minute expiration. New pricing applies only to subsequent quote requests.
           </div>
@@ -115,21 +112,22 @@ export function AePriceUpdateModal({
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="arc-price-revision-actions">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
+            size="md"
             onClick={() => onOpenChange(false)}
             disabled={pending}
-            className={cn('min-h-touch', TACTILE)}
           >
             Cancel
           </Button>
           <Button
             type="button"
+            variant="primary"
+            size="md"
             onClick={handleConfirm}
             disabled={pending}
-            className={cn('min-h-touch', TACTILE)}
           >
             {pending ? 'Publishing…' : 'Publish New Revision'}
           </Button>

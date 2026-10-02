@@ -170,3 +170,32 @@ it('resumes only the saved draft and never labels a fresh form as continuation',
   expect(screen.getByRole('link', { name: 'Add another Tool' }).getAttribute('href'))
     .toBe('/owner/operations/new')
 })
+
+it('shows only the actual source recheck outcome and guards duplicate execution while pending', async () => {
+  let resolve!: (outcome: { kind: 'refused'; message: string }) => void
+  const recheck = vi.fn(() => new Promise<{ kind: 'refused'; message: string }>((done) => { resolve = done }))
+  render(<AeProviderToolDetail name="Reference lookup" status={status} showTestPlayground onRecheck={recheck} />)
+
+  expect(screen.getByRole('heading', { name: 'Source verification' })).toBeTruthy()
+  expect(recheck).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Recheck source' }))
+  const checking = screen.getByRole<HTMLButtonElement>('button', { name: 'Checking source…' })
+  expect(checking.disabled).toBe(true)
+  fireEvent.click(checking)
+  expect(recheck).toHaveBeenCalledOnce()
+  resolve({ kind: 'refused', message: 'The canonical source could not be confirmed.' })
+  expect(await screen.findByText('Tool unchanged')).toBeTruthy()
+  expect(screen.getByText('The canonical source could not be confirmed.')).toBeTruthy()
+  expect(screen.queryByText(/HTTP 200|Latency|verifiedAt/u)).toBeNull()
+  expect(screen.queryByText('Tool updated')).toBeNull()
+})
+
+it('does not offer source verification without a real callback or while authority is under review', () => {
+  const { rerender } = render(<AeProviderToolDetail name="Reference lookup" status={status} showTestPlayground />)
+  expect(screen.queryByRole('heading', { name: 'Source verification' })).toBeNull()
+  const recheck = vi.fn()
+  rerender(<AeProviderToolDetail name="Reference lookup" status={{ ...status, state: 'Under review', routeability: { available: false, reasonCodes: [] } }} showTestPlayground onRecheck={recheck} />)
+  expect(screen.queryByRole('heading', { name: 'Source verification' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Recheck source' })).toBeNull()
+  expect(recheck).not.toHaveBeenCalled()
+})

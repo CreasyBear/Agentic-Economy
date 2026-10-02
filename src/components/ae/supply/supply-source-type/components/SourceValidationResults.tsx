@@ -1,9 +1,8 @@
 import { CheckCircle2Icon } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import '../../SupplyPublicationComposition.css'
 import { inspectHttpsUrl } from '../../supply-source-native-start-presentation'
 import {
   SUPPLY_SOURCE_TYPE_COPY,
@@ -26,9 +25,9 @@ export function UrlFieldWithPreflight({
 }: UrlFieldWithPreflightProps) {
   const preflight = inspectHttpsUrl(value)
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label} <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
-      <Input id={id} aria-label={label} type="url" required placeholder={placeholder} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
+    <Field className="arc-market arc-publication-field">
+      <FieldLabel htmlFor={id}>{label} <span aria-hidden="true" className="arc-source-required-hint">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
+      <input className="arc-publication-input" id={id} aria-label={label} type="url" required placeholder={placeholder} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
       <FieldDescription>{description}</FieldDescription>
       <PreflightSlot>
         {discoverDiagnostic !== undefined ? (
@@ -43,7 +42,7 @@ export function UrlFieldWithPreflight({
 
 function PreflightSlot({ children }: PreflightSlotProps) {
   return (
-    <div className="flex min-h-[2.5rem] items-center" aria-live="polite">
+    <div className="arc-source-preflight" aria-live="polite">
       {children}
     </div>
   )
@@ -52,16 +51,16 @@ function PreflightSlot({ children }: PreflightSlotProps) {
 function HttpsUrlPreflightBadge({ status, example }: HttpsUrlPreflightBadgeProps & Readonly<{ example: string }>) {
   if (status === 'empty') return null
   if (status === 'insecure') {
-    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.insecure}</Badge>
+    return <span className="arc-source-preflight-result" data-tone="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.insecure}</span>
   }
   if (status === 'invalid') {
-    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.invalid(example)}</Badge>
+    return <span className="arc-source-preflight-result" data-tone="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.invalid(example)}</span>
   }
   return (
-    <Badge variant="success" className="gap-1.5">
-      <CheckCircle2Icon className="size-3" />
+    <span className="arc-source-preflight-result" data-tone="success">
+      <CheckCircle2Icon className="size-4" aria-hidden="true" />
       {SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.valid}
-    </Badge>
+    </span>
   )
 }
 

@@ -77,6 +77,25 @@ describe('public funding return', () => {
     ])
   })
 
+  it('keeps the same observed payment visible and blocks another native check while pending', async () => {
+    let resolveRefresh!: (response: Response) => void
+    const refresh = new Promise<Response>((resolve) => { resolveRefresh = resolve })
+    fetchMock.mockResolvedValueOnce(found('processing')).mockReturnValueOnce(refresh)
+
+    renderFundingReturn()
+    fireEvent.click(await screen.findByRole('button', { name: 'Check this payment' }))
+    const pending = await screen.findByRole('button', { name: 'Checking this payment…' })
+    expect(pending.hasAttribute('disabled')).toBe(true)
+    expect(pending.getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('heading', { name: 'Payment received' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Open Credit' })).toBeNull()
+    fireEvent.click(pending)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    resolveRefresh(found('ready'))
+    expect(await screen.findByRole('heading', { name: 'Credit added' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Check/u })).toBeNull()
+  })
+
   it('keeps transient and awaiting states retryable without offering another payment', async () => {
     fetchMock
       .mockRejectedValueOnce(new Error('network unavailable'))

@@ -10,7 +10,7 @@ import {
   documentKindLabel,
   formatCreditAmount,
 } from '@/components/ae/console/owner-credit-format'
-import { Button } from '@/components/ui/button'
+import { Button as ArcButton } from '@/components/arc/button/button'
 import type {
   DocumentAction,
   DocumentActionKey,
@@ -18,6 +18,7 @@ import type {
 } from '@/modules/money/account-documents.view-model'
 
 import type { AeOwnerCreditProps } from '../owner-credit.contracts'
+import './CreditRecordsComposition.css'
 
 export type CreditAccountingPanelProps = Pick<
   AeOwnerCreditProps,
@@ -82,46 +83,48 @@ export function CreditAccountingPanel({
   const createDailyCloseStatus = documentActions[documentActionKey({ kind: 'create_daily_close' })]
 
   return (
-    <div className="grid gap-section" role="group" aria-label="Accounting records" aria-busy={administrationLoading}>
+    <div className="arc-market arc-credit-accounting" role="group" aria-label="Accounting records" aria-busy={administrationLoading}>
       {administrationLoading ? <p className="text-sm text-muted-foreground" role="status">Loading accounting records…</p> : null}
       <AeSection
         title="Documents"
         description="Immutable funding receipts, fee documents, statements, and adjustments retain their source transactions and policy version."
       >
         {onCreateStatement === undefined ? null : (
-          <div className="grid gap-intra">
-            <div className="flex flex-wrap gap-intra">
-              <Button
+          <div className="arc-credit-document-create">
+            <div className="arc-credit-document-actions">
+              <ArcButton
                 type="button"
                 variant="secondary"
                 disabled={createStatementStatus === 'pending'}
                 onClick={() => runDocumentAction({ kind: 'create_statement' }, onCreateStatement)}
               >
                 {createStatementStatus === 'pending' ? 'Creating statement…' : 'Create current statement'}
-              </Button>
+              </ArcButton>
               {onCreateDailyClose === undefined ? null : (
-                <Button
+                <ArcButton
                   type="button"
                   variant="secondary"
                   disabled={createDailyCloseStatus === 'pending'}
                   onClick={() => runDocumentAction({ kind: 'create_daily_close' }, onCreateDailyClose)}
                 >
                   {createDailyCloseStatus === 'pending' ? 'Creating daily close…' : 'Create yesterday’s close'}
-                </Button>
+                </ArcButton>
               )}
             </div>
-            <DocumentActionNotice
-              status={createStatementStatus}
-              pending="Creating the current statement…"
-              succeeded="Statement generation started. Its status remains visible below."
-              failed="Statement creation could not be confirmed. Refresh documents before trying again."
-            />
-            <DocumentActionNotice
-              status={createDailyCloseStatus}
-              pending="Creating yesterday’s daily close…"
-              succeeded="Daily close generation started. Its status remains visible below."
-              failed="Daily close creation could not be confirmed. Refresh documents before trying again."
-            />
+            <div className="arc-credit-document-notices">
+              <DocumentActionNotice
+                status={createStatementStatus}
+                pending="Creating the current statement…"
+                succeeded="Statement generation started. Its status remains visible below."
+                failed="Statement creation could not be confirmed. Refresh documents before trying again."
+              />
+              <DocumentActionNotice
+                status={createDailyCloseStatus}
+                pending="Creating yesterday’s daily close…"
+                succeeded="Daily close generation started. Its status remains visible below."
+                failed="Daily close creation could not be confirmed. Refresh documents before trying again."
+              />
+            </div>
           </div>
         )}
         {unavailable.documents ? (
@@ -132,19 +135,20 @@ export function CreditAccountingPanel({
             description="Receipts, fee documents, adjustments, and statements will be preserved here."
           />
         ) : (
-          <div className="grid gap-intra">
+          <ul className="arc-credit-document-list" aria-label="Accounting documents">
             {documents.map((document) => {
               const signStatus = documentActions[documentActionKey({ kind: 'sign', documentRef: document.documentRef })]
               const openStatus = documentActions[documentActionKey({ kind: 'open', documentRef: document.documentRef })]
               const label = documentKindLabel(document.kind)
               return (
-                <div key={document.documentRef} className="grid gap-intra rounded-card border border-border p-gutter">
-                  <AeFactList facts={documentFacts(document)} />
-                  <div className="grid gap-intra">
-                    <div className="flex flex-wrap gap-intra">
+                <li key={document.documentRef} className="arc-credit-document-row">
+                  <AeFactList facts={documentFacts(document)} className="arc-credit-document-facts" />
+                  <div className="arc-credit-document-action-stack">
+                    <div className="arc-credit-document-actions">
                       {document.kind === 'daily_close' && document.state === 'awaiting_signature' && onSignDailyClose !== undefined ? (
-                        <Button
+                        <ArcButton
                           type="button"
+                          variant="primary"
                           disabled={signStatus === 'pending'}
                           onClick={() => runDocumentAction(
                             { kind: 'sign', documentRef: document.documentRef },
@@ -152,10 +156,10 @@ export function CreditAccountingPanel({
                           )}
                         >
                           {signStatus === 'pending' ? 'Signing close…' : 'Sign close'}
-                        </Button>
+                        </ArcButton>
                       ) : null}
                       {onOpenDocument === undefined ? null : (
-                        <Button
+                        <ArcButton
                           type="button"
                           variant="secondary"
                           disabled={document.state !== 'issued' || openStatus === 'pending'}
@@ -165,26 +169,28 @@ export function CreditAccountingPanel({
                           )}
                         >
                           {openStatus === 'pending' ? 'Opening…' : document.state === 'issued' ? 'Open document' : 'Preparing…'}
-                        </Button>
+                        </ArcButton>
                       )}
                     </div>
-                    <DocumentActionNotice
-                      status={signStatus}
-                      pending={`Signing ${label}…`}
-                      succeeded={`${label} signed. Its updated status remains visible in this row.`}
-                      failed={`Signing ${label} could not be confirmed. Refresh this record before trying again.`}
-                    />
-                    <DocumentActionNotice
-                      status={openStatus}
-                      pending={`Opening ${label}…`}
-                      succeeded={`${label} link prepared. If no tab opened, try opening it again.`}
-                      failed={`${label} could not be opened. This record remains available.`}
-                    />
+                    <div className="arc-credit-document-notices">
+                      <DocumentActionNotice
+                        status={signStatus}
+                        pending={`Signing ${label}…`}
+                        succeeded={`${label} signed. Its updated status remains visible in this row.`}
+                        failed={`Signing ${label} could not be confirmed. Refresh this record before trying again.`}
+                      />
+                      <DocumentActionNotice
+                        status={openStatus}
+                        pending={`Opening ${label}…`}
+                        succeeded={`${label} link prepared. If no tab opened, try opening it again.`}
+                        failed={`${label} could not be opened. This record remains available.`}
+                      />
+                    </div>
                   </div>
-                </div>
+                </li>
               )
             })}
-          </div>
+          </ul>
         )}
       </AeSection>
       <AeSection
@@ -199,18 +205,23 @@ export function CreditAccountingPanel({
             description="New paid Calls remain blocked only when their affected Account is locked for a proven mismatch."
           />
         ) : (
-          <div className="grid gap-intra">
+          <ul className="arc-credit-record-list" aria-label="Reconciliation cases">
             {reconciliationCases.map((item) => (
-              <AeFactList key={item.caseRef} facts={[
-                { label: 'Difference', value: item.kind.replaceAll('_', ' ') },
-                { label: 'Status', value: item.status },
-                { label: 'Owner', value: item.ownerPrincipalRef ?? 'Unassigned' },
-                { label: 'Affected scope', value: item.scopeType === undefined ? 'Legacy Account case' : `${item.scopeType.replaceAll('_', ' ')} · ${item.scopeRef ?? 'Unknown'}` },
-                { label: 'Reason', value: item.reasonCode.replaceAll('_', ' ') },
-                { label: 'Reference', value: item.caseRef, mono: true },
-              ]} />
+              <li key={item.caseRef} className="arc-credit-record-row">
+                <AeFactList
+                  className="arc-credit-record-facts"
+                  facts={[
+                    { label: 'Difference', value: item.kind.replaceAll('_', ' ') },
+                    { label: 'Status', value: item.status },
+                    { label: 'Owner', value: item.ownerPrincipalRef ?? 'Unassigned' },
+                    { label: 'Affected scope', value: item.scopeType === undefined ? 'Legacy Account case' : `${item.scopeType.replaceAll('_', ' ')} · ${item.scopeRef ?? 'Unknown'}` },
+                    { label: 'Reason', value: item.reasonCode.replaceAll('_', ' ') },
+                    { label: 'Reference', value: item.caseRef, mono: true },
+                  ]}
+                />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </AeSection>
       <AeSection
@@ -222,18 +233,23 @@ export function CreditAccountingPanel({
         ) : providerObligations.length === 0 ? administrationLoading ? null : (
           <CreditSectionEmptyState title="No Provider obligations" description="A managed x402 Call creates one attributable upstream obligation." />
         ) : (
-          <div className="grid gap-intra">
+          <ul className="arc-credit-record-list" aria-label="Provider obligations">
             {providerObligations.map((obligation) => (
-              <AeFactList key={obligation.obligationRef} facts={[
-                { label: 'Provider', value: obligation.providerRef },
-                { label: 'Buyer amount', value: formatCreditAmount({ currency: 'AUD', exponent: 6, units: obligation.buyerAmountUnits }), mono: true },
-                { label: 'Provider amount', value: formatCreditAmount({ currency: 'USDC', exponent: 6, units: obligation.providerAmountUnits }), mono: true },
-                { label: 'State', value: obligation.state },
-                { label: 'Payout', value: 'Ineligible — settled by x402' },
-                { label: 'Reference', value: obligation.obligationRef, mono: true },
-              ]} />
+              <li key={obligation.obligationRef} className="arc-credit-record-row">
+                <AeFactList
+                  className="arc-credit-record-facts"
+                  facts={[
+                    { label: 'Provider', value: obligation.providerRef },
+                    { label: 'Buyer amount', value: formatCreditAmount({ currency: 'AUD', exponent: 6, units: obligation.buyerAmountUnits }), mono: true },
+                    { label: 'Provider amount', value: formatCreditAmount({ currency: 'USDC', exponent: 6, units: obligation.providerAmountUnits }), mono: true },
+                    { label: 'State', value: obligation.state },
+                    { label: 'Payout', value: 'Ineligible — settled by x402' },
+                    { label: 'Reference', value: obligation.obligationRef, mono: true },
+                  ]}
+                />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </AeSection>
     </div>

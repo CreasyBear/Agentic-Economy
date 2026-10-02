@@ -1,0 +1,60 @@
+/*
+ * Arc agent-run.module.css SHA-256: 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032 (.code).
+ * Arc ai-chat.module.css SHA-256: 9bb51b56ad4ba212ce43ffd3374e2f73f2311cf215a644ff30a78421c5709eeb (.codeBlock, .codeHead, .pre).
+ * Chosen selectors: .arc-market.arc-code-fence, .arc-code-fence-toolbar, .arc-code-fence-copy, .arc-code-fence-code.
+ */
+.arc-market.arc-code-fence {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-code-fence .arc-code-fence-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.arc-market.arc-code-fence .arc-code-fence-copy {
+  min-height: 44px;
+}
+
+.arc-market.arc-code-fence .arc-code-fence-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.arc-market.arc-code-fence .arc-code-fence-code {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4);
+  overflow-x: auto;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: max(14px, var(--text-sm));
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre;
+  scrollbar-width: thin;
+}
+
+.arc-market.arc-code-fence .arc-code-fence-code > code {
+  display: block;
+  min-width: max-content;
+}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { Button } from '@/components/ui/button'
+import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -17,6 +17,7 @@ import {
   type AdminExceptionsPageProps,
 } from './exceptions.contracts'
 import { useAdminExceptions } from './useAdminExceptions'
+import '../RecordWorkspaceComposition.css'
 
 export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
   const exceptions = useAdminExceptions(props)
@@ -51,7 +52,7 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
   const ready = exceptions.data
   const selectedPartition = ready.selectedPartition
   return page(
-    <div className="grid gap-section">
+    <div className="arc-market arc-admin-record-workspace">
       <AeSection
         title={ADMIN_EXCEPTIONS_COPY.filtersTitle}
         description={ADMIN_EXCEPTIONS_COPY.filtersDescription}
@@ -63,22 +64,21 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
           overview={ready.overview}
           onSelect={exceptions.onSelectKind}
         />
-        <div className="mt-3 flex flex-wrap gap-intra">
-          {ADMIN_EXCEPTION_PARTITIONS[ready.selectedKind].map((partition) => {
-            const count = exceptionQueueCount(
+        <SegmentedControl
+          label="Exception states"
+          value={selectedPartition}
+          options={ADMIN_EXCEPTION_PARTITIONS[ready.selectedKind].map((partition) => ({
+            value: partition,
+            label: `${ADMIN_EXCEPTION_PARTITION_LABELS[partition]} (${exceptionQueueCount(
               ready.overview.filter((entry) => entry.kind === ready.selectedKind && entry.partition === partition),
               1,
-            )
-            return (
-              <Button key={partition} type="button" size="sm"
-                variant={selectedPartition === partition ? 'default' : 'outline'}
-                aria-pressed={selectedPartition === partition}
-                onClick={() => exceptions.onSelectPartition(partition)}>
-                {ADMIN_EXCEPTION_PARTITION_LABELS[partition]} ({count})
-              </Button>
-            )
-          })}
-        </div>
+            )})`,
+          }))}
+          onValueChange={(value) => {
+            const partition = ADMIN_EXCEPTION_PARTITIONS[ready.selectedKind].find((candidate) => candidate === value)
+            if (partition !== undefined) exceptions.onSelectPartition(partition)
+          }}
+        />
       </AeSection>
       {ready.selectedSourceUnavailable ? (
         <p role="status" className="text-sm text-warning">{ADMIN_EXCEPTIONS_COPY.exceptionsUnavailable}</p>

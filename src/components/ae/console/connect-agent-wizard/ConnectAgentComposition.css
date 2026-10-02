@@ -1,0 +1,124 @@
+/* Adapted from Arc UI drawer source SHA-256: aa27fdf0aa995285f0cf513fcf355b037018c2a1a72c63fac4909a40055a7dd2; source retrieved 2026-10-01. */
+.arc-market.arc-connect-agent-drawer {
+  width: min(90vw, 620px);
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.arc-market.arc-connect-agent-drawer > :last-child {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.arc-connect-agent-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.arc-connect-agent-fields {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: var(--space-6);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-6);
+}
+
+.arc-connect-agent-fields input {
+  min-width: 0;
+  min-height: 44px;
+}
+
+.arc-connect-agent-limits {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+.arc-connect-agent-limit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.arc-connect-agent-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+/* Arc radio-cards body/indicator/description grouping, using the existing Base
+ * UI keyboard/selection engine and exact controlled options. Source CSS SHA-256
+ * 8f3f80726ef946b0665ae033de3eefa3013678c8f59bac57882be15fa03543ba. */
+.arc-agent-name-field, .arc-agent-choice-group { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-agent-name-field > label, .arc-agent-choice-heading { font-size: var(--text-sm); font-weight: 500; }
+.arc-agent-name-input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-3); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-sm); }
+.arc-agent-name-input[aria-invalid="true"] { border-color: var(--danger); }
+.arc-agent-name-description { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: var(--space-3); color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); }
+.arc-agent-name-description p { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.arc-agent-name-description > span { flex: none; font-variant-numeric: tabular-nums; }
+.arc-agent-environment-options { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.arc-agent-authority-options { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+.arc-agent-choice { display: grid; min-width: 0; min-height: 44px; align-items: start; gap: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-4); background: var(--surface); color: var(--foreground); font-size: var(--text-sm); line-height: var(--leading-body); cursor: pointer; transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard); }
+.arc-agent-choice:has([data-checked]) { border-color: var(--control-on); background: color-mix(in oklch, var(--control-on) 4%, var(--surface)); }
+.arc-agent-choice:has([data-disabled]) { background: var(--surface-muted); color: var(--text-muted); cursor: not-allowed; }
+.arc-agent-choice:has(:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.arc-agent-choice-title { display: flex; min-width: 0; align-items: center; gap: var(--space-2); }
+.arc-agent-choice-description { min-width: 0; color: var(--text-secondary); font-size: var(--text-sm); font-weight: 400; line-height: 1.45; overflow-wrap: anywhere; }
+.arc-agent-choice-list { grid-template-columns: auto minmax(0, 1fr); }
+.arc-agent-choice-copy { display: grid; min-width: 0; gap: var(--space-1); }
+.arc-agent-choice-production:has([data-checked]) { border-color: var(--ae-warning-ring); background: var(--ae-warning-subtle); }
+@media (hover: hover) and (pointer: fine) { .arc-agent-choice:not(:has([data-disabled])):hover { border-color: var(--border-strong); } }
+@media (max-width: 479px) { .arc-agent-environment-options { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .arc-agent-choice { transition: none; } }
+
+.arc-connect-agent-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  padding-block-end: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 639px) {
+  .arc-connect-agent-fields {
+    padding-inline: var(--space-4);
+  }
+
+  .arc-connect-agent-footer {
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (min-width: 480px) {
+  .arc-connect-agent-limit-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 479px) {
+  .arc-connect-agent-fields {
+    padding-block: var(--space-4);
+  }
+
+  .arc-connect-agent-footer > button {
+    flex: 1 1 0;
+  }
+}

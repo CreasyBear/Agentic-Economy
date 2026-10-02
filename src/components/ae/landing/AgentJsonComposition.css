@@ -1,0 +1,10 @@
+/* Adapted from Arc CodeBlock source/header geometry; source CSS SHA-256: 3419a73d0396bb47f3a834181fbc5435e84013bbf827cf7961dc5dfcc4d3946b.
+ * The existing explicit confirmation owns clipboard writes. */
+.arc-market.arc-agent-json { color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.5; }
+.arc-market .arc-agent-json-source { min-width: 0; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.arc-market .arc-agent-json-fields { min-width: 0; margin: 0; border-bottom: 1px solid var(--border-subtle); border-radius: calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px) 0 0; padding: var(--space-4); background: var(--surface-raised); color: var(--text-secondary); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.arc-market .arc-agent-json-pre { min-width: 0; max-width: 100%; max-height: 50dvh; overflow: auto; margin: 0; padding: var(--space-5); color: var(--foreground); font-family: var(--font-mono); font-size: var(--text-sm); font-variant-ligatures: none; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
+.arc-market .arc-agent-json-pre:focus-visible { outline: 2px solid var(--ring); outline-offset: -3px; }
+.arc-market .arc-agent-json-actions { display: flex; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3); }
+.arc-market .arc-agent-json-actions button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .arc-market .arc-agent-json-actions { flex-direction: column-reverse; } .arc-market .arc-agent-json-actions button { width: 100%; } .arc-market .arc-agent-json-pre { padding: var(--space-4); } }

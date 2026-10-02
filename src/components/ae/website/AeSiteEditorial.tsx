@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { AeSiteSection } from './AeSiteSection'
-import { AeSiteEyebrow, AeSiteHeading } from './AeSiteType'
+import './AboutStoryComposition.css'
 
 export type AeSiteEditorialProps = Readonly<{
   label: string
@@ -10,26 +9,25 @@ export type AeSiteEditorialProps = Readonly<{
   children: ReactNode
 }>
 
-/** Port of aecon.ai's Tailark content-4 split editorial composition. */
+/** Arc split editorial rhythm for the published founder article. */
 export function AeSiteEditorial({ label, title, description, children }: AeSiteEditorialProps) {
   return (
-    <AeSiteSection labelledBy="about-editorial" rhythm="section" enter>
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="grid gap-4 md:grid-cols-2 md:gap-6 lg:gap-12">
-          <div>
-            <AeSiteEyebrow>{label}</AeSiteEyebrow>
-            <AeSiteHeading as="h2" size="md" id="about-editorial" className="max-w-md">
-              {title}
-            </AeSiteHeading>
-          </div>
-          <div className="grid gap-4">
-            <p className="text-balance text-lg text-muted-foreground">
-              {description}
-            </p>
-            <div className="mt-8">{children}</div>
-          </div>
+    <section
+      className="arc-market arc-about-story arc-about-editorial"
+      aria-labelledby="about-editorial"
+    >
+      <div className="arc-about-story-inner arc-about-editorial-inner">
+        <div className="arc-about-editorial-heading">
+          <h2 className="arc-about-editorial-title" id="about-editorial">
+            {title}
+          </h2>
+          <p className="arc-about-story-label">{label}</p>
+        </div>
+        <div className="arc-about-editorial-content">
+          <p className="arc-about-story-description">{description}</p>
+          {children}
         </div>
       </div>
-    </AeSiteSection>
+    </section>
   )
 }

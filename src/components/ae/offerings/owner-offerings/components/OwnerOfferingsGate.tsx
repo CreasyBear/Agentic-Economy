@@ -1,12 +1,12 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
 
 import { OWNER_OFFERINGS_COPY, type OwnerOfferingsProjectionGateProps } from '../owner-offerings.contracts'
+import './OwnerInventoryComposition.css'
 
 export function OwnerOfferingsProjectionGate({
   projectionState,
@@ -15,12 +15,12 @@ export function OwnerOfferingsProjectionGate({
   if (projectionState === 'current') return null
 
   return (
-    <Alert>
+    <Alert className="arc-market arc-owner-inventory-gate">
       <AlertTitle>Your public page is still updating</AlertTitle>
       <AlertDescription>
         <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
         {onRetryProjection === undefined ? null : (
-          <Button type="button" variant="secondary" className="min-h-touch" onClick={onRetryProjection}>
+          <Button type="button" variant="secondary" size="md" onClick={onRetryProjection}>
             Refresh public status
           </Button>
         )}
@@ -37,7 +37,7 @@ export function OwnerOfferingsEmptyState() {
       action={
         <Link
           to="/owner/operations/new"
-          className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+          className={`arc-market ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-owner-inventory-empty-action`}
         >
           {OWNER_OFFERINGS_COPY.emptyAction}
         </Link>

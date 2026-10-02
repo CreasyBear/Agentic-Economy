@@ -2,8 +2,8 @@ import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import './ReceiptComposition.css'
 
 export function CallReceiptWorkspace({
   callRef,
@@ -26,23 +26,23 @@ export function CallReceiptWorkspace({
       currentPath={`/calls/${encodeURIComponent(callRef)}`}
       breadcrumbs={[{ label: 'Calls', href: '/activity' }, { label: 'Call receipt' }]}
       actions={(
-        <div className="flex flex-wrap gap-intra">
+        <div className="arc-market arc-call-actions">
           <Link
             to="/support"
             search={{ callRef }}
-            className={cn(buttonVariants({ variant: 'ghost' }), 'min-h-touch')}
+            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
           >
             Get help
           </Link>
           <Link
             to="/trust"
-            className={cn(buttonVariants({ variant: 'ghost' }), 'min-h-touch')}
+            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
           >
             Trust centre
           </Link>
           <Link
             to="/activity"
-            className={cn(buttonVariants({ variant: 'ghost' }), 'min-h-touch')}
+            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
           >
             Back to Calls
           </Link>
@@ -50,7 +50,7 @@ export function CallReceiptWorkspace({
       )}
       pending={pending}
     >
-      <article id="receipt" className="grid scroll-mt-6 gap-section pb-page">
+      <article id="receipt" className="arc-market arc-call-receipt">
         {children}
       </article>
     </AeOperatorPage>

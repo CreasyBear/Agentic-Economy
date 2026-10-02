@@ -7,9 +7,7 @@ import { ArrowLeftIcon, SearchIcon, XIcon } from 'lucide-react'
 
 import { useAppearance } from '@/components/ae/theme/ThemeProvider'
 
-import { TACTILE } from '@/components/ae/feedback/AeEmptyState'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
 import {
   Dialog,
   DialogClose,
@@ -23,6 +21,7 @@ import { useCommandPanel } from './CommandPanelProvider'
 import { ToolsSearchPage } from './tools-search-page/ToolsSearchPage'
 import { ToolDetailPage } from './pages/ToolDetailPage'
 import { useCommandPanelHotKeys } from './useCommandPanelHotKeys'
+import './CommandPanelComposition.css'
 
 const PANEL_CONTENT_ID = 'ae-command-panel-content'
 
@@ -68,18 +67,15 @@ export function AeCommandPanel({
         render={
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            className={cn(
-              'min-h-touch justify-start rounded-full px-3 shadow-none sm:min-w-40',
-              TACTILE,
-            )}
+            variant="secondary"
+            size="md"
+            className="arc-market arc-command-trigger"
             aria-label="Find Tools"
             aria-controls={PANEL_CONTENT_ID}
           >
             <SearchIcon aria-hidden="true" />
-            <span className="hidden text-sm font-medium sm:inline">Find Tools</span>
-            <kbd className="ms-auto hidden border-s border-border ps-2 font-mono text-[0.6875rem] text-muted-foreground sm:inline">
+            <span className="arc-command-trigger-label">Find Tools</span>
+            <kbd className="arc-command-trigger-key">
               ⌘K
             </kbd>
           </Button>
@@ -87,9 +83,9 @@ export function AeCommandPanel({
       />
       <DialogContent
         id={PANEL_CONTENT_ID}
-        showCloseButton={panel.pageCount === 1}
+        showCloseButton={false}
         instant
-        className="flex h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-lg p-0 sm:h-[min(42rem,calc(100dvh-3rem))] sm:w-full sm:max-w-3xl"
+        className="arc-market arc-command-panel"
         onKeyDown={(event) => {
           if (
             event.key === '/' &&
@@ -105,15 +101,18 @@ export function AeCommandPanel({
         <DialogDescription className="sr-only">
           Search the Tool catalog, describe one Tool, and take its next action.
         </DialogDescription>
+        {panel.pageCount === 1 ? (
+          <DialogClose render={<Button type="button" variant="ghost" size="md" className="arc-command-search-close" aria-label="Close"><XIcon aria-hidden="true" /></Button>} />
+        ) : null}
         {panel.pageCount > 1 ? (
-          <div className="flex min-h-touch shrink-0 items-center justify-between border-b border-border px-gutter">
-            <Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={panel.popPage}>
+          <div className="arc-command-layer-bar">
+            <Button type="button" variant="ghost" size="md" onClick={panel.popPage}>
               <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
               Back
             </Button>
             <DialogClose
               render={
-                <Button type="button" variant="ghost" size="sm" className="min-h-touch">
+                <Button type="button" variant="ghost" size="md">
                   <XIcon data-icon="inline-start" aria-hidden="true" />
                   Close
                 </Button>
@@ -121,7 +120,7 @@ export function AeCommandPanel({
             />
           </div>
         ) : null}
-        <div className="flex min-h-0 flex-1 flex-col" data-testid="command-panel-body">
+        <div className="arc-command-body" data-testid="command-panel-body">
           <div
             hidden={panel.topPage.kind !== 'tools-search'}
             className="contents"
@@ -154,30 +153,30 @@ export function AeCommandPanel({
         </div>
         <footer
           aria-label="Keyboard shortcuts"
-          className="flex shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-border px-gutter py-intra text-xs text-foreground/80"
+          className="arc-command-footer"
         >
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="inline-flex items-center gap-1">
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+          <div className="arc-command-footer-hints">
+            <span className="arc-command-footer-hint">
+              <kbd>
                 ↑↓
               </kbd>
               <span>Navigate</span>
             </span>
-            <span className="inline-flex items-center gap-1">
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+            <span className="arc-command-footer-hint">
+              <kbd>
                 ↵
               </kbd>
               <span>Select</span>
             </span>
-            <span className="inline-flex items-center gap-1">
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+            <span className="arc-command-footer-hint">
+              <kbd>
                 esc
               </kbd>
               <span>Back / Close</span>
             </span>
           </div>
-          <span className="hidden sm:inline-flex items-center gap-1">
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+          <span className="arc-command-footer-hint arc-command-footer-search-hint">
+            <kbd>
               /
             </kbd>
             <span>Search</span>

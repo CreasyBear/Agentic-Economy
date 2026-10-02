@@ -2,6 +2,7 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import type { AdminCallRelatedRef } from '../call-object.contracts'
 import { ADMIN_CALL_OBJECT_COPY } from '../call-object.contracts'
+import '../../RecordWorkspaceComposition.css'
 
 export type AdminCallReferencesProps = Readonly<{
   refs: readonly AdminCallRelatedRef[]
@@ -12,17 +13,17 @@ export function AdminCallReferences({ refs }: AdminCallReferencesProps) {
     <AeSection
       title={ADMIN_CALL_OBJECT_COPY.relatedTitle}
       description={ADMIN_CALL_OBJECT_COPY.relatedDescription}
-      className="rounded-card border border-border p-gutter"
+      className="arc-admin-related-records"
     >
-      <div className="grid gap-related">
+      <div className="arc-admin-related-list">
         {refs.map((ref) => (
-          <div key={`${ref.label}:${ref.value}`} className="grid gap-intra">
+          <div key={`${ref.label}:${ref.value}`} className="arc-admin-related-row">
             {ref.href === undefined ? (
-              <span className="text-sm font-medium text-foreground">{ref.label}</span>
+              <span>{ref.label}</span>
             ) : (
               <a
                 href={ref.href}
-                className="min-h-touch w-fit content-center text-sm font-medium text-link underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="arc-admin-record-link"
               >
                 {ref.label}
               </a>

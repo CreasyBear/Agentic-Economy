@@ -1,8 +1,5 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 
-export const TACTILE =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
 export const INVALID_PRICE_DIAGNOSTIC = {
   whatHappened: 'Invalid AUD price amount.',
   financialImpact: 'A$0.00 affected — pricing revision not published.',

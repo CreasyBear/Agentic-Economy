@@ -25,7 +25,6 @@ export function AeTableEmptyState({
   financialReassurance,
 }: AeTableEmptyStateProps) {
   return (
-    <div className="min-h-[14rem] rounded-card border border-dashed border-border/80 bg-muted/10 p-related">
       <AeEmptyState
         compact={true}
         title={title}
@@ -35,6 +34,5 @@ export function AeTableEmptyState({
         {...(recipes !== undefined ? { recipes } : {})}
         {...(financialReassurance !== undefined ? { financialReassurance } : {})}
       />
-    </div>
   )
 }

@@ -7,6 +7,7 @@ import { ToolPanelActions } from './components/ToolPanelActions'
 import { ToolPanelForm } from './components/ToolPanelForm'
 import { ToolPanelHeader } from './components/ToolPanelHeader'
 import { ToolPanelSkeleton } from './ToolPanelSkeleton'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 
 export function ToolPanel(props: ToolPanelProps) {
   const { view, setInputText, run, runAgain } = useToolPanel(props)
@@ -19,10 +20,10 @@ export function ToolPanel(props: ToolPanelProps) {
 
 
   return (
-    <section {...(props.panelId === undefined ? {} : { id: props.panelId })} aria-labelledby={headingId}
+    <DecisionPanel {...(props.panelId === undefined ? {} : { id: props.panelId })} aria-labelledby={headingId}
       aria-busy={view.phase === 'loading' || view.submission === 'submitting'} aria-hidden={!props.open}
       inert={!props.open} data-open={props.open}
-      className="grid min-w-0 gap-3 rounded-card border border-border bg-card p-4 motion-safe:transition-[opacity,translate] motion-safe:duration-base motion-safe:ease-emphasized motion-safe:starting:translate-y-1 motion-safe:starting:opacity-0 motion-safe:data-[open=false]:translate-y-1 motion-safe:data-[open=false]:opacity-0 motion-safe:data-[open=false]:duration-fast motion-safe:data-[open=false]:ease-standard">
+      className="arc-tool-review-panel">
       <ToolPanelHeader view={view} headingId={headingId} headingRef={headingRef} onClose={props.onClose} />
       {view.phase === 'loading' ? <ToolPanelSkeleton recommended={props.recommendedBy !== undefined} /> : null}
       {view.phase === 'unavailable' ? <p role="status" className="break-words text-sm text-muted-foreground">{chatToolPanel.unavailable}</p> : null}
@@ -32,6 +33,6 @@ export function ToolPanel(props: ToolPanelProps) {
           <ToolPanelActions view={view} statusId={`${id}-form-incomplete`} onRun={() => void run()} onRunAgain={runAgain} />
         </>
       ) : null}
-    </section>
+    </DecisionPanel>
   )
 }

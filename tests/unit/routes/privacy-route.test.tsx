@@ -28,6 +28,7 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 
 import '@/routes/privacy'
+import { privacySections, privacyLastUpdated, privacyOaicLink } from '@/components/ae/legal/privacy/privacy.contracts'
 
 afterEach(cleanup)
 
@@ -45,6 +46,14 @@ describe('privacy route', () => {
     expect(screen.getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
       .toBe('/privacy/remove-business')
 
+    expect(screen.getByText(`Legal · Last updated ${privacyLastUpdated} · Version Alpha draft for review`)).toBeTruthy()
+    for (const [index, section] of privacySections.entries()) {
+      const region = screen.getByRole('region', { name: `${index + 1}. ${section.heading}` })
+      expect(Array.from(region.querySelectorAll('p'), (p) => p.textContent)).toEqual(section.body)
+    }
+    expect(screen.getByRole('link', { name: 'Contact Support about your data' }).getAttribute('href')).toBe('/support')
+    expect(screen.getByRole('link', { name: privacyOaicLink }).getAttribute('href'))
+      .toBe('https://www.oaic.gov.au/privacy/privacy-complaints')
     const contents = screen.getByRole('navigation', { name: 'On this page' })
     const links = within(contents).getAllByRole('link')
     expect(links).toHaveLength(15)

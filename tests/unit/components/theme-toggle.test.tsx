@@ -4,7 +4,6 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { TACTILE } from '@/components/ae/feedback/AeEmptyState'
 import { ThemeToggle } from '@/components/ae/layout/ThemeToggle'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import '../../setup/jsdom-platform'
@@ -117,31 +116,32 @@ describe('ThemeToggle', () => {
     })
   })
 
-  it('T6: trigger button uses compact size and full tactile physics token', () => {
+  it('T6: trigger is a native menu button with the current appearance label', () => {
     renderThemeToggle()
 
     const trigger = screen.getByRole('button', { name: 'Appearance: Light' })
-    expect(trigger.className).toContain('size-8')
-    for (const token of TACTILE.split(/\s+/u)) {
-      expect(trigger.className).toContain(token)
-    }
+    expect(trigger.tagName).toBe('BUTTON')
+    expect(trigger).toHaveAttribute('type', 'button')
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('T8: menu content and radio items use Base UI origin and tactile classes', async () => {
+  it('T8: keyboard opens the appearance choices and Escape returns focus', async () => {
     renderThemeToggle()
 
-    openAppearanceMenu()
+    const trigger = screen.getByRole('button', { name: 'Appearance: Light' })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
 
     await waitFor(() => {
       expect(screen.getByRole('menu')).toBeInTheDocument()
     })
 
-    const menu = screen.getByRole('menu')
-    expect(menu.className).toContain('origin-(--transform-origin)')
-
     const darkItem = screen.getByRole('menuitemradio', { name: 'Dark' })
-    expect(darkItem.className).toContain('active:scale-[0.98]')
-    expect(darkItem.className).toContain('motion-reduce:transition-none')
+    expect(darkItem).toHaveAttribute('aria-checked', 'false')
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it('T7: radio menu items expose aria-checked on the active preference', async () => {

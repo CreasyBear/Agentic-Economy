@@ -5,6 +5,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
+import arcButtonStyles from '@/components/arc/button/button.module.css'
 
 const routeState = vi.hoisted(() => ({
   components: new Map<string, ComponentType>(),
@@ -62,7 +63,7 @@ describe('public semantic comfort', () => {
     }
     const company = screen.getByRole('navigation', { name: 'Company and website' })
     for (const link of within(company).getAllByRole('link')) {
-      expect(link.classList.contains('min-h-touch')).toBe(true)
+      expect(link.classList.contains('arc-document-company-link')).toBe(true)
     }
     expect(within(article).getByText(/an authorised Agent acts for that Customer/)).toBeTruthy()
     expect(within(article).getByText(/which Tools it may use/)).toBeTruthy()
@@ -102,7 +103,10 @@ describe('public semantic comfort', () => {
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.featuresHeading })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.ctaHeading })).toBeTruthy()
     const cta = about.getByRole('region', { name: ABOUT.ctaHeading })
-    expect(within(cta).getByRole('link', { name: ABOUT.ctaPrimary }).classList.contains('h-12')).toBe(true)
+    const primaryCta = within(cta).getByRole('link', { name: ABOUT.ctaPrimary })
+    expect(Array.from(primaryCta.classList)).toContain(arcButtonStyles.primary)
+    expect(Array.from(primaryCta.classList)).toContain(arcButtonStyles.md)
+    expect(primaryCta.getAttribute('href')).toBe('/market')
     expect(within(cta).queryByRole('link', { name: 'Add Tool' })).toBeNull()
     expect(about.queryByRole('link', { name: 'Add Tool' })).toBeNull()
     expect(

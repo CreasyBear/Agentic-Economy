@@ -1,125 +1,104 @@
+import { useId, useState } from 'react'
+
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { AeSiteBody, AeSiteHeading, AeSiteSection } from '@/components/ae/website'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
-
 import { DEVELOPERS_API_COPY, type DevelopersApiViewModel } from './developers-api.contracts'
+import '../DeveloperReferenceComposition.css'
 
 export type DevelopersApiPageProps = Readonly<{
   page: DevelopersApiViewModel
 }>
 
 export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
+  const outlineId = useId()
+  const [outlineOpen, setOutlineOpen] = useState(false)
+  const contents = [
+    { id: 'api-requests-heading', title: DEVELOPERS_API_COPY.operationsHeading },
+    { id: 'api-setup-heading', title: DEVELOPERS_API_COPY.setupHeading },
+    { id: 'api-errors-heading', title: DEVELOPERS_API_COPY.errorsHeading },
+  ]
+
   return (
-    <AePublicPage
-      kind="document"
-      eyebrow={DEVELOPERS_API_COPY.eyebrow}
-      title={DEVELOPERS_API_COPY.title}
-      description={DEVELOPERS_API_COPY.description}
-    >
-      <AeSiteSection labelledBy="api-requests-heading" scheme="canvas">
-        <div className="grid gap-page">
-          <div className="grid gap-intra">
-            <AeSiteHeading as="h2" size="md" id="api-requests-heading">
-              {DEVELOPERS_API_COPY.operationsHeading}
-            </AeSiteHeading>
-            <AeSiteBody muted size="sm">{DEVELOPERS_API_COPY.operationsDescription}</AeSiteBody>
+    <AePublicPage kind="document" eyebrow={DEVELOPERS_API_COPY.eyebrow} title={DEVELOPERS_API_COPY.title} description={DEVELOPERS_API_COPY.description}>
+      <div className="arc-market arc-developer-reference">
+        <div className="arc-reference-reading">
+          <div className="arc-reference-outline">
+            <button type="button" className="arc-reference-outline-toggle" aria-expanded={outlineOpen} aria-controls={outlineId} onClick={() => setOutlineOpen((open) => !open)}>
+              API reference contents
+            </button>
+            <div id={outlineId} className="arc-reference-outline-panel" data-open={outlineOpen}>
+              <nav aria-label="API reference contents">
+                <p className="arc-reference-outline-title">On this page</p>
+                <ul>{contents.map((item) => <li key={item.id}><a href={`#${item.id}`} onClick={() => setOutlineOpen(false)}>{item.title}</a></li>)}</ul>
+              </nav>
+            </div>
           </div>
-          {page.operationGroups.map((group) => (
-            <div key={group.tag} className="grid gap-related">
-              <AeSiteHeading as="h3" size="sm">{group.tag}</AeSiteHeading>
-              <div className="grid gap-related xl:grid-cols-2">
-                {group.operations.map((operation) => (
-                  <Card key={operation.operationId} className="min-w-0">
-                    <CardContent className="grid min-w-0 gap-related">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <Badge variant="outline">{operation.method}</Badge>
-                        <code className="min-w-0 break-all text-xs text-muted-foreground">{operation.path}</code>
-                      </div>
-                      <div className="grid gap-1">
-                        <AeSiteHeading as="h4" size="xs">{operation.summary}</AeSiteHeading>
-                        <code className="text-xs text-muted-foreground">{operation.operationId}</code>
-                      </div>
-                      {operation.curl === undefined ? (
-                        <div className="grid min-w-0 gap-2">
-                          <p className="text-sm font-medium">Request template · not runnable</p>
-                          <p className="text-xs text-muted-foreground">{operation.authority}</p>
-                          <pre className="min-w-0 overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{operation.template}</code></pre>
-                        </div>
-                      ) : (
-                        <AeCopyCommand
-                          comfortable
-                          prompt={false}
-                          label={`${operation.method} ${operation.path} cURL`}
-                          code={operation.curl}
-                        />
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </AeSiteSection>
-
-      <AeSiteSection labelledBy="api-setup-heading" rhythm="flush" scheme="surface">
-        <div className="grid gap-page py-10 md:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)] md:py-12">
-          <div className="grid content-start gap-related">
-            <AeSiteHeading as="h2" size="sm" id="api-setup-heading">
-              {DEVELOPERS_API_COPY.setupHeading}
-            </AeSiteHeading>
-            <AeSiteBody muted size="sm">{DEVELOPERS_API_COPY.setupDescription}</AeSiteBody>
-            <a className="w-fit text-sm font-medium text-brand underline underline-offset-4" href="/openapi.json">
-              {DEVELOPERS_API_COPY.openApiLink}
-            </a>
-          </div>
-          <dl className="grid gap-related text-sm">
-            <div className="grid gap-1">
-              <dt className="font-medium">{DEVELOPERS_API_COPY.versionLabel}</dt>
-              <dd className="text-muted-foreground">{page.versionPolicy}</dd>
-            </div>
-            <div className="grid gap-1">
-              <dt className="font-medium">{DEVELOPERS_API_COPY.authenticationLabel}</dt>
-              <dd className="text-muted-foreground">{page.authDescription}</dd>
-            </div>
-            <div className="grid gap-1">
-              <dt className="font-medium">{DEVELOPERS_API_COPY.priceShapeLabel}</dt>
-              <dd className="grid gap-1 text-muted-foreground">
-                <span>{DEVELOPERS_API_COPY.priceShape}</span>
-                <code className="break-all text-xs text-foreground">{page.priceExample.json}</code>
-                <span>{DEVELOPERS_API_COPY.priceExampleLabel}: {page.priceExample.formatted}</span>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </AeSiteSection>
-
-      <AeSiteSection labelledBy="api-errors-heading" scheme="surface">
-        <div className="grid gap-page">
-          <div className="grid gap-intra">
-            <AeSiteHeading as="h2" size="md" id="api-errors-heading">
-              {DEVELOPERS_API_COPY.errorsHeading}
-            </AeSiteHeading>
-            <AeSiteBody muted size="sm">{DEVELOPERS_API_COPY.errorsDescription}</AeSiteBody>
-          </div>
-          <div className="grid gap-related md:grid-cols-2">
-            {page.problems.map((problem) => (
-              <Card key={problem.kind} className="min-w-0">
-                <CardContent className="grid gap-2 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <code className="font-medium">{problem.kind}</code>
-                    <span className="text-muted-foreground">{problem.title}</span>
+          <div className="arc-reference-content">
+            <section className="arc-reference-region" aria-labelledby="api-requests-heading">
+              <header>
+                <h2 id="api-requests-heading" tabIndex={-1}>{DEVELOPERS_API_COPY.operationsHeading}</h2>
+                <p>{DEVELOPERS_API_COPY.operationsDescription}</p>
+              </header>
+              {page.operationGroups.map((group) => (
+                <div key={group.tag} className="arc-reference-operation-group">
+                  <h3>{group.tag}</h3>
+                  <div className="arc-reference-operations">
+                    {group.operations.map((operation) => (
+                      <article key={operation.operationId} className="arc-reference-operation">
+                        <header className="arc-reference-operation-head">
+                          <div><Badge variant="outline">{operation.method}</Badge><code>{operation.path}</code></div>
+                          <h4>{operation.summary}</h4>
+                          <code>{operation.operationId}</code>
+                        </header>
+                        {operation.curl === undefined ? (
+                          <div className="arc-reference-template">
+                            <p>Request template · not runnable</p>
+                            <p>{operation.authority}</p>
+                            <pre><code>{operation.template}</code></pre>
+                          </div>
+                        ) : <AeCopyCommand comfortable prompt={false} label={`${operation.method} ${operation.path} cURL`} code={operation.curl} />}
+                      </article>
+                    ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">{DEVELOPERS_API_COPY.problemTypeLabel}: <code>{problem.type}</code></p>
-                  <p><span className="font-medium">{DEVELOPERS_API_COPY.nextStepLabel}:</span> {problem.nextStep}</p>
-                </CardContent>
-              </Card>
-            ))}
+                </div>
+              ))}
+            </section>
+            <section className="arc-reference-region" aria-labelledby="api-setup-heading">
+              <header>
+                <h2 id="api-setup-heading" tabIndex={-1}>{DEVELOPERS_API_COPY.setupHeading}</h2>
+                <p>{DEVELOPERS_API_COPY.setupDescription}</p>
+              </header>
+              <div className="arc-reference-setup">
+                <a className="arc-reference-openapi" href="/openapi.json">{DEVELOPERS_API_COPY.openApiLink}</a>
+                <dl>
+                  <div><dt>{DEVELOPERS_API_COPY.versionLabel}</dt><dd>{page.versionPolicy}</dd></div>
+                  <div><dt>{DEVELOPERS_API_COPY.authenticationLabel}</dt><dd>{page.authDescription}</dd></div>
+                  <div>
+                    <dt>{DEVELOPERS_API_COPY.priceShapeLabel}</dt>
+                    <dd><span>{DEVELOPERS_API_COPY.priceShape}</span><code>{page.priceExample.json}</code><span>{DEVELOPERS_API_COPY.priceExampleLabel}: {page.priceExample.formatted}</span></dd>
+                  </div>
+                </dl>
+              </div>
+            </section>
+            <section className="arc-reference-region" aria-labelledby="api-errors-heading">
+              <header>
+                <h2 id="api-errors-heading" tabIndex={-1}>{DEVELOPERS_API_COPY.errorsHeading}</h2>
+                <p>{DEVELOPERS_API_COPY.errorsDescription}</p>
+              </header>
+              <ul className="arc-reference-problems">
+                {page.problems.map((problem) => (
+                  <li key={problem.kind} className="arc-reference-problem">
+                    <div><code>{problem.kind}</code><span>{problem.title}</span></div>
+                    <p>{DEVELOPERS_API_COPY.problemTypeLabel}: <code>{problem.type}</code></p>
+                    <p><span>{DEVELOPERS_API_COPY.nextStepLabel}:</span> {problem.nextStep}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
           </div>
         </div>
-      </AeSiteSection>
+      </div>
     </AePublicPage>
   )
 }

@@ -2,7 +2,6 @@ import { useEffect, type Ref } from 'react'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { cn } from '@/lib/utils'
 import { REASON_COPY } from '@/content/reason-copy'
 import type { SupplyToolCandidate } from '@/modules/capability-supply/source-preview'
 import {
@@ -10,9 +9,7 @@ import {
   SUPPLY_PUBLICATION_FIELD_IDS,
   type SupplyPublicationInvalidField,
 } from './supply-source-native-start-presentation'
-
-const CANDIDATE_CARD_CLASS =
-  'grid min-h-touch cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border p-4 has-[[data-checked]]:border-foreground has-[[data-checked]]:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+import './SourceCandidatesComposition.css'
 
 export function SupplyCandidateSection({ candidates, selectedRef, invalidField, fieldError, headingRef, onSelect }: Readonly<{
   candidates: readonly SupplyToolCandidate[]
@@ -41,6 +38,7 @@ export function SupplyCandidateSection({ candidates, selectedRef, invalidField, 
         aria-describedby={errorDescribedBy}
         value={selectedRef}
         onValueChange={(val) => onSelect(String(val))}
+        className="arc-market arc-source-candidates"
       >
         {candidates.map((candidate) => <CandidateRow key={candidate.candidateRef} candidate={candidate} />)}
       </RadioGroup>
@@ -55,10 +53,7 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }
   return (
     <Label
       htmlFor={inputId}
-      className={cn(
-        CANDIDATE_CARD_CLASS,
-        !supported && 'cursor-not-allowed opacity-80 motion-reduce:active:scale-100 active:scale-100',
-      )}
+      className="arc-source-candidate"
       data-disabled={!supported || undefined}
     >
       <RadioGroupItem
@@ -66,14 +61,14 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }
         value={candidate.candidateRef}
         disabled={!supported}
         aria-label={`Select ${candidate.title}`}
-        className="mt-0.5"
+        className="arc-source-candidate-radio"
       />
-      <div className="grid min-w-0 gap-1">
-        <p className="font-medium text-foreground">{candidate.title}</p>
-        <p className="text-sm text-muted-foreground">{candidate.description}</p>
-        <p className="text-sm text-muted-foreground">{candidate.x402 === undefined ? 'Payment challenge incomplete' : `Price ${candidate.x402.amount} · payTo ${candidate.x402.payTo} · ${candidate.x402.network}`}</p>
-        <p className="text-sm text-muted-foreground">Input {candidate.inputSchema === undefined ? 'not declared' : 'schema declared'} · Output {candidate.outputSchema === undefined ? 'not declared' : 'schema declared'}</p>
-        {supported ? null : <p className="text-sm text-destructive">{REASON_COPY[candidate.disposition.reason] ?? `This operation cannot be imported (${candidate.disposition.reason}). Correct its source definition, then find Tools again.`}</p>}
+      <div className="arc-source-candidate-copy">
+        <p className="arc-source-candidate-title">{candidate.title}</p>
+        <p className="arc-source-candidate-description">{candidate.description}</p>
+        <p className="arc-source-candidate-payment">{candidate.x402 === undefined ? 'Payment challenge incomplete' : `Price ${candidate.x402.amount} · payTo ${candidate.x402.payTo} · ${candidate.x402.network}`}</p>
+        <p className="arc-source-candidate-description">Input {candidate.inputSchema === undefined ? 'not declared' : 'schema declared'} · Output {candidate.outputSchema === undefined ? 'not declared' : 'schema declared'}</p>
+        {supported ? null : <p className="arc-source-candidate-refusal">{REASON_COPY[candidate.disposition.reason] ?? `This operation cannot be imported (${candidate.disposition.reason}). Correct its source definition, then find Tools again.`}</p>}
       </div>
     </Label>
   )

@@ -6,10 +6,7 @@ import { OwnerOfferingsTable } from './owner-offerings/components/OwnerOfferings
 import type { AeOwnerOfferingsListProps } from './owner-offerings/owner-offerings.contracts'
 import { useOwnerOfferings } from './owner-offerings/useOwnerOfferings'
 
-export {
-  TACTILE_PRESS_CLASS,
-  type OwnerOfferingSummary,
-} from './owner-offerings/owner-offerings.contracts'
+export type { OwnerOfferingSummary } from './owner-offerings/owner-offerings.contracts'
 export {
   matchesOwnerOfferingInventory,
   toOwnerOfferingSummary,

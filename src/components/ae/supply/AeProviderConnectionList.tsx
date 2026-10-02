@@ -1,13 +1,12 @@
 import type { RefObject } from 'react'
+import { PlugZap } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { SettingsDangerZone, SettingsEmptyState, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { SettingsDangerZone, SettingsEmptyState } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { Button as ArcButton } from '@/components/arc/button/button'
+import arcButtonStyles from '@/components/arc/button/button.module.css'
 import type { OwnerProviderConnection } from '@/modules/capability-supply/supply-funnel.functions'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { providerConnectionTargetId } from './provider-connection-target'
@@ -17,6 +16,7 @@ import {
   providerConnectionStatus,
 } from './owner-provider-connections-model'
 import { OWNER_MCP_OAUTH_CALLBACK_COPY } from './owner-mcp-oauth-callback.contracts'
+import './ProviderConnectionsComposition.css'
 
 export function AeProviderConnectionList({
   connections,
@@ -62,19 +62,19 @@ export function AeProviderConnectionList({
   onClearProgrammaticFocus: () => void
 }>) {
   return (
-    <>
+    <div className="arc-market arc-provider-connections">
       {connections.length === 0 ? (
         <SettingsEmptyState
           title="No provider connection yet"
           description="Add the public HTTPS endpoint that returns the x402 payment challenge for your Tool."
           action={readOnly ? undefined : (
-            <Button type="button" className="min-h-touch" onClick={onBeginConnection}>
+            <ArcButton type="button" variant="primary" size="md" className="arc-provider-connection-action" onClick={onBeginConnection}>
               {missingConnectionActionLabel}
-            </Button>
+            </ArcButton>
           )}
         />
       ) : (
-        <ul className="m-0 min-w-0 list-none p-0">
+        <ul className="arc-provider-connection-list" aria-label="Provider connections">
           {connections.map((connection) => (
             <li
               key={connection.connectionRef}
@@ -82,60 +82,75 @@ export function AeProviderConnectionList({
               tabIndex={-1}
               data-programmatic-focus={programmaticFocusId === providerConnectionTargetId(connection.connectionRef) ? '' : undefined}
               onPointerDown={onClearProgrammaticFocus}
-              className="min-w-0 scroll-mt-6 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[programmatic-focus]:focus:outline-2 data-[programmatic-focus]:focus:outline-offset-2 data-[programmatic-focus]:focus:outline-ring"
+              className="min-w-0 scroll-mt-6 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[programmatic-focus]:focus:outline-2 data-[programmatic-focus]:focus:outline-offset-2 data-[programmatic-focus]:focus:outline-ring arc-provider-connection-row"
             >
-              <SettingsRow
-                label={providerConnectionStatus(connection)}
-                description="Exact method, endpoint, and payment authority."
-              >
-                <div className="grid min-w-0 gap-2 text-left sm:text-right">
-                  <p className="break-all text-muted-foreground">
-                    {connection.x402Method ?? 'Method not recorded'} {providerConnectionResource(connection)}
-                  </p>
-                  {connection.sourceEnvironment === undefined ? null : (
-                    <Badge variant="outline" className="justify-self-start sm:justify-self-end">
-                      {OWNER_MCP_OAUTH_CALLBACK_COPY.environment[connection.sourceEnvironment]}
-                    </Badge>
-                  )}
-                  <p className="break-all text-muted-foreground">
-                    Permission: route x402 payment to {connection.x402Payee ?? 'an unrecorded payee'} for this exact method and resource.
-                  </p>
-                  <p className="text-muted-foreground">Authority generation {connection.authorityGeneration}</p>
-                  {connection.expiresAt === undefined ? (
-                    <p className="text-muted-foreground">No scheduled authority expiry</p>
-                  ) : (
-                    <time dateTime={timestampIso(connection.expiresAt)} className="text-muted-foreground">
-                      Authority expires {formatRelativeTime(connection.expiresAt)} · {formatTimestamp(connection.expiresAt)}
-                    </time>
-                  )}
-                  <p className="text-muted-foreground">{providerConnectionHealth(connection)}</p>
-                  <p className="text-muted-foreground">Credential rotation: not applicable. x402 stores no provider credential or private key.</p>
-                  <p className="text-muted-foreground">Tool readiness is checked per Tool and is not implied by connection health.</p>
-                  <AeCopyReference label="connection reference" value={connection.connectionRef} className="justify-start sm:justify-end" />
+              <section className="arc-provider-connection-card">
+                <header className="arc-provider-connection-header">
+                  <PlugZap size={20} aria-hidden="true" />
+                  <div className="arc-provider-connection-heading">
+                    <h3>{providerConnectionStatus(connection)}</h3>
+                    <p>Exact method, endpoint, and payment authority.</p>
+                  </div>
+                </header>
+                <div className="arc-provider-connection-details">
+                  <div className="arc-provider-connection-endpoint">
+                    <p>{connection.x402Method ?? 'Method not recorded'} {providerConnectionResource(connection)}</p>
+                    {connection.sourceEnvironment === undefined ? null : (
+                      <span className="arc-provider-connection-environment">
+                        {OWNER_MCP_OAUTH_CALLBACK_COPY.environment[connection.sourceEnvironment]}
+                      </span>
+                    )}
+                  </div>
+                  <ul className="access-list" aria-label="Authority, health, and readiness facts">
+                    <li>
+                      <p>Permission: route x402 payment to {connection.x402Payee ?? 'an unrecorded payee'} for this exact method and resource.</p>
+                    </li>
+                    <li>
+                      <p>Authority generation {connection.authorityGeneration}</p>
+                    </li>
+                    {connection.expiresAt === undefined ? (
+                      <li><p>No scheduled authority expiry</p></li>
+                    ) : (
+                      <li>
+                        <time dateTime={timestampIso(connection.expiresAt)}>
+                          Authority expires {formatRelativeTime(connection.expiresAt)} · {formatTimestamp(connection.expiresAt)}
+                        </time>
+                      </li>
+                    )}
+                    <li><p>{providerConnectionHealth(connection)}</p></li>
+                    <li><p>Credential rotation: not applicable. x402 stores no provider credential or private key.</p></li>
+                    <li><p>Tool readiness is checked per Tool and is not implied by connection health.</p></li>
+                    <li>
+                      <AeCopyReference label="connection reference" value={connection.connectionRef} className="justify-start" />
+                    </li>
+                  </ul>
                   {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
-                    <div className="flex flex-wrap gap-2 sm:justify-end">
-                      <Button
+                    <div className="arc-provider-connection-actions">
+                      <ArcButton
                         type="button"
                         variant="secondary"
-                        className="min-h-touch"
+                        size="md"
+                        className="arc-provider-connection-action"
                         disabled={readOnly || busy !== undefined || refreshRequired}
+                        aria-busy={busy === connection.connectionRef || undefined}
                         onClick={() => onCheckConnection(connection)}
                       >
                         {busy === connection.connectionRef ? 'Checking…' : 'Check connection'}
-                      </Button>
-                      <Button
+                      </ArcButton>
+                      <ArcButton
                         type="button"
                         variant="secondary"
-                        className="min-h-touch"
+                        size="md"
+                        className="arc-provider-connection-action"
                         disabled={readOnly || busy !== undefined || refreshRequired}
                         onClick={() => onBeginReauthorization(connection)}
                       >
                         Reauthorize
-                      </Button>
+                      </ArcButton>
                     </div>
                   ) : null}
                 </div>
-              </SettingsRow>
+              </section>
               {rebindOfferingRef !== undefined && connection.connectionRef === rebindConnectionRef ? (
                 refreshedForRebind === connection.connectionRef ? (
                   <Alert>
@@ -145,7 +160,7 @@ export function AeProviderConnectionList({
                       <a
                         ref={rebindLinkRef}
                         href={`/owner/operations/${encodeURIComponent(rebindOfferingRef)}#provider`}
-                        className={cn(buttonVariants(), 'min-h-touch justify-self-start')}
+                        className={[arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md, 'arc-provider-connection-action'].join(' ')}
                       >
                         Re-admit Tool
                       </a>
@@ -170,15 +185,16 @@ export function AeProviderConnectionList({
             {connections.filter((connection) => connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required').map((connection) => (
               <div key={connection.connectionRef} className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border py-2 last:border-b-0">
                 <span className="min-w-0 break-all text-sm">{providerConnectionResource(connection)}</span>
-                <Button
+                <ArcButton
                   type="button"
-                  variant="outline"
-                  className="min-h-touch shrink-0"
+                  variant="danger"
+                  size="md"
+                  className="arc-provider-connection-action shrink-0"
                   disabled={readOnly || busy !== undefined || refreshRequired}
                   onClick={(event) => onRequestRevoke(connection, event.currentTarget)}
                 >
                   Revoke
-                </Button>
+                </ArcButton>
               </div>
             ))}
           </div>
@@ -197,6 +213,6 @@ export function AeProviderConnectionList({
         onConfirm={onConfirmRevoke}
         returnFocusRef={revokeTriggerRef}
       />
-    </>
+    </div>
   )
 }

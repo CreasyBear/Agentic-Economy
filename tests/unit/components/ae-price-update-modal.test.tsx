@@ -4,10 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import {
-  AePriceUpdateModal,
-  TACTILE,
-} from '@/components/ae/supply/price-update-modal/AePriceUpdateModal'
+import { AePriceUpdateModal } from '@/components/ae/supply/price-update-modal/AePriceUpdateModal'
 import { toast } from '@/lib/ui/toast'
 
 vi.mock('@/lib/ui/toast', () => ({
@@ -73,16 +70,13 @@ describe('AePriceUpdateModal', () => {
     expect(screen.getByText('No change')).toBeInTheDocument()
   })
 
-  it('reserves comparison and diagnostic geometry and shows em dash without current price', () => {
+  it('withholds an unknown current price and retains an empty live diagnostic region', () => {
     renderModal()
-
-    const comparisonCard = screen.getByText('Current Price:').closest('div[class*="min-h-[8.5rem]"]')
-    expect(comparisonCard?.className).toContain('min-h-[8.5rem]')
 
     const diagnosticSlot = screen
       .getAllByRole('status')
-      .find((element) => element.className.includes('min-h-[2.5rem]'))
-    expect(diagnosticSlot?.className).toContain('min-h-[2.5rem]')
+      .find((element) => element.getAttribute('aria-live') === 'polite')
+    expect(diagnosticSlot).toBeEmptyDOMElement()
 
     const comparisonRow = screen.getByText('Current Price:').parentElement as HTMLElement
     const currentValue = comparisonRow.querySelector('span.font-mono')
@@ -196,7 +190,7 @@ describe('AePriceUpdateModal', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('applies tactile classes to action buttons and preset chips', () => {
+  it('retains native action buttons and the actual tier selection state', () => {
     renderModal({ currentPrice: 'A$ 0.10' })
 
     const cancelButton = screen.getByRole('button', { name: /^cancel$/i })
@@ -205,10 +199,14 @@ describe('AePriceUpdateModal', () => {
     const percentChip = screen.getByRole('button', { name: '+10%' })
 
     for (const element of [cancelButton, publishButton, tierChip, percentChip]) {
-      expect(element.className).toContain('min-h-touch')
-      expect(element.className).toContain('active:scale-[0.98]')
+      expect(element).toHaveAttribute('type', 'button')
+      expect(element).toBeEnabled()
     }
 
-    expect(TACTILE).toContain('active:scale-[0.98]')
+    expect(percentChip).toHaveAttribute('aria-pressed', 'false')
+    expect(tierChip).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(tierChip)
+    expect(tierChip).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText(/new price per call \(aud\)/i)).toHaveValue('0.10')
   })
 })
