@@ -44,6 +44,8 @@ const cspDirectives = {
     "'unsafe-inline'",
     'https://*.clerk.accounts.dev',
     'https://*.clerk.com',
+    // Verified production Clerk Frontend API; keep this an exact trusted origin.
+    'https://clerk.aecon.ai',
     'https://challenges.cloudflare.com',
     'https://*.posthog.com',
     'https://*.i.posthog.com',
@@ -76,6 +78,8 @@ const cspDirectives = {
     "'self'",
     'https://*.clerk.accounts.dev',
     'https://*.clerk.com',
+    'https://clerk.aecon.ai',
+    'https://*.protect.clerk.com:*',
     'wss://*.clerk.com',
     'https://*.convex.cloud',
     'https://*.convex.site',

@@ -70,6 +70,23 @@ describe('security header middleware', () => {
     }
   })
 
+  it('allows production Clerk scripts and connections while retaining an enforcing, bounded policy', () => {
+    const headers = buildSecurityHeaders({ cspMode: 'enforce' })
+    const csp = headers.get('Content-Security-Policy') ?? ''
+    const directives = new Map(csp.split('; ').map(directive => {
+      const [name, ...sources] = directive.split(' ')
+      return [name, sources] as const
+    }))
+    expect(directives.get('script-src')).toContain('https://clerk.aecon.ai')
+    expect(directives.get('connect-src')).toContain('https://clerk.aecon.ai')
+    expect(directives.get('connect-src')).toContain('https://*.protect.clerk.com:*')
+    expect(directives.get('script-src')).not.toContain("'unsafe-eval'")
+    expect(directives.get('script-src')).not.toContain('https:')
+    expect(csp).not.toContain('https://*.aecon.ai')
+    expect(directives.get('frame-ancestors')).toEqual(["'none'"])
+    expect(headers.has('Content-Security-Policy-Report-Only')).toBe(false)
+  })
+
   it('resolves an enforcing default in production, opting into report-only only when explicitly requested', () => {
     const cases = [
       { name: 'unset AE_CSP_REPORT_ONLY enforces by default', env: { NODE_ENV: 'production' }, expected: 'enforce' },

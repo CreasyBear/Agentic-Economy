@@ -3451,3 +3451,46 @@ The protected query discloses neither allowlist entries nor another actor's
 audit. One card, one source adapter and one bounded query remove manual payload
 construction; existing storage, grant semantics and subsequent command MFA stay
 authoritative. Production grant and enrollment remain human actions.
+
+
+Stage 49 acceptance: `npm run check` and an uninterrupted `npm run gate` pass
+on `5f65964ef4955744238316f1ea035e0a654031d9`: 7,895 unit assertions,
+2,741 integration assertions, four type contracts, 75 import checks, TypeScript
+standards, 31 SEO checks, 16 browser journeys, 18 accessibility checks, the
+public build and reproducible CLI package. Existing native-provider opt-in
+skips remain unverified by this source gate. Focused checks also cover known
+chat refusal, source proofs, callback signature/body/path rejection and the
+real installed CLI Call/replay path. Test fixtures now isolate the runner-only
+build flag and sign production Clerk turns using the actual request envelope.
+
+PR #299 merged as `316094bead7df43e2e722069bd5e309082abec6a`. The native
+Convex dry run and deployment pass for `cautious-zebra-473`, with no index
+deletion. Vercel Production `dpl_B3SyFALFMa2p8ZLoyYbF4hc9UZsT` serves the
+same release identity. At 11:02 UTC, sign-in returns 200, Security activity and
+Treasury redirect unauthenticated requests to sign-in, and readiness remains
+503. Native anonymous bootstrap and policy preparation both refuse authority;
+Formance health remains ready and custody remains disabled. No owner grant or
+policy activation was performed. The obsolete `AE_SERVICE_MODE` and
+`AE_SCHEDULED_WORKLOADS_ENABLED` bindings were removed from Vercel Production
+and Convex, with exact before-values retained privately for rollback. Browser
+acceptance exposed the separate Clerk CSP defect below, so server availability
+alone does not establish working sign-in.
+
+## Stage 50 — admit the production Clerk frontend through enforced CSP
+
+Brave now renders the sign-in page, but Clerk reports `failed_to_load_clerk_js`
+for `https://clerk.aecon.ai/npm/@clerk/clerk-js@6/dist/clerk.browser.js`.
+The configured production Frontend API resolves to Clerk; the emitted policy
+only permits Clerk's shared domains and omits the actual production host.
+
+**Requires:** the verified production Clerk Frontend API origin. **Ensures:**
+the enforcing policy permits its scripts and API connections, plus Clerk's
+required fraud-protection connections on provider-selected ports. **Invariant:**
+CSP stays enforced; no general HTTPS, AECON-subdomain wildcard or `unsafe-eval`
+is added; frame-ancestor blocking and all authentication/admission checks stay
+in force. **On violation:** other origins remain blocked. This is three entries
+in the existing maintained allowlist, without a configuration parser, new
+policy framework or dependency. The narrow header/middleware suite passes 80
+assertions; the full release gate and actual browser form remain required.
+
+Provider requirements: [Clerk CSP guidance](https://clerk.com/docs/guides/secure/best-practices/csp-headers).
