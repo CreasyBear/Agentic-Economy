@@ -83,8 +83,10 @@ incomplete boot configuration; delivery is not accepted evidence yet.
 The existing AWS Formance footprint is `ae-alpha`: one private host and a
 Multi-AZ RDS database, with nightly Melbourne backup copies. Repairing the
 CloudWatch Agent configuration restored disk/memory observations and all eight
-alarms are currently OK. The declared email subscription was restored and
-awaits confirmation; alert delivery and an actual restore remain unproved.
+alarms are currently OK. The restored email subscription is confirmed. A
+controlled CloudWatch alarm delivered one SNS notification with zero failures,
+and metric evaluation restored OK after 102 seconds. Inbox receipt and an
+actual restore remain unproved.
 A separate production footprint versus a new
 production boundary sharing the existing infrastructure remains an explicit
 cost/isolation decision; the alpha ledger is preserved.

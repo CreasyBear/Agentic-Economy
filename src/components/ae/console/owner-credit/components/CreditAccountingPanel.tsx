@@ -24,6 +24,7 @@ export type CreditAccountingPanelProps = Pick<
   | 'documents'
   | 'reconciliationCases'
   | 'providerObligations'
+  | 'administrationLoading'
   | 'onCreateStatement'
   | 'onCreateDailyClose'
   | 'onSignDailyClose'
@@ -55,6 +56,7 @@ export function CreditAccountingPanel({
   documents = [],
   reconciliationCases = [],
   providerObligations = [],
+  administrationLoading = false,
   onCreateStatement,
   onCreateDailyClose,
   onSignDailyClose,
@@ -80,7 +82,8 @@ export function CreditAccountingPanel({
   const createDailyCloseStatus = documentActions[documentActionKey({ kind: 'create_daily_close' })]
 
   return (
-    <div className="grid gap-section">
+    <div className="grid gap-section" role="group" aria-label="Accounting records" aria-busy={administrationLoading}>
+      {administrationLoading ? <p className="text-sm text-muted-foreground" role="status">Loading accounting records…</p> : null}
       <AeSection
         title="Documents"
         description="Immutable funding receipts, fee documents, statements, and adjustments retain their source transactions and policy version."
@@ -123,7 +126,7 @@ export function CreditAccountingPanel({
         )}
         {unavailable.documents ? (
           <CreditSectionEmptyState title="Documents unavailable" description="No document state is being inferred." />
-        ) : documents.length === 0 ? (
+        ) : documents.length === 0 ? administrationLoading ? null : (
           <CreditSectionEmptyState
             title="No accounting documents yet"
             description="Receipts, fee documents, adjustments, and statements will be preserved here."
@@ -190,7 +193,7 @@ export function CreditAccountingPanel({
       >
         {unavailable.reconciliation ? (
           <CreditSectionEmptyState title="Reconciliation unavailable" description="No reconciliation state is being inferred." />
-        ) : reconciliationCases.length === 0 ? (
+        ) : reconciliationCases.length === 0 ? administrationLoading ? null : (
           <CreditSectionEmptyState
             title="No reconciliation differences"
             description="New paid Calls remain blocked only when their affected Account is locked for a proven mismatch."
@@ -216,7 +219,7 @@ export function CreditAccountingPanel({
       >
         {unavailable.obligations ? (
           <CreditSectionEmptyState title="Provider obligations unavailable" description="No obligation state is being inferred." />
-        ) : providerObligations.length === 0 ? (
+        ) : providerObligations.length === 0 ? administrationLoading ? null : (
           <CreditSectionEmptyState title="No Provider obligations" description="A managed x402 Call creates one attributable upstream obligation." />
         ) : (
           <div className="grid gap-intra">
