@@ -3,7 +3,7 @@ import { v } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveInteractiveAuthorityContext } from './factResolution'
 import { InteractiveAuthorityError } from './errors'
-import { ensureOwnerIdentityForAuthenticatedIdentity, logProvisionRefusal } from './provisioning'
+import { ensureOwnerIdentityForAuthenticatedIdentity, initializeOwnerSessionCutoff, logProvisionRefusal } from './provisioning'
 
 export const materializeCurrentInteractiveAuthorityArgs = {}
 
@@ -19,7 +19,10 @@ export async function materializeCurrentInteractiveAuthorityHandler(
   }
   try {
     await ensureOwnerIdentityForAuthenticatedIdentity(ctx, identity)
-    await resolveInteractiveAuthorityContext(ctx, identity)
+    const context = await resolveInteractiveAuthorityContext(ctx, identity)
+    // Typed refusals return false and commit the transaction. Initialize a
+    // legacy cutoff only after the complete principal/account authority passes.
+    await initializeOwnerSessionCutoff(ctx, context.provenance.bindingRef)
     return true
   } catch (error) {
     if (error instanceof InteractiveAuthorityError) {

@@ -164,6 +164,24 @@ describe('scheduled chat consequence authority', () => {
         expect(after.accounts).toHaveLength(before.accounts.length + 1)
         expect(after.ownerships).toHaveLength(before.ownerships.length + 1)
         expect(after.memberships).toHaveLength(before.memberships.length)
+      } else if (caseKind === 'owner' || caseKind === 'member') {
+        // Valid legacy authority initializes its cutoff once. Failed
+        // materialization below must still preserve every authority row.
+        expect(after).toEqual({
+          ...before,
+          bindings: before.bindings.map((binding) => binding.providerIdentifier !==
+            `https://identity.example|user_${slug}${caseKind === 'member' ? '-member' : ''}` ? binding : ({
+            ...binding,
+            interactiveSessionsRevokedBefore: 0,
+            revision: binding.revision + 1,
+            updatedAt: after.bindings.find((row) => row._id === binding._id)!.updatedAt,
+          })),
+        })
+        await expect(caller.mutation(
+          api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+          {},
+        )).resolves.toBe(true)
+        await expect(authorityState()).resolves.toEqual(after)
       } else {
         expect(after).toEqual(before)
       }

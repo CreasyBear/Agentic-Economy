@@ -187,7 +187,6 @@ async function ensureCurrentOwnerCredentialGeneration(
   }
   await requireCurrentInteractiveSession(ctx.db, identity, binding, sessionRevocationCutoff)
   if (current.expiresAt === expiresAt) {
-    await initializeOwnerSessionCutoff(ctx, binding, sessionRevocationCutoff)
     return { bindingRef: binding.bindingRef, principalRef: binding.principalRef }
   }
   // A current verified presentation may renew the server-anchored fallback
@@ -196,7 +195,6 @@ async function ensureCurrentOwnerCredentialGeneration(
   // Revoked and conflicting generations have already been refused above.
   if (!hasVerifiedTokenWindow
     && current.expiresAt - Date.now() > INTERACTIVE_OWNER_SESSION_WINDOW_MS / 2) {
-    await initializeOwnerSessionCutoff(ctx, binding, sessionRevocationCutoff)
     return { bindingRef: binding.bindingRef, principalRef: binding.principalRef }
   }
   // A still-active generation whose window no longer matches the verified
@@ -204,12 +202,16 @@ async function ensureCurrentOwnerCredentialGeneration(
   return await issueOwnerCredentialGeneration(ctx, binding, tokenIdentifier, expiresAt, current.credentialRef, sessionRevocationCutoff)
 }
 
-async function initializeOwnerSessionCutoff(
+export async function initializeOwnerSessionCutoff(
   ctx: Pick<MutationCtx, 'db'>,
-  binding: Doc<'externalIdentityBindings'>,
-  cutoff: number,
+  bindingRef: string,
 ): Promise<void> {
+  const binding = await ctx.db.query('externalIdentityBindings')
+    .withIndex('by_bindingRef', (query) => query.eq('bindingRef', bindingRef))
+    .unique()
+  if (binding === null) throw new InteractiveAuthorityError('binding_missing')
   if (binding.interactiveSessionsRevokedBefore !== undefined) return
+  const cutoff = await readInteractiveSessionRevocationCutoff(ctx.db, binding)
   await ctx.db.patch(binding._id, {
     interactiveSessionsRevokedBefore: cutoff,
     revision: binding.revision + 1,

@@ -3616,6 +3616,14 @@ audits omitted the security action, those updates conservatively count toward
 the initial cutoff. Each legacy history is capped at 256 rows; overflow refuses
 authority rather than using a truncated cutoff.
 
+The coordinated repair uses one implementation and release owner in PR #304.
+Legacy cutoff initialization occurs only after the complete Account and
+Principal authority resolver succeeds: invalid workload or Account facts
+return false without initializing authority. Valid legacy owner/member
+materialization initializes exactly once; repeat attempts leave every row
+unchanged. The existing scheduled-chat integration checks retain their strict
+no-write assertions for refused authority.
+
 Native production census finds two active Clerk bindings, with 40 credentials
 on the affected binding and one on the other. The affected owner has seven
 audit rows; the conservative cutoff remains 13:24:57 UTC, before the fresh
