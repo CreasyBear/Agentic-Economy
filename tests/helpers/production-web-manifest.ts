@@ -3,6 +3,8 @@ import { validCustodyEnvironment } from './quote-fixtures'
 
 /** Static web configuration for tests that exercise a real production initiation path. */
 export const productionWebManifestFixture = Object.freeze({
+  // The release runner's build flag is not deployed application configuration.
+  AE_CLI_PREBUILT: undefined,
   AE_DEPLOYMENT_ENVIRONMENT: 'production',
   AE_CANONICAL_BASE_URL: 'https://ae.example',
   CONVEX_URL: 'https://convex.example',
