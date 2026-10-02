@@ -55,6 +55,7 @@ import {
   readPlatformFundingConstraintsThroughSource,
 } from '@/modules/money/server'
 import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
+import { productionWebManifestFixture } from '../../helpers/production-web-manifest'
 
 const input = {
   amount: { currency: 'AUD', units: '5000000', exponent: 6 },
@@ -518,12 +519,7 @@ describe('Account AUD funding HTTP boundary', () => {
     expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(deadline === 0 ? 2 : 1)
   })
 
-  it('uses live Stripe configuration only as a production policy gate signal', async () => {
-    sourceMocks.callSourceMutation.mockResolvedValueOnce({
-      kind: 'refused',
-      code: 'commercial_policy_required',
-      retryable: false,
-    })
+  it('refuses new production funding before reserve or Stripe when the full money manifest is incomplete', async () => {
     const provider = {
       createOrRecoverCreditPayment: vi.fn(),
       readCreditPayment: vi.fn(),
@@ -536,12 +532,43 @@ describe('Account AUD funding HTTP boundary', () => {
       env: { AE_DEPLOYMENT_ENVIRONMENT: 'production' },
     })).resolves.toEqual({
       kind: 'refused',
-      code: 'commercial_policy_required',
+      code: 'stripe_setup_required',
       retryable: false,
     })
-    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
-      environment: 'production',
+    expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
+    expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
+  })
+
+  it('uses complete live Stripe configuration as a production policy gate signal', async () => {
+    sourceMocks.callSourceMutation.mockResolvedValueOnce({
+      kind: 'refused', code: 'commercial_policy_required', retryable: false,
     })
+    const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+    await expect(beginAccountFundingThroughSource(input, {}, {
+      resolveOwnerId: async () => 'owner-1', provider, mode: 'live',
+      env: productionWebManifestFixture,
+    })).resolves.toEqual({ kind: 'refused', code: 'commercial_policy_required', retryable: false })
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({ environment: 'production' })
+    expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
+  })
+
+  it('refuses a new production agent handoff before reserve or Stripe while custody is unavailable', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+    const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+    const service = createFundingHandoffService(
+      new Request('https://ae.test/api/v1/account/funding-sessions', { method: 'POST' }), '{}', provider,
+    )
+    await expect(service.create({
+      input: { principalAmount: { currency: 'AUD', exponent: 6, units: '5000000' }, idempotencyKey: 'blocked' },
+      principal: {
+        principalId: 'principal:agent-one', ownerId: 'account:one', credentialId: 'credential:one',
+        applicationRef: 'agentic-economy', environment: 'production',
+        scopes: ['market_operations:invoke'], authorityMode: 'read_only',
+      },
+      correlationId: 'blocked',
+    })).resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+    expect(sourceMocks.callPublicSourceMutation).not.toHaveBeenCalled()
     expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
   })
 

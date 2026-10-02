@@ -1,4 +1,3 @@
-import Decimal from 'decimal.js'
 import { z } from 'zod'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -73,9 +72,15 @@ function alignExactAmounts(left: unknown, right: unknown): Readonly<{ left: Exac
   return alignedLeft === undefined || alignedRight === undefined ? undefined : { left: alignedLeft, right: alignedRight }
 }
 
+/** Requires unsigned decimal notation and a supported currency/scale.
+ * Ensures exact canonical units, preserving every digit without precision limits.
+ * Invariant: no rounding; nonzero digits beyond the scale are refused.
+ * On violation: undefined, with no state changes.
+ */
 export function parseDecimalExactAmount(currency: unknown, decimalAmount: unknown, exponent: unknown): ExactAmount | undefined {
   const targetExponent = readExponent(exponent)
-  if (targetExponent === undefined || typeof decimalAmount !== 'string' || !decimalNotation.test(decimalAmount)) return undefined
+  if (targetExponent === undefined || typeof decimalAmount !== 'string'
+    || decimalAmount.trim() !== decimalAmount || !decimalNotation.test(decimalAmount)) return undefined
   let parsedCurrency: string
   try {
     const currencyResult = currencySchema.safeParse(currency)
@@ -84,16 +89,11 @@ export function parseDecimalExactAmount(currency: unknown, decimalAmount: unknow
   } catch (cause) {
     return degradeBackend(cause, undefined, { site: 'parseDecimalExactAmount', reason: 'invalid_response' })
   }
-  const fractionalDigits = decimalAmount.split('.')[1] ?? ''
+  const [integerDigits, fractionalDigits = ''] = decimalAmount.split('.')
   if (/[1-9]/.test(fractionalDigits.slice(targetExponent))) return undefined
-  try {
-    const scaled = new Decimal(decimalAmount).mul(new Decimal(10).pow(targetExponent))
-    if (!scaled.isInteger() || scaled.isNegative()) return undefined
-    const units = scaled.toFixed(0)
-    return exactAmountSchema.parse({ currency: parsedCurrency, units, exponent: targetExponent })
-  } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'parseDecimalExactAmount', reason: 'invalid_response' })
-  }
+  const units = `${integerDigits}${fractionalDigits.slice(0, targetExponent).padEnd(targetExponent, '0')}`
+    .replace(/^0+(?=\d)/u, '')
+  return { currency: parsedCurrency, units, exponent: targetExponent }
 }
 
 export function rescaleExactAmount(amount: unknown, targetExponent: unknown): ExactAmount | undefined {

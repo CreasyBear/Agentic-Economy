@@ -1,4 +1,5 @@
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { productionMoneyManifestReady } from '@/lib/deployment/env-schema'
 import { degrade } from '@/lib/observability/degrade'
 import { authRefusalProblem, authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessAuthenticationOptions, type AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
@@ -133,6 +134,7 @@ export function createFundingHandoffService(
       })
     },
     create: async ({ input, principal, correlationId }) => {
+      if (!productionMoneyManifestReady()) return refusal({ kind: 'refused', code: 'stripe_setup_required', retryable: false }, correlationId)
       const context = providerContext()
       if (isMoneyRefusal(context)) return refusal(context, correlationId)
       if (principal.environment !== context.environment) {

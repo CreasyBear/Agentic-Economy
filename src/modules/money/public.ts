@@ -21,6 +21,7 @@ export {
   PACKAGE4_FORMANCE_REQUIREMENTS,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   validCommercialPolicyControl,
+  validProductionCommercialPolicyControl,
 } from './internal/commercial-policy'
 export {
   admitTaxInvoiceIssuance,

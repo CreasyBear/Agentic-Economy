@@ -8,9 +8,16 @@ import { ownerReadableActor, requirePrincipalTurn, reserveAndStartTurn, resolveT
 import { expireStaleTurn, failPendingTurnSteps, unresolvedTurnCallRefs } from './recovery'
 import type { startTurnArgs, cancelTurnArgs, recordOwnerChatCallArgs, finishTurnArgs } from './contracts'
 import { issueSearchContinuation, resolveSearchContinuation } from './searchContinuation'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 
 
 export const startTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeof startTurnArgs>) => publicChatTurn(async () => {
+    // Production Clerk turns can purchase Tools during generation. Require the
+    // existing request-bound source proof before reserving a turn or scheduling work.
+    if (args.principal.kind === 'clerk' && process.env.AE_DEPLOYMENT_ENVIRONMENT === 'production') {
+      const admission = await requireSourceWrite(ctx, args, 'protected_action')
+      if (admission.kind !== 'accepted') throw new Error('unauthenticated')
+    }
     const actor = args.principal.kind === 'clerk'
       ? await resolveOwnerChatActor(ctx) ?? await resolveTurnActor(ctx, args.principal, args, true)
       : await resolveTurnActor(ctx, args.principal, args, true)
@@ -113,4 +120,3 @@ export const finishTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeo
 }
 
 export { issueSearchContinuation }
-

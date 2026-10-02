@@ -384,7 +384,7 @@ export function validCommercialPolicyControl(control: CommercialPolicyControl): 
   }
 }
 
-function validProductionCommercialPolicyControl(control: CommercialPolicyControl): boolean {
+export function validProductionCommercialPolicyControl(control: CommercialPolicyControl): boolean {
   switch (control.family) {
     case 'treasury_custody':
       return control.formanceLedgerVersion === PACKAGE4_FORMANCE_REQUIREMENTS.ledgerVersion

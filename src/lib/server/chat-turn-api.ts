@@ -15,6 +15,7 @@ import { rateLimitedResponse, withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { productionMoneyManifestReady } from '@/lib/deployment/env-schema'
 import { projectStreamJourneyProblem, type CallEvent, type ChatTurnFailureReason, type TurnEvent, type WorkState } from '@/modules/actions/contract'
 
 const startTurn = sourceMutation<Record<string, unknown>, TurnSnapshot>('chatTurns:startTurn')
@@ -67,7 +68,7 @@ function sourceFor(request: Request, body: string, correlationId: string, princi
   async function invoke<T>(name: 'start' | 'cancel' | 'read' | 'deltas', command: Record<string, unknown>): Promise<T> {
     const operationKey = canonicalDigest({ contract: `chat.turn.${name}`, principal: principalArgs, command })
     const args: Record<string, unknown> = { ...command, principal: principalArgs }
-    if (isKey) {
+    if (isKey || (name === 'start' && process.env.AE_DEPLOYMENT_ENVIRONMENT === 'production')) {
       const signed = { ...args, operationKey, correlationId }
       const admission = await sourceWriteAdmissionFromRequest({ request, command: signed, body, scope: 'protected_action', operationKey, correlationId })
       Object.assign(args, { operationKey, correlationId, sourceWrite: admission, sourceWriteRequest: sourceWriteRequestFromAdmission(admission) })
@@ -234,6 +235,10 @@ export async function handleChatTurnPost(request: Request, options: ChatTurnOpti
         }
         const parsed = bodySchema.safeParse(value)
         if (!parsed.success) return withRequestCorrelationHeader(problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_input', detail: zodIssueDetail(parsed.error) }), correlationId)
+        if (!productionMoneyManifestReady()) return withRequestCorrelationHeader(problem({
+          status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,
+          detail: 'Chat purchases are temporarily unavailable.',
+        }), correlationId)
         try {
           const source = options.source?.(principal) ?? sourceFor(request, bounded.text, correlationId, principal)
           const turn = await source.start({ prompt: parsed.data.prompt, clientTurnId: parsed.data.clientTurnId, ...(parsed.data.threadId === undefined ? {} : { threadId: parsed.data.threadId }) })

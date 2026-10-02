@@ -1,5 +1,6 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
+import { productionMoneyManifestReady } from '@/lib/deployment/env-schema'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
@@ -341,6 +342,7 @@ export async function beginAccountFundingThroughSource(
   context?: unknown,
   runtime: AccountFundingServerRuntime = {},
 ): Promise<AccountFundingStartResult> {
+  if (!productionMoneyManifestReady(runtime.env ?? process.env)) return refusal('stripe_setup_required', false)
   const providerContext = createAccountFundingProvider(runtime)
   if (isMoneyRefusal(providerContext)) return providerContext
   const ownerId = await (runtime.resolveOwnerId ?? defaultResolveOwnerId)()

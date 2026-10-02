@@ -9,6 +9,31 @@ import { withSourceWrite } from '../helpers/source-write-admission'
 const principal = { kind: 'clerk' as const }
 
 describe.sequential('durable chat Turns', () => {
+  it('requires a signed production Clerk start before reserving a turn or scheduling work', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    try {
+      const backend = convexTestWithMarketComponents()
+      const { owner, canonicalPrincipalRef } = await publishedBusinessOwner(backend, 'production-turn-proof')
+      const command = {
+        principal, clientTurnId: 'signed-production-turn', prompt: 'Find weather Tools',
+        operationKey: 'production-turn-proof', correlationId: 'production-turn-proof',
+      }
+      await expect(owner.mutation(api.chatTurns.startTurn, command))
+        .rejects.toMatchObject({ data: { code: 'unauthenticated' } })
+      expect(await backend.run(ctx => ctx.db.query('chatTurns')
+        .withIndex('by_principalRef_and_clientTurnId', q =>
+          q.eq('principalRef', canonicalPrincipalRef).eq('clientTurnId', command.clientTurnId)).collect()))
+        .toHaveLength(0)
+      const signed = await withSourceWrite('protected_action', command)
+      const started = await owner.mutation(api.chatTurns.startTurn, signed)
+      expect(started).toMatchObject({ state: 'submitted', sequence: 1 })
+      expect(await backend.run(ctx => ctx.db.query('chatTurns')
+        .withIndex('by_principalRef_and_clientTurnId', q =>
+          q.eq('principalRef', canonicalPrincipalRef).eq('clientTurnId', command.clientTurnId)).collect()))
+        .toHaveLength(1)
+    } finally { vi.unstubAllEnvs() }
+  })
+
   it('reserves before creating a thread and replays the same client turn exactly once', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef, canonicalPrincipalRef } = await publishedBusinessOwner(backend, 'turn-replay')

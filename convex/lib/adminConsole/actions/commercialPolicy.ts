@@ -1,6 +1,6 @@
 import type { GenericDatabaseReader } from 'convex/server'
-import type { DataModel } from '../../../_generated/dataModel'
-import type { MutationCtx } from '../../../_generated/server'
+import type { DataModel, Doc } from '../../../_generated/dataModel'
+import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { env } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import type { AdminCommandSpec } from '../commands/commandEnvelope'
@@ -11,10 +11,13 @@ import {
   COMMERCIAL_POLICY_FAMILIES,
   evaluateCommercialPolicyGate,
   validCommercialPolicyControl,
+  validProductionCommercialPolicyControl,
+  PACKAGE4_FORMANCE_REQUIREMENTS,
   type CommercialPolicyApproval,
   type CommercialPolicyEnvironment,
   type CommercialPolicyGateResult,
   type CommercialPolicySandboxFixture,
+  type CommercialPolicyFamily,
 } from '@/modules/money/public'
 
 
@@ -32,6 +35,50 @@ function validChange(args: AdminCommandWireArgs<'change_commercial_policy'>): bo
     && input.effectiveAt < input.expiresAt
     && input.control.family === input.family
     && validCommercialPolicyControl(input.control)
+}
+
+function policyStateDigest(row: Doc<'moneyCommercialPolicies'>): string {
+  return canonicalDigest({
+    policyRef: row.policyRef, revision: row.revision, lifecycle: row.lifecycle,
+    effectiveAt: row.effectiveAt, expiresAt: row.expiresAt,
+    evidenceRef: row.evidenceRef, evidenceDigest: row.evidenceDigest,
+    control: row.control, updatedAt: row.updatedAt,
+  })
+}
+
+/** Requires owner-admin authorization at the registration and the declared environment.
+ * Ensures a bounded current/historical read and canonical technical requirements, never business defaults.
+ * Invariant: historical controls remain readable even after a technical pin changes; this query has no effects.
+ * On violation: refuse the mismatched environment; report conflicting active records without choosing one. */
+export async function prepareCommercialPolicyChange(
+  ctx: QueryCtx,
+  args: { environment: CommercialPolicyEnvironment; family: CommercialPolicyFamily },
+) {
+  if (deploymentPaymentEnvironment(env) !== args.environment) {
+    return { kind: 'refused' as const, code: 'commercial_policy_environment_mismatch' }
+  }
+  const [active, suspended, superseded, owners] = await Promise.all([
+    ctx.db.query('moneyCommercialPolicies').withIndex('by_environment_and_family_and_lifecycle', q => q
+      .eq('environment', args.environment).eq('family', args.family).eq('lifecycle', 'active')).take(2),
+    ctx.db.query('moneyCommercialPolicies').withIndex('by_environment_and_family_and_lifecycle', q => q
+      .eq('environment', args.environment).eq('family', args.family).eq('lifecycle', 'suspended')).order('desc').take(1),
+    ctx.db.query('moneyCommercialPolicies').withIndex('by_environment_and_family_and_lifecycle', q => q
+      .eq('environment', args.environment).eq('family', args.family).eq('lifecycle', 'superseded')).order('desc').take(1),
+    ctx.db.query('adminMemberships').withIndex('by_state_and_role', q => q.eq('state', 'active').eq('role', 'owner_admin')).take(2),
+  ])
+  const latest = [...active, ...suspended, ...superseded].sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  const current = active[0] ?? latest
+  return {
+    kind: 'ready' as const, environment: args.environment, family: args.family,
+    conflict: active.length > 1, requiresSecondApproval: owners.length >= 2,
+    requirements: PACKAGE4_FORMANCE_REQUIREMENTS,
+    current: current === undefined ? null : {
+      policyRef: current.policyRef, revision: current.revision, lifecycle: current.lifecycle,
+      effectiveAt: current.effectiveAt, expiresAt: current.expiresAt, control: current.control,
+      evidenceRef: current.evidenceRef, approvedByPrincipalRef: current.approvedByPrincipalRef,
+      stateDigest: policyStateDigest(current),
+    },
+  }
 }
 export async function readCommercialPolicyGate(
   db: GenericDatabaseReader<DataModel>,
@@ -128,15 +175,16 @@ export function commercialPolicySpec(
     auditEventType: 'protected_action.attempt_succeeded',
     currentStateDigest: async () => {
       const [active] = await currentPolicy()
-      return active === undefined ? null : canonicalDigest({
-        policyRef: active.policyRef, revision: active.revision, lifecycle: active.lifecycle,
-        effectiveAt: active.effectiveAt, expiresAt: active.expiresAt,
-        evidenceRef: active.evidenceRef, evidenceDigest: active.evidenceDigest,
-        control: active.control, updatedAt: active.updatedAt,
-      })
+      return active === undefined ? null : policyStateDigest(active)
     },
     apply: async () => {
       if (!validChange(args)) return { kind: 'refused', code: 'authority_mismatch' }
+      // Compare before effects; never repair a reviewed command or obstruct retirement of historical controls.
+      if (deploymentPaymentEnvironment(env) !== input.environment
+        || (input.changeKind !== 'suspend' && input.environment === 'production'
+          && !validProductionCommercialPolicyControl(input.control))) {
+        return { kind: 'refused', code: 'authority_mismatch' }
+      }
       const actor = await resolveBusinessActor(ctx)
       if (actor.kind !== 'authenticated_owner') return { kind: 'refused', code: 'authority_mismatch' }
       const existingByRef = await ctx.db.query('moneyCommercialPolicies')
@@ -168,6 +216,10 @@ export function commercialPolicySpec(
       })
       if (input.changeKind === 'suspend') {
         if (active === undefined) return { kind: 'refused', code: 'policy_not_found' }
+        if (input.effectiveAt !== active.effectiveAt || input.expiresAt !== active.expiresAt
+          || canonicalDigest(input.control) !== canonicalDigest(active.control)) {
+          return { kind: 'refused', code: 'authority_mismatch' }
+        }
         await ctx.db.patch(active._id, {
           lifecycle: 'suspended', suspendedAt: now, updatedAt: now,
           correlationRef: args.correlationId, idempotencyRef: args.operationKey, commandDigest,

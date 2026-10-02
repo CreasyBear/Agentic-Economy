@@ -1,5 +1,6 @@
 import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import { query } from './_generated/server'
 
 import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
 import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
@@ -7,7 +8,7 @@ import { openRemovalDisputeArgsValue, removalReason, visibilityTargetType } from
 import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import { grantAdminMembershipSpec, revokeAdminMembershipSpec } from './lib/adminConsole/actions/adminMembership'
 import { removalDisputeSpec } from './lib/adminConsole/actions/removalDispute'
-import { bootstrapOwnerAdminHandler } from './lib/security/adminMembership/bootstrap'
+import { bootstrapOwnerAdminHandler, readOwnerAdminBootstrapHandler } from './lib/security/adminMembership/bootstrap'
 import { openRemovalDisputeHandler } from './lib/security/removalDisputes/open'
 const adminRole = v.union(v.literal('owner_admin'), v.literal('support'), v.literal('reviewer'))
 const adminMembershipState = v.union(v.literal('active'), v.literal('revoked'), v.literal('suspended'))
@@ -120,6 +121,17 @@ const openDisputeResult = v.union(
   })
 )
 
+
+export const readOwnerAdminBootstrap = query({
+  args: { operationKey: v.optional(v.string()) },
+  returns: v.union(
+    v.object({ kind: v.literal('eligible') }),
+    v.object({ kind: v.literal('active'), auditEventRef: v.union(v.string(), v.null()) }),
+    v.object({ kind: v.literal('recorded'), auditEventRef: v.string() }),
+    v.object({ kind: v.literal('ineligible'), reason: v.string() }),
+  ),
+  handler: readOwnerAdminBootstrapHandler,
+})
 
 export const bootstrapOwnerAdmin = mutationGeneric({
   args: {

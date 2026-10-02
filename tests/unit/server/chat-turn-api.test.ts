@@ -4,6 +4,7 @@ import { ConvexError } from 'convex/values'
 import { handleChatTurnPost, handleChatTurnResource, type ChatTurnOptions, type ChatTurnSource } from '@/lib/server/chat-turn-api'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+import { productionWebManifestFixture } from '../../helpers/production-web-manifest'
 
 const turnRef = `turn_${'0'.repeat(8)}-${'0'.repeat(4)}-4000-8000-${'0'.repeat(12)}`
 const threadId = 'thread_test'
@@ -44,7 +45,30 @@ async function parts(response: Response): Promise<Record<string, unknown>[]> {
 
 describe('authenticated chat Turn HTTP adapter', () => {
   beforeEach(() => setHttpRateLimitAdmissionForTests(async () => ({ ok: true })))
-  afterEach(() => setHttpRateLimitAdmissionForTests(undefined))
+  afterEach(() => { setHttpRateLimitAdmissionForTests(undefined); vi.unstubAllEnvs() })
+  it('blocks a production start before source dispatch when money is unready but preserves read and cancel', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+    const store = source({ start: vi.fn(async () => snapshot), read: vi.fn(async () => snapshot),
+      cancel: vi.fn(async () => ({ kind: 'stopped' as const, turnRef, inFlightEffects: [] })) })
+    const started = await handleChatTurnPost(post(), options(store))
+    expect(started.status).toBe(503)
+    await expect(started.json()).resolves.toMatchObject({ kind: 'UNAVAILABLE', code: 'source_unavailable' })
+    expect(store.start).not.toHaveBeenCalled()
+    expect((await handleChatTurnResource(resource('GET'), turnRef, options(store))).status).toBe(200)
+    expect((await handleChatTurnResource(resource('DELETE'), turnRef, options(store))).status).toBe(200)
+    expect(store.read).toHaveBeenCalledOnce()
+    expect(store.cancel).toHaveBeenCalledOnce()
+  })
+
+  it('admits a production start when the full money manifest is valid', async () => {
+    for (const [name, value] of Object.entries(productionWebManifestFixture)) vi.stubEnv(name, value)
+    const store = source({ start: vi.fn(async () => snapshot) })
+    const response = await handleChatTurnPost(post(), options(store))
+    expect(response.status).toBe(200)
+    expect(store.start).toHaveBeenCalledOnce()
+    await response.body?.cancel()
+  })
   it('sends the durable Turn identity first in the SDK UI stream and then text deltas', async () => {
     const response = await handleChatTurnPost(post(), options(source()))
     expect(response.status).toBe(200)

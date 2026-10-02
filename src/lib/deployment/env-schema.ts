@@ -16,41 +16,63 @@ const kindSchemas: Readonly<Record<FieldRule['kind'], z.ZodType<string>>> = {
   'credential-ref': z.string().min(1),
 }
 
-const clerkWebhookConfigurationNames = new Set([
+const controlPlaneConfigurationNames = new Set([
   ...DEPLOYMENT_MANIFEST.configuration.sharedProduction.flatMap(group => group.names),
   ...DEPLOYMENT_MANIFEST.configuration.forbiddenProduction,
   'AE_CANONICAL_HOST_ALLOWLIST',
+  'AE_CSP_REPORT_ONLY',
+])
+const controlPlaneFindingScopes = new Set([
+  'environment', 'canonical', 'convex', 'convex-auth', 'clerk',
+  'source-write', 'browser-security', 'runtime',
 ])
 
 /**
  * Requires the declared environment and its identity/source authority rules.
- * Ensures identity callbacks remain available while money providers need setup.
+ * Ensures identity and operator requests remain available while money providers need setup.
  * Invariant: production credential, URL and source-key rules still come from
- * the manifest; unrelated payment readiness never grants webhook authority.
+ * the manifest; unrelated payment readiness never grants control-plane authority.
  * On violation: return only configuration names/codes, before source mutation.
  */
-export function validateClerkWebhookEnvironment(
+export function validateControlPlaneEnvironment(
   env: NodeJS.ProcessEnv,
   environment: 'development' | 'production',
 ): EnvValidationResult {
   // Preserve development admission; only production sheds unrelated readiness.
   if (deploymentPaymentEnvironment(env) !== 'production') return validateEnvironment(env, environment)
 
-  const result = validateDeploymentManifest(env, { environment })
+  const result = validateDeploymentManifest(env, {
+    environment,
+    nodeMajor: Number.parseInt(process.versions.node.split('.')[0] ?? '', 10),
+  })
   const problems = result.findings
-    .filter(finding => finding.names.some(name => clerkWebhookConfigurationNames.has(name)
-      || name.startsWith('AE_SOURCE_WRITE_') || name.startsWith('VITE_AE_SOURCE_WRITE_')))
+    .filter(finding => finding.kind === 'forbidden'
+      || controlPlaneFindingScopes.has(finding.scope)
+      || finding.names.some(name => controlPlaneConfigurationNames.has(name)
+        || name.startsWith('AE_SOURCE_WRITE_') || name.startsWith('VITE_AE_SOURCE_WRITE_')))
     .flatMap(finding => finding.names.map(name => Object.freeze({ name, reason: finding.code })))
   const token = readTrimmedEnv(env, 'AE_CONVEX_SERVER_FUNCTION_TOKEN')
   if (token !== undefined && token.length < 32) {
     problems.push({ name: 'AE_CONVEX_SERVER_FUNCTION_TOKEN', reason: 'server_function_auth_invalid' })
   }
+  const nodeEnvironment = readTrimmedEnv(env, 'NODE_ENV')
+  if (nodeEnvironment !== undefined && !['development', 'production', 'test', 'preview'].includes(nodeEnvironment)) {
+    problems.push({ name: 'NODE_ENV', reason: 'node_environment_invalid' })
+  }
   return problems.length === 0 ? { ok: true } : { ok: false, problems: Object.freeze(problems) }
+}
+
+/** Callback admission is rechecked independently of the ordinary request boot cache. */
+export function validateClerkWebhookEnvironment(
+  env: NodeJS.ProcessEnv,
+  environment: 'development' | 'production',
+): EnvValidationResult {
+  return validateControlPlaneEnvironment(env, environment)
 }
 
 /**
  * Requires an explicit money world; production requires the complete manifest.
- * Ensures production boot and diagnostics share one semantic decision.
+ * Ensures readiness and new money initiation share one static decision.
  * Invariant: a production build does not turn development money into live money;
  * findings contain names/codes, never supplied credentials or URLs.
  * On violation: named problems, without provider calls or payment effects.
@@ -97,4 +119,11 @@ export function validateEnvironment(
     problems: Object.freeze(result.findings.flatMap(finding => finding.names.map(name =>
       Object.freeze({ name, reason: finding.code })))),
   }
+}
+
+/** New production money effects retain the complete static manifest admission. */
+export function productionMoneyManifestReady(env: NodeJS.ProcessEnv = process.env): boolean {
+  const paymentEnvironment = deploymentPaymentEnvironment(env)
+  return paymentEnvironment === 'sandbox'
+    || (paymentEnvironment === 'production' && validateEnvironment(env, 'production').ok)
 }

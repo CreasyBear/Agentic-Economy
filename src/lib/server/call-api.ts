@@ -1,4 +1,5 @@
 import { gatewayFailureToProblem, operationInvokeResultToProblem } from '@/lib/errors'
+import { productionMoneyManifestReady } from '@/lib/deployment/env-schema'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isJsonContentType } from '@/lib/server/json-content-type'
 import {
@@ -96,6 +97,10 @@ export function createCallService(
     command,
   })
   const callTool = async (input: CallServiceRequest) => {
+    if (!productionMoneyManifestReady()) return {
+      kind: 'refused' as const, code: 'operation_not_ready' as const, retryable: true,
+      nextAction: 'Tool purchases are temporarily unavailable. You can keep searching for Tools.',
+    }
     const operationKey = operationKeyFor({
       commitmentRef: input.input.quoteRef,
       idempotencyKey: input.input.idempotencyKey,
@@ -123,6 +128,10 @@ export function createCallService(
     return callResultSchema.parse(result)
   }
   const quoteTool: NonNullable<CallService['quoteTool']> = async (input) => {
+    if (!productionMoneyManifestReady()) return {
+      kind: 'refused' as const, toolRef: input.input.toolRef, code: 'payments_not_ready' as const,
+      retryable: true, correlationRef: input.correlationId,
+    }
     const operationKey = operationKeyFor(
       {
         operationRef: input.input.toolRef,
@@ -419,6 +428,10 @@ export async function handleToolQuotePost(
         detail: 'The request did not match tool.quote:v2.',
       }), correlationId)
     }
+    if (!productionMoneyManifestReady()) return withRequestCorrelationHeader(response({
+      kind: 'refused', toolRef: parsed.data.toolRef, code: 'payments_not_ready',
+      retryable: true, correlationRef: correlationId,
+    }, 200, callJsonResponseHeaders), correlationId)
     try {
       const service = options.callService ?? createCallService(request, bounded.text)
       if (service.quoteTool === undefined) throw new Error('tool_quote_unavailable')
@@ -488,6 +501,14 @@ export async function handleToolCallPost(
         code: 'invalid_request',
         detail: 'The request did not match tool.call:v1.',
       }), correlationId)
+    }
+    if (!productionMoneyManifestReady()) {
+      const refused = callAction.outputSchema.parse(projectCallMachineResult({
+        kind: 'refused', code: 'operation_not_ready', retryable: true,
+        nextAction: 'Tool purchases are temporarily unavailable. You can keep searching for Tools.',
+      }))
+      telemetry(gatewayTelemetryForResult(refused))
+      return withRequestCorrelationHeader(response(refused, 200, callJsonResponseHeaders), correlationId)
     }
     try {
       const service = options.callService ?? createCallService(request, bounded.text)
