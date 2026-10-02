@@ -290,7 +290,10 @@ describe('anonymous operation chat transport', () => {
     ]))
 
     expect(streamed.body).not.toContain('A weather Operation is available.')
-    expect(streamed.queries).toEqual(['x402DirectoryIndex:searchCompactInternal'])
+    expect(streamed.queries).toEqual([
+      'x402DirectoryIndex:searchCompactInternal',
+      'x402DirectoryIndex:status',
+    ])
     expect(streamed.mutations).toEqual([])
     expect(anonymousThreads.page).toEqual([])
     expect(sentinelThreads.page).toEqual([])
