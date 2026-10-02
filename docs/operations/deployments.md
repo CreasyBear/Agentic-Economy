@@ -132,8 +132,12 @@ evidence.
 [#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) tracks the remaining
 foundation setup. Complete custody enablement/funding, two compatible RPCs,
 screening, commercial policy, treasury, identity and backup/restore acceptance.
-Infura's native Base checks pass; Alchemy's compatible-plan billing setup remains
-pending under the approved US$1 monthly cap. Joel's selected owner identity is
+Infura and Alchemy now pass the actual Base-mainnet treasury observation,
+including an agreed finalized checkpoint, balance and 2,000-block transfer range.
+Joel completed Alchemy Pay As You Go setup; the US$1 account-wide monthly usage
+cap is verified. Both endpoints are bound to the production vault, Convex and
+Vercel setting; the latter consumes the updated setting on its next deployment.
+Custody remains disabled and the wallet unfunded. Joel's selected owner identity is
 verified and allowlisted, and real sign-in at 11:57 UTC is recorded in Security
 activity. The first explicit Admin bootstrap was refused at web admission;
 Stage 52 corrects Vercel's HTTP reconstruction after TLS termination without

@@ -3665,3 +3665,75 @@ Formance and the reference rate pass on the live Admin view. Custody, matching
 RPC evidence, licensed screening, commercial approvals and treasury evidence
 remain incomplete. Development paid-Call proof, the authorized mainnet drills
 and public launch remain outstanding.
+
+## Stage 55 — Credit recovery, native RPCs and financial-document preservation
+
+On 3 October Perth time, Joel reported a failed production Credit page and
+authorised completion of the setup. Native browser console evidence identified
+an obsolete CSS chunk returning 404 after deployment. PR #306 extends the
+existing bounded stale-asset reload recovery to the operator route boundary.
+Ordinary query failures still use the router retry; the existing cooldown
+prevents reload loops. Its full source gate passed. Vercel Production
+`dpl_HfVFTxR9F8x3tPywt8h94snSbQLz` serves merged revision
+`8cf06666b7ca4816f7a9b73acc20de7f4e3e548b`. Native authenticated acceptance loads
+Credit with A$0.00 available, purchased and promotional credit, and an empty
+ledger. Funding remains unavailable because production policy is not active.
+
+Joel completed Alchemy's upgrade. Native readback verifies Pay As You Go and a
+US$1 account-wide monthly usage cap. The actual treasury observation code passes
+against Infura and Alchemy Base mainnet: both agree on chain identity, finalized
+checkpoint `52095323`, hash
+`0x3b1c3a062a0aa8590030f033346e8c09ebf6c22ac4706ba3023e6c6693e698e2`,
+zero USDC balance and the 2,000-block transfer range. This is a real read-only
+provider result, not a fixture or a signing test.
+
+The production Convex RPC setting incorrectly selected Base Sepolia. The named
+setting now selects both verified Base mainnet endpoints in Infisical production,
+Convex `cautious-zebra-473` and Vercel Production. Exact vault and Convex readback
+match; Vercel confirms the sensitive setting's update and consumes it on the next
+deployment. Prior named values and metadata are retained privately for recovery.
+The temporary credential-transfer files were removed. Custody remains disabled;
+the wallet is unfunded and no payment was signed or submitted.
+
+The focused internal money-control audit found a document recovery defect:
+after storage succeeded, a committed attachment with a lost acknowledgement could
+fall through generic error cleanup and delete its canonical HTML/CSV files.
+The fix separates pre-submission failure, definite refusal and unknown outcome.
+Unknown attachment outcomes read back the same document and preserve potentially
+committed bytes. Same-content concurrent/repeated attachments return one immutable
+pair; only proven duplicate candidates are cleaned up. Cleanup failure is
+observable and cannot invalidate an attached document. Internal recovery reads
+include `awaiting_signature`; owner downloads remain restricted to issued
+documents. Late worker failure cannot demote a daily close awaiting its signature.
+
+**Requires:** frozen render material and existing internal/owner authority.
+**Ensures:** one canonical attachment or visible unresolved failure.
+**Invariant:** uncertain acknowledgement cannot destroy financial evidence;
+unsigned documents do not become owner-downloadable.
+**On violation:** preserve bytes and use existing worker retry/reconciliation.
+Unresolved failures may retain orphan files; this is preferable to loss of an
+issued document. No new storage schema, service or recovery subsystem is added.
+
+Focused document tests pass 20/20 and `npm run check` passes. The full gate runs
+with explicit local development/sandbox declarations under Node 22/npm 11.5.1:
+8,073 unit tests and 2,780 integration tests pass, followed by type/boundary/SEO
+checks, 16 browser journeys, 18 accessibility checks and reproducible CLI package
+verification. A fresh native Convex export including file storage is retained at
+23:09 UTC before deployment (SHA-256
+`1ab5dfae511d4775451feba8f359e03a24fee6cfac51c4661dd068ebfd923f81`).
+The regression cases
+exercise commit-then-throw, failed readback, delayed commit, partial storage
+failure, definitive refusal, concurrent renders, failed duplicate cleanup,
+immutable digests, late completion and real owner signing/access boundaries.
+Hosted response-loss injection remains unverified.
+
+The audit also distinguishes implemented controls from launch evidence. Authority,
+atomic custody admission, payment replay and ledger readback have substantive
+source/test coverage; successful native screening, paid Calls and the live failure
+drills remain unproved. The TRM adapter is deliberately unavailable until the
+licensed Wallet Screening tenant contract is integrated; the prepared vendor
+enquiry has not been sent. Tax-invoice generation and fuller reporting surfaces
+are the next authorised implementation. Stored policy approvals alone cannot
+prove retention procedures, a signed close or production recovery objectives.
+The historical alpha cloud restore remains valid for its documented target and
+cutoff, not proof of a current whole-production restore.

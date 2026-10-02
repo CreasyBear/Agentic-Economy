@@ -15,15 +15,24 @@ export const attachRenderedFileResult = v.union(
     v.object({ kind: v.literal('replayed'), fileId: v.id('_storage'), csvFileId: v.id('_storage') }),
     v.object({ kind: v.literal('refused') }),
   )
+/** Requires the frozen render input. Ensures one immutable attachment pair;
+ * concurrent/repeated matching renders return that pair without replacing it.
+ * Conflicting material or incomplete attachments are refused without writes. */
 export const attachRenderedFileHandler = async (ctx: MutationCtx, args: Infer<typeof attachRenderedFileArgs>) => {
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || row.renderInputDigest !== args.renderInputDigest || row.state !== 'rendering') {
+    if (row === null || row.renderInputDigest !== args.renderInputDigest) {
       return { kind: 'refused' as const }
     }
     if (row.fileId !== undefined && row.csvFileId !== undefined) {
+      if (row.fileDigest !== args.fileDigest || row.csvFileDigest !== args.csvFileDigest) {
+        return { kind: 'refused' as const }
+      }
       return { kind: 'replayed' as const, fileId: row.fileId, csvFileId: row.csvFileId }
+    }
+    if (row.state !== 'rendering' || row.fileId !== undefined || row.csvFileId !== undefined) {
+      return { kind: 'refused' as const }
     }
     await ctx.db.patch(row._id, {
       fileId: args.fileId,
@@ -36,4 +45,3 @@ export const attachRenderedFileHandler = async (ctx: MutationCtx, args: Infer<ty
     })
     return { kind: 'attached' as const, fileId: args.fileId, csvFileId: args.csvFileId }
   }
-

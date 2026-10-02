@@ -114,7 +114,7 @@ export const readQueuedForRenderResult = v.union(v.null(), v.object({
     renderInputJson: v.string(),
     renderInputDigest: v.string(),
     templateVersion: v.string(),
-    state: v.union(v.literal('rendering'), v.literal('issued')),
+    state: v.union(v.literal('rendering'), v.literal('awaiting_signature'), v.literal('issued')),
     fileId: v.optional(v.id('_storage')),
     fileDigest: v.optional(v.string()),
     csvFileId: v.optional(v.id('_storage')),
@@ -124,7 +124,7 @@ export const readQueuedForRenderHandler = async (ctx: QueryCtx, args: Infer<type
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || (row.state !== 'rendering' && row.state !== 'issued')) return null
+    if (row === null || (row.state !== 'rendering' && row.state !== 'awaiting_signature' && row.state !== 'issued')) return null
     return {
       documentRef: row.documentRef,
       renderInputJson: row.renderInputJson,
@@ -150,4 +150,3 @@ export const readOwnerDocumentUrlHandler = async (ctx: QueryCtx, args: Infer<typ
       || row.state !== 'issued' || row.fileId === undefined) return null
     return await ctx.storage.getUrl(row.fileId)
   }
-
