@@ -6,6 +6,7 @@ import { createElement, useEffect, useEffectEvent, useRef, useState, type ReactN
 
 import { api } from '../../../../../convex/_generated/api'
 import { enableOwnerChatSpendingServer } from '@/modules/agent-access/agent-access.functions'
+import { startOwnerChatTurnServer } from '@/lib/server/chat-turn.functions'
 import {
   findOwnerActiveMarketDemand,
   getOwnerMarketDemandStatus,
@@ -118,7 +119,7 @@ export function useChatSession({
     isAuthenticated && threadId !== null ? { threadId, now } : 'skip',
   )
 
-  const startTurn = useMutation(api.chatTurns.startTurn)
+  const startTurn = useServerFn(startOwnerChatTurnServer)
 
   const enableOwnerChat = useServerFn(enableOwnerChatSpendingServer)
 
@@ -284,14 +285,25 @@ export function useChatSession({
       if (isAuthenticated) {
         clientTurnId = retryClientTurnId ?? globalThis.crypto.randomUUID()
         const result = await startTurn({
-          principal: { kind: 'clerk' }, prompt: nextPrompt,
-          clientTurnId,
-          ...(threadId === null || forceNewThread ? {} : { threadId }),
-          ...(continuation === undefined ? {} : {
-            continuation: { kind: 'search_next_page' as const, ...continuation },
-          }),
+          data: {
+            prompt: nextPrompt, clientTurnId,
+            ...(threadId === null || forceNewThread ? {} : { threadId }),
+            ...(continuation === undefined ? {} : {
+              continuation: { kind: 'search_next_page' as const, ...continuation },
+            }),
+          },
         })
         if (!mountedRef.current || requestGenerationRef.current !== requestGeneration) return { kind: 'submitted' }
+        if ('kind' in result) {
+          const unavailable = result.code === 'source_unavailable'
+          setError(unavailable
+            ? 'Chat purchases are temporarily unavailable. Your message was not sent; try again after setup is restored.'
+            : 'Your sign-in expired. Sign in again before sending this message.')
+          setRecovery(unavailable ? 'source_unavailable' : 'chat_unavailable')
+          setStatus('')
+          updateRetryableClientTurn(null)
+          return { kind: 'not_submitted', reason: unavailable ? 'source_unavailable' : 'chat_unavailable' }
+        }
         updateRetryableClientTurn(null)
         if (!preserveDraft) setPrompt('')
         setRecovery(undefined)

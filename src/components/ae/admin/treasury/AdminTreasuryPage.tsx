@@ -12,6 +12,7 @@ import { api } from '../../../../../convex/_generated/api'
 import { TREASURY_SNAPSHOT_MAX_AGE_MS } from '@/modules/money/treasury-report'
 import { TreasuryMetrics } from './TreasuryMetrics'
 import { TreasuryActions } from './TreasuryActions'
+import { CommercialPolicyActions } from './CommercialPolicyActions'
 import { TREASURY_ALERT_LABELS } from './treasury-view-model'
 
 export const TREASURY_PAGE_DESCRIPTION = 'Company USDC float, customer credit coverage and payment controls.'
@@ -42,6 +43,7 @@ export function AdminTreasuryPage() {
       </Alert>}
       <TreasuryMetrics view={view} />
       <TreasuryActions view={view} />
+      <CommercialPolicyActions environment={view.environment} />
     </div>}
   </AeOperatorPage>
 }

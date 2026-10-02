@@ -14,9 +14,14 @@ import {
   type AdminActionSheetController,
   type AdminActionSheetProps,
   type AdminActionSheetState,
+  type AdminCommandRequest,
 } from './actions.contracts'
 import { useAdminCommandProof } from './useAdminCommandProof'
 
+/** Requires a reviewed command and current authority. Submission captures its entire request once.
+ * Ensures MFA, pending and uncertain retries use identical terms and operation identity.
+ * An unresolved request can be minimized and resumed in the same mounted instance; it cannot be edited.
+ * A known refusal permits an explicit new request. Page reload/navigation is outside this local lifetime. */
 export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSheetController {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
   const role = access?.kind === 'allowed' ? access.role : null
@@ -27,23 +32,29 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   const generation = useRef(0)
   const flights = useRef(0)
   const abandoned = useRef(false)
+  const submittedRequest = useRef<AdminCommandRequest | null>(null)
+  const unresolved = useRef(false)
   const [pending, setPending] = useState(false)
+  const [minimized, setMinimized] = useState(false)
   const [state, setState] = useState<AdminActionSheetState>({
     phase: props.approval?.kind === 'approve' ? 'preview' : 'reason', reasonCode: props.initialReasonCode ?? '',
     evidenceRefs: props.initialEvidenceRefs ?? [], typedEvidence: '', receipt: null,
-    error: null, approval: props.approval ?? { kind: 'execute' },
+    error: null, approval: props.approval ?? { kind: 'execute' }, submittedRequest: null,
   })
 
   const resetFromCurrentProps = useEffectEvent(() => {
     generation.current += 1
     abandoned.current = false
+    submittedRequest.current = null
+    unresolved.current = false
+    setMinimized(false)
     setPending(flights.current > 0)
     operationKey.current = createPrefixedRandomId('admin:')
     correlationId.current = createPrefixedRandomId('admin:correlation:')
     setState({
       phase: props.approval?.kind === 'approve' ? 'preview' : 'reason', reasonCode: props.initialReasonCode ?? '',
       evidenceRefs: props.initialEvidenceRefs ?? [], typedEvidence: '', receipt: null,
-      error: null, approval: props.approval ?? { kind: 'execute' },
+      error: null, approval: props.approval ?? { kind: 'execute' }, submittedRequest: null,
     })
   })
 
@@ -52,12 +63,14 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }, [props.open])
 
   function setReason(value: string) {
+    if (submittedRequest.current !== null) return
     if (props.approval?.kind === 'approve') return
     if (!ADMIN_REASON_OPTIONS[props.action].some((reason) => reason === value)) return
     setState((previous) => ({ ...previous, reasonCode: value, error: null }))
   }
 
   function setEvidence(value: string, selected: boolean) {
+    if (submittedRequest.current !== null) return
     if (props.approval?.kind === 'approve') return
     setState((previous) => ({ ...previous,
       evidenceRefs: selected
@@ -95,7 +108,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
 
   function leaveSubmitting() {
     abandoned.current = true
-    setState((previous) => ({ ...previous, phase: 'preview', error: unchangedPreview() }))
+    setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
   }
 
   function back() {
@@ -103,6 +116,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       leaveSubmitting()
       return
     }
+    if (submittedRequest.current !== null) return
     if (props.approval?.kind === 'approve' && state.phase !== 'confirm') return
     setState((previous) => ({ ...previous, error: null, phase:
       previous.phase === 'confirm' ? 'preview'
@@ -113,12 +127,16 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
 
   async function submit(intent = state.approval) {
     if (props.approval?.kind === 'approve' && intent.kind !== 'approve') return
+    if (!allowed || flights.current > 0 || state.phase === 'submitting') return
     if (intent.kind !== state.approval.kind) {
+      if (unresolved.current) return
       operationKey.current = createPrefixedRandomId('admin:')
       correlationId.current = createPrefixedRandomId('admin:correlation:')
+      if (submittedRequest.current !== null) submittedRequest.current = {
+        ...submittedRequest.current, approval: intent, operationKey: operationKey.current, correlationId: correlationId.current,
+      }
     }
-    if (!allowed || flights.current > 0 || state.phase === 'submitting') return
-    const validated = adminCommandRequestSchema.safeParse({
+    const validated = adminCommandRequestSchema.safeParse(submittedRequest.current ?? {
       action: props.action, input: props.input, reasonCode: state.reasonCode,
       evidenceRefs: state.evidenceRefs,
       ...(props.currentStateDigest === undefined ? {} : { expectedStateDigest: props.currentStateDigest }),
@@ -128,11 +146,13 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       setState((previous) => ({ ...previous, error: 'Review the reason, evidence and command details before submitting.' }))
       return
     }
+    submittedRequest.current = validated.data
+    unresolved.current = true
     const ticket = generation.current
     flights.current += 1
     abandoned.current = false
     setPending(true)
-    setState((previous) => ({ ...previous, phase: 'submitting', approval: intent, error: null }))
+    setState((previous) => ({ ...previous, phase: 'submitting', approval: intent, error: null, receipt: null, submittedRequest: validated.data }))
     try {
       const receipt = await execute(validated.data)
       if (generation.current !== ticket) return
@@ -140,6 +160,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
         setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
         return
       }
+      unresolved.current = receipt.kind === 'pending'
       if (abandoned.current) {
         abandoned.current = false
         if (receipt.kind === 'refused' && receipt.code === 'mfa_reverification_required') return
@@ -150,6 +171,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     } catch (cause) {
       if (generation.current !== ticket) return
       const cancelled = isReverificationCancelledError(cause)
+      unresolved.current = !cancelled
       if (abandoned.current) {
         abandoned.current = false
         if (!cancelled) {
@@ -176,21 +198,32 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     if (state.receipt?.kind !== 'refused') return
     const presentation = ADMIN_REFUSAL_PRESENTATION[state.receipt.code]
     if (presentation.retry === 'no') return
-    if (newKey) operationKey.current = createPrefixedRandomId('admin:')
-    correlationId.current = createPrefixedRandomId('admin:correlation:')
+    if (newKey) {
+      operationKey.current = createPrefixedRandomId('admin:')
+      correlationId.current = createPrefixedRandomId('admin:correlation:')
+      if (submittedRequest.current !== null) submittedRequest.current = { ...submittedRequest.current, operationKey: operationKey.current, correlationId: correlationId.current }
+    }
     await submit()
   }
 
   function edit() {
     if (props.approval?.kind === 'approve' || state.receipt?.kind !== 'refused') return
+    submittedRequest.current = null
     operationKey.current = createPrefixedRandomId('admin:')
     correlationId.current = createPrefixedRandomId('admin:correlation:')
-    setState((previous) => ({ ...previous, phase: 'reason', receipt: null, error: null, approval: { kind: 'execute' } }))
+    setState((previous) => ({ ...previous, phase: 'reason', receipt: null, error: null, approval: { kind: 'execute' }, submittedRequest: null }))
   }
 
   return {
-    ...state, role, allowed, pending, setReason, setEvidence,
-    setTypedEvidence: (value) => setState((previous) => ({ ...previous, typedEvidence: value })),
+    ...state, role, allowed, pending, minimized, resume: () => setMinimized(false), setReason, setEvidence,
+    onOpenChange: (open) => {
+      if (!open && (flights.current > 0 || unresolved.current)) {
+        setMinimized(true)
+        return
+      }
+      props.onOpenChange(open)
+    },
+    setTypedEvidence: (value) => { if (submittedRequest.current === null) setState((previous) => ({ ...previous, typedEvidence: value })) },
     next, back, submit, retry, edit,
   }
 }

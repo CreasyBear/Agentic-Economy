@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEPLOYMENT_MANIFEST, SOURCE_WRITE_FAMILIES, validateDeploymentManifest } from '@/lib/deployment/manifest'
-import { validateClerkWebhookEnvironment, validateEnvironment } from '@/lib/deployment/env-schema'
+import { productionMoneyManifestReady, validateClerkWebhookEnvironment, validateControlPlaneEnvironment, validateEnvironment } from '@/lib/deployment/env-schema'
+import { productionWebManifestFixture } from '../../helpers/production-web-manifest'
 
 import {
   ensureBootEnvironmentValidated,
@@ -12,7 +13,7 @@ function liveConfiguration(): Record<string, string> {
   return {
     NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production',
     AE_CANONICAL_BASE_URL: 'https://ae.example', CONVEX_URL: 'https://convex.example',
-    AE_CONVEX_SERVER_FUNCTION_TOKEN: 'source-token',
+    AE_CONVEX_SERVER_FUNCTION_TOKEN: 'source-token-with-at-least-32-characters',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example', CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example', CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_d2ViaG9vay1zaWduaW5nLXNlY3JldA==',
     AE_FORMANCE_ENVIRONMENT: 'production', AE_FORMANCE_GATEWAY_URL: 'https://formance.example',
@@ -54,6 +55,9 @@ afterEach(() => {
 })
 
 describe('Clerk webhook environment admission', () => {
+  it('keeps the shared production web fixture money-ready', () => {
+    expect(validateEnvironment(productionWebManifestFixture, 'production')).toEqual({ ok: true })
+  })
   it('retains shared production admission while missing or broken money providers keep full boot closed', () => {
     const identity = clerkWebhookConfiguration()
     for (const unrelated of [{}, {
@@ -72,6 +76,8 @@ describe('Clerk webhook environment admission', () => {
     ['AE_CANONICAL_BASE_URL', undefined],
     ['AE_CANONICAL_BASE_URL', 'https://ae.example/?unexpected=true'],
     ['AE_CANONICAL_HOST_ALLOWLIST', 'not a host'],
+    ['AE_CSP_REPORT_ONLY', 'garbage'],
+    ['AE_CSP_REPORT_ONLY', 'TRUE'],
     ['CONVEX_URL', undefined],
     ['CONVEX_URL', 'http://convex.example'],
     ['VITE_CONVEX_URL', 'https://different-convex.example'],
@@ -94,7 +100,7 @@ describe('Clerk webhook environment admission', () => {
     if (value !== undefined) expect(JSON.stringify(result)).not.toContain(value)
   })
 
-  it('does not populate full boot validation after accepting a callback', () => {
+  it('does not populate ordinary boot validation after accepting a callback', () => {
     vi.stubEnv('AE_CLI_PREBUILT', undefined)
     for (const group of DEPLOYMENT_MANIFEST.configuration.requiredProduction) {
       for (const name of group.names) vi.stubEnv(name, undefined)
@@ -103,7 +109,8 @@ describe('Clerk webhook environment admission', () => {
     for (const [name, value] of Object.entries(clerkWebhookConfiguration())) vi.stubEnv(name, value)
     vi.stubEnv('NODE_ENV', 'production')
     expect(() => ensureClerkWebhookEnvironmentValidated()).not.toThrow()
-    expect(() => ensureBootEnvironmentValidated()).toThrow('formance_configuration_required')
+    expect(() => ensureBootEnvironmentValidated()).not.toThrow()
+    expect(validateEnvironment(process.env, 'production').ok).toBe(false)
   })
 
   it('rechecks callback configuration even after full boot validation succeeded', () => {
@@ -192,7 +199,7 @@ describe('ensureBootEnvironmentValidated', () => {
     }
   })
 
-  it('runs semantic live checks on preview boot and does not cache a refusal', () => {
+  it('admits shared control configuration while live money is incomplete', () => {
     // The release runner's CLI build switch is not web deployment configuration.
     vi.stubEnv('AE_CLI_PREBUILT', undefined)
     for (const name of new Set([...DEPLOYMENT_MANIFEST.configuration.requiredProduction.flatMap(group => group.names),
@@ -200,9 +207,32 @@ describe('ensureBootEnvironmentValidated', () => {
     for (const [name, value] of Object.entries(liveConfiguration())) vi.stubEnv(name, value)
     vi.stubEnv('VERCEL_ENV', 'preview')
     vi.stubEnv('AE_X402_CDP_CREDENTIAL_GENERATION', '0')
-    expect(() => ensureBootEnvironmentValidated()).toThrow(/x402_custody_configuration_invalid/)
-    vi.stubEnv('AE_X402_CDP_CREDENTIAL_GENERATION', '1')
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+    vi.stubEnv('AE_X402_RPC_URLS_JSON', undefined)
     expect(() => ensureBootEnvironmentValidated()).not.toThrow()
+    expect(productionMoneyManifestReady()).toBe(false)
+    expect(validateEnvironment(process.env, 'development').ok).toBe(false)
+    resetBootEnvironmentValidationForTests()
+    vi.stubEnv('AE_CSP_REPORT_ONLY', 'true')
+    expect(() => ensureBootEnvironmentValidated()).toThrow(/AE_CSP_REPORT_ONLY: production_csp_must_enforce/)
+    vi.stubEnv('AE_CSP_REPORT_ONLY', undefined)
+    vi.stubEnv('AE_X402_CDP_CREDENTIAL_GENERATION', '1')
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'true')
+    vi.stubEnv('AE_X402_RPC_URLS_JSON', liveConfiguration().AE_X402_RPC_URLS_JSON)
+    expect(() => ensureBootEnvironmentValidated()).not.toThrow()
+    expect(productionMoneyManifestReady()).toBe(true)
+  })
+
+  it('keeps browser security and runtime findings in shared control-plane admission', () => {
+    const environment = liveConfiguration()
+    expect(validateControlPlaneEnvironment({ ...environment, AE_CSP_REPORT_ONLY: 'true' }, 'production'))
+      .toMatchObject({ ok: false, problems: expect.arrayContaining([
+        { name: 'AE_CSP_REPORT_ONLY', reason: 'production_csp_must_enforce' },
+      ]) })
+    expect(validateControlPlaneEnvironment({ ...environment, NODE_ENV: 'invalid' }, 'production'))
+      .toMatchObject({ ok: false, problems: expect.arrayContaining([
+        { name: 'NODE_ENV', reason: 'node_environment_invalid' },
+      ]) })
   })
 
   it('rejects a missing declaration on preview repeatedly until corrected and reset', () => {

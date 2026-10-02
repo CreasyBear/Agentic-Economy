@@ -41,7 +41,7 @@ import {
   preparedPublicationArgs,
   seedCatalogOffering,
 } from './capability-publication-harness'
-import { installTestSourceWriteSecret, withSourceWrite, withSourceWriteCommand } from '../helpers/source-write-admission'
+import { withSourceWrite, withSourceWriteCommand } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE,
@@ -53,6 +53,7 @@ import {
   quoteAudAccountFunding,
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
+import { productionWebManifestFixture } from '../helpers/production-web-manifest'
 import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../helpers/payment-readiness-fixture'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
@@ -2361,7 +2362,6 @@ describe('capability Call Workpool lifecycle', () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
-    installTestSourceWriteSecret()
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'served-cli-route-signing-secret-material-32')
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:served-cli')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
@@ -2400,6 +2400,10 @@ describe('capability Call Workpool lifecycle', () => {
         return result
       },
     }
+    // Publication seed helpers use the sandbox signing fixture. The served
+    // production routes require their complete manifest and per-family keys.
+    for (const [name, value] of Object.entries(productionWebManifestFixture)) vi.stubEnv(name, value)
+    vi.stubEnv('AE_SOURCE_WRITE_SECRET', undefined)
     const restoreTransport = setPublicSourceTransportForTests(transport)
     const served = await serveCallRoutes({ apiKeyId, apiKeySubject, scopes, principal })
     const temporaryRoot = await mkdtemp(join(tmpdir(), 'ae-served-cli-'))

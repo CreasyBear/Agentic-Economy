@@ -37,11 +37,15 @@ export type AdminActionSheetState = Readonly<{
   receipt: AdminActionSheetReceipt | null
   error: string | null
   approval: AdminApprovalIntent
+  submittedRequest: AdminCommandRequest | null
 }>
 export type AdminActionSheetController = AdminActionSheetState & Readonly<{
   role: AdminRole | null
   allowed: boolean
   pending: boolean
+  minimized: boolean
+  resume: () => void
+  onOpenChange: (open: boolean) => void
   setReason: (value: string) => void
   setEvidence: (value: string, selected: boolean) => void
   setTypedEvidence: (value: string) => void
@@ -224,7 +228,7 @@ export const ADMIN_ACTION_SHEET_COPY = {
   edit: 'Edit command',
   propose: 'Propose instead',
   permission: ADMIN_ACCESS_REFUSED_COPY,
-  unavailable: 'Command outcome could not be confirmed. Review the current record before retrying.',
+  unavailable: 'Command outcome could not be confirmed. Submit again to check the same command. You can close this review and use Resume command on this page; its terms and operation identity are preserved until you leave or reload the page.',
   approval: 'Approval intent',
   operation: 'Operation',
   close: 'Close',

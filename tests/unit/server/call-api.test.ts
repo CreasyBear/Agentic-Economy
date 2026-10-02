@@ -80,6 +80,25 @@ function invokeBody(idempotencyKey = 'key-12345') {
 }
 
 describe('operation.invoke HTTP adapter', () => {
+  it('refuses production Quote and Call before an injected service when money configuration is incomplete', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+    const executor = service({ kind: 'completed' })
+    const options = {
+      authenticate: async () => ({ ...(await authenticate()), claims: { aeEnvironment: 'production' } }),
+      resolvePrincipal: resolveCanonicalPrincipal,
+      callService: executor,
+    }
+    const quote = await handleToolQuotePost(post({ toolRef: operationRef, input: {} }, '/api/v1/tools/quote'), options)
+    const call = await handleCallPostImpl(post(invokeBody()), options)
+    expect(quote.status).toBe(200)
+    await expect(quote.json()).resolves.toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
+    expect(call.status).toBe(200)
+    await expect(call.json()).resolves.toMatchObject({ kind: 'refused', code: 'operation_not_ready' })
+    expect(executor.quoteTool).not.toHaveBeenCalled()
+    expect(executor.callTool).not.toHaveBeenCalled()
+  })
+
   it.each([
     { label: 'missing', contentType: undefined },
     { label: 'text/plain', contentType: 'text/plain' },

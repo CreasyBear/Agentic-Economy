@@ -7,13 +7,14 @@ import { EvidenceRefsPicker } from './components/EvidenceRefsPicker'
 import { ReasonSelect } from './components/ReasonSelect'
 import { ReceiptView } from './components/ReceiptView'
 import { useAdminActionSheet } from './useAdminActionSheet'
+import { CommercialPolicyReview } from '../treasury/CommercialPolicyReview'
 
 export function AdminActionSheet(props: AdminActionSheetProps) {
   const command = useAdminActionSheet(props)
   const destructive = props.action === 'revoke_admin_membership' || props.action === 'close_removal_dispute'
   const showBack = command.allowed && (
     command.phase === 'submitting'
-    || (['evidence', 'proof', 'preview', 'confirm'].includes(command.phase) && (props.approval?.kind !== 'approve' || command.phase === 'confirm'))
+    || (command.submittedRequest === null && ['evidence', 'proof', 'preview', 'confirm'].includes(command.phase) && (props.approval?.kind !== 'approve' || command.phase === 'confirm'))
   )
   const action = command.allowed && command.phase === 'reason' ? (
     <Button type="button" className="min-h-touch" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
@@ -33,10 +34,15 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
     <Button type="button" disabled aria-busy="true">{ADMIN_ACTION_SHEET_COPY.processing}</Button>
   ) : null
 
+  if (props.open && command.minimized) return <div className="grid gap-intra" role="status">
+    <p className="text-sm">{ADMIN_ACTION_COPY[props.action]}: {command.pending ? 'response pending' : command.receipt !== null ? 'receipt available' : command.error === ADMIN_ACTION_SHEET_COPY.unavailable ? 'outcome unknown' : 'review retained'}. Resume to check the outcome before leaving or reloading.</p>
+    <Button type="button" variant="outline" onClick={command.resume}>Resume command</Button>
+  </div>
+
   return (
     <AeRecordSheet
       open={props.open}
-      onOpenChange={props.onOpenChange}
+      onOpenChange={command.onOpenChange}
       title={ADMIN_ACTION_COPY[props.action]}
       description={ADMIN_ACTION_SHEET_COPY.description}
       action={(
@@ -52,6 +58,7 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
           ? <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.mfaRequired} <a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Account security</a></AlertDescription></Alert>
           : null}
         {command.error === null ? null : <Alert role="alert" variant="destructive"><AlertDescription>{command.error}</AlertDescription></Alert>}
+        {props.action === 'change_commercial_policy' ? <CommercialPolicyReview input={command.submittedRequest?.action === 'change_commercial_policy' ? command.submittedRequest.input : props.input} /> : null}
         {command.phase === 'reason' ? (
           <ReasonSelect action={props.action} value={command.reasonCode} onChange={command.setReason} />
         ) : command.phase === 'evidence' ? (

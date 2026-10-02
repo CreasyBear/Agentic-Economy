@@ -3482,6 +3482,12 @@
   {
     "visibility": "public",
     "module": "security",
+    "method": "readOwnerAdminBootstrap",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
     "method": "revokeAdminMembership",
     "kind": "mutation"
   },

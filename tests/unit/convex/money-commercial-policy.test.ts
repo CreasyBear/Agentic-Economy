@@ -4,15 +4,18 @@ import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import schema from '../../../convex/schema'
+import { api } from '../../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import { readCommercialPolicyGate } from '../../../convex/moneyCommercialPolicy'
 import {
   COMMERCIAL_POLICY_FAMILIES,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  PACKAGE4_FORMANCE_REQUIREMENTS,
+  type CommercialPolicyControl,
 } from '../../../src/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
-import { ownerAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
+import { ownerAdmin, reviewerAdmin, supportAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const convexModules = Object.fromEntries(
@@ -230,6 +233,7 @@ describe('commercial policy persistence', () => {
   })
 
   it('replaces and suspends the current row without leaving two active policies', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTest(schema, convexModules)
     const subject = 'user_commercial-policy-lifecycle'
     const admin = await ownerAdmin(backend, subject)
@@ -241,7 +245,7 @@ describe('commercial policy persistence', () => {
     const second = command(subject, 'policy:replace:2', 'replace', secondRef, 2, firstRef)
     await expect(admin.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', second)))
       .resolves.toMatchObject({ kind: 'completed', code: 'commercial_policy_changed' })
-    const suspend = command(subject, 'policy:suspend:2', 'suspend', secondRef, 2, secondRef)
+    const suspend = proofFor(subject, { ...command(subject, 'policy:suspend:2', 'suspend', secondRef, 2, secondRef), input: { ...second.input, changeKind: 'suspend', expectedCurrentPolicyRef: secondRef } })
     await expect(admin.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', suspend)))
       .resolves.toMatchObject({ kind: 'completed', code: 'commercial_policy_changed' })
     const rows = await backend.run((ctx) => ctx.db.query('moneyCommercialPolicies')
@@ -254,5 +258,116 @@ describe('commercial policy persistence', () => {
       { policyRef: firstRef, lifecycle: 'superseded', supersededByPolicyRef: secondRef },
       { policyRef: secondRef, lifecycle: 'suspended', supersededByPolicyRef: undefined },
     ])
+  })
+})
+
+function proofFor(subject: string, input: AdminCommandArgs<'change_commercial_policy'>): AdminCommandArgs<'change_commercial_policy'> {
+  const digest = canonicalDigest({ scope: 'admin_operator', action: input.action, input: input.input, reasonCode: input.reasonCode, evidenceRefs: input.evidenceRefs, ...(input.expectedStateDigest === undefined ? {} : { expectedStateDigest: input.expectedStateDigest }) })
+  return { ...input, proof: testMfaConsequenceProof({ subject }, digest) }
+}
+describe('protected commercial policy preparation and write requirements', () => {
+  it('requires owner-admin preparation and returns only fixed requirements when no policy exists', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTest(schema, convexModules)
+    const args = { environment: 'production' as const, family: 'operations' as const }
+    expect(await backend.query(api.moneyCommercialPolicy.prepareChange, args)).toMatchObject({ kind: 'refused' })
+    for (const create of [reviewerAdmin, supportAdmin]) {
+      const caller = await create(backend, `user_prepare-${create.name}`)
+      expect(await caller.query(api.moneyCommercialPolicy.prepareChange, args)).toMatchObject({ kind: 'refused', code: 'action_not_allowed' })
+    }
+    const owner = await ownerAdmin(backend, 'user_prepare-owner')
+    expect(await owner.query(api.moneyCommercialPolicy.prepareChange, args)).toEqual({ ...args, kind: 'ready', current: null, conflict: false, requiresSecondApproval: false, requirements: PACKAGE4_FORMANCE_REQUIREMENTS })
+    await ownerAdmin(backend, 'user_prepare-second')
+    expect(await owner.query(api.moneyCommercialPolicy.prepareChange, args)).toMatchObject({ requiresSecondApproval: true })
+    expect(await owner.query(api.moneyCommercialPolicy.prepareChange, { ...args, environment: 'sandbox' })).toEqual({ kind: 'refused', code: 'commercial_policy_environment_mismatch' })
+    expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual([])
+  })
+
+  it.each(['activate', 'replace', 'suspend'] as const)('refuses a %s in an undeclared environment without policy effects', async changeKind => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    const backend = convexTest(schema, convexModules)
+    const subject = 'user_policy-env'
+    const owner = await ownerAdmin(backend, subject)
+    const request = command(subject, `policy:env:${changeKind}`, changeKind, 'policy:env', 1, changeKind === 'activate' ? undefined : 'policy:env')
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', request))).toMatchObject({ kind: 'refused', code: 'authority_mismatch' })
+    expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual([])
+  })
+
+  it.each([
+    { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, formanceLedgerVersion: 'v99.0.0' },
+    { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, formanceGatewayVersion: 'v99.0.0' },
+    { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, formanceSchemaVersion: 'v99.0.0' },
+    { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, maximumSdkIntegerUnits: '1' },
+    { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, architectureReviewCumulativeUnits: '1' },
+    { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.operations, formanceSdkVersion: '99.0.0' },
+    { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.operations, formanceSdkArtifactDigest: `sha256:${'0'.repeat(64)}` },
+    SANDBOX_COMMERCIAL_POLICY_CONTROLS.operations,
+    SANDBOX_COMMERCIAL_POLICY_CONTROLS.treasury_custody,
+  ] satisfies CommercialPolicyControl[])('refuses changed technical requirements or fixture attestations %#', async control => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTest(schema, convexModules)
+    const subject = 'user_policy-pins'
+    const owner = await ownerAdmin(backend, subject)
+    const base = command(subject, 'policy:pin-drift', 'activate', 'policy:pins', 1)
+    const request = { ...base, input: { ...base.input, family: control.family, control } }
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, request)))).toMatchObject({ kind: 'refused', code: 'authority_mismatch' })
+    expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual([])
+  })
+
+  it('reads and suspends historical pins while refusing their replacement, preserving the old row', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTest(schema, convexModules)
+    const subject = 'user_policy-history'
+    const owner = await ownerAdmin(backend, subject)
+    const base = command(subject, 'policy:history:activate', 'activate', 'policy:history', 1)
+    const initial = { ...base, input: { ...base.input, family: 'treasury_custody' as const, control: PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody } }
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, initial)))).toMatchObject({ kind: 'completed' })
+    const historical = { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, formanceLedgerVersion: 'v1.0.0' }
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyCommercialPolicies').unique()
+      if (row === null) throw new Error('policy_missing')
+      await ctx.db.patch(row._id, { control: historical })
+    })
+    const prepared = await owner.query(api.moneyCommercialPolicy.prepareChange, { environment: 'production', family: 'treasury_custody' })
+    expect(prepared).toMatchObject({ kind: 'ready', current: { control: historical }, requirements: PACKAGE4_FORMANCE_REQUIREMENTS })
+    if (prepared.kind !== 'ready' || prepared.current === null) throw new Error('preparation_missing')
+    const replacement = { ...initial, operationKey: 'policy:history:replace', correlationId: 'policy:history:replace', expectedStateDigest: prepared.current.stateDigest, input: { ...initial.input, control: historical, changeKind: 'replace' as const, revision: 2, policyRef: 'policy:history:new', expectedCurrentPolicyRef: 'policy:history' } }
+    const before = await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, replacement)))).toMatchObject({ kind: 'refused', code: 'authority_mismatch' })
+    expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual(before)
+    const suspend = { ...initial, operationKey: 'policy:history:suspend', correlationId: 'policy:history:suspend', expectedStateDigest: prepared.current.stateDigest, input: { ...initial.input, control: historical, changeKind: 'suspend' as const, expectedCurrentPolicyRef: 'policy:history' } }
+    for (const [key, differentTerms] of Object.entries({
+      effective: { ...suspend.input, effectiveAt: suspend.input.effectiveAt - 1 },
+      expiry: { ...suspend.input, expiresAt: suspend.input.expiresAt + 1 },
+      control: { ...suspend.input, control: { ...historical, minimumBufferUnits: '123' } },
+    })) {
+      const dishonest = { ...suspend, input: differentTerms, operationKey: `policy:history:different:${key}`, correlationId: `policy:history:different:${key}` }
+      expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, dishonest)))).toMatchObject({ kind: 'refused', code: 'authority_mismatch' })
+      expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual(before)
+    }
+    const signed = await withSourceWrite('admin_operator', proofFor(subject, suspend))
+    const receipt = await owner.mutation(changeCommercialPolicy, signed)
+    expect(receipt).toMatchObject({ kind: 'completed' })
+    expect(await owner.mutation(changeCommercialPolicy, signed)).toEqual(receipt)
+    expect(await owner.query(api.moneyCommercialPolicy.prepareChange, { environment: 'production', family: 'treasury_custody' })).toMatchObject({ kind: 'ready', current: { lifecycle: 'suspended', control: historical } })
+  })
+
+  it('admits one concurrent activation and refuses a replacement using stale preparation', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTest(schema, convexModules)
+    const subject = 'user_policy-race'
+    const owner = await ownerAdmin(backend, subject)
+    const requests = await Promise.all(['one', 'two'].map(key => withSourceWrite('admin_operator', command(subject, `policy:race:${key}`, 'activate', `policy:race:${key}`, 1))))
+    const results = await Promise.all(requests.map(request => owner.mutation(changeCommercialPolicy, request)))
+    expect(results.filter(result => result.kind === 'completed')).toHaveLength(1)
+    const preparation = await owner.query(api.moneyCommercialPolicy.prepareChange, { environment: 'production', family: 'commercial_perimeter' })
+    if (preparation.kind !== 'ready' || preparation.current === null) throw new Error('preparation_missing')
+    const current = preparation.current
+    const first = { ...command(subject, 'policy:race:replace', 'replace', 'policy:race:three', 2, current.policyRef), expectedStateDigest: current.stateDigest }
+    const other = { ...first, operationKey: 'policy:race:other', correlationId: 'policy:race:other', input: { ...first.input, policyRef: 'policy:race:four' } }
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, first)))).toMatchObject({ kind: 'completed' })
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, other)))).toMatchObject({ kind: 'refused', code: 'target_changed' })
+    const rows = await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())
+    expect(rows.filter(row => row.lifecycle === 'active').map(row => row.policyRef)).toEqual(['policy:race:three'])
   })
 })

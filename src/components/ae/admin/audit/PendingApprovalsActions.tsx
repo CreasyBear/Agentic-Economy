@@ -11,14 +11,13 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { formatExactAmount } from '@/modules/money/public'
-import { AUDIT_COPY, type PendingApprovalsActionsProps } from './audit.contracts'
+import { AUDIT_COPY, type AdminApprovalProposal, type PendingApprovalsActionsProps } from './audit.contracts'
 
 export function PendingApprovalsActions({ proposals, now, role, actorRef, paginationStatus, onLoadMore }: PendingApprovalsActionsProps) {
-  const [selectedRef, setSelectedRef] = useState<string | null>(null)
-  const selected = proposals.find((row) => row.proposalRef === selectedRef && row.expiresAt > now)
-  const command = selected?.commandJson === null || selected === undefined
+  const [selected, setSelected] = useState<AdminApprovalProposal | null>(null)
+  const command = selected?.commandJson === null || selected === null
     ? null : parseAdminProposalCommand(selected.action, selected.commandJson)
-  const onOpenChange = (open: boolean) => { if (!open) setSelectedRef(null) }
+  const onOpenChange = (open: boolean) => { if (!open) setSelected(null) }
 
   return (
     <AeSection title={ADMIN_AUDIT_ACTION_COPY.approvalActionsTitle} description={ADMIN_AUDIT_ACTION_COPY.approvalActionsDescription}>
@@ -42,7 +41,7 @@ export function PendingApprovalsActions({ proposals, now, role, actorRef, pagina
                 {canApprove && material === null ? (
                   <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.proposalUnavailable}</AlertDescription></Alert>
                 ) : canApprove && material !== null ? (
-                  <Button type="button" variant="outline" className="min-h-touch" onClick={() => setSelectedRef(proposal.proposalRef)}>
+                  <Button type="button" variant="outline" className="min-h-touch" disabled={selected !== null} onClick={() => setSelected(proposal)}>
                     {ADMIN_AUDIT_ACTION_COPY.approve}
                   </Button>
                 ) : null}
@@ -54,8 +53,8 @@ export function PendingApprovalsActions({ proposals, now, role, actorRef, pagina
       {paginationStatus === 'Exhausted' ? null : (
         <Button type="button" variant="outline" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>{AUDIT_COPY.loadMore}</Button>
       )}
-      {role === 'owner_admin' && selected !== undefined && selected.proposerRef !== actorRef
-        && command !== null && selected.expiresAt > now
+      {role === 'owner_admin' && selected !== null && selected.proposerRef !== actorRef
+        && command !== null
         ? approvalSheet(command, selected.proposalRef, onOpenChange) : null}
     </AeSection>
   )

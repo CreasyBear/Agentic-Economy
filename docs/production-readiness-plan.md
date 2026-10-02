@@ -3298,5 +3298,156 @@ Before deployment, a fresh production Convex export retained snapshot
 `1790929159865364434`: 76,424,295 bytes, 435 entries and valid CRC, SHA-256
 `75de136e000ac8a65355bdd776dc39af72832b7d3ed7845bac57d35fbc01dc3c`.
 Native production Formance health passes, with zero transactions, zero accounts
-and four schemas matching its clean baseline. Backend deployment and runtime
-binding remain the next acceptance boundary; this stage has moved no live money.
+and four schemas matching its clean baseline.
+
+PR [#298](https://github.com/CreasyBear/Agentic-Economy/pull/298) merged as
+`d02063d598d257b8e1d3c5b22d6ae139aa1163b5`. The native Convex dry run validated
+the existing data and the single index replacement. That exact merged source
+then deployed to `cautious-zebra-473` before any financial binding changed.
+Both historical sandbox funding commands returned non-retryable
+`environment_mismatch` from the deployed worker read, with no worker running.
+
+Nineteen production Formance and CDP values were applied from the owning
+Infisical production folder. Convex's native multi-variable update was atomic,
+and exact named readback matched all 19 source values. Vercel's 19 entries are
+uniquely scoped to Production; sensitive values remain unreadable after writing.
+The two previously absent per-payee/new-payee limits were added. Custody remains
+`false`, with approved ceilings of US$0.50/signature, US$10/day,
+US$2/payee/day and US$0.50/new payee. Previous values are retained privately for
+recovery; the temporary credential-transfer file was removed.
+
+Vercel redeployment `dpl_CTN25Xqh7BJvfh6GkucTM9Fy57fr` is READY at the same
+merged revision, assigned to `app.aecon.ai`. At 09:16 UTC, release and health
+returned HTTP 200. Native backend Formance health reports Ledger 2.4.14 and
+schema 1.6.0. A complete snapshot through the deployed production binding still
+matches the empty baseline: zero transactions, zero accounts and four schemas.
+The two funding records retain their complete pre-cutover digest and continue
+to refuse with `environment_mismatch`. No live money moved.
+
+Readiness remains `not_ready`: Formance and the reference rate pass; custody is
+disabled, and RPC, treasury, screening and commercial-policy prerequisites are
+incomplete. The web manifest therefore refuses readiness with HTTP 503. This is
+not acceptance of a real paid Call or permission to launch. Infura passed the
+seven native Base RPC compatibility checks; Alchemy's free plan refused both
+2,000-block log queries, so a compatible second provider remains pending. The
+Alchemy card/terms and US$1 monthly cap handoff, the proposed bounded US$2 cloud
+restore rehearsal and the TRM product/tenant decision await the operator.
+
+Owner MFA enrollment and real bound-user revocation remain unverified. A fresh
+owner sign-in attempt in Brave was blocked by the browser before reaching the
+application; direct native HTTP release/health checks still pass. Subsequent
+native HTTP requests to sign-in, owner security and admin Treasury each returned
+500: ordinary boot demands the complete payment manifest before Clerk can run.
+Stage 49 addresses that setup deadlock while preserving new-money admission.
+Local native
+ledger tests and the accepted provider-native Clerk fixture do not replace the
+remaining owner, cloud-restore, development paid-Call, 20 reconciled mainnet Call
+or failure-drill acceptance.
+
+
+## Stage 49 — restore operator setup and commercial-policy review
+
+Native production readiness reports `commercial_policy_missing`. Source has
+six typed policy families, an MFA-protected command and second-owner approvals,
+but no maintained form initiates that command. A native read-only production
+census at 09:27 UTC found zero active `owner_admin` memberships; exact owner
+identity and initial authority must be established before any activation. The
+existing pending-approval view shows a policy reference without its actual
+commercial terms. Add the
+missing producer and complete review in the existing Treasury/approval screens;
+retain the current command, storage, role, evidence and approval mechanisms.
+
+**Requires:** authenticated owner-admin authority, the current declared payment
+environment, valid explicit business inputs and a current policy/version view.
+**Ensures:** the first owner and any second approver see the complete terms that
+will be submitted; fixed technical requirements come from the server and are
+checked by the mutation. **Invariant:** the reviewed request and its operation
+identity remain fixed through MFA, retries and unknown outcomes; source-write
+admission, strict MFA and the current two-owner rule remain authoritative. No
+production terms are inherited from sandbox fixtures or silently rewritten.
+**On violation:** show validation, stale-state or authority refusal and retain
+reviewable input; do not claim an active policy or automatically resubmit an
+edited/uncertain command. Existing historical policy reads remain available.
+
+Complexity: one typed form, a protected current-policy projection and a shared
+readable review add a UI/backend connection. They remove manual payload
+construction and ensure both actual reviewers see one interpretation of the
+same command. Keep those boundaries; reuse `AdminActionSheet`, its command proof
+and existing mutation instead of adding a general settings/approval framework.
+No new route, dependency, stored field or commercial model is intended.
+
+Cognitive-load and state-flow decisions: show one selected policy family and
+its existing status, then its business fields and validity dates. Keep values,
+units and deployment visible during review; put fixed implementation details
+behind a read-only disclosure. Fees, tax, funding/access limits, retention,
+buffer, validity and operational attestations require explicit owner input.
+Local edit state becomes an immutable reviewed request on the review event;
+server state remains in the existing query mechanism, and command outcome stays
+in the existing action sheet. Derive summaries rather than maintaining a second
+mutable copy. Do not refresh or rewrite a draft while the owner is reviewing it.
+
+Verification will cover unauthorized/mismatched preparation and changes, fixed
+technical drift, exact decimal amounts, all family previews, identical terms
+for a second approver, stable request identity on retry and refusal without
+policy mutation. Existing MFA, approval-concurrency and financial-readiness
+checks remain relevant. A usable form does not approve production commercial
+terms or establish restore/daily-close evidence; actual activation remains an
+explicit owner action after those facts exist.
+
+The same stage repairs the demonstrated control-plane boot deadlock. Shared
+identity, canonical origin, backend identity, source-write, browser-security and
+runtime configuration remain mandatory for ordinary requests. Full payment
+configuration belongs at new funding and purchase entry points and in readiness;
+existing-payment callbacks and operator recovery retain their own authority.
+
+**Requires:** an exact deployment declaration and valid shared configuration.
+**Ensures:** sign-in and authorized setup can operate while payment prerequisites
+are incomplete. **Invariant:** the complete production manifest still gates
+owner funding, agent funding handoffs, Quote/Call initiation, new authenticated
+chat turns and `/api/ready`;
+backend authority, environment isolation, current payment evidence and custody
+admission remain unchanged. **On violation:** reject configuration using names
+and codes only, and refuse new money before reservation or external effects.
+The read-only effect review found that both funding initiators previously relied
+on global boot; their existing Stripe and source-authority checks alone were not
+equivalent to full configuration admission. Existing funding status, signed
+callbacks and reconciliation must still handle previously created obligations.
+
+This keeps one shared-configuration decision and the existing full-manifest
+decision. The repeated initiation guards have real callers and retain existing
+refusal types; no route exception registry, new dependency or storage is needed.
+Incomplete payment setup is a recoverable operator state, while invalid identity
+or source-write configuration remains a request refusal. Verification must show
+both available setup and zero new financial effects under a rejected manifest;
+successful page rendering alone is insufficient.
+
+Independent review found that the shared decimal parser rounded beyond 20
+significant digits, although policy amounts allow more. Its existing unsigned
+decimal grammar now scales by string digits, preserving exact canonical units
+without a precision context. Nonzero excess fractional digits and surrounding
+whitespace are refused. Nineteen focused constructor/parser assertions pass,
+including 30-digit units, scale 18, zero, excess precision and format/parse
+round trips. The policy form retains the shared parser rather than adding one.
+
+The independent ingress review corrected an initial assumption about chat:
+browser turns invoke Convex directly rather than using the web Call service.
+The single browser start producer therefore moves behind server admission, and
+the existing production Clerk start mutation must validate the existing signed
+source-write envelope before reserving or scheduling a turn. HTTP starts use
+the same proof. Gating all new authenticated turns avoids a race with enabling
+spending after a read-only preflight. Existing turn reads, deltas, cancellation
+and financial recovery retain their own guards and remain available.
+
+The missing initial-owner producer uses the existing bootstrap mutation on the
+owner security-activity page. **Requires:** the real canonical authenticated
+owner, configured allowlist, zero active Admin owners, consistent token identity,
+explicit reason/evidence and signed POST admission. **Ensures:** the existing
+transaction creates the membership and audit together. **Invariant:** the
+client neither selects an identity nor bypasses first-owner eligibility; an
+unknown result retains its command and requires bounded membership/audit
+readback before an explicit same-command retry. **On violation:** show refusal
+or unresolved status without claiming authority or automatically retrying.
+The protected query discloses neither allowlist entries nor another actor's
+audit. One card, one source adapter and one bounded query remove manual payload
+construction; existing storage, grant semantics and subsequent command MFA stay
+authoritative. Production grant and enrollment remain human actions.

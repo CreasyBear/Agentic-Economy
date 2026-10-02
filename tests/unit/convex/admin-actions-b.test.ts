@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { makeFunctionReference } from 'convex/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { SANDBOX_COMMERCIAL_POLICY_CONTROLS } from '@/modules/money/public'
 import type { AdminCommandAction, AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
@@ -17,6 +17,7 @@ const sourceInput = {
   expectedSourceDigest: `sha256:${'c'.repeat(64)}`,
 }
 const now = Date.now()
+afterEach(() => vi.unstubAllEnvs())
 const policyInput: AdminCommandArgs<'change_commercial_policy'>['input'] = {
   changeKind: 'activate', family: 'commercial_perimeter',
   environment: 'production', policyRef: 'commercial-policy:admin-actions-b',
@@ -126,6 +127,7 @@ describe('admin source authority and commercial policy actions', () => {
   })
 
   it('requires policy proof, returns policy_not_found, and replays identical receipts', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const subject = 'user_admin-b-policy'
     const admin = await ownerAdmin(backend, subject)
@@ -156,6 +158,7 @@ describe('admin source authority and commercial policy actions', () => {
   })
 
   it('requires a distinct second owner before changing policy exactly once', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const proposer = 'user_admin-b-proposer'
     const approver = 'user_admin-b-approver'

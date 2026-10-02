@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { ClerkRuntimeError } from '@clerk/shared/error'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -15,8 +15,8 @@ vi.mock('@/components/ae/admin/actions/useAdminCommandProof', () => ({
   useAdminCommandProof: () => mocks.execute,
 }))
 vi.mock('@/components/ae/layout/AeRecordSheet', () => ({
-  AeRecordSheet: ({ open, title, children, action }: { open: boolean; title: string; children: ReactNode; action: ReactNode }) =>
-    open ? <section aria-label={title}>{children}{action}</section> : null,
+  AeRecordSheet: ({ open, title, children, action, onOpenChange }: { open: boolean; title: string; children: ReactNode; action: ReactNode; onOpenChange: (open: boolean) => void }) =>
+    open ? <section aria-label={title}>{children}{action}<button type="button" onClick={() => onOpenChange(false)}>Close</button></section> : null,
 }))
 
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
@@ -35,6 +35,7 @@ afterEach(() => {
   cleanup()
   mocks.access.mockReset()
   mocks.execute.mockReset()
+  props.onOpenChange.mockReset()
 })
 
 function toPreview() {
@@ -144,10 +145,58 @@ describe('Admin action sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
     expect(await screen.findByRole('button', { name: 'Submitting command…' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    expect(await screen.findByText(/No change was made/)).toBeTruthy()
+    expect(await screen.findByText(/Command outcome could not be confirmed/)).toBeTruthy()
     const submit = screen.getByRole('button', { name: 'Submit command' })
     expect(submit.hasAttribute('disabled')).toBe(true)
     fireEvent.click(submit)
     expect(mocks.execute).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(props.onOpenChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Submit command' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume command' }))
+    expect(screen.getByRole('button', { name: 'Submit command' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('minimizes an unknown outcome and resumes the entire unchanged request', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.execute.mockRejectedValueOnce(new Error('response lost'))
+      .mockResolvedValueOnce({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
+    const rendered = render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    expect(await screen.findByText(/Command outcome could not be confirmed/)).toBeTruthy()
+    rendered.rerender(<AdminActionSheet {...props} input={{ ...props.input, expectedRevision: 999 }} currentStateDigest="changed" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(props.onOpenChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Submit command' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume command' }))
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2))
+    expect(mocks.execute.mock.calls[1]?.[0]).toEqual(mocks.execute.mock.calls[0]?.[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(props.onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('receives a completed command while minimized and resumes its receipt without resubmission', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    let finish: ((receipt: unknown) => void) | undefined
+    mocks.execute.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(props.onOpenChange).not.toHaveBeenCalled()
+    expect(screen.getByText(/response pending/)).toBeTruthy()
+    await act(async () => {
+      if (finish === undefined) throw new Error('submission_not_started')
+      finish({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
+    })
+    expect(screen.getByText(/receipt available/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume command' }))
+    expect(screen.getByText('Completed: Source authority verified')).toBeTruthy()
+    expect(mocks.execute).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(props.onOpenChange).toHaveBeenCalledWith(false)
   })
 })

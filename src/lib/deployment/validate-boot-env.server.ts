@@ -1,8 +1,8 @@
 import { bootValidationClass } from './environment'
-import { validateClerkWebhookEnvironment, validateEnvironment } from './env-schema'
+import { validateClerkWebhookEnvironment, validateControlPlaneEnvironment } from './env-schema'
 
-// Production money requires the full static manifest at the request boundary;
-// provider health and operational approval remain separate payment checks.
+// Ordinary requests require the shared control-plane configuration. New money
+// effects and readiness retain the full static production manifest.
 // Development deployments can use NODE_ENV=production without live secrets.
 let validated = false
 
@@ -10,7 +10,7 @@ export function ensureBootEnvironmentValidated(): void {
   if (validated) return
 
   const environment = bootValidationClass(process.env)
-  const result = validateEnvironment(process.env, environment)
+  const result = validateControlPlaneEnvironment(process.env, environment)
   if (result.ok) {
     validated = true
     return

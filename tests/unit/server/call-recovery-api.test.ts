@@ -78,6 +78,27 @@ function service(): CallService {
   } as unknown as CallService
 }
 
+describe('production Tool initiation admission', () => {
+  it('refuses Quote and Call before source effects when web money configuration is incomplete', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+    const mutation = vi.fn()
+    const action = vi.fn()
+    const restore = setPublicSourceTransportForTests({ query: vi.fn(), mutation, action } as never)
+    try {
+      const executor = createCallService(new Request('https://ae.example/api/v1/tools/call', { method: 'POST' }), '{}')
+      await expect(executor.quoteTool?.({ input: { toolRef, input: {} }, principal, correlationId: 'blocked-quote' }))
+        .resolves.toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
+      await expect(executor.callTool({ input: { quoteRef: 'blocked', idempotencyKey: 'blocked' }, principal, correlationId: 'blocked-call' }))
+        .resolves.toMatchObject({ kind: 'refused', code: 'operation_not_ready' })
+      expect(mutation).not.toHaveBeenCalled()
+      expect(action).not.toHaveBeenCalled()
+    } finally {
+      restore()
+    }
+  })
+})
+
 function recoveryPost(
   path: string,
   body: unknown,

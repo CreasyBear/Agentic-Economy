@@ -237,6 +237,7 @@ describe('Clerk service callback admission', () => {
     mutation.mockClear()
     mocks.clerkFactory.mockClear()
     const names = new Set([
+      'AE_CLI_PREBUILT',
       ...knownNames, ...fieldRules.map(rule => rule.name),
       ...DEPLOYMENT_MANIFEST.configuration.forbiddenProduction,
       ...Object.keys(process.env).filter(name => name.startsWith('AE_SOURCE_WRITE_') || name.startsWith('VITE_AE_SOURCE_WRITE_')),
@@ -298,12 +299,15 @@ describe('Clerk service callback admission', () => {
     })).toBe(true)
     expect(mocks.clerkFactory).not.toHaveBeenCalled()
 
-    for (const [path, method] of [['/account', 'GET'], ['/api/v1/tools/quote', 'POST']] as const) {
-      const terminal = vi.fn(async () => new Response('not admitted'))
-      await expect(throughStart(new Request(`https://ae.example${path}`, { method }), 'router', terminal))
-        .rejects.toThrow('Invalid environment configuration')
-      expect(terminal).not.toHaveBeenCalled()
-    }
+    // Shared configuration admits the control plane; protected pages still use
+    // Clerk. New-money admission is exercised at the actual Quote/Call handlers.
+    const account = vi.fn(async () => new Response('not admitted'))
+    await expect(throughStart(new Request('https://ae.example/account'), 'router', account))
+      .rejects.toBe(clerkSessionError)
+    expect(account).not.toHaveBeenCalled()
+    const publicPage = vi.fn(async () => new Response('available'))
+    expect((await throughStart(new Request('https://ae.example/about'), 'router', publicPage)).status).toBe(200)
+    expect(publicPage).toHaveBeenCalledOnce()
     const readyRequest = new Request('https://ae.example/api/ready')
     const ready = await throughStart(readyRequest, 'router', vi.fn(() => handleReadyRequest(readyRequest, { timeoutMs: 1 })))
     expect(ready.status).toBe(503)
@@ -367,10 +371,11 @@ describe('Clerk service callback admission', () => {
     ['/api/clerk/webhook', 'POST', 'serverFn'], ['/api/clerk/webhook/', 'POST', 'router'],
     ['/api/clerk/webhook-extra', 'POST', 'router'], ['/api/clerk/webhook/nested', 'POST', 'router'],
     ['/api/clerk/%77ebhook', 'POST', 'router'], ['/api/stripe/webhook', 'POST', 'router'],
-  ] as const)('keeps %s %s %s behind full boot admission', async (path, method, handlerType) => {
+  ] as const)('keeps %s %s %s behind session or CSRF admission', async (path, method, handlerType) => {
     const request = signedRequest(path, method)
     const terminal = vi.fn(() => handleClerkWebhookRequest(request))
-    await expect(throughStart(request, handlerType, terminal)).rejects.toThrow('Invalid environment configuration')
+    if (handlerType === 'serverFn') expect((await throughStart(request, handlerType, terminal)).status).toBe(403)
+    else await expect(throughStart(request, handlerType, terminal)).rejects.toBe(clerkSessionError)
     expect(terminal).not.toHaveBeenCalled()
     expect(mutation).not.toHaveBeenCalled()
   })
@@ -379,7 +384,9 @@ describe('Clerk service callback admission', () => {
     const request = signedRequest()
     Object.defineProperty(request, 'runtime', { value: { node: { req: { url: '/api/clerk/%2e/webhook' } } } })
     const terminal = vi.fn(() => handleClerkWebhookRequest(request))
-    await expect(throughStart(request, 'router', terminal)).rejects.toThrow('Invalid environment configuration')
+    const response = await throughStart(request, 'router', terminal)
+    expect(response.status).toBe(404)
+    expect(await response.json()).toMatchObject({ code: 'api_not_found' })
     expect(terminal).not.toHaveBeenCalled()
     expect(mutation).not.toHaveBeenCalled()
   })

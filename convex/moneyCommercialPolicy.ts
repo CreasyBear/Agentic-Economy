@@ -9,7 +9,9 @@ import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import {
   commercialPolicySpec,
   readCommercialPolicyGate,
+  prepareCommercialPolicyChange,
 } from './lib/adminConsole/actions/commercialPolicy'
+import { defineAdminQuery } from './lib/adminConsole/reads/registrars'
 import { commercialPolicyControlValue } from '../src/modules/money/schema'
 import { AUD_EXPONENT, audFundingPolicyFromCommercialControls, type CommercialPolicyEnvironment } from '../src/modules/money/public'
 export { readCommercialPolicyGate } from './lib/adminConsole/actions/commercialPolicy'
@@ -26,6 +28,25 @@ const commercialPolicyEnvironmentValue = v.union(
   v.literal('sandbox'),
   v.literal('production'),
 )
+export const prepareChange = defineAdminQuery({
+  action: 'manage_commercial_policy',
+  args: { environment: commercialPolicyEnvironmentValue, family: commercialPolicyFamilyValue },
+  returns: v.union(v.object({ kind: v.literal('refused'), code: v.string() }), v.object({
+    kind: v.literal('ready'), environment: commercialPolicyEnvironmentValue, family: commercialPolicyFamilyValue,
+    conflict: v.boolean(), requiresSecondApproval: v.boolean(),
+    requirements: v.object({
+      ledgerVersion: v.string(), gatewayVersion: v.string(), schemaVersion: v.string(), sdkVersion: v.string(),
+      sdkArtifactDigest: v.string(), maximumSdkIntegerUnits: v.string(), architectureReviewCumulativeUnits: v.string(),
+    }),
+    current: v.union(v.null(), v.object({
+      policyRef: v.string(), revision: v.number(),
+      lifecycle: v.union(v.literal('active'), v.literal('superseded'), v.literal('suspended')),
+      effectiveAt: v.number(), expiresAt: v.number(), control: commercialPolicyControlValue,
+      evidenceRef: v.string(), approvedByPrincipalRef: v.string(), stateDigest: v.string(),
+    })),
+  })),
+  handler: prepareCommercialPolicyChange,
+})
 const fundingConstraintsRefusalValue = v.object({
   kind: v.literal('refused'),
   code: v.string(),

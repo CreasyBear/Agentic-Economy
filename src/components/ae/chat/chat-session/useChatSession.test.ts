@@ -23,7 +23,9 @@ const {
     role: 'user' | 'assistant'
     parts: { type: string; text?: string }[]
   }[]),
-  sendMessageMutationMock: vi.fn(async () => ({ threadId: 'thread-created' })),
+  sendMessageMutationMock: vi.fn(async (): Promise<
+    { threadId: string } | { kind: 'not_started'; code: 'source_unavailable' }
+  > => ({ threadId: 'thread-created' })),
   authStateRef: { current: { isAuthenticated: false, isLoading: false } },
   useQueryCallsRef: { current: [] as unknown[][] },
 }))
@@ -43,6 +45,11 @@ vi.mock('convex/react', () => ({
     return { results: [], status: 'Exhausted', loadMore: vi.fn() }
   },
   useMutation: () => sendMessageMutationMock,
+}))
+
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-start')>()),
+  useServerFn: () => sendMessageMutationMock,
 }))
 
 vi.mock('ai', () => ({
@@ -139,11 +146,10 @@ describe('useChatSession', () => {
       action: 'next-page', authority: 'public', args: { query: 'weather', cursor: 'sc1.private-cursor' },
     }))
     await waitFor(() => expect(sendMessageMutationMock).toHaveBeenCalledOnce())
-    expect(sendMessageMutationMock).toHaveBeenCalledWith(expect.objectContaining({
-      threadId: 'thread-owned',
-      prompt: 'Show more results for weather',
+    expect(sendMessageMutationMock).toHaveBeenCalledWith({ data: expect.objectContaining({
+      threadId: 'thread-owned', prompt: 'Show more results for weather',
       continuation: { kind: 'search_next_page', query: 'weather', cursor: 'sc1.private-cursor' },
-    }))
+    }) })
     expect(result.current.composer.prompt).toBe('A draft for another question')
   })
 
@@ -159,10 +165,23 @@ describe('useChatSession', () => {
       outcome = await runTool(toolRef, { city: 'Sydney' })
     })
     expect(outcome).toEqual({ kind: 'outcome_unknown' })
-    expect(sendMessageMutationMock).toHaveBeenCalledWith(expect.objectContaining({
+    expect(sendMessageMutationMock).toHaveBeenCalledWith({ data: expect.objectContaining({
       threadId: 'thread-owned',
       prompt: `Run Tool ${toolRef} with this exact JSON input: {\"city\":\"Sydney\"}.`,
-    }))
+    }) })
+  })
+
+  it('reports a known pre-dispatch production refusal as not submitted', async () => {
+    authStateRef.current = { isAuthenticated: true, isLoading: false }
+    sendMessageMutationMock.mockResolvedValueOnce({ kind: 'not_started', code: 'source_unavailable' })
+    const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-owned' }))
+    const runTool = result.current.transcript.onRunTool
+    if (runTool === undefined) throw new Error('expected owner-chat Run handler')
+    let outcome: ChatRunResult | undefined
+    await act(async () => { outcome = await runTool(`operation:v1:${'a'.repeat(64)}`, { city: 'Sydney' }) })
+    expect(outcome).toEqual({ kind: 'not_submitted', reason: 'source_unavailable' })
+    expect(result.current.composer.error).toContain('Your message was not sent')
+    expect(result.current.composer.error).not.toContain('could not confirm')
   })
 
   it('never reroutes a private thread message into an anonymous session during auth reconnect', async () => {

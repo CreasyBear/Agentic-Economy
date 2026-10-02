@@ -15,7 +15,8 @@ import { sanitizeTelemetryError, sanitizeTelemetryValue } from '@/lib/observabil
 import { boundaryCauseKind, captureBackendException } from '@/lib/observability/degrade-backend'
 
 // This shared entry is also evaluated in the browser. Validate shared server
-// prerequisites on first request; operation-only config is checked where used.
+// prerequisites on first request; the full money manifest is checked at new
+// money initiation and by readiness.
 // Requires an exact safe router probe. Ensures diagnostics can explain invalid
 // boot/auth configuration, including release identity, without admitting pages,
 // writes or server functions.
