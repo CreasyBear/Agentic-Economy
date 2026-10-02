@@ -3051,3 +3051,68 @@ returns `formance_configuration_invalid`. Native Convex readback confirms
 `courteous-finch-213` declares development/sandbox but has no Formance gateway or
 ledger binding. This is a provider-binding gap, not an accepted empty balance.
 No Checkout session or financial transaction was created by these proofs.
+
+## Stage 45 — bind recovery scripts to the selected source
+
+The recovery infrastructure already accepts `source_environment`, but its
+verification and cleanup scripts were hardcoded to `package4-release` and
+`agentic-economy-release`. They could not rehearse the observed `ae-alpha` /
+`agentic-economy-alpha` source. Both scripts now require the source namespace
+and ledger explicitly, and the runbook uses that same pair for baseline capture,
+Terraform state selection, verification and cleanup.
+
+**Requires:** valid namespace/ledger identifiers and a drill name derived from
+that exact namespace and an eight-digit date; verification also requires a
+matching baseline ledger and cutoff. **Ensures:** the verifier binds the supplied
+endpoint and secret to the named isolated RDS instance, and cleanup deletes only
+the validated drill's resources. **Invariant:** source workloads and the source
+database remain distinct from the drill; the AWS account, original-command replay
+and operator restoration checks remain in force. **On violation:** return
+nonzero before secret access or workload mutation. Provider failures propagate,
+and cleanup reports no PASS if deletion or either source health check fails.
+
+The existing scripts remain the implementation boundary. Two explicit source
+arguments and matching input validation replace the old literals; no wrapper,
+dependency, new resource or accounting algorithm was added. Review also found
+that the initial namespace-existence prerequisite prevented cleanup retries when
+Stack deletion had succeeded but later Settings or Versions deletion failed.
+Removing that prerequisite lets the same exact, idempotent named deletes finish
+partial cleanup or repeat completed cleanup. The final absence and source-health
+checks remain mandatory; namespace lookup errors are failures, not evidence of
+absence. Financial verification still replays the original
+native idempotency key. Operate one drill
+at a time because verification temporarily controls the shared Formance operator.
+
+All 52 focused deployment tests pass, including executable shell checks for both
+source pairs, invalid and cross-source names, baseline mismatches, exact cleanup
+targets, failed health/deletion/namespace operations and cleanup retries after
+partial or complete removal. Shell syntax checks pass;
+independent review found no material issue. Pinned OpenTofu 1.12.6 formatting
+and backend-disabled validation pass. This is
+source preparation: no billable restore, source interruption or cloud cleanup
+was executed. The real AWS restore, production isolation decision, staging
+Formance binding and paid-Call acceptance remain outstanding. Local command
+fixtures cannot establish that a restored cloud database or operator recovery
+works; those require the authorized runtime rehearsal.
+
+The final Node 22/npm 11.5.1 `npm run check` and `npm run gate` pass: 7,739 unit
+tests, 2,701 integration tests, type/import/security checks, SEO, browser
+journeys, accessibility, CLI packaging and the public build. Configured skips
+remain explicit; this is not evidence of the outstanding live money journeys.
+
+## Stage 46 — production-only infrastructure and approved drill limits
+
+Joel directed completion of production infrastructure, operational acceptance,
+the development paid Call, then 20 reconciled mainnet Calls and failure drills.
+On 2 October he explicitly chose to remove the AWS sandbox and use production
+only to avoid another AWS footprint. Reuse the existing host, RDS and Formance
+service; preserve an independent backup and establish restore evidence before
+retiring sandbox state. Create a clean production ledger instead of relabelling
+test transactions. Development proof uses the local isolated test stack.
+
+Joel approved US$0.50 per signature, US$10 per rolling day globally, US$2 per
+payee/day and US$0.50 for a new payee. The authorized drill funding ceiling is
+US$10 USDC plus US$2 for gas. Buyer authority limits remain AUD$1 per Call,
+AUD$5/day and AUD$20/month. Install and verify custody controls before funding
+or signing. These are approved limits, not a claim that configuration or funding
+has completed. Launch remains subject to its final acceptance and approval.

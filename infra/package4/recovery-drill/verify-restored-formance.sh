@@ -2,22 +2,30 @@
 
 set -euo pipefail
 
-drill_name="${1:?drill name required}"
-drill_endpoint="${2:?drill database endpoint required}"
-drill_secret_arn="${3:?drill database secret ARN required}"
-baseline_path="${4:?recorded baseline path required}"
-command_path="${5:?original command path required}"
-restore_time="${6:?exact restored UTC timestamp required}"
-aws_region="${7:-ap-southeast-2}"
+source_namespace="${1:?source namespace required}"
+source_ledger="${2:?source ledger required}"
+drill_name="${3:?drill name required}"
+drill_endpoint="${4:?drill database endpoint required}"
+drill_secret_arn="${5:?drill database secret ARN required}"
+baseline_path="${6:?recorded baseline path required}"
+command_path="${7:?original command path required}"
+restore_time="${8:?exact restored UTC timestamp required}"
+aws_region="${9:-ap-southeast-2}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../../.." && pwd)"
 forward_pid=""
 forward_log=""
 local_port="18082"
-source_namespace="package4-release"
-source_ledger="agentic-economy-release"
 
-if [[ ! "$drill_name" =~ ^package4-release-restore-[0-9]{8}$ ]]; then
+if [[ ! "$source_namespace" =~ ^[a-z][a-z0-9-]{2,30}$ ]]; then
+  printf 'refusing invalid source namespace\n' >&2
+  exit 1
+fi
+if [[ ! "$source_ledger" =~ ^[a-z][a-z0-9-]{2,62}$ ]]; then
+  printf 'refusing invalid source ledger\n' >&2
+  exit 1
+fi
+if [[ ! "$drill_name" =~ ^${source_namespace}-restore-[0-9]{8}$ ]]; then
   printf 'refusing unexpected drill name: %s\n' "$drill_name" >&2
   exit 1
 fi
@@ -237,6 +245,8 @@ verification_output="$(
 )"
 
 printf 'drill_namespace=%s\n' "$drill_name"
+printf 'source_namespace=%s\n' "$source_namespace"
+printf 'source_ledger=%s\n' "$source_ledger"
 printf 'restore_time=%s\n' "$restore_time"
 stop_forward
 restore_operator

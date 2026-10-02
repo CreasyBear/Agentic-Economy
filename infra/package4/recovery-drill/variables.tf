@@ -1,6 +1,12 @@
 variable "source_environment" {
-  type    = string
-  default = "package4-release"
+  description = "Existing source environment; also the source Formance namespace."
+  type        = string
+  default     = "package4-release"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{2,30}$", var.source_environment))
+    error_message = "source_environment must be a short lowercase environment identifier."
+  }
 }
 
 variable "drill_date" {

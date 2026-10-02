@@ -1,11 +1,36 @@
 # Package 4 recovery drill
 
-This root restores a **recorded UTC point** of the synthetic Package 4 RDS
+This root restores a **recorded UTC point** of the selected source RDS
 instance into a separate private, single-AZ database. It adds only the temporary
 network path and exact secret read needed by the existing private k3s host.
 The authoritative database endpoint is never changed. Applying this root creates
 billable AWS resources; use the existing approved drill scope and a reviewed,
 saved plan. Source preparation, provisioning and cleanup are separate operations.
+
+Select the existing source namespace and ledger explicitly. The namespace must
+match Terraform's `source_environment`; the source RDS instance is
+`<source_environment>-formance`. The observed alpha pair is `ae-alpha` and
+`agentic-economy-alpha`; the historical release pair is `package4-release` and
+`agentic-economy-release`. Verify the live binding before capture. This selection
+does not provision a production ledger or change the source's environment.
+
+The examples use the existing alpha source. Set these values in each terminal:
+
+```sh
+source_namespace=ae-alpha
+source_ledger=agentic-economy-alpha
+drill_date=20261002
+drill_name="${source_namespace}-restore-${drill_date}"
+```
+
+**Requires:** valid source identifiers, a drill name consisting of that exact
+namespace plus `-restore-YYYYMMDD`, and a matching baseline ledger/cutoff.
+**Ensures:** verification uses the named, distinct restored RDS instance;
+cleanup deletes only resources named for that drill. **Invariant:** source
+workloads and the authoritative endpoint are not redirected or deleted.
+**On violation:** exit nonzero before secret access or workload mutation.
+Operational failures remain failures; PASS requires successful completion and,
+for verification, operator restoration.
 
 ## Capture a coherent baseline
 
@@ -26,7 +51,7 @@ saved plan. Source preparation, provisioning and cleanup are separate operations
 
    ```sh
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-   kubectl -n package4-release port-forward --address 127.0.0.1 service/gateway 18081:8080
+   kubectl -n "$source_namespace" port-forward --address 127.0.0.1 service/gateway 18081:8080
    ```
 
 4. From the repository root, capture the baseline using absolute private paths:
@@ -34,7 +59,7 @@ saved plan. Source preparation, provisioning and cleanup are separate operations
    ```sh
    npm exec --no -- tsx tools/release/formance-restore.ts capture \
      --gateway http://127.0.0.1:18081 \
-     --ledger agentic-economy-release \
+     --ledger "$source_ledger" \
      --command-file /secure/drill/original-command.json \
      --baseline /secure/drill/baseline.json
    ```
@@ -55,8 +80,12 @@ saved plan. Source preparation, provisioning and cleanup are separate operations
 
 ## Restore and verify
 
-Use a dedicated state key per drill date. Review and apply a saved plan with the
-exact `restore_time`. Record the restored DB ARN/endpoint and the executed plan;
+Use a dedicated state key per source and drill date, such as
+`agentic-economy/ae-alpha/recovery-drills/20261002.tfstate`. Supply
+`source_environment=ae-alpha` and `drill_date=20261002` for that state; do not
+reuse the backend example's historical release state. Review and apply a saved
+plan with the exact `restore_time`. Record the restored DB ARN/endpoint and the
+executed plan;
 a requested timestamp alone is not evidence that a restore completed. Do not use
 `use_latest_restorable_time`, overwrite production, or reuse a prior baseline.
 
@@ -66,7 +95,7 @@ from that same state:
 
 ```sh
 infra/package4/recovery-drill/verify-restored-formance.sh \
-  package4-release-restore-YYYYMMDD \
+  "$source_namespace" "$source_ledger" "$drill_name" \
   '<restored database endpoint>' '<restored database secret ARN>' \
   /secure/drill/baseline.json /secure/drill/original-command.json \
   '<restore_time output>' ap-southeast-2
@@ -124,9 +153,20 @@ it must never be pointed at an existing database or ordinary development stack.
 
 Do not destroy the cloud drill until evidence is recorded and Joel has explicitly
 confirmed cleanup. First run `cleanup-restored-formance.sh` on the k3s host with
-the exact `package4-release-restore-YYYYMMDD` name and confirmation flag. It
-rejects other targets and proves source health before and after removing drill
-Formance resources. Then review and apply a saved OpenTofu destroy plan for the
+the same source, ledger and dated drill name:
+
+```sh
+infra/package4/recovery-drill/cleanup-restored-formance.sh \
+  "$source_namespace" "$source_ledger" "$drill_name" --confirmed-by-joel
+```
+
+It rejects other targets and proves source health before and after removing drill
+Formance resources. It can safely resume after a partial cleanup or repeat after
+the namespace is already gone: the exact named deletes still remove any remaining
+Settings or Versions, and a failed operation never emits PASS.
+Namespace verification accepts an explicit not-found result; Kubernetes lookup
+errors remain failures.
+Then review and apply a saved OpenTofu destroy plan for the
 same dated state. Destruction removes the drill database, its managed secret,
 temporary log group, security group rules and temporary instance-role grant.
 
