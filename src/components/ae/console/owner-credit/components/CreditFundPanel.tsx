@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
+import { BillingOverview } from '@/components/arc/blocks/billing-overview/billing-overview'
 import { Button } from '@/components/arc/button/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -39,7 +40,7 @@ export function CreditFundPanel({
   const balanceRefreshUnavailable = unavailable.balance === true && accountBalance?.kind === 'available'
   const balanceLocked = accountBalance?.kind === 'available' && accountBalance.locked
   const creditStatus = balanceLoading && accountBalance === undefined
-    ? 'Loading Credit.'
+    ? 'Loading credit.'
     : balanceLoading
       ? 'Refreshing available credit.'
       : balanceUnavailable
@@ -58,15 +59,18 @@ export function CreditFundPanel({
       <p className="sr-only" aria-live="polite">
         {creditStatus}
       </p>
-      <div className="arc-credit-fund__regions">
-        {balanceLoading && accountBalance === undefined ? (
-          <section className="arc-credit-balance arc-credit-balance--loading" aria-busy="true" aria-label="Loading Credit">
+      <BillingOverview
+        balance={{
+          label: balanceLoading && accountBalance === undefined ? 'Loading credit' : 'Available credit',
+          value: balance === undefined ? undefined : formatDisplayAmount(balance),
+          busy: balanceLoading,
+          content: balanceLoading && accountBalance === undefined ? (
+          <div className="grid gap-3">
             <Skeleton className="h-4 w-28" />
             <Skeleton className="h-11 w-48" />
             <Skeleton className="h-4 w-72 max-w-full" />
-          </section>
+          </div>
         ) : balanceUnavailable ? (
-          <section className="arc-credit-balance arc-credit-balance--unavailable" aria-label="Available credit">
             <Alert>
               <AlertTitle>Credit unavailable</AlertTitle>
               <AlertDescription className="arc-credit-alert__description">
@@ -78,13 +82,9 @@ export function CreditFundPanel({
                 )}
               </AlertDescription>
             </Alert>
-          </section>
         ) : (
-          <section className="arc-credit-balance" aria-label="Available credit">
-            <p className="arc-credit-balance__label">Available credit</p>
-            <p className="arc-credit-balance__amount">
-              {balance === undefined ? 'Checking…' : formatDisplayAmount(balance)}
-            </p>
+          <>
+            {balance === undefined ? <p>Checking…</p> : null}
             {purchasedBalance === undefined || promotionalBalance === undefined ? null : (
               <dl className="arc-credit-balance__breakdown grid gap-1 text-sm text-muted-foreground">
                 <div className="arc-credit-balance__fact-row flex flex-wrap items-baseline justify-between gap-2">
@@ -120,22 +120,21 @@ export function CreditFundPanel({
                 </AlertDescription>
               </Alert>
             ) : null}
-          </section>
-        )}
-        <section className="arc-credit-fund__add">
-          <div className="arc-credit-fund__add-heading">
-            <h3>Add funds</h3>
-            <p>Review the exact credit, fee, and total before continuing to secure payment.</p>
-          </div>
-          <AeAccountFundingPanel
+          </>
+        ),
+        }}
+        funding={{
+          label: 'Add funds',
+          description: 'Review the exact credit, fee, and total before continuing to secure payment.',
+          content: <AeAccountFundingPanel
             {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
             {...(fundingConstraints === undefined ? {} : { constraints: fundingConstraints })}
             constraintsLoading={constraintsLoading}
             {...(accountBalance === undefined ? {} : { accountBalance })}
             {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
-          />
-        </section>
-      </div>
+          />,
+        }}
+      />
       <div className="arc-credit-fund__links">
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/spending">Configure spending defaults</Link>
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/receipts">View receipts &amp; invoices</Link>

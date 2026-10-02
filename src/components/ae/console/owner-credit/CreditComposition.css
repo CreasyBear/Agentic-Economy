@@ -1,11 +1,5 @@
-/*
- * Arc layout references licensed for this surface:
- * wallet-card.tsx SHA-256 c45b7c178b8d8f3fc965e1bf31e74b5b0a1de20d30c65c019ac518ccb0038e8d
- * wallet-card.module.css SHA-256 b805dea481a38328eaeea85a14d17a95ae5ae341dde4af5bcac11e4dfe309060
- * billing-overview.tsx SHA-256 e688714af48dbe16b865158213d065515efa569c0f2858b281a10c98c41dc3c9
- * billing-overview.module.css SHA-256 d983554f9cdd246f823a6dcce3a6ab6b14f531d42c6c190f0e6dffb3540224f7
- * Adapted balance typography and primary-grid boundaries only; no sample data or billing behaviors.
- */
+/* AE credit navigation and live state details around the licensed
+ * billing-overview block. Source-backed panels live with the block. */
 .arc-credit-root {
   display: grid;
   min-width: 0;
@@ -128,59 +122,6 @@
   text-wrap: pretty;
 }
 
-.arc-credit-fund__regions {
-  display: grid;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-surface);
-  background: var(--surface);
-}
-
-.arc-credit-balance,
-.arc-credit-fund__add {
-  min-width: 0;
-  padding: var(--space-6);
-}
-
-.arc-credit-balance {
-  container-type: inline-size;
-}
-
-.arc-credit-balance:not(.arc-credit-balance--loading) {
-  display: grid;
-  align-content: start;
-  gap: var(--space-2);
-}
-
-.arc-credit-balance--loading {
-  display: grid;
-  align-content: start;
-  gap: var(--space-3);
-}
-
-.arc-credit-balance__label {
-  display: flex;
-  min-height: 28px;
-  align-items: center;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-.arc-credit-balance__amount {
-  display: block;
-  min-height: 1.1em;
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(36px, 9cqi, 60px);
-  font-variant-numeric: tabular-nums;
-  font-weight: 400;
-  letter-spacing: -.045em;
-  line-height: 1.1;
-  overflow-wrap: anywhere;
-}
-
 .arc-credit-balance__meta {
   margin: 0;
   color: var(--text-secondary);
@@ -199,52 +140,9 @@
   gap: var(--space-3);
 }
 
-.arc-credit-fund__add {
-  display: grid;
-  align-content: start;
-  gap: var(--space-4);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.arc-credit-fund__add-heading {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.arc-credit-fund__add-heading h3 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 500;
-}
-
-.arc-credit-fund__add-heading p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
 .arc-credit-fund__links {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
   font-size: var(--text-sm);
-}
-
-@media (min-width: 900px) {
-  .arc-credit-fund__regions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .arc-credit-fund__add {
-    border-top: 0;
-    border-left: 1px solid var(--border-subtle);
-  }
-}
-
-@media (max-width: 600px) {
-  .arc-credit-balance,
-  .arc-credit-fund__add {
-    padding: var(--space-4);
-  }
 }

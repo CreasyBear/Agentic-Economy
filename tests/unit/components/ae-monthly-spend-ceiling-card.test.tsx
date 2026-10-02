@@ -53,13 +53,13 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'Monthly spending cap' })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent(/off — prepaid credit/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/off\. prepaid credit/i)
     expect(screen.getByRole('button', { name: 'Set limit' })).toBeInTheDocument()
     expect(screen.queryByText(/approaching monthly limit/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/monthly spending limit reached/i)).not.toBeInTheDocument()
   })
 
-  it('U2: 29% utilization shows tabular text with monthly cap, progress bar, no alert', () => {
+  it('U2: 29% utilization shows exact amounts and an accessible monthly cap meter, no alert', () => {
     const onSave = vi.fn()
     render(
       <AeMonthlySpendCeilingCard
@@ -72,19 +72,30 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/monthly cap/i)
     expect(screen.getByText(/A\$145\.20/i)).toBeInTheDocument()
     expect(screen.getByText(/A\$500\.00/i)).toBeInTheDocument()
-    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+    expect(screen.getByRole('meter')).toHaveAttribute('aria-valuenow', '29')
+    expect(screen.getByRole('meter')).toHaveAttribute('aria-valuetext', 'A$145.20 spent of A$500.00 monthly cap (29%)')
     expect(screen.queryByText(/approaching monthly limit/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/monthly spending limit reached/i)).not.toBeInTheDocument()
   })
 
-  it('withholds zero-spend claims and utilization while monthly spend is unavailable', () => {
+  it.each([{ kind: 'unavailable' } as const, { kind: 'available' } as const, undefined])('withholds zero-spend claims and utilization when monthly spend evidence is missing (%j)', (monthSpend) => {
     render(<AeMonthlySpendCeilingCard settings={{ enabled: true, ceilingUnits: CEILING_UNITS, revision: 1 }}
-      monthSpend={{ kind: 'unavailable' }} onSave={vi.fn()} />)
+      {...(monthSpend === undefined ? {} : { monthSpend })} onSave={vi.fn()} />)
     expect(screen.getByRole('status')).toHaveTextContent('Monthly cap; monthly spend is unavailable.')
-    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.queryByRole('meter')).toBeNull()
     expect(screen.queryByText(/spent of/u)).toBeNull()
     expect(screen.getByText('Monthly spend data is unavailable.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit limit' })).toBeEnabled()
+  })
+
+  it('withholds an off-state claim and editing when authoritative settings are missing', () => {
+    const onSave = vi.fn()
+    render(<AeMonthlySpendCeilingCard monthSpend={{ kind: 'available', spendUnits: '0' }} onSave={onSave} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Monthly spending cap unavailable.')
+    expect(screen.queryByText(/off\. prepaid credit/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Set limit' })).toBeNull()
+    expect(screen.queryByRole('meter')).toBeNull()
+    expect(onSave).not.toHaveBeenCalled()
   })
 
   it('U3: 90% utilization (critical) shows Approaching monthly limit (90%)', () => {

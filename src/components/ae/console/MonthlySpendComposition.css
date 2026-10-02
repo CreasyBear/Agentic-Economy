@@ -1,20 +1,8 @@
-/* Licensed Arc usage-billing spend/meter adaptation, retrieved 2026-10-01.
- * TSX SHA-256 89fe631f179f28dfb8efee2e0f82302f38d2c6c28c4f5b4c86b83e11032d410b.
- * CSS SHA-256 543cc56ac84be6b17f4dabaf411133d2ef69852db8a261fbd7816ab2c6ca31f9.
- * No projected spend, plan upgrades, fake alerts, or floating-point money. */
-.arc-monthly-usage { display: grid; width: 100%; min-width: 0; gap: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-6); background: var(--surface); color: var(--foreground); }
-.arc-monthly-summary { display: flex; flex-wrap: wrap; min-width: 0; justify-content: space-between; align-items: center; gap: var(--space-6); }
-.arc-monthly-stat { display: grid; min-width: 0; gap: var(--space-2); }
+/* AE exact amount summary and revision-checked editor around Arc's
+ * source-backed UsageBillingMeter. The block owns the panel and meter. */
 .arc-monthly-label { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); }
 .arc-monthly-value { display: grid; gap: var(--space-2); margin: 0; color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .arc-monthly-value strong { color: var(--foreground); font-size: clamp(32px, 4vw, 44px); font-weight: 500; letter-spacing: var(--tracking-display); line-height: 1.2; overflow-wrap: anywhere; }
-.arc-monthly-meter { display: grid; min-width: 0; gap: var(--space-4); }
-.arc-monthly-meter-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); font-size: var(--text-sm); }
-.arc-monthly-meter-head > span:last-child { color: var(--text-secondary); }
-.arc-monthly-track { position: relative; height: 10px; overflow: hidden; border-radius: var(--radius-pill); background: var(--surface-muted); }
-.arc-monthly-used { position: absolute; inset: 0; border-radius: inherit; transform-origin: left center; background: var(--accent); }
-.arc-monthly-usage[data-band="warning"] .arc-monthly-used, .arc-monthly-usage[data-band="critical"] .arc-monthly-used { background: var(--warning); }
-.arc-monthly-usage[data-band="exceeded"] .arc-monthly-used { background: var(--danger); }
 .arc-monthly-editor { display: grid; min-width: 0; gap: var(--space-6); }
 .arc-monthly-editor label, .arc-monthly-editor legend { color: var(--foreground); font-size: var(--text-sm); font-weight: 500; }
 .arc-monthly-editor button { min-height: 44px; }
@@ -22,4 +10,3 @@
 .arc-monthly-input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 10px var(--space-3); background: var(--background); color: var(--foreground); font: inherit; font-size: var(--text-base); font-variant-numeric: tabular-nums; }
 .arc-monthly-input[aria-invalid="true"] { border-color: var(--danger); }
 .arc-monthly-footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--border); padding-top: var(--space-4); }
-@media (max-width: 639px) { .arc-monthly-usage { padding: var(--space-5); } .arc-monthly-summary { gap: var(--space-4); } }

@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { Download, ExternalLink } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
-import { SettingsEmptyState, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { Badge } from '@/components/ui/badge'
+import { SettingsEmptyState, SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { UsageBillingInvoices, type UsageBillingInvoice } from '@/components/arc/blocks/usage-billing/usage-billing'
 import { Button } from '@/components/arc/button/button'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -75,6 +75,37 @@ export function ReceiptsSettings({
     }
   }
 
+  const invoices: readonly UsageBillingInvoice[] = invoiceHistoryLoading ? [] : rows.map(row => {
+    const display = receiptDisplay(row)
+    const taxInvoice = row.taxInvoice
+    const taxPending = pendingAction === `${row.commandRef}:tax`
+    const stripePending = pendingAction === `${row.commandRef}:stripe`
+    return {
+      id: row.commandRef,
+      anchorId: `funding-receipt-${row.commandRef}`,
+      description: row.description,
+      date: display.date,
+      amount: display.amount,
+      status: { label: display.status, tone: row.status === 'succeeded' ? 'paid' : 'reversed' },
+      detail: <>
+        {display.gst && <span className="arc-receipt-note">{display.gst}</span>}
+        {taxInvoice?.kind === 'withheld' && <span className="arc-receipt-note">
+          {taxInvoice.reason === 'customer_tax_facts_missing' ? <>
+            Tax details missing. <Link to="/owner/settings/tax" className="arc-receipt-link">Update tax details</Link> to obtain an eligible invoice.
+          </> : taxInvoice.reason === 'tax_invoice_not_generated' ? 'Tax invoice pending generation.'
+            : taxInvoice.reason === 'policy_disabled' ? 'Tax invoices are disabled for this environment.'
+              : 'Tax invoice unavailable.'}
+        </span>}
+      </>,
+      actions: <div className="arc-receipt-actions">
+        {taxInvoice?.kind === 'issued' && <Button type="button" variant="secondary" size="md" disabled={pendingAction !== null} aria-busy={taxPending}
+          onClick={() => void openDocument(row, 'tax')}><Download aria-hidden="true" />Tax invoice</Button>}
+        {row.hasPaymentReceipt && <Button type="button" variant="secondary" size="md" disabled={pendingAction !== null} aria-busy={stripePending}
+          onClick={() => void openDocument(row, 'stripe')}><ExternalLink aria-hidden="true" />Stripe receipt</Button>}
+      </div>,
+    }
+  })
+
   return <SettingsPage
     title="Receipts & invoices"
     description="Receipts for account credit top-ups, with tax invoices where available."
@@ -83,9 +114,13 @@ export function ReceiptsSettings({
       <Button type="button" variant="secondary" size="md" onClick={() => exportHistory('JSON')}><Download aria-hidden="true" />{invoiceHistoryHasMore ? 'Export shown JSON' : 'Export JSON'}</Button>
     </div> : undefined}
   >
-    <SettingsGroup title="Top-up history" description="Paid and reversed account funding. Tax invoices depend on your tax profile and the payment policy.">
-      <p className="sr-only" role="status" aria-live="polite">{receiptsStatus}</p>
-      {invoiceHistoryLoading ? <div aria-busy="true" className="grid gap-4 py-4">
+    <UsageBillingInvoices
+      title="Top-up history"
+      description="Paid and reversed account funding. Tax invoices depend on your tax profile and the payment policy."
+      invoices={invoices}
+      state={<>
+        <p className="sr-only" role="status" aria-live="polite">{receiptsStatus}</p>
+        {invoiceHistoryLoading ? <div aria-busy="true" className="grid gap-4 py-4">
         {[0, 1, 2].map(index => <div key={index} className="grid gap-2 border-b border-border pb-4 last:border-b-0">
           <Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-4 w-28 max-w-full" />
         </div>)}
@@ -93,43 +128,17 @@ export function ReceiptsSettings({
         title="No top-up receipts yet"
         description="When you add credit, your payment receipts and eligible tax invoices will appear here."
         action={<Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Add credit</Link>}
-      /> : rows.map(row => {
-        const display = receiptDisplay(row)
-        const taxInvoice = row.taxInvoice
-        const taxPending = pendingAction === `${row.commandRef}:tax`
-        const stripePending = pendingAction === `${row.commandRef}:stripe`
-        return <div id={`funding-receipt-${row.commandRef}`} key={row.commandRef} className="arc-market arc-receipt-record scroll-mt-24"><SettingsRow label={row.description} description={display.date}>
-          <div className="arc-receipt-content">
-            <div className="arc-receipt-summary">
-              <span className="arc-receipt-amount">{display.amount}</span>
-              <Badge variant={row.status === 'succeeded' ? 'secondary' : 'outline'}>{display.status}</Badge>
-            </div>
-            {display.gst && <span className="arc-receipt-note">{display.gst}</span>}
-            <div className="arc-receipt-actions">
-              {taxInvoice?.kind === 'issued' && <Button type="button" variant="secondary" size="md" disabled={pendingAction !== null} aria-busy={taxPending}
-                onClick={() => void openDocument(row, 'tax')}><Download aria-hidden="true" />Tax invoice</Button>}
-              {row.hasPaymentReceipt && <Button type="button" variant="secondary" size="md" disabled={pendingAction !== null} aria-busy={stripePending}
-                onClick={() => void openDocument(row, 'stripe')}><ExternalLink aria-hidden="true" />Stripe receipt</Button>}
-            </div>
-            {taxInvoice?.kind === 'withheld' && <span className="arc-receipt-note">
-              {taxInvoice.reason === 'customer_tax_facts_missing' ? <>
-                Tax details missing. <Link to="/owner/settings/tax" className="text-primary underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring">Update tax details</Link> to obtain an eligible invoice.
-              </> : taxInvoice.reason === 'tax_invoice_not_generated' ? 'Tax invoice pending generation.'
-                : taxInvoice.reason === 'policy_disabled' ? 'Tax invoices are disabled for this environment.'
-                  : 'Tax invoice unavailable.'}
-            </span>}
-          </div>
-        </SettingsRow></div>
-      })}
-    </SettingsGroup>
+        /> : null}
+      </>}
+      continuation={(invoiceHistoryHasMore || invoiceHistoryLoadingMore) ? <div className="arc-receipt-pagination">
+        <Button type="button" variant="secondary" size="md" disabled={invoiceHistoryLoadingMore} onClick={onLoadMore}>
+          {invoiceHistoryLoadingMore ? 'Loading older top-ups…' : 'Load older top-ups'}
+        </Button>
+      </div> : null}
+    />
     <p className="text-sm text-muted-foreground">
       <a href="/trust#receipts" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
-        className="underline underline-offset-4">Trust centre</a>
+        className="arc-receipt-link">Trust centre</a>
     </p>
-    {(invoiceHistoryHasMore || invoiceHistoryLoadingMore) && <div className="arc-receipt-pagination">
-      <Button type="button" variant="secondary" size="md" disabled={invoiceHistoryLoadingMore} onClick={onLoadMore}>
-        {invoiceHistoryLoadingMore ? 'Loading older top-ups…' : 'Load older top-ups'}
-      </Button>
-    </div>}
   </SettingsPage>
 }

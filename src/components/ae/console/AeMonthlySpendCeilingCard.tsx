@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { UsageBillingMeter } from '@/components/arc/blocks/usage-billing/usage-billing'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
@@ -114,6 +115,13 @@ export function AeMonthlySpendCeilingCard({
   }
 
   function renderCardAlertSlot() {
+    if (!spendKnown) {
+      return (
+        <Alert>
+          <AlertDescription>Monthly spend data is unavailable.</AlertDescription>
+        </Alert>
+      )
+    }
     if (resolvedSettings.enabled && percent >= 90 && percent < 100) {
       return (
         <Alert className="border-warning-ring bg-warning-subtle text-warning-foreground">
@@ -128,13 +136,6 @@ export function AeMonthlySpendCeilingCard({
           <AlertDescription>
             Paid Calls are paused until next month or the cap is raised.
           </AlertDescription>
-        </Alert>
-      )
-    }
-    if (monthSpend?.kind === 'unavailable') {
-      return (
-        <Alert>
-          <AlertDescription>Monthly spend data is unavailable.</AlertDescription>
         </Alert>
       )
     }
@@ -155,6 +156,7 @@ export function AeMonthlySpendCeilingCard({
   }
 
   async function handleSave() {
+    if (settings === undefined) return
     let nextUnits = canonicalAudUnits(ceilingText)
     if (enabled) {
       if (nextUnits === undefined) {
@@ -196,29 +198,28 @@ export function AeMonthlySpendCeilingCard({
   return (
     <>
       <SettingsGroup title="Monthly spending cap" description="Limit paid Calls across your workspace; Agent spending policies still apply.">
-        <div className="arc-market arc-monthly-usage" data-band={band}>
-          <div className="arc-monthly-summary">
-            <div className="arc-monthly-stat">
+        <UsageBillingMeter
+          summary={<>
               <p className="arc-monthly-label">Current limit</p>
               <p role="status" aria-live="polite" className="arc-monthly-value">
-                {resolvedSettings.enabled ? <>
+                {settings === undefined ? <span>Monthly spending cap unavailable.</span> : resolvedSettings.enabled ? <>
                   <strong>{spendKnown ? spendFormatted : ceilingFormatted}</strong>
                   <span>{spendKnown ? `spent of ${ceilingFormatted} monthly cap (${percent}%)` : 'Monthly cap; monthly spend is unavailable.'}</span>
-                </> : <span>Off — prepaid credit and Agent policies still apply.</span>}
+                </> : <span>Off. Prepaid credit and Agent policies still apply.</span>}
               </p>
-            </div>
-            <Button type="button" variant="secondary" onClick={() => { resetDialogForm(); setDialogOpen(true) }}>
+          </>}
+          action={settings === undefined ? null : <Button type="button" variant="secondary" onClick={() => { resetDialogForm(); setDialogOpen(true) }}>
               {resolvedSettings.enabled ? 'Edit limit' : 'Set limit'}
-            </Button>
-          </div>
-          {resolvedSettings.enabled ? <div className="arc-monthly-meter">
-            <div className="arc-monthly-meter-head"><span>Monthly usage</span><span>Resets at the start of the next month.</span></div>
-            {spendKnown ? <div className="arc-monthly-track" role="progressbar" aria-label={`${percent}% of monthly spending cap used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-              <span className="arc-monthly-used" style={{ transform: `scaleX(${percent / 100})` }} />
-            </div> : null}
-            {renderCardAlertSlot()}
-          </div> : null}
-        </div>
+            </Button>}
+          meter={settings !== undefined && resolvedSettings.enabled ? {
+            name: 'Monthly usage',
+            percent: spendKnown ? percent : undefined,
+            valueText: `${spendFormatted} spent of ${ceilingFormatted} monthly cap (${percent}%)`,
+            tone: band === 'normal' ? 'ok' : band === 'exceeded' ? 'critical' : 'warning',
+            note: 'Resets at the start of the next month.',
+            notice: renderCardAlertSlot(),
+          } : undefined}
+        />
       </SettingsGroup>
 
       <Drawer
@@ -269,7 +270,7 @@ export function AeMonthlySpendCeilingCard({
             <Button
               type="button"
               variant="primary"
-              disabled={saving}
+              disabled={saving || settings === undefined}
               onClick={() => { void handleSave() }}
             >
               {saving ? 'Saving…' : 'Save'}

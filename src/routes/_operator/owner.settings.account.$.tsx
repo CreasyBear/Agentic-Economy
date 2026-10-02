@@ -3,8 +3,8 @@ import { Link, createFileRoute, redirect, useLocation } from '@tanstack/react-ro
 
 import { clerkEmbeddedProfileAppearance } from '@/components/ae/website/clerk-appearance'
 import { SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { SecuritySettings, SecuritySettingsNavigation } from '@/components/arc/blocks/security-settings/security-settings'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_operator/owner/settings/account/$')({
   ...operatorRouteOptions,
@@ -24,35 +24,38 @@ export const Route = createFileRoute('/_operator/owner/settings/account/$')({
 
 function OwnerAccountRoute() {
   const security = useLocation().pathname === '/owner/settings/account/security'
-  return (
-    <SettingsPage title={security ? 'Security' : 'Profile'} description={security ? 'Manage your sign-in security.' : 'Manage your identity and email.'}>
-      <nav aria-label="Account pages" className="flex gap-2 md:hidden">
-        {[
-          { label: 'Profile', href: '/owner/settings/account' },
-          { label: 'Security', href: '/owner/settings/account/security' },
-        ].map(({ label, href }) => <Link key={href} to={href} activeOptions={{ exact: true }}
-          className={cn('flex min-h-10 items-center rounded-md px-3 text-sm', (security ? label === 'Security' : label === 'Profile') ? 'bg-muted font-medium' : 'hover:underline')}
-        >{label}</Link>)}
-      </nav>
-      <div className="min-w-0 max-w-full overflow-x-auto">
-        <UserProfile
-          routing="path"
-          path="/owner/settings/account"
-          appearance={{
-            ...clerkEmbeddedProfileAppearance,
-            elements: {
-              ...clerkEmbeddedProfileAppearance.elements,
-              navbar: { display: 'none' },
-              navbarMobileMenuRow: { display: 'none !important' },
-              navbarButton__apiKeys: { display: 'none' },
-            },
-          }}
-        >
-          <UserProfile.Page label="account" />
-          <UserProfile.Page label="security" />
-          <UserProfile.Page label="apiKeys" />
-        </UserProfile>
-      </div>
-    </SettingsPage>
+  const navigation = <SecuritySettingsNavigation
+    activePage={security ? 'security' : 'profile'}
+    profile={<Link to="/owner/settings/account/$" params={{ _splat: '' }} activeOptions={{ exact: true }} aria-current={security ? undefined : 'page'}>Profile</Link>}
+    security={<Link to="/owner/settings/account/$" params={{ _splat: 'security' }} activeOptions={{ exact: true }} aria-current={security ? 'page' : undefined}>Security</Link>}
+  />
+  const profile = (
+    <UserProfile
+      routing="path"
+      path="/owner/settings/account"
+      appearance={{
+        ...clerkEmbeddedProfileAppearance,
+        elements: {
+          ...clerkEmbeddedProfileAppearance.elements,
+          navbar: { display: 'none' },
+          navbarMobileMenuRow: { display: 'none !important' },
+          navbarButton__apiKeys: { display: 'none' },
+          ...(security ? {
+            rootBox: { width: '100%', maxWidth: '100%' },
+            cardBox: { width: '100%', maxWidth: '100%', boxShadow: 'none', borderRadius: 0 },
+            card: { boxShadow: 'none', background: 'transparent' },
+          } : {}),
+        },
+      }}
+    >
+      <UserProfile.Page label="account" />
+      <UserProfile.Page label="security" />
+      <UserProfile.Page label="apiKeys" />
+    </UserProfile>
   )
+  if (security) return <SecuritySettings navigation={navigation} content={profile} />
+  return <SettingsPage title="Profile" description="Manage your identity and email.">
+    {navigation}
+    <div className="min-w-0 max-w-full overflow-x-auto">{profile}</div>
+  </SettingsPage>
 }

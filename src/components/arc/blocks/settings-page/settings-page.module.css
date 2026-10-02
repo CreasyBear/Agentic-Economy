@@ -1,0 +1,58 @@
+/* Arc UI Pro settings-page.module.css.
+ * Upstream SHA-256: 914fbd4e6f7f84d5e3145dd4080a7ef1d9b04d67087258ddaddf769cad788d9c
+ * Keep the source frame, nav highlight, pane, groups and row geometry.
+ * Routed pages use document scrolling rather than the demo's fixed 640px form.
+ */
+.root { container: settings-page / inline-size; width: min(100%, 1120px); min-width: 0; margin-inline: auto; color: var(--foreground); font-family: var(--font-body); letter-spacing: var(--tracking-body); }
+.pageHead { padding-block: 24px; }
+.pageHead h1 { margin: 0; font-family: var(--font-display); font-size: clamp(32px, 4vw, 48px); font-weight: 400; letter-spacing: var(--tracking-display); line-height: var(--leading-display); overflow-wrap: anywhere; }
+.pageHead p { margin: 8px 0 0; color: var(--text-secondary); font-size: var(--text-base); line-height: var(--leading-body); }
+.settings { position: relative; display: grid; grid-template-columns: 216px minmax(0, 1fr); min-width: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.sidebar { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 16px; border-right: 1px solid var(--border); border-radius: 15px 0 0 15px; padding: 16px 8px; background: color-mix(in oklch, var(--surface-muted) 50%, var(--surface)); }
+.navigation { display: grid; gap: 16px; }
+.navGroup { min-width: 0; }
+.navGroup h2 { margin: 0 0 6px; padding-inline: 12px; color: var(--text-muted); font-size: var(--text-xs); font-weight: 500; line-height: var(--leading-body); }
+.navList { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.navItem { position: relative; isolation: isolate; display: flex; width: 100%; min-height: 36px; align-items: center; gap: 10px; border: 0; border-radius: 8px; padding: 0 12px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; text-align: left; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+.navItem[aria-current="page"] { color: var(--foreground); }
+@media (hover: hover) and (pointer: fine) {
+  .navItem:hover { color: var(--foreground); }
+  .navItem:not([aria-current]):hover { background: color-mix(in oklch, var(--surface-muted) 70%, transparent); }
+}
+.navItem:focus-visible { background: var(--surface-muted); color: var(--foreground); outline: none; }
+.highlight { position: absolute; z-index: -1; inset: 0; border: 1px solid var(--border); border-radius: inherit; background: var(--surface); box-shadow: var(--shadow-resting); }
+.navItem:focus-visible .highlight { background: var(--surface-muted); }
+.navLabel { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.main { position: relative; min-width: 0; min-height: 0; }
+.scroller { min-width: 0; padding: 24px 32px 32px; }
+.pane { display: grid; min-width: 0; gap: 24px; }
+.paneHead { display: flex; min-width: 0; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.paneHead h2 { margin: 0; font-family: var(--font-body); font-size: var(--text-lg); font-weight: 500; letter-spacing: -.01em; line-height: 1.4; outline: none; overflow-wrap: anywhere; }
+.paneHead p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; line-height: var(--leading-body); }
+.actions { display: flex; min-width: 0; max-width: 100%; flex-wrap: wrap; align-items: center; gap: 8px; }
+.group { min-width: 0; }
+.group + .group { margin-top: 24px; }
+.pane > .group + .group { margin-top: 0; }
+.group header > :is(h2, h3) { margin: 0 0 2px; color: var(--text-secondary); font-size: 13px; font-weight: 500; line-height: var(--leading-body); }
+.group header > p { margin: 2px 0 12px; color: var(--text-muted); font-size: var(--text-xs); line-height: var(--leading-body); }
+.rows { min-width: 0; }
+.rows > * + * { border-top: 1px solid var(--border-subtle); }
+.row { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 24px; padding: 14px 0; }
+.rowText { min-width: 0; }
+.rowText h4 { margin: 0; font-size: 13px; font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
+.rowText p { margin: 2px 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: var(--leading-body); }
+.rowAction { min-width: 0; color: var(--foreground); font-size: 13px; text-align: right; }
+@container (max-width: 719px) {
+  .settings { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { display: none; }
+  .scroller { padding: 20px; }
+  .row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .rowAction { text-align: left; }
+}
+@media (pointer: coarse) {
+  .navItem { min-height: 44px; }
+  .rowAction :is(button, a, input:not([type="hidden"]), select, [role="button"], [role="combobox"], [role="checkbox"], [role="switch"], [role="radio"]) { min-height: 44px; }
+  .rowAction :is(button, [role="button"], [role="checkbox"], [role="switch"], [role="radio"]) { min-width: 44px; }
+}
+@container (max-width: 360px) { .scroller { padding-inline: 16px; } }
+@media (prefers-reduced-motion: reduce) { .navItem { transition: none; } }
