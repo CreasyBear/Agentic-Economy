@@ -47,11 +47,13 @@ function MarketPending() {
 }
 
 function MarketError({ reset, error }: ErrorComponentProps) {
+  const invalidSearch = typeof error === 'object' && error !== null && 'name' in error
+    && (error.name === 'SearchParamError' || error.name === 'ZodError');
   return (
     <AePageState
       tone="danger"
       title="The market view didn’t load"
-        description={error.name === "SearchParamError" || error.name === "ZodError" ? "A directory search or filter is invalid. Check the address and try again. No broader search was run." : "Try again to fetch the current catalog and comparison. No Tool was called."}
+      description={invalidSearch ? "A directory search or filter is invalid. Check the address and try again. No broader search was run." : "Try again to fetch the current catalog and comparison. No Tool was called."}
       action={
         <Button type="button" className="min-h-touch" onClick={reset}>
           Try again

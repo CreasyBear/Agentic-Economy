@@ -2722,3 +2722,43 @@ for all seven generated files in its isolated local environment. No generated
 file changed. These are source-level and local-runtime proofs; the changes have
 not been pushed or deployed, and the full gate is still required on the combined
 Arc and money result before main.
+
+### Stage 41 — land the committed integration in main
+
+Joel authorised merging the current committed baseline on 2 October. The Arc
+redesign is still being edited in the shared checkout and is outside this merge.
+The candidate contains the committed UI history and the money/recovery work;
+main is already its ancestor. Preserve the integration branch because the
+founder-console PR is stacked on it.
+
+The first full gate found one stale anonymous-chat query expectation: the UI
+integration added a public directory-status read. The test now allows that read
+while retaining its no-mutations and no-Agent-threads assertions. All 12 tests
+in the file and `npm run check` pass after the correction.
+
+Vercel rejected the candidate's TanStack Start version for
+[CVE-2026-102989](https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8).
+Use the maintainer's first patched Start version, `1.168.60`, with its matching
+Router `1.170.41`; the resolved server core must be `1.169.39`. This is an existing
+dependency patch, with no application transport fork or deployment bypass.
+Requires: one consistent patched dependency graph. Ensures: the upstream
+server-function input/response fix is in the built application. Invariant:
+existing routing, authentication and financial authority remain enforced.
+On violation: do not merge a failed build or gate; repair the affected boundary.
+
+The patched Router also exposes route errors as `unknown`. The market error
+view now narrows the value before reading its name. Its presentation contract
+accepts null, primitives, Error instances and deserialised error objects; it
+keeps specific invalid-filter guidance and otherwise offers the existing retry
+without revealing internal details. This is a recoverable failure at the UI
+boundary, with no state mutation or automatic retry. Two rendering regressions
+failed before the guard on null/undefined; all six error-presentation cases use
+the real Router context and preserve the prior copy.
+
+The separate `agentic-economy-sandbox-tools` preview fails because its Vercel
+root directory still names the deleted reference-provider fixture. Restoring
+that retired fixture is not part of this application merge. GitHub's kernel
+gate and React Doctor workflows are manually disabled; retain that setting and
+run repository acceptance locally. Vercel's main-branch web build remains
+automatic. This merge does not deploy the Convex backend, publish a CLI release
+or authorise live-money drills.

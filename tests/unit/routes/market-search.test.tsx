@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from 'react-dom/server';
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRouter } from '@tanstack/react-router';
 
 import { Route, parseMarketCompareRefs, validateMarketSearch } from "@/routes/market";
 import { SEARCH_QUERY_MAX_LENGTH } from "@/modules/common/search-query";
@@ -43,6 +45,36 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+function renderMarketError(error: unknown): string {
+  const ErrorComponent = Route.options.errorComponent;
+  if (!ErrorComponent) throw new Error('market_error_component_missing');
+  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/market'] }) });
+  return renderToStaticMarkup(
+    <RouterContextProvider router={router}>
+      <ErrorComponent error={error} reset={vi.fn()} />
+    </RouterContextProvider>,
+  );
+}
+
+describe('market route error recovery', () => {
+  it.each([null, undefined, 'private upstream failure', new Error('private upstream failure')])(
+    'renders safe retry guidance for an unknown failure: %s', error => {
+      const html = renderMarketError(error);
+      expect(html).toContain('Try again to fetch the current catalog and comparison. No Tool was called.');
+      expect(html).not.toContain('private upstream failure');
+    },
+  );
+
+  it.each([
+    Object.assign(new Error('private validation detail'), { name: 'SearchParamError' }),
+    { name: 'ZodError', message: 'private validation detail' },
+  ])('retains specific guidance for directory validation failures', error => {
+    const html = renderMarketError(error);
+    expect(html).toContain('A directory search or filter is invalid. Check the address and try again. No broader search was run.');
+    expect(html).not.toContain('private validation detail');
+  });
 });
 
 describe("market entry metadata", () => {
