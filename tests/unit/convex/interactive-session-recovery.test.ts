@@ -24,7 +24,7 @@ const newIdentity = provisionedIdentity(TOKEN, { exp: undefined, sid: 'sess_new'
 async function observe(
   backend: InteractiveAuthorityBackend,
   sessionId: string,
-  eventType: 'session.created' | 'session.revoked' | 'session.ended',
+  eventType: 'session.created' | 'session.revoked' | 'session.ended' | 'user.updated',
   observedAt: number,
   providerIdentifier = TOKEN,
 ) {
@@ -33,10 +33,12 @@ async function observe(
     providerIdentifier,
     eventType,
     targetRefHash: canonicalDigest({
-      contract: 'ae.clerk-webhook-target:v1', provider: 'clerk', targetKind: 'session', targetRef: sessionId,
+      contract: 'ae.clerk-webhook-target:v1', provider: 'clerk',
+      targetKind: eventType === 'user.updated' ? 'security_profile' : 'session', targetRef: sessionId,
     }),
     observedAt,
-    securityAction: eventType === 'session.revoked' ? 'revoke_interactive_credentials' : 'observe_only',
+    securityAction: eventType === 'session.revoked' || eventType === 'user.updated'
+      ? 'revoke_interactive_credentials' : 'observe_only',
   }
   const serviceAuth = await createConvexServerFunctionAssertion({
     operation: CLERK_SECURITY_OBSERVE_OPERATION,
@@ -48,14 +50,14 @@ async function observe(
   })
 }
 
-async function revokedOwner() {
+async function revokedOwner(eventType: 'session.revoked' | 'user.updated' = 'session.revoked') {
   const backend = createInteractiveAuthorityBackend()
   await expect(backend.withIdentity(oldIdentity).mutation(
     api.interactiveAuthority.materializeCurrentInteractiveAuthority, {},
   )).resolves.toBe(true)
   await observe(backend, 'sess_old', 'session.created', NOW)
   vi.setSystemTime(NOW + 1_000)
-  await expect(observe(backend, 'sess_old', 'session.revoked', NOW + 1_000))
+  await expect(observe(backend, 'sess_old', eventType, NOW + 1_000))
     .resolves.toMatchObject({ kind: 'accepted', status: 'applied' })
   vi.setSystemTime(NOW + 2_000)
   return backend
@@ -122,6 +124,20 @@ describe('interactive session recovery after signed Clerk revocation', () => {
         .rejects.toEqual(new InteractiveAuthorityError('credential_not_current'))
     }
     await expect(collectAuthorityTables(backend)).resolves.toEqual(before)
+  })
+
+  it('keeps a password-reset session denied after a new session restores the Account', async () => {
+    const backend = await revokedOwner('user.updated')
+    await observe(backend, 'sess_new', 'session.created', NOW + 2_000)
+    await expect(backend.withIdentity(newIdentity).mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {}))
+      .resolves.toBe(true)
+    await expect(resolveInteractiveContext(backend, newIdentity)).resolves.toMatchObject({
+      provenance: { credentialGeneration: 2 },
+    })
+    await expect(backend.withIdentity(oldIdentity).mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {}))
+      .resolves.toBe(false)
+    await expect(resolveInteractiveContext(backend, oldIdentity))
+      .rejects.toEqual(new InteractiveAuthorityError('credential_not_current'))
   })
 
   it.each(['before_revocation', 'future', 'ended', 'wrong_principal'] as const)(

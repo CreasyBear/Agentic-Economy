@@ -172,7 +172,7 @@ export async function resolveInteractiveAuthorityFactsForToken(
     throw new InteractiveAuthorityError('principal_kind_invalid')
   }
   if (identity !== undefined) {
-    await readCurrentClerkSessionCreation(db, identity, canonicalPrincipalRef)
+    await readCurrentClerkSessionCreation(db, identity, canonicalPrincipalRef, binding.bindingRef)
   }
 
   const activeAccountResolution = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)

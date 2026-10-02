@@ -102,7 +102,12 @@ export async function ensureOwnerIdentityForAuthenticatedIdentity(
     logProvisionRefusal('binding_not_current', { lifecycle: binding.lifecycle, providerState: binding.providerState })
     return null
   }
-  const sessionCreation = await readCurrentClerkSessionCreation(ctx.db, identity, binding.principalRef)
+  const sessionCreation = await readCurrentClerkSessionCreation(ctx.db, identity, binding.principalRef, binding.bindingRef)
+  // Wall-clock admission belongs to this mutation; the shared session fact
+  // check also serves cached queries and must remain independent of time.
+  if (sessionCreation?.observedAt !== undefined && sessionCreation.observedAt > Date.now()) {
+    throw new InteractiveAuthorityError('credential_not_current')
+  }
   return await ensureCurrentOwnerCredentialGeneration(
     ctx,
     binding,

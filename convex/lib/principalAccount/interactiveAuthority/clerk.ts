@@ -19,18 +19,25 @@ export function clerkActiveOrganizationId(identity: UserIdentity): string | null
  * shared credential generation; replayed creation events cannot reopen it.
  * On violation: credential_not_current, with no writes. Missing session claims
  * retain legacy admission only before any canonical credential revocation.
+ * After revocation, even active successors require a creation observation
+ * after the revoked generation, including password-reset invalidation.
  */
 export async function readCurrentClerkSessionCreation(
   db: AuthorityDb,
   identity: UserIdentity,
   principalRef: string,
+  bindingRef: string,
 ): Promise<Doc<'auditEvents'> | null> {
+  const revocation = await db.query('credentials')
+    .withIndex('by_principalRef_and_lifecycle', query => query
+      .eq('principalRef', principalRef).eq('lifecycle', 'revoked'))
+    .filter(query => query.and(
+      query.eq(query.field('type'), 'provider_token'),
+      query.eq(query.field('bindingRef'), bindingRef),
+    ))
+    .order('desc')
+    .first()
   if (identity.sid === undefined) {
-    const revocation = await db.query('credentials')
-      .withIndex('by_principalRef_and_lifecycle', query => query
-        .eq('principalRef', principalRef).eq('lifecycle', 'revoked'))
-      .filter(query => query.eq(query.field('type'), 'provider_token'))
-      .first()
     if (revocation !== null) throw new InteractiveAuthorityError('credential_not_current')
     return null
   }
@@ -57,7 +64,7 @@ export async function readCurrentClerkSessionCreation(
     ))
     .first()
   if (terminal !== null) throw new InteractiveAuthorityError('credential_not_current')
-  return await db.query('auditEvents')
+  const creation = await db.query('auditEvents')
     .withIndex('by_targetType_and_targetRef_and_createdAt', query => query
       .eq('targetType', 'session').eq('targetRef', targetRef))
     .filter(query => query.and(
@@ -67,4 +74,12 @@ export async function readCurrentClerkSessionCreation(
     ))
     .order('desc')
     .first()
+  if (revocation !== null && (
+    revocation.revokedAt === undefined
+    || !Number.isSafeInteger(revocation.revokedAt)
+    || creation?.observedAt === undefined
+    || !Number.isSafeInteger(creation.observedAt)
+    || creation.observedAt <= revocation.revokedAt
+  )) throw new InteractiveAuthorityError('credential_not_current')
+  return creation
 }
