@@ -1,6 +1,6 @@
 import { SignOutButton } from '@clerk/tanstack-react-start'
 import { Link, useLocation, useRouter } from '@tanstack/react-router'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
@@ -10,6 +10,7 @@ import { Button } from '@/components/arc/button/button'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { operatorForbiddenCopy } from '@/components/ae/layout/route-error.contracts'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { attemptViteStaleChunkReload, isViteStaleChunkError } from '@/lib/observability/stale-chunk-reload'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
   OperatorSurfaceForbiddenError,
@@ -26,6 +27,11 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
   const parentShell = useOperatorShellChrome()
   const correlationRef = errorCorrelationRef(error)
   const recoveryCopy = 'Try again, or check system status.'
+
+  // The router catches asset-loading failures before the outer render boundary.
+  useEffect(() => {
+    attemptViteStaleChunkReload(error)
+  }, [error])
 
   if (isOperatorSurfaceForbidden(error)) {
     const surface = error instanceof OperatorSurfaceForbiddenError
@@ -47,6 +53,10 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
               if (retryLock.current) return
               retryLock.current = true
               setRetryPending(true)
+              if (isViteStaleChunkError(error)) {
+                window.location.reload()
+                return
+              }
               void router.invalidate()
                 .catch((cause) => captureClientExceptionOnClient(cause))
                 .finally(() => {
@@ -99,11 +109,19 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
             disabled={retryPending}
             aria-busy={retryPending || undefined}
             onClick={() => {
-              if (retryPending) return
+              if (retryLock.current) return
+              retryLock.current = true
               setRetryPending(true)
+              if (isViteStaleChunkError(error)) {
+                window.location.reload()
+                return
+              }
               void router.invalidate()
                 .catch((cause) => captureClientExceptionOnClient(cause))
-                .finally(() => setRetryPending(false))
+                .finally(() => {
+                  retryLock.current = false
+                  setRetryPending(false)
+                })
             }}
           >
             {retryPending ? 'Trying again…' : 'Try again'}

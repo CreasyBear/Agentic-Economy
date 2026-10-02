@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode, type ReactNode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const routeStateMocks = vi.hoisted(() => ({
@@ -11,6 +11,15 @@ const routeStateMocks = vi.hoisted(() => ({
   pathname: '/owner/settings/connections',
 }))
 const diagnostics = vi.hoisted(() => ({ capture: vi.fn() }))
+const originalLocation = window.location
+
+vi.mock('@/lib/observability/sentry.client', () => ({
+  captureClientException: vi.fn(),
+  Sentry: {
+    flush: vi.fn(async () => true),
+    getClient: vi.fn(() => undefined),
+  },
+}))
 
 vi.mock('@/lib/observability/capture-client-exception', () => ({
   captureClientExceptionOnClient: diagnostics.capture,
@@ -42,7 +51,8 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   useOperatorShellChrome: () => routeStateMocks.parentShell,
 }))
 
-import { OperatorRouteError } from '@/components/ae/layout/AeRouteStates'
+import { OperatorRouteError, RouteError } from '@/components/ae/layout/AeRouteStates'
+import { STALE_CHUNK_RELOAD_TIMESTAMP_KEY } from '@/lib/observability/stale-chunk-reload'
 
 afterEach(() => {
   cleanup()
@@ -51,6 +61,8 @@ afterEach(() => {
   routeStateMocks.invalidate.mockReset()
   routeStateMocks.invalidate.mockResolvedValue(undefined)
   diagnostics.capture.mockReset()
+  window.sessionStorage.clear()
+  Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })
 })
 
 describe('OperatorRouteError router recovery', () => {
@@ -121,5 +133,85 @@ describe('OperatorRouteError router recovery', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Try again' })).toHaveProperty('disabled', false))
     expect(routeStateMocks.invalidate).toHaveBeenCalledTimes(1)
     expect(diagnostics.capture).toHaveBeenCalledWith(expect.any(Error))
+  })
+})
+
+describe.each([
+  { surface: 'operator', ErrorComponent: OperatorRouteError },
+  { surface: 'public', ErrorComponent: RouteError },
+])('$surface stale release recovery', ({ ErrorComponent }) => {
+  it.each([
+    'Unable to preload CSS for https://app.aecon.ai/assets/owner-old.css',
+    'Failed to fetch dynamically imported module: https://app.aecon.ai/assets/owner-old.js',
+  ])('reloads the current document once for %s and retains funding recovery', async (message) => {
+    const reload = vi.fn()
+    const target = new URL('https://app.aecon.ai/owner/credit?funding=cs_saved#fund')
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, href: target.href, pathname: target.pathname, search: target.search, hash: target.hash, reload },
+    })
+    const recoveryKey = 'ae.account-funding.recovery.user_owner'
+    const recovery = JSON.stringify({ externalRef: 'cs_saved' })
+    window.sessionStorage.setItem(recoveryKey, recovery)
+
+    routeStateMocks.pathname = target.pathname
+    const view = render(<StrictMode><ErrorComponent error={new Error(message)} /></StrictMode>)
+
+    await waitFor(() => expect(reload).toHaveBeenCalledOnce())
+    expect(window.location.href).toBe(target.href)
+    expect(window.sessionStorage.getItem(recoveryKey)).toBe(recovery)
+    expect(routeStateMocks.invalidate).not.toHaveBeenCalled()
+
+    await act(async () => {
+      view.rerender(<StrictMode><ErrorComponent error={new Error(message)} /></StrictMode>)
+    })
+    expect(reload).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveProperty('disabled', false)
+  })
+
+  it('uses a document reload for manual retry when automatic recovery is in cooldown', () => {
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...originalLocation, reload } })
+    window.sessionStorage.setItem(STALE_CHUNK_RELOAD_TIMESTAMP_KEY, String(Date.now()))
+
+    render(<ErrorComponent error={new Error('Unable to preload CSS for /assets/owner-old.css')} />)
+    expect(reload).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(reload).toHaveBeenCalledOnce()
+    expect(routeStateMocks.invalidate).not.toHaveBeenCalled()
+  })
+
+  it('keeps ordinary data errors on router retry without reloading the document', async () => {
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...originalLocation, reload } })
+
+    render(<ErrorComponent error={new Error('Account balance is temporarily unavailable')} />)
+    expect(reload).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Try again' })).toHaveProperty('disabled', false))
+    expect(routeStateMocks.invalidate).toHaveBeenCalledOnce()
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('keeps manual recovery usable when browser storage is denied', () => {
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...originalLocation, reload } })
+    const storageGetter = vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() => {
+      throw new Error('sessionStorage access denied')
+    })
+    try {
+      render(<ErrorComponent error={new Error('Unable to preload CSS for /assets/owner-old.css')} />)
+      expect(reload).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+      expect(reload).toHaveBeenCalledOnce()
+      expect(routeStateMocks.invalidate).not.toHaveBeenCalled()
+    } finally {
+      storageGetter.mockRestore()
+    }
   })
 })

@@ -266,6 +266,22 @@ describe('attemptViteStaleChunkReload', () => {
     expect(reload).not.toHaveBeenCalled()
   })
 
+  it('contains a denied browser sessionStorage getter without reloading', () => {
+    const reload = vi.fn()
+    const storageGetter = vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() => {
+      throw new Error('sessionStorage access denied')
+    })
+    try {
+      expect(attemptViteStaleChunkReload(new Error(staleChunkMessages[3]), {
+        now: () => NOW,
+        reload,
+      })).toBe(false)
+      expect(reload).not.toHaveBeenCalled()
+    } finally {
+      storageGetter.mockRestore()
+    }
+  })
+
   it('does not reload when session storage writes are denied', () => {
     const storage = {
       getItem: vi.fn(() => null),

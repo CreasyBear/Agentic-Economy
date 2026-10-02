@@ -51,9 +51,9 @@ export function attemptViteStaleChunkReload(
   }
 
   const now = options.now?.() ?? Date.now()
-  const storage = options.storage ?? window.sessionStorage
 
   try {
+    const storage = options.storage ?? window.sessionStorage
     const storedValue = storage.getItem(STALE_CHUNK_RELOAD_TIMESTAMP_KEY)
     const storedTimestamp = storedValue === null || storedValue.length === 0
       ? Number.NaN
