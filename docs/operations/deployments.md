@@ -87,9 +87,10 @@ alarms are currently OK. The restored email subscription is confirmed. A
 controlled CloudWatch alarm delivered one SNS notification with zero failures,
 and metric evaluation restored OK after 102 seconds. Inbox receipt and an
 actual restore remain unproved.
-A separate production footprint versus a new
-production boundary sharing the existing infrastructure remains an explicit
-cost/isolation decision; the alpha ledger is preserved.
+Joel selected one production-only AWS footprint on 2 October: reuse the existing
+host, RDS and Formance service; retain an independent sandbox backup and prove
+restore before retiring the sandbox ledger. Production receives a clean ledger,
+with no test balances carried forward. No second permanent AWS stack is approved.
 
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
 Joel selected the existing AWS self-hosted Formance route; a production ledger

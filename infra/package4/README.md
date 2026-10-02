@@ -153,10 +153,12 @@ Formance stack and exact schema, template, reference, balance and idempotency
 verification. Never attach a restored database to the authoritative release
 stack until the rehearsal evidence passes.
 
-Use `recovery-drill` with a dedicated state key for each drill date. Its
+Use `recovery-drill` with an explicit source namespace and ledger, and a
+dedicated state key for each source and drill date. Its
 verification script runs through Systems Manager, retrieves the drill secret
-on the host, creates a separate Formance namespace, compares source and restore
-digests, and submits a drill-only idempotency probe. Formance binds its logical
+on the host, creates a separate Formance namespace, compares the recorded
+baseline with the restored state, and replays the original command and native
+idempotency key without another posting. Formance binds its logical
 database name to the Stack name, so the script briefly pauses the Formance
 operator control loop and points only the isolated drill Ledger deployments at
 the restored source database name. The source data-plane stays online and its
