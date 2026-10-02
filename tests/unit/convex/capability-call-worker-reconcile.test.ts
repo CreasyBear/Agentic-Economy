@@ -9,7 +9,7 @@ vi.mock('@/modules/capability-execution/call-worker/recover', async (importOrigi
 }))
 
 import { getFunctionName } from 'convex/server'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   claimAutomaticReconciliationCandidate,
   finishAutomaticReconciliation,
@@ -51,6 +51,7 @@ type Row = {
   callRef: string
   principalId: string
   credentialId: string
+  environment: 'sandbox' | 'production'
   state: string
   operationJson?: string
   inputJson?: string
@@ -171,6 +172,7 @@ function row(
     callRef,
     principalId: `principal:${callRef}`,
     credentialId: `credential:${callRef}`,
+    environment: 'sandbox',
     state: 'reconciliation_required',
     operationJson: 'secret-operation-json',
     inputJson: 'secret-input-json',
@@ -204,9 +206,15 @@ function authorizedInvocation(callRef: unknown) {
   }
 }
 
+beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+  vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
+})
+
 afterEach(() => {
   recoverMock.mockReset()
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
 })
 
 describe('scheduled capability invocation reconciliation primitives', () => {
@@ -224,7 +232,7 @@ describe('scheduled capability invocation reconciliation primitives', () => {
       nextAttemptAt: number
     }>
 
-    expect(db.indexes).toContain('by_state_and_reconciliation_disposition_reason_nextAttemptAt')
+    expect(db.indexes).toContain('by_environment_state_reconciliation_disposition_reason_due')
     expect(candidates).toHaveLength(25)
     expect(candidates[0]).toEqual({ callRef: 'candidate:0', attemptCount: 0, nextAttemptAt: 1_000 })
     expect(Object.keys(candidates[0] as object)).toEqual(['callRef', 'attemptCount', 'nextAttemptAt'])
@@ -244,6 +252,39 @@ describe('scheduled capability invocation reconciliation primitives', () => {
       { callRef: 'due', attemptCount: 0, nextAttemptAt: 2_000 },
     ])
     expect(manual.every(item => item.reconciliation?.disposition === 'manual_review')).toBe(true)
+  })
+
+  it.each(['reconciliation_required', 'refused', 'cancelled'])('reaches current %s recovery behind 25 older foreign Calls without changing history', async (state) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
+    const reason = state === 'reconciliation_required' ? 'recovery_failed' : 'refund_pending'
+    const foreign = Array.from({ length: 25 }, (_, index) => ({
+      ...row(`sandbox:${index}`, { attemptCount: 0, nextAttemptAt: 1_000, disposition: 'automatic', reason }),
+      state,
+    }))
+    const historical = structuredClone(foreign)
+    const due = {
+      ...row('production:due', { attemptCount: 0, nextAttemptAt: 2_000, disposition: 'automatic', reason }),
+      environment: 'production' as const,
+      state,
+    }
+    const db = new MemoryDb([...foreign, due])
+
+    expect(await listHandler({ db }, { now: 3_000, limit: 25 })).toEqual([{
+      callRef: 'production:due', attemptCount: 0, nextAttemptAt: 2_000,
+      ...(state === 'reconciliation_required' ? {} : { preClaimRefund: true }),
+    }])
+    expect(foreign).toEqual(historical)
+  })
+
+  it.each([undefined, 'invalid'])('returns no recovery batch without a valid deployment environment: %s', async (environment) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', environment)
+    const due = row('due')
+    const unchanged = structuredClone(due)
+    const db = new MemoryDb([due])
+    expect(await listHandler({ db }, { now: 2_000, limit: 25 })).toEqual([])
+    expect(db.indexes).toEqual([])
+    expect(due).toEqual(unchanged)
   })
 
   it('merges reason partitions by due time under one shared output limit', async () => {

@@ -68,8 +68,8 @@ export async function applyVerifiedEventFromInboxHandler(
     )
     if (prepared.kind !== 'prepared') return prepared
     const booked = prepared.bookingKind === 'settlement'
-      ? await ctx.runAction(internal.moneyFormance.bookFundingSettlement, prepared.booking)
-      : await ctx.runAction(internal.moneyFormance.bookFundingReversal, prepared.booking)
+      ? await ctx.runAction(internal.moneyFormance.bookFundingSettlement, { ...prepared.booking, expectedEnvironment: prepared.expectedEnvironment })
+      : await ctx.runAction(internal.moneyFormance.bookFundingReversal, { ...prepared.booking, expectedEnvironment: prepared.expectedEnvironment })
     if (booked.kind === 'completed') {
       const [formanceTransactionRef] = booked.transactionRefs
       if (booked.transactionRefs.length !== 1 || formanceTransactionRef === undefined) {

@@ -26,6 +26,7 @@ if (sandboxGate.kind !== 'admitted') throw new Error('sandbox_policy_fixture_mis
 
 beforeEach(() => {
   vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+  vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
   vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
   for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
   vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')

@@ -426,8 +426,8 @@ export const capabilityCallTables = {
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
     .index('by_state_and_result_kind_and_createdAt', ['state', 'result.kind', 'createdAt'])
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt'])
-    .index('by_state_and_reconciliation_disposition_reason_nextAttemptAt', [
-      'state', 'reconciliation.disposition', 'reconciliation.reason', 'reconciliation.nextAttemptAt',
+    .index('by_environment_state_reconciliation_disposition_reason_due', [
+      'environment', 'state', 'reconciliation.disposition', 'reconciliation.reason', 'reconciliation.nextAttemptAt',
     ])
     .index('by_createdAt', ['createdAt']),
   // Authority-provenance-only journal. It stores no provider or payment secret

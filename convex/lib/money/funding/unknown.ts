@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment } from '../formance/contracts'
 import { v } from 'convex/values'
 import { recordFundingTerminal } from '@/lib/observability/journey'
 
@@ -19,6 +20,7 @@ export async function markFundingBookingUnknownHandler(
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef))
     .unique()
+  if (command !== null) assertFinancialEnvironment(command.environment)
   if (command !== null && command.state !== 'succeeded' && command.state !== 'failed') {
     recordFundingTerminal(command.state, 'outcome_unknown')
     await ctx.db.patch(command._id, {
@@ -41,6 +43,7 @@ export async function markFundingReversalUnknownHandler(
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_paymentId', (builder) => builder.eq('paymentId', args.paymentId))
     .unique()
+  if (command !== null) assertFinancialEnvironment(command.environment)
   if (command !== null
     && command.state === 'succeeded'
     && command.reversalRefundId === args.refundId

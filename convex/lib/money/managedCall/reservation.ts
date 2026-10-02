@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment } from '../formance/contracts'
 import { v, type Infer } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
@@ -15,11 +16,13 @@ async function loadRows(ctx: MutationCtx, callRef: string) {
   const call = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
     .unique()
+  if (call !== null) assertFinancialEnvironment(call.environment)
   if (call === null || call.quoteRef === undefined) return null
   const quoteRef = call.quoteRef
   const quote = await ctx.db.query('capabilityQuotes')
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef))
     .unique()
+  if (quote !== null) assertFinancialEnvironment(quote.environment)
   return quote === null ? null : { call, quote }
 }
 

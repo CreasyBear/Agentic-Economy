@@ -465,6 +465,7 @@ export async function prepareSubjects(
       ? []
       : [spendingPeriodAdjustmentReference(command)]
     await backend.mutation(internal.agentSpendingPeriods.acknowledge, {
+      expectedEnvironment: result.expectedEnvironment,
       command,
       transactionRefs,
     })

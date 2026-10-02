@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../formance/contracts'
 import { v, type Infer } from 'convex/values'
 import { env } from '../../../_generated/server'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
@@ -73,7 +74,7 @@ export const claimWorkResult = v.union(v.null(), workValue, v.object({
 }))
 export const claimWorkHandler = async (ctx: MutationCtx, args: Infer<typeof grantRefArgs>): Promise<Infer<typeof claimWorkResult>> => {
   const row = await ctx.db.query('moneyPromotionalGrants').withIndex('by_grantRef', q => q.eq('grantRef', args.grantRef)).unique()
-  if (row === null || row.environment !== deploymentPaymentEnvironment(env)) return null
+  if (row === null || !financialEnvironmentMatches(row.environment)) return null
   const now = Date.now()
   if (row.bookingState === 'pending') {
     const authority = await readPendingGrantAuthority(ctx, row)
@@ -132,7 +133,7 @@ export const finishWorkHandler = async (ctx: MutationCtx, args: Infer<typeof fin
   const [transactionRef] = args.transactionRefs
   if (row === null || args.transactionRefs.length !== 1 || transactionRef === undefined
     || row.accountRef !== args.accountRef || row.environment !== args.environment
-    || row.environment !== deploymentPaymentEnvironment(env)
+    || !financialEnvironmentMatches(row.environment)
     || row.commandDigest !== args.commandDigest || row.expiresAt !== args.expiresAt) return false
   const now = Date.now()
   if (args.kind === 'grant') {
@@ -214,12 +215,11 @@ export const processHandler = async (ctx: ActionCtx, args: Infer<typeof grantRef
   const work = await ctx.runMutation(internal.moneyPromotionalCredit.claimWork, args)
   if (work === null) return true
   if (work.kind === 'refused') return false
-  const { kind: _, environment: _environment, ...booking } = work
+  const { kind: _, environment: expectedEnvironment, ...booking } = work
   void _
-  void _environment
   const result = work.kind === 'grant'
-    ? await ctx.runAction(internal.moneyFormance.grantPromotionalCredit, booking)
-    : await ctx.runAction(internal.moneyFormance.expirePromotionalCredit, booking)
+    ? await ctx.runAction(internal.moneyFormance.grantPromotionalCredit, { ...booking, expectedEnvironment })
+    : await ctx.runAction(internal.moneyFormance.expirePromotionalCredit, { ...booking, expectedEnvironment })
   if (result.kind !== 'completed') return false
   return await ctx.runMutation(internal.moneyPromotionalCredit.finishWork, {
     ...work, transactionRefs: [...result.transactionRefs],

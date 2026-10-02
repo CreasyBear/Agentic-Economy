@@ -1,9 +1,8 @@
-import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { assertFinancialEnvironment, financialEnvironmentMatches } from '../formance/contracts'
 import { v, type Infer } from 'convex/values'
 
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
-import { env } from '../../../_generated/server'
 import {
   verifyMarketAgentPrincipal,
   type AgentAccessPrincipalValue,
@@ -99,8 +98,7 @@ export async function reserveAgentHandoffHandler(
   ctx: MutationCtx,
   args: Infer<typeof reserveAgentHandoffArgsValue>,
 ): Promise<FundingResult> {
-  const deploymentEnvironment = deploymentPaymentEnvironment(env)
-  if (deploymentEnvironment === undefined || deploymentEnvironment !== args.environment) {
+  if (!financialEnvironmentMatches(args.environment)) {
     return refused('environment_mismatch')
   }
   const admission = await admitAgentHandoff(ctx, args)
@@ -196,6 +194,8 @@ export async function bindAgentHandoffHandler(
     || command.accountRef !== admission.ownerId || command.actorPrincipalRef !== admission.principalId) {
     return refused('funding_pending', true)
   }
+  // A throwing fence rolls back any authority refresh performed by admission.
+  assertFinancialEnvironment(command.environment)
   if (args.evidence.checkoutMode !== 'hosted_page'
     || compareExactAmounts(args.evidence.amount, { currency: 'AUD', exponent: AUD_EXPONENT, units: command.totalUnits }) !== 0
     || (command.externalRef !== undefined && command.externalRef !== args.evidence.externalRef)

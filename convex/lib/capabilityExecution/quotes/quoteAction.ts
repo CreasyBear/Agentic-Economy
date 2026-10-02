@@ -66,12 +66,13 @@ async function evaluateQuoteAction(
     // without turning Quote creation into an unbounded retry loop.
     for (let round = 0; round < 2 && commands.length > 0; round += 1) {
       for (const command of commands) {
-        const adjusted = await ctx.runAction(internal.moneyFormance.adjustSpendingPeriod, command)
+        const adjusted = await ctx.runAction(internal.moneyFormance.adjustSpendingPeriod, { ...command, expectedEnvironment: subjects.expectedEnvironment })
         const expectedReferenceCount = command.previousLimitUnits === command.targetLimitUnits ? 0 : 1
         if (adjusted.kind !== 'completed' || adjusted.transactionRefs.length !== expectedReferenceCount) {
           return refuse(args, 'inspection_unavailable', true)
         }
         const acknowledged = await ctx.runMutation(internal.agentSpendingPeriods.acknowledge, {
+          expectedEnvironment: subjects.expectedEnvironment,
           command,
           transactionRefs: [...adjusted.transactionRefs],
         })
@@ -148,7 +149,7 @@ async function evaluateQuoteAction(
     return refuse(args, 'treasury_capacity_unavailable', true)
   }
   for (const capacity of capacityCommands) {
-    const synced = await ctx.runAction(internal.moneyFormance.syncCapacity, capacity)
+    const synced = await ctx.runAction(internal.moneyFormance.syncCapacity, { ...capacity, expectedEnvironment: subjects.expectedEnvironment })
     if (synced.kind !== 'completed') {
       return refuse(args, 'inspection_unavailable', synced.kind !== 'refused')
     }

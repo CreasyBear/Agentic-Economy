@@ -12,6 +12,7 @@ import { reversalRefused } from './state'
 type ManagedCallMaterial = Readonly<
   | {
       kind: 'available'
+      expectedEnvironment: 'sandbox' | 'production'
       booking: MoneyFormanceManagedCallBooking
       financialState?: 'reservation_pending' | 'reserved' | 'possibly_submitted'
         | 'outcome_unknown' | 'released' | 'settled'
@@ -39,6 +40,7 @@ export async function reverseOwnerSettlementHandler(
   const result: MoneyFormanceResult = await ctx.runAction(
     internal.moneyFormance.reverseProviderSettlement,
     {
+      expectedEnvironment: material.expectedEnvironment,
       booking: material.booking,
       originalSettlementRef: args.settlementTransactionRef,
       correctionEvidenceDigest: args.evidenceDigest,

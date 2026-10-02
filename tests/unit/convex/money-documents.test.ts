@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../../convex/_generated/api'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
@@ -404,4 +404,58 @@ describe('Formance-sourced money documents', () => {
     expect(listed.page.map((document) => document.kind).sort()).toEqual(['adjustment', 'funding_receipt'])
   })
 
+})
+
+
+describe('statement environment cutover', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  async function fixture(residualUnits: string) {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await backend.run(async ctx => await ctx.db.insert('moneyDocuments', {
+      documentRef, accountRef: 'account:document-test', kind: 'statement',
+      sourceTransactionRefs: ['native:original-sale'], amountUnits: '10000', residualUnits,
+      policyRefs: ['commercial-policy:sandbox'], policyDigest: `sha256:${'a'.repeat(64)}`,
+      templateVersion: 'ae.money-document:html:v1', renderInputJson: '{}',
+      renderInputDigest: `sha256:${'b'.repeat(64)}`, state: 'adjusting', environment: 'sandbox',
+      sourceCount: 1, snapshotDigest: `sha256:${'c'.repeat(64)}`, snapshotCutoffAt: 1_800_086_400_000,
+      periodStart: 1_800_000_000_000, periodEnd: 1_800_086_400_000, pageCount: 1,
+      exactAmountUnits: (10000n - BigInt(residualUnits)).toString(), createdAt: 1_800_086_400_000,
+    }))
+    return backend
+  }
+
+  async function state(backend: ReturnType<typeof convexTestWithWorkers>) {
+    return await backend.run(async ctx => ({
+      documents: await ctx.db.query('moneyDocuments').collect(),
+      schedules: await ctx.db.system.query('_scheduled_functions').collect(),
+    }))
+  }
+
+  it.each(['0', '4999'])('refuses %s residual finalization and delayed render acknowledgement after cutover without record or schedule changes', async residualUnits => {
+    const backend = await fixture(residualUnits)
+    const material = await backend.query(internal.moneyDocuments.readStatementFinalization, { documentRef })
+    expect(material).toMatchObject({ expectedEnvironment: 'sandbox', residualUnits })
+    const before = await state(backend)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
+    expect(await backend.query(internal.moneyDocuments.readStatementFinalization, { documentRef })).toEqual(material)
+    await expect(backend.action(internal.moneyDocuments.finalizeStatement, { documentRef })).rejects.toThrow('environment_mismatch')
+    await Promise.all([0, 1].map(async () => await expect(backend.mutation(internal.moneyDocuments.queueStatementRender, {
+      documentRef, adjustmentTransactionRefs: residualUnits === '0' ? [] : ['native:adjustment'],
+    })).rejects.toThrow('environment_mismatch')))
+    expect(await state(backend)).toEqual(before)
+  })
+
+  it('preserves the zero-residual shortcut and canonical rendering material in the matching environment', async () => {
+    const backend = await fixture('0')
+    expect(await backend.action(internal.moneyDocuments.finalizeStatement, { documentRef })).toEqual({ kind: 'advanced' })
+    const completed = await state(backend)
+    expect(completed.documents[0]).toMatchObject({ state: 'rendering', sourceTransactionRefs: ['native:original-sale'] })
+    const render = JSON.parse(completed.documents[0]!.renderInputJson)
+    expect(render.adjustmentTransactionRefs).toEqual([])
+    expect(render).not.toHaveProperty('expectedEnvironment')
+    expect(await backend.action(internal.moneyDocuments.finalizeStatement, { documentRef })).toEqual({ kind: 'advanced' })
+    expect(await state(backend)).toEqual(completed)
+  })
 })

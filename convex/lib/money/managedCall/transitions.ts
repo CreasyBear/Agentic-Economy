@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment } from '../formance/contracts'
 import type { WorkId } from '@convex-dev/workpool'
 import { marketDispatchWorkpool } from '../../../marketDispatchWorkpool'
 import { restorePromotionalCredit } from '../promotionalCredit/allocation'
@@ -20,6 +21,7 @@ export const markPossiblySubmittedHandler = async (ctx: MutationCtx, args: Infer
     const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
+    if (row !== null) assertFinancialEnvironment(row.environment)
     if (row === null || row.formanceReservationRefs === undefined) {
       return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
     }
@@ -43,6 +45,7 @@ export const markOutcomeUnknownHandler = async (ctx: MutationCtx, args: Infer<ty
     const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
+    if (row !== null) assertFinancialEnvironment(row.environment)
     if (row === null || row.formanceReservationRefs === undefined) {
       return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
     }
@@ -187,6 +190,7 @@ export const finalizeReleaseHandler = async (ctx: MutationCtx, args: Infer<typeo
     const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
+    if (row !== null) assertFinancialEnvironment(row.environment)
     if (args.expectedBookingDigest !== undefined) return await finalizeHistoricalRelease(ctx, args, row)
     if (row !== null && isManualSettlementHold(row)) return { kind: 'refused' as const, code: 'call_manual_settlement_review_required' }
     if (row === null || args.transactionRefs.length !== 2 + (row.promotionalCreditAllocation?.grants.length ?? 0)) {
@@ -222,6 +226,7 @@ export const finalizeSettlementHandler = async (ctx: MutationCtx, args: Infer<ty
     const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
+    if (row !== null) assertFinancialEnvironment(row.environment)
     // A native read is valid only for this exact current booking, including on
     // replay. Check before any accounting write; older callers remain supported.
     let boundObligation: Doc<'moneyProviderObligations'> | undefined

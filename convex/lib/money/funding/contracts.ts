@@ -232,6 +232,7 @@ export const prepareFundingEventResultValue = v.union(
   v.object({
     kind: v.literal('prepared'),
     bookingKind: v.union(v.literal('settlement'), v.literal('reversal')),
+    expectedEnvironment: environmentValue,
     booking: fundingBookingValue,
   }),
   applyFundingEventResultValue,

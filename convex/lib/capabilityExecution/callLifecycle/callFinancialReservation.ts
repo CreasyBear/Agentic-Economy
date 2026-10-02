@@ -49,6 +49,7 @@ async function attachFormanceReservation(
   principal: AgentAccessPrincipal,
   result: ReservedCall,
   booking: Parameters<typeof ctx.runAction>[1],
+  expectedEnvironment: 'sandbox' | 'production',
   turnRef?: string,
 ): Promise<ReservationResult> {
   const attempt = await ctx.runMutation(internal.moneyManagedCall.claimReservationAttempt, { callRef: result.reservation.callRef, initialAdmission: result.kind === 'reserved' })
@@ -56,7 +57,7 @@ async function attachFormanceReservation(
     kind: 'refused', code: 'commercial_policy_unavailable', retryable: true,
     nextAction: 'This Call reservation is still being confirmed. Retry with the same idempotency key.',
   }
-  const booked = await ctx.runAction(internal.moneyFormance.reserveManagedCall, booking)
+  const booked = await ctx.runAction(internal.moneyFormance.reserveManagedCall, { ...booking, expectedEnvironment })
   if (booked.kind === 'completed') {
     const attached = await ctx.runMutation(internal.moneyManagedCall.attachReservation, {
       callRef: result.reservation.callRef,
@@ -123,5 +124,5 @@ export async function reserveFormanceBackedInvocation(
     return { kind: 'replayed', reservation: result.reservation }
   }
   if (material.financialState === 'reserved') return result
-  return await attachFormanceReservation(ctx, principal, result, material.booking, turnRef)
+  return await attachFormanceReservation(ctx, principal, result, material.booking, material.expectedEnvironment, turnRef)
 }

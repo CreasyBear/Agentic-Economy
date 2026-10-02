@@ -1,5 +1,6 @@
 "use node"
 
+import { financialEnvironmentMatches } from './lib/money/formance/contracts'
 import { v } from 'convex/values'
 import { Agent } from 'undici'
 import { internal } from './_generated/api'
@@ -40,6 +41,7 @@ async function resolvePaidResultFailure(ctx: ActionCtx, args: { callRef: string;
   failureKind?: 'http_error'): Promise<{ kind: 'completed' } | { kind: 'refused'; code: string }> {
     const transactionHash = args.transactionHash.toLowerCase()
     const call = await ctx.runQuery(internal.capabilityCalls.readOwnerRecovery, { callRef: args.callRef })
+    if (call !== null && !financialEnvironmentMatches(call.environment)) return { kind: 'refused', code: 'environment_mismatch' }
     if (call?.result?.kind === 'refused'
       && (failureKind === 'http_error' ? call.result.code === 'provider_refused' && call.result.receipt?.lossState === 'provider_http_error' : call.result.code === 'result_invalid')
       && call.result.receipt?.refundState === 'released'
@@ -121,6 +123,7 @@ async function resolvePaidResultFailure(ctx: ActionCtx, args: { callRef: string;
       return { kind: 'refused', code: 'booking_unavailable' }
     }
     const money: MoneyFormanceResult = await ctx.runAction(internal.moneyFormance.remedyPaidCall, {
+      expectedEnvironment: material.expectedEnvironment,
       booking: material.booking, externalEvidenceDigest: evidenceDigest,
     })
     if (money.kind !== 'completed') return { kind: 'refused', code: 'credit_restoration_pending' }

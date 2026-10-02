@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../../money/formance/contracts'
 import { v } from 'convex/values'
 
 import {
@@ -36,6 +37,7 @@ export async function prepareSpendingPeriodsHandler(
     { kind: 'new_operation', toolRef: args.toolRef },
   )
   if (authority === null) return { kind: 'refused' as const, reason: 'spending_period_authority_stale' }
+  if (!financialEnvironmentMatches(authority.principal.environment)) return { kind: 'refused', reason: 'environment_mismatch' }
   const grantRow = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', authority.grantRef))
     .unique()

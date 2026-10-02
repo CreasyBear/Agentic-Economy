@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment } from './lib/money/formance/contracts'
 import { restorePromotionalCredit } from './lib/money/promotionalCredit/allocation'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
@@ -13,7 +14,9 @@ const proof = {
   evidenceDigest: v.string(), evidenceRef: v.string(),
 }
 async function readCall(ctx: Pick<QueryCtx, 'db'>, callRef: string) {
-  return await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+  const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+  if (call !== null) assertFinancialEnvironment(call.environment)
+  return call
 }
 
 /** Called only with independently verified safe-block proof; pins evidence across crash/replay. */

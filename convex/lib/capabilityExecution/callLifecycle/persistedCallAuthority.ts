@@ -1,3 +1,4 @@
+import { assertCallEnvironment } from './callIdentity'
 import type { Infer } from 'convex/values'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import type { Doc } from '../../../_generated/dataModel'
@@ -166,6 +167,7 @@ export async function reconcilePersistedCallAuthority(
     .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
     .unique()
   if (row === null) return null
+  assertCallEnvironment(row)
   const storedAgent = await ctx.db.query('agentAccessPrincipals')
     .withIndex('by_credentialId', (query) => query.eq('credentialId', row.credentialId))
     .unique()

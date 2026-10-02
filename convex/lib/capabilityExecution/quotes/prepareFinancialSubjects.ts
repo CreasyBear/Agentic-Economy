@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment } from '../../money/formance/contracts'
 import { v } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -98,6 +99,7 @@ export async function prepareFinancialSubjectsCore(
   const pricing = normalizePricingConfig(operation.pricingConfig)
   if (pricing.kind !== 'valid') return { kind: 'refused', code: 'tool_unsupported' }
   if (pricing.config.kind !== 'fixed_aud' || pricing.config.amountUnits !== '0') {
+    assertFinancialEnvironment(authority.principal.environment)
     const paymentAccess = await readAgentPaymentAdmission(ctx, {
       environment: authority.principal.environment, accountRef: authority.principal.ownerId,
       grantRef: authority.grantRef, grantGeneration: authority.grantGeneration,
@@ -220,6 +222,7 @@ export async function prepareFinancialSubjectsCore(
     : undefined
   return {
     kind: 'prepared',
+    expectedEnvironment: authority.principal.environment,
     accountRef: authority.principal.ownerId,
     principalRef: authority.principal.principalId,
     budgetGeneration: grantReadback.budget.generation,

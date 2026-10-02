@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment } from './lib/money/formance/contracts'
 import { restorePromotionalCredit } from './lib/money/promotionalCredit/allocation'
 import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
@@ -54,6 +55,7 @@ export const claim = internalMutation({
     if (!/^0x[0-9a-fA-F]{64}$/.test(args.transactionHash)) return null
     const call = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
+    if (call !== null) assertFinancialEnvironment(call.environment)
     if (call === null) return null
     if (call.state === 'refused' && call.result?.kind === 'refused'
       && (args.failureKind === 'http_error' ? call.result.code === 'provider_refused' && call.result.receipt?.lossState === 'provider_http_error' : call.result.code === 'result_invalid')
@@ -98,6 +100,7 @@ export const finish = internalMutation({
     if (!/^sha256:[a-f0-9]{64}$/.test(args.evidenceDigest)) return { kind: 'refused' as const }
     const call = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
+    if (call !== null) assertFinancialEnvironment(call.environment)
     if (call?.state === 'refused' && call.result?.kind === 'refused'
       && (args.failureKind === 'http_error' ? call.result.code === 'provider_refused' && call.result.receipt?.lossState === 'provider_http_error' : call.result.code === 'result_invalid')
       && call.result.receipt?.evidenceHash === args.evidenceDigest

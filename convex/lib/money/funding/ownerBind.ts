@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../formance/contracts'
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
@@ -26,6 +27,7 @@ export async function bindHandler(
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef))
     .unique()
+  if (command !== null && !financialEnvironmentMatches(command.environment)) return refused('environment_mismatch')
   if (command === null || command.accountRef !== actor.canonicalAccountRef) {
     return refused('funding_pending', true)
   }

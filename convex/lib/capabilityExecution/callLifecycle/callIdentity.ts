@@ -1,3 +1,7 @@
+import { ConvexError } from 'convex/values'
+import { env } from '../../../_generated/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { financialEnvironmentMatches } from '../../money/formance/contracts'
 import { type Infer } from 'convex/values'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
@@ -206,4 +210,14 @@ export function callIdentityMatches<T extends CallIdentityArgs>(
     row.applicationRef === identity.applicationRef,
     row.environment === identity.environment,
   ].every(Boolean)
+}
+
+export function callEnvironmentMatches(row: CallRow): boolean {
+  return row.environment === deploymentPaymentEnvironment(env)
+    && (row.formanceFinancialState === undefined && row.formanceReservationRefs === undefined
+      || financialEnvironmentMatches(row.environment))
+}
+
+export function assertCallEnvironment(row: CallRow): void {
+  if (!callEnvironmentMatches(row)) throw new ConvexError({ code: 'environment_mismatch' })
 }

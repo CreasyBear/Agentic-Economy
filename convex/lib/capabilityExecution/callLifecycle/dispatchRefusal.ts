@@ -4,7 +4,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { callResultValue } from '@/modules/capability-execution/convex'
 import { type Infer, type ObjectType, v } from 'convex/values'
-import { purchaseIdentityMatches } from './callIdentity'
+import { assertCallEnvironment, callEnvironmentMatches, purchaseIdentityMatches } from './callIdentity'
 
 
 type CallRow = Doc<'capabilityCalls'>
@@ -140,6 +140,7 @@ export async function refuseUnclaimedHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
     .unique()
+  if (row !== null) assertCallEnvironment(row)
   if (!purchaseIdentityMatches(row, args)) return { kind: 'not_found' }
 
   const [control, attempts] = await Promise.all([
@@ -224,6 +225,7 @@ export async function readPreClaimRefundHandler(
       || (row.state === 'cancelled' && result?.kind === 'refused' && result.code === 'invocation_cancelled'))
   if (
     row === null
+    || !callEnvironmentMatches(row)
     || !validTerminalResult
     || row.dispatchState !== 'failed'
     || row.attemptRef !== undefined

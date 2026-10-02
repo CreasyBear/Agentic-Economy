@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../formance/contracts'
 import type { Infer } from 'convex/values'
 
 import { api, internal } from '../../../_generated/api'
@@ -18,6 +19,7 @@ export async function fulfillReturnHandler(
   const durable = await ctx.runQuery(api.moneyAccountFunding.read, { externalRef })
   if (durable.kind === 'refused') return durable
   const command = durable.command
+  if (!financialEnvironmentMatches(command.environment)) return { kind: 'refused', code: 'environment_mismatch', retryable: false }
   if (command.externalRef !== externalRef) {
     return { kind: 'refused', code: 'payment_binding_invalid', retryable: false }
   }

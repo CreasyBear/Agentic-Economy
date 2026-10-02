@@ -55,6 +55,7 @@ async function withReadyCustodyEnvironment<T>(backend: ConvexFixtureBackend, cal
 
 beforeEach(() => {
   vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+  vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
   for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
   vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
   vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '10000')

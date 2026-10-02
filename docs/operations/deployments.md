@@ -77,17 +77,20 @@ Stage 43 also enables Clerk authenticator/backup-code support, stores the
 production identity and authority settings in Infisical, aligns the Vercel
 authority bindings, and creates an isolated, unfunded CDP production project.
 Stage 46 creates its unfunded wallet and verifies the approved signing policies;
-removing temporary policy-management access and binding custody remain pending.
+temporary policy-management access is now removed and native readback still
+verifies the wallet and policies. Runtime custody binding remains pending.
 Stage 47 separates signed Clerk callback admission from incomplete money setup;
-deployed callback acceptance remains pending.
+the provider-native production example now returns HTTP 200 accepted/ignored
+through the actual Svix verifier and Convex assertion. This does not prove a real
+bound-user revocation or owner MFA enrollment.
 
 The existing AWS Formance footprint is `ae-alpha`: one private host and a
 Multi-AZ RDS database, with nightly Melbourne backup copies. Repairing the
 CloudWatch Agent configuration restored disk/memory observations and all eight
 alarms are currently OK. The restored email subscription is confirmed. A
 controlled CloudWatch alarm delivered one SNS notification with zero failures,
-and metric evaluation restored OK after 102 seconds. Inbox receipt and an
-actual restore remain unproved.
+and metric evaluation restored OK after 102 seconds. Inbox receipt and the
+cloud restore rehearsal remain unproved.
 Joel selected one production-only AWS footprint on 2 October: reuse the existing
 host, RDS and Formance service; retain an independent sandbox backup and prove
 restore before retiring the sandbox ledger. Production receives a clean ledger,

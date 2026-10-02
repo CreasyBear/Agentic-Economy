@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../formance/contracts'
 import { v, type Infer } from 'convex/values'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
@@ -8,6 +9,7 @@ import { transitionResult, type TransitionResult } from './transitions'
 type ManagedCallMaterial =
   | {
       kind: 'available'
+      expectedEnvironment: 'sandbox' | 'production'
       booking: FormanceManagedCallBooking
       financialState?: 'reservation_pending' | 'reserved' | 'possibly_submitted' | 'outcome_unknown' | 'released' | 'settled'
       reservationRefs?: string[]
@@ -27,6 +29,7 @@ export const releaseBeforeSubmissionHandler = async (ctx: ActionCtx, args: Infer
     if (material.kind !== 'available') {
       return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
     }
+    if (!financialEnvironmentMatches(material.expectedEnvironment)) return { kind: 'refused', code: 'environment_mismatch' }
     if (material.requiresManualSettlementReview) return { kind: 'refused', code: 'call_manual_settlement_review_required' }
     if (material.financialState === 'released') {
       return { kind: 'accepted' as const, state: 'released', replayed: true }
@@ -35,6 +38,7 @@ export const releaseBeforeSubmissionHandler = async (ctx: ActionCtx, args: Infer
       return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
     }
     const result: FormanceMoneyResult = await ctx.runAction(internal.moneyFormance.releaseManagedCall, {
+      expectedEnvironment: material.expectedEnvironment,
       booking: material.booking,
       externalEvidenceDigest: material.booking.quoteDigest,
       submissionProvenAbsent: true,
@@ -63,6 +67,7 @@ export const settleHandler = async (ctx: ActionCtx, args: Infer<typeof settleArg
     if (material.kind !== 'available') {
       return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
     }
+    if (!financialEnvironmentMatches(material.expectedEnvironment)) return { kind: 'refused', code: 'environment_mismatch' }
     if (material.remedyInProgress) return { kind: 'refused' as const, code: 'managed_call_remedy_in_progress' }
     if (material.financialState === 'settled') {
       if (material.settlementRefs === undefined) return { kind: 'refused', code: 'managed_call_settlement_invalid' }
@@ -77,6 +82,7 @@ export const settleHandler = async (ctx: ActionCtx, args: Infer<typeof settleArg
       return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
     }
     const result: FormanceMoneyResult = await ctx.runAction(internal.moneyFormance.settleManagedCall, {
+      expectedEnvironment: material.expectedEnvironment,
       booking: material.booking,
       externalEvidenceDigest: args.evidenceDigest,
     })
@@ -107,6 +113,7 @@ export const reconcileSettlementHandler = async (
 ): Promise<TransitionResult> => {
   const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: args.callRef })
   if (material.kind !== 'available') return { kind: 'refused', code: 'managed_call_reservation_not_found' }
+  if (!financialEnvironmentMatches(material.expectedEnvironment)) return { kind: 'refused', code: 'environment_mismatch' }
   if (material.remedyInProgress) return { kind: 'refused', code: 'managed_call_remedy_in_progress' }
   if (material.financialState !== 'possibly_submitted'
     && material.financialState !== 'outcome_unknown'
@@ -133,6 +140,7 @@ export async function reconcileReservationHandler(
 ): Promise<TransitionResult> {
   const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: args.callRef })
   if (material.kind !== 'available') return { kind: 'refused', code: 'managed_call_reservation_not_found' }
+  if (!financialEnvironmentMatches(material.expectedEnvironment)) return { kind: 'refused', code: 'environment_mismatch' }
   if (material.remedyInProgress) return { kind: 'refused', code: 'managed_call_remedy_in_progress' }
   if (material.financialState === 'settled' || material.financialState === 'released') {
     return { kind: 'refused', code: 'managed_call_state_conflict' }
@@ -156,6 +164,7 @@ export async function reconcileReleaseHandler(
 ): Promise<TransitionResult> {
   const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: args.callRef })
   if (material.kind !== 'available') return { kind: 'refused', code: 'managed_call_reservation_not_found' }
+  if (!financialEnvironmentMatches(material.expectedEnvironment)) return { kind: 'refused', code: 'environment_mismatch' }
   if (!material.requiresManualSettlementReview) return { kind: 'refused', code: 'call_manual_settlement_review_required' }
   if (material.remedyInProgress) return { kind: 'refused', code: 'managed_call_remedy_in_progress' }
   if (material.financialState !== 'outcome_unknown' && material.financialState !== 'released') {

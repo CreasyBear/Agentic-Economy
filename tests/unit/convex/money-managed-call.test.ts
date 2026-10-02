@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test'
-import { describe, expect, it, vi } from 'vitest'
+import type { WorkId } from '@convex-dev/workpool'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 import type { ActionCtx } from '../../../convex/_generated/server'
 import type { Doc } from '../../../convex/_generated/dataModel'
@@ -21,6 +22,8 @@ import { convexTestWithMarketComponents, convexTestWithWorkers, publishedBusines
 import { marketDispatchWorkpool } from '../../../convex/marketDispatchWorkpool'
 import { readRecoveryStatus } from '@/modules/capability-execution/call-runtime'
 import { withSourceWrite } from '../../helpers/source-write-admission'
+import { am10BindEvidence, am10PaidCheckoutEvent, fundingRows, insertSettledFunding, refundEvent, refundEvidence } from '../../helpers/money-funding-fixtures'
+import { eventRowFields } from '../../../convex/moneyStripeEvents'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
@@ -1682,5 +1685,219 @@ describe('verified-paid HTTP error remedy', () => {
       if (payment) await ctx.db.patch(payment._id, { responseStatus: 200 })
     })
     expect(await backend.mutation(internal.moneyManagedCallRemedy.finish, finish)).toEqual({ kind: 'refused' })
+  })
+})
+
+
+describe('financial environment cutover', () => {
+  beforeEach(() => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
+  })
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
+
+  const production = () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
+  }
+  const evidenceDigest = `sha256:${'a'.repeat(64)}`
+  const transactionHash = `0x${'b'.repeat(64)}`
+  const refusal = { kind: 'refused', code: 'environment_mismatch', retryable: false }
+
+  async function financialState(backend: ReturnType<typeof convexTest>) {
+    return await backend.run(async ctx => ({
+      calls: await ctx.db.query('capabilityCalls').collect(),
+      quotes: await ctx.db.query('capabilityQuotes').collect(),
+      obligations: await ctx.db.query('moneyProviderObligations').collect(),
+      attempts: await ctx.db.query('moneyX402PaymentAttempts').collect(),
+      schedules: await ctx.db.system.query('_scheduled_functions').collect(),
+    }))
+  }
+
+  it('preserves historical booking evidence and refuses serial and concurrent recovery mutations without a claim or schedule', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedReservationFixture(backend)
+    const originalBooking = await backend.query(internal.moneyManagedCall.readBooking, { callRef })
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { state: 'refused', dispatchState: 'failed',
+        result: { kind: 'refused', toolRef, code: 'source_unavailable', retryable: false },
+        reconciliation: { disposition: 'automatic', reason: 'refund_pending', attemptCount: 0, nextAttemptAt: now },
+      })
+    })
+    expect(await backend.query(internal.capabilityCalls.readPreClaimRefund, { callRef })).toBe(true)
+    const before = await financialState(backend)
+    production()
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef })).toEqual(originalBooking)
+    expect(await backend.query(internal.capabilityCalls.readPreClaimRefund, { callRef })).toBe(false)
+    expect(await backend.query(internal.capabilityCalls.listDueAutomaticReconciliationCandidates, { now, limit: 25 })).toEqual([])
+    const operations = [
+      () => backend.mutation(internal.moneyManagedCall.claimReservationAttempt, { callRef, initialAdmission: false }),
+      () => backend.mutation(internal.moneyManagedCall.attachReservation, { callRef, transactionRefs: reservationRefs }),
+      () => backend.mutation(internal.moneyManagedCall.markReservationUnknown, { callRef, reference: 'ref', statusRef: 'status' }),
+      () => backend.mutation(internal.moneyManagedCall.repairReservation, { callRef, transactionRefs: reservationRefs, expectedBookingDigest: evidenceDigest, now }),
+      () => backend.mutation(internal.moneyManagedCallLifecycle.markPossiblySubmitted, { callRef, evidenceDigest, now }),
+      () => backend.mutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, { callRef, evidenceDigest, now }),
+      () => backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, { callRef, transactionRefs: releaseRefs, now }),
+      () => backend.mutation(internal.moneyManagedCallLifecycle.finalizeSettlement, { callRef, transactionRefs: settlementRefs, now }),
+      () => backend.mutation(internal.capabilityCalls.claimAutomaticReconciliationCandidate, { callRef, leaseOwner: 'cutover', now }),
+      () => backend.mutation(internal.capabilityCalls.finishAutomaticReconciliation, { callRef, leaseOwner: 'cutover', now, outcome: 'success' }),
+      () => backend.mutation(internal.moneyX402Expiry.schedule, { callRef, runAt: now }),
+      () => backend.mutation(internal.moneyX402Expiry.claim, { callRef, attemptRef: 'attempt', effectGeneration: 1,
+        paymentIdentityDigest: evidenceDigest, paymentNonce: 'nonce', evidenceDigest, evidenceRef: 'proof' }),
+      () => backend.mutation(internal.moneyX402Expiry.finish, { callRef, evidenceDigest, transactionRefs: releaseRefs }),
+      () => backend.mutation(internal.moneyManagedCallRemedy.claim, { callRef, transactionHash }),
+      () => backend.mutation(internal.moneyManagedCallRemedy.finish, { callRef, transactionHash, evidenceDigest, transactionRefs: settlementRefs }),
+    ]
+    for (const run of operations) await expect(run()).rejects.toThrow('environment_mismatch')
+    await Promise.all(operations.flatMap(run => [0, 1].map(async () => await expect(run()).rejects.toThrow('environment_mismatch'))))
+    expect(await backend.action(internal.moneyX402ExpiryActions.recover, { callRef })).toEqual({ kind: 'refused', code: 'environment_mismatch' })
+    expect(await backend.action(internal.moneyManagedCallRemedyActions.resolveLostResult, { callRef, transactionHash })).toEqual({ kind: 'refused', code: 'environment_mismatch' })
+    expect(await financialState(backend)).toEqual(before)
+  })
+
+  it.each([
+    ['production', 'production'],
+    ['development', 'production'],
+    ['production', 'sandbox'],
+  ])('refuses every native posting for a saved sandbox command under %s deployment / %s ledger without HTTP', async (deployment, ledger) => {
+    const backend = convexTest(schema, convexModules)
+    await seedReservationFixture(backend)
+    const material = await backend.query(internal.moneyManagedCall.readBooking, { callRef })
+    if (material.kind !== 'available') throw new Error('fixture_missing')
+    const expectedEnvironment = material.expectedEnvironment
+    const booking = material.booking
+    const bookingDigest = canonicalDigest(booking)
+    const funding = { commandRef: 'funding:cutover', idempotencyKey: 'funding:cutover', accountRef,
+      processorRef: 'stripe:cutover', principalUnits: '100', serviceFeeUnits: '0', taxUnits: '0', totalUnits: '100',
+      policyDigest: evidenceDigest, externalEvidenceDigest: evidenceDigest, expectedEnvironment }
+    const finalization = { booking, externalEvidenceDigest: evidenceDigest, expectedEnvironment }
+    const promo = { grantRef: 'promo:cutover', accountRef, amountUnits: '100', expiresAt: now + 1000,
+      commandDigest: evidenceDigest, expectedEnvironment }
+    const period = { principalRef, periodKind: 'day' as const, ...currentUtcDayBounds(now), revision: 1,
+      previousLimitUnits: '0', targetLimitUnits: '100', authorityDigest: evidenceDigest, expectedEnvironment }
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', ledger)
+    const http = vi.fn(() => { throw new Error('unexpected_native_request') })
+    vi.stubGlobal('fetch', http)
+    const posts = [
+      () => backend.action(internal.moneyFormance.bookBuyerAdjustment, { documentRef: 'document:cutover', accountRef,
+        residualUnits: '1', policyDigest: evidenceDigest, snapshotDigest: evidenceDigest, expectedEnvironment }),
+      () => backend.action(internal.moneyFormance.bookFundingSettlement, funding),
+      () => backend.action(internal.moneyFormance.bookFundingReversal, funding),
+      () => backend.action(internal.moneyFormance.syncCapacity, { commandRef: 'capacity:cutover', idempotencyKey: 'capacity:cutover',
+        kind: 'legal_customer_exposure' as const, subjectRef: 'legal:cutover', generation: 1, targetUnits: '100',
+        policyDigest: evidenceDigest, externalEvidenceDigest: evidenceDigest, expectedEnvironment }),
+      () => backend.action(internal.moneyFormance.adjustSpendingPeriod, period),
+      () => backend.action(internal.moneyFormance.reserveManagedCall, { ...booking, expectedEnvironment }),
+      () => backend.action(internal.moneyFormance.releaseManagedCall, { ...finalization, submissionProvenAbsent: true as const }),
+      () => backend.action(internal.moneyFormance.releaseExpiredUnusedCall, finalization),
+      () => backend.action(internal.moneyFormance.settleManagedCall, finalization),
+      () => backend.action(internal.moneyFormance.remedyPaidCall, finalization),
+      () => backend.action(internal.moneyFormance.reverseProviderSettlement, { booking, originalSettlementRef: settlementRefs[1]!,
+        correctionEvidenceDigest: evidenceDigest, expectedEnvironment }),
+      () => backend.action(internal.moneyFormance.grantPromotionalCredit, promo),
+      () => backend.action(internal.moneyFormance.expirePromotionalCredit, promo),
+      () => backend.action(internal.moneyFormance.refundSettledSale, { booking, originalSettlementRefs: settlementRefs,
+        reportDigest: evidenceDigest, expectedEnvironment }),
+    ]
+    for (const post of posts) expect(await post()).toEqual(refusal)
+    expect(await Promise.all(posts.flatMap(post => [post(), post()]))).toEqual(posts.flatMap(() => [refusal, refusal]))
+    expect(http).not.toHaveBeenCalled()
+    expect(canonicalDigest(booking)).toBe(bookingDigest)
+  })
+
+  async function fundingFixture() {
+    const backend = convexTestWithWorkers()
+    const commandRef = 'funding:cutover'
+    const evidence = am10BindEvidence(evidenceDigest, 'cutover')
+    await insertSettledFunding(backend, { commandRef, accountRef, actorPrincipalRef: principalRef, paymentId: evidence.paymentId })
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyFundingCommands').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { metadataDigest: evidence.metadataDigest, externalRef: evidence.externalRef })
+    })
+    const event = am10PaidCheckoutEvent({ commandRef, evidence, stripeEventId: 'evt_cutover',
+      eventType: 'checkout.session.completed', payloadDigest: evidenceDigest })
+    const args = { event, readback: evidence, operationKey: 'cutover', correlationId: event.stripeEventId }
+    return { backend, commandRef, args }
+  }
+
+  it('stops old funding work before provider setup/readback and records only terminal inbox refusal', async () => {
+    const { backend, commandRef, args } = await fundingFixture()
+    await backend.mutation(api.moneyStripeWebhookInbox.ingest, await withSourceWrite('billing', {
+      destination: 'snapshot', event: args.event, operationKey: 'cutover:ingest', correlationId: args.event.stripeEventId,
+    }))
+    const inbox = await backend.run(async ctx => ctx.db.query('moneyStripeWebhookInbox').unique())
+    if (inbox?.workId === undefined) throw new Error('work_not_queued')
+    const workId = inbox.workId as WorkId
+    const before = await fundingRows(backend, commandRef)
+    production()
+    vi.stubEnv('STRIPE_SECRET_KEY', undefined)
+    const result = await backend.action(internal.moneyStripeWebhookWorker.process, { stripeEventId: args.event.stripeEventId })
+    expect(result).toEqual({ kind: 'reconciliation_required', code: 'environment_mismatch' })
+    await backend.mutation(internal.moneyStripeWebhookInbox.complete, { workId, context: { stripeEventId: args.event.stripeEventId },
+      result: { kind: 'success', returnValue: result } })
+    expect(await backend.query(internal.moneyStripeWebhookInbox.readForProcessing, { stripeEventId: args.event.stripeEventId }))
+      .toMatchObject({ state: 'reconciliation_required' })
+    expect(await fundingRows(backend, commandRef)).toEqual(before)
+  })
+
+  it('refuses checkout/refund preparation, finalization and unknown marking after cutover without financial writes', async () => {
+    const { backend, commandRef, args } = await fundingFixture()
+    const refund = refundEvent({ stripeEventId: 'evt_cutover_refund', refundId: 're_cutover',
+      paymentId: args.readback.paymentId, observedAt: now })
+    const refundArgs = { event: refund, refundReadback: refundEvidence(refund), operationKey: 'cutover', correlationId: refund.stripeEventId }
+    const before = await fundingRows(backend, commandRef)
+    production()
+    const operations = [
+      () => backend.mutation(internal.moneyAccountFunding.prepareVerifiedEventFromInbox, args),
+      () => backend.mutation(internal.moneyAccountFunding.prepareVerifiedEventFromInbox, refundArgs),
+      () => backend.mutation(internal.moneyAccountFunding.finalizeVerifiedEventFromInbox, { ...args, formanceTransactionRef: 'native:cutover' }),
+      () => backend.mutation(internal.moneyAccountFunding.finalizeVerifiedRefundFromInbox, { ...refundArgs, formanceTransactionRef: 'native:cutover' }),
+      () => backend.action(internal.moneyAccountFundingFormance.applyVerifiedEventFromInbox, args),
+    ]
+    for (const run of operations) expect(await run()).toEqual(refusal)
+    expect(await Promise.all(operations.flatMap(run => [run(), run()]))).toEqual(operations.flatMap(() => [refusal, refusal]))
+    await expect(backend.mutation(internal.moneyAccountFunding.markFundingBookingUnknown, { commandRef, stripeEventId: args.event.stripeEventId, observedAt: now })).rejects.toThrow('environment_mismatch')
+    await expect(backend.mutation(internal.moneyAccountFunding.markFundingReversalUnknown, {
+      paymentId: refund.paymentId, refundId: refund.refundId, stripeEventId: refund.stripeEventId, statusRef: 'status', observedAt: now,
+    })).rejects.toThrow('environment_mismatch')
+    expect(await fundingRows(backend, commandRef)).toEqual(before)
+  })
+
+  it('keeps same-environment funding preparation and completed replay material unchanged', async () => {
+    const { backend, commandRef, args } = await fundingFixture()
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyFundingCommands').first()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { state: 'pending', appliedTransactionRef: undefined })
+    })
+    const prepared = await backend.mutation(internal.moneyAccountFunding.prepareVerifiedEventFromInbox, args)
+    expect(prepared.kind).toBe('prepared')
+    if (prepared.kind !== 'prepared') throw new Error('fixture_missing')
+    expect(prepared.expectedEnvironment).toBe('sandbox')
+    expect(prepared.booking).not.toHaveProperty('expectedEnvironment')
+    expect(await Promise.all([0, 1].map(() => backend.mutation(internal.moneyAccountFunding.prepareVerifiedEventFromInbox, args))))
+      .toEqual([prepared, prepared])
+    const pending = await fundingRows(backend, commandRef)
+    production()
+    expect(await backend.mutation(internal.moneyAccountFunding.finalizeVerifiedEventFromInbox, { ...args, formanceTransactionRef: 'native:original' })).toEqual(refusal)
+    expect(await fundingRows(backend, commandRef)).toEqual(pending)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
+    await backend.run(async ctx => {
+      const command = await ctx.db.query('moneyFundingCommands').first()
+      const event = await ctx.db.query('moneyStripeEvents').first()
+      if (command === null || event === null) throw new Error('fixture_missing')
+      await ctx.db.patch(command._id, { state: 'succeeded', appliedTransactionRef: 'native:original' })
+      await ctx.db.patch(event._id, { ...eventRowFields(args.event), status: 'applied', appliedRef: 'native:original' })
+    })
+    const completed = await fundingRows(backend, commandRef)
+    const replayed = { kind: 'accepted', status: 'replayed', appliedRef: 'native:original' }
+    expect(await backend.mutation(internal.moneyAccountFunding.prepareVerifiedEventFromInbox, args)).toEqual(replayed)
+    expect(await backend.mutation(internal.moneyAccountFunding.finalizeVerifiedEventFromInbox, { ...args, formanceTransactionRef: 'native:original' })).toEqual(replayed)
+    expect(await fundingRows(backend, commandRef)).toEqual(completed)
   })
 })

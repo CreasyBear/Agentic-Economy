@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../formance/contracts'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import type { MutationCtx } from '../../../_generated/server'
 import { AUD_EXPONENT, compareExactAmounts, type StripeMoneyWebhookEvent } from '../../../../src/modules/money/public'
@@ -139,6 +140,7 @@ export async function prepareFundingRefundEvent(
     return {
       kind: 'prepared',
       bookingKind: 'reversal',
+      expectedEnvironment: command.environment,
       booking: fundingReversalBooking(
         command,
         command.reversalRefundId,
@@ -163,6 +165,7 @@ export async function prepareFundingRefundEvent(
   return {
     kind: 'prepared',
     bookingKind: 'reversal',
+    expectedEnvironment: command.environment,
     booking: fundingReversalBooking(command, event.refundId, readback.evidenceDigest),
   }
 }
@@ -182,6 +185,7 @@ export async function finalizeFundingRefundHandler(
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_paymentId', (builder) => builder.eq('paymentId', refundEvent.paymentId))
     .unique()
+  if (command !== null && !financialEnvironmentMatches(command.environment)) return refused('environment_mismatch')
   const event = await ctx.db.query('moneyStripeEvents')
     .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', args.event.stripeEventId))
     .unique()

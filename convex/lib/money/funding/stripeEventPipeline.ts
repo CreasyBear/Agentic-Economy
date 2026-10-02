@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../formance/contracts'
 import type { Doc } from '../../../_generated/dataModel'
 import { recordFundingTerminal } from '@/lib/observability/journey'
 import type { MutationCtx } from '../../../_generated/server'
@@ -56,6 +57,7 @@ export type PrepareFundingResult =
   | Readonly<{
       kind: 'prepared'
       bookingKind: 'settlement' | 'reversal'
+      expectedEnvironment: 'sandbox' | 'production'
       booking: FundingBooking
     }>
   | Readonly<{
@@ -88,6 +90,7 @@ export async function ensureEventConsistency(
   lookupQuery: Promise<Doc<'moneyFundingCommands'> | null>,
 ): Promise<ConsistencyResult> {
   const command = await lookupQuery
+  if (command !== null && !financialEnvironmentMatches(command.environment)) return refused('environment_mismatch')
   if (command === null) return { kind: 'refused', code: 'funding_pending', retryable: true }
 
   const priorEvent = await ctx.db.query('moneyStripeEvents')
@@ -206,6 +209,7 @@ export async function prepareFundingSettlementEvent(
   return {
     kind: 'prepared',
     bookingKind: 'settlement',
+    expectedEnvironment: command.environment,
     booking: {
       commandRef: command.commandRef,
       accountRef: command.accountRef,
@@ -236,6 +240,7 @@ export async function finalizeFundingEventHandler(
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_commandRef', (builder) => builder.eq('commandRef', fundingEvent.commandRef))
     .unique()
+  if (command !== null && !financialEnvironmentMatches(command.environment)) return refused('environment_mismatch')
   const event = await ctx.db.query('moneyStripeEvents')
     .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', fundingEvent.stripeEventId))
     .unique()

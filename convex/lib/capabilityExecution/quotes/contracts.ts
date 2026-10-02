@@ -177,6 +177,7 @@ export const formanceFinancialSnapshot = v.object({
 export const financialSubjectsResult = v.union(
   v.object({
     kind: v.literal('prepared'),
+    expectedEnvironment: v.union(v.literal('sandbox'), v.literal('production')),
     accountRef: v.string(),
     principalRef: v.string(),
     budgetGeneration: v.number(),

@@ -3202,4 +3202,101 @@ paid routes/readiness. `npm run check` and the full Node 22/npm 11.5.1 merge gat
 pass: 7,794 unit and 2,701 integration tests, clean types/imports, SEO, 16 browser
 journeys, 18 accessibility checks, CLI packaging and the public build. The gate
 uses explicit development/sandbox environment declarations; configured skips
-remain explicit. Deployed callback acceptance remains pending.
+remain explicit. Deployed callback acceptance passed on source revision
+`2fca96603e1abbb5062139ac41858bf51b016da3`: `/api/v1/release` and health returned
+HTTP 200. Clerk's native production `session.revoked` example
+`msg_3K86bdIweUxIcwDJWFAQA304rD5` (provider timestamp `1790926920`) reached
+`https://app.aecon.ai/api/clerk/webhook` and returned HTTP 200 accepted/ignored.
+This proves native Svix verification and the actual Convex service assertion
+handoff; the fictional unknown user does not establish bound-user revocation.
+
+Temporary CDP policy-management permission is removed. Maintained custody
+readiness verifies the existing wallet and policy with custody disabled and
+unfunded. The rotated Cloudflare credential and new-token-only gateway policy
+pass native production health, with the production ledger still at zero
+transactions and the credential stored in the AWS secret. These observations
+do not complete the pending cloud restore rehearsal or production RPC setup.
+
+
+## Stage 48 — fence persisted financial work across environment cutover
+
+**Requires:** each persisted financial command, Call, report or grant belongs to
+both the declared deployment payment environment and the active Formance
+environment before a claim, schedule, state/evidence update or native posting.
+**Ensures:** mismatched historical work stops with `environment_mismatch` before
+a financial effect; a prepared action rechecks its original environment at the native
+adapter, and finalization rechecks the persisted record. **Invariant:** booking
+material, canonical digests, transaction references and same-environment replay
+semantics remain unchanged; historical receipt and booking reads stay available.
+**On violation:** refuse without financial-record mutation or native submission.
+The existing webhook completion may record its terminal environment refusal in
+the inbox to stop automatic retry; it cannot change funding or ledger evidence. Environment
+cutover cannot be repaired by retrying against a different ledger.
+
+Reuse existing loaders, validators and the Formance gateway. A small assertion
+in the existing adapter contracts and an environment field beside command
+material add explicit checks and argument plumbing, while isolating historical
+work from a newly configured ledger. The alternatives—rewriting historical
+records, altering booking hashes or introducing a migration/queue framework—add
+risk without establishing this boundary. Keep the guard and explicit context.
+Replace the existing automatic-reconciliation index with an environment-prefixed
+index so foreign history cannot consume a bounded recovery partition before
+current work is selected. This changes the index schema, with no stored-field,
+public API, dependency or new-layer change. Recovery requires a valid declared
+deployment environment, returns no batch when it is absent or invalid, and keeps
+bounded indexed reads and the shared 25-candidate limit without changing history.
+Verification covers
+unchanged persisted state and schedules on serial/concurrent refusals, native
+submission refusal after preparation, finalization after cutover, and unchanged
+same-environment replay, plus ordinary and refused/cancelled refund recovery
+behind a full older page from another environment.
+
+Production inventory before cutover found no Calls, promotional grants or paid
+Call reports. The two funding commands are sandbox records (one pending, one
+succeeded); the seven webhook inbox rows include two queued events. The native
+Stripe Workpool contains two pending-start funding workers, each at attempt 12,
+with none running or completing. Keep these historical records intact: the
+persisted-origin fence, rather than queue deletion or record migration, prevents
+them from affecting the production ledger.
+
+The native adapter now requires original environment separately for every money
+posting, including statement residual adjustment, capacity and spending periods.
+The statement action and render acknowledgement both fence zero and nonzero
+residual work. Owner/Agent funding intent admission checks both bindings before
+creating intent or legal-customer bindings; Agent handoff binding throws the
+existing environment error so admission-side updates roll back as well.
+
+Local verification under Node 22.22.0/npm 11.5.1 passed all 109 tests in the
+existing managed-Call suite, then 23 focused tests across managed Calls, money
+documents, funding and expiry recovery. These establish serial/concurrent
+refusal without financial mutation or new schedules, refusal at all 14 native
+posting registrations without HTTP, old queued funding refusal before provider
+setup, in-flight finalization rejection, retained historical booking reads,
+unchanged prepared hashes and same-environment local replay. The subsequent
+four-file reconciliation, Quote, notification and payment-control run passed
+101 tests, including all three recovery partitions behind 25 older foreign
+Calls and empty selection without a valid deployment environment. Production
+fixtures now declare matching ledger environments; their original readiness,
+authority and refusal assertions remain intact.
+
+`npm run check` and the full `npm run gate` pass under Node 22/npm 11.5.1 with
+explicit development/sandbox declarations: 7,811 unit tests (one skipped),
+2,718 integration tests (61 skipped, three todo), four type contracts, 75 import
+checks, 31 SEO checks, 16 browser journeys, 18 accessibility cases, CLI packaging
+and public-build integrity. Independent review accepted the changed boundaries
+and the recovery-index correction.
+
+All 43 required native money assertions also pass against the existing isolated
+Docker fixture running Ledger 2.4.14. They exercise real postings, concurrent
+limits, settlement, refunds and replay through the changed adapters. The
+maintained evidence command verifies all three required files with no skipped
+assertions. External custody, screening and Provider responses remain simulated;
+this is not a real testnet or mainnet Call. The temporary local containers and
+volume were removed after verification.
+
+Before deployment, a fresh production Convex export retained snapshot
+`1790929159865364434`: 76,424,295 bytes, 435 entries and valid CRC, SHA-256
+`75de136e000ac8a65355bdd776dc39af72832b7d3ed7845bac57d35fbc01dc3c`.
+Native production Formance health passes, with zero transactions, zero accounts
+and four schemas matching its clean baseline. Backend deployment and runtime
+binding remain the next acceptance boundary; this stage has moved no live money.

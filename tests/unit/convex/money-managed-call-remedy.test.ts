@@ -45,7 +45,7 @@ function context(httpError = false, financialState = 'outcome_unknown', currency
     const name = getFunctionName(ref)
     if (name === 'capabilityCalls:readOwnerRecovery') return call
     if (name === 'moneyX402PaymentAttempts:readX402PaymentAttempt') return retainedAttempt
-    if (name === 'moneyManagedCall:readBooking') return { kind: 'available', financialState, booking: { providerAmountUnits: '1000', buyerAmountUnits: '1404' } }
+    if (name === 'moneyManagedCall:readBooking') return { kind: 'available', expectedEnvironment: 'sandbox', financialState, booking: { providerAmountUnits: '1000', buyerAmountUnits: '1404' } }
     throw new Error(name)
   })
   const runMutation = vi.fn(async (ref: never) => {
