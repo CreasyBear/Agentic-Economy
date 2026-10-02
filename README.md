@@ -53,6 +53,10 @@ publication remain separate release gates.
 
 ## Current stage
 
+For current application hosts, staging, retired test projects and remaining
+production blockers, use the [deployment map](./docs/operations/deployments.md).
+The production execution queue is [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256).
+
 The implemented foundation includes canonical Tools, comparison, Quotes,
 brokered Calls, prepaid buyer credit, Charges, Provider
 earnings, refunds, status and recovery.
