@@ -3627,4 +3627,41 @@ no-write assertions for refused authority.
 Native production census finds two active Clerk bindings, with 40 credentials
 on the affected binding and one on the other. The affected owner has seven
 audit rows; the conservative cutoff remains 13:24:57 UTC, before the fresh
-session. The source fix and production schema deployment remain under review.
+session. PR #304 merges at `2f7cb3dbc059006fd13bbf499a97becacd01beb1`, with a tree
+matching gated candidate `0ad64054b099d122c04ee8c4d14bb3ba3e0ba7d2`. The complete
+source gate passes: 8,046 unit assertions, 2,767 integration assertions, 16
+browser journeys, 18 accessibility checks, public build and reproducible CLI
+package. Native-provider opt-in skips remain separate from live-money acceptance.
+
+The matching backend deploys to `cautious-zebra-473`; Vercel production
+`dpl_CXEVvGNCKLi6e9m3fYBJZoeoQin1` serves the same merged revision. The existing
+fresh Clerk browser session opens Profile and Chat without captured console
+errors. Native readback confirms one active credential, cutoff
+`1790947497777`, normal renewal and all 40 original revoked credentials preserved.
+Release and health return HTTP 200; readiness remains HTTP 503 because money
+prerequisites remain incomplete. PR #304 also removes pull-request workflow
+triggers under Joel's explicit request; the two workflows remain disabled in
+GitHub and local release verification remains required.
+
+## Stage 54 — production owner activation and accurate readiness diagnosis
+
+At 14:45 UTC, the previously authorized owner retries the original setup through
+the normal browser flow. The application records the membership bootstrap,
+reports Admin owner access active and opens the production Admin dashboard.
+Guarded commands still require fresh MFA; this acceptance does not enable
+payments or establish that protected financial commands have passed step-up.
+
+Native readback at 14:49 UTC verifies that web and backend select the same
+production money environment and `cautious-zebra-473` backend. The web check
+returns `deployment_manifest_invalid`, and the backend's existing umbrella
+`web_readiness_identity_mismatch` also covers failed configuration/probe checks.
+Its old dashboard text incorrectly asserted a different backend. The explanation
+now states that the configuration and backend identity checks have not passed.
+This is a recoverable provisioning failure surfaced at the informational UI
+boundary: the copy change makes no state transition, performs no retry and
+preserves the failed readiness result and payment refusal.
+
+Formance and the reference rate pass on the live Admin view. Custody, matching
+RPC evidence, licensed screening, commercial approvals and treasury evidence
+remain incomplete. Development paid-Call proof, the authorized mainnet drills
+and public launch remain outstanding.

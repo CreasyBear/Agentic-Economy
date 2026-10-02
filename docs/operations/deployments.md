@@ -120,12 +120,12 @@ No second permanent AWS stack is approved.
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
 Joel selected the existing AWS self-hosted Formance route. The production ledger
 is provisioned, bound and verified empty. Backend `cautious-zebra-473` runs
-Stage 49 revision `316094bead7df43e2e722069bd5e309082abec6a`, including explicit
-owner bootstrap, commercial-policy review and protected chat admission. Vercel
-Production `dpl_79FtsQTwNz8FNZdyHWETqdBfRYPV` serves Stage 52 revision
-`8197a2c1b5fd5dac9bd9d6d46448504805ac65b3`, including enforced Clerk CSP and
-canonical HTTPS admission behind Vercel TLS termination. Native readback at
-13:35 UTC verifies that release; release and health return HTTP 200. Readiness
+Stage 53 revision `2f7cb3dbc059006fd13bbf499a97becacd01beb1`, including fresh-session
+recovery after revocation. Vercel Production `dpl_CXEVvGNCKLi6e9m3fYBJZoeoQin1`
+serves the same revision from [PR #304](https://github.com/CreasyBear/Agentic-Economy/pull/304).
+This retains explicit owner bootstrap, commercial-policy review, protected chat
+admission, enforced Clerk CSP and canonical HTTPS admission behind Vercel TLS
+termination. Native release verification passes; release and health return HTTP 200. Readiness
 remains HTTP 503 with custody disabled and the remaining money prerequisites
 incomplete. The readiness record holds the source gate and native acceptance
 evidence.
@@ -137,20 +137,26 @@ pending under the approved US$1 monthly cap. Joel's selected owner identity is
 verified and allowlisted, and real sign-in at 11:57 UTC is recorded in Security
 activity. The first explicit Admin bootstrap was refused at web admission;
 Stage 52 corrects Vercel's HTTP reconstruction after TLS termination without
-relaxing same-origin checks. Production acceptance of that fix, commercial policy
-and screening remain pending. Clerk's native readback at 13:18 UTC verifies
+relaxing same-origin checks. After Stage 53, the previously authorized owner
+activation succeeds at 14:45 UTC and the production Admin dashboard opens.
+Commercial policy and screening remain pending. Clerk's native readback at 13:18 UTC verifies
 owner authenticator MFA and backup codes. The live session-revocation drill at
 13:24 UTC records exactly one matching application audit event, revokes all
 40 older interactive credentials for that owner, and returns the browser to
-sign-in. The fresh MFA sign-in is observed at 13:31 UTC, but application authority
-recovery is blocked by a missing-token-claim assumption. Stage 53 adds a durable
-revocation cutoff and signed session evidence checks; source verification and
-the production schema deployment are pending. Then
+sign-in. The fresh MFA sign-in is observed at 13:31 UTC. Stage 53 replaces the
+missing-token-claim assumption with a durable revocation cutoff and signed
+session evidence checks. Production Profile, Chat and Admin access now pass;
+all 40 original revoked credentials remain revoked and one current credential
+is active. Native readback at 14:49 UTC confirms that web and backend identities
+both select production and `cautious-zebra-473`. The web configuration check still
+fails with `deployment_manifest_invalid`; its umbrella readiness error must not
+be interpreted as proof of a backend mismatch. Then
 [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
 proves the authorized real Calls and failure drills before
 [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288) permits launch.
 
-The local `npm run gate` remains the source release gate. The normal Kernel
-release gate and React Doctor GitHub workflows remain manually disabled as
-previously configured. A Vercel build success is only build evidence; release,
+The local `npm run gate` remains the source release gate. PR #304 removes all
+pull-request workflow triggers. Kernel release gate retains release-tag and
+manual triggers; React Doctor is manual only. Both remain manually disabled in
+GitHub. The public CLI release workflow is unchanged. A Vercel build success is only build evidence; release,
 readiness and the actual supported journeys must be checked separately.
