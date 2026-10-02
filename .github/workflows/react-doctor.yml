@@ -7,9 +7,7 @@
 name: React Doctor
 
 on:
-  # Scans the PR's changed files and posts a sticky summary comment listing only the new issues introduced relative to the merge base of the target branch.
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,9 +15,9 @@ permissions:
   issues: write
   statuses: write
 
-# Cancels an in-flight scan for the same PR as soon as a new commit arrives.
+# Cancels an in-flight scan when another is requested for the same ref.
 concurrency:
-  group: react-doctor-${{ github.event.pull_request.number || github.ref }}
+  group: react-doctor-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # fetch-depth: 0 gives React Doctor the full git history it needs to find the merge base with the target branch. Without it a shallow checkout has no merge base, so PR runs can't compare against the base and fall back to reporting every issue in the changed files (pre-existing ones included) instead of only the ones the PR introduced.
+      # Keep full history available for React Doctor's change comparison.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
