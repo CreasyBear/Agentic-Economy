@@ -1,0 +1,19 @@
+/* Arc settings-page fields and filter-toolbar surface geometry for the existing
+ * object-kind/reference search. The caller's parsed kind, query and message
+ * retain their meaning; this composition owns no search or permission state.
+ * settings-page CSS e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc;
+ * filter-toolbar CSS e6d408a3d31a1b32eafa21482c7b0575567b0b425a62fb92842d3ac7b6d1751e. */
+.arc-object-search { display: grid; min-width: 0; max-width: 720px; gap: var(--space-5); }
+.arc-object-search-fields { display: grid; min-width: 0; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: var(--space-4); }
+.arc-object-search-field { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-object-search-field > label { font-size: var(--text-sm); font-weight: 500; }
+.arc-object-search-input, .arc-object-search-select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-3); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-sm); }
+.arc-object-search-input[aria-invalid="true"] { border-color: var(--danger); }
+.arc-object-search-input:focus-visible, .arc-object-search-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.arc-object-search-input::placeholder { color: var(--text-secondary); }
+.arc-object-search-action { justify-self: start; }
+.arc-object-search-message { min-width: 0; margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-object-search-message[role="alert"] { color: var(--danger); }
+.arc-market.arc-object-search-options { border-color: var(--border); border-radius: var(--radius-panel); padding: 6px; background: var(--surface-raised); color: var(--foreground); box-shadow: var(--shadow-floating); }
+.arc-object-search-option { min-height: 44px; padding: var(--space-3); font-size: var(--text-sm); }
+@media (max-width: 599px) { .arc-object-search-fields { grid-template-columns: minmax(0, 1fr); } }

@@ -1,36 +1,49 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
-import { Separator } from '@/components/ui/separator'
 import type {
   SettingsDangerZoneProps, SettingsEmptyStateProps, SettingsGroupProps,
   SettingsPageProps, SettingsRowProps,
 } from '../settings-section.contracts'
+import '../SettingsComposition.css'
 
 export function SettingsPage({ title, description, action, children, headingRef }: SettingsPageProps) {
-  return <div className="grid min-w-0 gap-8">
-    <header className="flex min-w-0 flex-wrap items-start justify-between gap-4">
-      <div className="grid min-w-0 gap-1"><h2 ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1} className="text-2xl font-semibold tracking-tight text-foreground focus:outline-none">{title}</h2><p className="text-sm text-muted-foreground">{description}</p></div>
-      {action}
+  return <div className="arc-market ae-settings-page">
+    <header className="ae-settings-page-header">
+      <div className="ae-settings-page-heading"><h2 ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1}>{title}</h2><p>{description}</p></div>
+      {action && <div className="ae-settings-page-action">{action}</div>}
     </header>
     {children}
   </div>
 }
 
 export function SettingsGroup({ title, description, children }: SettingsGroupProps) {
-  return <Card><CardHeader><CardTitle><h3>{title}</h3></CardTitle>{description && <CardDescription>{description}</CardDescription>}</CardHeader><CardContent className="grid min-w-0"><Separator />{children}</CardContent></Card>
+  return <section className="arc-market ae-settings-group">
+    <header className="ae-settings-group-header">
+      <h3>{title}</h3>
+      {description && <p>{description}</p>}
+    </header>
+    <div className="ae-settings-group-rows">{children}</div>
+  </section>
 }
 
 export function SettingsRow({ label, description, children }: SettingsRowProps) {
-  return <div className="flex min-w-0 flex-col gap-3 border-b border-border py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-    <div className="min-w-0"><h4 className="text-sm font-medium text-foreground">{label}</h4>{description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}</div>
-    <div className="min-w-0 shrink-0 text-sm text-foreground sm:text-right">{children}</div>
+  return <div className="arc-market ae-settings-row">
+    <div className="ae-settings-row-copy"><h4>{label}</h4>{description && <p>{description}</p>}</div>
+    <div className="ae-settings-row-action">{children}</div>
   </div>
 }
 
 export function SettingsEmptyState({ title, description, action }: SettingsEmptyStateProps) {
-  return <Empty><EmptyHeader><EmptyTitle><h3>{title}</h3></EmptyTitle><EmptyDescription>{description}</EmptyDescription></EmptyHeader>{action && <EmptyContent>{action}</EmptyContent>}</Empty>
+  return <div className="arc-market ae-settings-empty-state">
+    <div className="ae-settings-empty-copy"><h3>{title}</h3><p>{description}</p></div>
+    {action && <div className="ae-settings-empty-action">{action}</div>}
+  </div>
 }
 
 export function SettingsDangerZone({ children, description }: SettingsDangerZoneProps) {
-  return <Card className="border-destructive/50"><CardHeader><CardTitle className="text-destructive"><h3>Danger zone</h3></CardTitle>{description && <CardDescription>{description}</CardDescription>}</CardHeader><CardContent>{children}</CardContent></Card>
+  return <section className="arc-market ae-settings-danger-zone">
+    <header className="ae-settings-danger-header">
+      <h3>Danger zone</h3>
+      {description && <p>{description}</p>}
+    </header>
+    <div className="ae-settings-danger-rows">{children}</div>
+  </section>
 }

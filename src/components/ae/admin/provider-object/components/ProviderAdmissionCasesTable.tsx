@@ -1,6 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
@@ -36,7 +37,7 @@ const columns: ColumnDef<ProviderAdmissionCaseRow, unknown>[] = [
 
 export function ProviderAdmissionCasesTable({ rows }: ProviderAdmissionCasesTableProps) {
   return (
-    <AeSection title={PROVIDER_OBJECT_COPY.admissionCasesTitle}>
+    <AeSection className="arc-market arc-admin-record-table-region" title={PROVIDER_OBJECT_COPY.admissionCasesTitle}>
       <AeRecordTable
         columns={columns}
         data={rows}

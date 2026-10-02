@@ -1,21 +1,22 @@
 import { Link } from '@tanstack/react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 import type { ConsentOutcomeViewProps } from '../authorize-form.contracts'
+import './ConsentEvidenceComposition.css'
 
 function ConnectionProblemAlert({ code, technicalReference }: Readonly<{ code: string; technicalReference?: string }>) {
   const presentation = presentConnectionProblem({ code, ...(technicalReference === undefined ? {} : { instance: technicalReference }) })
   return (
-    <Alert variant="destructive">
+    <Alert variant="destructive" className="arc-market arc-consent-outcome">
       <AlertTitle id="consent-outcome-heading" tabIndex={-1}>{presentation.heading}</AlertTitle>
-      <AlertDescription className="grid gap-2">
+      <AlertDescription className="arc-consent-outcome-body">
         <p>{presentation.outcome}</p>
         <p>{presentation.nextAction}</p>
         {presentation.technicalReference === undefined ? null : (
-          <p className="font-mono text-xs">Reference: {presentation.technicalReference}</p>
+          <p className="font-mono">Reference: {presentation.technicalReference}</p>
         )}
       </AlertDescription>
     </Alert>
@@ -32,9 +33,9 @@ export function ConsentOutcomeView({
 }: ConsentOutcomeViewProps) {
   if (phase === 'approved') {
     return (
-      <Alert>
+      <Alert className="arc-market arc-consent-outcome">
         <AlertTitle id="consent-outcome-heading" tabIndex={-1}>Connected to {clientName}</AlertTitle>
-        <AlertDescription>Return there to continue. This connection remains signed in until it expires or you disconnect it.</AlertDescription>
+        <AlertDescription className="arc-consent-outcome-body">Return there to continue. This connection remains signed in until it expires or you disconnect it.</AlertDescription>
       </Alert>
     )
   }
@@ -43,14 +44,14 @@ export function ConsentOutcomeView({
   }
   if (phase === 'outcome_unknown') {
     return (
-      <div className="grid gap-3">
+      <div className="arc-market arc-consent-outcome-group">
         <ConnectionProblemAlert code="outcome_unknown" technicalReference={grantRef} />
         <Link
           id="consent-outcome-recovery"
           to="/agent-access/authorize"
           search={authorizeRecoverySearch}
           reloadDocument
-          className={buttonVariants({ variant: 'secondary' })}
+          className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-consent-outcome-recovery`}
         >
           Check approval status
         </Link>

@@ -1,11 +1,12 @@
 import { Link } from '@tanstack/react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
+import '../CorrectionComposition.css'
 
 import { removalReasonOptions, removalRequestCopy, type RemovalRequestFormProps } from '../remove-business.contracts'
 
@@ -37,13 +38,13 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
   const selectedReasonLabel = removalReasonOptions.find((option) => option.value === value.reasonCode)?.label
 
   return (
-    <form onSubmit={onSubmit} className="grid w-full gap-section" noValidate>
+    <form onSubmit={onSubmit} className="arc-market arc-correction-form" noValidate>
       {error !== undefined && !contactInvalid && !evidenceInvalid ? (
         <Alert variant="destructive">
           <AlertTitle>Request needs attention</AlertTitle>
           <AlertDescription>
             {error}
-            {outcomeUnknown ? <> <Link to="/support" className="underline underline-offset-4">Open support</Link> with the Provider slug and your contact email.</> : null}
+            {outcomeUnknown ? <> <Link to="/support" className="arc-correction-support-link underline underline-offset-4">Open support</Link> with the Provider slug and your contact email.</> : null}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -56,8 +57,8 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
           </AlertDescription>
         </Alert>
       )}
-      <FieldGroup>
-        <Field>
+      <FieldGroup className="arc-correction-fields">
+        <Field className="arc-correction-field">
           <FieldLabel htmlFor="slug">Provider slug</FieldLabel>
           <Input
             id="slug"
@@ -65,14 +66,14 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             value={value.slug}
             disabled={pending}
             aria-describedby={slugDescriptionId}
-            className="min-h-touch"
+            className="arc-correction-input"
             onChange={(event) => {
               onSlugChange(event.currentTarget.value)
             }}
           />
           <FieldDescription id={slugDescriptionId}>Shown in the Provider profile URL.</FieldDescription>
         </Field>
-        <Field {...(contactInvalid ? { 'data-invalid': true } : {})}>
+        <Field className="arc-correction-field" {...(contactInvalid ? { 'data-invalid': true } : {})}>
           <FieldLabel htmlFor="contactEmail">Your email</FieldLabel>
           <Input
             id="contactEmail"
@@ -84,7 +85,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             ref={contactEmailRef}
             value={value.contactEmail}
             disabled={pending}
-            className="min-h-touch"
+            className="arc-correction-input"
             onChange={(event) => {
               onContactEmailChange(event.currentTarget.value)
             }}
@@ -94,7 +95,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             <FieldError id={contactErrorId}>{error ?? ''}</FieldError>
           ) : null}
         </Field>
-        <Field>
+        <Field className="arc-correction-field">
           <FieldLabel htmlFor="reasonCode">Reason</FieldLabel>
           <input type="hidden" name="reasonCode" value={value.reasonCode} />
           <Select
@@ -106,10 +107,10 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
               }
             }}
           >
-            <SelectTrigger id="reasonCode" className="min-h-touch w-full">
+            <SelectTrigger id="reasonCode" className="arc-correction-input">
               <SelectValue placeholder="Choose one">{selectedReasonLabel}</SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="arc-market arc-correction-popup">
               <SelectGroup>
                 {removalReasonOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
@@ -118,7 +119,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             </SelectContent>
           </Select>
         </Field>
-        <Field {...(evidenceInvalid ? { 'data-invalid': true } : {})}>
+        <Field className="arc-correction-field" {...(evidenceInvalid ? { 'data-invalid': true } : {})}>
           <FieldLabel htmlFor="evidenceSummary">What should change?</FieldLabel>
           <Textarea
             id="evidenceSummary"
@@ -128,7 +129,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             ref={evidenceSummaryRef}
             value={value.evidenceSummary}
             disabled={pending}
-            className="min-h-28 resize-y"
+            className="arc-correction-textarea"
             onChange={(event) => {
               onEvidenceSummaryChange(event.currentTarget.value)
             }}
@@ -139,7 +140,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
           ) : null}
         </Field>
       </FieldGroup>
-      <Button type="submit" disabled={pending || outcomeUnknown} className="min-h-touch justify-self-start">
+      <Button type="submit" variant="primary" size="md" disabled={pending || outcomeUnknown} className="arc-correction-submit">
         {pending ? <Spinner /> : null}
         {outcomeUnknown ? 'Outcome not confirmed' : removalRequestCopy.submit}
       </Button>

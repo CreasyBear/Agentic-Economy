@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import {
   AECON_DARK_MARK_SRC,
   AECON_MARKETING_URL,
@@ -11,7 +10,7 @@ import {
 import { FOOTER } from '@/content/brand-copy'
 
 import { AE_SITE_FOOTER, FOOTER_NAVIGATION } from './AeSiteFooter.contracts'
-import { AeSiteHeading } from './AeSiteType'
+import './FooterComposition.css'
 
 export type AeSiteFooterProps = Readonly<{
   hideCloser?: boolean
@@ -19,158 +18,98 @@ export type AeSiteFooterProps = Readonly<{
 
 export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
   return (
-    <footer className="relative isolate mt-auto overflow-hidden border-t border-border bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden opacity-15 mix-blend-luminosity dark:opacity-25">
-        <img
-          src={AE_SITE_FOOTER.images.atmosphere.src}
-          srcSet={AE_SITE_FOOTER.images.atmosphere.srcSet}
-          sizes="100vw"
-          alt=""
-          loading="lazy"
-          className="size-full object-cover object-bottom"
-        />
-        <div className="absolute inset-0 bg-linear-to-t from-background via-background/90 to-background/60" />
-      </div>
-
-      <div className="ae-rail pt-6 pb-8 md:pt-16 md:pb-16">
+    <footer className="arc-market arc-site-footer">
+      <div className="ae-rail arc-site-footer-inner">
         {hideCloser ? null : (
-          <div className="relative mb-12 overflow-hidden rounded-3xl border border-white/15 shadow-overlay ring-1 ring-white/10 md:mb-16">
-            <img
-              src={AE_SITE_FOOTER.images.closer.src}
-              srcSet={AE_SITE_FOOTER.images.closer.srcSet}
-              sizes="(max-width: 1280px) 100vw, 1280px"
-              alt=""
-              loading="lazy"
-              className="absolute inset-0 size-full object-cover object-center brightness-[0.82] contrast-[1.05]"
-            />
-            <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/40 to-black/20" />
-            <div className="relative z-10 flex min-h-[320px] flex-col items-center justify-center p-8 text-center md:min-h-[380px] md:p-14">
-              <span className="mb-3 inline-block rounded-full border border-white/20 bg-[var(--ae-overlay-scrim)] px-3.5 py-1 text-xs font-medium tracking-widest text-white/90 uppercase backdrop-blur-md">
-                {AE_SITE_FOOTER.closer.eyebrow}
-              </span>
-              <AeSiteHeading as="h2" size="md" className="max-w-2xl text-white">
-                {AE_SITE_FOOTER.closer.heading}
-              </AeSiteHeading>
-              <p className="mt-4 max-w-xl text-balance text-base text-white/80 drop-shadow-xs md:text-lg">
-                {AE_SITE_FOOTER.closer.description}
-              </p>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <section className="arc-site-footer-closer" aria-labelledby="footer-closer-title">
+            <div className="arc-site-footer-closer-copy">
+              <h2 id="footer-closer-title">{AE_SITE_FOOTER.closer.heading}</h2>
+              <p>{AE_SITE_FOOTER.closer.description}</p>
+              <div className="arc-site-footer-closer-actions">
                 <Link
                   to="/market"
-                  className={buttonVariants({
-                    size: 'lg',
-                    className: 'rounded-full bg-white px-6 font-semibold text-zinc-950 shadow-float-dark hover:bg-zinc-100 hover:text-black',
-                  })}
+                  className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}
                 >
                   {AE_SITE_FOOTER.closer.primaryAction}
                 </Link>
                 <Link
                   to="/status"
-                  className={buttonVariants({
-                    variant: 'outline',
-                    size: 'lg',
-                    className: 'rounded-full border-background/40 bg-foreground px-6 text-background hover:bg-foreground/90',
-                  })}
+                  className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
                 >
                   {AE_SITE_FOOTER.closer.secondaryAction}
                 </Link>
               </div>
             </div>
-          </div>
+            <div className="arc-site-footer-closer-stage">
+              <img
+                src={AE_SITE_FOOTER.images.closer.src}
+                srcSet={AE_SITE_FOOTER.images.closer.srcSet}
+                sizes="(max-width: 860px) 100vw, 50vw"
+                loading="lazy"
+                alt=""
+                className="arc-site-footer-closer-image"
+              />
+            </div>
+          </section>
         )}
 
-        <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4 lg:grid-cols-6">
-          <div className="col-span-full grid gap-4 lg:col-span-2">
+        <div className="arc-site-footer-top">
+          <div className="arc-site-footer-brand-column">
             <a
               href={AECON_MARKETING_URL}
               aria-label="About AECON"
-              className="inline-flex min-h-touch items-center gap-2 rounded-sm text-sm font-semibold transition-opacity duration-fast hover:opacity-90 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="arc-site-footer-brand-link"
             >
               <img
                 src={AECON_MARK_SRC}
                 alt=""
                 aria-hidden="true"
-                className={`${aeconMarkClassName.light} dark:hidden`}
+                className={`arc-site-footer-brand-mark-light ${aeconMarkClassName.light}`}
               />
               <img
                 src={AECON_DARK_MARK_SRC}
                 alt=""
                 aria-hidden="true"
-                className={`${aeconMarkClassName.dark} hidden dark:block`}
+                className={`arc-site-footer-brand-mark-dark ${aeconMarkClassName.dark}`}
               />
               AECON
             </a>
-            <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">{FOOTER.tagline}</p>
+            <p className="arc-site-footer-tagline">{FOOTER.tagline}</p>
           </div>
 
-          <Accordion className="col-span-full md:hidden" type="multiple">
+          <nav aria-label="Footer" className="arc-site-footer-columns">
             {FOOTER_NAVIGATION.map((column) => (
-              <AccordionItem key={column.id} value={column.id}>
-                <AccordionTrigger className="min-h-touch hover:no-underline">
-                  {column.title} links
-                </AccordionTrigger>
-                <AccordionContent>
-                  <ul className="flex flex-col gap-1">
-                    {column.links.map((link) => (
-                      <li key={link.to}>
-                        <Link
-                          to={link.to}
-                          {...(link.reloadDocument ? { reloadDocument: true } : {})}
-                          className="block min-h-touch py-2.5 text-muted-foreground transition-colors duration-fast hover:text-foreground"
-                        >
-                          {link.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </AccordionContent>
-              </AccordionItem>
+              <section key={column.id} className="arc-site-footer-column" aria-labelledby={column.id}>
+                <h2 id={column.id}>{column.title}</h2>
+                <ul>
+                  {column.links.map((link) => (
+                    <li key={link.to}>
+                      <Link
+                        to={link.to}
+                        reloadDocument={link.reloadDocument}
+                        className="arc-site-footer-link"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </Accordion>
-
-          {FOOTER_NAVIGATION.map((column) => (
-            <section key={column.id} className="hidden md:block" aria-labelledby={column.id}>
-              <h2 id={column.id} className="text-xs font-semibold tracking-wider text-foreground uppercase">
-                {column.title}
-              </h2>
-              <ul className="mt-4 grid list-inside gap-3">
-                {column.links.map((link) => (
-                  <li key={link.to}>
-                    <Link
-                      to={link.to}
-                      {...(link.reloadDocument ? { reloadDocument: true } : {})}
-                      className="text-sm text-muted-foreground transition-colors duration-fast hover:text-foreground"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+          </nav>
         </div>
 
-        <div className="mt-8 flex flex-col items-start justify-between gap-4 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center md:mt-12 md:pt-8">
-          <div>
-            <p>{FOOTER.tagline}</p>
-            <nav aria-label="Follow Agentic Economy" className="mt-1 flex flex-wrap gap-x-5 gap-y-2">
-              {AE_SITE_FOOTER.socialLinks.map((profile) => (
-                <a
-                  key={profile.href}
-                  href={profile.href}
-                  className="min-h-touch text-muted-foreground underline underline-offset-4 transition-colors duration-fast hover:text-foreground"
-                >
-                  {profile.label}
-                </a>
-              ))}
-            </nav>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-muted-foreground sm:justify-end">
+        <div className="arc-site-footer-bottom">
+          <nav aria-label="Follow Agentic Economy" className="arc-site-footer-social-links">
+            {AE_SITE_FOOTER.socialLinks.map((profile) => (
+              <a key={profile.href} href={profile.href} className="arc-site-footer-link">
+                {profile.label}
+              </a>
+            ))}
+          </nav>
+          <div className="arc-site-footer-legal">
             <p>{FOOTER.copyright(new Date().getFullYear())}</p>
-            <a
-              href={AE_SITE_FOOTER.abn.href}
-              className="min-h-touch text-muted-foreground underline underline-offset-4 transition-colors duration-fast hover:text-foreground"
-            >
+            <a href={AE_SITE_FOOTER.abn.href} className="arc-site-footer-link">
               {AE_SITE_FOOTER.abn.label}
             </a>
           </div>

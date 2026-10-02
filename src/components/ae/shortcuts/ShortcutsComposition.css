@@ -1,0 +1,17 @@
+/* Actual Arc command-palette grouped rows, keys and compact modal frame.
+ * CSS SHA-256 f06e18253cecdb3797415629700b9c6c0fc0c0d4efc5504386be8ef44a47bcf8.
+ * Existing Base UI focus/dismiss and global editable-target guards remain. */
+.arc-market.arc-shortcuts { width: min(480px, calc(100vw - 32px)); max-width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-6); background: var(--surface-raised); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.5; }
+.arc-market .arc-shortcuts-header { min-width: 0; gap: var(--space-2); padding-right: var(--space-12); text-align: left; }
+.arc-market.arc-shortcuts [data-slot='dialog-title'] { font-size: 20px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.arc-market.arc-shortcuts [data-slot='dialog-description'] { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.arc-market .arc-shortcuts-close { position: absolute; top: 16px; right: 16px; width: 44px; min-width: 44px; padding-inline: 0; }
+.arc-market .arc-shortcuts-close svg { width: 20px; height: 20px; }
+.arc-market .arc-shortcuts-body { display: grid; min-width: 0; gap: var(--space-6); }
+.arc-market .arc-shortcut-category { display: grid; min-width: 0; gap: var(--space-3); }
+.arc-market .arc-shortcut-category > h3 { margin: 0; font-size: var(--text-sm); font-weight: 500; line-height: 1.5; }
+.arc-market .arc-shortcut-rows { display: grid; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.arc-market .arc-shortcut-rows > li { display: grid; min-width: 0; min-height: 44px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); border-bottom: 1px solid var(--border); padding-block: 10px; }
+.arc-market .arc-shortcut-rows > li:last-child { border-bottom: 0; }
+.arc-market .arc-shortcut-rows > li > span { color: var(--text-secondary); overflow-wrap: anywhere; }
+.arc-market .arc-shortcut-key { border: 1px solid var(--border); border-radius: 6px; padding: var(--space-1) var(--space-2); background: var(--surface-muted); color: var(--foreground); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.3; }

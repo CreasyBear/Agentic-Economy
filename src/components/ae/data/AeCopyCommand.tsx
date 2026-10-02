@@ -1,9 +1,13 @@
-import { CheckIcon, CopyIcon } from 'lucide-react'
+/* Arc code-block frame/header/selectable source, using the existing clipboard
+ * controller. Displayed code may be redacted; clipboard content is resolved
+ * only on activation. Never retain an outgoing secret for a code animation. */
+import { CheckIcon, CopyIcon, FileCode2Icon } from 'lucide-react'
 import { useCallback } from 'react'
 
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { cn } from '@/lib/utils'
+import './CopyCommandComposition.css'
 
 type AeCopyCommandProps = Readonly<{
   label: string
@@ -47,24 +51,15 @@ export function AeCopyCommand({
       : ''
 
   return (
-    <div className={cn('grid min-w-0 gap-1.5', className)}>
-      <div className={cn('flex min-w-0 items-start gap-2 rounded-md border border-border bg-muted/40 dark:bg-muted/25', compact ? 'p-2' : comfortable ? 'p-related' : 'p-3')}>
-        {comfortable && prompt ? (
-          <span className="mt-0.5 font-mono text-sm text-muted-foreground" aria-hidden="true">
-            $
-          </span>
-        ) : null}
-        <code className={cn('min-w-0 flex-1 whitespace-pre-wrap break-words font-mono leading-5 text-foreground', compact ? 'text-[11px]' : comfortable ? 'text-sm leading-6' : 'text-xs')}>
-          {code}
-        </code>
+    <div className={cn('arc-market arc-copy-command', className)}>
+      <section className="arc-copy-command-block" aria-label={label} data-compact={compact || undefined} data-comfortable={comfortable || undefined}>
+        <header className="arc-copy-command-header">
+          <span className="arc-copy-command-file"><FileCode2Icon size={16} aria-hidden="true" />{label}</span>
         <Button
           type="button"
           variant="ghost"
-          size={comfortable ? 'icon' : 'icon-sm'}
-          className={cn(
-            'relative shrink-0 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100',
-            comfortable && 'min-h-touch min-w-touch',
-          )}
+          size="md"
+          className="arc-copy-command-action"
           aria-label={copied ? `${label} copied` : `Copy ${label}`}
           onClick={() => { void copy() }}
         >
@@ -85,7 +80,12 @@ export function AeCopyCommand({
             />
           </span>
         </Button>
-      </div>
+        </header>
+        <div className="arc-copy-command-viewport" data-prompt={comfortable && prompt || undefined}>
+          {comfortable && prompt ? <span className="arc-copy-command-prompt" aria-hidden="true">$</span> : null}
+          <pre className="arc-copy-command-source" tabIndex={0} aria-label={`Selectable ${label}`}><code>{code}</code></pre>
+        </div>
+      </section>
       <p role="status" aria-live="polite" className={cn('min-h-4 text-xs', status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}>
         {copiedMessage}
       </p>

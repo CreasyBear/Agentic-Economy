@@ -5,9 +5,8 @@ import {
   fundingReturnCopy,
   type FundingReturnPageState,
 } from '@/components/ae/funding/funding-return.contracts'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { formatDisplayAmount } from '@/modules/money/public'
 import type { FundingReturnViewState } from '@/modules/money/funding-return.view-model'
 
@@ -17,13 +16,13 @@ export type AeFundingReturnStateProps = Readonly<{
 }>
 
 const OPEN_CREDIT_ACTION = (
-  <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
+  <Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
     {fundingReturnCopy.openCreditAction}
   </Link>
 )
 
 const OPEN_AGENTS_ACTION = (
-  <Link to="/agent-access" className={cn(buttonVariants(), 'min-h-touch')}>
+  <Link to="/agent-access" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
     {fundingReturnCopy.openAgentsAction}
   </Link>
 )
@@ -46,7 +45,7 @@ function deriveFundingReturnPageState(
       title: 'Funding status unavailable',
       description: 'We could not confirm this payment. Do not start another payment; try checking this same payment again.',
       action: (
-        <Button type="button" className="min-h-touch" onClick={() => { void onCheck() }}>
+        <Button type="button" size="md" labelLayout="wrap" onClick={() => { void onCheck() }}>
           Try again
         </Button>
       ),
@@ -67,8 +66,10 @@ function deriveFundingReturnPageState(
   const checkAction = (
     <Button
       type="button"
-      className="min-h-touch"
+      size="md"
+      labelLayout="wrap"
       disabled={refresh === 'checking'}
+      loading={refresh === 'checking'}
       onClick={() => { void onCheck() }}
     >
       {refresh === 'checking' ? 'Checking this payment…' : refreshFailed ? 'Try again' : 'Check this payment'}

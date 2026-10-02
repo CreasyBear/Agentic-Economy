@@ -1,11 +1,11 @@
 import { Link } from '@tanstack/react-router'
+import { useId, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import type { AeSiteUtilityDocumentProps } from './utility-document.contracts'
 import { utilityDocumentNavigation } from './utility-document.contracts'
-
-import { AeSiteHeading } from './AeSiteType'
+import './UtilityDocumentComposition.css'
 
 export function AeSiteUtilityDocument({
   title,
@@ -17,77 +17,84 @@ export function AeSiteUtilityDocument({
   footer,
   className,
 }: AeSiteUtilityDocumentProps) {
+  const outlineId = useId()
+  const [outlineOpen, setOutlineOpen] = useState(false)
   return (
-    <div className={cn('mx-auto grid max-w-6xl gap-8 px-6 py-12 md:py-20 lg:grid-cols-[minmax(0,1fr)_180px] lg:gap-12', className)}>
-      <article className="flex min-w-0 w-full max-w-[900px] flex-col gap-8 pb-8">
-        <header className="border-b border-border pb-8">
-          <p className="mb-3 text-sm text-muted-foreground">
+    <div className={cn('arc-market arc-utility-document', className)}>
+      <article className="arc-document-article">
+        <header className="arc-document-header">
+          <h1>{title}</h1>
+          <p className="arc-document-metadata">
             Legal · Last updated {lastUpdated}{version === undefined ? '' : ` · Version ${version}`}
           </p>
-          <AeSiteHeading as="h1" size="lg" className="text-foreground">
-            {title}
-          </AeSiteHeading>
           {description === undefined ? null : (
-            <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-              {description}
-            </p>
+            <p className="arc-document-description">{description}</p>
           )}
         </header>
 
-        <nav aria-label="On this page" className="border-b border-border pb-8">
-          <p className="mb-4 text-sm font-medium text-foreground">On this page</p>
-          <ol className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-            {sections.map(({ id, heading }, index) => (
-              <li key={id}>
-                <a
-                  href={`#${id}`}
-                  className="leading-relaxed text-primary underline underline-offset-4 visited:text-muted-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  <span className="mr-2 text-muted-foreground">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  {heading}
-                </a>
-              </li>
+        <div className="arc-document-reading">
+          <nav className="arc-document-outline" aria-label="On this page">
+            <button
+              type="button"
+              className="arc-document-outline-toggle"
+              aria-expanded={outlineOpen}
+              aria-controls={outlineId}
+              onClick={() => setOutlineOpen((open) => !open)}
+            >
+              On this page
+            </button>
+            <p className="arc-document-outline-title" aria-hidden="true">On this page</p>
+            <div id={outlineId} className="arc-document-outline-panel" data-open={outlineOpen}>
+              <ol>
+                {sections.map(({ id, heading }, index) => (
+                  <li key={id}>
+                    <a href={`#${id}`} onClick={() => setOutlineOpen(false)}>
+                      <span className="arc-document-outline-number">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      <span>{heading}</span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </nav>
+
+          <div className="arc-document-content">
+            {intro === undefined ? null : <div className="arc-document-intro">{intro}</div>}
+
+            {sections.map(({ id, heading, body }, index) => (
+              <section key={id} aria-labelledby={id} className="arc-document-section">
+                <h2 id={id} tabIndex={-1}>
+                  {index + 1}. {heading}
+                </h2>
+                {body.map((paragraph, paragraphIndex) => (
+                  <p key={typeof paragraph === 'string' ? paragraph : paragraphIndex}>
+                    {paragraph}
+                  </p>
+                ))}
+              </section>
             ))}
-          </ol>
-        </nav>
 
-        {intro === undefined ? null : <div className="max-w-[70ch] text-base leading-7 text-foreground">{intro}</div>}
-
-        <div className="grid max-w-[70ch] gap-10 text-base leading-7 text-foreground">
-          {sections.map(({ id, heading, body }, index) => (
-            <section key={id} aria-labelledby={id} className="grid scroll-mt-anchor gap-4">
-              <h2 id={id} tabIndex={-1} className="text-2xl font-medium tracking-tight text-foreground outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                {index + 1}. {heading}
-              </h2>
-              {body.map((paragraph, paragraphIndex) => (
-                <p key={typeof paragraph === 'string' ? paragraph : paragraphIndex}>{paragraph}</p>
-              ))}
-            </section>
-          ))}
-        </div>
-
-        {footer === undefined ? null : (
-          <div className="max-w-[70ch] border-t border-border pt-5 text-sm leading-6 text-muted-foreground">
-            {footer}
+            {footer === undefined ? null : (
+              <div className="arc-document-footer">{footer}</div>
+            )}
           </div>
-        )}
+        </div>
       </article>
-      <nav aria-label="Company and website" className="h-fit">
-        <p className="mb-3 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Agentic Economy
-        </p>
-        <div className="flex flex-wrap gap-1 rounded-xl border border-border p-1.5 lg:flex-col">
+
+      <nav className="arc-document-company" aria-label="Company and website">
+        <p>Agentic Economy</p>
+        <div>
           {utilityDocumentNavigation.map(({ to, label }) => (
             <Link
               key={to}
               to={to}
               activeProps={{
                 'aria-current': 'page',
-                className: 'bg-muted font-medium text-foreground',
+                className: 'arc-document-company-current',
               }}
-              className="min-h-touch rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="arc-document-company-link"
             >
               {label}
             </Link>

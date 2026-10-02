@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
 import { timestampIso } from '@/lib/ui/format-time'
 import type { AdminQuoteView } from '@/lib/operator/admin-console/views'
+import '../../RecordWorkspaceComposition.css'
 import { ADMIN_OBJECT_PAGE_COPY, formatPerthTimestamp } from '../object-pages.contracts'
 
 export type QuoteObjectViewProps = Readonly<{ view: AdminQuoteView }>
@@ -30,11 +31,11 @@ export function QuoteObjectView({ view }: QuoteObjectViewProps) {
       actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
       stickyHeader
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
+      <div className="arc-market arc-admin-object-reference">
         <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
         <AeCopyReference label={ADMIN_OBJECT_PAGE_COPY.referenceLabel} value={view.ref} />
       </div>
-      <div className="grid gap-section pb-page lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="arc-market arc-admin-object-layout">
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.detailsTitle}>
           <AeFactList facts={[
             { label: copy.state, value: status.label },
@@ -58,30 +59,30 @@ export function QuoteObjectView({ view }: QuoteObjectViewProps) {
         </AeSection>
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.relatedTitle}>
           {!hasRelated ? (
-            <p className="text-sm text-muted-foreground">{ADMIN_OBJECT_PAGE_COPY.noRelatedReferences}</p>
+            <p className="arc-admin-record-context">{ADMIN_OBJECT_PAGE_COPY.noRelatedReferences}</p>
           ) : (
-            <div className="grid gap-related">
+            <div className="arc-admin-object-related-list">
               {view.toolRef === null ? null : (
-                <div className="grid gap-intra">
-                  <a className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:underline" href={`/admin/tools/${view.toolRef}`}>{copy.tool}</a>
+                <div className="arc-admin-object-related-row">
+                  <a className="arc-admin-record-link" href={`/admin/tools/${view.toolRef}`}>{copy.tool}</a>
                   <AeCopyReference label={copy.tool} value={view.toolRef} />
                 </div>
               )}
               {view.workspaceRef === null ? null : (
-                <div className="grid gap-intra">
-                  <a className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:underline" href={`/admin/workspaces/${view.workspaceRef}`}>{copy.workspace}</a>
+                <div className="arc-admin-object-related-row">
+                  <a className="arc-admin-record-link" href={`/admin/workspaces/${view.workspaceRef}`}>{copy.workspace}</a>
                   <AeCopyReference label={copy.workspace} value={view.workspaceRef} />
                 </div>
               )}
               {view.agentRef === null ? null : (
-                <div className="grid gap-intra">
-                  <a className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:underline" href={`/admin/agents/${view.agentRef}`}>{copy.agent}</a>
+                <div className="arc-admin-object-related-row">
+                  <a className="arc-admin-record-link" href={`/admin/agents/${view.agentRef}`}>{copy.agent}</a>
                   <AeCopyReference label={copy.agent} value={view.agentRef} />
                 </div>
               )}
               {view.consumedCallRef === null ? null : (
-                <div className="grid gap-intra">
-                  <a className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:underline" href={`/admin/calls/${view.consumedCallRef}`}>{copy.consumedCall}</a>
+                <div className="arc-admin-object-related-row">
+                  <a className="arc-admin-record-link" href={`/admin/calls/${view.consumedCallRef}`}>{copy.consumedCall}</a>
                   <AeCopyReference label={copy.consumedCall} value={view.consumedCallRef} />
                 </div>
               )}

@@ -1,8 +1,10 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 
+import { Button } from '@/components/arc/button/button'
 import { cn } from '@/lib/utils'
 
-import { AeSiteBody, AeSiteEyebrow, AeSiteHeading, type AeSiteHeadingLevel } from './AeSiteType'
+import type { AeSiteHeadingLevel } from './AeSiteType'
+import './AuthComposition.css'
 
 const desktopAutofocusInputSelector =
   'input:not([type=hidden]):not([type=checkbox]):not([disabled])'
@@ -46,6 +48,7 @@ export function AeSiteAuthPanel({
   footer,
 }: AeSiteAuthPanelProps) {
   const clerkWellRef = useRef<HTMLDivElement>(null)
+  const Title = titleAs
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -80,24 +83,22 @@ export function AeSiteAuthPanel({
   }, [])
 
   return (
-    <div data-slot="ae-site-auth-panel" className="grid gap-section bg-container px-5 py-6 sm:px-6">
-      <div className="grid gap-related">
-        <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>
-        <AeSiteHeading as={titleAs} size="md" id={titleId}>
+    <div data-slot="ae-site-auth-panel" className="arc-market arc-auth-panel">
+      <header className="arc-auth-intro">
+        <p className="arc-auth-eyebrow">{eyebrow}</p>
+        <Title className="arc-auth-title" id={titleId}>
           {title}
-        </AeSiteHeading>
-        <AeSiteBody muted size="sm">
-          {body}
-        </AeSiteBody>
-      </div>
+        </Title>
+        <p className="arc-auth-description">{body}</p>
+      </header>
       <div
         ref={clerkWellRef}
         data-slot="ae-site-auth-clerk-well"
-        className="min-h-96 w-full overflow-visible"
+        className="arc-auth-clerk-well min-h-96 w-full overflow-visible"
       >
         {children}
       </div>
-      {footer === undefined ? null : <div className="text-sm text-muted-foreground">{footer}</div>}
+      {footer === undefined ? null : <footer className="arc-auth-footer">{footer}</footer>}
     </div>
   )
 }
@@ -109,30 +110,16 @@ export function AeSiteAuthSubmit({
   type = 'button',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  const submitClasses = cn(
-    'inline-flex min-h-touch w-full items-center justify-center bg-foreground px-4 text-sm font-medium text-background shadow-none hover:bg-foreground/90 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60',
-    className,
-  )
-
-  if (type === 'submit') {
-    return (
-      <button {...props} type="submit" className={submitClasses}>
-        {children}
-      </button>
-    )
-  }
-
-  if (type === 'reset') {
-    return (
-      <button {...props} type="reset" className={submitClasses}>
-        {children}
-      </button>
-    )
-  }
-
+  const buttonType = type === 'submit' || type === 'reset' ? type : 'button'
   return (
-    <button {...props} type="button" className={submitClasses}>
+    <Button
+      {...props}
+      type={buttonType}
+      variant="primary"
+      size="md"
+      className={cn('min-h-touch w-full', className)}
+    >
       {children}
-    </button>
+    </Button>
   )
 }

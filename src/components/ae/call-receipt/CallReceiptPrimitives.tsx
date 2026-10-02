@@ -3,14 +3,11 @@ import type { ReactNode } from 'react'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
+import './ReceiptComposition.css'
 
 import type { CallIssueView } from '@/modules/capability-execution/call-receipt-view'
 import type { CallStatusPageActions } from '@/lib/call-recovery/call-status-page-types'
-
-export const callReceiptTactilePressClassName =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 export type CallReceiptRefreshLabelMode = 'try_again' | 'refresh_status'
 
@@ -29,7 +26,7 @@ export function CallReceiptRef({
 }
 
 export function CallReceiptFact({ label, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {
-  return <div className="grid min-w-0 gap-intra"><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="break-words text-sm text-foreground">{children ?? value}</dd></div>
+  return <div className="arc-market arc-call-fact"><dt>{label}</dt><dd>{children ?? value}</dd></div>
 }
 
 function financialImpactTone(moneyMovement: string): 'success' | 'warning' | 'neutral' {
@@ -43,28 +40,21 @@ export function CallReceiptIssue({ issue }: Readonly<{ issue: CallIssueView }>) 
   return (
     <section
       role="alert"
-      className="grid gap-related rounded-xl border border-border bg-card p-4"
+      className="arc-market arc-call-issue"
       aria-labelledby="call-receipt-issue-title"
     >
       <Badge variant="warning" className="w-fit">Needs attention</Badge>
-      <h2 id="call-receipt-issue-title" className="text-base font-medium leading-snug tracking-tight text-foreground">
+      <h2 id="call-receipt-issue-title" className="arc-call-heading">
         {issue.title}
       </h2>
       <p className="text-sm text-foreground">{issue.whatHappened}</p>
-      <p
-        className={cn(
-          'rounded-card border px-3 py-2 text-sm tabular-nums',
-          moneyTone === 'success' && 'border-success-ring bg-success-subtle text-success-foreground',
-          moneyTone === 'warning' && 'border-warning-ring bg-warning-subtle text-warning-foreground',
-          moneyTone === 'neutral' && 'border-border bg-muted/40 text-foreground',
-        )}
-      >
+      <p className="arc-call-money-impact" data-tone={moneyTone}>
         {issue.moneyMovement}
       </p>
-      <p className="text-sm text-muted-foreground">{issue.userNext}</p>
-      <details className="border-t border-border pt-intra">
-        <summary className="min-h-touch cursor-pointer text-xs font-medium text-muted-foreground">What happens next</summary>
-        <p className="pt-intra text-sm text-muted-foreground">{issue.automaticNext}</p>
+      <p className="arc-call-context">{issue.userNext}</p>
+      <details className="arc-call-disclosure">
+        <summary>What happens next</summary>
+        <p className="arc-call-context">{issue.automaticNext}</p>
         <CallReceiptRef value={issue.retainedReference} />
       </details>
     </section>
@@ -79,8 +69,9 @@ export function CallReceiptRefreshButton({
   return (
     <Button
       type="button"
-      variant="outline"
-      className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
+      variant="secondary"
+      size="md"
+      className="arc-market w-fit"
       disabled={pending}
       onClick={() => { void actions.onRefresh?.() }}
     >
@@ -107,7 +98,7 @@ export function CallReceiptStatusFeedback({
     )
   }
   return (
-    <Alert role="status">
+    <Alert role="status" className="arc-market arc-call-status-feedback">
       <AlertTitle>Status refreshed</AlertTitle>
       <AlertDescription>{feedback.message}</AlertDescription>
     </Alert>

@@ -3,8 +3,7 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { AdminMetricsPageSkeleton } from './AdminMetricsPageSkeleton'
 import { MetricsControls } from './components/MetricsControls'
 import { MetricsDayTable } from './components/MetricsDayTable'
-import { MetricsHeadline } from './components/MetricsHeadline'
-import { MetricsRatios } from './components/MetricsRatios'
+import { MetricsDashboard } from './MetricsDashboard'
 import { AdminSearchNotice } from '../AdminSearchNotice'
 import { ADMIN_METRICS_COPY, type AdminMetricsPageProps } from './metrics.contracts'
 import { useAdminMetrics } from './useAdminMetrics'
@@ -22,7 +21,6 @@ export function AdminMetricsPage({ range, rejected, onRangeChange }: AdminMetric
         { label: ADMIN_METRICS_COPY.adminBreadcrumb, href: '/admin' },
         { label: ADMIN_METRICS_COPY.title },
       ]}
-      actions={<MetricsControls range={range} onRangeChange={onRangeChange} />}
       stickyHeader
     >
       <AdminSearchNotice rejected={rejected} />
@@ -37,8 +35,19 @@ export function AdminMetricsPage({ range, rejected, onRangeChange }: AdminMetric
           {data.partialDays.map((day) => (
             <p key={day} role="status" className="text-sm text-muted-foreground">{ADMIN_METRICS_COPY.snapshotIncomplete(day)}</p>
           ))}
-          {data.coverageComplete ? <MetricsHeadline cards={data.cards} /> : <p role="status">{data.coverageDescription}</p>}
-          {data.coverageComplete ? <MetricsRatios ratios={data.ratios} /> : null}
+          {data.coverageComplete ? (
+            <MetricsDashboard
+              cards={data.cards}
+              ratios={data.ratios}
+              dailyCalls={data.dailyCalls}
+              controls={<MetricsControls range={range} onRangeChange={onRangeChange} />}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-related">
+              <p role="status" className="text-sm text-muted-foreground">{data.coverageDescription}</p>
+              <MetricsControls range={range} onRangeChange={onRangeChange} />
+            </div>
+          )}
           <MetricsDayTable rows={data.days} />
         </div>
       )}

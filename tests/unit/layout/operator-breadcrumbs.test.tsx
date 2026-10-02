@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -115,6 +115,10 @@ describe('AeOperatorBreadcrumbs', () => {
 
     const ellipsisBtn = screen.getByRole('button', { name: 'Show intermediate crumbs' })
     expect(ellipsisBtn).toBeTruthy()
+    fireEvent.click(ellipsisBtn)
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: 'Level two' }).getAttribute('href')).toBe('/root/two')
+    expect(within(menu).getByRole('menuitem', { name: 'Level three' }).getAttribute('href')).toBe('/root/two/three')
   })
 
   it('keeps link navigation intact for non-collapsed crumbs', () => {

@@ -20,11 +20,10 @@ describe('CallReceiptSkeleton (W-41)', () => {
   it('reserves summary, playbook, money facts, recovery, and technical record regions', () => {
     const { container } = render(<CallReceiptSkeleton />)
 
-    expect(container.querySelector('.min-h-\\[12rem\\].rounded-xl.border.bg-card.p-4')).toBeInTheDocument()
-    expect(container.querySelector('.min-h-\\[13\\.5rem\\]')).toBeInTheDocument()
-    expect(container.querySelector('.min-h-\\[4\\.5rem\\].border-t.border-border.pt-section')).toBeInTheDocument()
-    expect(container.querySelector('.min-h-touch.h-touch.w-44')).toBeInTheDocument()
-    expect(container.querySelector('.h-5.w-24.font-mono')).toBeInTheDocument()
-    expect(container.querySelector('.h-6.w-32.rounded-full')).toBeInTheDocument()
+    const regions = container.querySelectorAll('section[aria-hidden="true"]')
+    expect(regions).toHaveLength(5)
+    for (const region of regions) expect(region.querySelector('[data-slot="skeleton"]')).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument()
   })
 })

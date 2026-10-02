@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
@@ -17,6 +17,7 @@ import { AgentLifecycleConfirmDialog } from './components/AgentLifecycleConfirmD
 import { AgentRecordSheet } from './components/AgentRecordSheet'
 import { useAgentLifecycleDialog } from './useAgentLifecycleDialog'
 import { useAgentSelection } from './useAgentSelection'
+import '../AgentDirectoryComposition.css'
 
 export type AeAgentOperatorConsoleProps = Readonly<{
   directory: AgentDirectoryProjection
@@ -97,7 +98,7 @@ export function AeAgentOperatorConsole({
 
   if (accessUnavailable) {
     return (
-      <div className="grid gap-8">
+      <div className="arc-market arc-agent-console">
         <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
         {approvalsSection}
       </div>
@@ -105,11 +106,11 @@ export function AeAgentOperatorConsole({
   }
 
   return (
-    <div className="grid gap-8">
+    <div className="arc-market arc-agent-console">
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
       {approvalsSection}
       {selectedPrincipalId === undefined || selected !== undefined ? null : (
-        <Alert>
+        <Alert className="arc-agent-console-recovery">
           <AlertTitle>Agent not found</AlertTitle>
           <AlertDescription>
             <p>This agent is no longer in the directory or the link is stale.</p>
@@ -118,13 +119,14 @@ export function AeAgentOperatorConsole({
         </Alert>
       )}
       <AeSection
+        className="arc-agent-directory-section"
         id="revoke"
         title="Agents"
         description="Review each independent agent, its current credential generation, activity, and connection state. Historical credentials stay attached to the same Agent."
       >
         {onConnectNewAgent !== undefined && (
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" onClick={onConnectNewAgent} className="w-fit min-h-touch">Connect an Agent</Button>
+          <div className="arc-agent-directory-actions">
+            <Button type="button" variant="secondary" onClick={onConnectNewAgent}>Connect an Agent</Button>
           </div>
         )}
         <AeAgentDirectoryTable

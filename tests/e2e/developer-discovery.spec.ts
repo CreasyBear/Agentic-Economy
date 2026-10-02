@@ -34,9 +34,9 @@ test.describe('developer discovery', () => {
     await expect(schemaRow.getByText(new URL(artifactHref).origin, { exact: true })).toBeVisible()
     await expect(artifactLink).toHaveAttribute('href', /^https?:\/\//)
 
-    await expect(page.getByText('Source-owned readback', { exact: true })).toBeVisible()
-    await expect(page.getByText(/current public catalog facts/i)).toBeVisible()
-    await expect(page.getByText(/read path status/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Source-owned readback', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Current public catalog facts', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Read path status', exact: true })).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(futureAuthorityCopy)

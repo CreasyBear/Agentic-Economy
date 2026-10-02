@@ -1,16 +1,9 @@
 'use client'
 
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
+import { Button } from '@/components/arc/button/button'
+import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import type { AgentAccessKeyIssueResult, IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type { AgentKeyDraft } from './agent-key-draft'
 
@@ -23,6 +16,8 @@ import {
   CONNECT_AGENT_WIZARD_SANDBOX_DISPLAY,
   useConnectAgentWizard,
 } from './useConnectAgentWizard'
+
+import './ConnectAgentComposition.css'
 
 export interface AeConnectAgentWizardDialogProps {
   deploymentEnvironment: ConnectAgentEnvironment
@@ -55,7 +50,7 @@ export function AeConnectAgentWizardDialog({
   const { view } = wizard
 
   return (
-    <Dialog
+    <Drawer
       open={open}
       onOpenChange={(nextOpen, eventDetails) => {
         if (!nextOpen && eventDetails.reason === 'outside-press') {
@@ -68,14 +63,15 @@ export function AeConnectAgentWizardDialog({
         wizard.handleOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="sm:max-w-[620px]" data-slot="dialog-content">
-        <form onSubmit={wizard.handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Connect an Agent</DialogTitle>
-            <DialogDescription>Step 1 of 2 · Set policy</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-5 py-4">
+      <DrawerContent
+        side="right"
+        title="Connect an Agent"
+        description="Step 1 of 2 · Set policy"
+        className="arc-connect-agent-drawer"
+        data-slot="dialog-content"
+      >
+        <form onSubmit={wizard.handleSubmit} className="arc-connect-agent-form">
+          <div className="arc-connect-agent-fields">
             {view.diagnostic !== null ? (
               <div aria-live="polite">
                 <Alert variant="destructive">
@@ -102,7 +98,7 @@ export function AeConnectAgentWizardDialog({
               onChange={wizard.setAuthorityMode}
             />
 
-            <div className="rounded-md border p-3">
+            <div className="arc-connect-agent-limits">
               <SpendingLimitInputs
                 presentation={view.spendingPresentation}
                 ids={CONNECT_AGENT_WIZARD_LIMIT_IDS}
@@ -112,34 +108,41 @@ export function AeConnectAgentWizardDialog({
                   monthly: view.monthlyAmount,
                 }}
                 disabled={view.isSubmitting}
-                className="grid grid-cols-3 gap-2"
+                className="arc-connect-agent-limit-grid"
                 placeholders={CONNECT_AGENT_WIZARD_LIMIT_PLACEHOLDERS}
                 sandboxDisplay={CONNECT_AGENT_WIZARD_SANDBOX_DISPLAY}
                 onPerCallChange={wizard.setPerCallAmount}
                 onDailyChange={wizard.setDailyAmount}
                 onMonthlyChange={wizard.setMonthlyAmount}
               />
-              <p className="mt-3 text-xs text-muted-foreground">
+              <p className="arc-connect-agent-hint">
                 Per-call ≤ daily ≤ monthly. AUD, GST-inclusive prepaid credit.
               </p>
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          <footer className="arc-connect-agent-footer">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
+              size="md"
               disabled={view.isSubmitting}
               onClick={() => wizard.handleOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={view.isSubmitting}>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              disabled={view.isSubmitting}
+              aria-busy={view.isSubmitting || undefined}
+            >
               {view.isSubmitting ? 'Connecting…' : 'Connect an Agent'}
             </Button>
-          </DialogFooter>
+          </footer>
         </form>
-      </DialogContent>
-    </Dialog>
+      </DrawerContent>
+    </Drawer>
   )
 }

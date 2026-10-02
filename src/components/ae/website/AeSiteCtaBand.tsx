@@ -2,10 +2,10 @@ import type { ReactNode } from 'react'
 
 import { Link } from '@tanstack/react-router'
 
-import { buttonVariants } from '@/components/ui/button-variants'
+import arcButtonStyles from '@/components/arc/button/button.module.css'
+import { cn } from '@/lib/utils'
 
-import { AeSiteSection } from './AeSiteSection'
-import { AeSiteHeading } from './AeSiteType'
+import './AboutFeaturesComposition.css'
 
 export type AeSiteCtaBandProps = Readonly<{
   title: string
@@ -14,30 +14,34 @@ export type AeSiteCtaBandProps = Readonly<{
   secondary?: Readonly<{ label: string; to: '/for-providers' }>
 }>
 
-/** Port of aecon.ai's Dusk call-to-action-2 heading and action row. */
+/** Closing About page action with the responsibility copy kept alongside it. */
 export function AeSiteCtaBand({ title, description, primary, secondary }: AeSiteCtaBandProps) {
   return (
-    <AeSiteSection labelledBy="about-cta" rhythm="section">
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="flex items-center justify-center gap-6 max-lg:flex-col max-lg:text-center lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <AeSiteHeading as="h2" size="md" id="about-cta" enter>
-              {title}
-            </AeSiteHeading>
-            <p className="mt-4 max-w-xl leading-relaxed text-muted-foreground">{description}</p>
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-center gap-3">
-            <Link to={primary.to} className={buttonVariants({ size: 'lg' })}>
+    <section className="arc-market arc-about-cta" aria-labelledby="about-cta">
+      <div className="arc-about-cta-inner">
+        <div className="arc-about-cta-panel">
+          <h2 id="about-cta" className="arc-about-cta-title">
+            {title}
+          </h2>
+          <div className="arc-about-cta-description">{description}</div>
+          <div className="arc-about-cta-actions">
+            <Link
+              to={primary.to}
+              className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}
+            >
               {primary.label}
             </Link>
             {secondary === undefined ? null : (
-              <Link to={secondary.to} className={buttonVariants({ size: 'lg', variant: 'outline' })}>
+              <Link
+                to={secondary.to}
+                className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}
+              >
                 {secondary.label}
               </Link>
             )}
           </div>
         </div>
       </div>
-    </AeSiteSection>
+    </section>
   )
 }

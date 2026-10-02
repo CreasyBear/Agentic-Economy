@@ -1,0 +1,224 @@
+/* Arc source provenance:
+ * integrations.module.css SHA-256 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10
+ * metrics-dashboard.module.css SHA-256 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9
+ * sortable-data-table.module.css SHA-256 e13a086dba25df8a48aa2a5804d0400e5267125a7399d6d8fafbbdb9cd02b473
+ * Adapted Arc's divided metrics and continuous rows to the existing AE table and facts components.
+ */
+
+.arc-market.aeAgentCallHistory, .arc-market.aeAgentConnectionReceipts, .arc-market.aeAgentConnectionDirectKey, .arc-market.aeAgentConnectionUnavailable { color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
+
+.aeAgentCallHistory {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.aeAgentCallMetrics {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid var(--border);
+}
+
+.aeAgentCallMetric {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: var(--space-1);
+  padding: 14px var(--space-4) 14px var(--space-5);
+}
+
+.aeAgentCallMetric + .aeAgentCallMetric {
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-4);
+}
+
+.aeAgentCallMetricLabel {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.aeAgentCallMetricValue {
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.aeAgentCallHistory .arc-record-table,
+.aeAgentCallHistory .arc-record-table th,
+.aeAgentCallHistory .arc-record-table td,
+.aeAgentCallHistory .arc-record-sort,
+.aeAgentCallHistory [data-slot="badge"] {
+  font-size: var(--text-sm);
+}
+
+.aeAgentCallHistory [data-slot="badge"] {
+  font-weight: 500;
+}
+
+.aeAgentCallHistory .arc-record-table td[data-label]::before {
+  font-size: var(--text-sm);
+}
+
+.aeAgentCallReference {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.aeAgentCallReceipt {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.aeAgentConnectionReceipts {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+}
+
+.aeAgentConnectionUnavailable {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.aeAgentConnectionDirectKey {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  border-block: 1px solid var(--border);
+  padding: 14px var(--space-5);
+}
+
+.aeAgentConnectionDirectKeyTitle,
+.aeAgentConnectionName {
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.aeAgentConnectionDirectKeyDescription {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.aeAgentConnectionHeading {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.aeAgentConnectionList {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border-block: 1px solid var(--border);
+  padding: 0;
+  list-style: none;
+}
+
+.aeAgentConnectionRow {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  padding: 14px var(--space-5);
+}
+
+.aeAgentConnectionRow + .aeAgentConnectionRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.aeAgentConnectionHeader {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.aeAgentConnectionReceipts [data-slot="badge"] {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.aeAgentConnectionFacts {
+  min-width: 0;
+}
+
+.aeAgentConnectionFacts .arc-facts-row {
+  grid-template-columns: minmax(7.5rem, 0.45fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.aeAgentConnectionReconnect {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.aeAgentConnectionDisconnect {
+  justify-self: start;
+  max-width: 100%;
+  min-height: 44px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+@media (max-width: 620px) {
+  .aeAgentCallMetrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aeAgentCallMetric {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .aeAgentCallMetric + .aeAgentCallMetric {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding-left: var(--space-4);
+  }
+
+  .aeAgentConnectionDirectKey,
+  .aeAgentConnectionHeading,
+  .aeAgentConnectionRow {
+    padding-inline: var(--space-4);
+  }
+
+  .aeAgentConnectionFacts .arc-facts-row {
+    grid-template-columns: minmax(7rem, 0.45fr) minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}

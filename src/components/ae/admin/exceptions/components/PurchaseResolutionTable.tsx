@@ -1,5 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 
+import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
@@ -14,7 +15,7 @@ const columns: ColumnDef<AdminResolutionRowModel, unknown>[] = [
     accessorKey: 'callRef',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.call,
     cell: ({ row }) => (
-      <a className="font-medium text-foreground underline-offset-4 hover:underline" href={row.original.href}>
+      <a className="arc-admin-record-link" href={row.original.href}>
         {row.original.callRef}
       </a>
     ),
@@ -36,6 +37,7 @@ const columns: ColumnDef<AdminResolutionRowModel, unknown>[] = [
 export function PurchaseResolutionTable({ rows }: PurchaseResolutionTableProps) {
   return (
     <AeSection
+      className="arc-market arc-admin-record-table-region"
       title={ADMIN_EXCEPTIONS_COPY.resolutionsTitle}
       description={ADMIN_EXCEPTIONS_COPY.resolutionsDescription}
     >

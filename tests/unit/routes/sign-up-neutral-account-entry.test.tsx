@@ -64,7 +64,8 @@ describe('sign-up account entry', () => {
     expect(routeState.clerkProps?.fallback).toBeTruthy()
     const { container } = render(<>{routeState.clerkProps?.fallback as ReactNode}</>)
     expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')).toBeTruthy()
-    expect(container.querySelectorAll('.min-h-touch').length).toBeGreaterThanOrEqual(4)
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
+    expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')?.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('S2: preserves supplier copy and returns to the requested destination', () => {
@@ -101,10 +102,11 @@ describe('sign-up account entry', () => {
     })
   })
 
-  it('S4: exports a sign-up fallback skeleton with reserved height', () => {
+  it('S4: exports hidden sign-up loading placeholders without actions', () => {
     const { container } = render(<SignUpClerkFallback />)
     const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
-    expect(fallback?.className).toContain('min-h-96')
-    expect(fallback?.className).toContain('gap-related')
+    expect(fallback?.getAttribute('aria-hidden')).toBe('true')
+    expect(fallback?.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })

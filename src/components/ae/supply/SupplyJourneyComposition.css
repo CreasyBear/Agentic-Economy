@@ -1,0 +1,233 @@
+/* Arc settings-page pane/head/rows source SHA-256: e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Arc agent-run approval/result frame source SHA-256: 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032.
+ * Their semantic spacing and row geometry frame the existing source journey and decision controls. */
+.arc-market.arc-supply-journey {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-6);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  letter-spacing: var(--tracking-body);
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress-item {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  border-top: 2px solid var(--border);
+  padding-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress-item[aria-current="step"] {
+  border-color: var(--control-on);
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress-item[data-complete] {
+  border-color: var(--accent);
+  color: var(--foreground);
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress-stage {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress-index {
+  display: grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-xs);
+  line-height: 1;
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress-item[data-complete] .arc-supply-progress-index {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.arc-market.arc-supply-journey .arc-supply-progress-label {
+  min-width: 0;
+  color: inherit;
+  font-size: var(--text-sm);
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-journey .arc-supply-summaries {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface);
+}
+
+.arc-market.arc-supply-journey .arc-supply-summary {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-4);
+}
+
+.arc-market.arc-supply-journey .arc-supply-summary-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.arc-market.arc-supply-journey .arc-supply-summary-label {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-journey .arc-supply-summary-detail {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-journey .arc-supply-summary-detail[data-numeric] {
+  font-variant-numeric: tabular-nums;
+}
+
+.arc-market.arc-supply-journey .arc-supply-summary-edit {
+  flex: none;
+  min-height: 44px;
+  max-width: 100%;
+}
+
+.arc-market.arc-supply-journey .arc-supply-feedback {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.arc-market.arc-supply-journey .arc-supply-feedback > [data-slot="alert-title"] {
+  display: block;
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  letter-spacing: normal;
+}
+
+.arc-market.arc-supply-journey .arc-supply-feedback-description {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-journey .arc-supply-feedback-description > p {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-owner-feedback {
+  min-width: 0;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: 1.55;
+}
+
+.arc-market.arc-supply-owner-feedback > [data-slot="alert-title"] {
+  display: block;
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  letter-spacing: normal;
+}
+
+.arc-market.arc-supply-owner-feedback .arc-supply-owner-feedback-description {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-owner-feedback .arc-supply-owner-feedback-description > p {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-journey .arc-supply-feedback-action,
+.arc-market.arc-supply-owner-feedback .arc-supply-feedback-action {
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-supply-journey .arc-supply-feedback-action:focus-visible,
+.arc-market.arc-supply-owner-feedback .arc-supply-feedback-action:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+@media (min-width: 640px) {
+  .arc-market.arc-supply-journey .arc-supply-progress {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .arc-market.arc-supply-journey .arc-supply-summaries {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 479px) {
+  .arc-market.arc-supply-journey .arc-supply-summaries {
+    padding: var(--space-4);
+  }
+}

@@ -1,20 +1,21 @@
 import type { GstSplitBreakdownProps } from '../price-update-modal.contracts'
+import '../PriceRevisionComposition.css'
 
 export function GstSplitBreakdown({ baseText, gstText, totalText }: GstSplitBreakdownProps) {
   return (
-    <div className="grid gap-1 text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground">Base price</span>
-        <span className="font-mono tabular-nums">{baseText}</span>
+    <dl className="arc-price-revision-gst">
+      <div>
+        <dt>Base price</dt>
+        <dd>{baseText}</dd>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground">GST</span>
-        <span className="font-mono tabular-nums">{gstText}</span>
+      <div>
+        <dt>GST</dt>
+        <dd>{gstText}</dd>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground">Total Buyer Consideration</span>
-        <span className="font-mono tabular-nums font-semibold">{totalText}</span>
+      <div>
+        <dt>Total Buyer Consideration</dt>
+        <dd>{totalText}</dd>
       </div>
-    </div>
+    </dl>
   )
 }

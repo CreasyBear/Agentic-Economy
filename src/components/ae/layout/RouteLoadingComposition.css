@@ -1,0 +1,34 @@
+/* Static shapes mirror Arc settings fields, integrations rows, metrics and table regions.
+ * Settings CSS SHA-256 e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Metrics CSS SHA-256 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9.
+ * Integrations CSS SHA-256 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10.
+ * No sample values, timers or controls; the actual busy name remains exposed. */
+.arc-market.arc-route-loading { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-6); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.5; }
+.arc-market.arc-public-loading { padding-block: var(--space-8); }
+.arc-market .arc-loading-intro,
+.arc-market .arc-loading-stack { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-3); }
+.arc-market .arc-loading-stack { gap: var(--space-6); }
+.arc-market .arc-loading-line { display: block; width: 100%; min-width: 0; height: 14px; border-radius: 6px; background: var(--surface-muted); }
+.arc-market .arc-loading-label { width: min(45%, 28ch); }
+.arc-market .arc-loading-heading { width: min(70%, 480px); height: 28px; }
+.arc-market .arc-loading-value { width: min(60%, 120px); height: 36px; }
+.arc-market .arc-loading-field { height: 44px; }
+.arc-market .arc-loading-action { width: min(100%, 160px); height: 44px; }
+.arc-market .arc-loading-rows,
+.arc-market .arc-loading-table { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-raised); }
+.arc-market .arc-loading-record { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); align-content: center; gap: var(--space-3); border-bottom: 1px solid var(--border); padding: var(--space-5) var(--space-6); }
+.arc-market .arc-loading-record:last-child { border-bottom: 0; }
+.arc-market .arc-loading-table-row { display: grid; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; gap: var(--space-4); border-bottom: 1px solid var(--border); padding: var(--space-4); }
+.arc-market .arc-loading-table-row:last-child { border-bottom: 0; }
+.arc-market .arc-loading-metrics { display: grid; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-raised); }
+.arc-market .arc-loading-metric { display: grid; min-width: 0; gap: var(--space-4); border-right: 1px solid var(--border); padding: var(--space-6); }
+.arc-market .arc-loading-metric:last-child { border-right: 0; }
+.arc-market .arc-loading-metrics > .arc-loading-field { width: auto; margin: var(--space-4); }
+.arc-market .arc-loading-well { min-height: 200px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-muted); }
+.arc-market .arc-loading-split,
+.arc-market .arc-loading-detail { display: grid; min-width: 0; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); align-items: start; gap: var(--space-6); }
+.arc-market .arc-loading-detail { grid-template-columns: minmax(0, 1fr) minmax(0, 280px); }
+.arc-market .arc-loading-pane { display: grid; min-width: 0; min-height: 200px; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-6); background: var(--surface-raised); }
+.arc-market .arc-loading-form { display: grid; width: 100%; max-width: 680px; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-6); background: var(--surface-raised); }
+@media (max-width: 899px) { .arc-market :is(.arc-loading-detail, .arc-loading-split) { grid-template-columns: minmax(0, 1fr); } .arc-market .arc-loading-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .arc-market .arc-loading-metric:nth-child(2) { border-right: 0; } .arc-market .arc-loading-metric:nth-child(n+3) { border-top: 1px solid var(--border); } }
+@media (max-width: 599px) { .arc-market .arc-loading-metrics { grid-template-columns: minmax(0, 1fr); } .arc-market .arc-loading-metric { border-right: 0; } .arc-market .arc-loading-metric + .arc-loading-metric { border-top: 1px solid var(--border); } .arc-market :is(.arc-loading-form, .arc-loading-pane, .arc-loading-metric) { padding: var(--space-4); } .arc-market .arc-loading-table-row { gap: var(--space-2); padding: var(--space-3); } }

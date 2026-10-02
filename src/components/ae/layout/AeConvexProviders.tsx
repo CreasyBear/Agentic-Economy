@@ -6,10 +6,11 @@ import { Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { cn } from '@/lib/utils'
 import { api } from '../../../../convex/_generated/api'
+import './RouteRecoveryComposition.css'
 
 const CHAT_VISIBLE_STYLE = { display: 'contents' } as const
 const CHAT_HIDDEN_STYLE = { display: 'none' } as const
@@ -39,7 +40,7 @@ export function ChatConfigurationUnavailable() {
       description="Chat is not configured. The Tool catalogue remains available."
       tone="warning"
       action={(
-        <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
+        <Link to="/market" className={`arc-market ${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
           Browse Tools
         </Link>
       )}
@@ -166,11 +167,11 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
           description="Your account connection could not be completed. Try again or browse Tools."
           tone="warning"
           action={(
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={buttonVariants()} onClick={() => setAttempt((value) => value + 1)}>
+            <div className="arc-market arc-recovery-action-row">
+              <Button type="button" size="md" onClick={() => setAttempt((value) => value + 1)}>
                 Try again
-              </button>
-              <Link to="/market" className={buttonVariants({ variant: 'outline' })}>Browse Tools</Link>
+              </Button>
+              <Link to="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Browse Tools</Link>
             </div>
           )}
         />

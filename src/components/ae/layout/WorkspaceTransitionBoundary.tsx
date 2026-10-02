@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import { Spinner } from '@/components/ui/spinner'
+import './AppFrameComposition.css'
 
 function isDeepTenantRoute(pathname: string): boolean {
   return pathname.split('/').filter(Boolean).length > 2
@@ -54,18 +55,18 @@ export function WorkspaceTransitionBoundary({ children }: { children: ReactNode 
   }, [isLoaded, isTransitioning, orgId])
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="arc-market arc-workspace-transition">
       {children}
       {isTransitioning ? (
         <div
           data-slot="workspace-transition-scrim"
           data-testid="workspace-transition-scrim"
-          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm"
+          className="arc-workspace-transition-scrim"
           role="status"
           aria-live="polite"
         >
           <Spinner className="size-6 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Switching workspace…</p>
+          <p>Switching workspace…</p>
         </div>
       ) : null}
     </div>

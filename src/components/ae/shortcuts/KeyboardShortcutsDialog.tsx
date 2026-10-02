@@ -1,17 +1,20 @@
 'use client'
 
 import { useEffect } from 'react'
+import { XIcon } from 'lucide-react'
+import { Button } from '@/components/arc/button/button'
 
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import './ShortcutsComposition.css'
 
-const kbdClassName =
-  'font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border text-foreground/70'
+const kbdClassName = 'arc-shortcut-key'
 
 type ShortcutRow = {
   keys: string
@@ -20,9 +23,8 @@ type ShortcutRow = {
 
 const navigationShortcuts: ShortcutRow[] = [
   { keys: '⌘K', description: 'Open command console' },
-  { keys: '⌘B', description: 'Toggle operator sidebar' },
   { keys: '/', description: 'Focus search in command console' },
-  { keys: '?', description: 'Toggle keyboard shortcuts cheatsheet' },
+  { keys: '?', description: 'Open keyboard shortcuts' },
   { keys: 'Esc', description: 'Dismiss active overlay / pop layer' },
 ]
 
@@ -39,12 +41,12 @@ function ShortcutCategory({
   rows: ShortcutRow[]
 }>) {
   return (
-    <section className="grid gap-2">
-      <h3 className="text-sm font-medium text-foreground">{title}</h3>
-      <ul className="grid gap-2">
+    <section className="arc-shortcut-category">
+      <h3>{title}</h3>
+      <ul className="arc-shortcut-rows">
         {rows.map((row) => (
-          <li key={row.keys} className="flex items-center justify-between gap-4 text-sm">
-            <span className="text-muted-foreground">{row.description}</span>
+          <li key={row.keys}>
+            <span>{row.description}</span>
             <kbd className={kbdClassName}>{row.keys}</kbd>
           </li>
         ))}
@@ -62,14 +64,17 @@ export function KeyboardShortcutsDialog({
 }>) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="arc-market arc-shortcuts" showCloseButton={false} instant>
+        <DialogHeader className="arc-shortcuts-header">
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>
             Global shortcuts work outside text fields and editable content.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-6">
+        <DialogClose render={<Button type="button" variant="ghost" size="md" className="arc-shortcuts-close" aria-label="Close keyboard shortcuts" />}>
+          <XIcon aria-hidden="true" />
+        </DialogClose>
+        <div className="arc-shortcuts-body">
           <ShortcutCategory title="Navigation & Console" rows={navigationShortcuts} />
           <ShortcutCategory title="Item Traversal" rows={traversalShortcuts} />
         </div>

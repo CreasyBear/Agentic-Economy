@@ -184,6 +184,38 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(thirtyDay.getAttribute('aria-pressed')).toBe('false')
   })
 
+  it('moves selection and focus by keyboard within each filter group', () => {
+    renderActivity()
+    const status = screen.getByRole('group', { name: 'Call status' })
+    const dates = screen.getByRole('group', { name: 'Call date range' })
+    const all = within(status).getByRole('button', { name: /All\s+2/u })
+    all.focus()
+    fireEvent.keyDown(all, { key: 'ArrowRight' })
+    const completed = within(status).getByRole('button', { name: /Completed\s+1/u })
+    expect(document.activeElement).toBe(completed)
+    expect(completed.getAttribute('aria-pressed')).toBe('true')
+    expect(within(status).getAllByRole('button').filter(button => button.tabIndex === 0)).toEqual([completed])
+    expect(screen.queryByText('Postal Address Lookup')).toBeNull()
+    expect(within(dates).getByRole('button', { name: 'All time' }).getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.keyDown(completed, { key: 'End' })
+    const attention = within(status).getByRole('button', { name: /Needs attention\s+0/u })
+    expect(document.activeElement).toBe(attention)
+    expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
+    fireEvent.keyDown(attention, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(all)
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
+
+    const allTime = within(dates).getByRole('button', { name: 'All time' })
+    fireEvent.keyDown(allTime, { key: 'End' })
+    const thirtyDays = within(dates).getByRole('button', { name: 'Last 30 days' })
+    expect(document.activeElement).toBe(thirtyDays)
+    expect(thirtyDays.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.keyDown(thirtyDays, { key: 'Home' })
+    expect(document.activeElement).toBe(allTime)
+    expect(all.getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('filters calls by status and date range', () => {
     renderActivity()
 

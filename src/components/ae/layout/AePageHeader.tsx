@@ -1,6 +1,10 @@
+/* Arc page-header intro, title row, details, metadata and trailing actions.
+ * Upstream TSX SHA-256 036f994db99aa96f42a5ab4aa02ab8f57e45d81cd9c01fad643847c3c13aa60a.
+ * Existing AE title focus and factual slots remain authoritative; sample project,
+ * badges, tabs and scroll-owner state are omitted. */
 import { useEffect, useId, type ReactNode } from 'react'
 
-import { AeSiteEyebrow } from '@/components/ae/website/AeSiteType'
+import './PageHeaderComposition.css'
 
 type AePageHeaderProps = {
   eyebrow?: string
@@ -35,82 +39,35 @@ export function AePageHeader({
     document.getElementById(titleId)?.focus()
   }, [focusTitle, titleId, title])
 
-  if (variant === 'workspace') {
-    return (
-      <section
-        data-header-profile="workspace"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        className="ae-nav w-full shrink-0 px-gutter py-3"
-      >
-        <div className="grid min-w-0 gap-2 border-b border-border pb-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-          <div className="flex min-w-0 items-center gap-related">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-baseline gap-intra">
-                <h1
-                  id={titleId}
-                  {...(focusTitle ? { tabIndex: -1 as const } : {})}
-                  className="truncate font-sans text-xl font-medium leading-tight tracking-tight text-foreground sm:text-2xl"
-                >
-                  {title}
-                </h1>
-                {eyebrow === undefined ? null : (
-                  <span className="shrink-0 font-sans text-xs font-medium text-muted-foreground">
-                    {eyebrow}
-                  </span>
-                )}
-              </div>
-              <p id={descriptionId} className="truncate text-xs text-muted-foreground">
-                {description}
-              </p>
-            </div>
-          </div>
-          <div className="flex min-w-0 items-center justify-between gap-related sm:justify-end">
-            {meta === undefined ? null : (
-              <p role="status" aria-live="polite" className="font-mono text-xs tabular-nums text-muted-foreground">{meta}</p>
-            )}
-            {actions === undefined ? null : (
-              <div className="flex items-center gap-intra">{actions}</div>
-            )}
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  const headerProfile = variant === 'market' ? 'market' : 'editorial'
+  const headerProfile = variant === 'workspace' ? 'workspace' : variant === 'market' ? 'market' : 'editorial'
 
   return (
     <section
       data-header-profile={headerProfile}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className="ae-rail w-full py-16 md:py-24"
+      className={`arc-market arc-page-header ae-${variant === 'workspace' ? 'nav' : 'rail'}`}
     >
-      <div className="grid gap-related border-b border-border pb-section md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-        <div className="grid max-w-4xl gap-related">
-          <div>
-            {eyebrow === undefined ? null : <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>}
+      <div className="arc-page-header-bar">
+        <div className="arc-page-header-intro">
+          <div className="arc-page-header-title-row">
             <h1
               id={titleId}
               {...(focusTitle ? { tabIndex: -1 as const } : {})}
-              className="text-balance text-4xl font-extralight tracking-[-0.035em] text-foreground md:text-5xl lg:text-6xl"
+              className="arc-page-header-title"
             >
               {title}
             </h1>
+            {eyebrow === undefined ? null : <span className="arc-page-header-context">{eyebrow}</span>}
           </div>
-          <p id={descriptionId} className="max-w-prose text-pretty text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
+          <p id={descriptionId} className="arc-page-header-description">{description}</p>
         </div>
-        <div className="flex flex-col items-start gap-related md:items-end">
-          {meta === undefined ? null : (
-            <p role="status" aria-live="polite" className="order-2 font-mono text-xs tabular-nums text-muted-foreground md:order-1">{meta}</p>
-          )}
-          {actions === undefined ? null : (
-            <div className="order-1 flex flex-wrap items-center gap-intra md:order-2">{actions}</div>
-          )}
-        </div>
+        {meta === undefined && actions === undefined ? null : (
+          <div className="arc-page-header-trailing">
+            {meta === undefined ? null : <p role="status" aria-live="polite" className="arc-page-header-meta">{meta}</p>}
+            {actions === undefined ? null : <div className="arc-page-header-actions">{actions}</div>}
+          </div>
+        )}
       </div>
     </section>
   )

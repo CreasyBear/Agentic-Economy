@@ -1,8 +1,10 @@
 import { ChevronDownIcon } from 'lucide-react'
 
+import { Button as ArcButton } from '@/components/arc/button/button'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+
+import './AgentRecordComposition.css'
 
 import type { AgentFactsDisclosureProps } from '../agent-operator-console.contracts'
 
@@ -12,16 +14,22 @@ export function AgentFactsDisclosure({
   children,
 }: AgentFactsDisclosureProps) {
   return (
-    <Collapsible>
+    <Collapsible className="arc-market arc-agent-disclosure">
       <CollapsibleTrigger
         render={
-          <Button type="button" variant="ghost" className="w-fit min-h-touch">
+          <ArcButton
+            type="button"
+            variant="ghost"
+            size="md"
+            labelLayout="between"
+            className="arc-agent-disclosure-trigger"
+          >
             {label}
             <ChevronDownIcon className="size-4" aria-hidden="true" />
-          </Button>
+          </ArcButton>
         }
       />
-      <CollapsibleContent className="grid gap-3 pt-2">
+      <CollapsibleContent className="arc-agent-disclosure-content">
         <AeFactList density="compact" facts={facts} />
         {children}
       </CollapsibleContent>

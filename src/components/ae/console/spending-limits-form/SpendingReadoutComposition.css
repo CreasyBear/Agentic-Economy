@@ -1,0 +1,19 @@
+/* Arc usage-billing substats/meter and radio-cards choice geometry. Values and
+ * quota percentages remain supplied by the existing spending-policy projection.
+ * usage-billing CSS SHA-256 543cc56ac84be6b17f4dabaf411133d2ef69852db8a261fbd7816ab2c6ca31f9;
+ * radio-cards CSS SHA-256 8f3f80726ef946b0665ae033de3eefa3013678c8f59bac57882be15fa03543ba. */
+.arc-spending-readout { display: grid; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); margin: 0; }
+.arc-spending-readout > div { display: grid; min-width: 0; align-content: start; gap: var(--space-2); }
+.arc-spending-readout dt { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; }
+.arc-spending-readout dd { min-width: 0; margin: 0; color: var(--foreground); font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.025em; line-height: 1.4; overflow-wrap: anywhere; }
+.arc-spending-quota { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-spending-quota-label { min-width: 0; margin: 0; font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-spending-quota-label > span { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.arc-spending-quota-warning { margin: 0; color: var(--danger); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-spending-quota-track { height: 6px; border-radius: var(--radius-pill); background: var(--surface-muted); }
+.arc-spending-quota-track [data-slot="progress-indicator"] { background: var(--accent); }
+.arc-spending-presets { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-spending-preset-options { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-2); }
+.arc-spending-preset-options [aria-pressed="true"] { border-color: var(--control-on); background: color-mix(in oklch, var(--control-on) 4%, var(--surface)); }
+.arc-spending-preset-hint { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); }
+@media (max-width: 479px) { .arc-spending-readout { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); } }

@@ -3,10 +3,10 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import type { AccountSecurityHistoryItem } from '@/modules/security/account-security'
+import './SecurityHistoryComposition.css'
 
 export function AeSecurityHistoryTable({
   rows,
@@ -29,7 +29,7 @@ export function AeSecurityHistoryTable({
 }>) {
   const columns = useMemo(() => historyColumns(showActorAndTarget), [showActorAndTarget])
   return (
-    <div className="grid gap-related">
+    <div className="arc-market arc-security-history">
       <AeRecordTable
         columns={columns}
         data={rows}
@@ -40,7 +40,7 @@ export function AeSecurityHistoryTable({
         emptyMessage={emptyMessage}
         maxHeight="32rem"
       />
-      <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+      <div className="arc-security-pagination-status" role="status" aria-live="polite">
         {loadFailed ? (
           <div className="grid gap-1 text-sm text-muted-foreground">
             <p>
@@ -59,7 +59,10 @@ export function AeSecurityHistoryTable({
         <Button
           type="button"
           variant="secondary"
-          className="min-h-touch min-w-[11rem] justify-self-start enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+          size="md"
+          loading={loading}
+          aria-busy={loading || undefined}
+          className="arc-security-load"
           disabled={loading}
           onClick={onLoadMore}
         >
@@ -77,9 +80,9 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       header: 'Activity',
       accessorFn: (row) => `${row.eventType} ${row.outcome}`,
       cell: ({ row }) => (
-        <span className="grid gap-1">
-          <span className="font-medium text-foreground">{eventLabel(row.original.eventType)}</span>
-          <Badge variant="secondary" className="w-fit">{humanize(row.original.outcome)}</Badge>
+        <span className="arc-security-activity">
+          <span className="arc-security-activity-name">{eventLabel(row.original.eventType)}</span>
+          <span className="arc-security-outcome">{humanize(row.original.outcome)}</span>
         </span>
       ),
     },
@@ -88,9 +91,9 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       header: 'Time',
       accessorFn: (row) => row.observedAt ?? row.recordedAt,
       cell: ({ row }) => (
-        <span className="grid gap-1 whitespace-nowrap">
+        <span className="arc-security-time">
           <span>{row.original.observedAt === undefined ? 'Observed time unavailable' : `${formatUtcTimestamp(row.original.observedAt)} UTC`}</span>
-          <span className="text-xs text-muted-foreground">Recorded {formatUtcTimestamp(row.original.recordedAt)} UTC</span>
+          <span className="arc-security-recorded">Recorded {formatUtcTimestamp(row.original.recordedAt)} UTC</span>
         </span>
       ),
     },
@@ -104,7 +107,7 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       header: 'Evidence',
       enableSorting: false,
       cell: ({ row }) => (
-        <dl className="grid min-w-48 gap-2 text-xs text-muted-foreground">
+        <dl className="arc-security-evidence">
           {showActorAndTarget ? (
             <>
               <div className="grid gap-1">

@@ -1,0 +1,15 @@
+/* Arc Pro settings-page fields + usage-billing facts, retrieved 2026-10-01.
+ * Settings CSS SHA-256 e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Usage CSS SHA-256 543cc56ac84be6b17f4dabaf411133d2ef69852db8a261fbd7816ab2c6ca31f9.
+ * Caller owns exact text amounts, validation, disabled state and layout overrides.
+ */
+.arc-market.arc-spending-inputs { min-width: 0; color: var(--foreground); font-family: var(--font-body); }
+.arc-spending-inputs-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.arc-spending-input-field { display: grid; min-width: 0; align-content: start; gap: var(--space-2); }
+.arc-spending-input-label { color: var(--text-secondary); font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-spending-input-value { color: var(--foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-base); font-variant-numeric: tabular-nums; line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-spending-input-control { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px var(--space-3); background: var(--surface); color: var(--foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); font-variant-numeric: tabular-nums; line-height: var(--leading-body); }
+.arc-spending-input-control::placeholder { color: var(--text-muted); }
+.arc-spending-input-control:focus-visible { outline: 2px solid var(--control-on); outline-offset: 3px; }
+.arc-spending-input-control:disabled { background: var(--surface-muted); color: var(--text-muted); cursor: not-allowed; }
+@media (max-width: 639px) { .arc-spending-inputs-grid { grid-template-columns: minmax(0, 1fr); } }

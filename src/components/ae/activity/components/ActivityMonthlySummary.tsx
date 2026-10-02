@@ -1,14 +1,16 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 
-import { ACTIVITY_TACTILE_PRESS_CLASS, type ActivityMonthlySummaryProps } from '../activity.contracts'
+import './ActivitySummaryComposition.css'
+
+import type { ActivityMonthlySummaryProps } from '../activity.contracts'
 
 function ActivityMetric({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
-    <div className="grid gap-intra rounded-md border border-border px-gutter py-related">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="font-mono text-lg tabular-nums text-foreground">{value}</span>
+    <div className="arc-activity-monthly-summary__metric">
+      <dt className="arc-activity-monthly-summary__label">{label}</dt>
+      <dd className="arc-activity-monthly-summary__value">{value}</dd>
     </div>
   )
 }
@@ -32,8 +34,8 @@ export function ActivityMonthlySummary({
             <Button
               type="button"
               variant="secondary"
-              className={ACTIVITY_TACTILE_PRESS_CLASS}
               disabled={retryPending}
+              aria-busy={retryPending || undefined}
               onClick={onRetry}
             >
               {retryPending ? 'Refreshing…' : 'Refresh summaries'}
@@ -41,12 +43,12 @@ export function ActivityMonthlySummary({
           </AlertDescription>
         </Alert>
       ) : null}
-      <div className="grid gap-related sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="arc-market arc-activity-monthly-summary">
         <ActivityMetric label="Calls" value={monthly.callCountLabel} />
         <ActivityMetric label="Completed" value={monthly.completedLabel} />
         <ActivityMetric label="Needs attention" value={monthly.attentionLabel} />
         <ActivityMetric label="Account spend" value={monthly.spendLabel} />
-      </div>
+      </dl>
     </AeSection>
   )
 }

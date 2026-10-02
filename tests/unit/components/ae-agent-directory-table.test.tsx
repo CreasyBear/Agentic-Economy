@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -103,7 +103,7 @@ describe('AeAgentDirectoryTable (W-25)', () => {
       />,
     )
 
-    expect(screen.getByText(label)).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Agents' })).getByText(label)).toBeInTheDocument()
     expect(screen.queryByText(/No limit|A\$100\.00|Active/)).not.toBeInTheDocument()
     expect(container.querySelector('[data-slot="progress"]')).not.toBeInTheDocument()
   })

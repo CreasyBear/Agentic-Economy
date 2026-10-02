@@ -13,6 +13,7 @@ import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type * as ClerkReact from '@clerk/tanstack-react-start'
 import '../../setup/resize-observer'
+import arcButton from '@/components/arc/button/button.module.css'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
@@ -99,7 +100,7 @@ describe('operator command panel', () => {
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
     const dialog = await screen.findByRole('dialog', { name: 'Command console' })
     expect(dialog.getAttribute('data-slot')).toBe('dialog-content')
-    expect(dialog.className).toContain('sm:max-w-3xl')
+    expect(dialog.className).toContain('arc-command-panel')
     expect(dialog.querySelector('[data-slot="command"]')).toBeTruthy()
     expect(document.querySelector('[data-slot="dialog-backdrop"], [data-slot="dialog-overlay"]')).toBeTruthy()
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
@@ -181,8 +182,8 @@ describe('operator command panel', () => {
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
     const back = await screen.findByRole('button', { name: 'Back' })
-    expect(back.className).toContain('min-h-touch')
-    expect(screen.getByRole('button', { name: 'Close' }).className).toContain('min-h-touch')
+    expect(back.className.split(' ')).toContain(arcButton.md)
+    expect(screen.getByRole('button', { name: 'Close' }).className.split(' ')).toContain(arcButton.md)
     const inactiveItems = Array.from(document.querySelectorAll('[data-slot="command-item"]'))
     expect(inactiveItems.length).toBeGreaterThan(0)
     expect(inactiveItems.every((item) => item.getAttribute('aria-disabled') === 'true')).toBe(true)
@@ -715,7 +716,7 @@ describe('operator command panel', () => {
 
     expect(await screen.findByText(/temporarily unavailable/)).toBeTruthy()
     const retry = screen.getByRole('button', { name: 'Try again' })
-    expect(retry.getAttribute('data-slot')).toBe('button')
+    expect(retry.tagName).toBe('BUTTON')
     fireEvent.click(retry)
     expect(await screen.findByRole('option', { name: /Weather forecast/ })).toBeTruthy()
     expect(fetchSearch).toHaveBeenCalledTimes(2)
@@ -787,7 +788,7 @@ describe('operator command panel', () => {
     const browse = screen.getByRole('link', { name: 'Browse current Tools' })
     expect(browse.getAttribute('href')).toBe('/market')
     const clear = screen.getByRole('button', { name: 'Clear search' })
-    expect(clear.getAttribute('data-slot')).toBe('button')
+    expect(clear.tagName).toBe('BUTTON')
     fireEvent.click(clear)
     expect((input as HTMLInputElement).value).toBe('')
   })

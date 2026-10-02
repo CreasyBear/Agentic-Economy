@@ -3,10 +3,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import { toast } from '@/lib/ui/toast'
+
+vi.mock('@/lib/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.clearAllMocks()
 })
 
 describe('AeCopyReference', () => {
@@ -23,6 +27,8 @@ describe('AeCopyReference', () => {
     expect(screen.getByText('Copied')).toBeTruthy()
     expect(screen.getByRole('status').textContent).toBe('Copied')
     expect(screen.getByRole('button', { name: 'Operation reference copied' })).toBeTruthy()
+    expect(toast.success).toHaveBeenCalledWith('Copied Operation reference to clipboard')
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('keeps the reference selectable and gives visible failure recovery', async () => {
@@ -36,5 +42,7 @@ describe('AeCopyReference', () => {
 
     expect(await screen.findByText('Copy failed')).toBeTruthy()
     expect(screen.getByText('receipt:public').tagName).toBe('CODE')
+    expect(toast.error).toHaveBeenCalledWith('Failed to copy Receipt reference')
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })

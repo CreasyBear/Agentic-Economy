@@ -1,0 +1,245 @@
+/*
+ * Arc Pro agent-run surface and approval geometry, source SHA-256:
+ * 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032.
+ * Arc settings-page continuous rows, source SHA-256:
+ * e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Adapted to the existing Agentic Economy approval and authorization contracts.
+ */
+.arc-market.arc-agent-approvals {
+  box-sizing: border-box;
+  min-width: 0;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+}
+
+.arc-agent-approvals *,
+.arc-agent-approvals *::before,
+.arc-agent-approvals *::after {
+  box-sizing: border-box;
+}
+
+.arc-agent-approvals__loading {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.arc-agent-approvals__skeleton {
+  width: 100%;
+  min-height: 44px;
+}
+
+.arc-agent-approvals__list {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border-block: 1px solid var(--border);
+  padding: 0;
+  list-style: none;
+}
+
+.arc-agent-approvals__item {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+}
+
+.arc-agent-approvals__item + .arc-agent-approvals__item {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.arc-agent-approvals__content,
+.arc-agent-approvals__tool {
+  display: grid;
+  min-width: 0;
+}
+
+.arc-agent-approvals__content {
+  gap: var(--space-3);
+}
+
+.arc-agent-approvals__tool {
+  gap: var(--space-1);
+}
+
+.arc-agent-approvals__tool-link,
+.arc-agent-approvals__tool-name {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.arc-agent-approvals__tool-link {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.arc-agent-approvals__description {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.arc-agent-approvals__facts {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.arc-agent-approvals [data-slot="alert"] {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: var(--space-2);
+  border-color: var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-3);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.arc-agent-approvals [data-slot="alert-title"] {
+  display: block;
+  grid-column: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: visible;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  letter-spacing: 0;
+  text-overflow: clip;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow-wrap: anywhere;
+}
+
+.arc-agent-approvals [data-slot="alert-description"] {
+  display: grid;
+  grid-column: 1;
+  justify-items: start;
+  min-width: 0;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.arc-agent-approvals [data-slot="alert-description"] p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.arc-agent-approvals__actions {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+}
+
+.arc-agent-approvals__action,
+.arc-agent-approvals__alert-action {
+  width: 100%;
+  min-height: 44px;
+}
+
+.arc-agent-approvals__authorized {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+}
+
+.arc-agent-approvals__authorized h3 {
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-agent-approvals__authorized-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border-block: 1px solid var(--border);
+  padding: 0;
+  list-style: none;
+}
+
+.arc-agent-approvals__authorized-item + .arc-agent-approvals__authorized-item {
+  min-width: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.arc-agent-approvals__authorized-item {
+  min-width: 0;
+}
+
+.arc-agent-approvals__authorized-link {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  padding-block: var(--space-2);
+  color: var(--foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (min-width: 640px) {
+  .arc-agent-approvals__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .arc-agent-approvals__actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .arc-agent-approvals__action {
+    width: auto;
+  }
+
+  .arc-agent-approvals__alert-action {
+    width: fit-content;
+  }
+}
+
+@media (min-width: 1024px) {
+  .arc-agent-approvals__facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

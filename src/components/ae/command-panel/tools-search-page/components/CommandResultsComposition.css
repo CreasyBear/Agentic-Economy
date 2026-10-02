@@ -1,0 +1,123 @@
+/* Arc command-palette result treatment, aligned to command-palette.module.css
+ * SHA-256 f06e18253cecdb3797415629700b9c6c0fc0c0d4efc5504386be8ef44a47bcf8.
+ * cmdk remains the only choice and keyboard engine. */
+.arc-market.arc-command-search .arc-command-result-group {
+  position: relative;
+  padding: 6px var(--space-2);
+  color: var(--foreground);
+}
+
+.arc-market.arc-command-search .arc-command-result-group + .arc-command-result-group {
+  margin-block-start: var(--space-1);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.arc-market.arc-command-search .arc-command-result-group [cmdk-group-heading] {
+  display: block;
+  padding: 5px var(--space-2) 3px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.arc-market.arc-command-search .arc-command-result-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: var(--space-2);
+  background: transparent;
+  color: var(--foreground);
+  line-height: 1.45;
+  text-align: start;
+  cursor: pointer;
+}
+
+.arc-market.arc-command-search .arc-command-result-row[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--accent-subtle);
+}
+
+.arc-market.arc-command-search .arc-command-result-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.arc-market.arc-command-search .arc-command-result-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+}
+
+.arc-market.arc-command-search .arc-command-result-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.arc-market.arc-command-search .arc-command-result-title,
+.arc-market.arc-command-search .arc-command-result-meta {
+  display: block;
+  min-width: 0;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.arc-market.arc-command-search .arc-command-result-title {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.arc-market.arc-command-search .arc-command-result-meta {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.arc-market.arc-command-search .arc-command-result-reference {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.arc-market.arc-command-search .arc-command-result-price {
+  min-width: 0;
+  margin-inline-start: auto;
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-command-search .arc-command-result-row--tool {
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+}
+
+.arc-market.arc-command-search .arc-command-result-row--recent {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 480px) {
+  .arc-market.arc-command-search .arc-command-result-row--tool {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .arc-market.arc-command-search .arc-command-result-row--tool .arc-command-result-price {
+    grid-column: 1;
+    grid-row: 2;
+    max-width: none;
+    margin-inline-start: 0;
+    text-align: start;
+  }
+}

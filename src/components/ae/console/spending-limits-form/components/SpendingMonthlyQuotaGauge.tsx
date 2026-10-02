@@ -1,6 +1,7 @@
 import { Progress } from '@/components/ui/progress'
 
 import type { SpendingMonthlyQuotaGaugeProps } from '../spending-limits-form.contracts'
+import '../SpendingReadoutComposition.css'
 
 export function SpendingMonthlyQuotaGauge({
   label,
@@ -10,15 +11,15 @@ export function SpendingMonthlyQuotaGauge({
   progressAriaLabel,
 }: SpendingMonthlyQuotaGaugeProps) {
   return (
-    <div className="grid min-h-[2.75rem] gap-1.5">
-      <p className={`text-xs text-muted-foreground ${toneClass}`}>
-        <span className="font-mono tabular-nums text-foreground">{label}</span>
+    <div className="arc-market arc-spending-quota">
+      <p className={`arc-spending-quota-label text-muted-foreground ${toneClass}`}>
+        <span>{label}</span>
       </p>
       {approachingCopy !== undefined ? (
-        <p className="text-xs text-destructive">{approachingCopy}</p>
+        <p className="arc-spending-quota-warning">{approachingCopy}</p>
       ) : null}
       <Progress
-        className="h-1.5"
+        className="arc-spending-quota-track"
         value={progressValue}
         aria-label={progressAriaLabel}
       />

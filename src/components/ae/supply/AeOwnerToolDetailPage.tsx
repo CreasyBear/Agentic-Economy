@@ -14,9 +14,8 @@ import type {
 import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
 import { OWNER_TOOL_DETAIL_COPY } from '@/components/ae/supply/owner-tool-detail.contracts'
 import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -27,6 +26,7 @@ import {
   type OwnerSupplyMaintenanceInput,
   type SupplyFunnelActionContext,
 } from '@/modules/capability-supply/supply-funnel.functions'
+import './ProviderToolComposition.css'
 
 type AeOwnerToolDetailPageProps = Readonly<{
   toolRef: string
@@ -109,10 +109,10 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
       breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: name }]}
     >
-      <AeSection title={OWNER_TOOL_DETAIL_COPY.overviewTitle}>
+      <AeSection title={OWNER_TOOL_DETAIL_COPY.overviewTitle} className="arc-owner-tool-overview">
         <AeFactList
           density="compact"
-          className="grid-cols-2 sm:grid-cols-4"
+          className="arc-owner-tool-facts"
           facts={[
             {
               label: OWNER_TOOL_DETAIL_COPY.priceLabel,
@@ -135,7 +135,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
           <Link
             to="/tools/$providerHost/$slug"
             params={{ providerHost: identity.slug, slug: status.tool.slug }}
-            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-fit')}
+            className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-owner-tool-action'].join(' ')}
           >
             {OWNER_TOOL_DETAIL_COPY.publicPreviewLabel}
           </Link>
@@ -166,7 +166,7 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
       description="Agentic Economy could not confirm this Tool."
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
     >
-      <div className="grid gap-related">
+      <div className="arc-market arc-owner-tool-unavailable">
         <Alert variant={unavailable ? 'destructive' : 'default'}>
           <AlertTitle>{unavailable ? 'Tool status unavailable' : 'Tool not found'}</AlertTitle>
           <AlertDescription>
@@ -177,7 +177,7 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
         </Alert>
         <Link
           to="/owner/operations"
-          className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-fit')}
+          className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-owner-tool-action'].join(' ')}
         >
           Return to Tools
         </Link>

@@ -1,14 +1,16 @@
 import type { OptionsGridProps } from './generative.contracts'
 import { OptionCard } from './OptionCard'
+import { ProductListing } from '@/components/arc/market/ProductListing'
+import '@/components/arc/chat/Options.css'
 
 export function OptionsGrid({ view, onSelect, onCompare, onReview, openToolRef, panelId, readOnly = false }: OptionsGridProps) {
   if (view.options.length === 0) return null
   return (
-    <section aria-label="Options" className="grid min-w-0 gap-3">
-      <h3 className="text-xs font-medium text-muted-foreground sm:text-[0.8125rem]">Options</h3>
-      <div className="flex min-w-0 snap-x snap-mandatory gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:overflow-visible">
+    <section aria-label="Options" className="arc-market arc-chat arc-chat-options">
+      <h3 className="arc-chat-options-title">Options</h3>
+      <ProductListing className="arc-chat-option-gallery">
         {view.options.map((option) => (
-          <OptionCard key={option.id} option={option}
+          <li key={option.id}><OptionCard option={option}
             recommended={view.recommendedId === option.id}
             compared={view.comparedIds.includes(option.id)}
             selected={view.selectedId === option.id}
@@ -19,9 +21,9 @@ export function OptionsGrid({ view, onSelect, onCompare, onReview, openToolRef, 
             {...(onReview === undefined ? {} : { onReview })}
             {...(openToolRef === undefined ? {} : { openToolRef })}
             {...(panelId === undefined ? {} : { panelId })}
-          />
+          /></li>
         ))}
-      </div>
+      </ProductListing>
     </section>
   )
 }

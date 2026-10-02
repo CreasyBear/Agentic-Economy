@@ -1,10 +1,11 @@
 import { ChatAssistantText } from '@/components/ae/chat/ChatAssistantText'
 import type { AnswerBlockProps } from './generative.contracts'
+import '../TranscriptComposition.css'
 
 export function AnswerBlock({ view }: AnswerBlockProps) {
-  if (!view.markdown.trim()) return view.streaming ? <p role="status" className="w-fit text-sm text-muted-foreground motion-safe:animate-pulse">Writing an answer…</p> : null
+  if (!view.markdown.trim()) return view.streaming ? <p role="status" className="arc-market arc-chat arc-answer-writing">Writing an answer…</p> : null
   return (
-    <section aria-label="Answer" aria-busy={view.streaming === true} className="min-w-0 text-foreground">
+    <section aria-label="Answer" aria-busy={view.streaming === true} className="arc-market arc-chat arc-answer">
       <ChatAssistantText text={view.markdown} />
     </section>
   )

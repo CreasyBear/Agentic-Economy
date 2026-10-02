@@ -1,0 +1,40 @@
+/* Arc ProductDetail title/source split + ProductListing gallery, adapted to real sourced offerings. */
+.arc-provider-catalogue { container: provider-catalogue / inline-size; display: grid; gap: var(--space-8); min-width: 0; padding-block: var(--space-6) var(--space-12); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-base); line-height: var(--leading-body); }
+.arc-provider-catalogue :where(h1, h2, h3, p) { margin: 0; }
+.arc-provider-catalogue :where(a, summary):focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+.arc-provider-identity, .arc-host-identity { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .65fr); gap: var(--space-8); padding: var(--space-8); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-muted); overflow-wrap: anywhere; }
+.arc-provider-title { display: grid; align-content: start; gap: var(--space-4); min-width: 0; }
+.arc-provider-title h1 { font-family: var(--font-display); font-size: clamp(2rem, 4cqi, 3.5rem); font-weight: 500; letter-spacing: var(--tracking-display); line-height: var(--leading-display); }
+.arc-provider-title > p { max-width: 60ch; color: var(--text-secondary); }
+.arc-provider-source { display: grid; align-content: start; gap: var(--space-3); min-width: 0; padding-inline-start: var(--space-6); border-inline-start: 1px solid var(--border); color: var(--text-secondary); font-size: var(--text-sm); }
+.arc-provider-source details { min-width: 0; }
+.arc-provider-source summary, .arc-provider-json summary { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-height-md); cursor: pointer; }
+.arc-provider-source details p { padding-block: var(--space-2); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.arc-provider-source a, .arc-provider-text-link { display: inline-flex; align-items: center; min-height: var(--control-height-md); width: fit-content; max-width: 100%; text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
+.arc-provider-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .35fr); gap: var(--space-8); align-items: start; min-width: 0; }
+.arc-provider-portfolio, .arc-host-grouping { display: grid; gap: var(--space-6); min-width: 0; }
+.arc-provider-portfolio h2, .arc-host-grouping h2, .arc-provider-aside h2 { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 500; letter-spacing: var(--tracking-display); line-height: var(--leading-display); }
+.arc-provider-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); min-width: 0; }
+.arc-provider-offering { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
+.arc-provider-card { display: grid; align-content: start; gap: var(--space-4); min-width: 0; height: 100%; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); overflow-wrap: anywhere; }
+.arc-provider-card header, .arc-provider-card-body { display: grid; gap: var(--space-3); min-width: 0; }
+.arc-provider-card h3 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 500; letter-spacing: var(--tracking-display); line-height: var(--leading-display); }
+.arc-provider-card h3 a { text-decoration: none; }
+.arc-provider-card h3 a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.arc-provider-card-body > p { color: var(--text-secondary); }
+.arc-provider-meta { color: var(--text-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.arc-provider-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.arc-provider-aside { position: sticky; top: calc(var(--header-height, 4rem) + var(--space-6)); display: grid; gap: var(--space-6); min-width: 0; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-muted); }
+.arc-provider-aside > section { display: grid; gap: var(--space-4); min-width: 0; }
+.arc-provider-aside p { color: var(--text-secondary); }
+.arc-provider-aside a { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.arc-provider-json { min-width: 0; border-block: 1px solid var(--border); }
+.arc-provider-json summary { font-size: var(--text-sm); font-weight: 500; }
+.arc-provider-json summary svg { width: 16px; height: 16px; flex: none; }
+.arc-provider-json > div { display: grid; gap: var(--space-3); padding-block: var(--space-3); }
+.arc-provider-loading { display: grid; gap: var(--space-4); min-width: 0; }
+.arc-provider-loading [data-slot="skeleton"] { min-width: 0; max-width: 100%; }
+@container provider-catalogue (max-width: 900px) { .arc-provider-layout { grid-template-columns: minmax(0, 1fr); } .arc-provider-aside { position: static; } }
+@container provider-catalogue (max-width: 700px) { .arc-provider-identity, .arc-host-identity { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding: var(--space-5); } .arc-provider-source { padding-inline-start: 0; padding-block-start: var(--space-4); border-inline-start: 0; border-block-start: 1px solid var(--border); } }
+@container provider-catalogue (max-width: 560px) { .arc-provider-gallery { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 592px) { .arc-provider-catalogue { gap: var(--space-6); } }

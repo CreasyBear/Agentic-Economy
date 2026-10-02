@@ -1,7 +1,8 @@
+import '@/components/ae/shared/ProviderCatalogueComposition.css'
 import { Link, type NotFoundRouteProps } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { buttonVariants } from '@/components/ui/button-variants'
+import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { cn } from '@/lib/utils'
 import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
 
@@ -17,9 +18,9 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
         title="Provider profile unavailable"
         description="This provider is not published in the catalogue right now."
         action={
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Link to="/for-providers" className={cn(buttonVariants({ variant: 'default' }), 'min-h-touch')}>Add Tool</Link>
-            <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Browse Tools</Link>
+          <div className="arc-provider-actions">
+            <Link to="/for-providers" className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}>Add Tool</Link>
+            <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>Browse Tools</Link>
           </div>
         }
       />
@@ -31,9 +32,9 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
       title="No provider at this address"
       description="Nothing is published here. Check the address, or browse the catalogue."
       action={
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Link to="/market" className={cn(buttonVariants({ variant: 'default' }), 'min-h-touch')}>Browse Tools</Link>
-          <Link to="/for-providers" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Add Tool</Link>
+        <div className="arc-provider-actions">
+          <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}>Browse Tools</Link>
+          <Link to="/for-providers" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>Add Tool</Link>
         </div>
       }
     />

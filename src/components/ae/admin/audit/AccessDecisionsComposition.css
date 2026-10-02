@@ -1,0 +1,116 @@
+/* Arc settings-page field/group geometry SHA-256:
+ * e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Arc agent-run approval rows SHA-256:
+ * 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032.
+ * Existing permission and two-person approval controllers own every action. */
+.arc-market.arc-admin-membership,
+.arc-market.arc-admin-approvals {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.arc-market.arc-admin-membership {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface);
+}
+.arc-market .arc-admin-membership-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-2);
+}
+.arc-market .arc-admin-membership-field > label {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-membership-field > :where(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 10px var(--space-3);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+.arc-market .arc-admin-membership-field > input {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.arc-market .arc-admin-membership-field > :where(input, select):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.arc-market .arc-admin-membership-actions {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.arc-market .arc-admin-approval-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: 0;
+  background: var(--surface);
+  list-style: none;
+}
+.arc-market .arc-admin-approval-row {
+  display: flex;
+  min-width: 0;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-5) var(--space-6);
+}
+.arc-market .arc-admin-approval-row:last-child { border-bottom: 0; }
+.arc-market .arc-admin-approval-facts {
+  display: grid;
+  flex: 1 1 260px;
+  min-width: 0;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-approval-facts > span { font-weight: 500; }
+.arc-market .arc-admin-approval-facts time {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.arc-market .arc-admin-approval-diagnostic {
+  flex: 1 1 260px;
+  min-width: 0;
+  max-width: 100%;
+}
+.arc-market .arc-admin-approval-diagnostic [data-slot="alert-description"] {
+  color: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-approvals-empty {
+  margin: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.arc-market .arc-admin-approvals-more { justify-self: start; }
+@media (min-width: 640px) {
+  .arc-market.arc-admin-membership { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 479px) {
+  .arc-market.arc-admin-membership,
+  .arc-market .arc-admin-approval-row { padding: var(--space-4); }
+}

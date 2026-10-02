@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import './FactsComposition.css'
 
 export type AeFact = Readonly<{
   label: string;
@@ -21,36 +22,24 @@ export function AeFactList({
 }) {
   return (
     <dl
-      className={cn(
-        density === "compact" ? "grid gap-x-related gap-y-intra" : "grid gap-related",
-        className,
-      )}
+      className={cn('arc-market arc-facts-list', className)}
+      data-density={density}
     >
       {facts.map((fact) => (
         <div
           key={fact.label}
-          className={cn(
-            "min-w-0",
-            density === "default" &&
-              "grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related",
-          )}
+          className="arc-facts-row"
         >
           <dt
-            className={cn(
-              "text-muted-foreground",
-              density === "compact" ? "text-xs" : "text-sm",
-            )}
+            className="arc-facts-term"
             aria-description={fact.definition}
           >
             {fact.label}
           </dt>
           <dd
-            className={cn(
-              "min-w-0 break-all font-medium tabular-nums",
-              density === "compact" ? "mt-0.5 break-words text-sm" : "text-sm",
-              fact.mono && "font-mono",
-              fact.muted ? "text-muted-foreground" : "text-foreground",
-            )}
+            className="arc-facts-value"
+            data-mono={fact.mono ? '' : undefined}
+            data-muted={fact.muted ? '' : undefined}
           >
             {fact.value}
           </dd>

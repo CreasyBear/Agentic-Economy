@@ -12,6 +12,7 @@ import { ConsentOutcomeView } from './components/ConsentOutcomeView'
 import { ConsentRequestFacts } from './components/ConsentRequestFacts'
 import { ConsentToolAccessFieldset } from './components/ConsentToolAccessFieldset'
 import { useAgentConsentDecision } from './useAgentConsentDecision'
+import './ConsentComposition.css'
 
 export type AeAgentAccessAuthorizeFormProps = Readonly<{
   locator: ConsentLocator
@@ -51,11 +52,11 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
       <AeSettingsStack>
         {vm.decision.phase === 'idle' || vm.decision.phase === 'submitting' ? (
           <div
-            className="flex max-h-[min(40rem,calc(100dvh-12rem))] flex-col overflow-hidden rounded-xl border border-border bg-card"
+            className="arc-market arc-consent-review"
             role="group"
             aria-label={`Access decision for ${vm.clientName}`}
           >
-            <div className="shrink-0 p-4 sm:p-5">
+            <div className="arc-consent-review-head">
               <AeSection
                 title={`Connect ${vm.clientName}`}
                 description={vm.accessProfile === 'provider'
@@ -77,8 +78,8 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
                 />
               </AeSection>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-5">
-              <div className="grid gap-related">
+            <div className="arc-consent-review-body">
+              <div className="arc-consent-review-regions">
                 <ConsentConnectionFieldset
                   pending={vm.pending}
                   connectionTarget={vm.connectionTarget}

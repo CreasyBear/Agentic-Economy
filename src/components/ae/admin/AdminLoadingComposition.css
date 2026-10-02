@@ -1,0 +1,94 @@
+/* Static loading regions mirror Arc settings-page panes, integrations rows and
+ * metrics-dashboard KPIs. No invented records, values or animated progress.
+ * Settings SHA-256 e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Metrics SHA-256 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9.
+ * Integrations SHA-256 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10. */
+.arc-market.arc-admin-loading {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-8);
+  color: var(--foreground);
+  font-family: var(--font-body);
+}
+.arc-market .arc-admin-loading-pane {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface);
+}
+.arc-market .arc-admin-loading-line {
+  display: block;
+  width: 56%;
+  max-width: 20rem;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+}
+.arc-market .arc-admin-loading-line[data-size="title"] {
+  width: 40%;
+  height: 20px;
+}
+.arc-market .arc-admin-loading-line[data-size="value"] {
+  width: 60%;
+  height: 32px;
+}
+.arc-market .arc-admin-loading-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  padding-block: var(--space-4);
+}
+.arc-market .arc-admin-loading-kpis {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+.arc-market .arc-admin-loading-kpi {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  padding: var(--space-6);
+}
+.arc-market .arc-admin-loading-kpi + .arc-admin-loading-kpi {
+  border-left: 1px solid var(--border);
+}
+.arc-market .arc-admin-loading-object {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  align-items: start;
+  gap: var(--space-6);
+}
+.arc-market .arc-admin-loading-chart {
+  height: 192px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+@media (max-width: 859px) {
+  .arc-market .arc-admin-loading-object { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 759px) {
+  .arc-market .arc-admin-loading-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .arc-market .arc-admin-loading-kpi:nth-child(odd) { border-left: 0; }
+  .arc-market .arc-admin-loading-kpi:nth-child(n + 3) { border-top: 1px solid var(--border); }
+}
+@media (max-width: 439px) {
+  .arc-market .arc-admin-loading-pane,
+  .arc-market .arc-admin-loading-kpi { padding: var(--space-4); }
+  .arc-market .arc-admin-loading-kpis { grid-template-columns: minmax(0, 1fr); }
+  .arc-market .arc-admin-loading-kpi + .arc-admin-loading-kpi {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+  .arc-market .arc-admin-loading-row { grid-template-columns: minmax(0, 1fr); }
+}

@@ -3,8 +3,8 @@ import { Suspense, type ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import './ProviderWorkspaceComposition.css'
 import { projectProviderWorkspace, type ProviderWorkspaceProjectionRow } from './provider-workspace-projection'
 import type {
   ProviderWorkspaceInventoryResult,
@@ -65,7 +65,7 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
               )
             }
             return (
-              <div className="grid gap-related">
+              <div className="arc-provider-workspace-tool-results">
                 {projection.attentionCount === 0 ? null : (
                   <Alert>
                     <AlertTitle>{projection.attentionCount === 1 ? '1 Tool needs attention' : `${projection.attentionCount} Tools need attention`}</AlertTitle>
@@ -82,11 +82,11 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
         </Suspense>
       )}
       {inventory.isDone && compatibilityCursor === undefined ? null : (
-        <nav aria-label="Tool pages" className="flex flex-wrap gap-intra">
+        <nav aria-label="Tool pages" className="arc-provider-workspace-tool-pages">
           {compatibilityCursor === undefined ? null : (
             <a
               href="/owner/operations"
-              className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+              className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
             >
               First 50 Tools
             </a>
@@ -94,7 +94,7 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
           {inventory.isDone ? null : (
             <a
               href={`/owner/operations?cursor=${encodeURIComponent(inventory.continueCursor)}`}
-              className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+              className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
             >
               Next 50 Tools
             </a>

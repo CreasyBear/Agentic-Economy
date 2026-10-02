@@ -14,6 +14,7 @@ import {
   type AdminCallObjectFoundProps,
 } from './call-object.contracts'
 import { useAdminCallObject } from './useAdminCallObject'
+import '../RecordWorkspaceComposition.css'
 
 export type AdminCallObjectPageProps = Readonly<{
   result: AdminCallLoaderResult
@@ -66,7 +67,7 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
         <span>{ADMIN_CALL_OBJECT_COPY.referenceLabel}</span>
         <AeCopyReference label={ADMIN_CALL_OBJECT_COPY.referenceLabel} value={view.ref} />
       </div>
-      <div className="grid gap-section lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="arc-market arc-admin-call-layout">
         <AdminCallEvidence model={model} />
         <AdminCallReferences refs={model.relatedRefs} />
       </div>

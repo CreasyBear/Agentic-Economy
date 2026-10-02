@@ -92,19 +92,60 @@ describe('/support', () => {
   it('keeps private support primary and labels public escalation', () => {
     renderRoute()
     expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe('mailto:support@aecon.ai')
+    expect(screen.getByText('Do not include credentials, raw inputs or private results.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: /^Private support/ }))
+    expect(screen.getByRole('link', { name: 'Request a listing correction' }).getAttribute('href')).toBe('/privacy/remove-business')
+    expect(screen.getByRole('link', { name: 'Review Provider requirements' }).getAttribute('href')).toBe('/for-providers')
+    fireEvent.click(screen.getByRole('tab', { name: /^Developer issue/ }))
     expect(screen.getByRole('link', { name: /Open a public developer issue/ }).getAttribute('href')).toBe(
       'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose',
     )
     expect(screen.getByText(/Do not include credentials, raw inputs or private results/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Request a listing correction' }).getAttribute('href')).toBe('/privacy/remove-business')
+    expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe('mailto:support@aecon.ai')
+    expect(screen.queryByRole('link', { name: 'Request a listing correction' })).toBeNull()
   })
 
   it('discloses advanced diagnostics with the configured canonical origin', () => {
     renderRoute()
+    fireEvent.click(screen.getByRole('tab', { name: /^Agent connection/ }))
     expect(screen.queryByRole('button', { name: 'Copy diagnostic command' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Advanced connection diagnostics' }))
     expect(screen.getByText('ae doctor --base-url "https://ae.example"')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Review Agent connection' }).getAttribute('href')).toBe('/for-agents')
+  })
+
+  it('chooses one support topic with keyboard arrows and Home/End without retaining outgoing actions', () => {
+    renderRoute()
+    const current = screen.getByRole('tab', { name: /^Current status/ })
+    const connection = screen.getByRole('tab', { name: /^Agent connection/ })
+    const developer = screen.getByRole('tab', { name: /^Developer issue/ })
+    current.focus()
+    fireEvent.keyDown(current, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(connection)
+    expect(connection.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tabpanel', { name: /^Agent connection/ })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Open Calls' })).toBeNull()
+    fireEvent.keyDown(connection, { key: 'End' })
+    expect(document.activeElement).toBe(developer)
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    const issue = screen.getByRole('link', { name: /Open a public developer issue/ })
+    expect(issue.getAttribute('target')).toBe('_blank')
+    expect(issue.getAttribute('rel')).toBe('noreferrer')
+    fireEvent.keyDown(developer, { key: 'Home' })
+    expect(document.activeElement).toBe(current)
+    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
+    expect(screen.queryByRole('link', { name: /Open a public developer issue/ })).toBeNull()
+  })
+
+  it('keeps the exact Call reference and private email draft visible across topics', () => {
+    renderRoute({ callRef: validCallRef })
+    const initialHref = screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')
+    for (const name of [/^Agent connection/, /^Private support/, /^Developer issue/, /^Current status/]) {
+      fireEvent.click(screen.getByRole('tab', { name }))
+      expect(screen.getByText(`Referenced Call: ${validCallRef}`)).toBeTruthy()
+      expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe(initialHref)
+      expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    }
   })
 
   it('renders an absent Call reference with the general Calls handoff', () => {

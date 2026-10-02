@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import { Link } from '@tanstack/react-router'
 
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import './AppFrameComposition.css'
 
 function subscribeToNetworkStatus(onStoreChange: () => void): () => void {
   window.addEventListener('online', onStoreChange)
@@ -39,7 +39,7 @@ export function AeNetworkHealthBanner() {
     <div
       data-slot="offline-warning-banner"
       role="alert"
-      className="border-b border-warning/30 bg-warning/15 px-gutter py-intra text-sm text-warning-foreground"
+      className="arc-market arc-network-warning"
     >
       You are currently offline. Showing cached data.
     </div>
@@ -50,7 +50,7 @@ export function AeNetworkHealthIndicator() {
   return (
     <Link
       to="/status"
-      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}
+      className={`arc-market ${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
       aria-label="System status"
     >
       Status

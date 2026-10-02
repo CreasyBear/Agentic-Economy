@@ -1,10 +1,12 @@
 import { Skeleton } from '@/components/ui/skeleton'
+import './WorkspaceDangerComposition.css'
 
 export function WorkspaceDangerZoneSkeleton() {
   return (
-    <div className="grid min-h-[28rem] gap-section" aria-busy="true">
-      <Skeleton className="min-h-[12rem] w-full" />
-      <Skeleton className="min-h-[12rem] w-full" />
+    <div className="arc-market arc-workspace-danger-loading" aria-busy="true">
+      {[0, 1].map(index => <div key={index} className="arc-workspace-danger-placeholder" aria-hidden="true">
+        <Skeleton className="h-6 w-48 max-w-full" /><Skeleton className="h-4 w-3/4" />
+      </div>)}
     </div>
   )
 }

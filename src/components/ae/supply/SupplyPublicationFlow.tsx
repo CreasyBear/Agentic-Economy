@@ -2,11 +2,11 @@ import { useEffect, type ReactNode, type Ref } from 'react'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Button } from '@/components/arc/button/button'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
@@ -141,8 +141,8 @@ export function SupplyPublicationFlow({
       : undefined
 
   if (!reviewing) return (
-    <AeSection title="Terms" description="Review facts derived from the source, then declare only the terms AE owns." {...(headingRef === undefined ? {} : { headingRef })}>
-      <FieldGroup className="gap-5">
+    <AeSection title="Terms" description="Review facts derived from the source, then declare only the terms AE owns." className="arc-publication-region" {...(headingRef === undefined ? {} : { headingRef })}>
+      <FieldGroup className="arc-publication-fields">
         <TextField id="supply-native-name" label="Tool name" value={name} disabled={disabled} onChange={onNameChange} description="Shown to agents in discovery." />
         <TextAreaField id="supply-native-description" label="Description" value={description} disabled={disabled} onChange={onDescriptionChange} description="What this Tool does and returns." />
         {descriptionSuggestion}
@@ -183,7 +183,7 @@ export function SupplyPublicationFlow({
           />
         )}
         <ConsequencesField externalEffect={externalEffect} dataRelease={dataRelease} financialExposure={financialExposure} dataClassification={dataClassification} disabled={disabled} onExternalEffectChange={onExternalEffectChange} onDataReleaseChange={onDataReleaseChange} onFinancialExposureChange={onFinancialExposureChange} onDataClassificationChange={onDataClassificationChange} />
-        <Button type="button" className="min-h-touch justify-self-start" disabled={disabled} onClick={onContinueToReview}>
+        <Button type="button" variant="primary" size="md" className="arc-publication-action" disabled={disabled} onClick={onContinueToReview}>
           Continue to review
         </Button>
       </FieldGroup>
@@ -198,8 +198,8 @@ export function SupplyPublicationFlow({
   const priceSummary = publicationPriceSummary(pricingInput(pricingKind, price))
 
   return (
-    <AeSection title="Review" description="Confirm the exact Tool presentation and declared terms before validation starts." {...(headingRef === undefined ? {} : { headingRef })}>
-      <div className="grid gap-related rounded-xl border border-border bg-card p-4" role="group" aria-label="Tool publication decision">
+    <AeSection title="Review" description="Confirm the exact Tool presentation and declared terms before validation starts." className="arc-publication-region" {...(headingRef === undefined ? {} : { headingRef })}>
+      <DecisionPanel role="group" aria-label="Tool publication decision" className="arc-publication-review">
         <AeFactList facts={[
           { label: 'Tool', value: name },
           { label: 'Description', value: description },
@@ -208,8 +208,8 @@ export function SupplyPublicationFlow({
           { label: 'Source connection', value: selected.authentication.kind === 'public' ? 'Public source' : connectionRef === '' ? 'Not selected' : 'Connected source selected' },
           { label: 'Declared behavior', value: consequenceSummary },
         ]} />
-        <Button type="button" variant="secondary" className="justify-self-start min-h-touch" disabled={disabled} onClick={onEditTerms}>Edit terms</Button>
-        <div className="border-t border-border pt-related">
+        <Button type="button" variant="secondary" size="md" className="arc-publication-action" disabled={disabled} onClick={onEditTerms}>Edit terms</Button>
+        <div className="arc-publication-attestation">
           <AttestationField
             values={attestation}
             disabled={disabled}
@@ -219,10 +219,10 @@ export function SupplyPublicationFlow({
           />
         </div>
         <div role="status" aria-live="polite">{saving ? <AeInlineState state="saving" description="Submitting the exact source revision for validation." /> : null}</div>
-        <Button type="button" className="min-h-touch justify-self-start" disabled={disabled} aria-busy={saving || undefined} onClick={onSubmit}>
+        <Button type="button" variant="primary" size="md" className="arc-publication-action" disabled={disabled} aria-busy={saving || undefined} onClick={onSubmit}>
           {saving ? 'Listing…' : 'List this endpoint'}
         </Button>
-      </div>
+      </DecisionPanel>
     </AeSection>
   )
 }
@@ -239,20 +239,21 @@ function PricingField({ kind, price, x402, disabled, invalid = false, describedB
         aria-describedby={invalid && describedBy !== undefined ? describedBy : undefined}
         value={kind}
         disabled={disabled}
-        className="grid gap-2 sm:grid-cols-2"
+        className="arc-publication-options arc-publication-price-options"
         onValueChange={(next) => onKindChange(next as typeof kind)}
       >
         {x402 ? (
           <p className="text-sm text-muted-foreground">Price is the amount in the payment challenge.</p>
         ) : (
           <>
-            <Label className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value="free" />Free</Label>
-            <Label className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value="fixed_aud" />Fixed AUD price</Label>
+            <Label className="arc-publication-choice"><RadioGroupItem value="free" />Free</Label>
+            <Label className="arc-publication-choice"><RadioGroupItem value="fixed_aud" />Fixed AUD price</Label>
           </>
         )}
       </RadioGroup>
       {kind === 'fixed_aud' ? (
-        <Input
+        <input
+          className="arc-publication-input"
           id={SUPPLY_PUBLICATION_FIELD_IDS.priceAud}
           aria-label="AUD price"
           aria-invalid={invalid || undefined}
@@ -281,7 +282,8 @@ function ConnectionField({ value, options, connecting, disabled, invalid = false
               id={SUPPLY_PUBLICATION_FIELD_IDS.connection}
               type="button"
               variant="secondary"
-              className="mt-4 min-h-touch"
+              size="md"
+              className="arc-publication-connect-action"
               disabled={connecting || disabled}
               aria-invalid={invalid || undefined}
               aria-describedby={invalid && describedBy !== undefined ? describedBy : undefined}
@@ -300,10 +302,11 @@ function ConnectionField({ value, options, connecting, disabled, invalid = false
           aria-describedby={invalid && describedBy !== undefined ? describedBy : undefined}
           value={value}
           disabled={disabled}
+          className="arc-publication-options"
           onValueChange={(val) => onChange(String(val))}
         >
           {options.map((option) => (
-            <Label key={option.connectionRef} className="min-h-touch rounded-md border border-border p-3">
+            <Label key={option.connectionRef} className="arc-publication-choice">
               <RadioGroupItem value={option.connectionRef} />
               {option.adapterId} · connected
             </Label>
@@ -326,16 +329,16 @@ function ConsequencesField({ externalEffect, dataRelease, financialExposure, dat
       </div>
       {dataRelease ? (
         <>
-          <FieldLabel id="supply-native-data-classification-label" className="mt-3">Data classification</FieldLabel>
+          <FieldLabel id="supply-native-data-classification-label">Data classification</FieldLabel>
           <RadioGroup
             aria-labelledby="supply-native-data-classification-label"
             value={dataClassification}
             disabled={disabled}
-            className="mt-3 grid gap-2 sm:grid-cols-3"
+            className="arc-publication-options arc-publication-classification-options"
             onValueChange={(next) => onDataClassificationChange(next as typeof dataClassification)}
           >
             {(['public', 'personal', 'sensitive'] as const).map((classification) => (
-              <Label key={classification} className="min-h-touch rounded-md border border-border p-3">
+              <Label key={classification} className="arc-publication-choice">
                 <RadioGroupItem value={classification} />
                 {classification[0]?.toUpperCase()}{classification.slice(1)} data
               </Label>
@@ -363,5 +366,5 @@ function AttestationField({ values, disabled, invalid = false, describedBy, onCh
 }
 
 function CheckRow({ id, label, checked, disabled = false, onChange }: Readonly<{ id: string; label: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }>) {
-  return <Label htmlFor={id} className="min-h-touch rounded-md border border-border p-3"><Checkbox id={id} checked={checked} disabled={disabled} onCheckedChange={(value) => onChange(value === true)} />{label}</Label>
+  return <Label htmlFor={id} className="arc-publication-check-row"><Checkbox id={id} checked={checked} disabled={disabled} onCheckedChange={(value) => onChange(value === true)} />{label}</Label>
 }

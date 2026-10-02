@@ -1,0 +1,24 @@
+/* Scope composition checked against SegmentedControl upstream 9e1a4bc135246c86ed2d8875a3a1266490aa38a3d7800759db630e700188e840 and FilterToolbar source TSX 08e4a8d716906d81028e30fd28005cb960335937f486f4f3fe79db2f7b230290 / CSS e6d408a3d31a1b32eafa21482c7b0575567b0b425a62fb92842d3ac7b6d1751e. */
+.arc-market.arc-operator-scope-region {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--space-3);
+}
+
+.arc-market .arc-operator-scope-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-operator-provider-scope {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}

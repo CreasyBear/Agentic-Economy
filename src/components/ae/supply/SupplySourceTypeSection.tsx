@@ -1,17 +1,16 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { FieldGroup } from '@/components/ui/field'
-import { cn } from '@/lib/utils'
 import { SupplySourceFields } from './supply-source-type/components/SupplySourceFields'
 import { SUPPLY_SOURCE_TYPE_COPY, type SupplySourceTypeSectionProps } from './supply-source-type/supply-source-type.contracts'
 import { useSupplySourceType } from './supply-source-type/useSupplySourceType'
-import { TACTILE } from './supply-source-native-start-presentation'
+import './SupplyPublicationComposition.css'
 
 export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps & Readonly<{ askMethod?: boolean }>) {
   const { discoverDiagnostic, handleDiscover } = useSupplySourceType(props)
   return (
     <AeSection title="Add Tool" description="Paste the public HTTPS URL. Agentic Economy reads the payment challenge.">
-      <FieldGroup className="gap-5">
+      <FieldGroup className="arc-publication-fields">
         <SupplySourceFields
           {...props}
           discoverDiagnostic={discoverDiagnostic}
@@ -19,7 +18,8 @@ export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps & Re
         />
         <Button
           type="button"
-          className={cn('min-h-touch justify-self-start', TACTILE)}
+          size="md"
+          className="arc-publication-action"
           disabled={props.disabled}
           aria-busy={props.discovering || undefined}
           onClick={handleDiscover}

@@ -1,0 +1,18 @@
+/* Arc code-block CSS SHA-256 3419a73d0396bb47f3a834181fbc5435e84013bbf827cf7961dc5dfcc4d3946b.
+ * Authored file/header/source geometry; AE retains origin resolution and the
+ * distinct display/copy channel. No syntax inference or animated secret exit. */
+.arc-copy-command { display: grid; min-width: 0; max-width: 100%; gap: var(--space-2); }
+.arc-copy-command-block { width: 100%; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.arc-copy-command-header { display: flex; min-height: 52px; min-width: 0; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--border-subtle); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4); background: var(--surface-raised); }
+.arc-copy-command-file { display: flex; min-width: 0; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-copy-command-file > svg { flex: none; color: var(--text-muted); }
+.arc-copy-command-action { width: 44px; height: 44px; flex: none; padding: 0; }
+.arc-copy-command-viewport { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-4); }
+.arc-copy-command-viewport[data-prompt] { grid-template-columns: 12px minmax(0, 1fr); }
+.arc-copy-command-prompt { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.7; }
+.arc-copy-command-source { min-width: 0; max-width: 100%; margin: 0; overflow: auto; color: var(--foreground); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.7; tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; }
+.arc-copy-command-source code { font: inherit; }
+.arc-copy-command-block:has(.arc-copy-command-source:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.arc-copy-command-block[data-comfortable] .arc-copy-command-viewport { padding: var(--space-6); }
+.arc-copy-command-block[data-compact] .arc-copy-command-viewport { padding: var(--space-3); }
+@media (max-width: 479px) { .arc-copy-command-block[data-comfortable] .arc-copy-command-viewport { padding: var(--space-4); } }

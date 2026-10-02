@@ -13,12 +13,6 @@ export type AeSupplierOnboardingWizardProps = Readonly<{
   onSaveProfile?: (profile: SupplierOnboardingProfile) => Promise<SupplierOnboardingSaveResult>
 }>
 
-export const TACTILE =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-export const SHELL = 'min-h-[28rem]'
-export const SLOT = 'min-h-[3rem]'
-export const ABN_INPUT_CLASS = 'font-mono tabular-nums'
-
 export const STEP_META: ReadonlyArray<{
   id: SupplierOnboardingStep
   label: string

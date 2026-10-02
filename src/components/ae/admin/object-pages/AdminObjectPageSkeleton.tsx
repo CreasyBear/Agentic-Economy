@@ -1,5 +1,5 @@
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { Skeleton } from '@/components/ui/skeleton'
+import '../AdminLoadingComposition.css'
 import { ADMIN_OBJECT_PAGE_COPY } from './object-pages.contracts'
 
 export function AdminObjectPageSkeleton() {
@@ -13,18 +13,42 @@ export function AdminObjectPageSkeleton() {
       stickyHeader
       pending
     >
-      <div
-        className="grid gap-section pb-page lg:grid-cols-[minmax(0,1fr)_20rem]"
-        aria-busy="true"
-        aria-label={ADMIN_OBJECT_PAGE_COPY.loadingTitle}
-      >
-        <div className="grid content-start gap-related">
-          <Skeleton className="h-6 w-32" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-        <div className="grid content-start gap-related">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="h-48 w-full" />
+      <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={ADMIN_OBJECT_PAGE_COPY.loadingTitle}>
+        <div aria-hidden="true" className="arc-admin-loading-object">
+          <div className="arc-admin-loading-pane">
+            <span className="arc-admin-loading-line" data-size="title" />
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+          </div>
+          <div className="arc-admin-loading-pane">
+            <span className="arc-admin-loading-line" data-size="title" />
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+          </div>
         </div>
       </div>
     </AeOperatorPage>

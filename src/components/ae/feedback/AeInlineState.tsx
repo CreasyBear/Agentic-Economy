@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { getAeUiStatePresentation, type AeUiState, type AeUiStateTone } from '@/lib/ui/ui-state'
+import '../layout/RouteRecoveryComposition.css'
 
 type AeInlineStateProps = Readonly<{
   state: AeUiState
@@ -19,7 +20,7 @@ export function AeInlineState({ state, label, description }: AeInlineStateProps)
 
   return (
     <span
-      className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
+      className="arc-market arc-inline-state"
       role={presentation.role}
       aria-live={presentation.live}
       data-ui-state={state}

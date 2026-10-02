@@ -1,5 +1,6 @@
 import type { ToolCardProjection } from '@/modules/chat/tool-card'
 import type { TranscriptTurn } from './presentation'
+import './TranscriptComposition.css'
 
 export type ChatTranscriptClarifyProps = Readonly<{
   card: Extract<ToolCardProjection, { kind: 'clarify' }>
@@ -37,13 +38,13 @@ export function clarifyPresentation(turns: readonly TranscriptTurn[]) {
 export function ChatTranscriptClarify({ card, answer, hidePending }: ChatTranscriptClarifyProps) {
   if (answer === undefined) {
     if (hidePending) return null
-    return <p className="text-sm text-muted-foreground">{card.question}</p>
+    return <p className="arc-market arc-chat arc-transcript-clarify">{card.question}</p>
   }
   return (
-    <p className="text-sm text-muted-foreground">
+    <p className="arc-market arc-chat arc-transcript-clarify">
       <span>{card.question}</span>
       {' '}
-      <span className="font-medium text-foreground">{answer}</span>
+      <span className="arc-transcript-answer">{answer}</span>
     </p>
   )
 }

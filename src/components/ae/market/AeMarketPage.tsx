@@ -3,7 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/arc/button/button";
 import type { MarketSearch } from "@/modules/market/market.functions";
 import type { X402DirectoryPage } from "@/modules/market/x402-directory";
 import { retainedMarketCatalogue, type MarketCompareEntry } from "@/modules/market/market-route-data";
@@ -41,9 +41,9 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
   return (
     <AePublicPage>
       {decision.retainPrevious ? (
-        <div className="ae-rail pt-section" role="alert">
+        <div className="arc-market ae-rail pt-section" role="alert">
           <p className="text-sm text-destructive">This market view could not be loaded. The previous catalogue is still shown.</p>
-          <Button type="button" className="mt-3 min-h-touch" variant="outline" onClick={() => void router.invalidate()}>Try again</Button>
+          <Button type="button" className="mt-3 min-h-touch" variant="secondary" onClick={() => void router.invalidate()}>Try again</Button>
         </div>
       ) : null}
       <AeX402Directory

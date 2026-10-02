@@ -6,8 +6,8 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { operatorForbiddenCopy } from '@/components/ae/layout/route-error.contracts'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import {
@@ -16,7 +16,7 @@ import {
   type OperatorSurface,
 } from '@/lib/operator/operator-context'
 import { operatorRoleForPath } from '@/lib/operator/roles'
-import { cn } from '@/lib/utils'
+import './RouteRecoveryComposition.css'
 
 function RouteErrorState({ error, operator }: { error: unknown; operator: boolean }) {
   const { pathname } = useLocation()
@@ -25,8 +25,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
   const [retryPending, setRetryPending] = useState(false)
   const parentShell = useOperatorShellChrome()
   const correlationRef = errorCorrelationRef(error)
-  const moneyRoute = /\/(?:calls?|credit|quotes?|receipts?|activity)(?:\/|$)/.test(pathname)
-  const recoveryCopy = `${moneyRoute ? 'Nothing was charged. ' : ''}Try again, or check system status.`
+  const recoveryCopy = 'Try again, or check system status.'
 
   if (isOperatorSurfaceForbidden(error)) {
     const surface = error instanceof OperatorSurfaceForbiddenError
@@ -37,11 +36,11 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
 
   if (!operator) {
     const actions = (
-      <div className="grid w-full gap-related">
-        <div className="flex w-full flex-col gap-intra sm:flex-row">
+      <div className="arc-market arc-recovery-actions">
+        <div className="arc-recovery-action-row">
           <Button
             type="button"
-            className="min-h-touch w-full sm:w-auto"
+            size="md"
             disabled={retryPending}
             aria-busy={retryPending || undefined}
             onClick={() => {
@@ -60,13 +59,13 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
           </Button>
           <Link
             to="/status"
-            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-full sm:w-auto')}
+            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
           >
             Check system status
           </Link>
         </div>
         {correlationRef === undefined ? null : (
-          <div className="grid gap-1 text-sm text-muted-foreground">
+          <div className="arc-recovery-reference">
             <span>Support reference</span>
             <AeCopyReference label="support reference" value={correlationRef} />
           </div>
@@ -86,17 +85,17 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
 
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const body = (
-    <Alert variant="destructive">
+    <Alert variant="destructive" className="arc-market arc-recovery-alert">
       {parentShell === null ? null : <AlertTitle>Couldn’t load this page</AlertTitle>}
       <AlertDescription>
         <p>{recoveryCopy}</p>
         {correlationRef === undefined
           ? null
           : <AeCopyReference label="support reference" value={correlationRef} />}
-        <div className="flex w-full flex-wrap gap-intra">
+        <div className="arc-recovery-action-row">
           <Button
             type="button"
-            className="min-h-touch"
+            size="md"
             disabled={retryPending}
             aria-busy={retryPending || undefined}
             onClick={() => {
@@ -111,7 +110,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
           </Button>
           <Link
             to="/status"
-            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
           >
             Check system status
           </Link>
@@ -176,15 +175,15 @@ export function OperatorRouteForbidden({ surface }: OperatorRouteForbiddenProps)
 function OperatorForbiddenActions({ surface }: OperatorRouteForbiddenProps) {
   const copy = operatorForbiddenCopy[surface]
   return (
-    <div className="flex w-full flex-wrap gap-intra">
-      <Link to="/support" className={cn(buttonVariants(), 'min-h-touch')}>
+    <div className="arc-market arc-recovery-action-row">
+      <Link to="/support" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
         {copy.supportAction}
       </Link>
-      <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+      <Link to="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
         {copy.marketAction}
       </Link>
       <SignOutButton redirectUrl="/">
-        <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
+        <Button type="button" variant="secondary" size="md">Sign out</Button>
       </SignOutButton>
     </div>
   )

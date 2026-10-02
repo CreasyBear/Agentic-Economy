@@ -1,6 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
@@ -18,7 +19,7 @@ const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
     accessorKey: 'ref',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.reference,
     cell: ({ row }) => (
-      <a className="font-medium text-foreground underline-offset-4 hover:underline" href={row.original.href}>
+      <a className="arc-admin-record-link" href={row.original.href}>
         {row.original.ref}
       </a>
     ),
@@ -29,7 +30,7 @@ const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
     cell: ({ row }) => row.original.businessHref === null || row.original.businessSlug === null
       ? ADMIN_EXCEPTIONS_COPY.unavailable
       : (
-          <a className="font-medium text-foreground underline-offset-4 hover:underline" href={row.original.businessHref}>
+          <a className="arc-admin-record-link" href={row.original.businessHref}>
             {row.original.businessSlug}
           </a>
         ),
@@ -40,7 +41,7 @@ const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
     cell: ({ row }) => (
       <div className="grid gap-1">
         <time dateTime={row.original.sinceIso}>{row.original.sinceLabel}</time>
-        <span className="text-xs text-muted-foreground">{row.original.sinceRelativeLabel}</span>
+        <span className="arc-admin-record-context">{row.original.sinceRelativeLabel}</span>
       </div>
     ),
   },
@@ -74,7 +75,7 @@ export function ExceptionFeedTable({ rows, observed, complete, unavailable, orde
         ? <p role="status" className="text-sm text-muted-foreground">{ADMIN_EXCEPTIONS_COPY.scanProgress(scanRequests)}</p>
         : null}
       {paginationStatus === 'Exhausted' ? null : (
-        <Button type="button" variant="outline" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>
+        <Button type="button" variant="secondary" size="md" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>
           {ADMIN_EXCEPTIONS_COPY.loadMore}
         </Button>
       )}

@@ -7,7 +7,7 @@ test.describe('developer discovery accessibility', () => {
 
     await expect(page.getByRole('heading', { name: 'Discovery status', level: 1 })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Open schema, Public catalog schema' })).toBeVisible()
-    await expect(page.getByText(/read path status/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Read path status', exact: true })).toBeVisible()
 
     const skipLink = page.getByRole('link', { name: /skip to content/i })
     const mainContent = page.locator('#main-content')

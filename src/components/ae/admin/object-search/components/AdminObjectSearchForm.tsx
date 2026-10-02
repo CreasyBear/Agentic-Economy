@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from 'react'
 
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -18,6 +17,7 @@ import {
   ADMIN_OBJECT_SEARCH_COPY,
   adminObjectKindSchema,
 } from '../object-search.contracts'
+import './ObjectSearchComposition.css'
 
 export type AdminObjectSearchFormProps = Readonly<{
   initialKind?: AdminObjectKind
@@ -43,9 +43,9 @@ export function AdminObjectSearchForm({
   }
 
   return (
-    <form className="grid max-w-2xl gap-related" onSubmit={submit} aria-busy={busy}>
-      <FieldGroup className="gap-related sm:grid sm:grid-cols-[12rem_minmax(0,1fr)]">
-        <Field>
+    <form className="arc-market arc-object-search" onSubmit={submit} aria-busy={busy}>
+      <FieldGroup className="arc-object-search-fields">
+        <Field className="arc-object-search-field">
           <FieldLabel htmlFor="admin-object-kind">{ADMIN_OBJECT_SEARCH_COPY.kindLabel}</FieldLabel>
           <Select
             value={kind}
@@ -54,21 +54,22 @@ export function AdminObjectSearchForm({
               if (parsed.success) setKind(parsed.data)
             }}
           >
-            <SelectTrigger id="admin-object-kind" className="min-h-touch w-full">
+            <SelectTrigger id="admin-object-kind" className="arc-object-search-select">
               <SelectValue>{ADMIN_OBJECT_KIND_OPTIONS.find((option) => option.value === kind)?.label}</SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="arc-market arc-object-search-options">
               <SelectGroup>
                 {ADMIN_OBJECT_KIND_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value} className="arc-object-search-option">{option.label}</SelectItem>
                 ))}
               </SelectGroup>
             </SelectContent>
           </Select>
         </Field>
-        <Field data-invalid={message?.tone === 'error' ? 'true' : undefined}>
+        <Field className="arc-object-search-field" data-invalid={message?.tone === 'error' ? 'true' : undefined}>
           <FieldLabel htmlFor="admin-object-ref">{ADMIN_OBJECT_SEARCH_COPY.referenceLabel}</FieldLabel>
-          <Input
+          <input
+            className="arc-object-search-input"
             id="admin-object-ref"
             type="search"
             autoComplete="off"
@@ -81,14 +82,14 @@ export function AdminObjectSearchForm({
           />
         </Field>
       </FieldGroup>
-      <Button type="submit" className="min-h-touch w-fit" disabled={busy}>
+      <Button type="submit" size="md" className="arc-object-search-action" disabled={busy}>
         {busy ? ADMIN_OBJECT_SEARCH_COPY.searching : ADMIN_OBJECT_SEARCH_COPY.submit}
       </Button>
       {message === undefined ? null : (
         <p
           id="admin-object-search-message"
           role={message.tone === 'error' ? 'alert' : 'status'}
-          className={message.tone === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+          className="arc-object-search-message"
         >
           {message.text}
         </p>

@@ -1,7 +1,8 @@
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 
 import type { HomeEmptyInstallPanelProps } from '../agent-access-home.contracts'
+import '../AgentHomeComposition.css'
 
 export function HomeEmptyInstallPanel({
   canonicalBaseUrl,
@@ -11,9 +12,9 @@ export function HomeEmptyInstallPanel({
   onConnectNewAgent,
 }: HomeEmptyInstallPanelProps) {
   return (
-    <div className="grid gap-4">
-      <div className="flex justify-end">
-        <Button type="button" onClick={onConnectNewAgent} className="w-fit min-h-touch">
+    <div className="arc-market arc-agent-empty-install">
+      <div className="arc-agent-home-actions">
+        <Button type="button" onClick={onConnectNewAgent} className="arc-agent-inline-action">
           Choose how to connect
         </Button>
       </div>

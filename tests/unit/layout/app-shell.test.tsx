@@ -3,7 +3,7 @@
  */
 import { getFunctionName, type FunctionReference } from 'convex/server'
 import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -94,6 +94,28 @@ describe('AeAppShell', () => {
     expect(brand.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(slot!.parentElement?.className ?? '').not.toMatch(/ms-auto/)
     expect(slot!.compareDocumentPosition(screen.getByRole('button', { name: 'Find Tools' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('opens a named public drawer with exact destinations and restores trigger focus on close', async () => {
+    clerkSignedIn.value = false
+    renderAppShell()
+    const trigger = screen.getByRole('button', { name: 'Open public menu' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const drawer = await screen.findByRole('dialog', { name: 'Public navigation' })
+    await waitFor(() => expect(drawer.contains(document.activeElement)).toBe(true))
+    expect(screen.queryByRole('link', { name: 'Agentic Economy home' })).toBeNull()
+    const nav = within(drawer).getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map(link => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['Market', '/market'], ['For agents', '/for-agents'], ['For providers', '/for-providers'],
+    ])
+    expect(within(drawer).getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/sign-in')
+    const close = within(drawer).getByRole('button', { name: 'Close public menu' })
+    expect(close.tagName).toBe('BUTTON')
+    fireEvent.click(close)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Public navigation' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 
   it('opens workspace destinations from the header menu when signed in', () => {

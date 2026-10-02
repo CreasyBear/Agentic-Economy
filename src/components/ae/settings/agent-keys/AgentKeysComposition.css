@@ -1,0 +1,138 @@
+/* Licensed Arc UI Pro api-keys list geometry adapted for Agent key projections.
+ * api-keys.tsx SHA-256: cefa2f62836e77328ea24dcaa668cfc3f2a9359e5724e8cfce2cbbd0df70f1a4
+ * api-keys.module.css SHA-256: f65f24eb6a3760b52936eb5edcfc5b5b0177fc5c28ed7d3ffe7a386d564448b3
+ */
+.arc-market.arc-key-list {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: 0;
+  background: var(--surface);
+  color: var(--foreground);
+  list-style: none;
+}
+
+.arc-market.arc-key-list > .arc-key-row {
+  display: grid;
+  min-width: 0;
+  min-height: 88px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+}
+
+.arc-market.arc-key-list > .arc-key-row-inner {
+  position: relative;
+}
+
+.arc-market.arc-key-list > .arc-key-row + .arc-key-row.arc-key-row-inner {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.arc-key-identity {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 2px;
+}
+
+.arc-key-name-line {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.arc-key-name {
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-key-dates {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-key-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.arc-key-state {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) 10px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.arc-key-state[data-active="true"] {
+  border-color: var(--accent);
+  color: var(--foreground);
+}
+
+.arc-key-link {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  padding: 0 var(--space-2);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 4px;
+}
+
+.arc-key-link:hover {
+  text-decoration-line: underline;
+}
+
+.arc-market.arc-key-list.arc-key-danger-list {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 639px) {
+  .arc-market.arc-key-list > .arc-key-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .arc-key-actions {
+    justify-content: flex-start;
+  }
+}

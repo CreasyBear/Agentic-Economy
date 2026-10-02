@@ -1,6 +1,6 @@
 import { AeDegradedState } from '@/components/ae/feedback/AeDegradedState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 
 import type { ActivityUnavailableStateProps } from '../activity.contracts'
 

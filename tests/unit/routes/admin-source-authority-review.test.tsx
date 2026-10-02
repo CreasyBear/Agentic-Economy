@@ -93,4 +93,13 @@ describe('admin source authority review', () => {
     expect(screen.queryByRole('button', { name: 'Verify source authority' })).toBeNull()
     expect(mocks.sheet).not.toHaveBeenCalled()
   })
+
+  it('keeps the reviewed facts visible but withholds verification while access is loading', () => {
+    mocks.access.mockReturnValue(undefined)
+    render(<SourceAuthorityReviewPanel review={review} />)
+    expect(document.body.textContent).toContain(review.expectedSourceDigest)
+    expect(document.body.textContent).toContain(review.publicationRef)
+    expect(screen.queryByRole('button', { name: 'Verify source authority' })).toBeNull()
+    expect(mocks.sheet).not.toHaveBeenCalled()
+  })
 })

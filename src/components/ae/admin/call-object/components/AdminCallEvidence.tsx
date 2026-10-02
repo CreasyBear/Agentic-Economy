@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { ChatModelCostSummary } from '@/modules/chat/model-cost'
 import type { AdminCallObjectViewModel } from '../call-object.contracts'
 import { ADMIN_CALL_OBJECT_COPY } from '../call-object.contracts'
+import '../../RecordWorkspaceComposition.css'
 
 export type AdminCallEvidenceProps = Readonly<{
   model: AdminCallObjectViewModel
@@ -13,7 +14,7 @@ export type AdminCallEvidenceProps = Readonly<{
 
 export function AdminCallEvidence({ model }: AdminCallEvidenceProps) {
   return (
-    <div className="grid content-start gap-section">
+    <div className="arc-market arc-admin-evidence">
       <AeSection
         title={ADMIN_CALL_OBJECT_COPY.factsTitle}
         description={ADMIN_CALL_OBJECT_COPY.factsDescription}
@@ -22,7 +23,7 @@ export function AdminCallEvidence({ model }: AdminCallEvidenceProps) {
       </AeSection>
       {model.moneyTruth === null ? null : (
         <AeSection title={ADMIN_CALL_OBJECT_COPY.moneyTruthTitle}>
-          <p className="text-sm text-muted-foreground">{model.moneyTruth}</p>
+          <p className="arc-admin-record-context">{model.moneyTruth}</p>
         </AeSection>
       )}
       <CallReceiptTimeline stages={model.view.receipt.stages} />

@@ -1,8 +1,9 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/earnings-card/AeSupplyEarningsCard'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Button as ArcButton } from '@/components/arc/button/button'
+import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import { Skeleton } from '@/components/ui/skeleton'
+import '../supply/earnings-card/EarningsComposition.css'
 import { UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import {
   PROVIDER_WORKSPACE_EARNINGS_COPY,
@@ -20,14 +21,10 @@ export function ProviderWorkspaceEarningsSection({
 }: ProviderWorkspaceEarningsSectionProps) {
   return (
     <AeSection id="earnings" title="Earnings" description="Source-recorded Provider obligations and Call settlements.">
-      <Button type="button" variant="secondary" className="justify-self-start min-h-touch" onClick={onOpenEarnings}>View earnings</Button>
-      <Sheet open={earningsOpen} onOpenChange={(open) => { if (!open) onCloseEarnings() }}>
-        <SheetContent className="overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>Earnings</SheetTitle>
-            <SheetDescription>Source-recorded Provider obligations and Call settlements.</SheetDescription>
-          </SheetHeader>
-          <div className="px-gutter pb-gutter">
+      <ArcButton type="button" variant="secondary" size="md" className="justify-self-start min-h-touch" onClick={onOpenEarnings}>View earnings</ArcButton>
+      <Drawer open={earningsOpen} onOpenChange={(open) => { if (!open) onCloseEarnings() }}>
+        <DrawerContent side="right" title="Earnings" description="Source-recorded Provider obligations and Call settlements." className="arc-provider-earnings-drawer">
+          <div className="arc-provider-earnings-body">
             {earningsOpen ? (
               earningsPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div>
                 : earningsUnavailable || earningsDetail === undefined
@@ -35,8 +32,8 @@ export function ProviderWorkspaceEarningsSection({
                   : <AeSupplyEarningsCard readback={earningsDetail} />
             ) : null}
           </div>
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
     </AeSection>
   )
 }

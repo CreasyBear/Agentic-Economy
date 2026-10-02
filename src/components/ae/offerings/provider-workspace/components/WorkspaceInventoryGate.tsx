@@ -1,6 +1,6 @@
 import { AeSupplierOnboardingWizard } from '@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import type { WorkspaceInventoryGateProps } from '../provider-workspace.contracts'
 
 export function WorkspaceInventoryGate(props: WorkspaceInventoryGateProps) {
@@ -23,11 +23,11 @@ export function WorkspaceInventoryGate(props: WorkspaceInventoryGateProps) {
     )
   }
   return (
-    <Alert variant="destructive">
+    <Alert variant="destructive" className="arc-market">
       <AlertTitle>Tools could not be loaded</AlertTitle>
       <AlertDescription className="flex flex-wrap items-center gap-3">
         <span>Nothing was charged.</span>
-        <Button type="button" variant="secondary" disabled={props.refreshPending} onClick={props.onRefresh}>
+        <Button type="button" variant="secondary" size="md" disabled={props.refreshPending} onClick={props.onRefresh}>
           {props.refreshPending ? 'Trying again…' : 'Try again'}
         </Button>
       </AlertDescription>

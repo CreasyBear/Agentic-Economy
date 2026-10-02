@@ -1,0 +1,11 @@
+/* Arc page-header navigation and workspace-sidebar continuous destinations.
+ * Page-header CSS SHA-256 70bd6338c6dedb44eae5392dfb623d1f2da7d152cdcc2d3e646b3149e8704cea.
+ * Workspace CSS SHA-256 972d1b2ee66b1b63b6b8a03aee71895be29fdb15fd62735047168872e7fc9c13.
+ * The canonical public destinations, current resolution and signed-in omission remain. */
+.arc-market.arc-public-primary-nav { display: none; min-width: 0; align-items: center; gap: var(--space-1); }
+.arc-market.arc-public-drawer-nav { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-1); padding: var(--space-4); }
+.arc-market .arc-public-nav-link { min-width: 0; min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+.arc-market .arc-public-nav-link[aria-current='page'] { background: var(--surface-muted); color: var(--foreground); font-weight: 500; }
+.arc-market .arc-public-drawer-link { width: 100%; min-height: 64px; justify-content: space-between; border-radius: var(--radius-control); padding: var(--space-4); font-size: 20px; font-weight: 400; line-height: 1.3; text-align: left; }
+.arc-market .arc-public-drawer-link svg { width: 20px; height: 20px; flex: none; color: var(--text-secondary); }
+@media (min-width: 768px) { .arc-market.arc-public-primary-nav { display: flex; } }

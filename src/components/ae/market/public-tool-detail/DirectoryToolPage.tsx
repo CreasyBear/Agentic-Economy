@@ -3,8 +3,9 @@ import { useState } from 'react'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { ToolDetailFacts } from '@/components/ae/shared/ToolDetailFacts'
+import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
+import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { directoryTitle } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
@@ -27,18 +28,52 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
   const indexedSourceRouteRef = metadata.kind === 'found' ? metadata.item.choice?.sourceRouteRef ?? metadata.item.sourceRouteRef : undefined
   const capability = entry.description || entry.category || entry.tags?.join(' ') || ''
   const alternativeHref = alternativeToolSearchHref(listing, capability, indexedSourceRouteRef)
+  const slides: DetailSlide[] = [{
+    id: 'input-example', label: 'Input example',
+    description: entry.input?.exampleJson === undefined ? 'No example input was published in this directory listing.' : 'Provider-published input',
+    content: entry.input?.exampleJson === undefined
+      ? <div className="arc-pdp-empty"><p>Inspect the published source contract under Technical. Examples are never inferred.</p></div>
+      : <pre><code>{entry.input.exampleJson}</code></pre>,
+  }]
+  if (entry.output?.exampleJson !== undefined) slides.push({
+    id: 'output-example', label: 'Output example', description: 'Provider-published output',
+    content: <pre><code>{entry.output.exampleJson}</code></pre>,
+  })
+  if (entry.input?.schemaJson !== undefined) slides.push({
+    id: 'input-schema', label: 'Input contract', description: 'Published schema. This is a contract, not an example request.',
+    content: <pre><code>{entry.input.schemaJson}</code></pre>,
+  })
   return <AePublicPage>
-    <article className="ae-rail grid min-w-0 gap-section pb-page pt-section">
-      <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground"><Link to="/market" className="min-h-touch content-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">Market</Link><span aria-hidden="true"> / </span>Tool</nav>
-      <ToolDetailFacts view={view} hideTechnicalRefs primary={{ label: indexedSourceRouteRef === undefined || capability.trim().length === 0 ? 'Browse Market' : 'Search callable alternatives', onSelect: () => { window.location.assign(alternativeHref) } }} />
-      <p className="text-sm text-muted-foreground">Coinbase Bazaar directory listing only. No admitted AE Tool or verified execution Provider is attached to this listing. Inspect its source input before use; no AE Quote or Call is available here.</p>
-      {listing.facts.price.kind === 'present' && listing.facts.price.value.kind !== 'quote_required' && listing.facts.price.value.currency === 'USDC' ? <p className="text-sm text-muted-foreground">Provider-listed source price: {listing.facts.price.value.kind === 'range' ? `${listing.facts.price.value.minimum}–${listing.facts.price.value.maximum}` : listing.facts.price.value.amount} USDC per Call.</p> : null}
-      <section aria-labelledby="example-heading" className="grid min-w-0 gap-related border-t border-border pt-section">
-        <h2 id="example-heading" className="text-title font-medium">Example</h2>
-        {entry.input?.exampleJson === undefined ? <p className="text-sm text-muted-foreground">No example input was published in this directory listing.</p> : <div className="grid min-w-0 gap-intra"><p className="text-sm text-muted-foreground">Provider-published input</p><pre className="max-w-full overflow-x-auto rounded-card bg-muted p-gutter text-xs"><code>{entry.input.exampleJson}</code></pre></div>}
-        {entry.output?.exampleJson === undefined ? <p className="text-sm text-muted-foreground">No example output was published.</p> : <div className="grid min-w-0 gap-intra"><p className="text-sm text-muted-foreground">Provider-published output</p><pre className="max-w-full overflow-x-auto rounded-card bg-muted p-gutter text-xs"><code>{entry.output.exampleJson}</code></pre></div>}
-      </section>
-      <details className="min-w-0 rounded-card border border-border"><summary className="min-h-touch cursor-pointer px-gutter py-related font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Technical · endpoint and source</summary><div className="grid min-w-0 gap-intra border-t border-border p-gutter text-sm"><p className="break-all">Source: Coinbase Bazaar</p><p className="break-all">Endpoint: {entry.resource}</p>{entry.method === undefined ? null : <p>Method: {entry.method}</p>}{entry.input?.schemaJson === undefined ? null : <pre className="max-w-full overflow-x-auto rounded-card bg-muted p-related text-xs"><code>{entry.input.schemaJson}</code></pre>}</div></details>
-    </article>
+    <div className="arc-pdp-page">
+      <ProductDetail
+        id={entry.resource}
+        title={view.title}
+        {...(view.outcome === undefined ? {} : { summary: view.outcome })}
+        surfaceLabel="Directory listing"
+        breadcrumb={<><Link to="/market">Market</Link><span aria-hidden="true"> / </span><span aria-current="page">Tool</span></>}
+        {...(view.price === undefined ? {} : { priceLabel: view.price.label })}
+        facts={<>
+          <ToolFacts view={{ title: view.title, listing, readiness: view.readiness }} />
+          {view.identity === undefined ? null : <p>{view.identity.kind === 'verified_provider' ? 'Provider' : view.identity.kind === 'publisher' ? 'Publisher' : 'Directory Host'}: {view.identity.kind === 'publisher' ? <span>{view.identity.name}</span> : <a href={view.identity.href}>{view.identity.name}</a>}</p>}
+          {view.identity?.kind === 'publisher' && listing.identity.hostName.kind === 'present' && listing.hostPage.kind === 'present' ? <p>Directory Host: <a href={listing.hostPage.value}>{listing.identity.hostName.value}</a></p> : null}
+          <p>Directory or catalogue listing, not callable through AE.</p>
+          <p className="arc-pdp-provenance">Title source: {listing.identity.title.provenance.replaceAll('_', ' ')}</p>
+          {view.price === undefined ? null : <p className="arc-pdp-provenance">Price source: {listing.facts.price.provenance.replaceAll('_', ' ')}</p>}
+          {view.readiness.source === undefined ? null : <p className="arc-pdp-provenance">Readiness source: {listing.facts.readiness.provenance.replaceAll('_', ' ')}</p>}
+        </>}
+        context={<>
+          <p>Coinbase Bazaar directory listing only. No admitted AE Tool or verified execution Provider is attached to this listing. Inspect its source input before use; no AE Quote or Call is available here.</p>
+          {listing.facts.price.kind === 'present' && listing.facts.price.value.kind !== 'quote_required' && listing.facts.price.value.currency === 'USDC' ? <p>Provider-listed source price: {listing.facts.price.value.kind === 'range' ? `${listing.facts.price.value.minimum}–${listing.facts.price.value.maximum}` : listing.facts.price.value.amount} USDC per Call.</p> : null}
+          {entry.output?.exampleJson === undefined ? <p>No example output was published.</p> : null}
+        </>}
+        primary={{ label: indexedSourceRouteRef === undefined || capability.trim().length === 0 ? 'Browse Market' : 'Search callable alternatives', onSelect: () => { window.location.assign(alternativeHref) } }}
+        slides={slides}
+        sections={[{ id: 'technical', title: 'Technical · endpoint and source', content: <>
+          <p>Source: Coinbase Bazaar</p><p>Endpoint: {entry.resource}</p>
+          {entry.method === undefined ? null : <p>Method: {entry.method}</p>}
+          {entry.input?.schemaJson === undefined ? null : <pre><code>{entry.input.schemaJson}</code></pre>}
+        </> }]}
+      />
+    </div>
   </AePublicPage>
 }

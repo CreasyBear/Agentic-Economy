@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { offboardingBlocker, offboardingError } from './provider-workspace-projection'
 import { DeferredSection, UnavailableSummary } from './ProviderWorkspaceSharedUi'
@@ -15,6 +16,7 @@ import {
   startOwnerProviderOffboardingServer,
   type OwnerProviderOffboardingResult,
 } from './provider-workspace.functions'
+import './ProviderWorkspaceComposition.css'
 
 export function ProviderWorkspaceOffboardingSection({ offboarding, refreshWorkspace }: Readonly<{
   offboarding?: Promise<OwnerProviderOffboardingResult>
@@ -118,10 +120,10 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
   }
   if (result.kind === 'not_found') {
     return (
-      <div className="grid gap-related rounded-card border border-border p-related">
-        <div><h3 className="font-medium">Retire this Provider</h3><p className="text-sm text-muted-foreground">AE freezes new work first, then waits for Calls, obligations and payouts before revoking connections.</p></div>
+      <DecisionPanel className="arc-provider-offboarding" aria-label="Provider offboarding">
+        <div className="arc-provider-offboarding-heading"><h3>Retire this Provider</h3><p>AE freezes new work first, then waits for Calls, obligations and payouts before revoking connections.</p></div>
         {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Provider was not retired</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-        <Button ref={triggerRef} type="button" variant="destructive" className="justify-self-start min-h-touch" onClick={() => setConfirmOpen(true)}>Start Provider offboarding</Button>
+        <Button ref={triggerRef} type="button" variant="danger" size="md" className="arc-provider-offboarding-action" onClick={() => setConfirmOpen(true)}>Start Provider offboarding</Button>
         <AeConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
@@ -133,7 +135,7 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
           onConfirm={start}
           returnFocusRef={triggerRef}
         />
-      </div>
+      </DecisionPanel>
     )
   }
 
@@ -142,20 +144,20 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
   const canCancel = status.state === 'Freezing' && !status.routeabilityFrozen
   const isTerminal = status.state === 'Retired' || status.state === 'Cancelled'
   return (
-    <div className="grid gap-related rounded-card border border-border p-related" aria-live="polite">
-      <div><h3 className="font-medium">{status.state}</h3><p className="text-sm text-muted-foreground">{status.routeabilityFrozen ? 'New work is frozen.' : 'AE is preparing to freeze new work.'} Case {status.caseRef}</p></div>
+    <DecisionPanel className="arc-provider-offboarding" aria-label="Provider offboarding" aria-live="polite">
+      <div className="arc-provider-offboarding-heading"><h3>{status.state}</h3><p>{status.routeabilityFrozen ? 'New work is frozen.' : 'AE is preparing to freeze new work.'} Case {status.caseRef}</p></div>
       {status.blockerCodes.length === 0 ? null : (
         <Alert><AlertTitle>Action required</AlertTitle><AlertDescription>{status.blockerCodes.map(offboardingBlocker).join(' ')}</AlertDescription></Alert>
       )}
       {status.state === 'Retired' ? <p className="text-sm text-muted-foreground">Tools are retired, Calls and obligations are clear, and Provider connections are revoked.</p> : null}
       {status.state === 'Cancelled' ? <p className="text-sm text-muted-foreground">Offboarding was cancelled before new work was frozen. The Provider remains active.</p> : null}
       {isTerminal ? null : (
-        <div className="flex flex-wrap gap-intra">
-          <Button type="button" variant="secondary" className="min-h-touch" disabled={pending} onClick={canResume ? () => void resume() : refreshWorkspace}>{pending ? 'Checking…' : canResume ? 'Resume offboarding' : 'Refresh status'}</Button>
-          {canCancel ? <Button type="button" variant="outline" className="min-h-touch" disabled={pending} onClick={() => void cancel()}>Cancel offboarding</Button> : null}
+        <div className="arc-provider-offboarding-actions">
+          <Button type="button" variant="secondary" size="md" disabled={pending} onClick={canResume ? () => void resume() : refreshWorkspace}>{pending ? 'Checking…' : canResume ? 'Resume offboarding' : 'Refresh status'}</Button>
+          {canCancel ? <Button type="button" variant="secondary" size="md" disabled={pending} onClick={() => void cancel()}>Cancel offboarding</Button> : null}
         </div>
       )}
       {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Status was not updated</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-    </div>
+    </DecisionPanel>
   )
 }

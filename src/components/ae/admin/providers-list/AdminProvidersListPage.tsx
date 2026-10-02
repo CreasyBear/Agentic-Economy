@@ -11,6 +11,7 @@ import {
   type AdminProvidersListPageProps,
 } from './providers-list.contracts'
 import { useAdminProvidersList } from './useAdminProvidersList'
+import '../RecordWorkspaceComposition.css'
 
 export function AdminProvidersListPage(props: AdminProvidersListPageProps) {
   const providers = useAdminProvidersList(props)
@@ -27,7 +28,7 @@ export function AdminProvidersListPage(props: AdminProvidersListPageProps) {
     )
   } else {
     content = (
-      <div className="grid gap-section pb-page">
+      <div className="arc-market arc-admin-record-workspace">
         <AdminSearchNotice rejected={props.search.rejected} />
         <AeSection title={PROVIDERS_LIST_COPY.filterTitle} description={PROVIDERS_LIST_COPY.filterDescription}>
           <ProviderFilterChips filter={providers.filter} onChange={providers.onFilterChange} />

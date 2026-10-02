@@ -2,13 +2,15 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { ReceiptText as ReceiptTextIcon } from 'lucide-react'
 
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button as ArcButton } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { formatTimestamp } from '@/lib/ui/format-time'
@@ -19,6 +21,7 @@ import type {
 import type { AccountHistoryPort } from '@/modules/money/account-history.contracts'
 import { AccountHistorySourceLink } from './AccountHistorySourceLink'
 import { accountHistoryLabel, accountHistorySourceLabel, deduplicateHistory, formatSignedAmount } from './owner-credit-format'
+import './owner-credit/components/CreditRecordsComposition.css'
 
 type AvailableAccountHistory = Extract<AccountHistoryResult, { kind: 'available' }>
 
@@ -36,11 +39,14 @@ export function CreditSectionEmptyState({
   action,
 }: Readonly<{ title: string; description: string; action?: ReactNode }>) {
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-      <span className="font-medium text-foreground">{title}</span>
-      <span className="text-muted-foreground">{description}</span>
-      {action === undefined ? null : action}
-    </div>
+    <AeEmptyState
+      title={title}
+      description={description}
+      action={action}
+      icon={<ReceiptTextIcon size={32} />}
+      compact
+      titleAs="p"
+    />
   )
 }
 
@@ -58,16 +64,22 @@ export function AccountHistory({
   onRefresh?: () => void | Promise<void>
 }>) {
   if (result?.kind !== 'available') {
-    return <UnavailableAccountHistory loading={loading} {...(onRefresh === undefined ? {} : { onRefresh })} />
+    return (
+      <div className="arc-market arc-credit-records">
+        <UnavailableAccountHistory loading={loading} {...(onRefresh === undefined ? {} : { onRefresh })} />
+      </div>
+    )
   }
   return (
-    <AvailableAccountHistoryFrame
-      result={result}
-      {...(port === undefined ? {} : { port })}
-      refreshUnavailable={unavailable}
-      loading={loading}
-      {...(onRefresh === undefined ? {} : { onRefresh })}
-    />
+    <div className="arc-market arc-credit-records">
+      <AvailableAccountHistoryFrame
+        result={result}
+        {...(port === undefined ? {} : { port })}
+        refreshUnavailable={unavailable}
+        loading={loading}
+        {...(onRefresh === undefined ? {} : { onRefresh })}
+      />
+    </div>
   )
 }
 
@@ -89,7 +101,7 @@ function UnavailableAccountHistory({
       <AlertDescription className="flex flex-wrap items-center gap-3">
         <span>Known Account balance remains visible. No missing transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (
-          <Button type="button" variant="secondary" onClick={() => { void onRefresh() }}>Try again</Button>
+          <ArcButton type="button" variant="secondary" aria-busy={loading} onClick={() => { void onRefresh() }}>Try again</ArcButton>
         )}
       </AlertDescription>
     </Alert>
@@ -110,7 +122,7 @@ function AvailableAccountHistoryFrame({
   onRefresh?: () => void | Promise<void>
 }>) {
   return (
-    <div className="grid gap-4">
+    <div className="arc-credit-history-stack">
       <HistoryRefreshWarning
         visible={refreshUnavailable}
         loading={loading}
@@ -133,9 +145,9 @@ function HistoryRefreshWarning({
       <AlertDescription className="flex flex-wrap items-center gap-3">
         <span>The last booked transactions remain visible. No later transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (
-          <Button type="button" variant="secondary" disabled={loading} onClick={() => { void onRefresh() }}>
+          <ArcButton type="button" variant="secondary" disabled={loading} aria-busy={loading} onClick={() => { void onRefresh() }}>
             {loading ? 'Trying again…' : 'Try again'}
-          </Button>
+          </ArcButton>
         )}
       </AlertDescription>
     </Alert>
@@ -252,7 +264,7 @@ function AvailableAccountHistoryView({
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="arc-credit-history-stack">
       {state.coverage === 'partial' ? (
         <Alert>
           <AlertTitle>Some transaction attribution is incomplete</AlertTitle>
@@ -284,10 +296,10 @@ function AvailableAccountHistoryView({
       {state.cursor === undefined ? null : port === undefined ? (
         <p className="text-sm text-muted-foreground">More booked transactions exist, but continuation is unavailable on this surface.</p>
       ) : (
-        <div>
-          <Button type="button" variant="secondary" disabled={state.status === 'loading'} onClick={() => { void loadNextPage() }}>
+        <div className="arc-credit-history-continuation">
+          <ArcButton type="button" variant="secondary" disabled={state.status === 'loading'} aria-busy={state.status === 'loading'} onClick={() => { void loadNextPage() }}>
             {state.status === 'loading' ? 'Loading more…' : 'Load more'}
-          </Button>
+          </ArcButton>
 
         </div>
       )}

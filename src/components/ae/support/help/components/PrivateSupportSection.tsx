@@ -1,17 +1,18 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
+import buttonStyles from '@/components/arc/button/button.module.css'
+
+import '../SupportComposition.css'
 
 export function PrivateSupportSection() {
   return (
-    <AeCollectionRail
-      title="Contact support privately"
-      deck="For account, billing, security or Call problems, email support@aecon.ai with what you expected, what happened and a safe request reference. Do not include credentials, raw inputs or private results."
-    >
-      <div className="flex flex-wrap gap-related">
-        <Link to="/for-providers" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Review Provider requirements</Link>
-        <Link to="/privacy/remove-business" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Request a listing correction</Link>
+    <section className="arc-market arc-support-section">
+      <h2>Contact support privately</h2>
+      <p>For account, billing, security or Call problems, email support@aecon.ai with what you expected, what happened and a safe request reference. Do not include credentials, raw inputs or private results.</p>
+      <div className="arc-support-actions">
+        <Link to="/for-providers" className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>Review Provider requirements</Link>
+        <Link to="/privacy/remove-business" className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>Request a listing correction</Link>
       </div>
-    </AeCollectionRail>
+    </section>
   )
 }

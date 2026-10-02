@@ -3,8 +3,8 @@ import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import '../RecordWorkspaceComposition.css'
 import { AdminSearchNotice } from '../AdminSearchNotice'
 import { AdminAuditPageSkeleton } from './AdminAuditPageSkeleton'
 import { AdminMembershipActions } from './AdminMembershipActions'
@@ -46,7 +46,7 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
         action={
           <Link
             to="/admin"
-            className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
+            className={`arc-market ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
           >
             Return to Overview
           </Link>
@@ -56,7 +56,7 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
   }
 
   return page(
-    <div className="grid gap-section">
+    <div className="arc-market arc-admin-record-workspace">
       <AdminSearchNotice rejected={props.search.rejected} />
       <AeSection title={AUDIT_COPY.filtersTitle} description={AUDIT_COPY.filtersDescription}>
         <AuditFilterChips

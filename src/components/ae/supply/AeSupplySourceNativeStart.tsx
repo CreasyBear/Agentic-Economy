@@ -2,10 +2,9 @@ import { CheckIcon } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
 import { SupplySourceSuggestion } from './SupplySourceSuggestion'
 import { SupplyPublicationFlow } from './SupplyPublicationFlow'
@@ -19,6 +18,7 @@ import {
 import type { SupplyJourneyContinuation } from './supply-source-native-start-presentation'
 import { supplyPublishAuthorityRequired, useReportSupplyNavigationSafety } from './supply-navigation-safety'
 import { useSupplyNativeStartState, type SupplyNativeStartProps } from './useSupplyNativeStartState'
+import './SupplyJourneyComposition.css'
 
 type SupplyStage = 'source' | 'tool' | 'terms' | 'review'
 
@@ -44,7 +44,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
   }, [stage])
 
   return (
-    <div className="grid gap-section">
+    <div className="arc-market arc-supply-journey">
       <SupplyProgress current={stage} />
       <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />
 
@@ -83,7 +83,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
 
       {vm.selected === undefined || (stage !== 'terms' && stage !== 'review') ? null : (
         <div className="grid gap-section">
-          <div className="sticky top-20 z-10 grid gap-intra rounded-xl border border-border bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:grid-cols-2">
+          <div className="arc-supply-summaries sticky top-20 z-10">
             <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editSource} />
             <CompletedStageSummary step="Tool" detail={vm.selected.title} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTool} />
             {stage === 'review' ? <CompletedStageSummary step="Terms" detail={termsSummary(vm)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTerms} /> : null}
@@ -162,17 +162,17 @@ function SupplyProgress({ current }: Readonly<{ current: SupplyStage }>) {
   const currentIndex = stages.indexOf(current)
   return (
     <nav aria-label="Add Tool progress">
-      <ol className="grid grid-cols-4 gap-2">
+      <ol className="arc-supply-progress">
         {stages.map((stage, index) => {
           const complete = index < currentIndex
           const active = index === currentIndex
           return (
-            <li key={stage} aria-current={active ? 'step' : undefined} className={cn('grid min-w-0 gap-1 border-t-2 pt-2 text-xs capitalize', active ? 'border-foreground font-medium text-foreground' : complete ? 'border-brand text-foreground' : 'border-border text-muted-foreground')}>
-              <span className="flex items-center gap-1.5">
-                <span className={cn('flex size-5 shrink-0 items-center justify-center rounded-full border font-mono text-[0.625rem]', complete && 'border-brand bg-brand text-on-brand', active && 'border-foreground')}>
+            <li key={stage} aria-current={active ? 'step' : undefined} data-complete={complete || undefined} className="arc-supply-progress-item">
+              <span className="arc-supply-progress-stage">
+                <span className="arc-supply-progress-index">
                   {complete ? <CheckIcon aria-hidden="true" className="size-3" /> : index + 1}
                 </span>
-                <span className="truncate">{stage}</span>
+                <span className="arc-supply-progress-label">{stage}</span>
               </span>
             </li>
           )
@@ -184,12 +184,12 @@ function SupplyProgress({ current }: Readonly<{ current: SupplyStage }>) {
 
 function CompletedStageSummary({ step, detail, disabled, onEdit }: Readonly<{ step: string; detail: string; disabled: boolean; onEdit: () => void }>) {
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border/70 bg-card px-3 py-2">
-      <span className="grid min-w-0 gap-0.5">
-        <span className="text-xs font-medium text-muted-foreground">{step} complete</span>
-        <span className={cn('truncate text-sm text-foreground', step === 'Terms' && 'tabular-nums')} title={detail}>{detail}</span>
+    <div className="arc-supply-summary">
+      <span className="arc-supply-summary-copy">
+        <span className="arc-supply-summary-label">{step} complete</span>
+        <span className="arc-supply-summary-detail" data-numeric={step === 'Terms' || undefined} title={detail}>{detail}</span>
       </span>
-      <Button type="button" size="sm" variant="ghost" className="min-h-touch shrink-0" disabled={disabled} onClick={onEdit}>Edit {step}</Button>
+      <Button type="button" size="md" variant="ghost" className="arc-supply-summary-edit" disabled={disabled} onClick={onEdit}>Edit {step}</Button>
     </div>
   )
 }
@@ -203,16 +203,16 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
 }>) {
   return (
     <>
-      {error === undefined ? null : <Alert id={SUPPLY_PUBLICATION_ERROR_ID} variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4 min-h-touch')}>Open Tools</a> : null}</AlertDescription></Alert>}
+      {error === undefined ? null : <Alert id={SUPPLY_PUBLICATION_ERROR_ID} variant="destructive" role="alert" className="arc-supply-feedback"><AlertTitle>Action required</AlertTitle><AlertDescription className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}>Open Tools</a> : null}</AlertDescription></Alert>}
       {requiredAction === undefined ? null : (
-        <Alert role="status">
+        <Alert role="status" className="arc-supply-feedback">
           <AlertTitle>{requiredAction.title}</AlertTitle>
-          <AlertDescription>
+          <AlertDescription className="arc-supply-feedback-description">
             <p>{requiredAction.description}</p>
             {requiredAction.cta === null ? null : (
               <a
                 href={requiredAction.cta}
-                className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+                className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}
               >
                 {requiredAction.ctaLabel}
               </a>
@@ -221,14 +221,14 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
         </Alert>
       )}
       {success === undefined ? null : (
-        <Alert>
+        <Alert className="arc-supply-feedback">
           <AlertTitle>Submitted</AlertTitle>
-          <AlertDescription className="grid gap-related">
+          <AlertDescription className="arc-supply-feedback-description">
             <p>{success}</p>
             {continuation === undefined ? null : (
               <a
                 href={continuation.to}
-                className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+                className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}
               >
                 {continuation.label}
               </a>

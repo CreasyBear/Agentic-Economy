@@ -38,7 +38,6 @@ export const FOOTER_NAVIGATION = [
 
 export const AE_SITE_FOOTER = {
   closer: {
-    eyebrow: 'Agentic Economy',
     heading: 'Take control of your Agentic future',
     description:
       'Find Tools, pay per Call in AUD, and control Agent spending for your Business.',
@@ -46,11 +45,6 @@ export const AE_SITE_FOOTER = {
     secondaryAction: 'System status',
   },
   images: {
-    atmosphere: {
-      src: '/website/basalt-coast-full.webp',
-      srcSet:
-        '/website/basalt-coast-small.webp 640w, /website/basalt-coast-medium.webp 1280w, /website/basalt-coast-full.webp 1920w',
-    },
     closer: {
       src: '/website/mountain-viaduct-full.webp',
       srcSet:

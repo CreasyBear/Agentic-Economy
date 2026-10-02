@@ -4,8 +4,8 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import './connection-handoff/ConnectionHandoffComposition.css'
 
 import {
   OWNER_MCP_OAUTH_CALLBACK_COPY,
@@ -33,7 +33,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
             {OWNER_MCP_OAUTH_CALLBACK_COPY.environment[result.environment]}
           </Badge>
         )}
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="arc-market arc-connection-handoff-status">
           <AlertTitle>{outcome.title}</AlertTitle>
           <AlertDescription>
             <p>{outcome.description}</p>
@@ -42,7 +42,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
               search={result.continuationDraftRef === undefined
                 ? {}
                 : { draft: result.continuationDraftRef }}
-              className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+              className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-connection-return`}
             >
               {OWNER_MCP_OAUTH_CALLBACK_COPY.action}
             </Link>

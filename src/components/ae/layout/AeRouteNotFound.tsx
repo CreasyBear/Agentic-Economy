@@ -3,10 +3,10 @@ import { Link, useLocation } from '@tanstack/react-router'
 
 import { AeNotFound } from '@/components/ae/layout/AeNotFound'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { appDestination } from '@/lib/navigation/app-navigation'
 import { operatorRoleForPath } from '@/lib/operator/roles'
-import { cn } from '@/lib/utils'
+import './RouteRecoveryComposition.css'
 
 export type OperatorRouteNotFoundProps = Readonly<{
   recoveryHref?: string
@@ -42,13 +42,12 @@ export function OperatorRouteNotFoundRecovery({
       description="This page may have moved, or your account may not have access."
       currentPath={pathname}
     >
-      <Link
-        to={recoveryHref}
-        className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-fit')}
-      >
-        <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
-        {recoveryLabel}
-      </Link>
+      <div className="arc-market arc-recovery-panel">
+        <Link to={recoveryHref} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+          <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
+          {recoveryLabel}
+        </Link>
+      </div>
     </AeOperatorPage>
   )
 }

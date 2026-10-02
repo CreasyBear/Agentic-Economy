@@ -1,6 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
@@ -32,7 +33,7 @@ const columns: ColumnDef<ProviderConnectionRow, unknown>[] = [
 
 export function ProviderConnectionsTable({ rows }: ProviderConnectionsTableProps) {
   return (
-    <AeSection title={PROVIDER_OBJECT_COPY.connectionsTitle}>
+    <AeSection className="arc-market arc-admin-record-table-region" title={PROVIDER_OBJECT_COPY.connectionsTitle}>
       <AeRecordTable
         columns={columns}
         data={rows}

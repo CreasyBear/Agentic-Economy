@@ -2,7 +2,8 @@ import { Link } from '@tanstack/react-router'
 
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import '../../RecordWorkspaceComposition.css'
 import {
   ADMIN_EXCEPTIONS_COPY,
   type ExceptionEvidenceSheetProps,
@@ -36,12 +37,12 @@ export function ExceptionEvidenceSheet({ row, onOpenChange }: ExceptionEvidenceS
       facts={facts}
     >
       {row === null ? null : (
-        <div className="grid gap-related">
+        <div className="arc-market arc-admin-evidence-action">
           {row.kind === 'source_authority_review' ? (
-            <p className="text-sm text-muted-foreground">{ADMIN_EXCEPTIONS_COPY.verifySourceAuthority}</p>
+            <p className="arc-admin-record-context">{ADMIN_EXCEPTIONS_COPY.verifySourceAuthority}</p>
           ) : null}
           {objectHref === null || objectHref === undefined ? null : (
-            <Link to={objectHref} className={buttonVariants({ variant: 'outline', className: 'w-fit' })}>
+            <Link to={objectHref} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
               {ADMIN_EXCEPTIONS_COPY.openObject}
             </Link>
           )}

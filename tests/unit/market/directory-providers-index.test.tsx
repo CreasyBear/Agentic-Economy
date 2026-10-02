@@ -50,3 +50,16 @@ it('reports index failure without presenting a sampled complete list', () => {
   const browse = new URL(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')!, 'https://aecon.ai')
   expect(Object.fromEntries(browse.searchParams)).toEqual({ view: 'tools' })
 })
+it('distinguishes reported zero activity from absent facts without aggregating counts into activity', () => {
+  render(<DirectoryProvidersIndex result={{ kind: 'ok', coverage, page: [
+    { key: 'zero.example.com', label: 'Zero', count: 7, leadCalls: 0, leadPayers: 0, leadPrice: '0.000001', leadTitle: 'Quiet Tool', leadSlug: 'quiet' },
+    { key: 'unknown.example.com', label: 'Unknown', count: 42 },
+  ], isDone: true, continueCursor: '' }} />)
+  const zeroRow = screen.getByRole('link', { name: 'View Tools from zero.example.com' }).closest('tr')!
+  expect([...zeroRow.querySelectorAll('td')].map(cell => cell.textContent)).toEqual(expect.arrayContaining(['0', '7']))
+  expect(zeroRow.querySelectorAll('td')[1]?.textContent).toBe('US$0.000001Provider lists 0.000001 USDC per Call')
+  const unknownRow = screen.getByRole('link', { name: 'View Tools from unknown.example.com' }).closest('tr')!
+  expect([...unknownRow.querySelectorAll('td')].map(cell => cell.textContent)).toEqual(expect.arrayContaining(['Price unavailable', 'Not reported', '42']))
+  expect(unknownRow.textContent).not.toContain('Quiet Tool')
+  expect(screen.getByRole('link', { name: 'Quiet Tool' }).getAttribute('href')).toBe('/tools/zero.example.com/quiet')
+})

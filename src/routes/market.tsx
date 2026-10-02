@@ -1,7 +1,7 @@
 import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-router";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/arc/button/button";
 import { loadMarketPageRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 

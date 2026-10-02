@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import type { AddCreditSheetProps } from './add-credit.contracts'
 import { suggestedAddCreditAmount } from './add-credit.contracts'
 import { AddCreditPanel } from './components/AddCreditPanel'
@@ -42,12 +42,8 @@ export function AddCreditSheet({
   }, [amount, open, setSelected, shortfall?.exponent, shortfall?.units])
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl px-4 pb-6 pt-8 sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:border-l sm:border-t-0 sm:px-6 sm:py-8">
-        <SheetHeader className="px-0 pb-5 pt-0">
-          <SheetTitle>Add credit</SheetTitle>
-          <SheetDescription>Keep this conversation open while you add credit.</SheetDescription>
-        </SheetHeader>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent side="right" title="Add credit" description="Keep this conversation open while you add credit." data-phone-bottom>
         <AddCreditPanel
           signedIn={signedIn}
           payingOn={payingOn}
@@ -65,11 +61,15 @@ export function AddCreditSheet({
           constraints={constraints}
           shortfallTooLarge={exceedsLargest}
         />
-        <a href="/trust" target="_blank" rel="noreferrer"
-          className="mt-5 w-fit text-sm text-muted-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
+        <a
+          href="/trust"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-5 w-fit text-sm text-muted-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
           Trust centre (opens in a new tab)
         </a>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   )
 }

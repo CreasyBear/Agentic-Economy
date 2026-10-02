@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/arc/button/button'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { chatClarify } from '@/lib/public/chat-ia'
 
 export type ChatClarifyPromptProps = Readonly<{
@@ -18,16 +18,18 @@ export function ChatClarifyPrompt({
   onAnswer,
 }: ChatClarifyPromptProps) {
   const [other, setOther] = useState('')
+  const otherInputId = useId()
   return (
     <div className="sticky bottom-2 z-10 mx-auto max-w-3xl px-gutter">
-      <div className="grid gap-related rounded-card border bg-background p-related">
-        <p className="text-sm font-medium">{question}</p>
+      <DecisionPanel aria-label={question}>
+        <h2 className="arc-decision-heading">{question}</h2>
         <div className="flex flex-wrap gap-related">
           {choices.map((choice) => (
             <Button
               key={choice}
               type="button"
-              variant="outline"
+              variant="secondary"
+              labelLayout="wrap"
               className="min-h-touch"
               disabled={disabled}
               onClick={() => onAnswer(choice)}
@@ -37,7 +39,7 @@ export function ChatClarifyPrompt({
           ))}
         </div>
         <form
-          className="flex flex-wrap items-center gap-related"
+          className="grid gap-related"
           onSubmit={(event) => {
             event.preventDefault()
             const answer = other.trim()
@@ -45,19 +47,22 @@ export function ChatClarifyPrompt({
             onAnswer(answer)
           }}
         >
-          <Input
-            value={other}
-            disabled={disabled}
-            placeholder={chatClarify.otherPlaceholder}
-            aria-label={chatClarify.otherLabel}
-            className="min-h-touch min-w-0 flex-1"
-            onChange={(event) => setOther(event.target.value)}
-          />
-          <Button type="submit" className="min-h-touch" disabled={disabled || other.trim().length === 0}>
-            {chatClarify.submitOther}
-          </Button>
+          <label htmlFor={otherInputId} className="text-sm font-medium">{chatClarify.otherLabel}</label>
+          <div className="flex flex-wrap items-center gap-related">
+            <input
+              id={otherInputId}
+              value={other}
+              disabled={disabled}
+              placeholder={chatClarify.otherPlaceholder}
+              className="min-h-touch min-w-0 flex-1"
+              onChange={(event) => setOther(event.target.value)}
+            />
+            <Button type="submit" className="min-h-touch" disabled={disabled || other.trim().length === 0}>
+              {chatClarify.submitOther}
+            </Button>
+          </div>
         </form>
-      </div>
+      </DecisionPanel>
     </div>
   )
 }

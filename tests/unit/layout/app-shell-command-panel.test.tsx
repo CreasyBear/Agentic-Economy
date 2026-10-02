@@ -11,6 +11,7 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import arcButton from '@/components/arc/button/button.module.css'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
@@ -51,7 +52,7 @@ describe('app shell command panel', () => {
     renderAppShell()
 
     const trigger = screen.getByRole('button', { name: 'Find Tools' })
-    expect(trigger.className).toContain('min-h-touch')
+    expect(trigger.className.split(' ')).toContain(arcButton.md)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
     fireEvent.keyDown(window, { key: 'k', metaKey: true })

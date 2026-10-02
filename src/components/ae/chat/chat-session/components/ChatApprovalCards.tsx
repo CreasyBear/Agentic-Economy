@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react'
 
 import { CallOutcome } from '@/components/ae/shared/CallOutcome'
 import { QuoteConfirmation } from '@/components/ae/shared/QuoteConfirmation'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/arc/button/button'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import type { OwnerChatCard } from '../chat-session.contracts'
 
 export type ChatApprovalCardsProps = Readonly<{
@@ -50,16 +50,16 @@ export function ChatApprovalCards({ cards, problem, onApprove, onDeny, onFreshQu
           </div>
         )
         return (
-          <Card key={callRef} data-outcome-ref={callRef} className="min-w-0">
-            <CardHeader><CardTitle><h2 tabIndex={-1}>Approval unavailable</h2></CardTitle></CardHeader>
-            <CardContent className="grid min-w-0 gap-related">
+          <DecisionPanel key={callRef} data-outcome-ref={callRef}>
+            <header className="arc-decision-header"><h2 tabIndex={-1} className="arc-decision-heading">Approval unavailable</h2></header>
+            <div className="arc-decision-body">
               <p>{card.toolName} · {card.quoteLabel}</p>
               <p className="break-all text-sm">Input: {card.inputSummary}</p>
               <p role="alert" className="text-destructive">{card.reason}</p>
               <p className="break-all font-mono text-xs">Call reference: {callRef}</p>
-            </CardContent>
-            <CardFooter><Button type="button" variant="outline" className="min-h-touch" onClick={() => onFreshQuote(callRef)}>Get a fresh Quote</Button></CardFooter>
-          </Card>
+            </div>
+            <div className="arc-decision-actions"><Button type="button" variant="secondary" labelLayout="wrap" onClick={() => onFreshQuote(callRef)}>Get a fresh Quote</Button></div>
+          </DecisionPanel>
         )
       })}
     </section>

@@ -328,3 +328,22 @@ it('keeps the last catalogue when the next view cannot be read', async () => {
   expect(retainedMarketCatalogue(previous, { page: failed.page, catalogue: failed.catalogue })).toEqual({ shown: previous, retainPrevious: true });
   expect(retainedMarketCatalogue(undefined, { page: failed.page, catalogue: failed.catalogue }).retainPrevious).toBe(false);
 });
+
+describe('catalogue display preference', () => {
+  it('accepts the two layouts, rejects malformed preferences and keeps them out of catalogue loader dependencies', () => {
+    const search = { view: 'tools' as const, query: 'weather', sort: 'relevance' as const, network: 'base', page: 2, compare: 'https://example.com/tool/1' }
+    expect(validateMarketSearch({ ...search, layout: 'grid' })).toMatchObject({ ...search, layout: 'grid' })
+    expect(validateMarketSearch({ layout: 'table' })).toEqual({ layout: 'table' })
+    expect(validateMarketSearch({ layout: 'cards' })).toEqual({})
+    expect(validateMarketSearch({ layout: ['grid'] })).toEqual({})
+    expect(marketLoaderDeps({ ...search, layout: 'grid' })).toEqual(marketLoaderDeps({ ...search, layout: 'table' }))
+    expect(marketLoaderDeps({ ...search, layout: 'grid' })).not.toHaveProperty('layout')
+  })
+
+  it('carries the layout across navigation while respecting explicit overrides', () => {
+    const from = { layout: 'grid' as const, compare: 'https://example.com/tool/1' }
+    expect(carryMarketCompare(from, { view: 'providers' })).toEqual({ view: 'providers', ...from })
+    expect(carryMarketCompare(from, { layout: 'table', compare: undefined })).toEqual({ layout: 'table', compare: undefined })
+    expect(carryMarketCompare(from, { layout: undefined })).toEqual({ layout: undefined, compare: from.compare })
+  })
+})

@@ -216,7 +216,6 @@ describe('Tool chat provider boundary', () => {
     expect(browseLinks).toHaveLength(1)
     expect(browseLinks[0]?.tagName).toBe('A')
     expect(browseLinks[0]?.getAttribute('href')).toBe('/market')
-    expect(browseLinks[0]?.classList.contains('min-h-touch')).toBe(true)
 
     expect(screen.queryByRole('button', { name: /retry|try again/iu })).toBeNull()
     expect(screen.queryByRole('link', { name: /retry|try again/iu })).toBeNull()

@@ -1,11 +1,10 @@
 import { useRef, useState } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/arc/button/button'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspace.functions'
+import './IdentityFieldsComposition.css'
 
 export type ProviderNameEditorProps = Readonly<{
   businessId: string
@@ -28,19 +27,20 @@ export function ProviderNameEditor({ businessId, currentName, onRename, descript
   const invalid = normalized.length === 0 || normalized.length > 160
   const unchanged = normalized === currentName
 
-  return <div className="grid min-w-0 gap-3 sm:max-w-sm">
-    <Field data-invalid={invalid || undefined}>
-      <FieldLabel htmlFor="provider-public-name" className="sr-only">Public Provider name</FieldLabel>
-      <Input id="provider-public-name" value={name} maxLength={200} disabled={pending} aria-invalid={invalid || undefined}
+  return <div className="arc-market arc-identity-editor">
+    <div role="group" data-invalid={invalid || undefined} className="arc-identity-field">
+      <label htmlFor="provider-public-name" className="sr-only">Public Provider name</label>
+      <input type="text" id="provider-public-name" className="arc-identity-input" value={name} maxLength={200} disabled={pending} aria-invalid={invalid || undefined}
+        aria-describedby={[description ? 'provider-name-description' : null, invalid ? 'provider-name-error' : null].filter(Boolean).join(' ') || undefined}
         onChange={(event) => {
           setName(event.currentTarget.value)
           setFeedback(undefined)
           requestKeyRef.current = crypto.randomUUID()
         }} />
-      {description ? <FieldDescription>{description}</FieldDescription> : null}
-      {invalid ? <FieldError>Enter a public Provider name from 1 to 160 characters.</FieldError> : null}
-    </Field>
-    <Button type="button" className="min-h-touch justify-self-start" disabled={pending || invalid || unchanged} aria-busy={pending || undefined}
+      {description ? <p id="provider-name-description" className="arc-identity-description">{description}</p> : null}
+      {invalid ? <p id="provider-name-error" role="alert" className="arc-identity-error">Enter a public Provider name from 1 to 160 characters.</p> : null}
+    </div>
+    <Button variant="primary" size="md" type="button" className="arc-identity-save" disabled={pending || invalid || unchanged} aria-busy={pending || undefined}
       onClick={() => {
         setPending(true)
         setFeedback(undefined)

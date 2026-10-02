@@ -1,0 +1,169 @@
+/* Arc HeroContent source CSS SHA-256: 0fb963f57acb7e7f8104b8bbf69e52eb3460cd6379e646d1516fb4d15370017c */
+.arc-market.arc-about-story {
+  container: about-story / inline-size;
+  inline-size: 100%;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-body);
+}
+
+.arc-about-story *, .arc-about-story *::before, .arc-about-story *::after { box-sizing: border-box; }
+
+.arc-about-story,
+.arc-about-story-inner,
+.arc-about-hero-copy,
+.arc-about-hero-actions,
+.arc-about-hero-media,
+.arc-about-editorial-heading,
+.arc-about-editorial-content,
+.arc-about-editorial-content > *,
+.arc-about-story :where(h1, h2, p, a) {
+  min-width: 0;
+}
+
+.arc-about-story-inner {
+  display: grid;
+  inline-size: min(calc(100% - 32px), 1160px);
+  margin-inline: auto;
+  padding-block: var(--space-16);
+}
+
+.arc-about-hero-inner {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.arc-about-hero-copy {
+  display: grid;
+  align-content: center;
+  gap: var(--space-6);
+}
+
+.arc-about-hero-title,
+.arc-about-editorial-title {
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: var(--tracking-display);
+  overflow-wrap: anywhere;
+}
+
+.arc-about-hero-title {
+  max-width: 16ch;
+  font-size: clamp(40px, 5vw, 64px);
+  line-height: 1.06;
+}
+
+.arc-about-story-label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.arc-about-story-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.arc-about-hero-description {
+  max-width: 52ch;
+}
+
+.arc-about-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.arc-about-hero-media {
+  aspect-ratio: 5 / 4;
+  border-radius: 16px;
+}
+
+.arc-about-hero-image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+.arc-about-editorial-inner {
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: var(--space-12);
+}
+
+.arc-about-editorial-heading {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+
+.arc-about-editorial-title {
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: var(--leading-display);
+}
+
+.arc-about-editorial-content {
+  display: grid;
+  align-content: start;
+  gap: var(--space-6);
+}
+
+.arc-about-editorial-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.arc-about-editorial-content a {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.arc-about-story :where(a, button):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.arc-about-story :where(h1, h2, p, a) {
+  overflow-wrap: anywhere;
+}
+
+@container about-story (max-width: 800px) {
+  .arc-about-story-inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+    padding-block: var(--space-10);
+  }
+}
+
+@container about-story (max-width: 520px) {
+  .arc-about-story-inner {
+    inline-size: calc(100% - 32px);
+  }
+
+  .arc-about-hero-title {
+    font-size: var(--text-3xl);
+  }
+}

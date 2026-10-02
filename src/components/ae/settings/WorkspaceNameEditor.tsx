@@ -3,11 +3,10 @@ import { useMutation } from 'convex/react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
-import { Button } from '@/components/ui/button'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/arc/button/button'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { renameWorkspaceServer } from '@/lib/server/workspace-profile.functions'
+import './IdentityFieldsComposition.css'
 const renameUnboundWorkspaceRef = makeFunctionReference<
   'mutation',
   Readonly<{ name: string; expectedRevision: number; correlationRef: string; idempotencyRef: string }>,
@@ -83,7 +82,7 @@ export function WorkspaceNameEditor({ name, canonicalName, accountRevision, cler
     }).finally(() => setPending(false))
   }
 
-  if (!canEdit) return <span className="font-medium">{name}</span>
+  if (!canEdit) return <span className="arc-market arc-identity-editor arc-identity-readonly">{name}</span>
 
   const dirty = normalized !== name.trim()
   return (
@@ -96,17 +95,18 @@ export function WorkspaceNameEditor({ name, canonicalName, accountRevision, cler
       saveActionRef={saveRef}
       headingRef={inputRef}
     >
-      <form onSubmit={onSubmit} className="grid min-w-0 gap-2 sm:max-w-sm">
-        <Field data-invalid={invalid || undefined}>
-          <FieldLabel htmlFor="workspace-name" className="sr-only">Workspace name</FieldLabel>
-          <Input ref={inputRef} id="workspace-name" value={draft} maxLength={200} disabled={pending || requestedName !== null}
+      <form onSubmit={onSubmit} className="arc-market arc-identity-editor">
+        <div role="group" data-invalid={invalid || undefined} className="arc-identity-field">
+          <label htmlFor="workspace-name" className="sr-only">Workspace name</label>
+          <input ref={inputRef} type="text" id="workspace-name" className="arc-identity-input" value={draft} maxLength={200} disabled={pending || requestedName !== null}
             aria-invalid={invalid || undefined} spellCheck={false}
+            aria-describedby={invalid ? 'workspace-name-error' : undefined}
             onChange={(event) => { setDraft(event.currentTarget.value); setMessage(''); setSaveOutcome('idle') }} />
-          {invalid ? <FieldError>Enter a name of 1 to 200 characters.</FieldError> : null}
-        </Field>
-        <Button ref={saveRef} type="submit" disabled={pending || requestedName !== null || invalid || normalized === canonicalName}
-          className="min-h-touch justify-self-start">{pending ? 'Saving…' : 'Save workspace name'}</Button>
-        {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
+          {invalid ? <p id="workspace-name-error" role="alert" className="arc-identity-error">Enter a name of 1 to 200 characters.</p> : null}
+        </div>
+        <Button variant="primary" size="md" ref={saveRef} type="submit" disabled={pending || requestedName !== null || invalid || normalized === canonicalName}
+          className="arc-identity-save">{pending ? 'Saving…' : 'Save workspace name'}</Button>
+        {message ? <p role="status" className="arc-identity-message">{message}</p> : null}
       </form>
     </AeNavigationSafetyBoundary>
   )

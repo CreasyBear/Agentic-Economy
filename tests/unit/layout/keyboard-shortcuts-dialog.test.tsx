@@ -22,7 +22,7 @@ describe('KeyboardShortcutsDialog', () => {
     const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' })
     expect(dialog).toBeTruthy()
     expect(screen.getByText('⌘K')).toBeTruthy()
-    expect(screen.getByText('⌘B')).toBeTruthy()
+    expect(screen.queryByText('⌘B')).toBeNull()
     expect(screen.getByText('/')).toBeTruthy()
     expect(screen.getByText('?')).toBeTruthy()
     expect(screen.getByText('Esc')).toBeTruthy()
@@ -66,6 +66,14 @@ describe('KeyboardShortcutsDialog', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull()
     })
+  })
+
+  it('dismisses through the named native close action', async () => {
+    render(<ShortcutsHarness initialOpen />)
+    const close = screen.getByRole('button', { name: 'Close keyboard shortcuts' })
+    expect(close.tagName).toBe('BUTTON')
+    fireEvent.click(close)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull())
   })
 })
 

@@ -2,17 +2,6 @@ import type { ReactNode, RefObject } from 'react'
 
 import { agentAuthorityModeAllows, type AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import type { AgentConsentTarget } from '@/modules/agent-access/consent-read-model'
-import { cn } from '@/lib/utils'
-
-export const AUTHORIZE_RADIO_CARD_CLASS = cn(
-  'grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border border-border p-3',
-  'has-[[data-checked]]:border-foreground has-[[data-checked]]:bg-muted',
-)
-
-export const AUTHORIZE_RADIO_CARD_CLASS_TOUCH = cn(
-  AUTHORIZE_RADIO_CARD_CLASS,
-  'min-h-touch items-start px-3 py-3',
-)
 
 export type PublicAuthorityMode = Exclude<AgentAccessAuthorityMode, 'unrestricted_test_only'>
 
