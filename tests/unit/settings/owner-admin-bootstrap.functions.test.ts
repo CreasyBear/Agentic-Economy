@@ -21,6 +21,7 @@ vi.mock('@/lib/server/convex-source', async importOriginal => ({
 }))
 
 import { bootstrapOwnerAdminServer, readOwnerAdminBootstrapServer } from '@/modules/security/owner-admin-bootstrap.functions'
+import { sourceWriteRequestFromRequest } from '@/lib/server/source-write-admission'
 import { sourceWriteCommandDigest, verifySourceWriteAdmission, type SourceWriteAdmission, type SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import { installTestSourceWriteSecret } from '../../helpers/source-write-admission'
 
@@ -39,9 +40,52 @@ beforeEach(() => {
   boundary.mutation.mockReset()
   boundary.header.mockReset()
 })
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs() })
 
 describe('owner bootstrap server producer', () => {
+  it('admits canonical HTTPS behind Vercel TLS termination and signs the unchanged request and command', async () => {
+    vi.stubEnv('VERCEL', '1')
+    vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://ae.example')
+    const request = new Request('http://ae.example/_serverFn/bootstrap?mode=exact&x=%2F', {
+      method: 'POST', headers: { Origin: 'https://ae.example', 'x-forwarded-proto': 'https', 'x-forwarded-host': 'untrusted.example' },
+    })
+    const captured = sourceWriteRequestFromRequest({ request, body: JSON.stringify(data) })
+    expect(captured).toMatchObject({ method: 'POST', initiatorOrigin: 'https://ae.example', targetOrigin: 'https://ae.example',
+      targetPath: '/_serverFn/bootstrap', targetQuery: '?mode=exact&x=%2F' })
+    boundary.mutation.mockResolvedValue({ kind: 'ok' })
+    expect(await submit({ data, context: { sourceWriteRequest: captured } })).toEqual({ kind: 'active', auditEventRef: null })
+    const sent = boundary.mutation.mock.calls[0]?.[1] as SentCommand
+    expect(sent).toMatchObject(data)
+    expect(sent.sourceWriteRequest).toEqual({ ...captured, bodyDigest: sent.sourceWrite.bodyDigest })
+    expect(await verifySourceWriteAdmission({ admission: sent.sourceWrite, now, expected: {
+      scope: 'admin_operator', operationKey: data.operationKey, correlationId: data.correlationId,
+      commandDigest: sourceWriteCommandDigest(data), request: sent.sourceWriteRequest,
+    } })).toMatchObject({ kind: 'accepted' })
+  })
+
+  it.each([
+    { label: 'outside Vercel', vercel: '0' },
+    { label: 'missing forwarded protocol', protocol: '' },
+    { label: 'forwarded HTTP', protocol: 'http' },
+    { label: 'noncanonical protocol casing', protocol: 'HTTPS' },
+    { label: 'multiple forwarded protocols', protocol: 'https,http' },
+    { label: 'foreign host with forged forwarded host', host: 'other.example' },
+    { label: 'wrong target port', host: 'ae.example:8080' },
+    { label: 'foreign browser Origin', origin: 'https://other.example' },
+    { label: 'HTTP canonical configuration', canonical: 'http://ae.example' },
+  ])('refuses $label before reading authority or writing', async scenario => {
+    vi.stubEnv('VERCEL', scenario.vercel ?? '1')
+    vi.stubEnv('AE_CANONICAL_BASE_URL', scenario.canonical ?? 'https://ae.example')
+    const request = new Request(`http://${scenario.host ?? 'ae.example'}/_serverFn/bootstrap`, {
+      method: 'POST', headers: { Origin: scenario.origin ?? 'https://ae.example',
+        'x-forwarded-proto': scenario.protocol ?? 'https', 'x-forwarded-host': 'ae.example' },
+    })
+    const captured = sourceWriteRequestFromRequest({ request, body: JSON.stringify(data) })
+    expect(await submit({ data, context: { sourceWriteRequest: captured } })).toEqual({ kind: 'refused', reason: 'request_unavailable' })
+    expect(boundary.query).not.toHaveBeenCalled()
+    expect(boundary.mutation).not.toHaveBeenCalled()
+  })
+
   it('signs the exact explicit command from the genuine POST context and returns the durable readback receipt', async () => {
     const receipt = { kind: 'active', auditEventRef: 'audit:admin.membership_bootstrapped:user_owner:bootstrap:one' }
     boundary.query.mockResolvedValueOnce({ kind: 'eligible' }).mockResolvedValueOnce(receipt)

@@ -3519,3 +3519,71 @@ Infisical folder, verified by native V4 list and exact-name reads. CLI 0.43.129
 prints named `*not found*` placeholders for absent keys; those placeholders
 initially appeared to be records. No vault deletion was necessary. Actual
 Vercel and Convex before-values remain retained for rollback.
+
+## Stage 51 — actual cloud restore and authorized cleanup
+
+The native RDS point-in-time restore of `ae-alpha-formance` to the isolated
+`ae-alpha-restore-20261002` completes at the selected
+`2026-10-02T06:50:34.185Z` cutoff. The maintained verifier returns PASS at
+12:48:12 UTC: the historical alpha ledger's 45 transactions, 53 accounts and
+two schemas match the final baseline digests. Application replay and native
+retries preserve the original transaction and complete census. Request to
+verified recovery is 2,361.44 seconds. The source database remains untouched.
+This is recovery evidence for that selected Formance ledger and cutoff; it
+does not establish current-production RPO or complete Convex/storage recovery.
+
+Joel's bounded restore authorization includes cleanup. The maintained
+Kubernetes cleanup passes before applying the saved six-resource destroy plan.
+The source operator, gateway, ledger, worker and tunnel remain ready. Native
+readback at 13:02:29 UTC proves the drill database, automated backups, snapshots,
+temporary network rules, policy, log group, managed secret, transfer object and
+host runtime are absent. Native deletion audit confirms automatic-backup
+deletion and no final snapshot. Resources existed for 44.7 minutes within the
+four-hour bound; the actual billed amount is not yet available. Source backup
+retention remains seven days. The strict post-change infrastructure snapshot
+still reports its seven known evidence/input gaps; it is not a readiness pass.
+
+## Stage 52 — canonical HTTPS admission and isolated test cleanup
+
+Joel selected and signed in as the verified production owner. The explicit
+bootstrap request was refused before mutation because Vercel's Nitro adapter
+reconstructed an HTTP URL after TLS termination. **Requires:** Vercel runtime,
+exact `x-forwarded-proto: https`, and a request host/port matching the configured
+canonical HTTPS origin. **Ensures:** admission signs and checks that canonical
+HTTPS URL. **Invariant:** origin, host, path, query and body validation remain
+strict; forwarded host and browser Origin never select the trusted authority.
+**On violation:** retain the original request URL and existing refusal. The
+existing admission function owns this normalization; no new layer is added.
+
+The release gate also exposed host-wide browser cleanup terminating another
+checkout's tests. **Requires:** readable process metadata and the recorded
+POSIX process group of this invocation. **Ensures:** only its new test browsers
+are selected for cleanup. **Invariant:** unrelated and preexisting processes
+remain untouched; cancellation reaches ordinary child workers as well as the
+launcher. **On violation:** missing ownership selects no browser. One process
+group field and the existing launcher replace host-wide selection, without a
+new dependency or cleanup service. Two real subprocess regressions establish
+owned-browser termination, concurrent-browser survival, descendant cancellation
+and signal exit status. `npm run check` and 46 focused assertions pass.
+
+After integrating Arc UI main revision `e1fe3ae015d3cb7f8dd89d516c24c09e0d459de7`,
+the complete source gate passes on `de0f934f33380bde73fb2f7321be7001bacc9861`:
+8,020 unit assertions, 2,741 integration assertions, four type contracts,
+75 import checks, TypeScript standards, 31 SEO checks, browser and accessibility
+journeys, public build and reproducible CLI package. The gate uses the existing
+`PLAYWRIGHT_TEST_PORT` option for isolated port 3062. Native-provider opt-in skips
+remain outside this source proof. Actual production bootstrap remains pending.
+
+After Joel completes personal enrollment, Clerk's native owner readback at
+13:18:44 UTC verifies the selected primary email, authenticator MFA and backup
+codes. Factor enrollment is now verified. Fresh step-up for protected commands
+remains a separate acceptance check.
+
+The live bound-user drill revokes the exact sole active owner session through
+Clerk at 13:24:57 UTC. Provider readback confirms `revoked`; the actual signed
+webhook records one `account.session.revoked` event at 13:24:58 UTC for the same
+session and owner. Native Convex readback confirms all 40 previously stale
+interactive credentials for that owner are now revoked. The browser returns to
+sign-in. This establishes provider revocation, bound-user callback admission
+and application authority invalidation; no user deletion or machine-agent
+revocation is performed.

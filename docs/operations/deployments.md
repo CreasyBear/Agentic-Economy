@@ -92,8 +92,9 @@ Multi-AZ RDS database, with nightly Melbourne backup copies. Repairing the
 CloudWatch Agent configuration restored disk/memory observations and all eight
 alarms are currently OK. The restored email subscription is confirmed. A
 controlled CloudWatch alarm delivered one SNS notification with zero failures,
-and metric evaluation restored OK after 102 seconds. Inbox receipt and the
-cloud restore rehearsal remain unproved.
+and metric evaluation restored OK after 102 seconds. Inbox receipt remains
+unproved. The actual cloud restore rehearsal passes for
+the selected historical Formance ledger, as recorded below.
 Joel selected one production-only AWS footprint on 2 October: reuse the existing
 host, RDS and Formance service; retain an independent sandbox backup and prove
 restore before retiring the sandbox ledger. Production receives a clean ledger,
@@ -104,7 +105,16 @@ operator, worker, external tunnel and reconciliation timer are healthy. A new
 production-only Cloudflare Access credential replaced sandbox access and is
 verified in the production vault and existing AWS secret. Stage 48 binds it to
 the production application and verifies native ledger health through Convex.
-Sandbox retirement and the actual cloud restore rehearsal remain pending.
+Stage 51 restores the historical alpha ledger from a native RDS point-in-time
+restore at `2026-10-02T06:50:34.185Z`. Its 45 transactions, 53 accounts and two
+schemas match the recorded baseline, and original-command replay leaves those
+digests unchanged. Request-to-verification time is 39 minutes 21 seconds. This
+proves the selected ledger at that cutoff; it does not prove a current-production
+RPO or a complete Convex/storage restore. Authorized cleanup is complete: native
+readback at 13:02 UTC confirms the temporary database, backups, snapshots,
+network rules, policy, log group, managed secret, transfer object and host
+runtime are absent. The source database and its seven-day backups remain intact.
+Sandbox retirement remains pending.
 No second permanent AWS stack is approved.
 
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
@@ -122,10 +132,18 @@ source gate and native acceptance evidence.
 [#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) tracks the remaining
 foundation setup. Complete custody enablement/funding, two compatible RPCs,
 screening, commercial policy, treasury, identity and backup/restore acceptance.
-Infura's native Base checks pass; Alchemy's compatible-plan setup and the bounded
-cloud restore remain pending operator actions. Owner sign-in is available;
-selection of the first Admin identity, actual sign-in, explicit bootstrap and
-MFA acceptance remain pending. Then [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
+Infura's native Base checks pass; Alchemy's compatible-plan billing setup remains
+pending under the approved US$1 monthly cap. Joel's selected owner identity is
+verified and allowlisted, and real sign-in at 11:57 UTC is recorded in Security
+activity. The first explicit Admin bootstrap was refused at web admission;
+Stage 52 corrects Vercel's HTTP reconstruction after TLS termination without
+relaxing same-origin checks. Production acceptance of that fix, commercial policy
+and screening remain pending. Clerk's native readback at 13:18 UTC verifies
+owner authenticator MFA and backup codes. The live session-revocation drill at
+13:24 UTC records exactly one matching application audit event, revokes all
+40 older interactive credentials for that owner, and returns the browser to
+sign-in. Then
+[#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
 proves the authorized real Calls and failure drills before
 [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288) permits launch.
 
