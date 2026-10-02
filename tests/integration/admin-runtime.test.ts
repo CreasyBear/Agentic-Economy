@@ -18,8 +18,17 @@ type IndexBuilder = {
   eq: (field: string, value: unknown) => IndexBuilder
 }
 
+type RowPredicate = (row: Row) => boolean
+type FilterBuilder = {
+  field: (field: string) => (row: Row) => unknown
+  eq: (field: (row: Row) => unknown, value: unknown) => RowPredicate
+  and: (...conditions: RowPredicate[]) => RowPredicate
+  or: (...conditions: RowPredicate[]) => RowPredicate
+}
+
 type Query = {
   withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
+  filter: (callback: (query: FilterBuilder) => RowPredicate) => Query
   order: (direction: 'asc' | 'desc') => Query
   take: (limit: number) => Promise<Row[]>
   collect: () => Promise<Row[]>
@@ -230,6 +239,16 @@ class FakeQuery implements Query {
     return new FakeQuery(this.rows, [...this.filters, ...builder.filters], this.direction)
   }
 
+  filter(callback: (query: FilterBuilder) => RowPredicate): Query {
+    const predicate = callback({
+      field: field => row => row[field],
+      eq: (field, value) => row => field(row) === value,
+      and: (...conditions) => row => conditions.every(condition => condition(row)),
+      or: (...conditions) => row => conditions.some(condition => condition(row)),
+    })
+    return new FakeQuery(this.rows.filter(predicate), this.filters, this.direction)
+  }
+
   order(direction: 'asc' | 'desc'): Query {
     return new FakeQuery(this.rows, this.filters, direction)
   }
@@ -253,7 +272,7 @@ class FakeQuery implements Query {
   }
 
   async first(): Promise<Row | null> {
-    return this.unique()
+    return (await this.take(1)).at(0) ?? null
   }
 }
 
