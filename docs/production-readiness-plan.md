@@ -3494,3 +3494,28 @@ policy framework or dependency. The narrow header/middleware suite passes 80
 assertions; the full release gate and actual browser form remain required.
 
 Provider requirements: [Clerk CSP guidance](https://clerk.com/docs/guides/secure/best-practices/csp-headers).
+
+Stage 50 acceptance: `npm run check` and the complete `npm run gate` pass on
+source commit `21e54217917ed525112c48b628b593fd53f282e8`: 7,896 unit assertions,
+2,741 integration assertions, four type contracts, 75 import checks, TypeScript
+standards, 31 SEO checks, 16 browser journeys, 18 accessibility checks, the
+public build and reproducible CLI package. Native-provider opt-in skips remain
+outside this source proof. PR #300 merged as
+`6e15ec908d84a096eddaf91fcd43ab9031185d84`; the executable tree is unchanged by
+the squash merge. No backend deployment is required for this web-only fix.
+
+Vercel Production `dpl_DWxJpweqthTfcZpC8ftsVe5nwTBj` serves that exact release.
+At 11:26 UTC, release, health and sign-in return HTTP 200. CSP remains enforced,
+admits the configured Clerk frontend, excludes `unsafe-eval`, and blocks frame
+ancestors. Unauthenticated Security activity and Treasury requests redirect to
+sign-in; readiness remains HTTP 503. The actual Brave sign-in page now renders
+Google and email controls, with before/after screenshots retained as acceptance
+evidence. This proves form availability; actual owner sign-in, bootstrap, MFA
+and commercial-policy activation remain unverified pending the selected human
+identity. Signing remains disabled and no money was moved.
+
+The two retired deployment bindings are also absent from the production
+Infisical folder, verified by native V4 list and exact-name reads. CLI 0.43.129
+prints named `*not found*` placeholders for absent keys; those placeholders
+initially appeared to be records. No vault deletion was necessary. Actual
+Vercel and Convex before-values remain retained for rollback.

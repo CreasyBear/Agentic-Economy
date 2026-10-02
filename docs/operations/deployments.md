@@ -109,17 +109,23 @@ No second permanent AWS stack is approved.
 
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
 Joel selected the existing AWS self-hosted Formance route. The production ledger
-is provisioned, bound and verified empty. Backend `cautious-zebra-473` and Vercel
-`dpl_CTN25Xqh7BJvfh6GkucTM9Fy57fr` run merged revision
-`d02063d598d257b8e1d3c5b22d6ae139aa1163b5`; release and health return HTTP 200.
-Readiness still returns HTTP 503 with custody disabled and the remaining money
-prerequisites incomplete.
+is provisioned, bound and verified empty. Backend `cautious-zebra-473` runs
+Stage 49 revision `316094bead7df43e2e722069bd5e309082abec6a`, including explicit
+owner bootstrap, commercial-policy review and protected chat admission. Vercel
+Production `dpl_DWxJpweqthTfcZpC8ftsVe5nwTBj` serves Stage 50 revision
+`6e15ec908d84a096eddaf91fcd43ab9031185d84`; this subsequent web-only change admits
+the configured Clerk frontend through enforced CSP. At 11:26 UTC, release and
+health return HTTP 200, and the real Brave sign-in form renders Google and email
+controls. Readiness remains HTTP 503 with custody disabled and the remaining
+money prerequisites incomplete. Stages 49–50 of the readiness record hold the
+source gate and native acceptance evidence.
 [#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) tracks the remaining
 foundation setup. Complete custody enablement/funding, two compatible RPCs,
 screening, commercial policy, treasury, identity and backup/restore acceptance.
 Infura's native Base checks pass; Alchemy's compatible-plan setup and the bounded
-cloud restore remain pending operator actions. Owner sign-in is currently blocked
-by Brave before reaching the production application. Then [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
+cloud restore remain pending operator actions. Owner sign-in is available;
+selection of the first Admin identity, actual sign-in, explicit bootstrap and
+MFA acceptance remain pending. Then [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
 proves the authorized real Calls and failure drills before
 [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288) permits launch.
 
