@@ -1,5 +1,5 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
 import { requireLocalE2EOwnerAuthority } from '../../../convex/lib/dev/seed/identity'
@@ -15,6 +15,27 @@ import {
 import { convexModules as modules } from '../../helpers/convex-fixtures'
 
 const owningAccountRef = 'acc_d2000000000000000000000000000001'
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
+
+describe('dev seed deployment fence', () => {
+  it.each(['production', 'preview', undefined])('refuses all seed mutations before state changes for %s', async (declaration) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+    const backend = convexTest(schema, modules)
+    await expect(backend.mutation(internal.devSeed.seedDevCatalog, {})).rejects.toThrow('dev_seed_deployment_refused')
+    await expect(backend.mutation(internal.devSeed.seedOfferingSupply, { cursor: null })).rejects.toThrow('dev_seed_deployment_refused')
+    await expect(backend.mutation(internal.devSeed.seedOfferingSupply, { cursor: 'continuation' })).rejects.toThrow('dev_seed_deployment_refused')
+    await expect(backend.mutation(internal.devSeed.publishSandboxTool, {})).rejects.toThrow('dev_seed_deployment_refused')
+    await expect(backend.mutation(internal.devSeed.seedSandboxSpendingPolicy, {})).rejects.toThrow('dev_seed_deployment_refused')
+    const rows = await backend.run(async (ctx) => ({
+      principals: await ctx.db.query('principals').collect(),
+      businesses: await ctx.db.query('businesses').collect(),
+      bindings: await ctx.db.query('moneyLegalCustomerBindings').collect(),
+    }))
+    expect(rows).toEqual({ principals: [], businesses: [], bindings: [] })
+  })
+})
 
 describe('dev seed Convex store', () => {
   it('persists an empty catalog after retired seed eviction', async () => {

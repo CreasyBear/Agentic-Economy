@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { assertHttpAdmission, rateLimitedResponse } from '@/lib/server/rate-limit'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { postOnlyRoute } from '@/lib/server/gateway-json-route'
@@ -36,6 +37,12 @@ export const Route = createFileRoute('/api/v1/sandbox-reference')({
 
 export async function handleSandboxReferenceRequest(request: Request): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }: RequestCorrelation) => {
+    if (deploymentPaymentEnvironment(process.env) !== 'sandbox') {
+      return withRequestCorrelationHeader(
+        problem({ status: 404, kind: 'NOT_FOUND', code: 'sandbox_reference_unavailable', detail: 'Sandbox reference Calls are available only in development.' }),
+        correlationId,
+      )
+    }
     const admission = await assertHttpAdmission(request, 'public-mutation', { keySuffix: 'sandbox-reference' })
     if (!admission.ok) return withRequestCorrelationHeader(rateLimitedResponse(admission.retryAfter), correlationId)
 

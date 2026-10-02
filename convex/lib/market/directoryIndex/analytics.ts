@@ -5,7 +5,7 @@ import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { MutationCtx } from '../../../_generated/server'
 import { directoryFacets } from './facets'
 
-export const ANALYTICS_VERSION = 2
+export const ANALYTICS_VERSION = 3
 export const analyticsNamespace = (generation: string) => `${generation}:analytics:${ANALYTICS_VERSION}`
 /** Category/provider/network facet memberships for eligible-only rows, mirrored alongside the generation-wide namespace. */
 export const eligibleFacetsNamespace = (generation: string) => `${generation}:eligible`

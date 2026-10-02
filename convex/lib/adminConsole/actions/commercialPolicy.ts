@@ -6,6 +6,7 @@ import { resolveBusinessActor } from '../../../authz'
 import type { AdminCommandSpec } from '../commands/commandEnvelope'
 import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from '../commands/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   COMMERCIAL_POLICY_FAMILIES,
   evaluateCommercialPolicyGate,
@@ -14,7 +15,6 @@ import {
   type CommercialPolicyEnvironment,
   type CommercialPolicyGateResult,
   type CommercialPolicySandboxFixture,
-  type Package4SandboxDeploymentProfile,
 } from '@/modules/money/public'
 
 
@@ -41,23 +41,15 @@ export async function readCommercialPolicyGate(
     sandboxFixture?: CommercialPolicySandboxFixture
   }>,
 ): Promise<CommercialPolicyGateResult> {
+  if (deploymentPaymentEnvironment(env) !== input.environment) {
+    return { kind: 'refused', code: 'commercial_policy_environment_mismatch' }
+  }
   if (input.environment === 'sandbox') {
-    const configuredProfile = env.AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE?.trim()
-    const sandboxDeploymentProfile: Package4SandboxDeploymentProfile | undefined =
-      configuredProfile === undefined || configuredProfile === '' || configuredProfile === 'local_ci'
-        ? 'local_ci'
-        : configuredProfile === 'synthetic_vps_fixture'
-          ? 'synthetic_vps_fixture'
-          : undefined
-    if (sandboxDeploymentProfile === undefined) {
-      return { kind: 'refused', code: 'commercial_policy_deployment_profile_invalid' }
-    }
     return evaluateCommercialPolicyGate({
       environment: input.environment,
       now: input.now,
       approvals: [],
       ...(input.sandboxFixture === undefined ? {} : { sandboxFixture: input.sandboxFixture }),
-      sandboxDeploymentProfile,
     })
   }
 

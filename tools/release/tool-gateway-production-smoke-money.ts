@@ -16,10 +16,8 @@ import {
   type StrictLivePayoutReceipt,
 } from "../../src/modules/money/public";
 import {
-  GatewayPayoutProviderTransferReadbackSchema,
   GatewayPayoutReceiptSchema,
   GatewaySmokeError,
-  MAX_PROVIDER_TRANSFER_COUNT,
   addAmount,
   boundedRefSchema,
   conservationReceiptSchema,
@@ -28,7 +26,6 @@ import {
   strictCallReceiptSchema,
   subtractAmount,
   topupReceiptSchema,
-  type GatewayPayoutProviderTransferReadback,
   type GatewayPayoutReceipt,
   type GatewayTopupProviderEvent,
   type GatewayTopupWebhookReplay,
@@ -282,103 +279,17 @@ export function buildCallCharge(
   };
 }
 
-export function sanitizeGatewayPayoutProviderTransfers(
-  payoutRef: string,
-  transferIds: readonly string[],
-): GatewayPayoutProviderTransferReadback {
-  if (transferIds.length > MAX_PROVIDER_TRANSFER_COUNT)
-    throw new GatewaySmokeError(
-      "gateway_smoke_payout_provider_transfer_readback_unbounded",
-    );
-  const normalizedIds = transferIds
-    .map((transferId) => boundedRefSchema.parse(transferId))
-    .sort();
-  if (new Set(normalizedIds).size !== normalizedIds.length)
-    throw new GatewaySmokeError(
-      "gateway_smoke_payout_provider_transfer_identity_duplicate",
-    );
-  const transferIdDigests = normalizedIds.map((transferId) =>
-    canonicalDigest({ format: "stripe-transfer:v1", transferId }),
-  );
-  return GatewayPayoutProviderTransferReadbackSchema.parse({
-    payoutRef: boundedRefSchema.parse(payoutRef),
-    count: normalizedIds.length,
-    transferIdsDigest: canonicalDigest({
-      format: "stripe-transfer-ids:v1",
-      payoutRef,
-      transferIdDigests,
-    }),
-    transferIdDigests,
-  });
-}
-
 export function buildGatewayPayoutReceipt(
   input: Readonly<{
     payout: StrictLivePayoutReceipt;
     payoutReplay: StrictLivePayoutReceipt;
-    providerTransfersBeforePayout: GatewayPayoutProviderTransferReadback;
-    providerTransfersAfterInitialPayout: GatewayPayoutProviderTransferReadback;
-    providerTransfersAfterReplay: GatewayPayoutProviderTransferReadback;
   }>,
 ): GatewayPayoutReceipt {
   const payout = StrictLivePayoutReceiptSchema.parse(input.payout);
   const payoutReplay = StrictLivePayoutReceiptSchema.parse(input.payoutReplay);
   if (canonicalDigest(payout) !== canonicalDigest(payoutReplay))
     throw new GatewaySmokeError("gateway_smoke_payout_replay_changed");
-  const providerTransfers = {
-    beforePayout: GatewayPayoutProviderTransferReadbackSchema.parse(
-      input.providerTransfersBeforePayout,
-    ),
-    afterInitialPayout: GatewayPayoutProviderTransferReadbackSchema.parse(
-      input.providerTransfersAfterInitialPayout,
-    ),
-    afterReplay: GatewayPayoutProviderTransferReadbackSchema.parse(
-      input.providerTransfersAfterReplay,
-    ),
-  };
-  for (const observation of Object.values(providerTransfers)) {
-    if (
-      observation.count !== observation.transferIdDigests.length ||
-      new Set(observation.transferIdDigests).size !==
-        observation.transferIdDigests.length ||
-      observation.transferIdsDigest !==
-        canonicalDigest({
-          format: "stripe-transfer-ids:v1",
-          payoutRef: observation.payoutRef,
-          transferIdDigests: observation.transferIdDigests,
-        }) ||
-      observation.payoutRef !== payout.payoutRef
-    )
-      throw new GatewaySmokeError(
-        "gateway_smoke_payout_provider_transfer_readback_invalid",
-      );
-  }
-  if (
-    providerTransfers.beforePayout.count !== 0 ||
-    providerTransfers.afterInitialPayout.count !== 1 ||
-    providerTransfers.afterReplay.count !== 1 ||
-    !providerTransfers.afterInitialPayout.transferIdDigests.includes(
-      payout.stripeTransferDigest,
-    ) ||
-    !providerTransfers.afterReplay.transferIdDigests.includes(
-      payout.stripeTransferDigest,
-    )
-  )
-    throw new GatewaySmokeError(
-      "gateway_smoke_payout_provider_transfer_identity_invalid",
-    );
-  const replayAdditionalDebits =
-    providerTransfers.afterReplay.count -
-    providerTransfers.afterInitialPayout.count;
-  if (replayAdditionalDebits !== 0)
-    throw new GatewaySmokeError(
-      "gateway_smoke_payout_provider_replay_added_transfer",
-    );
-  return GatewayPayoutReceiptSchema.parse({
-    ...payout,
-    replayAdditionalDebits,
-    providerTransfers,
-  });
+  return GatewayPayoutReceiptSchema.parse(payout);
 }
 
 export function buildConservation(

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type * as ClerkModule from '@clerk/tanstack-react-start'
 import {
   RouterContextProvider,
@@ -9,19 +9,21 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import '../../setup/jsdom-platform'
+const clerkAuth = vi.hoisted(() => ({ orgId: null as string | null, isLoaded: true }))
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof ClerkModule>()),
+  OrganizationSwitcher: () => null,
   UserButton: () => null,
+  useAuth: () => clerkAuth,
 }))
 vi.mock('@/components/ae/command-panel', () => ({ AeCommandPanel: () => null }))
 vi.mock('@/components/ae/layout/AeNetworkHealthIndicator', () => ({
   AeNetworkHealthBanner: () => null,
   AeNetworkHealthIndicator: () => null,
 }))
-vi.mock('@/components/ae/layout/app-shell/AeWorkspaceIdentity', () => ({ AeWorkspaceIdentity: () => null }))
 vi.mock('@/components/ae/layout/ThemeToggle', () => ({ ThemeToggle: () => null }))
+vi.mock('@/components/ae/layout/app-shell/OperatorWorkspaceMenu', () => ({ OperatorWorkspaceMenu: () => null }))
 vi.mock('@/components/ae/layout/app-shell/WorkspaceMenu', () => ({ WorkspaceMenu: () => null }))
 vi.mock('@/components/ae/website/AeSiteNav', () => ({
   AeSiteDrawerNav: () => null,
@@ -40,7 +42,11 @@ import {
 } from '@/modules/capability-execution/call-receipt-view'
 import type { AdminCallView } from '@/lib/operator/admin-console/views'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  clerkAuth.orgId = null
+  clerkAuth.isLoaded = true
+})
 
 const callRefText = `operation-invocation:v1:${'a'.repeat(64)}`
 const parsedCallRef = parseCallRef(callRefText)
@@ -73,10 +79,11 @@ const uncertainView: AdminCallView = {
   agentRef: null,
   correlationId: null,
   resolution: null,
+  answerModelCost: null,
   timeline: [],
 }
 
-function renderCallPage() {
+function renderCallPage(view: AdminCallView = uncertainView) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -84,7 +91,7 @@ function renderCallPage() {
     createRoute({ getParentRoute: () => rootRoute, path: '/admin/search' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
-  return render(
+  const renderTree = () => (
     <RouterContextProvider router={router}>
       <OperatorChromeProvider>
         <AeAppHeader
@@ -97,13 +104,33 @@ function renderCallPage() {
           hydrated
           chatFrame={false}
         />
-        <AdminCallObjectPage result={uncertainView} />
+        <AdminCallObjectPage result={view} />
       </OperatorChromeProvider>
-    </RouterContextProvider>,
+    </RouterContextProvider>
   )
+  const rendered = render(renderTree())
+  return { ...rendered, router, rerenderTree: () => rendered.rerender(renderTree()) }
 }
 
 describe('/admin/calls/$callRef', () => {
+  it('shows the whole answer subtotal and its unpriced Jev request separately from Call money', () => {
+    renderCallPage({ ...uncertainView, answerModelCost: {
+      cost: { turnRef: 'turn:answer', status: 'incomplete', knownCostUsd: '0.001', requestCount: 2, unknownRequestCount: 1,
+        requests: [
+          { requestRef: 'sdk:one:0', source: 'openrouter', purpose: 'initial', requestedModel: 'test/model', model: 'test/actual',
+            inputTokens: 10, outputTokens: 20, accounting: { status: 'priced', amountUsd: '0.001', source: 'inline' } },
+          { requestRef: 'jev:one', source: 'jev', purpose: 'discovery_rerank', requestedModel: '~typesafe/jev-latest',
+            accounting: { status: 'unpriced', reason: 'jev_usage_only' } },
+        ] }, callRefs: [callRefText, 'operation-invocation:v1:second'], callsTruncated: false,
+    } })
+    expect(screen.getByText('Known subtotal US$0.001 · incomplete (1 unpriced request)')).toBeTruthy()
+    expect(screen.getByText('The cost of the originating chat answer, shared by all its Calls.')).toBeTruthy()
+    expect(screen.getByText('test/actual')).toBeTruthy()
+    expect(screen.getByText('jev usage only')).toBeTruthy()
+    expect(screen.getByText('Related Calls (2)')).toBeTruthy()
+    expect(screen.getByText('Unknown')).toBeTruthy()
+  })
+
   it('shows the canonical uncertainty sentence without claiming a zero charge', () => {
     const { container } = renderCallPage()
     const uncertainty = uncertainView.receipt.issue?.moneyMovement
@@ -113,11 +140,14 @@ describe('/admin/calls/$callRef', () => {
     expect(container.textContent).not.toContain('A$0.00')
   })
 
-  it('shows Call as the identity heading with the exact copyable reference beneath it', () => {
-    renderCallPage()
+  it('refreshes route data when the active organization changes', async () => {
+    const page = renderCallPage()
+    const invalidate = vi.spyOn(page.router, 'invalidate')
+    expect(invalidate).not.toHaveBeenCalled()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Copy Reference' })).toBeTruthy()
-    expect(screen.getByText(callRefText)).toBeTruthy()
+    clerkAuth.orgId = 'org_test'
+    page.rerenderTree()
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1))
   })
+
 })

@@ -115,7 +115,6 @@ describe('capability supply boundaries', () => {
       'withdrawOfferingAccessPath',
       'retryBusinessSupplyProjection',
       'getCurrentOwnerOfferingSupply',
-      'promoteX402SellerCanary',
     ]
     const retiredCeremonies = [
       'preflightOwnerOpenApiDocumentServer',
@@ -123,8 +122,6 @@ describe('capability supply boundaries', () => {
       'admitOwnerCapabilityServer',
       'runOwnerSupplyReadinessServer',
       'runOwnerSupplyTestServer',
-      'readOwnerSellerCanaryStatusServer',
-      'promoteOwnerSellerCanaryServer',
     ]
 
     for (const name of retiredPublicNames) {

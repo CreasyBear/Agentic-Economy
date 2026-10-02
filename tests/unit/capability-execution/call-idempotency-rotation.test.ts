@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { internal } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
 import { convexTestWithMarketComponents } from '../../helpers/convex-fixtures'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
+import { callResultSchema } from '@/modules/capability-execution/call-contracts'
 
 // Call idempotency is keyed by the stable Principal tuple
 // (principalId, ownerId, applicationRef, environment). The credential and the
@@ -225,6 +226,35 @@ describe('call idempotency across a credential rotation', () => {
       )).resolves.toBeNull()
     }
     expect(await calls(backend)).toHaveLength(1)
+  })
+
+  it.each([
+    { recordedCode: 'provider_http_500', publicCode: 'provider_refused' },
+    { recordedCode: 'payment_provider_requirement_stale', publicCode: 'provider_refused' },
+    { recordedCode: 'payment_requirement_outside_authority', publicCode: 'pre_release_failed' },
+  ])('replays historical $recordedCode under the same key without changing stored effects', async ({ recordedCode, publicCode }) => {
+    const backend = convexTestWithMarketComponents()
+    await seed(backend)
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', CALL_REF)).unique()
+      if (row === null) throw new Error('historical_call_missing')
+      await ctx.db.patch('capabilityCalls', row._id, {
+        state: 'refused', formanceFinancialState: 'released',
+        result: { kind: 'refused', toolRef: TOOL_REF, code: recordedCode, retryable: false },
+      })
+    })
+    const before = await calls(backend)
+    for (let retry = 0; retry < 2; retry += 1) {
+      expect(await backend.mutation(internal.capabilityCalls.reserve, reserveArgs() as never))
+        .toMatchObject({ kind: 'replayed', reservation: { callRef: CALL_REF } })
+      const replay = await backend.query(internal.capabilityCalls.readReplay, stableIdentity() as never)
+      expect(callResultSchema.parse(replay?.result)).toEqual({
+        kind: 'refused', toolRef: TOOL_REF, code: publicCode, retryable: false,
+      })
+    }
+    expect(await calls(backend)).toEqual(before)
+    expect(await backend.query(internal.capabilityCalls.readReplay,
+      stableIdentity({ ownerId: 'owner:other' }) as never)).toBeNull()
   })
 
   it('conflicts without throwing when two stored Calls already share the key', async () => {

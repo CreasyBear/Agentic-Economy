@@ -1,8 +1,9 @@
 'use client'
 
-import { UserButton } from '@clerk/tanstack-react-start'
+import { OrganizationSwitcher, UserButton, useAuth } from '@clerk/tanstack-react-start'
 import { ArrowLeftIcon, MenuIcon, XIcon } from 'lucide-react'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
+import { useEffect, useRef } from 'react'
 
 import { AeCommandPanel } from '@/components/ae/command-panel'
 import { AeNetworkHealthBanner, AeNetworkHealthIndicator } from '@/components/ae/layout/AeNetworkHealthIndicator'
@@ -12,12 +13,12 @@ import { AeSiteDrawerNav, AeSiteIconButton, AeSitePrimaryNav } from '@/component
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { chatHeaderActionsId } from '@/lib/public/chat-ia'
 import type { OperatorRole } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
 
 import { OperatorWorkspaceMenu } from './OperatorWorkspaceMenu'
-import { AeWorkspaceIdentity } from './AeWorkspaceIdentity'
 
 export type AeAppHeaderProps = Readonly<{
   signedIn: boolean
@@ -58,6 +59,22 @@ export function AeAppHeader({
   hydrated,
   chatFrame,
 }: AeAppHeaderProps) {
+  const { isLoaded, orgId } = useAuth()
+  const router = useRouter()
+  const previousOrgId = useRef<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (!isLoaded) return
+    const activeOrgId = orgId ?? null
+    if (previousOrgId.current === undefined) {
+      previousOrgId.current = activeOrgId
+      return
+    }
+    if (previousOrgId.current === activeOrgId) return
+    previousOrgId.current = activeOrgId
+    void router.invalidate().catch((cause) => captureClientExceptionOnClient(cause))
+  }, [isLoaded, orgId, router])
+
   const frameChrome = useOperatorFrameChrome()
   const title = frameChrome?.title
   const pageTitle = typeof title === 'string' && title !== '' ? title : null
@@ -106,7 +123,7 @@ export function AeAppHeader({
           <div className="ms-auto flex min-w-0 shrink-0 items-center justify-end gap-0.5 sm:gap-intra">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><AeCommandPanel /></div>
-            <div className={chatFrame ? 'hidden sm:block' : ''}><AeWorkspaceIdentity /></div>
+            <div className={chatFrame ? 'hidden sm:block' : ''}><OrganizationSwitcher hidePersonal={false} /></div>
             <div className={chatFrame ? 'hidden sm:block' : ''}><OperatorWorkspaceMenu operatorRole={operatorRole} /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle /></div>
             <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />

@@ -68,6 +68,12 @@ export function mapUpdateRefusedDiagnostic(
   code: Extract<AgentSpendingLimitsResult, { kind: 'refused' }>['code'],
 ): Rule4Diagnostic {
   switch (code) {
+    case 'mfa_reverification_required':
+      return {
+        whatHappened: 'Verify your identity to raise spending limits',
+        financialImpact: FINANCIAL_SAFE_LIMITS_UNCHANGED,
+        nextStep: 'Complete verification, or enable two-factor authentication in Account security, then save again.',
+      }
     case 'authentication_required':
       return {
         whatHappened: 'Sign-in required',

@@ -104,6 +104,7 @@ describe('discovery files', () => {
     expect(result.body).toContain('<loc>https://ae.example/about</loc>')
     expect(result.body).toContain('<loc>https://ae.example/privacy</loc>')
     expect(result.body).toContain('<loc>https://ae.example/terms</loc>')
+    expect(result.body).toContain('<loc>https://ae.example/trust</loc>')
     expect(result.body).toContain('<loc>https://ae.example/demo-listed-provider</loc>')
     expect(result.body).not.toContain('/admin/')
     expect(result.body).not.toContain('/ucp</loc>')

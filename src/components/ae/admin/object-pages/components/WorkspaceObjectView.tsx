@@ -3,14 +3,26 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { AdminWorkspaceView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
 import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
 import { ADMIN_OBJECT_PAGE_COPY, formatPerthTimestamp } from '../object-pages.contracts'
 
-export type WorkspaceObjectViewProps = Readonly<{ view: AdminWorkspaceView }>
+export type WorkspaceObjectViewProps = Readonly<{
+  view: AdminWorkspaceView
+  grant?: Readonly<{
+    amount: string
+    expiry: string
+    canReview: boolean
+    onAmountChange: (value: string) => void
+    onExpiryChange: (value: string) => void
+    onReview: () => void
+  }> | null
+}>
 
-export function WorkspaceObjectView({ view }: WorkspaceObjectViewProps) {
+export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewProps) {
   const copy = ADMIN_OBJECT_PAGE_COPY.workspace
   const status = getStatusPresentation(view.lifecycle)
 
@@ -55,6 +67,40 @@ export function WorkspaceObjectView({ view }: WorkspaceObjectViewProps) {
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.relatedTitle}>
           <p className="text-sm text-muted-foreground">{ADMIN_OBJECT_PAGE_COPY.noRelatedReferences}</p>
         </AeSection>
+        {grant === null ? null : (
+          <AeSection title="Promotional credit" description="Grant expiring AUD credit to this Workspace after Admin review and ledger confirmation.">
+            {view.paymentEnvironment === null ? (
+              <p className="text-sm text-muted-foreground">Payment environment is unavailable for this deployment.</p>
+            ) : (
+              <div className="grid gap-intra">
+                <p className="text-sm text-muted-foreground">Environment: {view.paymentEnvironment}</p>
+                <label className="grid gap-1 text-sm font-medium">
+                  Amount (AUD)
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="10.00"
+                    value={grant.amount}
+                    onChange={(event) => grant.onAmountChange(event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-1 text-sm font-medium">
+                  Expiry (your local time)
+                  <Input
+                    type="datetime-local"
+                    value={grant.expiry}
+                    onChange={(event) => grant.onExpiryChange(event.target.value)}
+                  />
+                </label>
+                <p className="text-xs text-muted-foreground">Enter a positive AUD amount with up to six decimal places and a future expiry.</p>
+                <Button type="button" variant="outline" className="min-h-touch justify-self-start" disabled={!grant.canReview} onClick={grant.onReview}>
+                  Review promotional credit grant
+                </Button>
+              </div>
+            )}
+          </AeSection>
+        )}
       </div>
     </AeOperatorPage>
   )

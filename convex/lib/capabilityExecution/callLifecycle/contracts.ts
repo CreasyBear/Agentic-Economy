@@ -7,7 +7,6 @@ import { actionExecutionTransactArgs } from '../../../lib/actionExecution/contro
 import {
   callAuthorityValue,
   callResultValue,
-  sellerOnboardingCanaryExecutionEnvelopeValue,
   usageValue,
   statusResultValue,
 } from '@/modules/capability-execution/convex'
@@ -105,7 +104,6 @@ export const openDispatchValue = v.object({
   environment,
   state: v.union(v.literal('pending'), v.literal('completed'), v.literal('refused'), v.literal('reconciliation_required'), v.literal('cancelled')),
   toolRef: v.string(),
-  sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
   idempotencyKey: v.string(),
   inputDigest: v.string(),
   requestDigest: v.string(),
@@ -166,6 +164,7 @@ export const replayValue = v.object({
   attemptRef: v.optional(v.string()),
 })
 export const recoveryValue = v.object({
+  requiresManualSettlementReview: v.optional(v.literal(true)),
   quoteRef: v.optional(v.string()),
   callRef: v.string(),
   principalId: v.string(),
@@ -181,7 +180,6 @@ export const recoveryValue = v.object({
     v.literal('cancelled'),
   ),
   toolRef: v.string(),
-  sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
   inputDigest: v.string(),
   requestDigest: v.string(),
   grantGeneration: v.number(),

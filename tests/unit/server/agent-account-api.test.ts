@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleAgentAccountActionPost, handleAgentAccountGet } from '@/lib/server/agent-account-api'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
 
 const authenticate = async (scopes: readonly string[] = ['market_tools:call']) => ({
   isAuthenticated: true as const,
@@ -9,9 +12,29 @@ const authenticate = async (scopes: readonly string[] = ['market_tools:call']) =
   id: 'key_current',
   subject: 'user_owner',
   scopes,
+  claims: { aeEnvironment: 'sandbox' },
 })
 
 describe('agent account HTTP adapter', () => {
+  it('returns a correlated unavailable response when service admission is not configured', async () => {
+    setHttpRateLimitAdmissionForTests(undefined)
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', undefined)
+    const verifyCredential = vi.fn(async () => await authenticate())
+    const response = await handleAgentAccountGet(new Request('https://ae.example/api/v1/account', {
+      headers: { 'x-ae-request-id': 'corr_account_admission_unavailable' },
+    }), { authenticate: verifyCredential })
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('x-ae-request-id')).toBe('corr_account_admission_unavailable')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('retry-after')).toBe('5')
+    expect(response.headers.get('www-authenticate')).toBeNull()
+    await expect(response.json()).resolves.toMatchObject({
+      status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,
+    })
+    expect(verifyCredential).not.toHaveBeenCalled()
+  })
+
   it('rate-limits current-account reads before dispatch when admission is denied', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 5_000 }))
     const response = await handleAgentAccountGet(

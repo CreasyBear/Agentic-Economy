@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { convexTest } from 'convex-test'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { prepareIndexedDirectorySource } from '../../convex/x402DirectoryIndexSource'
 import { convexModules, convexTestWithMarketComponents } from '../helpers/convex-fixtures'
-import { timezonePaymentRequired20260819Fixture as fixture } from '@/modules/capability-supply/public'
+import timezonePaymentRequired20260819Fixture from '../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json'
+const fixture = timezonePaymentRequired20260819Fixture
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', () => ({ listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
@@ -12,7 +13,53 @@ const payment = fixture.paymentRequired
 const item = { ...payment, resource: payment.resource.url, description: payment.resource.description, serviceName: payment.resource.serviceName, type: 'http' }
 
 describe('selected directory resource resolution', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => { vi.clearAllMocks(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('refuses missing deployment and opposite-network requests before index or upstream lookup', async () => {
+    const backend = convexTest(schema, convexModules)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
+    expect(await backend.action(api.x402Directory.resolve, { resource: item.resource })).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    expect(await backend.action(api.x402Directory.resolve, { resource: item.resource, network: 'base-sepolia' })).toEqual({ kind: 'unavailable', reason: 'resource_filters_mismatch' })
+    expect(sdk.list).not.toHaveBeenCalled()
+    expect(sdk.search).not.toHaveBeenCalled()
+    expect(await backend.run(ctx => ctx.db.query('capabilityPublications').collect())).toEqual([])
+  })
+
+  it.each([
+    ['production', 'production', 'eip155:8453', false],
+    ['production', 'production', 'eip155:8453', true],
+    ['development', 'sandbox', 'eip155:84532', false],
+    ['development', 'sandbox', 'eip155:84532', true],
+  ] as const)('resolves only its own payment option: deployment=%s, environment=%s, network=%s, reversed=%s', async (deployment, environment, network, reverse) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    const backend = convexTest(schema, convexModules)
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const mainnet = payment.accepts[0]!
+    const sepolia = { ...mainnet, network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' }
+    const mixed = { ...item, accepts: reverse ? [sepolia, mainnet] : [mainnet, sepolia] }
+    sdk.list.mockResolvedValue({ items: [mixed], pagination: { offset: 0, limit: 20, total: 1 } })
+    const result = await backend.action(api.x402Directory.resolve, { resource: item.resource })
+    expect(result).toMatchObject({ kind: 'ready' })
+    const publications = await backend.run(ctx => ctx.db.query('capabilityPublications').collect())
+    expect(publications).toHaveLength(1)
+    expect(publications[0]?.runtimeEnvironment).toBe(environment)
+    const pricing = publications[0]?.pricingConfigJson
+    if (pricing === undefined) throw new Error('expected_publication_pricing')
+    expect(JSON.parse(pricing)).toMatchObject({ sourceRequirement: { network } })
+  })
+
+  it.each(['production', 'development'])('refuses an opposite-network upstream resource in %s', async (deployment) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    const backend = convexTest(schema, convexModules)
+    const opposite = deployment === 'production'
+      ? { ...item, accepts: payment.accepts.map(accept => ({ ...accept, network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' })) }
+      : item
+    sdk.list.mockResolvedValue({ items: [opposite], pagination: { offset: 0, limit: 20, total: 1 } })
+    expect(await backend.action(api.x402Directory.resolve, { resource: item.resource })).toEqual({ kind: 'unavailable', reason: 'resource_not_found' })
+    expect(await backend.run(ctx => ctx.db.query('capabilityPublications').collect())).toEqual([])
+  })
 
   it('materializes only the exact selected resource using fresh SDK metadata', async () => {
     const backend = convexTest(schema, convexModules)
@@ -48,7 +95,7 @@ describe('selected directory resource resolution', () => {
     sdk.search.mockResolvedValue({ resources: [item], partialResults: false })
     const result = await backend.action(api.x402Directory.resolve, { resource: 'http://127.0.0.1/private', query: 'timezone' })
     expect(result).toEqual({ kind: 'unavailable', reason: 'resource_not_found' })
-    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'timezone', limit: 20 })
+    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'timezone', network: 'eip155:8453', limit: 20 })
     expect(await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())).toEqual([])
   })
 

@@ -2,31 +2,20 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
 import { FieldGroup } from '@/components/ui/field'
 import { cn } from '@/lib/utils'
-import { SourceTypeChooser } from './supply-source-type/components/SourceTypeChooser'
 import { SupplySourceFields } from './supply-source-type/components/SupplySourceFields'
 import { SUPPLY_SOURCE_TYPE_COPY, type SupplySourceTypeSectionProps } from './supply-source-type/supply-source-type.contracts'
 import { useSupplySourceType } from './supply-source-type/useSupplySourceType'
 import { TACTILE } from './supply-source-native-start-presentation'
 
-export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps) {
-  const {
-    discoverDiagnostic,
-    handleDiscover,
-    ...sourceFieldHandlers
-  } = useSupplySourceType(props)
-
+export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps & Readonly<{ askMethod?: boolean }>) {
+  const { discoverDiagnostic, handleDiscover } = useSupplySourceType(props)
   return (
-    <AeSection title="Source" description={SUPPLY_SOURCE_TYPE_COPY.sectionDescription}>
+    <AeSection title="Add Tool" description="Paste the public HTTPS URL. Agentic Economy reads the payment challenge.">
       <FieldGroup className="gap-5">
-        <SourceTypeChooser
-          sourceKind={props.sourceKind}
-          disabled={props.disabled}
-          onSourceKindChange={props.onSourceKindChange}
-        />
         <SupplySourceFields
           {...props}
-          {...sourceFieldHandlers}
           discoverDiagnostic={discoverDiagnostic}
+          askMethod={props.askMethod === true}
         />
         <Button
           type="button"
@@ -35,7 +24,7 @@ export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps) {
           aria-busy={props.discovering || undefined}
           onClick={handleDiscover}
         >
-          {props.discovering ? SUPPLY_SOURCE_TYPE_COPY.findingTools : SUPPLY_SOURCE_TYPE_COPY.findTools}
+          {props.discovering ? SUPPLY_SOURCE_TYPE_COPY.findingTools : 'Read endpoint'}
         </Button>
       </FieldGroup>
     </AeSection>

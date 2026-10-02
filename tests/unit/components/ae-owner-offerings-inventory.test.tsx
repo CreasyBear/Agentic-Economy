@@ -126,6 +126,24 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     })).toBe('A$0.10 / call')
   })
 
+  it('formats a managed x402 source requirement as an exact per-Call price', () => {
+    expect(ownerToolPricingLabel({
+      pricingConfigJson: {
+        version: 'pricing:v3',
+        kind: 'managed_x402',
+        effectTiming: 'payment_required_before_effect',
+        sourceRequirement: {
+          network: 'eip155:8453',
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+          atomicUnits: '10000',
+        },
+        pricingPolicyRef: 'pricing-policy:managed-x402:v1',
+        publicDisplay: 'on_request',
+      },
+      pricingLabel: 'Price on request',
+    })).toBe('USDC 0.010000 / call')
+  })
+
   it('T4: renders quick actions with accessible labels, links, and tactile press class', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 

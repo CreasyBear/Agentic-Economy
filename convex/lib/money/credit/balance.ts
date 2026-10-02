@@ -3,16 +3,12 @@ import { internal } from '../../../_generated/api'
 import type { ActionCtx, QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { exactAmount, identifier } from '../../../moneyLedgerValues'
-import { creditAccountResultValue, type FormanceDisplayBalanceRead } from './contracts'
+import { creditAccountResultValue } from './contracts'
+import type { AccountCreditBalance } from '@/modules/money/public'
 export const creditAccountMoneyFactsArgs = { accountRef: identifier }
 
 
 export const creditAccountMoneyFactsValue = v.object({
-  autoRecharge: v.object({
-    enabled: v.boolean(),
-    threshold: exactAmount,
-    rechargeAmount: exactAmount,
-  }),
   pendingTopup: v.optional(v.object({
     commandRef: v.string(),
     amount: exactAmount,
@@ -24,27 +20,6 @@ export const creditAccountMoneyFactsValue = v.object({
 type CreditAccountMoneyFacts = Infer<typeof creditAccountMoneyFactsValue>
 
 export async function readCreditAccountMoneyFactsHandler(ctx: QueryCtx, args: { accountRef: string }): Promise<CreditAccountMoneyFacts> {
-    const zero = { currency: 'AUD' as const, units: '0', exponent: 6 as const }
-    const settings = await ctx.db
-      .query('moneyAutoRechargeSettings')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', args.accountRef))
-      .unique()
-    const autoRecharge = settings === null
-      ? { enabled: false, threshold: zero, rechargeAmount: zero }
-      : {
-          enabled: settings.enabled,
-          threshold: {
-            currency: 'AUD' as const,
-            units: settings.thresholdUnits,
-            exponent: 6 as const,
-          },
-          rechargeAmount: {
-            currency: 'AUD' as const,
-            units: settings.rechargeAmountUnits,
-            exponent: 6 as const,
-          },
-        }
-
     const fundingCommands = await ctx.db
       .query('moneyFundingCommands')
       .withIndex('by_accountRef_and_createdAt', (query) => query.eq('accountRef', args.accountRef))
@@ -68,7 +43,7 @@ export async function readCreditAccountMoneyFactsHandler(ctx: QueryCtx, args: { 
             : { externalRef: pendingCommand.externalRef }),
         }
 
-    return { autoRecharge, ...(pendingTopup === undefined ? {} : { pendingTopup }) }
+    return { ...(pendingTopup === undefined ? {} : { pendingTopup }) }
 }
 
 export async function readCreditAccountHandler(ctx: ActionCtx, args: { principalId: string; currency: string }): Promise<Infer<typeof creditAccountResultValue>> {
@@ -77,9 +52,8 @@ export async function readCreditAccountHandler(ctx: ActionCtx, args: { principal
     if (args.principalId !== actor.canonicalAccountRef) {
       return { kind: 'refused' as const, code: 'billing_identity_mismatch' }
     }
-    const balance: FormanceDisplayBalanceRead = await ctx.runAction(internal.moneyFormance.readDisplayBalance, {
-      balanceKind: 'account_aud' as const,
-      subjectRef: actor.canonicalAccountRef,
+    const balance: AccountCreditBalance = await ctx.runAction(internal.moneyAccountCreditBalance.read, {
+      accountRef: actor.canonicalAccountRef,
     })
     if (balance.kind !== 'available') return { kind: 'refused' as const, code: 'source_unavailable' }
     const moneyFacts: CreditAccountMoneyFacts = await ctx.runQuery(
@@ -91,7 +65,9 @@ export async function readCreditAccountHandler(ctx: ActionCtx, args: { principal
       principalId: actor.canonicalAccountRef,
       accountId: actor.canonicalAccountRef,
       balance: { currency: balance.currency, units: balance.units, exponent: balance.exponent },
-      autoRecharge: moneyFacts.autoRecharge,
+      purchasedBalance: { currency: balance.currency, units: balance.purchasedUnits, exponent: balance.exponent },
+      promotionalBalance: { currency: balance.currency, units: balance.promotionalUnits, exponent: balance.exponent },
+      nextPromotionalExpiryAt: balance.nextPromotionalExpiryAt,
       ...(moneyFacts.pendingTopup === undefined ? {} : { pendingTopup: moneyFacts.pendingTopup }),
       evidence: 'source' as const,
     }

@@ -10,7 +10,7 @@ import {
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 
 import { observeTreasuryHandler } from '../../../convex/moneyTreasuryObservation'
-import type { CdpUsdcBalanceReader } from '../../../convex/capabilitySupplyCanaryFundingPreflight'
+import type { CdpUsdcBalanceReader } from '../../../convex/lib/money/cdpUsdcBalance'
 import schema from '../../../convex/schema'
 import type { Doc } from '../../../convex/_generated/dataModel'
 
@@ -22,6 +22,7 @@ const convexModules = Object.fromEntries(
 // Mirrors the custody environment the Quote handler tests admit, so a row this
 // action records is the row `prepareFinancialSubjects` looks up.
 const custodyEnvironment = Object.freeze({
+  AE_DEPLOYMENT_ENVIRONMENT: 'production',
   AE_X402_CUSTODY_ENABLED: 'true',
   AE_X402_CUSTODY_MAX_ATOMIC: '10000',
   AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000',
@@ -76,9 +77,10 @@ function backendWithObserver(reader: CdpUsdcBalanceReader = stubBalanceReader())
   } as unknown as Parameters<typeof observeTreasuryHandler>[0]
   return {
     backend,
-    observe: async (overrides: Readonly<{ now?: number; enabled?: boolean }> = {}) =>
+    observe: async (overrides: Readonly<{ now?: number; enabled?: boolean; deployment?: string }> = {}) =>
       await observeTreasuryHandler(ctx, {
-        environment: overrides.enabled === false ? {} : custodyEnvironment,
+        environment: overrides.enabled === false ? { AE_DEPLOYMENT_ENVIRONMENT: 'production' }
+          : { ...custodyEnvironment, AE_DEPLOYMENT_ENVIRONMENT: overrides.deployment ?? 'production' },
         now: overrides.now ?? OBSERVED_AT,
         createBalanceReader: () => reader,
       }),
@@ -108,19 +110,18 @@ describe('x402 treasury observation workload', () => {
     await expect(observer.rows()).resolves.toEqual([])
   })
 
-  it('records one external evidence row per configured x402 lane', async () => {
+  it('records only the production Base lane on a production deployment', async () => {
     const observer = backendWithObserver()
 
     await expect(observer.observe()).resolves.toEqual({
       kind: 'recorded',
       observations: [
-        { environment: 'sandbox', network: lane('sandbox').profile.network, totalUnits: '12000000' },
         { environment: 'production', network: lane('production').profile.network, totalUnits: '5000000' },
       ],
     })
 
     const rows = await observer.rows()
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(1)
     const production = rows.find((row) => row.environment === 'production')
     expect(production).toMatchObject({
       custodyRef: lane('production').custodyRef,
@@ -135,17 +136,15 @@ describe('x402 treasury observation workload', () => {
       observedAt: OBSERVED_AT,
     })
     expect(isCanonicalDigest(production?.evidenceDigest ?? '')).toBe(true)
-    // Distinct external evidence per lane, never one balance copied across both.
-    expect(new Set(rows.map((row) => row.evidenceDigest)).size).toBe(2)
   })
 
-  it('appends a second observation per lane and leaves the newest one winning by observedAt', async () => {
+  it('appends a second observation and leaves the newest one winning by observedAt', async () => {
     const observer = backendWithObserver()
 
     await observer.observe()
     await expect(observer.observe({ now: OBSERVED_AT + 1 })).resolves.toMatchObject({ kind: 'recorded' })
 
-    await expect(observer.rows()).resolves.toHaveLength(4)
+    await expect(observer.rows()).resolves.toHaveLength(2)
     const { profile, custodyRef } = lane('production')
     const newest = await observer.backend.run(async (ctx) => await ctx.db
       .query('moneyTreasuryObservations')
@@ -167,7 +166,7 @@ describe('x402 treasury observation workload', () => {
     expect(spendable > 0n).toBe(true)
   })
 
-  it('records the lanes it can read and reports the first unreadable one', async () => {
+  it('does not fall back to another network when the active lane cannot be read', async () => {
     const observer = backendWithObserver({
       listTokenBalances: async ({ network }) => {
         if (network === 'base-sepolia') throw new Error('cdp_unavailable')
@@ -180,11 +179,34 @@ describe('x402 treasury observation workload', () => {
       },
     })
 
-    await expect(observer.observe()).resolves.toMatchObject({
-      kind: 'recorded',
+    await expect(observer.observe({ deployment: 'development' })).resolves.toMatchObject({
+      kind: 'skipped',
       reason: 'balance_failed',
-      observations: [{ environment: 'production' }],
+      observations: [],
     })
+    await expect(observer.rows()).resolves.toHaveLength(0)
+  })
+
+  it('reads only Base Sepolia in development', async () => {
+    const reader = stubBalanceReader()
+    const read = vi.spyOn(reader, 'listTokenBalances')
+    const observer = backendWithObserver(reader)
+    await expect(observer.observe({ deployment: 'development' })).resolves.toMatchObject({
+      kind: 'recorded', observations: [{ environment: 'sandbox', totalUnits: '12000000' }],
+    })
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(read).toHaveBeenCalledWith(expect.objectContaining({ network: 'base-sepolia' }))
     await expect(observer.rows()).resolves.toHaveLength(1)
+  })
+
+  it.each(['', 'preview', 'test', 'invalid'])('refuses invalid deployment %s before reading or writing', async deployment => {
+    const createBalanceReader = vi.fn(() => stubBalanceReader())
+    const runMutation = vi.fn()
+    await expect(observeTreasuryHandler({ runMutation }, {
+      environment: { ...custodyEnvironment, AE_DEPLOYMENT_ENVIRONMENT: deployment },
+      createBalanceReader,
+    })).resolves.toMatchObject({ kind: 'skipped', reason: 'deployment_environment_invalid' })
+    expect(createBalanceReader).not.toHaveBeenCalled()
+    expect(runMutation).not.toHaveBeenCalled()
   })
 })

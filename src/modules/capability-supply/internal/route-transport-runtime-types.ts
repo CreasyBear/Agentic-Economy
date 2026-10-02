@@ -87,8 +87,9 @@ export type RouteTransportRuntime = Readonly<{
   checkpointX402Response?: (response: Readonly<{
     attemptRef: string
     paymentIdentifier: string
-    responseDigest: string
-    outputJson: string
+    responseStatus: number
+    responseDigest?: string
+    outputJson?: string
     settlementTransactionRef?: string
     requestDigest: string
     paymentResponseDigest?: string

@@ -4,6 +4,7 @@ import { CdpClient } from '@coinbase/cdp-sdk'
 import { v } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   cdpX402CustodyBudgetRef,
@@ -18,8 +19,9 @@ import {
   readCdpUsdcBalance,
   type CdpUsdcBalanceReader,
   type CdpUsdcNetwork,
-} from './capabilitySupplyCanaryFundingPreflight'
+} from './lib/money/cdpUsdcBalance'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
+import { reconcileTreasuryDeposits } from './lib/money/treasury/deposits'
 import {
   parseWorkloadCronSnapshot,
   workloadCronSnapshotValue,
@@ -33,11 +35,6 @@ const CDP_NETWORK_BY_ENVIRONMENT = {
   sandbox: 'base-sepolia',
   production: 'base',
 } as const satisfies Readonly<Record<TreasuryEnvironment, CdpUsdcNetwork>>
-
-// A quote reads the observation for its own Principal environment, and the
-// custody budget ref is environment-scoped, so one run observes every lane the
-// single custody wallet can settle on rather than guessing the deployment's.
-const OBSERVED_ENVIRONMENTS = ['sandbox', 'production'] as const
 
 // moneyTreasury.recordObservation's own admission bounds.
 const UNITS_PATTERN = /^(?:0|[1-9]\d{0,15})$/u
@@ -84,7 +81,9 @@ function officialCdpBalanceReader(configuration: CdpX402CustodyConfiguration): C
 }
 
 /**
- * Records the custody wallet's USDC balance as external treasury evidence.
+ * Requires the deployment's explicit payment environment and custody config.
+ * Records only that environment's USDC balance as external treasury evidence.
+ * Invalid deployment configuration cannot create a client, read or write.
  * Reads only the official CDP token-balance API and writes only through
  * moneyTreasury.recordObservation, which owns replay and conflict admission.
  */
@@ -92,9 +91,10 @@ export async function observeTreasuryHandler(
   ctx: Pick<ActionCtx, 'runMutation'>,
   dependencies: TreasuryObservationDependencies = {},
 ): Promise<TreasuryObservationResult> {
-  const configuration = cdpX402CustodyConfigurationFromEnvironment(
-    dependencies.environment ?? process.env,
-  )
+  const configuredEnvironment = dependencies.environment ?? process.env
+  const activeEnvironment = deploymentPaymentEnvironment(configuredEnvironment)
+  if (activeEnvironment === undefined) return skipped('deployment_environment_invalid')
+  const configuration = cdpX402CustodyConfigurationFromEnvironment(configuredEnvironment)
   if (configuration === undefined) {
     return skipped('custody_disabled')
   }
@@ -105,7 +105,7 @@ export async function observeTreasuryHandler(
   const address = configuration.expectedEvmAddress as `0x${string}`
   const observations: TreasuryObservationSummary[] = []
   let reason: string | undefined
-  for (const environment of OBSERVED_ENVIRONMENTS) {
+  for (const environment of [activeEnvironment]) {
     const profile = x402PaymentProfileForEnvironment(environment)
     if (profile === undefined) {
       reason ??= 'payment_profile_unavailable'
@@ -172,8 +172,17 @@ export const observe = internalAction({
       name: WORKLOAD_NAME,
       snapshot: parseWorkloadCronSnapshot(args.workload),
     })
-    return await observeTreasuryHandler(
-      bindWorkloadCronActionContext(ctx, { name: WORKLOAD_NAME, snapshot: workload }),
-    )
+    const bound = bindWorkloadCronActionContext(ctx, { name: WORKLOAD_NAME, snapshot: workload })
+    const observation = await observeTreasuryHandler(bound)
+    // Pending native posting recovery does not depend on the CDP balance API.
+    // Quote freshness still comes from the separately recorded observation.
+    const deposits = await reconcileTreasuryDeposits(bound, {
+      admit: async () => {
+        await ctx.runQuery(internal.workloadCron.reconcile, { name: WORKLOAD_NAME, snapshot: workload })
+        return true
+      },
+    })
+    if (deposits.kind === 'unavailable') console.warn('treasury_reconciliation_unavailable', { code: deposits.code })
+    return observation
   },
 })

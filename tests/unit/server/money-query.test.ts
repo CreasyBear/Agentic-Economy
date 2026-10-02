@@ -64,11 +64,6 @@ describe('createConvexMoneyQueryPort', () => {
       principalId: 'acc_one',
       accountId: 'acc_one',
       balance: { currency: 'AUD', units: '5000000', exponent: 6 },
-      autoRecharge: {
-        enabled: false,
-        threshold: { currency: 'AUD', units: '0', exponent: 6 },
-        rechargeAmount: { currency: 'AUD', units: '0', exponent: 6 },
-      },
       evidence: 'source',
     })
 
@@ -77,11 +72,6 @@ describe('createConvexMoneyQueryPort', () => {
       principalId: 'acc_one',
       accountId: 'acc_one',
       balance: { currency: 'AUD', units: '5000000', exponent: 6 },
-      autoRecharge: {
-        enabled: false,
-        threshold: { currency: 'AUD', units: '0', exponent: 6 },
-        rechargeAmount: { currency: 'AUD', units: '0', exponent: 6 },
-      },
       evidence: 'source',
     })
   })

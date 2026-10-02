@@ -1,4 +1,5 @@
 import type { Infer } from 'convex/values'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import type { MutationCtx } from '../../../_generated/server'
 import { env } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
@@ -42,7 +43,8 @@ function grantBindingMatchesAssertion(grant: AgentAccessGrant, assertion: Custom
 }
 
 export async function registerGrantForServerHandler(ctx: MutationCtx, args: RegisterGrantForServerArgs): Promise<RegisterGrantForServerResult> {
-    if (!grantBindingMatchesAssertion(args.grant, args.serviceAuth)
+    if (args.grant.environment !== deploymentPaymentEnvironment(env)
+      || !grantBindingMatchesAssertion(args.grant, args.serviceAuth)
       || !await verifyServerAssertion(registerGrantServerOperation, { grant: args.grant }, args.serviceAuth)) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }

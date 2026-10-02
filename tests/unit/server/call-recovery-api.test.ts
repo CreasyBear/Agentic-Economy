@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { CallService } from '@/modules/capability-execution/call-authority'
@@ -16,6 +16,9 @@ import {
 import { sourceWriteCommandDigest } from '@/modules/security/source-write-admission'
 import { installTestSourceWriteSecret } from '../../helpers/source-write-admission'
 import { convexUrl } from './server-seams-harness'
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
@@ -37,6 +40,7 @@ const authenticate = async () => ({
   id: principal.credentialId,
   subject: 'user_operation-recovery',
   scopes: principal.scopes,
+  claims: { aeEnvironment: 'sandbox' },
 })
 
 const unauthenticated = async () => ({

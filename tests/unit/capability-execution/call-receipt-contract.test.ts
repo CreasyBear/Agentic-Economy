@@ -8,8 +8,9 @@ import {
   type CallReceipt,
 } from '@/modules/capability-execution/call-contracts'
 import { buildBrokeredX402Receipt } from '@/modules/capability-execution/call-runtime'
-import { projectPureCallStatus, reconciliationResult, type RecoveryRow } from '@/modules/capability-execution/convex'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { projectPersistedRecovery, projectPureCallStatus, reconciliationResult, type RecoveryRow } from '@/modules/capability-execution/convex'
+import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { publishedToolIdentityDigest, type PublishedTool } from '@/modules/capability-supply/public'
@@ -309,7 +310,13 @@ describe('Call receipts', () => {
     })).toBeUndefined()
   })
 
-  it('round-trips receipts through terminal and reconciliation projections', () => {
+  it.each([
+    { recordedCode: 'provider_output_invalid', publicCode: 'provider_output_invalid' },
+    { recordedCode: 'pre_release_failed', publicCode: 'pre_release_failed' },
+    { recordedCode: 'payment_requirement_outside_authority', publicCode: 'pre_release_failed' },
+    { recordedCode: 'provider_http_500', publicCode: 'provider_refused' },
+    { recordedCode: 'payment_provider_requirement_stale', publicCode: 'provider_refused' },
+  ])('round-trips receipts and recorded $recordedCode through public status without changing evidence', ({ recordedCode, publicCode }) => {
     const candidate = receipt()
     const row: RecoveryRow = {
       callRef: 'invocation:opaque',
@@ -329,16 +336,22 @@ describe('Call receipts', () => {
       result: {
         kind: 'refused',
         toolRef: 'operation:opaque',
-        code: 'provider_output_invalid',
+        code: recordedCode,
         retryable: false,
         receipt: { ...candidate, state: 'refunded' },
       },
     }
+    const original = structuredClone(row)
     const status = { control: 'terminal', attempts: [] } as never
-    expect(projectPureCallStatus(row, status)).toMatchObject({
-      receipt: { state: 'refunded' },
-      result: { receipt: { state: 'refunded' } },
-    })
+    for (const projected of [projectPureCallStatus(row, status), projectPersistedRecovery(row)]) {
+      expect(callStatusResultSchema.parse(projected)).toEqual(projected)
+      expect(projected).toMatchObject({
+        state: 'terminal',
+        receipt: { ...candidate, state: 'refunded' },
+        result: { ...row.result, code: publicCode },
+      })
+    }
+    expect(row).toEqual(original)
     expect(reconciliationResult(row, status, [], 'operation:opaque', { ...candidate, state: 'reconciliation_required' }))
       .toMatchObject({ receipt: { state: 'reconciliation_required' } })
   })

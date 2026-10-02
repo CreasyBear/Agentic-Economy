@@ -1,4 +1,4 @@
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 
 import type { MutationCtx } from '../../../_generated/server'
 import { env } from '../../../_generated/server'
@@ -33,7 +33,8 @@ export async function reserveHandler(
   ctx: MutationCtx,
   args: ReserveFundingArgs,
 ): Promise<FundingResult> {
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), args.environment)) {
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
+  if (deploymentEnvironment === undefined || deploymentEnvironment !== args.environment) {
     return refused('environment_mismatch')
   }
   const sourceWrite = await requireSourceWrite(ctx, args, 'billing')

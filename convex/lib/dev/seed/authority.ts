@@ -31,6 +31,8 @@ import { resolveActiveAccountRefForPrincipal } from '../../principalAccount/inte
 export const DEV_SEED_CATALOG_PRINCIPAL_REF = 'prn_d2000000000000000000000000000001' as PrincipalRef
 export const DEV_SEED_CATALOG_ACCOUNT_REF = 'acc_d2000000000000000000000000000001' as AccountRef
 export const DEV_SEED_CATALOG_GRANT_REF = 'grt_d2000000000000000000000000000001'
+export const DEV_SEED_CATALOG_MEMBERSHIP_REF = 'mem_d2000000000000000000000000000001'
+export const DEV_SEED_CATALOG_PUBLISHER_REF = 'system:dev-seed'
 export const DEV_SEED_CATALOG_SCOPE = 'catalog:dev_seed' as const
 export const DEV_SEED_CATALOG_RESOURCE = 'catalog:dev-seed' as const
 export const DEV_SEED_CATALOG_PRINCIPAL_NAME = 'Agentic Economy development catalog seed workload'
@@ -181,12 +183,7 @@ export async function resolveDevSeedOwningAccountRef(
   if (ownership === null || ownership.lifecycle !== 'active' || ownership.accountRef !== candidate) {
     throw new DevSeedCatalogAuthorityError()
   }
-  const resolved = await resolveActiveAccountRefForPrincipal(
-    ctx.db,
-    principalRef(ownership.ownerPrincipalRef),
-    undefined,
-    'require',
-  )
+  const resolved = await resolveActiveAccountRefForPrincipal(ctx.db, principalRef(ownership.ownerPrincipalRef), undefined)
   if (resolved.activeAccountRef !== candidate) throw new DevSeedCatalogAuthorityError()
   return candidate
 }

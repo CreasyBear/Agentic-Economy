@@ -3,6 +3,7 @@ import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { validReferenceRate } from '@/modules/money/public'
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, internalQuery, query, type ActionCtx } from './_generated/server'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import { readReferenceRate } from './lib/money/referenceRate/store'
 
 const rateValue = v.object({
@@ -39,7 +40,13 @@ export const persist = internalMutation({
 
 /** Failed refresh never modifies the last-good observation. */
 export const run = internalAction({
-  handler: async (ctx: ActionCtx): Promise<null> => {
+  args: { workload: workloadCronSnapshotValue },
+  returns: v.null(),
+  handler: async (ctx: ActionCtx, args): Promise<null> => {
+    await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: 'refresh USDC/AUD reference rate',
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    })
     const rate = await fetchCoinbaseReferenceRate()
     if (rate !== undefined) await ctx.runMutation(internal.referenceRateRefresh.persist, { rate })
     return null

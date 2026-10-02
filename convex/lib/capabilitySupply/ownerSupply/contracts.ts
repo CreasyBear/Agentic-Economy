@@ -12,8 +12,6 @@ const ownerSupplyCompletedValue = v.object({
   message: v.string(),
   publicationRef: v.optional(v.string()),
   toolRef: v.optional(v.string()),
-  canaryRef: v.optional(v.string()),
-  callRef: v.optional(v.string()),
 })
 
 export const ownerSupplyActionResultValue = v.union(
@@ -41,7 +39,6 @@ export const ownerSupplyActionResultValue = v.union(
       v.literal('health_unhealthy'), v.literal('health_stale'),
       v.literal('eligibility_integrity_failure'), v.literal('provider_authority_unverified'), v.literal('withdrawn'),
       v.literal('incompatible_revision'),
-      v.literal('canary_admission_refused'),
     ),
   }),
 )

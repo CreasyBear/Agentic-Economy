@@ -29,8 +29,10 @@ function validExternalBaseUrl(candidate: string | undefined): boolean {
   if (candidate === undefined) return true
   try {
     const url = new URL(candidate)
-    return url.protocol === 'https:'
-      || (url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname))
+    return url.username === '' && url.password === '' && url.pathname === '/'
+      && url.search === '' && url.hash === ''
+      && (url.protocol === 'https:'
+        || (url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname)))
   } catch {
     return false
   }
@@ -64,7 +66,7 @@ export function readAuthenticatedE2EEnvironment(source: EnvironmentSource = proc
     }
   }
   if (!validExternalBaseUrl(externalBaseUrl)) {
-    invalid.push('AE_AUTHENTICATED_E2E_BASE_URL must be HTTPS or a loopback HTTP URL')
+    invalid.push('AE_AUTHENTICATED_E2E_BASE_URL must be an HTTPS or loopback HTTP origin without credentials, path, query or fragment')
   }
   if (expectedSourceRevision !== undefined && !/^[a-f0-9]{40}$/u.test(expectedSourceRevision)) {
     invalid.push('AE_RELEASE_SOURCE_REVISION must be a 40-character lowercase Git revision')

@@ -18,8 +18,10 @@ export default defineConfig({
     baseURL: environment.baseURL,
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    // These journeys display credentials and exchange tokens. Keep them out of artifacts.
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
   },
   metadata: {
     configured: environment.configured,

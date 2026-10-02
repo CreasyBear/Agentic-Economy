@@ -91,12 +91,7 @@ async function requireOwnerAccountContextForInvoiceHistory(
 ): Promise<{ canonicalAccountRef: ReturnType<typeof accountRef> }> {
   const principal = await requireInteractiveHumanPrincipalForInvoiceHistory(db, identity)
   const canonicalPrincipalRef = principalRef(principal.principalRef)
-  const res = await resolveActiveAccountRefForPrincipal(
-    db,
-    canonicalPrincipalRef,
-    identity,
-    'require',
-  )
+  const res = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)
   const canonicalAccountRef = accountRef(res.activeAccountRef)
   const access = await requireAccessFactForAccount(db, canonicalPrincipalRef, canonicalAccountRef)
   if (access.kind !== 'ownership') {
@@ -111,9 +106,8 @@ async function requireOwnerAccountContextForInvoiceHistory(
   return { canonicalAccountRef }
 }
 
-function fundingCommandInvoiceDescription(command: Doc<'moneyFundingCommands'>): string {
-  const initiationKind = command.initiationKind as string | undefined
-  return initiationKind === 'auto_recharge' ? 'Auto-recharge' : 'Account top-up'
+function fundingCommandInvoiceDescription(): string {
+  return 'Account top-up'
 }
 
 function isTerminalFundingState(state: Doc<'moneyFundingCommands'>['state']): boolean {
@@ -202,7 +196,7 @@ export async function listOwnerInvoiceHistoryHandler(
     page.push({
       commandRef: command.commandRef,
       createdAt: command.createdAt,
-      description: fundingCommandInvoiceDescription(command),
+      description: fundingCommandInvoiceDescription(),
       principalUnits: command.principalUnits,
       serviceFeeUnits: command.serviceFeeUnits,
       taxUnits: command.taxUnits,

@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 
-import { resolveServiceMode } from "@/lib/deployment/service-mode";
+import { deploymentPaymentEnvironment } from "@/lib/deployment/environment";
 import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
@@ -52,6 +52,8 @@ export function readStripeMoneyProviderConfig(
   env: Environment = process.env,
   expectedMode?: StripeMoneyMode,
 ): StripeMoneyProviderConfig | MoneyRefusal {
+  const deploymentMode = expectedStripeMoneyModeForDeployment(env, expectedMode);
+  if (deploymentMode === undefined) return refusal("stripe_setup_required", false);
   const secretKey = readEnvironmentValue(env, "STRIPE_SECRET_KEY");
   const webhookSecret = readEnvironmentValue(env, "STRIPE_WEBHOOK_SECRET");
   const v2WebhookSecret = readEnvironmentValue(env, "STRIPE_V2_WEBHOOK_SECRET");
@@ -79,7 +81,7 @@ export function readStripeMoneyProviderConfig(
       ...(checkoutHost === undefined ? {} : { checkoutHost }),
       mode: secretMode,
     },
-    expectedMode,
+    deploymentMode,
   );
 }
 
@@ -87,12 +89,10 @@ export function expectedStripeMoneyModeForDeployment(
   env: Environment = process.env,
   runtimeMode?: StripeMoneyMode,
 ): StripeMoneyMode | undefined {
-  const serviceMode = resolveServiceMode(env);
-  if (serviceMode === "hosted_alpha") return "test";
-  if (env.AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE === "synthetic_vps_fixture") {
-    return "test";
-  }
-  return runtimeMode;
+  const paymentEnvironment = deploymentPaymentEnvironment(env);
+  const deploymentMode = paymentEnvironment === "production" ? "live"
+    : paymentEnvironment === "sandbox" ? "test" : undefined;
+  return runtimeMode === undefined || runtimeMode === deploymentMode ? deploymentMode : undefined;
 }
 
 export function assertStripeMoneyModeFence(
@@ -117,13 +117,12 @@ export function validateStripeMoneyProviderConfig(
   if (secretMode === undefined || config.mode !== secretMode) {
     return refusal("stripe_setup_required", false);
   }
-  if (expectedMode !== undefined) {
-    try {
-      assertStripeMoneyModeFence(config, expectedMode);
-    } catch (cause) {
-      void cause;
-      return refusal("stripe_setup_required", false);
-    }
+  if (expectedMode === undefined) return refusal("stripe_setup_required", false);
+  try {
+    assertStripeMoneyModeFence(config, expectedMode);
+  } catch (cause) {
+    void cause;
+    return refusal("stripe_setup_required", false);
   }
   if (
     (config.webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(config.webhookSecret)) ||
@@ -138,6 +137,8 @@ export function readStripeMoneyReadbackProviderConfig(
   env: Environment = process.env,
   expectedMode?: StripeMoneyMode,
 ): StripeMoneyProviderConfig | MoneyRefusal {
+  const deploymentMode = expectedStripeMoneyModeForDeployment(env, expectedMode);
+  if (deploymentMode === undefined) return refusal("stripe_setup_required", false);
   const secretKey = readEnvironmentValue(env, "STRIPE_READBACK_KEY");
   if (secretKey === undefined || !/^rk_(?:test|live)_[A-Za-z0-9_-]+$/u.test(secretKey)) {
     return refusal("stripe_setup_required", false);
@@ -158,7 +159,7 @@ export function readStripeMoneyReadbackProviderConfig(
       ...(inclusiveGstTaxRateId === undefined ? {} : { inclusiveGstTaxRateId }),
       ...(checkoutHost === undefined ? {} : { checkoutHost }),
     },
-    expectedMode,
+    deploymentMode,
   );
 }
 
@@ -281,8 +282,8 @@ function readEnvironmentValue(
 }
 
 function modeFromSecretKey(value: string): StripeMoneyMode | undefined {
-  if (/^(?:sk|rk)_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
-  if (/^(?:sk|rk)_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
+  if (/^rk_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
+  if (/^rk_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
   return undefined;
 }
 

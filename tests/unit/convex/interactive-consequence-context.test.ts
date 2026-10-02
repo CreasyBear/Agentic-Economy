@@ -14,17 +14,17 @@ import { stableStringify } from '@/modules/common/stable-hash'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
-const draftSource = { definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox', kind: 'openapi' } as const
+const draftSource = { environment: 'sandbox', kind: 'x402', method: 'GET', resourceUrl: 'https://provider.example/canonical-owner' } as const
 const draftSourceDigest = `sha256:${'1'.repeat(64)}`
-const draftSelector = { method: 'get', path: '/canonical-owner' }
+const draftSelector = { method: 'GET', resourceUrl: draftSource.resourceUrl }
 const draftFacts = {
   title: 'Canonical authority Operation',
   description: 'An authority-context regression fixture.',
   category: 'testing',
-  sourceKind: 'openapi' as const,
+  sourceKind: 'x402' as const,
   sourceDescriptorJson: stableStringify(draftSource),
   sourceDigest: draftSourceDigest,
-  sourceRevision: 'openapi:canonical-owner',
+  sourceRevision: 'x402:canonical-owner',
   candidateRef: canonicalDigest({ sourceDigest: draftSourceDigest, selector: draftSelector }),
   sourceSelectorJson: stableStringify(draftSelector),
 }
@@ -166,7 +166,7 @@ describe('interactive consequence authority', () => {
         operationKey: `catalog:${slug}`,
         correlationId: `catalog:${slug}`,
         ...draftFacts,
-        sourceRevision: `openapi:${slug}`,
+        sourceRevision: `x402:${slug}`,
         candidateRef: canonicalDigest({
           sourceDigest: draftSourceDigest,
           selector: { ...draftSelector, lifecycle },
@@ -400,12 +400,13 @@ describe('interactive consequence authority', () => {
     expect(externalProbe).toHaveBeenCalledOnce()
   })
 
-  it('owner supply surfaces refusal from the separately reauthenticated x402 canary mutation', async () => {
+  it('owner supply sends an x402 test through the same pre-probe authority check', async () => {
     let authorityReads = 0
     const handler = (runOwnerSupplyTest as unknown as {
       _handler: (ctx: unknown, args: unknown) => Promise<unknown>
     })._handler
     const currentAuthority = ownerSupplyAuthority()
+    const externalProbe = vi.fn()
     const ctx = ownerSupplyActionContext({
       authority: () => {
         authorityReads += 1
@@ -413,15 +414,16 @@ describe('interactive consequence authority', () => {
       },
       sourceKind: 'x402',
       readinessCompleted: true,
-      canaryResult: { kind: 'refused', code: 'authorization_denied' },
+      externalProbe,
     })
 
     await expect(handler(ctx, ownerSupplyArgs())).resolves.toEqual({
       step: 'test',
       state: 'refused',
-      refusal: 'canary_admission_refused',
+      refusal: 'authorization_denied',
     })
-    expect(authorityReads).toBe(1)
+    expect(authorityReads).toBe(2)
+    expect(externalProbe).not.toHaveBeenCalled()
   })
 
   it('owner supply denies a test before reading the offering when no current authority exists', async () => {
@@ -450,6 +452,7 @@ describe('interactive consequence authority', () => {
     })._handler
     const currentAuthority = ownerSupplyAuthority()
     const externalProbe = vi.fn()
+    const recordEffect = vi.fn(async () => ({ kind: 'recorded' }))
     const ctx = ownerSupplyActionContext({
       authority: () => {
         authorityReads += 1
@@ -458,32 +461,40 @@ describe('interactive consequence authority', () => {
       sourceKind: 'x402',
       readinessCompleted: true,
       externalProbe,
+      recordEffect,
     })
 
     await expect(handler(ctx, ownerSupplyArgs())).resolves.toMatchObject({
       step: 'test',
       state: 'completed',
-      message: expect.stringContaining('queued on its selected x402 network'),
+      message: 'A fresh operation probe returned a contract-valid response.',
     })
-    expect(authorityReads).toBe(1)
-    expect(externalProbe).not.toHaveBeenCalled()
+    expect(authorityReads).toBe(3)
+    expect(externalProbe).toHaveBeenCalledOnce()
+    expect(recordEffect).toHaveBeenCalledOnce()
   })
 
-  it('owner supply refuses an x402 canary before exact readiness has completed', async () => {
+  it('owner supply probes an x402 test when readiness is incomplete', async () => {
     const handler = (runOwnerSupplyTest as unknown as {
       _handler: (ctx: unknown, args: unknown) => Promise<unknown>
     })._handler
+    const externalProbe = vi.fn()
+    const recordEffect = vi.fn(async () => ({ kind: 'recorded' }))
     const ctx = ownerSupplyActionContext({
       authority: () => ownerSupplyAuthority(),
       sourceKind: 'x402',
       readinessCompleted: false,
+      externalProbe,
+      recordEffect,
     })
 
-    await expect(handler(ctx, ownerSupplyArgs())).resolves.toEqual({
+    await expect(handler(ctx, ownerSupplyArgs())).resolves.toMatchObject({
       step: 'test',
-      state: 'refused',
-      refusal: 'health_unhealthy',
+      state: 'completed',
+      message: 'A fresh operation probe returned a contract-valid response.',
     })
+    expect(externalProbe).toHaveBeenCalledOnce()
+    expect(recordEffect).toHaveBeenCalledOnce()
   })
 
   it('owner supply denies authority revoked immediately before a test probe', async () => {
@@ -585,8 +596,6 @@ function ownerSupplyActionContext(options: Readonly<{
   readinessCompleted?: boolean
   externalProbe?: () => unknown
   recordEffect?: (...args: unknown[]) => unknown
-  canaryResult?: { kind: 'enqueued'; canaryRef: string; callRef: string; toolRef: string }
-    | { kind: 'refused'; code: string }
 }>) {
   return {
     auth: {
@@ -635,15 +644,6 @@ function ownerSupplyActionContext(options: Readonly<{
       throw new Error(`unexpected_action:${functionName}`)
     },
     runMutation: async (reference: unknown, ...args: unknown[]) => {
-      const functionName = getFunctionName(reference as never)
-      if (functionName === 'capabilitySupplyOwnerCanary:requestSellerOnboardingCanary') {
-        return options.canaryResult ?? {
-          kind: 'enqueued',
-          canaryRef: 'seller-canary:test',
-          callRef: 'seller-canary-invocation:test',
-          toolRef: 'operation:authority-refresh',
-        }
-      }
       return await (options.recordEffect ?? vi.fn())(reference, ...args)
     },
   }

@@ -1,20 +1,23 @@
 import Stripe from 'stripe'
-import { describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import {
   createStripeMoneyProvider,
   mapStripeMoneyWebhookEvent,
-  mapStripeTransferEvidence,
   readStripeMoneyProviderConfig,
-  readStripeTransfersByIdentity,
   verifyStripeMoneyWebhook,
   stripeCreditRequestDigest,
 } from '../../../src/lib/server/stripe-money-provider'
 import { isMoneyRefusal, type ExactAmount } from '../../../src/modules/money/public'
 import type { StripeMoneyProviderConfig } from '../../../src/lib/server/stripe-money-provider'
+import {
+  expectedStripeMoneyModeForDeployment,
+  readStripeMoneyReadbackProviderConfig,
+  validateStripeMoneyProviderConfig,
+} from '../../../src/lib/server/stripe-money-provider-config'
 
 const config: StripeMoneyProviderConfig = {
-  secretKey: 'sk_test_adapter',
+  secretKey: 'rk_test_adapter',
   webhookSecret: 'whsec_adapter',
   v2WebhookSecret: 'whsec_v2_adapter',
   mode: 'test',
@@ -40,16 +43,18 @@ const hostedConfig: StripeMoneyProviderConfig = {
 const hostedRequest = {
   ...request,
   accountRef: 'account-AUD',
-  amount: amount('AUD', '10550000', 6),
-  principalAmount: amount('AUD', '10000000', 6),
-  serviceFeeAmount: amount('AUD', '500000', 6),
-  taxAmount: amount('AUD', '50000', 6),
+  amount: amount('AUD', '5780000', 6),
+  principalAmount: amount('AUD', '5000000', 6),
+  serviceFeeAmount: amount('AUD', '250000', 6),
+  taxAmount: amount('AUD', '530000', 6),
   cancelReturnRef: 'https://app.example.test/fund/cancelled',
   checkoutExpiresAt: 1_700_003_600_000,
 }
 
 describe('Stripe money provider adapter', () => {
-  it('creates one hosted Checkout handoff with exact Account credit and inclusive GST evidence', async () => {
+  beforeEach(() => { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development') })
+  afterEach(() => { vi.unstubAllEnvs() })
+  it('creates one hosted Checkout handoff with the quoted credit, fee, and added GST', async () => {
     const create = vi.fn().mockResolvedValue({ data: hostedCheckoutSession() })
     const provider = createStripeMoneyProvider({
       config: hostedConfig,
@@ -65,7 +70,7 @@ describe('Stripe money provider adapter', () => {
       evidence: {
         externalRef: 'cs_test_hosted',
         checkoutMode: 'hosted_page',
-        amount: amount('AUD', '1055', 2),
+        amount: amount('AUD', '578', 2),
         status: 'pending',
       },
     })
@@ -78,12 +83,13 @@ describe('Stripe money provider adapter', () => {
       success_url: hostedRequest.successReturnRef,
       cancel_url: hostedRequest.cancelReturnRef,
       expires_at: 1_700_003_600,
+      automatic_tax: { enabled: false },
       line_items: [
         {
           quantity: 1,
           price_data: {
             currency: 'aud',
-            unit_amount: 1000,
+            unit_amount: 500,
             product_data: { name: 'Agentic Economy Account credit' },
           },
         },
@@ -91,37 +97,36 @@ describe('Stripe money provider adapter', () => {
           quantity: 1,
           price_data: {
             currency: 'aud',
-            unit_amount: 55,
-            product_data: expect.objectContaining({ name: 'Account funding service fee' }),
+            unit_amount: 25,
+            product_data: { name: 'Account funding service fee' },
           },
-          tax_rates: ['txr_au_gst_10_inclusive'],
+        },
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'aud',
+            unit_amount: 53,
+            product_data: { name: 'Australian GST' },
+          },
         },
       ],
     })
     expect(create.mock.calls[0]?.[0]).not.toHaveProperty('customer')
     expect(create.mock.calls[0]?.[0]).not.toHaveProperty('payment_method_types')
-    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('automatic_tax')
     expect(create.mock.calls[0]?.[1]).toEqual({
       idempotencyKey: 'ae:money:credit:topup-idempotency-1',
     })
   })
 
-  it.each([
-    ['inactive', { active: false }],
-    ['exclusive', { inclusive: false }],
-    ['wrong percentage', { percentage: 12, effective_percentage: 12 }],
-    ['wrong jurisdiction', { country: 'NZ', jurisdiction: 'NZ' }],
-    ['wrong mode', { livemode: true }],
-  ])('rejects hosted Checkout when the configured GST rate is %s', async (_label, taxRateOverrides) => {
+  it('rejects hosted Checkout when the GST line is not the quoted GST', async () => {
+    const session = hostedCheckoutSession()
+    const gst = session.line_items?.data[2]
+    if (gst === undefined) throw new Error('gst line missing')
+    gst.amount_total = 3
     const provider = createStripeMoneyProvider({
       config: hostedConfig,
-      client: fakeClient({
-        create: vi.fn().mockResolvedValue({
-          data: hostedCheckoutSession({}, taxRateOverrides),
-        }),
-      }),
+      client: fakeClient({ create: vi.fn().mockResolvedValue({ data: session }) }),
     })
-
     await expect(provider.createOrRecoverCreditPayment(hostedRequest)).resolves.toMatchObject({
       kind: 'refused',
       code: 'ledger_idempotency_conflict',
@@ -183,7 +188,7 @@ describe('Stripe money provider adapter', () => {
     })
     expect(recovered).toMatchObject({
       kind: 'hosted_redirect',
-      evidence: { externalRef: 'cs_test_hosted', amount: amount('AUD', '1055', 2) },
+      evidence: { externalRef: 'cs_test_hosted', amount: amount('AUD', '578', 2) },
     })
     expect(create).toHaveBeenCalledTimes(2)
     expect(create.mock.calls[0]?.[0]).toEqual(create.mock.calls[1]?.[0])
@@ -200,7 +205,7 @@ describe('Stripe money provider adapter', () => {
     const result = await provider.createOrRecoverCreditPayment({ ...hostedRequest, boundExternalRef: 'cs_test_hosted' })
 
     expect(isMoneyRefusal(result) && result.code).toBe('ledger_idempotency_conflict')
-    expect(retrieve).toHaveBeenCalledWith('cs_test_hosted', { expand: ['payment_intent', 'line_items.data.price', 'line_items.data.taxes.rate'] })
+    expect(retrieve).toHaveBeenCalledWith('cs_test_hosted', { expand: ['payment_intent', 'line_items.data.price'] })
     expect(create).not.toHaveBeenCalled()
   })
   it('reads the exact durable Checkout request material and binds without digest conflict', async () => {
@@ -218,7 +223,7 @@ describe('Stripe money provider adapter', () => {
         observedAt: 1_700_000_000_000,
       },
     })
-    expect(retrieve).toHaveBeenCalledWith('cs_test_hosted', { expand: ['payment_intent', 'line_items.data.price', 'line_items.data.taxes.rate'] })
+    expect(retrieve).toHaveBeenCalledWith('cs_test_hosted', { expand: ['payment_intent', 'line_items.data.price'] })
     expect(requestDigest).not.toBe(hostedRequest.inputDigest)
     expect(stripeCreditRequestDigest({ ...hostedRequest, successReturnRef: 'https://app.example.test/credit/other' }, hostedConfig)).not.toBe(requestDigest)
   })
@@ -269,214 +274,6 @@ describe('Stripe money provider adapter', () => {
     })
     expect(create).toHaveBeenCalledOnce()
   })
-  it('makes one explicit Transfer call and surfaces a lost response as outcome unknown', async () => {
-    const transferCreate = vi.fn().mockRejectedValue(new Error('response lost after provider effect'))
-    const transferRetrieve = vi.fn()
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ transferCreate, transferRetrieve }) })
-
-    const result = await provider.createOrRecoverTransfer(payoutRequest())
-
-    expect(result).toMatchObject({ kind: 'refused', code: 'payout_outcome_unknown', retryable: true })
-    expect(transferCreate).toHaveBeenCalledOnce()
-    expect(transferCreate.mock.calls[0]?.[1]).toEqual({ idempotencyKey: 'ae:money:payout:payout-idempotency-1' })
-    expect(transferRetrieve).not.toHaveBeenCalled()
-  })
-  it('rescales a USD exponent-one payout before creating the transfer', async () => {
-    const transfer = stripeTransfer({ amount: 100 })
-    const transferCreate = vi.fn().mockResolvedValue({ data: transfer })
-    const transferRetrieve = vi.fn().mockResolvedValue({ data: transfer })
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ transferCreate, transferRetrieve }) })
-
-    const result = await provider.createOrRecoverTransfer({
-      ...payoutRequest(),
-      amount: amount('USD', '10', 1),
-    })
-
-    expect(result).toMatchObject({ amount: amount('USD', '100', 2) })
-    expect(transferCreate.mock.calls[0]?.[0]).toMatchObject({ amount: 100, currency: 'usd' })
-  })
-  it('maps Stripe reversed transfer evidence to the explicit reversed status', () => {
-    const result = mapStripeTransferEvidence({ transfer: stripeTransfer({ reversed: true }), config, expected: payoutRequest() })
-
-    expect(result).toMatchObject({
-      provider: 'stripe',
-      transferId: 'tr_test_1',
-      status: 'reversed',
-      requestDigest: 'sha256:payout-input-1',
-    })
-  })
-  it('recovers Stripe reversed transfer evidence without downgrading it to failed', async () => {
-    const transferRetrieve = vi.fn().mockResolvedValue({ data: stripeTransfer({ reversed: true }) })
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ transferRetrieve }) })
-
-    await expect(provider.createOrRecoverTransfer({ ...payoutRequest(), boundExternalRef: 'tr_test_1' })).resolves.toMatchObject({
-      transferId: 'tr_test_1',
-      status: 'reversed',
-    })
-  })
-
-  it('refuses transfer material drift on exact recovery without creating another transfer', async () => {
-    const transferRetrieve = vi.fn().mockResolvedValue({ data: stripeTransfer({ amount: 1100 }) })
-    const transferCreate = vi.fn()
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ transferCreate, transferRetrieve }) })
-
-    const result = await provider.createOrRecoverTransfer({ ...payoutRequest(), boundExternalRef: 'tr_test_1' })
-
-    expect(isMoneyRefusal(result) && result.code).toBe('ledger_idempotency_conflict')
-    expect(transferRetrieve).toHaveBeenCalledWith('tr_test_1')
-    expect(transferCreate).not.toHaveBeenCalled()
-  })
-
-  it('keeps a created transfer outcome unknown when exact retrieval is unavailable without issuing a new key', async () => {
-    const transferCreate = vi.fn().mockResolvedValue({ data: stripeTransfer() })
-    const transferRetrieve = vi.fn().mockRejectedValue(new Error('read unavailable'))
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ transferCreate, transferRetrieve }) })
-
-    const result = await provider.createOrRecoverTransfer(payoutRequest())
-
-    expect(result).toMatchObject({ provider: 'stripe', transferId: 'tr_test_1', status: 'outcome_unknown' })
-    expect(transferCreate).toHaveBeenCalledTimes(1)
-    expect(transferCreate.mock.calls[0]?.[1]).toEqual({ idempotencyKey: 'ae:money:payout:payout-idempotency-1' })
-    expect(transferRetrieve).toHaveBeenCalledTimes(1)
-  })
-  it('reads bounded transfer-group provider identity through the Stripe SDK', async () => {
-    const transferList = vi.fn().mockResolvedValue({
-      data: [stripeTransfer()],
-      has_more: false,
-    })
-    const result = await readStripeTransfersByIdentity({
-      config,
-      client: fakeClient({ transferList }),
-      request: payoutRequest(),
-    })
-
-    expect(result).toMatchObject([
-      {
-        provider: 'stripe',
-        transferId: 'tr_test_1',
-        destinationAccountId: 'acct_test_1',
-        amount: amount('USD', '1050', 2),
-        requestDigest: 'sha256:payout-input-1',
-      },
-    ])
-    expect(transferList).toHaveBeenCalledWith({
-      transfer_group: 'payout-1',
-      limit: 100,
-    })
-  })
-
-
-  it('creates, onboards, and reads the same Accounts v2 recipient through the SDK', async () => {
-    const account = stripeV2Account()
-    const connectCreate = vi.fn().mockResolvedValue({ data: account })
-    const accountLinkCreate = vi.fn().mockResolvedValue({ data: {
-      id: 'link_1',
-      object: 'v2.core.account_link',
-      account: 'acct_test_1',
-      created: '2026-08-11T00:00:00.000Z',
-      expires_at: '2026-08-11T01:00:00.000Z',
-      livemode: false,
-      url: 'https://connect.stripe.com/setup/test',
-    } })
-    const connectRetrieve = vi.fn().mockResolvedValue({ data: account })
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ connectCreate, accountLinkCreate, connectRetrieve }) })
-
-    await expect(provider.createOrRecoverConnectAccount({
-      businessId: 'business-1',
-      currency: 'USD',
-      idempotencyKey: 'connect-idempotency-1',
-      configuration: 'accounts_v2',
-      providerRequestDigest: 'sha256:provider-request-1',
-      providerRecoveryDeadlineAt: Number.MAX_SAFE_INTEGER,
-      recoveryLeaseOwner: 'connect-lease-1',
-      recoveryLeaseGeneration: 1,
-    })).resolves.toMatchObject({ provider: 'stripe', stripeAccountId: 'acct_test_1' })
-    expect(connectCreate).toHaveBeenCalledWith(expect.objectContaining({
-      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
-      metadata: { ae_business_id: 'business-1', ae_currency: 'USD' },
-    }), { idempotencyKey: expect.stringMatching(/^ae:money:connect:sha256:[0-9a-f]{64}$/u) })
-
-    await expect(provider.createOnboardingLink({
-      businessId: 'business-1',
-      currency: 'USD',
-      stripeAccountId: 'acct_test_1',
-      refreshRef: 'https://app.example.test/owner/supply?connect=refresh',
-      returnRef: 'https://app.example.test/owner/supply?connect=return',
-      idempotencyKey: 'onboarding-idempotency-1',
-    })).resolves.toMatchObject({ provider: 'stripe', url: 'https://connect.stripe.com/setup/test' })
-    expect(accountLinkCreate).toHaveBeenCalledWith(expect.objectContaining({
-      account: 'acct_test_1',
-      use_case: { type: 'account_onboarding', account_onboarding: expect.objectContaining({ configurations: ['recipient'] }) },
-    }), { idempotencyKey: expect.stringMatching(/^ae:money:connect:sha256:[0-9a-f]{64}$/u) })
-    expect(accountLinkCreate.mock.calls[0]?.[1]?.idempotencyKey).not.toBe(connectCreate.mock.calls[0]?.[1]?.idempotencyKey)
-
-    await expect(provider.readConnectAccount({ businessId: 'business-1', currency: 'USD', stripeAccountId: 'acct_test_1' })).resolves.toMatchObject({
-      provider: 'stripe',
-      businessId: 'business-1',
-      currency: 'USD',
-      stripeAccountId: 'acct_test_1',
-      detailsSubmitted: true,
-      recipientCapabilityActive: true,
-      restricted: false,
-    })
-    expect(connectRetrieve).toHaveBeenCalledWith('acct_test_1', { include: ['configuration.recipient', 'requirements', 'future_requirements'] })
-    await expect(provider.createOrRecoverConnectAccount({
-      businessId: 'business-1',
-      currency: 'USD',
-      idempotencyKey: 'connect-idempotency-1',
-      configuration: 'accounts_v2',
-      providerRequestDigest: 'sha256:provider-request-1',
-      providerRecoveryDeadlineAt: Number.MAX_SAFE_INTEGER,
-      recoveryLeaseOwner: 'connect-lease-1',
-      recoveryLeaseGeneration: 1,
-      boundStripeAccountId: 'acct_test_1',
-    })).resolves.toMatchObject({ provider: 'stripe', stripeAccountId: 'acct_test_1' })
-    expect(connectCreate).toHaveBeenCalledOnce()
-    expect(connectRetrieve).toHaveBeenCalledTimes(2)
-  })
-  it('binds Connect provider keys to operation request identity and refuses account or link drift', async () => {
-    const account = stripeV2Account()
-    const connectCreate = vi.fn().mockResolvedValue({ data: account })
-    const accountLinkCreate = vi.fn().mockResolvedValue({ data: {
-      id: 'link_other',
-      object: 'v2.core.account_link',
-      account: 'acct_other',
-      created: '2026-08-11T00:00:00.000Z',
-      expires_at: '2026-08-11T01:00:00.000Z',
-      livemode: false,
-      url: 'https://connect.stripe.com/setup/other',
-    } })
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ connectCreate, accountLinkCreate }) })
-    const connectInput = {
-      businessId: 'business-1',
-      currency: 'USD',
-      idempotencyKey: 'connect-idempotency-identity',
-      configuration: 'accounts_v2' as const,
-      providerRequestDigest: 'sha256:provider-request-identity',
-      providerRecoveryDeadlineAt: Number.MAX_SAFE_INTEGER,
-      recoveryLeaseOwner: 'connect-lease-identity',
-      recoveryLeaseGeneration: 1,
-    }
-    await expect(provider.createOrRecoverConnectAccount(connectInput)).resolves.toMatchObject({ stripeAccountId: 'acct_test_1' })
-    await expect(provider.createOrRecoverConnectAccount({ ...connectInput, providerRequestDigest: 'sha256:provider-request-other' })).resolves.toMatchObject({ stripeAccountId: 'acct_test_1' })
-    expect(connectCreate.mock.calls[0]?.[1]?.idempotencyKey).not.toBe(connectCreate.mock.calls[1]?.[1]?.idempotencyKey)
-    const wrongAccount = { ...account, metadata: { ae_business_id: 'business-other', ae_currency: 'USD' } } as Stripe.V2.Core.Account
-    const wrongAccountProvider = createStripeMoneyProvider({ config, client: fakeClient({ connectCreate: vi.fn().mockResolvedValue({ data: wrongAccount }) }) })
-    await expect(wrongAccountProvider.createOrRecoverConnectAccount(connectInput)).resolves.toMatchObject({ kind: 'refused', code: 'payment_binding_invalid' })
-    const wrongCurrencyAccount = { ...account, defaults: { ...account.defaults, currency: 'eur' } } as Stripe.V2.Core.Account
-    const wrongCurrencyProvider = createStripeMoneyProvider({ config, client: fakeClient({ connectCreate: vi.fn().mockResolvedValue({ data: wrongCurrencyAccount }) }) })
-    await expect(wrongCurrencyProvider.createOrRecoverConnectAccount(connectInput)).resolves.toMatchObject({ kind: 'refused', code: 'payment_binding_invalid' })
-    await expect(provider.createOnboardingLink({
-      businessId: 'business-1',
-      currency: 'USD',
-      stripeAccountId: 'acct_test_1',
-      refreshRef: 'https://app.example.test/owner/supply?connect=refresh',
-      returnRef: 'https://app.example.test/owner/supply?connect=return',
-      idempotencyKey: 'onboarding-idempotency-drift',
-    })).resolves.toMatchObject({ kind: 'refused', code: 'payment_binding_invalid' })
-    expect(accountLinkCreate).toHaveBeenCalledOnce()
-  })
-
   it('fails configuration before provider I/O for missing, partial, or mode-mismatched keys', async () => {
     expect(readStripeMoneyProviderConfig({
       STRIPE_SECRET_KEY: 'not_a_stripe_secret',
@@ -484,14 +281,16 @@ describe('Stripe money provider adapter', () => {
     })).toMatchObject({ code: 'stripe_setup_required' })
     expect(readStripeMoneyProviderConfig({ STRIPE_SECRET_KEY: 'sk_test_only' })).toMatchObject({ code: 'stripe_setup_required' })
     expect(readStripeMoneyProviderConfig({
-      STRIPE_SECRET_KEY: 'sk_test_secret',
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      STRIPE_SECRET_KEY: 'rk_test_secret',
       STRIPE_WEBHOOK_SECRET: 'whsec_secret',
     }, 'live')).toMatchObject({ code: 'stripe_setup_required' })
 
     const create = vi.fn()
     const provider = createStripeMoneyProvider({
       env: {
-        STRIPE_SECRET_KEY: 'sk_test_secret',
+        AE_DEPLOYMENT_ENVIRONMENT: 'development',
+        STRIPE_SECRET_KEY: 'rk_test_secret',
         STRIPE_WEBHOOK_SECRET: 'whsec_secret',
       },
       mode: 'live',
@@ -499,6 +298,46 @@ describe('Stripe money provider adapter', () => {
     })
     const result = await provider.createOrRecoverCreditPayment(hostedRequest)
     expect(result).toMatchObject({ code: 'stripe_setup_required' })
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{}, undefined],
+    [{ AE_DEPLOYMENT_ENVIRONMENT: 'preview' }, undefined],
+    [{ AE_DEPLOYMENT_ENVIRONMENT: 'development' }, 'test'],
+    [{ AE_DEPLOYMENT_ENVIRONMENT: 'production' }, 'live'],
+  ] as const)('derives Stripe mode only from an exact declaration', (env, expected) => {
+    expect(expectedStripeMoneyModeForDeployment(env)).toBe(expected)
+    expect(expectedStripeMoneyModeForDeployment(env, expected === 'test' ? 'live' : 'test'))
+      .toBeUndefined()
+  })
+
+  it('refuses missing, invalid, override, and unrestricted keys before provider I/O', async () => {
+    const valid = { STRIPE_SECRET_KEY: 'rk_test_secret', STRIPE_WEBHOOK_SECRET: 'whsec_secret' }
+    const refusal = { kind: 'refused', code: 'stripe_setup_required', retryable: false }
+    expect(readStripeMoneyProviderConfig(valid, 'test')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'preview' }, 'test')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'development' }, 'live')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'production' }, 'test')).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk_test_secret' })).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'production', STRIPE_SECRET_KEY: 'sk_live_secret' })).toEqual(refusal)
+    expect(readStripeMoneyReadbackProviderConfig({ STRIPE_READBACK_KEY: 'rk_test_secret' }, 'test')).toEqual(refusal)
+    expect(readStripeMoneyReadbackProviderConfig({ AE_DEPLOYMENT_ENVIRONMENT: 'production', STRIPE_READBACK_KEY: 'rk_test_secret' })).toEqual(refusal)
+    expect(validateStripeMoneyProviderConfig(config)).toEqual(refusal)
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'development' })).toMatchObject({ mode: 'test' })
+    expect(readStripeMoneyProviderConfig({ ...valid, AE_DEPLOYMENT_ENVIRONMENT: 'production', STRIPE_SECRET_KEY: 'rk_live_secret' })).toMatchObject({ mode: 'live' })
+    expect(readStripeMoneyReadbackProviderConfig({ AE_DEPLOYMENT_ENVIRONMENT: 'development', STRIPE_READBACK_KEY: 'rk_test_secret' })).toMatchObject({ mode: 'test' })
+    expect(validateStripeMoneyProviderConfig(config, 'test')).toEqual(config)
+    const create = vi.fn()
+    const provider = createStripeMoneyProvider({ env: valid, mode: 'test', client: fakeClient({ create }) })
+    await expect(provider.createOrRecoverCreditPayment(hostedRequest)).resolves.toEqual(refusal)
+    const injectedMissing = createStripeMoneyProvider({ env: valid, mode: 'test', config, client: fakeClient({ create }) })
+    await expect(injectedMissing.createOrRecoverCreditPayment(hostedRequest)).resolves.toEqual(refusal)
+    const injectedOverride = createStripeMoneyProvider({
+      env: { AE_DEPLOYMENT_ENVIRONMENT: 'production' }, mode: 'test', config,
+      client: fakeClient({ create }),
+    })
+    await expect(injectedOverride.createOrRecoverCreditPayment(hostedRequest)).resolves.toEqual(refusal)
     expect(create).not.toHaveBeenCalled()
   })
 
@@ -620,20 +459,12 @@ function checkoutSession(overrides: Readonly<Record<string, unknown>> = {}): Str
 
 function hostedCheckoutSession(
   overrides: Readonly<Record<string, unknown>> = {},
-  taxRateOverrides: Readonly<Record<string, unknown>> = {},
 ): Stripe.Checkout.Session {
-  const taxRate = {
-    id: 'txr_au_gst_10_inclusive', object: 'tax_rate', active: true,
-    country: 'AU', created: 1_700_000_000, description: 'Australian GST',
-    display_name: 'GST', effective_percentage: 10, inclusive: true,
-    jurisdiction: 'AU', jurisdiction_level: 'country', livemode: false,
-    metadata: {}, percentage: 10, state: null, tax_type: 'gst',
-    ...taxRateOverrides,
-  } as unknown as Stripe.TaxRate
   return {
     id: 'cs_test_hosted',
     object: 'checkout.session',
-    amount_total: 1055,
+    amount_total: 578,
+    automatic_tax: { enabled: false, status: null },
     client_reference_id: hostedRequest.commandRef,
     client_secret: null,
     created: 1_700_000_000,
@@ -652,22 +483,25 @@ function hostedCheckoutSession(
     total_details: {
       amount_discount: 0,
       amount_shipping: 0,
-      amount_tax: 5,
-      breakdown: { discounts: [], taxes: [{ amount: 5, rate: taxRate, taxability_reason: 'standard_rated', taxable_amount: 55 }] },
+      amount_tax: 0,
     },
     line_items: {
       object: 'list',
       data: [
         {
-          id: 'li_credit', object: 'item', amount_discount: 0, amount_subtotal: 1000,
-          amount_tax: 0, amount_total: 1000, currency: 'aud', description: 'Agentic Economy Account credit',
+          id: 'li_credit', object: 'item', amount_discount: 0, amount_subtotal: 500,
+          amount_tax: 0, amount_total: 500, currency: 'aud', description: 'Agentic Economy Account credit',
           metadata: {}, price: null, quantity: 1, discounts: [], taxes: [],
         },
         {
-          id: 'li_fee', object: 'item', amount_discount: 0, amount_subtotal: 55,
-          amount_tax: 5, amount_total: 55, currency: 'aud', description: 'Account funding service fee',
-          metadata: {}, price: null, quantity: 1, discounts: [],
-          taxes: [{ amount: 5, rate: taxRate, taxability_reason: 'standard_rated', taxable_amount: 55 }],
+          id: 'li_fee', object: 'item', amount_discount: 0, amount_subtotal: 25,
+          amount_tax: 0, amount_total: 25, currency: 'aud', description: 'Account funding service fee',
+          metadata: {}, price: null, quantity: 1, discounts: [], taxes: [],
+        },
+        {
+          id: 'li_gst', object: 'item', amount_discount: 0, amount_subtotal: 53,
+          amount_tax: 0, amount_total: 53, currency: 'aud', description: 'Australian GST',
+          metadata: {}, price: null, quantity: 1, discounts: [], taxes: [],
         },
       ],
       has_more: false,
@@ -676,62 +510,6 @@ function hostedCheckoutSession(
     ...overrides,
   } as unknown as Stripe.Checkout.Session
 }
-function payoutRequest() {
-  return {
-    payoutRef: 'payout-1',
-    commandId: 'payout-command-1',
-    destinationAccountId: 'acct_test_1',
-    amount: amount('USD', '1050', 2),
-    inputDigest: 'sha256:payout-input-1',
-    idempotencyKey: 'payout-idempotency-1',
-  } as const
-}
-
-function stripeTransfer(overrides: Readonly<Record<string, unknown>> = {}): Stripe.Transfer {
-  return {
-    id: 'tr_test_1',
-    object: 'transfer',
-    amount: 1050,
-    currency: 'usd',
-    created: 1_700_000_010,
-    destination: 'acct_test_1',
-    livemode: false,
-    metadata: {
-      ae_payout_ref: 'payout-1',
-      ae_command_id: 'payout-command-1',
-      ae_input_digest: 'sha256:payout-input-1',
-      ae_idempotency_key: 'payout-idempotency-1',
-    },
-    reversed: false,
-    transfer_group: 'payout-1',
-    ...overrides,
-  } as unknown as Stripe.Transfer
-}
-
-function stripeV2Account(): Stripe.V2.Core.Account {
-  return {
-    id: 'acct_test_1',
-    object: 'v2.core.account',
-    applied_configurations: ['recipient'],
-    configuration: {
-      recipient: {
-        applied: true,
-        capabilities: {
-          stripe_balance: {
-            stripe_transfers: { requested: true, status: 'active' },
-          },
-        },
-      },
-    },
-    created: '2026-08-11T00:00:00.000Z',
-    defaults: { currency: 'usd' },
-    future_requirements: { entries: [] },
-    livemode: false,
-    metadata: { ae_business_id: 'business-1', ae_currency: 'USD' },
-    requirements: { entries: [] },
-  } as unknown as Stripe.V2.Core.Account
-}
-
 function amount(currency: string, units: string, exponent: number): ExactAmount {
   return { currency, units, exponent }
 }

@@ -31,6 +31,7 @@ import {
 
 const HOSTED_CREDIT_LINE_ITEM_NAME = "Agentic Economy Account credit";
 const HOSTED_FEE_LINE_ITEM_NAME = "Account funding service fee";
+const HOSTED_GST_LINE_ITEM_NAME = "Australian GST";
 
 export async function createOrRecoverCreditPayment(
   client: StripeMoneyClient,
@@ -54,7 +55,7 @@ export async function createOrRecoverCreditPayment(
     return refusal("payment_binding_invalid", false);
   if (Date.now() >= input.providerRecoveryDeadlineAt)
     return refusal("credit_topup_outcome_unknown", true);
-  const params = creditSessionCreateParams(input, config);
+  const params = creditSessionCreateParams(input);
   if (params === undefined)
     return refusal("credit_topup_amount_invalid", false);
   try {
@@ -105,7 +106,6 @@ export function mapStripeCheckoutSessionEvidence(
       material.amount,
       material.metadata,
       input.expected,
-      input.config,
     )
   ) {
     return refusal("ledger_idempotency_conflict", false);
@@ -150,10 +150,10 @@ export function mapStripeCheckoutSessionEvidence(
 
 export function stripeCreditRequestDigest(
   input: CreditPaymentRequest,
-  config?: StripeMoneyProviderConfig,
+  _config?: StripeMoneyProviderConfig,
 ): string | undefined {
   const idempotencyKey = stripeCreditIdempotencyKey(input.idempotencyKey);
-  const params = creditSessionCreateParams(input, config);
+  const params = creditSessionCreateParams(input);
   if (idempotencyKey === undefined || params === undefined) return undefined;
   return canonicalDigest({
     format: "stripe-checkout-request:v2",
@@ -258,7 +258,7 @@ async function retrieveCheckoutSession(
 ): Promise<Stripe.Checkout.Session | MoneyRefusal> {
   try {
     const response = await client.checkout.sessions.retrieve(externalRef, {
-      expand: ["payment_intent", "line_items.data.price", "line_items.data.taxes.rate"],
+      expand: ["payment_intent", "line_items.data.price"],
     });
     return responseData(response);
   } catch (cause) {
@@ -299,9 +299,23 @@ function paymentSessionFromCheckoutSession(
   };
 }
 
+function hostedLineItem(
+  currency: string,
+  name: string,
+  units: string,
+): Stripe.Checkout.SessionCreateParams.LineItem {
+  return {
+    price_data: {
+      currency: currency.toLowerCase(),
+      product_data: { name },
+      unit_amount: Number(units),
+    },
+    quantity: 1,
+  };
+}
+
 function creditSessionCreateParams(
   input: CreditPaymentRequest,
-  config?: StripeMoneyProviderConfig,
 ): Stripe.Checkout.SessionCreateParams | undefined {
   const amount = stripeMinorAmount(input.amount);
   if (amount === undefined) return undefined;
@@ -310,39 +324,24 @@ function creditSessionCreateParams(
   const tax = stripeMinorAmount(input.taxAmount);
   const expiresAt = input.checkoutExpiresAt;
   const cancelReturnRef = input.cancelReturnRef;
-  const taxRateId = config?.inclusiveGstTaxRateId;
   if (
     principal === undefined || serviceFee === undefined || tax === undefined ||
     principal.currency !== amount.currency || serviceFee.currency !== amount.currency || tax.currency !== amount.currency ||
     BigInt(principal.units) + BigInt(serviceFee.units) + BigInt(tax.units) !== BigInt(amount.units) ||
-    !validHttpUrl(cancelReturnRef) || typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt) || expiresAt <= 0 ||
-    !validIdentifier(taxRateId)
+    !validHttpUrl(cancelReturnRef) || typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt) || expiresAt <= 0
   ) return undefined;
-  const feeInclusiveTax = BigInt(serviceFee.units) + BigInt(tax.units);
-  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [{
-    price_data: {
-      currency: amount.currency.toLowerCase(),
-      product_data: { name: HOSTED_CREDIT_LINE_ITEM_NAME },
-      unit_amount: Number(principal.units),
-    },
-    quantity: 1,
-  }];
-  if (feeInclusiveTax > 0n) lineItems.push({
-    price_data: {
-      currency: amount.currency.toLowerCase(),
-      product_data: {
-        name: HOSTED_FEE_LINE_ITEM_NAME,
-        description: "Includes Australian GST",
-      },
-      unit_amount: Number(feeInclusiveTax),
-    },
-    quantity: 1,
-    tax_rates: [taxRateId],
-  });
+  const lineItems = [hostedLineItem(amount.currency, HOSTED_CREDIT_LINE_ITEM_NAME, principal.units)];
+  if (BigInt(serviceFee.units) > 0n) {
+    lineItems.push(hostedLineItem(amount.currency, HOSTED_FEE_LINE_ITEM_NAME, serviceFee.units));
+  }
+  if (BigInt(tax.units) > 0n) {
+    lineItems.push(hostedLineItem(amount.currency, HOSTED_GST_LINE_ITEM_NAME, tax.units));
+  }
   return {
     mode: "payment",
     ui_mode: "hosted_page",
     submit_type: "pay",
+    automatic_tax: { enabled: false },
     line_items: lineItems,
     client_reference_id: input.commandRef,
     metadata: creditMetadata(input),
@@ -355,7 +354,7 @@ function creditSessionCreateParams(
         message: "This payment adds Account credit. It does not grant access or spending authority.",
       },
     },
-    expand: ["payment_intent", "line_items.data.price", "line_items.data.taxes.rate"],
+    expand: ["payment_intent", "line_items.data.price"],
   };
 }
 
@@ -380,7 +379,6 @@ function creditSessionMatchesRequest(
   amount: ExactAmount,
   metadata: Readonly<Record<string, string>>,
   input: CreditPaymentRequest,
-  config: StripeMoneyProviderConfig,
 ): boolean {
   const expectedAmount = stripeMinorAmount(input.amount);
   if (expectedAmount === undefined) return false;
@@ -395,50 +393,44 @@ function creditSessionMatchesRequest(
   if (compareExactAmounts(amount, expectedAmount) !== 0) return false;
   for (const [key, value] of Object.entries(expectedMetadata))
     if (metadata[key] !== value) return false;
-  return hostedSessionMatchesRequest(session, input, config);
+  return hostedSessionMatchesRequest(session, input);
+}
+
+function hostedChargeLine(
+  name: string,
+  units: string,
+): Readonly<{ name: string; units: string }> {
+  return { name, units };
 }
 
 function hostedSessionMatchesRequest(
   session: Stripe.Checkout.Session,
   input: CreditPaymentRequest,
-  config: StripeMoneyProviderConfig,
 ): boolean {
   const principal = stripeMinorAmount(input.principalAmount);
   const serviceFee = stripeMinorAmount(input.serviceFeeAmount);
   const tax = stripeMinorAmount(input.taxAmount);
-  const taxRateId = config.inclusiveGstTaxRateId;
-  if (principal === undefined || serviceFee === undefined || tax === undefined || taxRateId === undefined)
-    return false;
+  if (principal === undefined || serviceFee === undefined || tax === undefined) return false;
   if (
     session.success_url !== input.successReturnRef ||
     session.cancel_url !== input.cancelReturnRef ||
     session.expires_at !== Math.floor((input.checkoutExpiresAt ?? -1) / 1000) ||
-    session.total_details?.amount_tax !== Number(tax.units) ||
+    (session.total_details?.amount_tax ?? 0) !== 0 ||
+    session.automatic_tax?.enabled === true ||
     session.line_items === undefined
   ) return false;
-  const expectedCount = BigInt(serviceFee.units) + BigInt(tax.units) === 0n ? 1 : 2;
-  if (session.line_items.data.length !== expectedCount) return false;
-  const credit = session.line_items.data[0];
-  if (
-    credit?.quantity !== 1 || credit.amount_total !== Number(principal.units) ||
-    credit.amount_tax !== 0 || credit.description !== HOSTED_CREDIT_LINE_ITEM_NAME
-  ) return false;
-  if (expectedCount === 1) return true;
-  const fee = session.line_items.data[1];
-  const appliedTax = fee?.taxes?.[0];
-  const appliedTaxRate = typeof appliedTax?.rate === "object" ? appliedTax.rate : undefined;
-  return fee?.quantity === 1
-    && fee.amount_total === Number(BigInt(serviceFee.units) + BigInt(tax.units))
-    && fee.amount_tax === Number(tax.units)
-    && fee.description === HOSTED_FEE_LINE_ITEM_NAME
-    && fee.taxes?.length === 1
-    && appliedTax?.amount === Number(tax.units)
-    && appliedTaxRate?.id === taxRateId
-    && appliedTaxRate.active === true
-    && appliedTaxRate.inclusive === true
-    && appliedTaxRate.percentage === 10
-    && appliedTaxRate.country === "AU"
-    && appliedTaxRate.livemode === (config.mode === "live");
+  const expected = [hostedChargeLine(HOSTED_CREDIT_LINE_ITEM_NAME, principal.units)];
+  if (BigInt(serviceFee.units) > 0n) expected.push(hostedChargeLine(HOSTED_FEE_LINE_ITEM_NAME, serviceFee.units));
+  if (BigInt(tax.units) > 0n) expected.push(hostedChargeLine(HOSTED_GST_LINE_ITEM_NAME, tax.units));
+  if (session.line_items.data.length !== expected.length) return false;
+  return expected.every((line, index) => {
+    const item = session.line_items?.data[index];
+    return item?.quantity === 1
+      && item.amount_total === Number(line.units)
+      && (item.amount_tax ?? 0) === 0
+      && item.description === line.name
+      && (item.taxes?.length ?? 0) === 0;
+  });
 }
 
 function validCheckoutUrl(value: string, config: StripeMoneyProviderConfig): boolean {

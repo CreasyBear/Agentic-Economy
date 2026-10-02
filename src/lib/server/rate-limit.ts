@@ -5,6 +5,7 @@ import {
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degrade } from '@/lib/observability/degrade'
 import { problem } from '@/lib/server/problem'
 
 export type RateLimitName =
@@ -97,12 +98,26 @@ export function createHttpRateLimitAdmission(name: HttpRateLimitName): RateLimit
   })
 }
 
+/**
+ * Requires a deferred operation and successful external admission before dispatch.
+ * Ensures admission failure returns a retryable 503 without invoking the operation.
+ * Invariant: exhaustion stays 429; admitted operation errors propagate unchanged.
+ * On violation: report unavailability, never retry or substitute an admission.
+ */
 export async function withHttpRateLimit(
   request: Request,
   name: HttpRateLimitName,
   operation: () => Promise<Response>,
 ): Promise<Response> {
-  const admission = await assertHttpAdmission(request, name)
+  let admission: RateLimitResult
+  try {
+    admission = await assertHttpAdmission(request, name)
+  } catch (cause) {
+    return degrade(cause, problem({
+      status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,
+      detail: 'Request admission is temporarily unavailable. Retry after 5 seconds.',
+    }, { 'Retry-After': '5' }), { site: 'withHttpRateLimit', reason: 'source_unavailable' })
+  }
   if (!admission.ok) return rateLimitedResponse(admission.retryAfter)
   return await operation()
 }

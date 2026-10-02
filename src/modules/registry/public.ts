@@ -95,7 +95,7 @@ export {
   projectPublicServicesSearchPage,
 } from './internal/services-api-projection'
 export { registrySearchTokens } from './internal/search-documents'
-export { isProductionToolChoice } from './tool-choice-evidence'
+export { isDeploymentToolChoice } from './tool-choice-evidence'
 export { SEARCH_ASSESSMENT_LIMIT, suitableRankedToolRefs } from './search-verdict'
 export type {
   PublicServicesApiPage,
@@ -172,3 +172,4 @@ export {
   getIndexStatus,
   readCatalogHealth,
 } from './internal/projection-attempts'
+export { compactDirectoryRows } from './internal/compact-directory-projection'

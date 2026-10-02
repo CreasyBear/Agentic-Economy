@@ -1,6 +1,7 @@
 import type { Infer } from 'convex/values'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import { upsertCallProjection } from './dispatchProjection'
+import { internal } from '../../../_generated/api'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import { recordCallTerminal } from '@/lib/observability/journey'
 import type { MutationCtx } from '../../../_generated/server'
@@ -8,13 +9,20 @@ import type { Doc } from '../../../_generated/dataModel'
 import { recordMarketEvidenceFact } from '../../../marketEvidence'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { callResultValue, usageValue } from '@/modules/capability-execution/convex'
+import { callResultValue, usageValue, parseContractOutput } from '@/modules/capability-execution/convex'
+import { materializeRuntimePublishedTool, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import { assertCallResultJson } from './callIdentity'
 
 type CallRow = Doc<'capabilityCalls'>
 type CallResultValue = Infer<typeof callResultValue>
 type Usage = Infer<typeof usageValue>
 type DispatchState = 'enqueued' | 'running' | 'completed' | 'failed' | 'reconciliation_required'
+
+function requiresManualSettlementReview(row: CallRow): boolean {
+  return row.state === 'reconciliation_required'
+    && row.reconciliation?.disposition === 'manual_review'
+    && row.reconciliation.reason === 'unknown_settlement'
+}
 
 export async function recordHandler(
   ctx: MutationCtx,
@@ -34,12 +42,20 @@ export async function recordHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
   if (row === null || row.principalId !== args.principalId) throw new Error('operation_invoke_identity_refused')
+  if (requiresManualSettlementReview(row)) throw new Error('call_manual_settlement_review_required')
   if (
     row.state !== 'pending'
     && args.state !== row.state
   ) return { kind: 'recorded' as const }
   recordCallTerminal(row.state, args.state)
   await ctx.db.patch(row._id, recordPatch(args))
+  if (args.state === 'pending' && args.result?.kind === 'needs_authority') {
+    try {
+      await ctx.runMutation(internal.notifications.enqueueAgentApprovalRequested, { callRef: args.callRef })
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'enqueueAgentApprovalRequested', reason: 'source_unavailable' })
+    }
+  }
   return { kind: 'recorded' as const }
 }
 
@@ -175,9 +191,24 @@ export async function projectRecoveryHandler(
     }
     return { kind: 'recorded' as const }
   }
+  if (row.state === 'refused' && row.result?.kind === 'refused'
+    && row.result.code === 'provider_output_invalid' && row.result.receipt?.state === 'settled'
+    && row.formanceFinancialState === 'settled') {
+    // A terminal paid delivery fact is immutable on retry, including its
+    // accounting references; caller-supplied receipts cannot overwrite it.
+    await upsertCallProjection(ctx, row, {
+      state: 'refused', dispatchState: 'failed', result: row.result,
+      ...(row.usage === undefined ? {} : { usage: row.usage }),
+    }, row.updatedAt)
+    return { kind: 'recorded' as const }
+  }
   const attemptRef = args.attemptRef
-  if (row.state === 'reconciliation_required' && args.state === 'completed'
-    && args.result?.kind === 'completed' && row.formanceFinancialState === 'settled'
+  const paidResult = args.state === 'completed' && args.result?.kind === 'completed'
+    ? args.result
+    : args.state === 'refused' && args.result?.kind === 'refused'
+      && args.result.code === 'provider_output_invalid' ? args.result : undefined
+  if (row.state === 'reconciliation_required' && paidResult !== undefined
+    && row.formanceFinancialState === 'settled'
     && row.formanceSettlementRefs?.length && attemptRef !== undefined
     && attemptRef === row.attemptRef) {
     const attempt = await ctx.db.query('moneyX402PaymentAttempts')
@@ -188,30 +219,51 @@ export async function projectRecoveryHandler(
     if (attempt?.dispatchRef !== row.callRef || attempt.toolRef !== row.toolRef
       || attempt.inputDigest !== row.inputDigest || attempt.settlementStatus !== 'settled'
       || attempt.reconciliationEvidenceDigest === undefined
-      || !retainedOutputMatches(attempt.quarantinedOutputJson, args.result.output)
-      || attempt.quarantinedResponseDigest !== args.result.evidenceHash
-      || args.result.receipt?.state !== 'settled') return { kind: 'recorded' as const }
+      || attempt.responseStatus === undefined || !Number.isInteger(attempt.responseStatus)
+      || attempt.responseStatus < 200 || attempt.responseStatus >= 300
+      || paidResult.receipt?.state !== 'settled') return { kind: 'recorded' as const }
+    const evidenceHash = attempt.quarantinedResponseDigest ?? attempt.transportObservationDigest
+    if (evidenceHash === undefined) return { kind: 'recorded' as const }
+    if (paidResult.kind === 'completed') {
+      if (!retainedOutputMatches(attempt.quarantinedOutputJson, paidResult.output)
+        || attempt.quarantinedResponseDigest !== paidResult.evidenceHash
+        || paidResult.callRef !== row.callRef) return { kind: 'recorded' as const }
+    } else {
+      const tool = parsePublishedToolSnapshot(row.toolJson ?? '')
+      if (tool === undefined || paidResult.receipt.evidenceHash !== evidenceHash) return { kind: 'recorded' as const }
+      const output = parseContractOutput({ transport: 'x402', disposition: 'succeeded', releaseStarted: true,
+        requestDigest: attempt.transportRequestDigest ?? '',
+        ...(attempt.quarantinedOutputJson === undefined ? {} : { outputJson: attempt.quarantinedOutputJson }),
+      }, materializeRuntimePublishedTool(tool))
+      if (output.valid) return { kind: 'recorded' as const }
+    }
     const settlementRef = row.formanceSettlementRefs[0]
-    if (settlementRef === undefined || args.result.callRef !== row.callRef
-      || args.result.toolRef !== row.toolRef) return { kind: 'recorded' as const }
-    const result = { ...args.result, receipt: { ...args.result.receipt,
+    if (settlementRef === undefined || paidResult.toolRef !== row.toolRef) return { kind: 'recorded' as const }
+    const result = { ...paidResult, receipt: { ...paidResult.receipt,
       accountingTransactionRefs: [...row.formanceSettlementRefs],
       transactionRef: settlementRef,
     } }
     const usage = recoveredPaidUsage(row, result.receipt)
     if (usage === undefined) return { kind: 'recorded' as const }
-    const completed = { ...result, usage }
-    await ctx.db.patch(row._id, { ...recoveryProjectionPatch(row, args), result: completed, usage,
-      evidenceHash: result.evidenceHash, reconciliation: undefined })
+    const terminalResult = result.kind === 'completed' ? { ...result, usage } : result
+    const state = result.kind === 'completed' ? 'completed' as const : 'refused' as const
+    const dispatchState = result.kind === 'completed' ? 'completed' as const : 'failed' as const
+    await ctx.db.patch(row._id, { ...recoveryProjectionPatch(row, args), result: terminalResult, usage,
+      evidenceHash, reconciliation: undefined })
     await materializePurchaseResolutionRecord(ctx, row, {
-      state: 'completed', dispatchState: 'completed', result: completed, usage,
+      state, dispatchState, result: terminalResult, usage,
     }, args.now)
     await upsertCallProjection(ctx, row, {
-      state: 'completed', dispatchState: 'completed', result: completed, usage,
+      state, dispatchState, result: terminalResult, usage,
     }, args.now)
-    await recordRecoveredCompletion(ctx, row, args.now)
+    if (state === 'completed') await recordRecoveredCompletion(ctx, row, args.now)
     return { kind: 'recorded' as const }
   }
+  // Requires the current Call identity, not just a pre-quarantine context.
+  // Ensures generic resets and same-state writes retain held original evidence.
+  // Invariant: the verified paid-result repair above remains admissible.
+  // On violation: abort the mutation; no retry, refund or evidence overwrite.
+  if (requiresManualSettlementReview(row)) throw new Error('call_manual_settlement_review_required')
   if (!recoveryProjectionTransitionAllowed(row, args)) return { kind: 'recorded' as const }
   recordCallTerminal(row.state, args.state)
   await ctx.db.patch(row._id, recoveryProjectionPatch(row, args))

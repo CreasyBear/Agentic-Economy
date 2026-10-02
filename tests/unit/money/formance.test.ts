@@ -9,6 +9,11 @@ import {
   createFormanceContext,
   executeFormanceMoneyBulk,
   FORMANCE_SCHEMA,
+  FORMANCE_TEMPLATE_NAMES,
+  PERIOD_FORMANCE_SCHEMA,
+  PROMOTIONAL_FORMANCE_SCHEMA,
+  PROMOTIONAL_FORMANCE_SCHEMA_DIGEST,
+  PROMOTIONAL_FORMANCE_TEMPLATE_NAMES,
   formanceMonetaryVariable,
   formanceSafeUnitsFromSdk,
   mapFormanceWriteError,
@@ -43,8 +48,13 @@ afterEach(() => {
 
 describe('Package 4 official Formance boundary', () => {
   it('locks the immutable schema to the approved named machine templates', () => {
-    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.4.0')
+    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.6.0')
     expect(PACKAGE4_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(PROMOTIONAL_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(Object.keys(PROMOTIONAL_FORMANCE_SCHEMA.transactions ?? {})).toEqual(PROMOTIONAL_FORMANCE_TEMPLATE_NAMES)
+    expect(Object.keys(FORMANCE_SCHEMA.transactions ?? {})).toEqual(FORMANCE_TEMPLATE_NAMES)
+    expect(PROMOTIONAL_FORMANCE_SCHEMA.transactions?.BUYER_SALE_REFUNDED).toBeUndefined()
+    expect(FORMANCE_SCHEMA.transactions?.BUYER_SALE_REFUNDED?.script).toContain('source = $legal_settled')
     expect(Object.keys(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})).toEqual(
       PACKAGE4_FORMANCE_TEMPLATE_NAMES,
     )
@@ -68,7 +78,9 @@ describe('Package 4 official Formance boundary', () => {
       configuration: { environment: 'sandbox', gatewayUrl: 'https://formance.example', ledger: 'existing-ledger', requestTimeoutMs: 10_000 },
       sdk: { ledger: { v2: {
         getSchema: vi.fn(async ({ version }: { version: string }) => {
+          if (version === 'v1.4.0') return { v2SchemaResponse: { data: { version, ...PERIOD_FORMANCE_SCHEMA } } }
           if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
+          if (version === 'v1.5.0') return { v2SchemaResponse: { data: { version, ...PROMOTIONAL_FORMANCE_SCHEMA } } }
           if (currentInstalled) return { v2SchemaResponse: { data: { version, ...FORMANCE_SCHEMA } } }
           throw Object.assign(new Error('schema absent'), { statusCode: 404 })
         }),
@@ -89,7 +101,7 @@ describe('Package 4 official Formance boundary', () => {
     await expect(installPackage4FormanceSchema(context)).resolves.toMatchObject({
       kind: 'completed',
       ledger: 'existing-ledger',
-      schemaVersion: 'v1.4.0',
+      schemaVersion: 'v1.6.0',
       replayed: false,
     })
     expect(insertSchema).toHaveBeenCalledTimes(1)
@@ -101,6 +113,7 @@ describe('Package 4 official Formance boundary', () => {
       configuration: { environment: 'sandbox', gatewayUrl: 'https://formance.example', ledger: 'existing-ledger', requestTimeoutMs: 10_000 },
       sdk: { ledger: { v2: {
         getSchema: vi.fn(async ({ version }: { version: string }) => {
+          if (version === 'v1.4.0') return { v2SchemaResponse: { data: { version, ...PERIOD_FORMANCE_SCHEMA } } }
           if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
           throw Object.assign(new Error('schema absent'), { statusCode: 404 })
         }),
@@ -142,7 +155,7 @@ describe('Package 4 official Formance boundary', () => {
     expect(settlement).toMatchObject({
       kind: 'prepared',
       command: {
-        schemaVersion: 'v1.4.0',
+        schemaVersion: 'v1.5.0',
         template: 'FUNDING_SETTLED',
         variables: {
           principal_amount: 'AUD/6 100000000',
@@ -751,30 +764,62 @@ describe('Package 4 official Formance boundary', () => {
 
   it('accepts loopback only for sandbox and requires Cloudflare Access for remote Gateway use', () => {
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
       AE_FORMANCE_ENVIRONMENT: 'sandbox',
       AE_FORMANCE_GATEWAY_URL: 'http://127.0.0.1:8080',
       AE_FORMANCE_LEDGER: 'agentic-economy-sandbox',
     })).toMatchObject({ kind: 'configured' })
 
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'http://formance.example.com',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',
     })).toEqual({ kind: 'setup_required', code: 'formance_gateway_invalid' })
 
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',
     })).toEqual({ kind: 'setup_required', code: 'formance_access_configuration_invalid' })
 
     expect(readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com/path',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',
       AE_FORMANCE_ACCESS_CLIENT_ID: 'id',
       AE_FORMANCE_ACCESS_CLIENT_SECRET: 'secret',
     })).toEqual({ kind: 'setup_required', code: 'formance_gateway_invalid' })
+  })
+
+  it.each([
+    ['development', 'sandbox', 'configured'],
+    ['production', 'production', 'configured'],
+    ['development', 'production', 'setup_required'],
+    ['production', 'sandbox', 'setup_required'],
+    [undefined, 'sandbox', 'setup_required'],
+    ['preview', 'sandbox', 'setup_required'],
+    [' development ', 'sandbox', 'setup_required'],
+    ['development', undefined, 'setup_required'],
+    ['development', ' sandbox ', 'setup_required'],
+    ['production', 'staging', 'setup_required'],
+  ] as const)('requires exact matching deployment %j and Formance %j', (deployment, formance, kind) => {
+    const result = readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: deployment,
+      AE_FORMANCE_ENVIRONMENT: formance,
+      AE_FORMANCE_GATEWAY_URL: formance === 'production'
+        ? 'https://formance.example.com' : 'http://127.0.0.1:8080',
+      AE_FORMANCE_LEDGER: 'agentic-economy-sandbox',
+      AE_FORMANCE_ACCESS_CLIENT_ID: 'id',
+      AE_FORMANCE_ACCESS_CLIENT_SECRET: 'secret',
+    })
+    if (kind === 'configured') {
+      expect(result).toMatchObject({ kind: 'configured', configuration: { environment: formance } })
+    } else {
+      expect(result).toEqual({ kind: 'setup_required', code: 'formance_configuration_invalid' })
+    }
   })
 
   it('uses the official HTTP hook for Access headers and disables SDK retries', async () => {
@@ -792,6 +837,7 @@ describe('Package 4 official Formance boundary', () => {
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }))
     const configuration = readFormanceConfiguration({
+      AE_DEPLOYMENT_ENVIRONMENT: 'production',
       AE_FORMANCE_ENVIRONMENT: 'production',
       AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
       AE_FORMANCE_LEDGER: 'agentic-economy-production',
@@ -808,6 +854,59 @@ describe('Package 4 official Formance boundary', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]?.headers.get('CF-Access-Client-Id')).toBe('access-client-id')
     expect(requests[0]?.headers.get('CF-Access-Client-Secret')).toBe('access-client-secret')
+  })
+
+  it('keeps the operation deadline active while the SDK reads a stalled response body', async () => {
+    const controller = new AbortController()
+    let headersReceived!: () => void
+    const received = new Promise<void>(resolve => { headersReceived = resolve })
+    const requests: Request[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      const body = new ReadableStream<Uint8Array>({ start(stream) {
+        stream.enqueue(new TextEncoder().encode('{'))
+        request.signal.addEventListener('abort', () => stream.error(request.signal.reason), { once: true })
+      } })
+      headersReceived()
+      return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    const context = createFormanceContext({ environment: 'sandbox', gatewayUrl: 'http://127.0.0.1:8080',
+      ledger: 'sandbox', requestTimeoutMs: 100 }, { signal: controller.signal })
+    const result = context.sdk.getVersions({ retries: { strategy: 'none' } })
+    // Attach the rejection assertion before cancelling so asynchronous failures are observed.
+    const assertion = expect(result).rejects.toThrow()
+    await received
+    controller.abort(new Error('operation_deadline'))
+    await assertion
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.signal.aborted).toBe(true)
+  })
+
+  it('refuses a healthy v2.4.12 Ledger after the approved version advances', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      env: 'production',
+      region: 'local',
+      versions: [
+        { health: true, name: 'gateway', version: PACKAGE4_FORMANCE_REQUIREMENTS.gatewayVersion },
+        { health: true, name: 'ledger', version: 'v2.4.12' },
+      ],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    const context = createFormanceContext({
+      environment: 'production',
+      gatewayUrl: 'https://formance.example.com',
+      ledger: 'agentic-economy-production',
+      requestTimeoutMs: 5_000,
+      accessClientId: 'access-client-id',
+      accessClientSecret: 'access-client-secret',
+    })
+
+    expect(await readFormanceHealth(context)).toEqual({
+      kind: 'setup_required',
+      code: 'formance_component_version_drift',
+    })
   })
 
   it('rotates Access tokens by rebuilding the client and fails closed after revocation', async () => {

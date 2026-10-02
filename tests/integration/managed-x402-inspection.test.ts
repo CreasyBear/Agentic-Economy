@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import * as networkServer from '@/modules/network-guard/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createCurrentToolQuote } from '@/modules/capability-supply/current-tool'
@@ -8,7 +8,9 @@ import { readCurrentPublishedTool } from '../../convex/lib/capabilitySupply/curr
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 
+afterEach(() => vi.unstubAllEnvs())
 it('inspects admitted supply without readiness or examples and retains Quote identity after observation', async () => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
   const backend = convexTestWithMarketComponents()
   const { toolRef } = await admitDiscoveredToolFixture(backend, { withoutExample: true })
   expect(await backend.run(async (ctx) => (await readCurrentPublishedTool(ctx, toolRef)) === undefined)).toBe(true)

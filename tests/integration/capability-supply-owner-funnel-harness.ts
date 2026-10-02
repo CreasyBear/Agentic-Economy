@@ -1,6 +1,5 @@
 import type { FunctionArgs } from 'convex/server'
 import { validatePaymentRequired } from '@x402/core/schemas'
-import { expect } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import { toRow as providerConnectionRow } from '../../convex/lib/capabilitySupply/providerConnections/codecs'
@@ -15,7 +14,6 @@ import {
 import type { Id } from '../../convex/_generated/dataModel'
 import {
   preparePublicationDraft,
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
@@ -189,12 +187,7 @@ export async function prepareOwnerPublicationCommand(
       },
       correlationId: `owner-supply:${offeringRef}`,
       reasonCode: 'owner_supply_publication',
-      evidenceRefs: [
-        ...source.evidenceRefs,
-        ...(runtimeEnvironment === 'sandbox' && source.kind === 'x402'
-          ? [X402_SELLER_CANARY_ADMISSION_REQUIRED_REF]
-          : []),
-      ],
+      evidenceRefs: [...source.evidenceRefs],
     })) satisfies PublishPreparedCapabilityArgs,
   }
 }
@@ -961,16 +954,6 @@ export async function seedPaidX402Publication(
       readinessValidUntil,
     })
   })
-  await expect(
-    backend.query(
-      internal.capabilitySupplyCurrentTool.readExactSellerCanaryOperationSnapshot,
-      {
-        publicationRef: published.publicationRef,
-        revision: published.publicationRevision,
-      },
-    ),
-  ).resolves.not.toBeNull()
-
   return {
     ...identity,
     offeringRef,

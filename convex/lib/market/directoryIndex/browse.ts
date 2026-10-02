@@ -1,16 +1,20 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
 import { paginationOptsValidator } from 'convex/server'
 import { filter } from 'convex-helpers/server/filter'
 import { v, type Infer } from 'convex/values'
 import Decimal from 'decimal.js'
 import { directoryNetwork, directoryIndexRangesValid, x402DirectoryIndexInputSchema, type X402DirectoryIndexInput } from '@/modules/market/x402-directory-index'
 import type { Doc } from '../../../_generated/dataModel'
-import type { QueryCtx } from '../../../_generated/server'
+import { env, type QueryCtx } from '../../../_generated/server'
 import { filterArgs, pageValue } from './contracts'
 import { choiceForDirectoryPage, choicesForDirectoryRows } from './choices'
 import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, indexedDirectoryEntry } from './rows'
 
 type SearchRow = Doc<'marketDirectorySearchEntries'>
+
+const REPEAT_SORT_MIN_PAYERS = 5
 
 /**
  * Joins live, never stored on the directory row: a withdrawn or superseded
@@ -19,9 +23,11 @@ type SearchRow = Doc<'marketDirectorySearchEntries'>
  * cached answer would go stale the moment disposition changes underneath it.
  */
 export async function admittedToolRef(ctx: QueryCtx, sourceRouteRef: string | undefined): Promise<string | undefined> {
-  if (sourceRouteRef === undefined) return undefined
+  const environment = deploymentPaymentEnvironment(env)
+  if (sourceRouteRef === undefined || environment === undefined) return undefined
   const publication = await ctx.db.query('capabilityPublications')
     .withIndex('by_sourceRouteRef_and_disposition', q => q.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current'))
+    .filter(q => q.eq(q.field('runtimeEnvironment'), environment))
     .unique()
   return publication?.toolRef
 }
@@ -30,11 +36,11 @@ export async function admittedToolRef(ctx: QueryCtx, sourceRouteRef: string | un
  * Eligible-only is the default everywhere except a provider filter: the
  * Provider page intentionally shows its ineligible long tail
  * (docs/architecture/catalogue-distillation.md#9, Lane 1), so a provider
- * filter always reads the un-narrowed indexes. Momentum sort keeps its
- * existing base index (out of Lane 1's scope).
+ * filter always reads the un-narrowed indexes. Sorts use their corresponding
+ * indexes, narrowed by provider or eligible category where applicable.
  */
-function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402DirectoryIndexInput) {
-  const network = input.network === undefined ? '*' : directoryNetwork(input.network)
+function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402DirectoryIndexInput & { network: string }) {
+  const network = input.network
   const rows = ctx.db.query('marketDirectorySearchEntries')
   // Read the narrowed selectors once: the index builders below are closures, so
   // reading input inside them loses the narrowing these branches established.
@@ -49,9 +55,15 @@ function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402Dire
       return search
     })
   }
-  if (input.sort === 'momentum') {
-    // Base index only: provider/category narrowing happens in the filter chain.
-    return rows.withIndex('by_generation_and_network_and_momentumOrder', q => q.eq('generation', generation).eq('network', network)).order('desc')
+  if (input.sort === 'active') {
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_lastActivatedAt', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_lastActivated', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+    return rows.withIndex('by_generation_and_network_and_elig_and_lastActivatedAt', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
+  }
+  if (input.sort === 'repeat') {
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payerDepth', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_payerDepth', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+    return rows.withIndex('by_generation_and_network_and_elig_and_payerDepth', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
   }
   if (input.sort === 'adoption') {
     if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
@@ -63,16 +75,15 @@ function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402Dire
     if (category !== undefined) return rows.withIndex('by_generation_and_network_and_elig_and_category_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('asc')
     return rows.withIndex('by_generation_and_network_and_elig_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('asc')
   }
-  if (input.sort === 'updated') {
-    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
-    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_updated', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
-    return rows.withIndex('by_generation_and_network_and_elig_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
+  if (input.sort === 'popular') {
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_popular', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+    return rows.withIndex('by_generation_and_network_and_elig_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
   }
-  if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
-  if (category !== undefined) return rows.withIndex('by_gen_net_elig_cat_popular', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
-  return rows.withIndex('by_generation_and_network_and_elig_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
+  if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+  if (category !== undefined) return rows.withIndex('by_generation_and_network_and_elig_and_category_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly).eq('category', category)).order('desc')
+  return rows.withIndex('by_generation_and_network_and_elig_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('eligible', eligibleOnly)).order('desc')
 }
-
 function matchesRemainingConstraints(row: SearchRow, input: X402DirectoryIndexInput): boolean {
   // Defense in depth: the index/search-filter branches above already narrow to
   // eligible===true whenever no provider filter is present; this catches any
@@ -103,20 +114,23 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
     if (!parsed.success || !directoryIndexRangesValid(parsed.data) || paginationOpts.numItems < 1 || paginationOpts.numItems > 50 || !Number.isSafeInteger(paginationOpts.numItems)
       || (alternativeTo !== undefined && (alternativeTo.length < 1 || alternativeTo.length > 8192 || !parsed.data.query))) return { kind: 'unavailable' as const, reason: 'query_invalid' }
     if (parsed.data.query && parsed.data.sort !== undefined && parsed.data.sort !== 'relevance') return { kind: 'unavailable' as const, reason: 'query_sort_unsupported' }
+    const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(env))?.network
+    if (network === undefined) return { kind: 'unavailable' as const, reason: 'source_unavailable' }
+    if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== network) return { kind: 'unavailable' as const, reason: 'query_invalid' }
     const generation = await activeDirectoryGeneration(ctx)
     if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
-    const input = parsed.data
+    const input = { ...parsed.data, network }
     const source = orderedDirectoryRows(ctx, generation.generation, input).filter(q => q.and(
       ...(input.category === undefined ? [] : [q.eq(q.field('category'), input.category)]),
       ...(input.provider === undefined ? [] : [q.eq(q.field('provider'), input.provider)]),
       ...(input.minUsdPrice === undefined ? [] : [q.gte(q.field('minimumUsdPriceOrder'), input.minUsdPrice)]),
+      ...(input.sort !== 'repeat' ? [] : [q.gte(q.field('payersOrder'), REPEAT_SORT_MIN_PAYERS)]),
       ...(input.minPayers30d === undefined ? [] : [q.gte(q.field('payersOrder'), input.minPayers30d)]),
       ...(input.maxPayers30d === undefined ? [] : [q.gte(q.field('payersOrder'), 0), q.lte(q.field('payersOrder'), input.maxPayers30d)]),
       ...(input.curatedOnly === true ? [q.eq(q.field('curated'), true)] : []),
       ...(input.priceBand === undefined ? [] : [q.eq(q.field('priceBand'), input.priceBand)]),
       ...(input.adoptionBand === undefined ? [] : [q.eq(q.field('adoptionBand'), input.adoptionBand)]),
       ...(input.maxUsdPrice === undefined ? [] : [q.gte(q.field('minimumUsdPriceOrder'), 0), q.lte(q.field('minimumUsdPriceOrder'), input.maxUsdPrice)]),
-      ...(input.sort === 'momentum' ? [q.gt(q.field('momentumOrder'), 0)] : []),
     ))
     // Rich source documents have a separate bounded budget from slim search rows.
     // A shorter native page still preserves its cursor and complete traversal.
@@ -177,9 +191,11 @@ export const searchCompactReturns = v.union(
         access: v.union(v.literal('external_listing'), v.literal('ae_callable'), v.literal('setup_required'), v.literal('unavailable')),
         sourceRouteRef: v.optional(v.string()), toolRef: v.optional(v.string()),
       })),
-      title: v.string(), summary: v.string(), provider: v.string(),
+      title: v.string(), summary: v.string(), provider: v.string(), network: v.string(),
       actionClass: actionClassValue, objectClass: objectClassValue, category: v.optional(v.string()),
       completedAt: v.number(), minimumUsdPrice: v.optional(v.string()),
+      resource: v.optional(v.string()), slug: v.optional(v.string()),
+      calls30d: v.optional(v.number()), payers30d: v.optional(v.number()),
     })),
     continueCursor: v.string(), isDone: v.boolean(),
   }),
@@ -192,13 +208,16 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
   if (!parsed.success || paginationOpts.numItems < 1 || paginationOpts.numItems > 12 || !Number.isSafeInteger(paginationOpts.numItems)) {
     return { kind: 'unavailable' as const, reason: 'query_invalid' }
   }
+  const networkKey = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(env))?.network
+  if (networkKey === undefined) return { kind: 'unavailable' as const, reason: 'source_unavailable' }
+  if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== networkKey) return { kind: 'unavailable' as const, reason: 'query_invalid' }
   const generation = await activeDirectoryGeneration(ctx)
   if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
   const scope = canonicalDigest([
     'compact-directory:v1', generation.generation, String(generation.completedAt ?? generation.startedAt),
     parsed.data.query ?? '', actionClass ?? '', objectClass ?? '',
     parsed.data.category ?? '', parsed.data.provider ?? '',
-    parsed.data.network === undefined ? '*' : directoryNetwork(parsed.data.network),
+    networkKey,
     parsed.data.priceBand ?? '', access ?? '',
   ])
   const requestedCursor = paginationOpts.cursor
@@ -207,8 +226,7 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
     return { kind: 'unavailable' as const, reason: 'cursor_invalid' }
   }
   const nativeCursor = requestedCursor === null ? null : requestedCursor.slice(separator + 1)
-  const { query, category, provider, network, priceBand } = parsed.data
-  const networkKey = network === undefined ? '*' : directoryNetwork(network)
+  const { query, category, provider, priceBand } = parsed.data
   const source = query
     ? ctx.db.query('marketDirectorySearchEntries')
       .withSearchIndex('search_text_by_generation_network_category_provider', search => {
@@ -256,7 +274,7 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
   const compact = await Promise.all(prepared.map(async ({ row, legacy, id, title, summary, choice: filtered }) => {
     const choice = filtered ?? batched?.get(row.sourceRouteRef ?? String(row._id)) ?? await choiceFor(row)
     return {
-      id, source: row.source ?? legacy?.source ?? 'coinbase',
+      id, source: row.source ?? legacy?.source ?? 'coinbase', network: row.network,
       ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),
       choice,
       ...(choice.access !== 'ae_callable' || choice.toolRef === undefined ? {} : { toolRef: choice.toolRef }),
@@ -267,6 +285,10 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
       ...(row.category === 'uncategorized' ? {} : { category: row.category }),
       completedAt: generation.completedAt ?? generation.startedAt,
       ...(row.minimumUsdPrice === undefined ? {} : { minimumUsdPrice: row.minimumUsdPrice }),
+      resource: row.resource,
+      ...(row.slug === undefined ? {} : { slug: row.slug }),
+      ...(row.popularOrder < 0 ? {} : { calls30d: row.popularOrder }),
+      ...(row.payersOrder === undefined || row.payersOrder < 0 ? {} : { payers30d: row.payersOrder }),
     }
   }))
   return {

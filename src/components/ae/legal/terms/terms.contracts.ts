@@ -1,11 +1,11 @@
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
-// Source: `git log -1 --format=%cs -- src/routes/terms.tsx` in the marketing repo returned 2026-09-07.
-export const termsLastUpdated = '7 September 2026'
+// Draft alpha terms for review; contracting entity and legal contact details remain unresolved.
+export const termsLastUpdated = '1 October 2026'
 export const termsTitle = 'Terms of service.'
-export const termsDescription = 'The framework for buying, delivering and paying for work through Agentic Economy.'
-export const termsIntro = 'These terms set out the responsibilities of Agentic Economy, customers and providers. Service-specific provisions apply when you use the relevant service.'
-export const termsAvailabilityLead = 'Current availability is described on our'
+export const termsDescription = 'Draft terms for the invitation-only alpha, promotional credits and Tool Calls through Agentic Economy.'
+export const termsIntro = 'These draft terms describe the invitation-only alpha. The contracting legal entity and legal contact details must be confirmed before acceptance or publication.'
+export const termsAvailabilityLead = 'Website and API checks appear on our'
 export const termsAvailabilityLink = 'status page'
 export const termsClosingLead = 'Read alongside our'
 export const termsClosingLink = 'privacy policy'
@@ -15,9 +15,9 @@ export const termsSections = [
     id: 'agreement',
     heading: 'Scope and agreement',
     body: [
-      'These terms govern Agentic Economy’s website and platform: business accounts, Agent access, Tool discovery, prepaid AUD Credit, Calls, usage records and Provider Tools. ‘AE’, ‘we’ and ‘us’ mean Agentic Economy. The service agreement identifies the legal entity supplying your Tools. ‘Customer’ means the individual or organisation purchasing access or Tools; an authorised Agent acts for that Customer.',
-      'Visiting this website does not open an account or authorise a purchase. The platform provisions apply when the customer accepts these terms during onboarding or signs an order form. Features become available only as expressly offered; examples and roadmaps are not commitments to deliver a particular feature or integration.',
-      'An accepted order form may specify the services, commercial arrangements and expressly agreed departures from these terms. A data-processing agreement governs conflicting provisions concerning customer personal information. Mandatory legal rights prevail over every document. Third-party conditions apply only where disclosed and agreed before the relevant purchase.',
+      'These terms cover Agentic Economy’s website and invitation-only alpha: accounts, Agent access, Tool discovery, promotional AUD credits, Calls and usage records. ‘AE’, ‘we’ and ‘us’ mean Agentic Economy. ‘Customer’ means the individual or organisation using the service; an authorised Agent acts for that Customer. The contracting legal entity and legal contact details must be confirmed before these terms are accepted.',
+      'Visiting the website does not open an account or authorise a Call. The platform terms apply when the Customer accepts them during onboarding or signs an order form. Alpha access is by invitation. Features are available only as offered; examples and roadmaps are not promises of future features or integrations.',
+      'An accepted order form may identify services and expressly agreed departures from these terms. A data-processing agreement governs conflicting provisions about Customer personal information. Mandatory legal rights prevail over every document. Third-party conditions apply only where disclosed and agreed before the relevant use.',
     ],
   },
   {
@@ -25,7 +25,7 @@ export const termsSections = [
     heading: 'Eligibility and account control',
     body: [
       'An account must be established by an adult with authority to bind the customer. Keep business, billing and authorised-user information accurate. The customer appoints administrators, assigns permissions and removes access when a person or agent no longer requires it. AE may request information reasonably necessary to verify authority, prevent fraud or meet applicable legal obligations.',
-      'Protect credentials and secrets, use available access controls, and promptly report suspected compromise through the support channel provided at onboarding. Each party is responsible for failures within its control. Use of a credential is evidence to investigate, not conclusive proof that every transaction was authorised. AE remains responsible for its own breaches and control failures.',
+      'Protect credentials and secrets, use available access controls, and promptly report suspected compromise through Support. Each party is responsible for failures within its control. Use of a credential is evidence to investigate, not conclusive proof that every transaction was authorised. AE remains responsible for its own breaches and control failures.',
     ],
   },
   {
@@ -41,37 +41,39 @@ export const termsSections = [
     id: 'services',
     heading: 'Discovery, providers and purchases',
     body: [
-      'Discovery records, including x402 Bazaar metadata, describe Tools that may be available in the ecosystem. A listing alone does not establish compatibility, verification, endorsement or availability through Agentic Economy. Before a purchase, the service offer identifies the Provider, Agentic Economy’s role, the Tool description, price or pricing basis, relevant data handling and material restrictions.',
-      'AE may supply a service itself, resell a provider’s service or facilitate a direct purchase, as stated in the applicable offer. Where AE is the seller, AE remains accountable for its supply obligations. Where a provider contracts directly with the customer, the disclosed provider terms govern that supply without removing AE’s responsibility for its own service.',
-      'A request may involve separate authorisation, payment, execution and delivery stages. A payment record does not by itself prove successful delivery, and an output does not by itself establish final payment status. Usage records must distinguish those facts. Customers should consult request status before retrying an uncertain purchase.',
+      'AE supplies its routing service to the Customer as principal. Independent Tool Providers supply services to AE. AE pays them from its own float to deliver that service; it does not buy or pay on the Customer’s behalf or hold cryptocurrency for the Customer. AE remains responsible for its own supply obligations.',
+      'Discovery records, including directory and Provider metadata, describe Tools that may be available. A listing alone does not establish compatibility, verification, endorsement or availability through AE. Tool information shows the available Provider or endpoint identity, description, price and declared restrictions. A domain or payment address is not verification of the Provider’s legal identity or data practices. AE does not independently verify every Provider or output.',
+      'Authorisation, payment, execution and delivery are separate facts. A payment record does not prove that an answer is accurate, useful or suitable for the Customer’s purpose. Usage records distinguish payment from delivery and purchase status. Check the Call’s status before retrying an uncertain purchase.',
     ],
   },
   {
     id: 'credit',
     heading: 'AUD credit and funding',
     body: [
-      'Customers can use the funding methods offered on their account to prepay in Australian dollars for eligible services. The funding offer states who receives the funds, what the Credit represents, when it becomes available and any restrictions. AUD Credit is separate from the settlement technology used for an individual provider request.',
-      'The funding offer sets out the legal nature of the Credit, the entity receiving funds and any applicable safeguarding arrangements and regulatory disclosures. AE will obtain and maintain the authorisations required for the activities it supplies.',
-      'The accepted funding schedule sets out funding methods, minimum amounts, fees, expiry if any, transferability, refund eligibility and handling on closure. No undisclosed expiry, forfeiture or conversion fee applies. Promotional Credit is identified separately from purchased Credit. AE will disclose any different conditions before the promotion is accepted.',
-      'A funding reversal, fraud concern or chargeback may require a proportionate hold on the affected amount while investigated. AE will explain the reason where legally permitted, avoid freezing unrelated funds unnecessarily, and reconcile the Credit. Customers retain their rights to dispute payment errors through lawful channels.',
+      'The alpha does not offer card purchases or paid top-ups. Invited Customers may receive an A$10 promotional credit grant where offered. The grant states its amount and expiry. The account shows promotional credits separately from any purchased credits.',
+      'Promotional credits are used first. They can be used only for eligible AE services, have no cash value and cannot be transferred or refunded, except where applicable law requires otherwise. They expire on the date shown with the grant. Adding credits does not give an Agent spending authority.',
+      'A reservation sets aside credits for an accepted Call and is not a final charge. Released reservations and restorations return credits to their original sources under the applicable grant or funding conditions. They do not renew a promotional grant or make expired promotional credits spendable again.',
+      'Any future credit purchase, funding fee or other funding arrangement requires a separately disclosed offer before acceptance. No undisclosed expiry, forfeiture or conversion fee applies. A funding reversal, fraud concern or chargeback may justify a proportionate hold on the affected amount while investigated; AE will explain where legally permitted, avoid unnecessarily freezing unrelated funds and reconcile the account. Lawful payment-dispute rights remain available.',
     ],
   },
   {
     id: 'pricing',
     heading: 'Prices, fees, tax and records',
     body: [
-      'The offer or agreed pricing schedule discloses provider charges, AE fees or markups, applicable GST treatment, currency conversion and any network costs passed to the customer. Variable-price requests require an agreed pricing basis and any spending ceiling. Customers are not bound by a price increase applied retrospectively to an accepted request.',
-      'The account record distinguishes purchased Credit, promotional Credit, reservations, final charges, adjustments and refunds. Reservations are not final charges. AE will provide the transaction records and invoices or receipts appropriate to its role and applicable law. Customers remain responsible for their own tax treatment and accounting decisions.',
-      'Subscription, renewal, minimum-spend or enterprise commitments apply only when separately disclosed and accepted. Any automatic renewal must identify its timing, price basis and cancellation mechanism before acceptance.',
+      'The AUD price is shown before the Customer or authorised Agent accepts a Call. Any applicable fees, markup, tax and network costs passed to the Customer must be disclosed before acceptance. Variable prices need an agreed pricing basis and ceiling. A price change before acceptance requires a new price; it does not silently increase an accepted Call.',
+      'AE reserves the displayed AUD amount, then draws it only after verified settlement and a successful HTTP response in the 2xx range. This draw can occur even if the returned output is unhelpful or unreadable: a 2xx response does not establish its quality. Reporting and other remedies remain available as described below and under applicable law.',
+      'Known non-2xx responses and known failures to receive a response are not charged to the Customer, even where AE has paid a Provider. An ambiguous payment or response remains pending for reconciliation; it is not treated as a completed charge or a proven failure. The reserved amount may remain held while AE resolves that uncertainty.',
+      'Account records distinguish promotional and purchased credits, reservations, final draws, adjustments and refunds. AE provides the records and receipts appropriate to its role and applicable law. Customers remain responsible for their own tax treatment and accounting decisions. Subscriptions, renewals or minimum-spend commitments apply only if separately disclosed and accepted, including their cancellation arrangements.',
     ],
   },
   {
     id: 'remedies',
     heading: 'Failed requests, disputes and refunds',
     body: [
-      'Report an incorrect, duplicate, unauthorised or undelivered charge with the request identifier and available evidence, without including secrets. AE will investigate the authorisation, payment and delivery records and explain the outcome. A provider’s refusal to refund does not resolve AE’s own obligations to the customer.',
-      'If a request was not chargeable under the agreed offer, AE will correct the account. Where payment occurred but delivery remains uncertain, AE will reconcile status before representing the work as complete or encouraging a paid retry. A retry that could create a fresh charge needs an existing Spending policy covering that charge or further authorisation.',
-      'The appropriate remedy may include completion, re-performance, a price reduction, reversal, refund or compensation, depending on the failure, applicable terms and law. A Credit adjustment must not replace a monetary refund where the customer is entitled to one. Support procedures and response targets are provided at onboarding and do not limit statutory rights.',
+      'For eligible completed and settled answers, “Report this answer” offers limited self-service credit restoration, at most once per Call. The action shows the actual allowance available to the user. The daily allowance resets at midnight UTC. These limits apply to this self-service route, not to rights or remedies under applicable law.',
+      'A restoration returns the Call’s original credit sources, subject to their original conditions. It does not revive expired promotional credits or extend their expiry. A credit adjustment cannot replace a monetary refund where the Customer is legally entitled to one.',
+      'If the action is missing, the output is invalid, or the issue concerns another dispute, contact Support with the Call reference and available evidence. Do not include secrets. Incorrect, duplicate, unauthorised or undelivered charges can also be raised there. AE will investigate the authorisation, payment and delivery records and explain the outcome; a Provider’s refusal to refund does not resolve AE’s own obligations.',
+      'AE will correct a Call that was not chargeable under its agreed terms. If payment or delivery is uncertain, AE will reconcile the status before representing the work as complete or encouraging a fresh paid retry. A fresh charge needs authority under the Spending policy or further authorisation. Depending on the circumstances and applicable law, remedies may include completion, re-performance, a price reduction, reversal, refund or compensation. Support procedures do not limit statutory rights.',
     ],
   },
   {
@@ -87,8 +89,9 @@ export const termsSections = [
     id: 'data',
     heading: 'Customer data and confidentiality',
     body: [
-      'Customers retain their rights in their inputs and existing materials. They grant AE the limited permissions necessary to deliver the agreed service, secure it, maintain required records and handle support or disputes. AE will not use customer content to train general-purpose models or sell that content under this permission. Any separate use requires an express, informed agreement.',
-      'The privacy policy governs AE’s handling of personal information. Where AE processes personal information on a customer’s behalf, the parties must agree the applicable processing instructions, security measures, subprocessors, transfers, assistance and deletion arrangements. Selecting a provider may involve disclosure to that provider under the terms presented before purchase.',
+      'Customers retain their rights in their inputs and existing materials. They grant AE the limited permissions needed to supply the agreed service, secure it, maintain required records and handle Support or disputes. This permission does not allow AE to sell Customer content or use it to train general-purpose models; any separate use requires an express, informed agreement.',
+      'Requesting a price or preparing a Quote can send the actual proposed inputs to the selected Tool Provider before payment or before a final Quote exists. Chat also sends text and relevant context to model services used to generate answers or find Tools. Payment is not the first point at which information may leave the account. Review the recipient and data-handling information before submitting inputs, including confidential or personal information.',
+      'The privacy policy describes AE’s handling of personal information, service providers and overseas disclosures. Tool declarations may not specify a Provider’s retention, training practices or processing countries. Do not assume these match AE’s practices. If a use requires particular processing or confidentiality terms, confirm an appropriate agreement before sending that information.',
       'Each party must protect the other’s non-public business information with reasonable care, use it only for the agreed relationship and limit access to people or service providers who need it and are bound to protect it. This does not restrict information already lawfully public, independently developed or lawfully received elsewhere. Required legal disclosures should be limited and notified where permitted.',
     ],
   },
@@ -105,9 +108,9 @@ export const termsSections = [
     id: 'providers',
     heading: 'Publishing and supplying services',
     body: [
-      'Providers require an accepted provider agreement before selling through AE. That agreement identifies the seller of record, onboarding requirements, service specifications, data responsibilities, pricing, tax, settlement, payout timing, refund allocation and any reserves or deductions. A discovery listing does not create a payout entitlement.',
-      'Providers must accurately describe their service, maintain the rights needed to supply it, disclose material dependencies and changes, and honour accepted purchases. They must handle customer data only as authorised and cooperate with delivery, security and billing investigations. AE may remove misleading or unsafe listings proportionately, with notice and review where practicable.',
-      'The provider agreement allocates responsibility for failed work and third-party claims. Providers are responsible for their supply obligations; AE remains responsible for its own obligations.',
+      'Independently operated Tools may be discovered through an external directory; a listing does not establish that the Provider has signed an AE publishing agreement or has a payout entitlement. Providers publishing through AE require an accepted Provider agreement. That agreement sets out service specifications, data responsibilities, pricing, tax, settlement, payout timing, refund allocation and any reserves or deductions.',
+      'Providers publishing through AE must accurately describe their services, hold the rights needed to supply them, disclose material dependencies and changes, and honour accepted purchases. They must handle Customer data only as authorised and cooperate with delivery, security and billing investigations. AE may proportionately remove misleading or unsafe listings, with notice and review where practicable.',
+      'Provider agreements allocate responsibility for failed work and third-party claims. Providers remain responsible for their own supply obligations; AE remains responsible for its obligations to the Customer.',
     ],
   },
   {
@@ -123,7 +126,7 @@ export const termsSections = [
     heading: 'Suspension and closure',
     body: [
       'AE may restrict access when reasonably necessary to address a material breach, security threat, suspected fraud or legal obligation. The action should be limited to the affected activity where practicable. AE will explain the reason and route to review unless doing so would be unlawful or undermine a legitimate investigation. Remediable breaches should receive a reasonable opportunity to be corrected.',
-      'Customers may request closure using the published account or support process, subject to separately accepted commitments. Closure stops new use but does not erase unresolved transactions. AE will reconcile charges and purchased Credit under the accepted refund schedule and law, and provide a reasonable opportunity to retrieve available customer records where lawful.',
+      'Customers may request closure using the published account or support process, subject to separately accepted commitments. Closure stops new use but does not erase unresolved transactions. AE will reconcile reservations, draws and credits under their applicable conditions and law, and provide a reasonable opportunity to retrieve available customer records where lawful.',
       'Confidentiality, accrued payment obligations, intellectual-property rights, lawful record retention and provisions needed to resolve existing disputes survive closure. Suspension alone does not authorise automatic forfeiture of purchased Credit.',
     ],
   },

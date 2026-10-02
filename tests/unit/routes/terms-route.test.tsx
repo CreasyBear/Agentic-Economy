@@ -15,10 +15,15 @@ vi.mock('@tanstack/react-router', () => ({
 import { AeTermsPage } from '@/components/ae/legal/terms/AeTermsPage'
 
 describe('Terms page', () => {
-  it('renders the published terms and links every contents entry to its section', () => {
+  it('marks the alpha terms as a draft and links every contents entry to its section', () => {
     render(<AeTermsPage />)
 
     expect(screen.getByRole('heading', { level: 2, name: '1. Scope and agreement' })).toBeTruthy()
+    expect(screen.getByText(/Alpha draft for review/u)).toBeTruthy()
+    expect(screen.getByText(/draws it only after verified settlement and a successful HTTP response/u)).toBeTruthy()
+    expect(screen.getByText(/does not revive expired promotional credits/u)).toBeTruthy()
+    expect(screen.getByText(/Business customers may also have statutory protections/u)).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Trust centre' }).some(link => link.getAttribute('href') === '/trust')).toBe(true)
 
     const contents = screen.getByRole('navigation', { name: 'On this page' })
     const links = within(contents).getAllByRole('link')

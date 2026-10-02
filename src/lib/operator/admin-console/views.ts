@@ -9,6 +9,7 @@ import type { AccountRef } from '@/modules/principal-account/account/public'
 import type { PrincipalRef } from '@/modules/principal-account/principal/public'
 import type { Slug } from '@/modules/common/ids'
 import type { AccountLifecycle } from '@/modules/principal-account/account/public'
+import type { ChatModelCostSummary } from '@/modules/chat/model-cost'
 
 export type AdminTimelineEntry = {
   at: number
@@ -29,6 +30,11 @@ export type AdminCallView = {
   agentRef: PrincipalRef | null
   correlationId: string | null
   resolution: PurchaseResolutionRecord | null
+  answerModelCost: {
+    cost: ChatModelCostSummary
+    callRefs: string[]
+    callsTruncated: boolean
+  } | null
   timeline: readonly AdminTimelineEntry[]
 }
 
@@ -53,6 +59,7 @@ export type AdminWorkspaceView = {
   createdAt: number
   externalOrganizationBound: boolean
   hasActiveSpendingPolicy: boolean
+  paymentEnvironment: 'sandbox' | 'production' | null
 }
 
 export type AdminAgentView = {

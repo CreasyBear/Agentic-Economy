@@ -1,3 +1,4 @@
+import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { expect } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -12,7 +13,6 @@ import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   COMMERCIAL_POLICY_FAMILIES,
-  PACKAGE4_FORMANCE_REQUIREMENTS,
   spendingPeriodAdjustmentReference,
   type SpendingPeriods,
 } from '@/modules/money/public'
@@ -39,7 +39,7 @@ export type QuotePrincipal = Readonly<{
   ownerId: string
   credentialId: string
   applicationRef: string
-  environment: 'production'
+  environment: 'production' | 'sandbox'
   scopes: string[]
   authorityMode: 'spending_policy'
 }>
@@ -145,7 +145,7 @@ export async function recordTreasuryObservation(
     observedAt?: number
   }> = {},
 ): Promise<void> {
-  const observedAt = overrides.observedAt ?? 1_800_000_000_000
+  const observedAt = overrides.observedAt ?? Date.now() - 1_000
   const result = await backend.mutation(internal.moneyTreasury.recordObservation, {
     environment: 'production',
     custodyRef: overrides.custodyRef ?? activeCustodyRef,
@@ -163,6 +163,22 @@ export async function recordTreasuryObservation(
   expect(result).toMatchObject({
     kind: 'accepted',
     replayed: false,
+  })
+  // This fixture represents an already reconciled treasury. Production creates
+  // this checkpoint only after the observer proves the native ledger opening.
+  await backend.run(async ctx => {
+    const existing = await ctx.db.query('moneyTreasuryCursors').withIndex('by_custody', query =>
+      query.eq('environment', 'production').eq('custodyRef', activeCustodyRef)).unique()
+    if (existing === null) await ctx.db.insert('moneyTreasuryCursors', {
+      environment: 'production', custodyRef: activeCustodyRef, custodyGeneration: activeCustodyGeneration,
+      bufferTargetUnits: validCustodyEnvironment.AE_X402_CUSTODY_MAX_ATOMIC, bufferUnits: validCustodyEnvironment.AE_X402_CUSTODY_MAX_ATOMIC,
+      network: activeCustodyNetwork,
+      asset: x402PaymentProfileForEnvironment('production')!.asset.toLowerCase(),
+      address: validCustodyEnvironment.AE_X402_CDP_EXPECTED_EVM_ADDRESS.toLowerCase(),
+      state: { kind: 'ready', checkpoint: { blockNumber: '100', blockHash: `0x${'1'.repeat(64)}`,
+        balanceUnits: '10000000' }, blockTimestamp: observedAt },
+      createdAt: observedAt, updatedAt: observedAt,
+    })
   })
 }
 
@@ -197,19 +213,18 @@ export function testRef(kind: string, material: string): string {
 export async function publishCurrentTool(
   backend: ConvexFixtureBackend,
   suffix: string,
+  environment: 'production' | 'sandbox' = 'production',
 ): Promise<PublishedQuoteTool> {
   const { businessId, owner, canonicalAccountRef } = await publishedBusinessOwner(backend, suffix)
   await seedCatalogOffering(backend, businessId, suffix, '/lookup', 'POST')
   const source = capabilityPublicationInput(businessId, suffix)
+  const { sourceWrite: _sourceWrite, sourceWriteRequest: _sourceWriteRequest, ...publication } = await preparedPublicationArgs(backend, {
+    ...source,
+    binding: { ...source.binding, authority: { kind: 'public_upstream' } },
+  })
   const published = await owner.mutation(
     api.capabilitySupply.publishPreparedCapability,
-    await preparedPublicationArgs(backend, {
-      ...source,
-      binding: {
-        ...source.binding,
-        authority: { kind: 'public_upstream' },
-      },
-    }),
+    await withSourceWrite('catalog_publish', { ...publication, runtimeEnvironment: environment }),
   )
   if ('reason' in published) throw new Error(`quote_publication_refused:${published.reason}`)
   await admitPublication(backend, published, suffix)
@@ -293,6 +308,7 @@ export async function seedAgent(
   toolRef: string,
   suffix: string,
   maximumSpendPerCallUnits: string,
+  environment: 'production' | 'sandbox' = 'production',
 ): Promise<QuoteAgent> {
   const now = Date.now()
   const principalId = testRef('prn', suffix)
@@ -304,13 +320,13 @@ export async function seedAgent(
     ownerId: owner.canonicalAccountRef,
     credentialId,
     applicationRef: 'agentic-economy',
-    environment: 'production',
+    environment,
     scopes: [MARKET_TOOLS_CALL_SCOPE],
     authorityMode: 'spending_policy',
   }
   const amount = (units: string) => ({ currency: 'AUD' as const, units, exponent: 6 as const })
   const policy = buildAgentAccessPolicy({
-    environment: 'production',
+    environment,
     currency: 'AUD',
     exponent: 6,
     maximumSpendPerCall: amount(maximumSpendPerCallUnits),
@@ -343,6 +359,12 @@ export async function seedAgent(
     idempotencyRef: `idempotency:quote:${suffix}`,
   }
   await backend.run(async (ctx: MutationCtx) => {
+    // Unrelated Quote scenarios run on an explicitly open lane. Launch-gate
+    // tests separately exercise absent/default and real human-admin delegation.
+    const launch = await ctx.db.query('platformLaunch').withIndex('by_environment', query => query.eq('environment', environment)).unique()
+    if (launch === null) await ctx.db.insert('platformLaunch', {
+      environment, paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone', revision: 1, updatedAt: now,
+    })
     await ctx.db.insert('externalIdentityBindings', {
       bindingRef: testRef('eib', suffix),
       principalRef: principalId,
@@ -467,7 +489,7 @@ export function formanceSnapshot(
     legalCustomerGeneration: subjects.legalCustomerGeneration,
     legalExposureAvailableUnits: subjects.legalExposureUnits,
     policyGeneration: subjects.policyGeneration,
-    formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+    formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
     buyerTaxBps: subjects.buyerTaxBps,
     spendingPeriods: subjects.spendingPeriods,
     dailyPeriodAvailableUnits: '20000000',

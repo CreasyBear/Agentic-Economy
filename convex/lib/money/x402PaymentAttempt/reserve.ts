@@ -4,6 +4,7 @@ import { loadByAttempt } from './attempt'
 import { type AttemptRow, type PrepareArgs } from './contracts'
 import { assertManagedCustodyPolicy, assertX402PaymentEnvironmentFence, prepareAttributionMatches, x402AuthorizationDigest, x402CustodyRefDigest, x402PaymentIdentityDigest } from './identity'
 import { x402PaymentAuthorizationFailureCodeValue, x402PaymentAuthorizationFailureDetailValue } from '../../../../src/modules/money/schema'
+import { x402SpendReservationRef } from '../../../../src/modules/money/x402-spend-admission'
 
 export const prepareX402PaymentAuthorizationArgs = {
   aeEnvironment: v.union(v.literal('sandbox'), v.literal('production')),
@@ -134,6 +135,7 @@ export async function prepareX402PaymentAuthorizationHandler(
     custodyRef,
     authorizationDigest,
     paymentIdentityDigest,
+    spendReservationRef: x402SpendReservationRef({ custodyRef, attemptRef: args.attemptRef, effectGeneration: args.effectGeneration, paymentIdentityDigest }),
     state: 'prepared',
     preparedAt: Date.now(),
     evidenceRefs: [],

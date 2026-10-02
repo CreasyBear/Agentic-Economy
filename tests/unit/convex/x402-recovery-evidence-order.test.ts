@@ -19,6 +19,7 @@ function fixture() {
     amountUnits: '1000', currency: 'USDC', exponent: 6,
     transportRequestDigest: 'sha256:request', transportObservationDigest: 'sha256:transport',
     paymentObservationDigest: 'sha256:payment', paymentResponseDigest: 'sha256:response',
+    responseStatus: 200,
     quarantinedOutputJson: '{"result":"weather"}', quarantinedResponseDigest: canonicalDigest('response'),
     paymentPayer: '0xpayer', paymentNonce: '0xnonce', network: 'eip155:84532', asset: '0xasset',
   }
@@ -71,14 +72,14 @@ describe('x402 recovery evidence before money', () => {
     expect(runAction).not.toHaveBeenCalled()
   })
 
-  it('keeps buyer money held when the paid response fails the declared output contract', async () => {
+  it('verifies the chain for a paid 2xx even when the output fails its contract', async () => {
     readReceipt.mockClear()
     const { work, material, ctx, runMutation, runAction } = fixture()
     work.x402Attempt!.quarantinedOutputJson = '{"unexpected":true}'
     expect(await prepareX402RecoveryEvidence(ctx, work, {
       ...material, digest: canonicalDigest(material as StableHashValue),
     })).toMatchObject({ kind: 'required' })
-    expect(readReceipt).not.toHaveBeenCalled()
+    expect(readReceipt).toHaveBeenCalledOnce()
     expect(runMutation).not.toHaveBeenCalled()
     expect(runAction).not.toHaveBeenCalled()
   })

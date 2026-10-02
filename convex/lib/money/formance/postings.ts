@@ -2,6 +2,8 @@
 
 import type { FormanceMoneyResult } from '../../../../src/modules/money/public'
 import type {
+  FormancePromotionalCreditBooking,
+  FormanceSettledSaleRefund,
   FormanceBuyerAdjustment,
   FormanceCapacitySync,
   FormanceFundingBooking,
@@ -12,6 +14,8 @@ import type {
   FormanceSpendingPeriodAdjustment,
 } from './gateway'
 import {
+  grantFormancePromotionalCredit,
+  expireFormancePromotionalCredit,
   adjustFormanceSpendingPeriod,
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
@@ -22,6 +26,7 @@ import {
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
   remedyFormancePaidCall,
+  refundFormanceSettledSale,
   syncFormanceCapacity,
 } from './gateway'
 
@@ -113,4 +118,23 @@ export async function reverseProviderSettlementHandler(_ctx: unknown, args: Form
   return context.kind === 'setup_required'
     ? { kind: 'refused' as const, code: context.code, retryable: false as const }
     : convexMoneyResult(await reverseFormanceProviderSettlement(context.context, args))
+}
+
+export async function grantPromotionalCreditHandler(_ctx: unknown, args: FormancePromotionalCreditBooking) {
+  const context = configuredContext()
+  if (context.kind === 'setup_required') return { kind: 'refused' as const, code: context.code, retryable: false as const }
+  return convexMoneyResult(await grantFormancePromotionalCredit(context.context, args))
+}
+
+export async function expirePromotionalCreditHandler(_ctx: unknown, args: FormancePromotionalCreditBooking) {
+  const context = configuredContext()
+  if (context.kind === 'setup_required') return { kind: 'refused' as const, code: context.code, retryable: false as const }
+  return convexMoneyResult(await expireFormancePromotionalCredit(context.context, args))
+}
+
+export async function refundSettledSaleHandler(_ctx: unknown, args: FormanceSettledSaleRefund) {
+  const context = configuredContext()
+  return context.kind === 'setup_required'
+    ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+    : convexMoneyResult(await refundFormanceSettledSale(context.context, args))
 }

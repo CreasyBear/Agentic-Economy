@@ -1,7 +1,8 @@
 import { availability } from '@/modules/capability-supply/public'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import type { DirectoryChoice } from '@/modules/market/x402-directory'
 import type { Doc } from '../../../_generated/dataModel'
-import type { QueryCtx } from '../../../_generated/server'
+import { env, type QueryCtx } from '../../../_generated/server'
 import { getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
 import { capabilitySupplyGraphPorts } from '../../capabilitySupply/graphPorts/ports'
 import { toPublicationRow, toPublishedBusiness } from '../../capabilitySupply/graphPorts/rows'
@@ -10,9 +11,12 @@ import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../../capabi
 
 /** Exact current publication identity alone never establishes Call readiness. */
 export async function currentDirectoryChoice(ctx: QueryCtx, sourceRouteRef: string | undefined, now: number): Promise<DirectoryChoice> {
+  const environment = deploymentPaymentEnvironment(env)
+  if (environment === undefined) return { access: 'unavailable' }
   if (sourceRouteRef === undefined) return { access: 'external_listing' }
   const publication = await ctx.db.query('capabilityPublications')
     .withIndex('by_sourceRouteRef_and_disposition', q => q.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current'))
+    .filter(q => q.eq(q.field('runtimeEnvironment'), environment))
     .unique()
   if (publication === null) return { access: 'external_listing', sourceRouteRef }
   const record = await toolRecord(ctx, publication, now)
@@ -84,9 +88,12 @@ export async function choicesForDirectoryRows(
   rows: readonly Doc<'marketDirectorySearchEntries'>[],
   now: number,
 ): Promise<Map<string, DirectoryChoice>> {
+  const environment = deploymentPaymentEnvironment(env)
+  if (environment === undefined) return new Map(rows.map(row => [row.sourceRouteRef ?? String(row._id), { access: 'unavailable' }]))
   const refs = [...new Set(rows.flatMap(row => row.sourceRouteRef === undefined ? [] : [row.sourceRouteRef]))]
   const publications = await Promise.all(refs.map(sourceRouteRef => ctx.db.query('capabilityPublications')
     .withIndex('by_sourceRouteRef_and_disposition', query => query.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current'))
+    .filter(query => query.eq(query.field('runtimeEnvironment'), environment))
     .unique()))
   const joined = refs.flatMap((sourceRouteRef, index) => {
     const publication = publications[index]

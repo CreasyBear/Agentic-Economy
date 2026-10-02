@@ -1,58 +1,73 @@
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { ToolObjectView } from '@/components/ae/shared/object-family.contracts'
-import { toolCardState, type ToolCardProjection } from '@/modules/chat/tool-card'
+import { toolCardState, type ToolCardProjection, type ToolCardRecommendation } from '@/modules/chat/tool-card'
 import type {
   ComparisonCellView, ComparisonRowView, ComparisonTableView, OptionView,
   OptionsGridView, SourcesInlineView, WorkDisclosureView,
 } from './generative.contracts'
 
 const sourceLabel = (provenance: string) => provenance === 'ae_observed' ? 'AE-observed' : provenance === 'directory_reported' ? 'Directory-reported' : provenance === 'business_published' ? 'Business-published' : 'Provider-reported'
+const projectChoiceReadiness = (readiness: string | undefined): OptionView['readiness'] =>
+  readiness === 'ready' || readiness === 'unavailable' ? readiness : 'unverified'
 
 /** A search card identifies the shortlist; a joined registry view supplies richer, attributed facts. */
 export function projectOptionsFromCard(
   card: ToolCardProjection,
   listings: readonly ToolObjectView[] = [],
   nowMs = Date.now(),
+  recommendation?: ToolCardRecommendation,
 ): OptionsGridView {
   if (card.kind !== 'choices') return { options: [], comparedIds: [] }
+  const options = card.choices.map((choice): OptionView => {
+    const object = listings.find(({ listing }) => listing.canonicalToolRef.kind === 'present' && listing.canonicalToolRef.value === choice.toolRef)
+    const listing = object?.listing
+    const readiness = listing?.facts.readiness
+    const ready = readiness?.kind === 'present' && readiness.value.posture === 'routeable' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)
+    const unavailable = readiness?.kind === 'present' && readiness.value.posture === 'unavailable' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)
+    const price = listing?.facts.price
+    const usage = listing?.facts.completedCalls
+    const facts: Record<string, ComparisonCellView> = {}
+    const currentPrice = price?.kind === 'present' && (price.validUntil === undefined || price.validUntil > nowMs)
+    const displayedPrice = currentPrice ? object?.price?.label ?? choice.price : choice.price
+    if (currentPrice && displayedPrice !== undefined) facts.Price = { value: displayedPrice, source: sourceLabel(price.provenance) }
+    if (readiness?.kind === 'present' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)) {
+      facts.Readiness = { value: ready ? 'Ready to use' : unavailable ? getStatusPresentation('unavailable').label : getStatusPresentation('setup_required').label, source: sourceLabel(readiness.provenance) }
+    }
+    if (usage?.kind === 'present') facts.Usage = { value: `${usage.value.count.toLocaleString()} uses ${usage.value.window}`, source: sourceLabel(usage.provenance) }
+    const identity = object?.identity
+    const seller = identity?.kind === 'verified_provider' ? { kind: 'provider' as const, name: identity.name }
+      : identity?.kind === 'directory_host' ? { kind: 'host' as const, name: identity.name } : undefined
+    return {
+      id: choice.toolRef,
+      name: object?.title ?? choice.title,
+      href: choice.detailHref ?? object?.href ?? `/tools/${encodeURIComponent(choice.toolRef)}`,
+      ...(object?.outcome === undefined ? {} : { outcome: object.outcome }),
+      price: displayedPrice ?? 'Price to be confirmed',
+      ...(displayedPrice === undefined || (currentPrice ? price?.validUntil : choice.priceValidUntil) === undefined
+        ? {} : { priceValidUntil: currentPrice ? price?.validUntil : choice.priceValidUntil }),
+      ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
+      ...(choice.sourcePrice === undefined ? {} : { providerListedPrice: choice.sourcePrice }),
+      ...(choice.host === undefined ? {} : { host: choice.host }),
+      ...(choice.resourcePath === undefined ? {} : { resourcePath: choice.resourcePath }),
+      ...(choice.networkLabel === undefined ? {} : { networkLabel: choice.networkLabel }),
+      readiness: projectChoiceReadiness(choice.readiness),
+      ...(seller === undefined ? {} : { seller }),
+      selectable: !choice.belowMatch
+        && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
+      ...(choice.callable === true && !choice.belowMatch ? { quoteable: true } : {}),
+      ...(listing === undefined ? {} : { facts }),
+    }
+  })
+  const recommendedOption = recommendation === undefined
+    ? undefined
+    : options.find((option) => option.id === recommendation.toolRef && option.quoteable === true)
   return {
     comparedIds: [],
-    options: card.choices.map((choice): OptionView => {
-      const object = listings.find(({ listing }) => listing.canonicalToolRef.kind === 'present' && listing.canonicalToolRef.value === choice.toolRef)
-      const listing = object?.listing
-      const readiness = listing?.facts.readiness
-      const ready = readiness?.kind === 'present' && readiness.value.posture === 'routeable' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)
-      const unavailable = readiness?.kind === 'present' && readiness.value.posture === 'unavailable' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)
-      const price = listing?.facts.price
-      const usage = listing?.facts.completedCalls
-      const facts: Record<string, ComparisonCellView> = {}
-      const currentPrice = price?.kind === 'present' && (price.validUntil === undefined || price.validUntil > nowMs)
-      const displayedPrice = currentPrice ? object?.price?.label ?? choice.price : price === undefined && (choice.priceValidUntil === undefined || choice.priceValidUntil > nowMs) ? choice.price : undefined
-      if (currentPrice && displayedPrice !== undefined) facts.Price = { value: displayedPrice, source: sourceLabel(price.provenance) }
-      if (readiness?.kind === 'present' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)) {
-        facts.Readiness = { value: ready ? 'Ready to use' : unavailable ? getStatusPresentation('unavailable').label : getStatusPresentation('setup_required').label, source: sourceLabel(readiness.provenance) }
-      }
-      if (usage?.kind === 'present') facts.Usage = { value: `${usage.value.count.toLocaleString()} uses ${usage.value.window}`, source: sourceLabel(usage.provenance) }
-      const identity = object?.identity
-      const seller = identity?.kind === 'verified_provider' ? { kind: 'provider' as const, name: identity.name }
-        : identity?.kind === 'directory_host' ? { kind: 'host' as const, name: identity.name } : undefined
-      return {
-        id: choice.toolRef,
-        name: object?.title ?? choice.title,
-        href: choice.detailHref ?? object?.href ?? `/tools/${encodeURIComponent(choice.toolRef)}`,
-        ...(object?.outcome === undefined ? {} : { outcome: object.outcome }),
-        price: displayedPrice ?? 'Price to be confirmed',
-        ...(displayedPrice === undefined || (currentPrice ? price?.validUntil : choice.priceValidUntil) === undefined
-          ? {} : { priceValidUntil: currentPrice ? price?.validUntil : choice.priceValidUntil }),
-        ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
-        readiness: ready ? 'ready' : unavailable ? 'unavailable' : 'unverified',
-        ...(seller === undefined ? {} : { seller }),
-        selectable: choice.access !== 'external_listing' && !choice.belowMatch
-          && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
-        ...(choice.callable === true && !choice.belowMatch ? { quoteable: true } : {}),
-        ...(listing === undefined ? {} : { facts }),
-      }
+    ...(recommendedOption === undefined || recommendation === undefined ? {} : {
+      recommendedId: recommendedOption.id,
+      recommendedBy: recommendation.by,
     }),
+    options,
   }
 }
 

@@ -109,11 +109,9 @@ export type {
 export {
   buildGatewayPayoutReceipt,
   parseGatewayOwnerProviderEarnings,
-  sanitizeGatewayPayoutProviderTransfers,
 } from "./tool-gateway-production-smoke-money";
 
 export {
-  GatewayPayoutProviderTransferReadbackSchema,
   GatewayPayoutReceiptSchema,
   GatewayProductionSmokeReceiptMaterialSchema,
   GatewayProductionSmokeReceiptSchema,
@@ -140,7 +138,6 @@ export type {
   GatewayServiceTool,
 } from "./tool-gateway-production-smoke-discovery";
 export type {
-  GatewayPayoutProviderTransferReadback,
   GatewayPayoutReceipt,
   GatewayProductionSmokeReceipt,
   GatewayProductionSmokeReceiptMaterial,
@@ -736,20 +733,14 @@ export async function runGatewayProductionSmoke(
       idempotencyKey: moneyRuntime.payoutIdempotencyKey,
       amount: callCharge.providerNetAccrual,
     };
-    const providerTransfersBeforePayout =
-      await moneyRuntime.readProviderTransfers(payoutInput.payoutRef);
     const payoutInitial = StrictLivePayoutReceiptSchema.parse(
       await moneyRuntime.beginPayout(payoutInput),
     );
     const afterPayout = await moneyRuntime.readSnapshot();
-    const providerTransfersAfterInitialPayout =
-      await moneyRuntime.readProviderTransfers(payoutInput.payoutRef);
     const payoutReplay = StrictLivePayoutReceiptSchema.parse(
       await moneyRuntime.beginPayout(payoutInput),
     );
     const afterPayoutReplay = await moneyRuntime.readSnapshot();
-    const providerTransfersAfterReplay =
-      await moneyRuntime.readProviderTransfers(payoutInput.payoutRef);
     const payoutReadback = StrictLivePayoutReceiptSchema.parse(
       await moneyRuntime.readPayout({
         payoutRef: payoutInput.payoutRef,
@@ -850,9 +841,6 @@ export async function runGatewayProductionSmoke(
     const payout = buildGatewayPayoutReceipt({
       payout: payoutReadback,
       payoutReplay,
-      providerTransfersBeforePayout,
-      providerTransfersAfterInitialPayout,
-      providerTransfersAfterReplay,
     });
 
     const withdrawnReadback = await ownerRuntime.withdraw(

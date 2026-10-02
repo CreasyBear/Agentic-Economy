@@ -3,10 +3,15 @@
 import { HTTPClient, SDK } from '@formance/formance-sdk'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   LEGACY_FORMANCE_SCHEMA_VERSION,
+  PERIOD_FORMANCE_SCHEMA_VERSION,
+  PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
   FORMANCE_SCHEMA_VERSION,
   FORMANCE_TEMPLATE_NAMES,
+  PERIOD_FORMANCE_TEMPLATE_NAMES,
+  PROMOTIONAL_FORMANCE_TEMPLATE_NAMES,
   LEGACY_FORMANCE_TEMPLATE_NAMES,
   type FormanceMoneyTemplate,
 } from '../formance-schema'
@@ -178,10 +183,12 @@ export const NO_RETRY = Object.freeze({ retries: Object.freeze({ strategy: 'none
 export function readFormanceConfiguration(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): FormanceConfigurationResult {
-  const environment = env.AE_FORMANCE_ENVIRONMENT?.trim()
+  const environment = env.AE_FORMANCE_ENVIRONMENT
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
   const gateway = env.AE_FORMANCE_GATEWAY_URL?.trim()
   const ledger = env.AE_FORMANCE_LEDGER?.trim()
   if ((environment !== 'sandbox' && environment !== 'production')
+    || deploymentEnvironment !== environment
     || gateway === undefined
     || ledger === undefined
     || !LEDGER_NAME_PATTERN.test(ledger)) {
@@ -230,8 +237,15 @@ export function readFormanceConfiguration(
   })
 }
 
-export function createFormanceContext(configuration: FormanceConfiguration): FormanceContext {
+export function createFormanceContext(
+  configuration: FormanceConfiguration,
+  options: Readonly<{
+    signal?: AbortSignal
+    observeResponse?: (response: Response, request: Request) => Promise<void>
+  }> = {},
+): FormanceContext {
   const httpClient = new HTTPClient()
+  if (options.observeResponse !== undefined) httpClient.addHook('response', options.observeResponse)
   const gatewayOrigin = new URL(configuration.gatewayUrl).origin
   httpClient.addHook('beforeRequest', (request) => {
     if (new URL(request.url).origin !== gatewayOrigin) {
@@ -241,6 +255,12 @@ export function createFormanceContext(configuration: FormanceConfiguration): For
       && configuration.accessClientSecret !== undefined) {
       request.headers.set('CF-Access-Client-Id', configuration.accessClientId)
       request.headers.set('CF-Access-Client-Secret', configuration.accessClientSecret)
+    }
+    // A caller's whole-operation deadline survives SDK per-request timers and
+    // remains attached while response bodies are consumed. Existing callers
+    // retain their configured request timeout and exact origin fence.
+    if (options.signal !== undefined) {
+      return new Request(request, { signal: AbortSignal.any([request.signal, options.signal]) })
     }
   })
   return Object.freeze({
@@ -258,12 +278,18 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
   if (!COMMAND_REFERENCE_PATTERN.test(command.commandRef)) return 'formance_command_reference_invalid'
   if (!DIGEST_PATTERN.test(command.idempotencyKey)) return 'formance_idempotency_key_invalid'
   if (command.schemaVersion !== FORMANCE_SCHEMA_VERSION
+    && command.schemaVersion !== PROMOTIONAL_FORMANCE_SCHEMA_VERSION
+    && command.schemaVersion !== PERIOD_FORMANCE_SCHEMA_VERSION
     && command.schemaVersion !== LEGACY_FORMANCE_SCHEMA_VERSION) {
     return 'formance_schema_version_invalid'
   }
   const allowedTemplates = command.schemaVersion === LEGACY_FORMANCE_SCHEMA_VERSION
     ? LEGACY_FORMANCE_TEMPLATE_NAMES
-    : FORMANCE_TEMPLATE_NAMES
+    : command.schemaVersion === PERIOD_FORMANCE_SCHEMA_VERSION
+      ? PERIOD_FORMANCE_TEMPLATE_NAMES
+      : command.schemaVersion === PROMOTIONAL_FORMANCE_SCHEMA_VERSION
+        ? PROMOTIONAL_FORMANCE_TEMPLATE_NAMES
+        : FORMANCE_TEMPLATE_NAMES
   if (!allowedTemplates.some((template) => template === command.template)) {
     return 'formance_template_invalid'
   }
@@ -276,8 +302,12 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
       || value !== value.trim()
       || !validFormanceVariableValue(
         value,
-        command.template === 'BUYER_SALE_SETTLED'
-          && key === 'tax_amount',
+        (['BUYER_SALE_SETTLED', 'BUYER_SALE_REFUNDED'].includes(command.template) && key === 'tax_amount')
+          || ((command.schemaVersion === FORMANCE_SCHEMA_VERSION
+            || command.schemaVersion === PROMOTIONAL_FORMANCE_SCHEMA_VERSION) && (
+            (['CALL_RESERVED_AUD', 'CALL_RELEASED_AUD'].includes(command.template) && key === 'buyer_amount')
+            || (['BUYER_SALE_SETTLED', 'BUYER_SALE_REFUNDED'].includes(command.template) && key === 'revenue_amount')
+          )),
       )) return 'formance_variables_invalid'
   }
   if (!validFormanceMetadata(command.metadata)

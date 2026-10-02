@@ -21,7 +21,7 @@ export type UseSignUpPageResult = Readonly<{
   titleId: 'sign-up-context-heading'
   labelledBy: 'sign-up-context-heading'
   stageUrl: '/sign-up'
-  onboardingRedirectUrl: string
+  redirectUrl: string
   signInFallbackRedirectUrl: string
   signInUrl: '/sign-in'
   switchSearch: SignUpSwitchSearch
@@ -53,19 +53,13 @@ export function projectSignUpCopy(redirect: string | undefined): SignUpCopy {
   if (redirect === undefined) {
     return {
       heading,
-      body: 'After you create your account, you’ll set up your Workspace.',
+      body: 'Your Workspace is set up when you create your account.',
     }
   }
   return {
     heading,
     body: 'After you create your account, you’ll return to where you left off.',
   }
-}
-
-export function buildOnboardingRedirectUrl(redirect: string | undefined): string {
-  return redirect === undefined
-    ? '/onboarding'
-    : `/onboarding?redirect=${encodeURIComponent(redirect)}`
 }
 
 export function buildSwitchSearch(redirect: string | undefined): SignUpSwitchSearch {

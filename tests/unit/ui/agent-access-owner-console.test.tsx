@@ -154,7 +154,7 @@ describe('assistant access owner continuation anchors', () => {
     fireEvent.click(trigger)
     const confirmation = screen.getByRole('alertdialog', { name: 'Disconnect Codex from Route assistant?' })
     expect(confirmation.textContent).toContain('Other connections for Route assistant remain usable')
-    fireEvent.click(within(confirmation).getByRole('button', { name: 'Drain then disconnect' }))
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Disconnect connection' }))
     await waitFor(() => expect(onDisconnectConnection).toHaveBeenCalledWith('connection_safe_reference', 2))
   })
 
@@ -238,8 +238,6 @@ describe('assistant access owner continuation anchors', () => {
     expect(confirmation.textContent).not.toContain(PRINCIPAL_ID)
     expect(confirmation.textContent).not.toContain('grantRef')
     const cancel = within(confirmation).getByRole('button', { name: 'Cancel' })
-    const drainRadio = within(confirmation).getByRole('radio', { name: /Graceful drain/u })
-    await waitFor(() => expect(document.activeElement).toBe(drainRadio))
 
     fireEvent.click(cancel)
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
@@ -247,9 +245,6 @@ describe('assistant access owner continuation anchors', () => {
     expect(document.activeElement).toBe(trigger)
 
     fireEvent.click(trigger)
-    await waitFor(() => expect(document.activeElement).toBe(
-      within(screen.getByRole('alertdialog')).getByRole('radio', { name: /Graceful drain/u }),
-    ))
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(onDisconnect).not.toHaveBeenCalled()
@@ -428,7 +423,7 @@ describe('assistant access owner continuation anchors', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('W-28: defaults to Graceful drain with financial disclosure and tactile confirm', () => {
+  it('uses a plain confirmation with financial disclosure and tactile confirm', () => {
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
@@ -444,35 +439,12 @@ describe('assistant access owner continuation anchors', () => {
     fireEvent.click(trigger)
 
     const confirmation = screen.getByRole('alertdialog', { name: 'Remove Route assistant everywhere?' })
-    const drainCard = within(confirmation).getByRole('radio', { name: /Graceful drain/u })
-    const freezeCard = within(confirmation).getByRole('radio', { name: /Immediate Freeze/u })
-    expect(drainCard.getAttribute('aria-checked')).toBe('true')
-    expect(freezeCard.getAttribute('aria-checked')).toBe('false')
     expect(confirmation.textContent).toContain(
       'A$0.00 unreleased holds remain protected — in-flight calls finish or release immediately',
     )
 
-    const confirm = within(confirmation).getByRole('button', { name: 'Drain then remove' })
+    const confirm = within(confirmation).getByRole('button', { name: 'Remove agent' })
     expect(confirm.className).toContain(TACTILE.split(' ')[0])
-  })
-
-  it('W-28: Immediate Freeze updates confirm label to Remove immediately', () => {
-    render(
-      <AeAgentOperatorConsole
-        {...consoleProps()}
-        selectedPrincipalId={PRINCIPAL_ID}
-        getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
-      />,
-    )
-
-    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove agent everywhere' }))
-    const confirmation = screen.getByRole('alertdialog', { name: 'Remove Route assistant everywhere?' })
-    fireEvent.click(within(confirmation).getByRole('radio', { name: /Immediate Freeze/u }))
-    expect(within(confirmation).getByRole('radio', { name: /Immediate Freeze/u }).getAttribute('aria-checked')).toBe('true')
-    expect(within(confirmation).getByRole('radio', { name: /Graceful drain/u }).getAttribute('aria-checked')).toBe('false')
-    expect(within(confirmation).getByRole('button', { name: 'Remove immediately' })).toBeDefined()
   })
 
   it('W-28: successful agent disconnect toasts and closes dialog', async () => {
@@ -489,7 +461,7 @@ describe('assistant access owner continuation anchors', () => {
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove agent everywhere' }))
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Drain then remove' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove agent' }))
     await waitFor(() => expect(onDisconnect).toHaveBeenCalledWith(PRINCIPAL_ID))
     expect(toast.success).toHaveBeenCalledWith('Agent access revoked')
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
@@ -511,7 +483,7 @@ describe('assistant access owner continuation anchors', () => {
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove agent everywhere' }))
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Drain then remove' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove agent' }))
     await waitFor(() => expect(onDisconnect).toHaveBeenCalled())
     expect(toast.error).toHaveBeenCalledWith('Could not revoke agent access.')
     const confirmation = screen.getByRole('alertdialog')

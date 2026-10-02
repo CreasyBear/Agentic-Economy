@@ -37,6 +37,46 @@ describe.sequential('durable chat Turns', () => {
     try { await backend.finishAllScheduledFunctions(() => undefined) } finally { error.mockRestore() }
   })
 
+  it('claims generation once and recovers an expired turn so the thread can continue', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner } = await publishedBusinessOwner(backend, 'turn-timeout-recovery')
+    const turn = await owner.mutation(api.chatTurns.startTurn, {
+      principal, clientTurnId: 'timeout-turn', prompt: 'Find a weather Tool',
+    })
+    const finish = { turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working' as const }
+    expect(await backend.mutation(internal.chatTurns.finishTurn, finish)).toBe(true)
+    expect(await backend.mutation(internal.chatTurns.finishTurn, finish)).toBe(false)
+
+    const deadlineAt = Date.now() - 1_000
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('chatTurns')
+        .withIndex('by_turnRef', query => query.eq('turnRef', turn.turnRef)).unique()
+      if (row === null) throw new Error('turn_missing')
+      await ctx.db.patch(row._id, { deadlineAt })
+    })
+    expect(await backend.mutation(internal.chatTurns.finishTurn, {
+      turnRef: turn.turnRef, promptMessageId: turn.promptMessageId,
+      state: 'failed', failureReason: 'generation_timed_out', expectedDeadlineAt: deadlineAt,
+    })).toBe(true)
+    expect(await owner.query(api.chatTurns.readTurn, {
+      principal, turnRef: turn.turnRef,
+    })).toMatchObject({ state: 'failed', failureReason: 'generation_timed_out' })
+
+    const history = await owner.query(api.chatMessages.listMessages, {
+      threadId: turn.threadId, paginationOpts: { cursor: null, numItems: 50 },
+      streamArgs: { kind: 'list' },
+    })
+    const prompt = history.page.find(message => message.id === turn.promptMessageId)
+    expect(prompt?.parts).toContainEqual({ type: 'data-chat-failure', data: { reason: 'generation_timed_out' } })
+
+    const resumed = await owner.mutation(api.chatTurns.startTurn, {
+      principal, threadId: turn.threadId, clientTurnId: 'after-timeout', prompt: 'Try another search',
+    })
+    expect(resumed).toMatchObject({ threadId: turn.threadId, state: 'submitted' })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try { await backend.finishAllScheduledFunctions(() => undefined) } finally { error.mockRestore() }
+  })
+
   it('continues only an issued search page in its authenticated thread without exposing the native cursor', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'turn-page-owner')

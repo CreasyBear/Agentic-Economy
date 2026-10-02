@@ -5,7 +5,6 @@ import {
   it,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import { COMMERCIAL_POLICY_FAMILIES } from '../../../src/modules/money/public'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
@@ -66,7 +65,6 @@ const readOwnerFundingCommandForReceiptRef = makeFunctionReference<
   ReadOwnerFundingCommandForReceiptResult
 >('moneyAccountFunding:readOwnerFundingCommandForReceipt')
 
-const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)
@@ -121,8 +119,8 @@ async function insertFundingCommand(
       exponent: 6,
       principalUnits: '5000000',
       serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
+      taxUnits: '530000',
+      totalUnits: '5780000',
       commercialPolicyDigest: canonicalDigest({ kind: 'policy', commandRef: input.commandRef }),
       commercialPolicyRefs: ['commercial-policy:sandbox'],
       idempotencyKey: input.commandRef,
@@ -149,18 +147,7 @@ async function insertFundingCommand(
   })
 }
 
-async function setActiveWorkspace(
-  backend: InteractiveAuthorityBackend,
-  accountRef: string,
-  presentedIdentity: UserIdentity = identity(),
-): Promise<void> {
-  const session = backend.withIdentity(presentedIdentity)
-  await session.mutation(setActiveWorkspaceRef, {
-    accountRef,
-    correlationRef: `invoice-history:workspace:${accountRef}`,
-  })
-}
-
+// Keep the personal account first under deterministic fallback.
 async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Promise<void> {
   await backend.run(async (ctx) => {
     await ctx.db.insert('accounts', {
@@ -173,7 +160,7 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
       initialOwnershipRef: OWNERSHIP_B,
       currentOwnershipRef: OWNERSHIP_B,
       revision: 1,
-      createdAt: NOW,
+      createdAt: NOW + 1,
       updatedAt: NOW,
       lastAction: {
         actorPrincipalRef: PRINCIPAL_REF,
@@ -189,7 +176,7 @@ async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Pro
       lifecycle: 'active',
       changeKind: 'creation',
       revision: 1,
-      createdAt: NOW,
+      createdAt: NOW + 1,
       createdBy: {
         actorPrincipalRef: PRINCIPAL_REF,
         activeAccountRef: ACCOUNT_B,
@@ -261,7 +248,7 @@ async function insertIssuedTaxInvoice(
       accountRef: ACCOUNT_REF,
       kind: 'tax_invoice',
       sourceTransactionRefs: [sourceTransactionRef],
-      amountUnits: '5280000',
+      amountUnits: '5780000',
       residualUnits: '0',
       policyRefs: ['commercial-policy:sandbox'],
       policyDigest: canonicalDigest({ kind: 'policy', documentRef }),
@@ -283,7 +270,6 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedSecondOwnedAccount(backend)
-    await setActiveWorkspace(backend, ACCOUNT_REF)
 
     await insertFundingCommand(backend, {
       commandRef: 'funding:w24:h1:older',
@@ -320,8 +306,8 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
     expect(result.page[0]).toMatchObject({
       principalUnits: '5000000',
       serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
+      taxUnits: '530000',
+      totalUnits: '5780000',
     })
   })
 
@@ -488,7 +474,6 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedSecondOwnedAccount(backend)
-    await setActiveWorkspace(backend, ACCOUNT_REF)
 
     await insertFundingCommand(backend, {
       commandRef: 'funding:w24:h7:owned',

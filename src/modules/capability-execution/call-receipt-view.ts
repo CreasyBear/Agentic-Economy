@@ -136,10 +136,11 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
   // stale execution progress; payment uncertainty never becomes completion.
   // Missing money facts remain unknown rather than implying a zero charge.
   const purchase = projectFoundCallPurchaseStatus(input)
-  const completed = result?.kind === 'completed' && purchase.kind === 'delivered'
+  const completed = result?.kind === 'completed' && (purchase.kind === 'delivered' || purchase.kind === 'refunded')
   const issue = issueFromFound(input, result, usage, receipt)
   const purchaseResolution = input.purchaseResolution
-  const released = purchase.kind === 'refunded'
+  const returnedSale = purchase.kind === 'refunded' && result?.kind === 'completed'
+  const released = !returnedSale && purchase.kind === 'refunded'
     && (purchaseResolution?.terminalState === 'released' || receipt?.refundState === 'released')
   return {
     version: 'ae.public-invocation-receipt:v1',
@@ -147,10 +148,11 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
     toolRef: input.toolRef,
     ...(input.previousInput === undefined ? {} : { previousInput: input.previousInput }),
     statusLabel: purchase.kind === 'refunded'
-      ? released ? 'Credit released' : 'Refunded'
+      ? returnedSale ? 'Credit returned' : released ? 'Credit released' : 'Refunded'
       : purchase.kind === 'uncertain' ? 'Needs review' : foundStatusLabel(input.state, result),
     statusDetail: purchase.kind === 'refunded'
-      ? released ? 'Your reserved credit was returned to your balance.' : 'Your payment was refunded.'
+      ? returnedSale ? 'Your purchase was returned to its original credit sources. The answer remains available.'
+        : released ? 'Your reserved credit was returned to your balance.' : 'Your payment was refunded.'
       : purchase.kind === 'uncertain'
         ? 'AE has not confirmed whether this Call completed. Its result and payment need review before another attempt.'
         : foundStatusDetail(input.state, result),
@@ -161,8 +163,8 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
     ...(input.evidenceHash === undefined ? {} : { evidenceHash: input.evidenceHash }),
     ...(purchase.kind === 'refunded' ? {
       issue: {
-        title: released ? 'Credit released' : 'Refunded',
-        whatHappened: result?.kind === 'refused' && result.code === 'result_invalid'
+        title: returnedSale ? 'Credit returned' : released ? 'Credit released' : 'Refunded',
+        whatHappened: returnedSale ? 'Your report was recorded. The answer remains available.' : result?.kind === 'refused' && result.code === 'result_invalid'
           && receipt?.externalSettlementRef !== undefined
           ? 'AE could not recover the service response. Your credit has been restored.'
           : released && result?.kind === 'refused' && result.code === 'source_unavailable'
@@ -170,9 +172,10 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
           : result?.kind === 'refused'
           ? foundIssueExplanation(result.code)
           : 'This purchase has been closed.',
-        moneyMovement: released ? 'Reserved credit was released back to your balance.' : 'Your payment was refunded.',
+        moneyMovement: returnedSale ? 'The purchase was returned to its original credit sources.'
+          : released ? 'Reserved credit was released back to your balance.' : 'Your payment was refunded.',
         automaticNext: 'No further payment will be attempted for this purchase.',
-        userNext: 'Return to the Tool to review a new Quote.',
+        userNext: returnedSale ? 'The answer remains available below.' : 'Return to the Tool to review a new Quote.',
         retainedReference: input.callRef,
       },
     } : issue === undefined ? {} : { issue }),

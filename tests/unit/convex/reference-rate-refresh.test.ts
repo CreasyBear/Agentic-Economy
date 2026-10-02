@@ -12,17 +12,23 @@ const modules = Object.fromEntries(
 
 afterEach(() => vi.unstubAllGlobals())
 
+async function admittedReferenceRateWorkload(t: ReturnType<typeof convexTest>) {
+  await t.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+  return await t.query(internal.workloadCron.admit, { name: 'refresh USDC/AUD reference rate' })
+}
+
 describe('persisted USDC/AUD reference rate', () => {
   it('continues pricing from last good observation when the scheduled source returns 500', async () => {
     const t = convexTest(schema, modules)
+    const workload = await admittedReferenceRateWorkload(t)
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json({ data: { currency: 'USDC', rates: { AUD: '1.50' } } }))
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
     vi.stubGlobal('fetch', fetch)
-    await t.action(internal.referenceRateRefresh.run, {})
+    await t.action(internal.referenceRateRefresh.run, { workload })
     const before = await t.query(api.referenceRateRefresh.current, {})
     expect(before?.rate).toBe('1.50')
-    await t.action(internal.referenceRateRefresh.run, {})
+    await t.action(internal.referenceRateRefresh.run, { workload })
     const persisted = await t.query(api.referenceRateRefresh.current, {})
     expect(persisted).toEqual(before)
     if (persisted === null) throw new Error('Expected the last good reference rate to remain persisted')

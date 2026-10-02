@@ -34,10 +34,16 @@ type Env = {
   readonly AE_CHAT_SHARE_KEY_ID: string | undefined;
   readonly AE_CHAT_SHARE_SECRET: string | undefined;
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
+  readonly AE_DEPLOYMENT_ENVIRONMENT: "production" | "development";
+  readonly AE_FORMANCE_ACCESS_CLIENT_ID: string | undefined;
+  readonly AE_FORMANCE_ACCESS_CLIENT_SECRET: string | undefined;
+  readonly AE_FORMANCE_ENVIRONMENT: string | undefined;
+  readonly AE_FORMANCE_GATEWAY_URL: string | undefined;
+  readonly AE_FORMANCE_LEDGER: string | undefined;
+  readonly AE_FORMANCE_REQUEST_TIMEOUT_MS: string | undefined;
   readonly AE_JEV_DISCOVERY_ENABLED: "true" | "false" | undefined;
   readonly AE_LLM_MODEL: string | undefined;
   readonly AE_OPENROUTER_API_BASE_URL: string | undefined;
-  readonly AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: string | undefined;
   readonly AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN: string | undefined;
   readonly AE_PACKAGE5_FIXTURE_X402_PAY_TO: string | undefined;
   readonly AE_PACKAGE5_WRITES_ENABLED: string | undefined;
@@ -48,7 +54,6 @@ type Env = {
   readonly AE_ROUTE_CALL_SIGNING_KEY_ID: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SECRET_LIFECYCLE_RPC_TOKEN: string | undefined;
-  readonly AE_SERVICE_MODE: "hosted_alpha" | undefined;
   readonly AE_SITE_URL: string | undefined;
   readonly AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: string | undefined;
   readonly AE_SUPPLY_MCP_OAUTH_ENABLED: string | undefined;
@@ -61,6 +66,8 @@ type Env = {
   readonly AE_X402_CUSTODY_DAILY_MAX_ATOMIC: string | undefined;
   readonly AE_X402_CUSTODY_ENABLED: string | undefined;
   readonly AE_X402_CUSTODY_MAX_ATOMIC: string | undefined;
+  readonly AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: string | undefined;
+  readonly AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: string | undefined;
   readonly AE_X402_PAYMENT_CREDENTIAL_REF: string | undefined;
   readonly AE_X402_PAYMENT_PRIVATE_KEY: string | undefined;
   readonly AE_X402_PAYMENT_SECRET_REF: string | undefined;
@@ -69,7 +76,10 @@ type Env = {
   readonly CDP_API_KEY_SECRET: string | undefined;
   readonly CDP_WALLET_SECRET: string | undefined;
   readonly CLERK_JWT_ISSUER_DOMAIN: string | undefined;
+  readonly CLERK_SECRET_KEY: string | undefined;
+  readonly NOTIFICATION_FROM_EMAIL: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
+  readonly RESEND_API_KEY: string | undefined;
   readonly SITE_URL: string | undefined;
   readonly STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: string | undefined;
   readonly STRIPE_CHECKOUT_HOST: string | undefined;

@@ -53,11 +53,11 @@ describe('price-revision-preview', () => {
   })
 
   describe('computeGstPresentation', () => {
-    it('matches incumbent 4dp GST legs for 0.15 gross', () => {
+    it('shows the call price with no GST, because GST is charged only at top-up', () => {
       const parsedNew = parsePositiveAudInput('0.15')
       const gst = computeGstPresentation('0.15', parsedNew)
-      expect(gst.baseText).toBe('A$0.1364')
-      expect(gst.gstText).toBe('A$0.0136')
+      expect(gst.baseText).toBe('A$0.1500')
+      expect(gst.gstText).toBe('A$0.0000')
       expect(gst.totalText).toBe('A$0.15')
     })
 
@@ -69,11 +69,11 @@ describe('price-revision-preview', () => {
       })
     })
 
-    it('produces uneven GST legs at other magnitudes', () => {
+    it('keeps GST at zero for other call prices', () => {
       const parsed = parsePositiveAudInput('0.10')
       const gst = computeGstPresentation('0.10', parsed)
-      expect(gst.baseText).toBe('A$0.0909')
-      expect(gst.gstText).toBe('A$0.0091')
+      expect(gst.baseText).toBe('A$0.1000')
+      expect(gst.gstText).toBe('A$0.0000')
       expect(gst.totalText).toBe('A$0.10')
     })
   })

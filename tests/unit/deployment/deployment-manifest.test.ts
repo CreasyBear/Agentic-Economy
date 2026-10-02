@@ -7,11 +7,11 @@ import {
   validateDeploymentManifest,
   type DeploymentEnvironmentInput,
 } from '../../../src/lib/deployment/manifest'
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '../../../src/lib/deployment/service-mode'
 
 function productionEnvironment(): Record<string, string> {
   return {
     NODE_ENV: 'production',
+    AE_DEPLOYMENT_ENVIRONMENT: 'production',
     AE_CANONICAL_BASE_URL: 'https://app.example.com',
     AE_CANONICAL_HOST_ALLOWLIST: 'app.example.com',
     CONVEX_URL: 'https://example.convex.cloud',
@@ -34,7 +34,13 @@ function productionEnvironment(): Record<string, string> {
     AE_X402_CUSTODY_ENABLED: 'true',
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
-    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
+    AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: '100000000',
+    AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: '100000000',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc","https://second-base.example/rpc"]}',
+    SENTRY_DSN: 'https://publickey@o123.ingest.sentry.io/123',
+    VITE_SENTRY_DSN: 'https://browserkey@o123.ingest.sentry.io/123',
+    SENTRY_ENVIRONMENT: 'production',
+    VITE_SENTRY_ENVIRONMENT: 'production',
     STRIPE_SECRET_KEY: 'rk_live_command_example',
     STRIPE_READBACK_KEY: 'rk_live_readback_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
@@ -89,7 +95,6 @@ describe('deployment manifest validator', () => {
       'convex-components',
       'agent-access',
       'formance-financial-authority',
-      'seller-onboarding-canary-funding',
       'durable-invocation-workpool',
       'durable-stripe-webhook-inbox',
       'provider-tools-rollout',
@@ -100,14 +105,17 @@ describe('deployment manifest validator', () => {
     expect((components as { components: readonly string[] }).components).toEqual([
       'workpool',
       'workpool:stripeWebhookWorkpool',
+      'workpool:notificationWorkpool',
       'workflow',
       'rate-limiter',
       'agent',
+      'migrations',
       'aggregate:marketEvidence',
       'aggregate:marketOperationEvidence',
-      'aggregate:marketOperationRatings',
-      'aggregate:marketActiveOperations',
-      'aggregate:marketActiveSuppliers',
+      'aggregate:marketToolRatings',
+      'aggregate:marketActiveTools',
+      'aggregate:marketActiveProviders',
+      'aggregate:marketDirectoryFacets',
     ])
     const stripeInbox = result.resources.find((resource) => resource.id === 'durable-stripe-webhook-inbox')
     expect((stripeInbox as { workerEnvironment: readonly string[] }).workerEnvironment).toEqual([
@@ -127,7 +135,7 @@ describe('deployment manifest validator', () => {
   })
 
   it('fails closed for missing shared source, identity, canonical, and source-write configuration', () => {
-    const result = validateDeploymentManifest({ NODE_ENV: 'production' }, { nodeMajor: 22 })
+    const result = validateDeploymentManifest({ NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production' }, { nodeMajor: 22 })
     const names = result.findings.flatMap((finding) => finding.names)
 
     expect(result.ok).toBe(false)
@@ -170,17 +178,6 @@ describe('deployment manifest validator', () => {
       scope: 'package5-rollout',
     })
 
-    const synthetic = validateDeploymentManifest({
-      NODE_ENV: 'test',
-      AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
-    }, { environment: 'test', nodeMajor: 22 })
-    expect(synthetic.findings.filter(({ scope }) => scope === 'package5-rollout').flatMap(({ names }) => names))
-      .toEqual(expect.arrayContaining([
-        'AE_PACKAGE5_WRITES_ENABLED',
-        'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
-        'AE_SUPPLY_MCP_OAUTH_ENABLED',
-        'AE_PROVIDER_OFFBOARDING_ENABLED',
-      ]))
   })
 
   it('requires both Infisical scopes before live Provider Invocation can be enabled', () => {
@@ -269,106 +266,107 @@ describe('deployment manifest validator', () => {
     ]))
   })
 
-  it('admits only sandbox identities and remote Formance for the synthetic release profile', () => {
-    const environment = {
-      ...productionEnvironment(),
-      AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
-      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_release',
-      CLERK_SECRET_KEY: 'sk_test_release',
-      STRIPE_SECRET_KEY: 'rk_test_release',
-      STRIPE_READBACK_KEY: 'rk_test_readback_release',
-      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
-      AE_FORMANCE_ENVIRONMENT: 'sandbox',
-      AE_FORMANCE_LEDGER: 'agentic-economy-release',
-    }
+  it.each(['production', 'preview', 'development', 'test'] as const)(
+    'requires an explicit payment declaration in %s hosting', (hosting) => {
+      const result = validateDeploymentManifest({ NODE_ENV: hosting }, { environment: hosting })
+      expect(result.findings).toContainEqual({
+        kind: 'missing', code: 'deployment_environment_invalid',
+        names: ['AE_DEPLOYMENT_ENVIRONMENT'], scope: 'environment',
+      })
+    },
+  )
 
-    expect(validateDeploymentManifest(environment, { nodeMajor: 22 })).toMatchObject({
-      ok: true,
-      findings: [],
-    })
-    expect(validateDeploymentManifest({
-      ...environment,
-      STRIPE_SECRET_KEY: 'rk_live_wrong-boundary',
+  it.each(['', ' production ', 'Production', 'sandbox', 'preview'])(
+    'rejects malformed payment declaration %j', (declaration) => {
+      const result = validateDeploymentManifest({
+        NODE_ENV: 'development', AE_DEPLOYMENT_ENVIRONMENT: declaration,
+      }, { environment: 'development' })
+      expect(result.findings).toContainEqual(expect.objectContaining({
+        kind: declaration === '' ? 'missing' : 'malformed',
+        code: 'deployment_environment_invalid', names: ['AE_DEPLOYMENT_ENVIRONMENT'],
+      }))
+    },
+  )
+
+  it('accepts preview hosting with development money and no production identity secrets', () => {
+    const result = validateDeploymentManifest({
+      NODE_ENV: 'production',
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+    }, { environment: 'preview', nodeMajor: 22 })
+    expect(result).toMatchObject({ ok: true, environment: 'preview', findings: [] })
+  })
+
+  it('rejects supplied money rails that conflict with the explicit declaration', () => {
+    const sandbox = validateDeploymentManifest({
+      NODE_ENV: 'production',
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      STRIPE_SECRET_KEY: 'rk_live_wrong',
+      STRIPE_READBACK_KEY: 'sk_test_unrestricted',
       AE_FORMANCE_ENVIRONMENT: 'production',
-    }, { nodeMajor: 22 }).findings.map(({ code }) => code)).toEqual(expect.arrayContaining([
-      'stripe_secret_key_invalid',
-      'formance_environment_mismatch',
+    }, { environment: 'preview' })
+    expect(sandbox.findings.map(({ code }) => code)).toEqual(expect.arrayContaining([
+      'stripe_secret_key_invalid', 'stripe_readback_key_invalid', 'formance_environment_mismatch',
+    ]))
+
+    const production = validateDeploymentManifest({
+      ...productionEnvironment(),
+      STRIPE_SECRET_KEY: 'rk_test_wrong',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+    })
+    expect(production.findings.map(({ code }) => code)).toEqual(expect.arrayContaining([
+      'stripe_secret_key_invalid', 'formance_environment_mismatch',
     ]))
   })
 
-  it('admits hosted alpha with production identity and sandbox money', () => {
-    const environment = {
-      ...productionEnvironment(),
-      AE_SERVICE_MODE: 'hosted_alpha',
-      STRIPE_SECRET_KEY: 'rk_test_alpha',
-      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
-      AE_FORMANCE_ENVIRONMENT: 'sandbox',
-    }
-    expect(validateDeploymentManifest(environment)).toMatchObject({ ok: true, findings: [] })
-    expect(resolveServiceMode(environment)).toBe('hosted_alpha')
-    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'sandbox')).toBe(true)
-    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'production')).toBe(false)
-  })
+  it.each(['development', 'production'] as const)(
+    'requires a Formance environment declaration for %s money', declaration => {
+      const result = validateDeploymentManifest({
+        ...productionEnvironment(), AE_DEPLOYMENT_ENVIRONMENT: declaration, AE_FORMANCE_ENVIRONMENT: undefined,
+      }, { environment: 'preview' })
+      expect(result.findings).toContainEqual({
+        kind: 'missing', code: 'formance_environment_required', names: ['AE_FORMANCE_ENVIRONMENT'], scope: 'formance',
+      })
+    },
+  )
 
-  it.each([
-    ['VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_alpha', 'clerk_publishable_key_invalid'],
-    ['CLERK_SECRET_KEY', 'sk_test_alpha', 'clerk_secret_key_invalid'],
-    ['STRIPE_SECRET_KEY', 'rk_live_alpha', 'stripe_secret_key_invalid'],
-    ['STRIPE_SECRET_KEY', 'sk_test_alpha', 'stripe_secret_key_invalid'],
-    ['STRIPE_READBACK_KEY', 'rk_live_alpha', 'stripe_readback_key_invalid'],
-    ['AE_FORMANCE_ENVIRONMENT', 'production', 'formance_environment_mismatch'],
-  ])('refuses hosted alpha with incompatible %s', (name, value, code) => {
-    const result = validateDeploymentManifest({
-      ...productionEnvironment(),
-      AE_SERVICE_MODE: 'hosted_alpha',
-      STRIPE_SECRET_KEY: 'rk_test_alpha',
-      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
-      AE_FORMANCE_ENVIRONMENT: 'sandbox',
-      [name]: value,
-    })
-    expect(result.ok).toBe(false)
-    expect(result.findings).toContainEqual(expect.objectContaining({ code, names: [name] }))
-  })
+  it.each([' production ', 'PRODUCTION', 'development'])(
+    'refuses malformed Formance environment %j without normalization', formanceEnvironment => {
+      const result = validateDeploymentManifest({ ...productionEnvironment(), AE_FORMANCE_ENVIRONMENT: formanceEnvironment })
+      expect(result.findings).toContainEqual({
+        kind: 'conflict', code: 'formance_environment_mismatch', names: ['AE_FORMANCE_ENVIRONMENT'], scope: 'formance',
+      })
+    },
+  )
 
-  it('keeps hosted alpha identity requirements on non-production deployment classes', () => {
-    const result = validateDeploymentManifest({
-      ...productionEnvironment(),
+  it('allows a local Formance gateway only for a development payment declaration', () => {
+    const gateway = 'http://localhost:3068'
+    const development = validateDeploymentManifest({
       NODE_ENV: 'development',
-      AE_SERVICE_MODE: 'hosted_alpha',
-      STRIPE_SECRET_KEY: 'rk_test_alpha',
-      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
-      AE_FORMANCE_ENVIRONMENT: 'sandbox',
-      CLERK_SECRET_KEY: undefined,
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      AE_FORMANCE_GATEWAY_URL: gateway,
     })
-    expect(result.ok).toBe(false)
-    expect(result.findings).toContainEqual(expect.objectContaining({
-      kind: 'missing', scope: 'clerk', names: ['CLERK_SECRET_KEY'],
+    expect(development.findings.filter(({ code }) => code === 'formance_gateway_invalid')).toEqual([])
+
+    const production = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_FORMANCE_GATEWAY_URL: gateway,
+    })
+    expect(production.findings).toContainEqual(expect.objectContaining({
+      kind: 'malformed', code: 'formance_gateway_invalid', names: ['AE_FORMANCE_GATEWAY_URL'],
     }))
   })
 
-  it.each([
-    { AE_SERVICE_MODE: '' },
-    { AE_SERVICE_MODE: ' ' },
-    { AE_SERVICE_MODE: 'standard' },
-    { AE_SERVICE_MODE: 'hosted_alpha ' },
-    { AE_SERVICE_MODE: 'unknown' },
-    { AE_SERVICE_MODE: 'hosted_alpha', AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture' },
-    { AE_SERVICE_MODE: 'hosted_alpha', AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: '' },
-  ])('fails closed for invalid or conflicting explicit service configuration %j', (configuration) => {
-    const environment = { ...productionEnvironment(), ...configuration }
-    expect(resolveServiceMode(environment)).toBe('invalid')
-    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'sandbox')).toBe(false)
-    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'production')).toBe(false)
-    const result = validateDeploymentManifest(environment)
-    expect(result.ok).toBe(false)
-    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'service_mode_invalid' }))
-  })
-
-  it('preserves existing environment checks when service mode is unset', () => {
-    const mode = resolveServiceMode(productionEnvironment())
-    expect(mode).toBe('standard')
-    expect(serviceModeAllowsEnvironment(mode, 'sandbox')).toBe(true)
-    expect(serviceModeAllowsEnvironment(mode, 'production')).toBe(true)
+  it('accepts an absent Stripe rail for a declared production promotional-credit deployment', () => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      STRIPE_SECRET_KEY: undefined,
+      STRIPE_READBACK_KEY: undefined,
+      STRIPE_WEBHOOK_SECRET: undefined,
+      STRIPE_V2_WEBHOOK_SECRET: undefined,
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: undefined,
+    })
+    expect(result.findings.filter(({ scope }) => scope === 'stripe-money')).toEqual([])
   })
 
   it('does not allow production CSP enforcement to be downgraded', () => {
@@ -491,7 +489,7 @@ describe('deployment manifest validator', () => {
       AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '',
       AE_X402_RPC_URLS_JSON: '',
     }, { nodeMajor: 22 })
-    expect(missing.findings.some((finding) => finding.scope === 'x402-payment' && finding.kind === 'missing')).toBe(false)
+    expect(missing.findings.some((finding) => finding.scope === 'x402-payment' && finding.kind === 'missing')).toBe(true)
 
     const forbidden = validateDeploymentManifest({
       ...productionEnvironment(),
@@ -596,6 +594,8 @@ describe('deployment manifest validator', () => {
   it('keeps non-production source-write root derivation available without accepting it in production', () => {
     const development: DeploymentEnvironmentInput = {
       NODE_ENV: 'development',
+      AE_DEPLOYMENT_ENVIRONMENT: 'development',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
       AE_SOURCE_WRITE_SECRET: 'development-source-write-secret-that-is-long-enough',
     }
     expect(validateDeploymentManifest(development, { environment: 'development', nodeMajor: 22 }).findings).toEqual([])
@@ -608,5 +608,89 @@ describe('deployment manifest validator', () => {
   it('keeps the manifest schema version stable for import consumers', () => {
     expect(DEPLOYMENT_MANIFEST.schemaVersion).toBe('ae.deployment-manifest:v1')
     expect(DEPLOYMENT_MANIFEST.runtime.nodeMajor).toBe(22)
+  })
+
+  it('requires every live group under an explicit production declaration, independently of hosting', () => {
+    for (const hosting of ['production', 'preview', 'development', 'test'] as const) {
+      for (const scope of ['formance', 'x402-payment', 'observability', 'clerk', 'source-write']) {
+        for (const group of DEPLOYMENT_MANIFEST.configuration.requiredProduction.filter(group => group.scope === scope)) {
+          for (const name of group.names) {
+            const result = validateDeploymentManifest({ ...productionEnvironment(), [name]: undefined }, { environment: hosting })
+            expect(result.ok, `${hosting}:${name}`).toBe(false)
+            expect(result.findings).toContainEqual(expect.objectContaining({ kind: 'missing', names: [name], scope }))
+          }
+        }
+      }
+    }
+  })
+
+  it('does not infer live configuration from production bundling for development money', () => {
+    const result = validateDeploymentManifest({
+      NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'development', AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_example', CLERK_SECRET_KEY: 'sk_test_example',
+    }, { environment: 'production' })
+    expect(result.findings).toEqual([])
+  })
+
+  it.each([
+    { AE_X402_CDP_EXPECTED_EVM_ADDRESS: 'not-an-address' },
+    { AE_X402_CDP_ACCOUNT_POLICY_ID: 'not-a-uuid' },
+    { AE_X402_CDP_PROJECT_POLICY_ID: 'not-a-uuid' },
+    { AE_X402_CDP_POLICY_RULES_DIGEST: 'sha256:wrong' },
+    { AE_X402_CDP_CREDENTIAL_GENERATION: '9007199254740992' },
+    { AE_X402_CDP_CREDENTIAL_GENERATION: '0' },
+    { AE_X402_CUSTODY_MAX_ATOMIC: '100000001' },
+  ])('rejects custody material refused by the real pure parser: %j', override => {
+    expect(validateDeploymentManifest({ ...productionEnvironment(), ...override }).findings)
+      .toContainEqual(expect.objectContaining({ code: 'x402_custody_configuration_invalid' }))
+  })
+
+  it.each([
+    { AE_FORMANCE_LEDGER: 'INVALID_LEDGER' },
+    { AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com/path' },
+    { AE_FORMANCE_GATEWAY_URL: 'https://user:private-password@formance.example.com' },
+    { AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com?access=private-token' },
+  ])('rejects configuration refused by the native Formance boundary: %j', override => {
+    const result = validateDeploymentManifest({ ...productionEnvironment(), ...override })
+    expect(result.ok).toBe(false)
+    expect(result.findings.some(finding => finding.scope === 'formance')).toBe(true)
+    for (const secret of ['private-password', 'private-token', 'private-one', 'private-two']) expect(JSON.stringify(result)).not.toContain(secret)
+  })
+
+  it.each([
+    { 'eip155:84532': ['https://first.example/rpc', 'https://second.example/rpc'] },
+    { 'eip155:8453': ['https://first.example/rpc'] },
+    { 'eip155:8453': ['https://first.example/key-one', 'https://first.example/key-two'] },
+    { 'eip155:8453': ['https://first.example/rpc', 'https://FIRST.EXAMPLE.:8443/rpc'] },
+    { 'eip155:8453': ['https://first.example/rpc', 'http://second.example/rpc'] },
+    { 'eip155:8453': ['https://first.example/rpc', 'https://user:private-token@second.example/rpc'] },
+  ])('requires two distinct Base mainnet RPC hosts: %j', configuration => {
+    const result = validateDeploymentManifest({ ...productionEnvironment(), AE_X402_RPC_URLS_JSON: JSON.stringify(configuration) })
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'x402_rpc_urls_invalid' }))
+    expect(JSON.stringify(result)).not.toContain('private-token')
+  })
+
+  it('accepts token-bearing RPC query endpoints without exposing them', () => {
+    const result = validateDeploymentManifest({ ...productionEnvironment(),
+      AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://first.example/rpc?key=private-one","https://second.example/rpc?key=private-two"]}',
+    })
+    expect(result.ok).toBe(true)
+    for (const secret of ['private-password', 'private-token', 'private-one', 'private-two']) expect(JSON.stringify(result)).not.toContain(secret)
+  })
+
+  it.each([
+    { SENTRY_DSN: 'https://sentry.example/123' },
+    { SENTRY_DSN: 'https://public:private-password@sentry.example/123' },
+    { VITE_SENTRY_DSN: 'http://public@sentry.example/123' },
+    { VITE_SENTRY_DSN: 'https://public@sentry.example/not-a-project' },
+    { SENTRY_ENVIRONMENT: 'development' },
+    { VITE_SENTRY_ENVIRONMENT: ' production ' },
+    { AE_DISABLE_OBSERVABILITY: 'true' },
+    { VITE_AE_DISABLE_OBSERVABILITY: 'true' },
+  ])('refuses malformed, wrong-world or disabled production Sentry: %j', override => {
+    const result = validateDeploymentManifest({ ...productionEnvironment(), ...override })
+    expect(result.ok).toBe(false)
+    expect(result.findings.some(finding => finding.scope === 'observability')).toBe(true)
+    expect(JSON.stringify(result)).not.toContain('private-password')
   })
 })

@@ -23,10 +23,17 @@ export const resolveBuyerSaleSourcesHandler = async (
       .take(2)
     const call = matches.length === 1 ? matches[0] : undefined
     const parsed = call === undefined ? undefined : parseCallRef(call.callRef)
+    const report = await ctx.db.query('paidCallReports')
+      .withIndex('by_accountRef_and_buyerRefundTransactionRef', query => query.eq('accountRef', args.accountRef).eq('buyerRefundTransactionRef', sale.transactionRef)).unique()
+    if (report?.state === 'posted' && digestReference('call', report.callRef) === sale.sourceDigest) {
+      const reportCall = parseCallRef(report.callRef)
+      sources.push(reportCall.kind === 'valid' ? reportCall.ref : null)
+      continue
+    }
     sources.push(call !== undefined
-      && call.formanceFinancialState === 'settled'
+      && (call.formanceFinancialState === 'settled' || (call.formanceFinancialState === 'released' && call.result?.kind === 'completed' && call.result.receipt?.state === 'refunded'))
       && call.formanceSettlementRefs?.[0] === sale.transactionRef
-      && call.formanceSettlementRefs.length === 2
+      && call.formanceSettlementRefs.length === 2 + (call.promotionalCreditAllocation?.grants.length ?? 0)
       && parsed?.kind === 'valid' && parsed.ref === call.callRef
       && digestReference('call', call.callRef) === sale.sourceDigest
       ? parsed.ref : null)
@@ -49,7 +56,7 @@ export const readOwnerHistoryHandler = async (
   })
   if (history.kind !== 'available') return history
   const candidates = history.entries.flatMap((entry, index) =>
-    entry.kind === 'call_spend' && entry.transactionRef && entry.sourceDigest
+    (entry.kind === 'call_spend' || entry.kind === 'call_refund') && entry.transactionRef && entry.sourceDigest
       ? [{ index, transactionRef: entry.transactionRef, sourceDigest: entry.sourceDigest }]
       : [])
   const fundingCandidates = history.entries.flatMap((entry, index) =>
@@ -84,7 +91,7 @@ export const readOwnerHistoryHandler = async (
       entries[candidate.index] = { ...entry, sourceRef: commandRef }
     }
   }
-  const callSpendCount = history.entries.filter((entry) => entry.kind === 'call_spend').length
+  const callSpendCount = history.entries.filter((entry) => entry.kind === 'call_spend' || entry.kind === 'promotional_use' || entry.kind === 'call_refund' || entry.kind === 'promotional_refund').length
   const sourceLinkCoverage = candidates.length === 0
     ? history.sourceLinkCoverage
     : linked === 0 ? 'unavailable' as const

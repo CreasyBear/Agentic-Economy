@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { ClerkRuntimeError } from '@clerk/shared/error'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +7,6 @@ import '../../setup/jsdom-platform'
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
-  overview: vi.fn(),
   execute: vi.fn(),
   query: vi.fn(),
 }))
@@ -20,9 +20,7 @@ vi.mock('@/components/ae/layout/AeRecordSheet', () => ({
 }))
 
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
-let queryIndex = 0
-mocks.query.mockImplementation(() =>
-  ++queryIndex % 2 === 0 ? mocks.overview() : mocks.access())
+mocks.query.mockImplementation(() => mocks.access())
 
 const props = {
   action: 'verify_capability_source_authority',
@@ -37,8 +35,6 @@ afterEach(() => {
   cleanup()
   mocks.access.mockReset()
   mocks.execute.mockReset()
-  mocks.overview.mockReset()
-  queryIndex = 0
 })
 
 function toPreview() {
@@ -72,16 +68,16 @@ describe('Admin action sheet', () => {
     expect(screen.queryByRole('button', { name: 'Propose instead' })).toBeNull()
   })
 
-  it('warns that FVA is absent while keeping submit enabled and preserving the MFA refusal', async () => {
+  it('shows MFA guidance only after the server refuses, preserving the command', async () => {
     mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
-    mocks.overview.mockReturnValue({ convex: 'ok', clerkFva: 'absent', x402Custody: 'not_configured' })
     mocks.execute.mockResolvedValue({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
     toPreview()
-    expect(screen.getByRole('link', { name: 'Account security' }).getAttribute('href')).toBe('/owner/settings/account/security')
+    expect(screen.queryByRole('link', { name: 'Account security' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Submit command' }).hasAttribute('disabled')).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Account security' }).getAttribute('href')).toBe('/owner/settings/account/security')
     expect(screen.queryByRole('button', { name: 'Propose instead' })).toBeNull()
     expect(screen.getByLabelText<HTMLInputElement>('Other evidence reference').value).toBe('review:ticket-123')
   })
@@ -111,7 +107,7 @@ describe('Admin action sheet', () => {
 
   it('returns a cancelled MFA check to the unchanged preview and does not submit again', async () => {
     mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
-    mocks.execute.mockRejectedValueOnce({ clerkRuntimeError: true, code: 'reverification_cancelled' })
+    mocks.execute.mockRejectedValueOnce(new ClerkRuntimeError('Verification cancelled', { code: 'reverification_cancelled' }))
       .mockResolvedValueOnce({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
     toPreview()
@@ -122,6 +118,22 @@ describe('Admin action sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
     await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2))
     expect(mocks.execute.mock.calls[1]?.[0].operationKey).toBe(mocks.execute.mock.calls[0]?.[0].operationKey)
+  })
+
+  it('checks a pending grant using the same operation, payload and evidence', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.execute.mockResolvedValueOnce({ kind: 'pending', action: 'grant_promotional_credit', effectRefs: ['grant:one'], auditEventRef: 'audit:pending', correlationId: 'correlation:1' })
+      .mockResolvedValueOnce({ kind: 'completed', action: 'grant_promotional_credit', code: 'promotional_credit_granted', effectRefs: ['grant:one'], auditEventRef: 'audit:booked', correlationId: 'correlation:1' })
+    render(<AdminActionSheet action="grant_promotional_credit"
+      input={{ accountRef: 'account:one', environment: 'sandbox', amountUnits: '10000000', expiresAt: 2_000_000_000_000 }}
+      targetRefs={[{ label: 'Workspace', value: 'account:one' }]} initialReasonCode="onboarding" open onOpenChange={() => undefined} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    expect(await screen.findByText('Credit grant pending')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check grant status' }))
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2))
+    expect(mocks.execute.mock.calls[1]?.[0]).toEqual(mocks.execute.mock.calls[0]?.[0])
+    expect(screen.queryByText('Credit grant pending')).toBeNull()
   })
 
   it('leaves a stalled submission without starting a second command', async () => {

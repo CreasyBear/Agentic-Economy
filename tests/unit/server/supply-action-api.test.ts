@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleSupplyActionPost } from '@/lib/server/supply-action-api'
 import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
 
 const authenticate = async (scopes: readonly string[] = ['market_supply:manage']) => ({
   isAuthenticated: true as const,
@@ -10,6 +13,7 @@ const authenticate = async (scopes: readonly string[] = ['market_supply:manage']
   id: 'key_supply',
   subject: 'user_supply',
   scopes,
+  claims: { aeEnvironment: 'sandbox' },
 })
 
 function service(overrides: Partial<SupplyManagementService> = {}): SupplyManagementService {
@@ -46,6 +50,10 @@ const resolvePrincipal = async () => ({
   scopes: ['market_supply:manage'],
   authorityMode: 'spending_policy' as const,
 })
+const authenticateProduction = async (scopes: readonly string[] = ['market_supply:manage']) => ({
+  ...await authenticate(scopes), claims: { aeEnvironment: 'production' },
+})
+const resolveProductionPrincipal = async () => ({ ...await resolvePrincipal(), environment: 'production' as const })
 
 describe('Provider action HTTP adapter', () => {
   it('rate-limits Provider actions before service dispatch when admission is denied', async () => {
@@ -69,13 +77,13 @@ describe('Provider action HTTP adapter', () => {
     const sourcePreview = vi.fn().mockResolvedValue({
       kind: 'ready',
       sourceDigest: `sha256:${'1'.repeat(64)}`,
-      sourceRevision: `openapi:sha256:${'1'.repeat(64)}`,
+      sourceRevision: `x402:sha256:${'1'.repeat(64)}`,
       provenance: {
-        sourceKind: 'openapi',
-        sourceUrl: 'https://provider.example/openapi.yaml',
-        authority: 'unverified_public',
+        sourceKind: 'x402',
+        sourceUrl: 'https://provider.example/paid',
+        authority: 'observed_external',
       },
-      authentication: [{ kind: 'public' }],
+      authentication: [{ kind: 'x402_wallet' }],
       candidates: [],
     })
     const response = await handleSupplyActionPost(
@@ -83,9 +91,9 @@ describe('Provider action HTTP adapter', () => {
         method: 'POST',
         headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify({
-          kind: 'openapi',
-          definitionUrl: 'https://provider.example/openapi.yaml',
-          environment: 'sandbox',
+          kind: 'x402',
+          resourceUrl: 'https://provider.example/paid',
+          method: 'POST',
         }),
       }),
       'sourcePreview',
@@ -96,7 +104,7 @@ describe('Provider action HTTP adapter', () => {
     expect(response.headers.get('cache-control')).toBe('no-store')
     await expect(response.json()).resolves.toMatchObject({
       kind: 'ready',
-      provenance: { sourceKind: 'openapi' },
+      provenance: { sourceKind: 'x402' },
     })
     expect(sourcePreview).toHaveBeenCalledOnce()
   })
@@ -198,8 +206,9 @@ describe('Provider action HTTP adapter', () => {
   })
 
   it('fails Package 5 writes closed in production while preserving source preview', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const withdraw = vi.fn().mockResolvedValue({ kind: 'refused', reason: 'must-not-run' })
-    const rolloutEnvironment = { NODE_ENV: 'production' }
+    const rolloutEnvironment = { NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production' }
     const writeResponse = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/withdraw', {
         method: 'POST',
@@ -211,7 +220,7 @@ describe('Provider action HTTP adapter', () => {
         }),
       }),
       'withdraw',
-      { authenticate, resolvePrincipal, supplyManagementService: service({ withdraw }), rolloutEnvironment },
+      { authenticate: authenticateProduction, resolvePrincipal: resolveProductionPrincipal, supplyManagementService: service({ withdraw }), rolloutEnvironment },
     )
 
     expect(writeResponse.status).toBe(503)
@@ -222,18 +231,18 @@ describe('Provider action HTTP adapter', () => {
 
     const sourcePreview = vi.fn().mockResolvedValue({
       kind: 'ready', sourceDigest: `sha256:${'1'.repeat(64)}`,
-      sourceRevision: `openapi:sha256:${'1'.repeat(64)}`,
-      provenance: { sourceKind: 'openapi', sourceUrl: 'https://provider.example/openapi.yaml', authority: 'unverified_public' },
-      authentication: [{ kind: 'public' }], candidates: [],
+      sourceRevision: `x402:sha256:${'1'.repeat(64)}`,
+      provenance: { sourceKind: 'x402', sourceUrl: 'https://provider.example/paid', authority: 'observed_external' },
+      authentication: [{ kind: 'x402_wallet' }], candidates: [],
     })
     const previewResponse = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/sources/preview', {
         method: 'POST',
         headers: { Authorization: 'Bearer hidden-provider-secret' },
-        body: JSON.stringify({ kind: 'openapi', definitionUrl: 'https://provider.example/openapi.yaml', environment: 'production' }),
+        body: JSON.stringify({ kind: 'x402', resourceUrl: 'https://provider.example/paid', method: 'POST' }),
       }),
       'sourcePreview',
-      { authenticate, resolvePrincipal, supplyManagementService: service({ sourcePreview }), rolloutEnvironment },
+      { authenticate: authenticateProduction, resolvePrincipal: resolveProductionPrincipal, supplyManagementService: service({ sourcePreview }), rolloutEnvironment },
     )
 
     expect(previewResponse.status).toBe(200)
@@ -261,6 +270,7 @@ describe('Provider action HTTP adapter', () => {
       enabled: { AE_PACKAGE5_WRITES_ENABLED: 'true' },
     },
   ])('keeps $code behind its independent connection start switch', async ({ body, code, enabled }) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const connectionConnect = vi.fn()
     const response = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/connections/connect', {
@@ -270,10 +280,10 @@ describe('Provider action HTTP adapter', () => {
       }),
       'connectionConnect',
       {
-        authenticate,
-        resolvePrincipal,
+        authenticate: authenticateProduction,
+        resolvePrincipal: resolveProductionPrincipal,
         supplyManagementService: service({ connectionConnect }),
-        rolloutEnvironment: { NODE_ENV: 'production', ...enabled },
+        rolloutEnvironment: { NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production', ...enabled },
       },
     )
 

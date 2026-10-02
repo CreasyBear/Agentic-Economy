@@ -49,7 +49,7 @@ const okPayload = (): ToolChoiceSearchResult => ({
     actionClass: 'retrieve',
     objectClass: 'data',
     readiness: 'ready',
-    price: { kind: 'indicative', label: 'A$1.00' },
+    price: { kind: 'indicative', label: 'A$1.00', validUntil: 2_000_000_000_000 },
     detailRef: alphaRef,
     next: [{ action: 'describe', args: { toolRef: alphaRef }, authority: 'public' }],
   }],
@@ -306,7 +306,7 @@ describe('useMarketToolSearch', () => {
           toolRef: '/api/v1/registry/detail?id=opaque-1',
           sourceKind: 'directory',
           healthLabel: 'External listing, not callable through AE',
-          priceLabel: 'AUD estimate temporarily unavailable',
+          priceLabel: 'US$0.000001',
         },
       ],
     })

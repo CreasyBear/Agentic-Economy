@@ -148,13 +148,11 @@ export function AeAgentOperatorConsole({
       })} />
       <AgentLifecycleConfirmDialog
         lifecycleTarget={lifecycle.lifecycleTarget}
-        revocationMode={lifecycle.revocationMode}
         revokePending={lifecycle.revokePending}
         revokeDiagnostic={lifecycle.revokeDiagnostic}
         revokeTriggerRef={lifecycle.revokeTriggerRef}
         onOpenChange={lifecycle.handleLifecycleDialogOpenChange}
         onConfirm={lifecycle.confirmLifecycle}
-        onRevocationModeChange={lifecycle.setRevocationMode}
       />
     </div>
   )

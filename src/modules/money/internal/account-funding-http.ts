@@ -4,6 +4,7 @@ import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   callPublicSourceQuery,
   callSourceMutation,
@@ -22,7 +23,7 @@ import {
   type StripeMoneyMode,
   type StripeMoneyProviderConfig,
 } from '@/lib/server/stripe-money-provider'
-import { expectedStripeMoneyModeForDeployment } from '@/lib/server/stripe-money-provider-config'
+import { expectedStripeMoneyModeForDeployment, validateStripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider-config'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -74,6 +75,9 @@ export type AccountFundingBalance =
       kind: 'available'
       accountRef: string
       balance: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
+      totalBalance?: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
+      promotionalBalance?: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
+      nextPromotionalExpiryAt?: number | null
       locked: boolean
       version: number
       updatedAt?: number | undefined
@@ -311,10 +315,10 @@ export async function readAccountFundingConstraintsThroughSource(
 export async function readPlatformFundingConstraintsThroughSource(
   runtime: AccountFundingServerRuntime = {},
 ): Promise<PlatformFundingConstraints> {
-  const environment = fundingEnvironmentFromRuntime(runtime)
-  if (isMoneyRefusal(environment)) return environment
+  const providerContext = createAccountFundingProvider(runtime)
+  if (isMoneyRefusal(providerContext)) return providerContext
   return await callPublicSourceQuery(readPlatformFundingConstraintsQuery, {
-    environment,
+    environment: providerContext.environment,
     now: Date.now(),
   })
 }
@@ -322,18 +326,14 @@ export async function readPlatformFundingConstraintsThroughSource(
 function fundingEnvironmentFromRuntime(
   runtime: AccountFundingServerRuntime,
 ): FundingEnvironment | MoneyRefusal {
-  if (runtime.mode !== undefined) return runtime.mode === 'live' ? 'production' : 'sandbox'
-  if (runtime.config !== undefined) {
-    return runtime.config.mode === 'live' ? 'production' : 'sandbox'
+  const environment = deploymentPaymentEnvironment(runtime.env ?? process.env)
+  if (environment === undefined) return refusal('stripe_setup_required', false)
+  const mode = environment === 'production' ? 'live' : 'test'
+  if ((runtime.mode !== undefined && runtime.mode !== mode)
+    || (runtime.config !== undefined && runtime.config.mode !== mode)) {
+    return refusal('stripe_setup_required', false)
   }
-  const deploymentEnv = runtime.env ?? process.env
-  const config = readStripeMoneyProviderConfig(deploymentEnv)
-  if (isMoneyRefusal(config)) {
-    // If Stripe provider config is not fully configured in this runtime/environment,
-    // platform public constraints default to sandbox.
-    return 'sandbox'
-  }
-  return config.mode === 'live' ? 'production' : 'sandbox'
+  return environment
 }
 
 export async function beginAccountFundingThroughSource(
@@ -341,10 +341,10 @@ export async function beginAccountFundingThroughSource(
   context?: unknown,
   runtime: AccountFundingServerRuntime = {},
 ): Promise<AccountFundingStartResult> {
-  const ownerId = await (runtime.resolveOwnerId ?? defaultResolveOwnerId)()
-  if (ownerId === undefined) return refusal('billing_identity_missing')
   const providerContext = createAccountFundingProvider(runtime)
   if (isMoneyRefusal(providerContext)) return providerContext
+  const ownerId = await (runtime.resolveOwnerId ?? defaultResolveOwnerId)()
+  if (ownerId === undefined) return refusal('billing_identity_missing')
 
   const commandRef = canonicalDigest({
     format: 'ae.account-funding-command-ref:v1',
@@ -398,16 +398,16 @@ export async function beginAccountFundingThroughSource(
   )
   if (isMoneyRefusal(payment)) {
     const mapped = fundingProviderRefusal(payment)
-    if (mapped.code !== 'funding_outcome_unknown') return mapped
+    // The provider may already have acted; every consumer needs this exact recovery locator.
+    if (mapped.code !== 'funding_outcome_unknown') return fundingOutcomeUnknown(reserved.command)
     if (reserved.command.externalRef === undefined
-      && Date.now() < reserved.command.providerRecoveryDeadlineAt) return mapped
+      && Date.now() < reserved.command.providerRecoveryDeadlineAt) return fundingOutcomeUnknown(reserved.command)
     return await markFundingOutcomeUnknown(reserved.command, context)
   }
   const bound = await bindFundingEvidence(reserved.command.commandRef, payment.evidence, context)
-  if (isMoneyRefusal(bound)) return bound
-  if (payment.evidence.status === 'succeeded') {
-    if (bound.command.state === 'pending') return refusal('funding_pending', true)
-    if (bound.command.state !== 'succeeded') return refusal('funding_outcome_unknown', true)
+  if (isMoneyRefusal(bound)) return fundingOutcomeUnknown(reserved.command)
+  if (payment.evidence.status === 'succeeded' && bound.command.state !== 'succeeded') {
+    return fundingOutcomeUnknown(reserved.command)
   }
   return { kind: 'ok', commandRef: reserved.command.commandRef, session: payment }
 }
@@ -417,13 +417,16 @@ export async function readAccountFundingThroughSource(
   context?: unknown,
   runtime: AccountFundingServerRuntime = {},
 ): Promise<CreditPaymentSession | MoneyRefusal> {
+  const providerContext = createAccountFundingProvider(runtime)
+  if (isMoneyRefusal(providerContext)) return providerContext
   const command = await callSourceQuery(readFundingQuery, input)
   if (isMoneyRefusal(command)) return command
+  if (command.command.environment !== providerContext.environment) {
+    return refusal('stripe_setup_required', false)
+  }
   if (command.command.externalRef === undefined) {
     return refusal('funding_outcome_unknown', true)
   }
-  const providerContext = createAccountFundingProvider(runtime)
-  if (isMoneyRefusal(providerContext)) return providerContext
   const payment = await providerContext.provider.readCreditPayment({
     ...fundingPaymentRequest(command.command),
     externalRef: 'externalRef' in input ? input.externalRef : command.command.externalRef,
@@ -493,32 +496,34 @@ async function markFundingOutcomeUnknown(
     sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     sourceWrite,
   })
-  return isMoneyRefusal(marked) ? marked : fundingOutcomeUnknown(marked.command)
+  return fundingOutcomeUnknown(isMoneyRefusal(marked) ? command : marked.command)
 }
 
 function createAccountFundingProvider(
   runtime: AccountFundingServerRuntime,
 ): Readonly<{ provider: CreditPaymentPort; environment: FundingEnvironment }> | MoneyRefusal {
   const deploymentEnv = runtime.env ?? process.env
+  const environment = fundingEnvironmentFromRuntime(runtime)
+  if (isMoneyRefusal(environment)) return environment
   const expectedMode = expectedStripeMoneyModeForDeployment(
     deploymentEnv,
-    runtime.mode ?? runtime.config?.mode,
   )
+  if (expectedMode === undefined) return refusal('stripe_setup_required', false)
   if (runtime.provider !== undefined) {
-    const mode = runtime.mode ?? runtime.config?.mode ?? 'test'
-    if (expectedMode !== undefined && mode !== expectedMode) {
-      return refusal('stripe_setup_required', false)
-    }
-    return { provider: runtime.provider, environment: mode === 'live' ? 'production' : 'sandbox' }
+    return { provider: runtime.provider, environment }
   }
-  const config = runtime.config
+  const candidate = runtime.config
     ?? readStripeMoneyProviderConfig(deploymentEnv, expectedMode)
+  if (isMoneyRefusal(candidate)) return candidate
+  const config = validateStripeMoneyProviderConfig(candidate, expectedMode)
   if (isMoneyRefusal(config)) return config
   const provider = createStripeMoneyProvider({
     config,
+    env: deploymentEnv,
+    mode: expectedMode,
     ...(runtime.client === undefined ? {} : { client: runtime.client }),
   })
-  return { provider, environment: config.mode === 'live' ? 'production' : 'sandbox' }
+  return { provider, environment }
 }
 
 export function fundingPaymentRequest(

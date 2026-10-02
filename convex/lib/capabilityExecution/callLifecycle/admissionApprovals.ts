@@ -1,5 +1,7 @@
+import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import { recordCallTerminal } from '@/lib/observability/journey'
+import { internal } from '../../../_generated/api'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { enqueueCallDispatch } from './dispatchEnqueue'
@@ -27,6 +29,15 @@ import {
 } from '@/modules/agent-access/policy'
 import type { ApprovalDecisionResult, PendingApprovalView } from './admissionApproval'
 import type { CallRow, GrantRow } from './contracts'
+import {
+  financialStateHasReleaseUncertainty,
+  isBuyerFormanceReservation,
+  refundReconciliation,
+} from './dispatchRefusal'
+import { parseWorkloadCronSnapshot } from '../../platform/workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from '../../platform/workloadCron/admission'
+
+export const AUTHORITY_REQUEST_TTL_MS = 60 * 60 * 1000
 
 function parseJsonObject(value: string): Record<string, unknown> | undefined {
   try {
@@ -170,12 +181,14 @@ function replayedApprovalDecision(
     ].every(Boolean)
     return replayed ? { kind: 'replayed', callRef: row.callRef } : null
   }
-  const replayed = [
-    row.state === 'pending',
-    result?.kind === 'pending',
-    row.workId !== undefined,
-    row.authority !== undefined,
-  ].every(Boolean)
+  // Approval is a committed decision, independent of the Call's later delivery
+  // or recovery state. Cancellation may clear workId but retains this authority.
+  const authority = row.authority
+  const replayed = authority?.acceptedBasis.kind === 'approval_required'
+    && authority.callRef === row.callRef
+    && authority.reference === `owner-approval:${canonicalDigest({
+      callRef: row.callRef, ownerId: row.ownerId,
+    }).slice(7)}`
   return replayed ? { kind: 'replayed', callRef: row.callRef } : null
 }
 
@@ -187,7 +200,14 @@ function pendingApprovalIsClean(row: PendingApprovalRow): boolean {
   return row.workId === undefined && row.authority === undefined
 }
 
-async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): Promise<ApprovalDecisionResult> {
+async function refusePendingApproval(
+  ctx: MutationCtx,
+  row: PendingApprovalRow,
+  nextAction: string,
+): Promise<ApprovalDecisionResult> {
+  if (financialStateHasReleaseUncertainty(row)) return { kind: 'refused', code: 'invocation_invalid' }
+  const now = Date.now()
+  const releaseRequired = isBuyerFormanceReservation(row)
   recordCallTerminal(row.state, 'refused')
   await ctx.db.patch(row._id, {
     state: 'refused',
@@ -197,11 +217,117 @@ async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): P
       toolRef: row.toolRef,
       code: 'authority_denied',
       retryable: false,
-      nextAction: 'The owner declined this operation.',
+      nextAction,
     },
-    updatedAt: Date.now(),
+    ...(releaseRequired ? { reconciliation: refundReconciliation(now) } : {}),
+    updatedAt: now,
   })
+  if (releaseRequired) {
+    await ctx.scheduler.runAfter(0, internal.capabilityCallWorker.reconcilePreClaimRefund, {
+      callRef: row.callRef,
+    })
+  }
   return { kind: 'denied', callRef: row.callRef }
+}
+
+async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): Promise<ApprovalDecisionResult> {
+  return await refusePendingApproval(ctx, row, 'The owner declined this operation.')
+}
+
+const APPROVAL_EXPIRY_PAGE_SIZE = 200
+
+export type ApprovalExpiryPage = Readonly<{ scanned: number; scheduled: number; blocked: number }>
+export const continueApprovalExpiryArgs = v.object({
+  afterCreatedAt: v.optional(v.number()),
+  continuation: v.optional(v.object({ cutoff: v.number(), cursor: v.string() })),
+})
+type ApprovalExpiryArgs = Infer<typeof continueApprovalExpiryArgs>
+
+function approvalIsExpired(createdAt: number, now: number): boolean {
+  return now - createdAt >= AUTHORITY_REQUEST_TTL_MS
+}
+
+function approvalCanBeRefused(row: PendingApprovalRow): boolean {
+  return pendingApprovalIsClean(row) && !financialStateHasReleaseUncertainty(row)
+}
+
+async function scheduleStaleApprovalPage(
+  ctx: MutationCtx,
+  args: ApprovalExpiryArgs,
+): Promise<ApprovalExpiryPage> {
+  const cutoff = args.continuation?.cutoff ?? Date.now() - AUTHORITY_REQUEST_TTL_MS
+  const cursor = args.continuation?.cursor ?? null
+  const { afterCreatedAt } = args
+  if (!Number.isSafeInteger(cutoff) || cutoff < 0 || cutoff > Date.now() - AUTHORITY_REQUEST_TTL_MS
+    || (afterCreatedAt !== undefined && (!Number.isSafeInteger(afterCreatedAt) || afterCreatedAt < 0 || afterCreatedAt > cutoff))) {
+    throw new Error('approval_expiry_cutoff_invalid')
+  }
+  if (cursor !== null && cursor.trim().length === 0) throw new Error('approval_expiry_cursor_invalid')
+  const page = await ctx.db.query('capabilityCalls')
+    .withIndex('by_state_and_result_kind_and_createdAt', (query) => {
+      const stale = query.eq('state', 'pending').eq('result.kind', 'needs_authority')
+      // Queued legacy continuations replay the boundary timestamp; per-Call refusal is idempotent.
+      return afterCreatedAt === undefined
+        ? stale.lte('createdAt', cutoff)
+        : stale.gte('createdAt', afterCreatedAt).lte('createdAt', cutoff)
+    })
+    .paginate({ numItems: APPROVAL_EXPIRY_PAGE_SIZE, maximumRowsRead: APPROVAL_EXPIRY_PAGE_SIZE, cursor })
+  if (!page.isDone && (page.continueCursor.trim().length === 0 || page.continueCursor === cursor)) {
+    throw new Error('approval_expiry_cursor_invalid')
+  }
+  let scheduled = 0
+  let blocked = 0
+  for (const row of page.page) {
+    if (!pendingApprovalRow(row)) continue
+    if (!approvalCanBeRefused(row)) {
+      blocked += 1
+      continue
+    }
+    await ctx.scheduler.runAfter(0, internal.capabilityCalls.expireStaleApproval, { callRef: row.callRef })
+    scheduled += 1
+  }
+  if (!page.isDone) {
+    await ctx.scheduler.runAfter(0, internal.capabilityCalls.continueApprovalExpiry, {
+      ...(afterCreatedAt === undefined ? {} : { afterCreatedAt }),
+      continuation: { cutoff, cursor: page.continueCursor },
+    })
+  }
+  if (blocked > 0) {
+    degradeBackend(new Error('approval_expiry_blocked'), undefined, {
+      site: 'expireStalePendingApprovals',
+      reason: 'invalid_response',
+    })
+  }
+  return { scanned: page.page.length, scheduled, blocked }
+}
+
+export async function expireStalePendingApprovalsHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ workload: unknown }>,
+): Promise<ApprovalExpiryPage> {
+  const workload = parseWorkloadCronSnapshot(args.workload)
+  await reconcileWorkloadCronSnapshot(ctx, 'expire stale pending approvals', workload)
+  return await scheduleStaleApprovalPage(ctx, {})
+}
+
+export async function continueApprovalExpiryHandler(
+  ctx: MutationCtx,
+  args: ApprovalExpiryArgs,
+): Promise<ApprovalExpiryPage> {
+  return await scheduleStaleApprovalPage(ctx, args)
+}
+
+export async function expireStaleApprovalHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ callRef: string }>,
+): Promise<null> {
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+    .unique()
+  if (row === null || !pendingApprovalRow(row)) return null
+  if (!approvalIsExpired(row.createdAt, Date.now()) || !approvalCanBeRefused(row)) return null
+  await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
+  return null
 }
 
 function loadApprovalMaterial(row: PendingApprovalRow): ApprovalMaterial | null {
@@ -338,6 +464,7 @@ async function approvePendingInvocation(
   row: PendingApprovalRow,
   runtime: ApprovalRuntime,
   now: number,
+  beforeApproval?: (row: CallRow, now: number) => Promise<ApprovalDecisionResult | null>,
 ): Promise<ApprovalDecisionResult> {
   const grant = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', row.grantRef))
@@ -355,6 +482,8 @@ async function approvePendingInvocation(
     now,
   })
   if (authority === undefined) return { kind: 'refused', code: 'invocation_invalid' }
+  const admission = await beforeApproval?.(row, now)
+  if (admission != null) return admission
   const dispatched = await enqueueCallDispatch(ctx, row, authority, now)
   if (dispatched.kind === 'replayed') return { kind: 'replayed', callRef: row.callRef }
   return dispatched.kind === 'refused'
@@ -365,6 +494,7 @@ async function approvePendingInvocation(
 export async function decideCallApprovalHandler(
   ctx: MutationCtx,
   args: { callRef: string; decision: 'approve' | 'deny' },
+  beforeApproval?: (row: CallRow, now: number) => Promise<ApprovalDecisionResult | null>,
 ): Promise<ApprovalDecisionResult> {
   const ownerRef = await authenticatedOwnerRef(ctx)
   if (ownerRef === null) return { kind: 'refused', code: 'authentication_required' }
@@ -376,7 +506,14 @@ export async function decideCallApprovalHandler(
   if (replay !== null) return replay
   if (!pendingApprovalRow(row)) return { kind: 'refused', code: 'authority_not_pending' }
   if (!pendingApprovalIsClean(row)) return { kind: 'refused', code: 'invocation_invalid' }
-  if (args.decision === 'deny') return await denyPendingApproval(ctx, row)
+  if (args.decision === 'deny') {
+    const admission = await beforeApproval?.(row, Date.now())
+    return admission ?? await denyPendingApproval(ctx, row)
+  }
+  if (approvalIsExpired(row.createdAt, Date.now())) {
+    const expired = await refusePendingApproval(ctx, row, 'The approval request expired before the owner decided.')
+    return expired.kind === 'denied' ? { kind: 'refused', code: 'authority_not_pending' } : expired
+  }
   if (row.applicationRef === 'ae-owner-chat') {
     const quoteRef = row.quoteRef
     const quote = quoteRef === undefined ? null : await ctx.db.query('capabilityQuotes')
@@ -397,5 +534,5 @@ export async function decideCallApprovalHandler(
   const now = Date.now()
   const runtime = await loadApprovalRuntime(ctx, row, material, now)
   if (runtime === null) return { kind: 'refused', code: 'invocation_invalid' }
-  return await approvePendingInvocation(ctx, row, runtime, now)
+  return await approvePendingInvocation(ctx, row, runtime, now, beforeApproval)
 }

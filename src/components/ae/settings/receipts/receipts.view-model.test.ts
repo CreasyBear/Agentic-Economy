@@ -10,18 +10,18 @@ const invoice: AeInvoiceHistoryRow = {
   description: 'Account top-up',
   principalUnits: '5000000',
   serviceFeeUnits: '250000',
-  taxUnits: '30000',
-  totalUnits: '5280000',
+  taxUnits: '530000',
+  totalUnits: '5780000',
   status: 'succeeded',
   appliedTransactionRef: 'transaction:paid',
   hasPaymentReceipt: true,
 }
 
-it('shows the stored fee tax, not 10% of the payable total', () => {
-  expect(receiptDisplay(invoice).gst).toBe('A$0.03 GST included')
+it('shows the stored top-up GST, not a second inclusive split of the payable total', () => {
+  expect(receiptDisplay(invoice).gst).toBe('A$0.53 GST included')
   expect(receiptExportRow(invoice)).toMatchObject({
-    amountAud: '5.280000',
-    gstAud: '0.030000',
+    amountAud: '5.780000',
+    gstAud: '0.530000',
     netAud: '5.250000',
   })
 })

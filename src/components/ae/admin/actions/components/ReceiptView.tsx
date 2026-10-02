@@ -8,6 +8,17 @@ import { ADMIN_ACTION_SHEET_COPY, ADMIN_SUCCESS_COPY, type ReceiptViewProps } fr
 
 
 export function ReceiptView({ receipt, onPropose, onRetry, onEdit, allowEdit }: ReceiptViewProps) {
+  if (receipt.kind === 'pending') return (
+    <Alert role="status">
+      <AlertTitle>Credit grant pending</AlertTitle>
+      <AlertDescription className="flex flex-col gap-2">
+        <span>Funds become available after ledger confirmation. Check this grant before starting another.</span>
+        <Button type="button" variant="outline" onClick={() => onRetry(false)}>Check grant status</Button>
+        {receipt.effectRefs.map((ref) => <AeCopyReference key={ref} label={ADMIN_ACTION_SHEET_COPY.effectReference} value={ref} />)}
+        <AeCopyReference label={ADMIN_ACTION_SHEET_COPY.auditReference} value={receipt.auditEventRef} />
+      </AlertDescription>
+    </Alert>
+  )
   if (receipt.kind === 'completed') return (
     <Alert role="status">
       <AlertTitle>{getStatusPresentation('completed').label}: {ADMIN_SUCCESS_COPY[receipt.code]}</AlertTitle>

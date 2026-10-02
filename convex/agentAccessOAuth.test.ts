@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest, type TestConvex } from 'convex-test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createSourceWriteAdmission,
@@ -51,10 +51,18 @@ const sourceArgs = async (
 }
 
 const previousSourceWriteSecret = process.env.AE_SOURCE_WRITE_SECRET
+const previousDeploymentEnvironment = process.env.AE_DEPLOYMENT_ENVIRONMENT
+
+beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+})
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   if (previousSourceWriteSecret === undefined) delete process.env.AE_SOURCE_WRITE_SECRET
   else process.env.AE_SOURCE_WRITE_SECRET = previousSourceWriteSecret
+  if (previousDeploymentEnvironment === undefined) delete process.env.AE_DEPLOYMENT_ENVIRONMENT
+  else process.env.AE_DEPLOYMENT_ENVIRONMENT = previousDeploymentEnvironment
 })
 
 const grant = {
@@ -261,6 +269,24 @@ const consentMaterialMutations: ReadonlyArray<Readonly<{
 ]
 
 describe('Agent Access OAuth Convex persistence adapter', () => {
+  it('refuses a fresh grant whose requested or approved environment differs from deployment', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    for (const [index, field] of ['requestedAccess', 'approvedAccess'].entries()) {
+      const mismatched = {
+        ...grant,
+        grantRef: `device:wrong-environment-${index}`,
+        [field]: { ...grant[field as 'requestedAccess' | 'approvedAccess'], environment: 'sandbox' as const },
+      }
+      const command = { grant: mismatched, operationKey: `oauth:wrong-env:${index}`, correlationId: `oauth:wrong-env:${index}` }
+      await expect(backend.mutation(api.agentAccessOAuth.insertGrant, {
+        ...command, ...(await sourceArgs(command)),
+      })).rejects.toThrow('agent_access_oauth_environment_mismatch')
+    }
+    await expect(backend.run(async (ctx) => ctx.db.query('agentAccessOAuthGrants').collect()))
+      .resolves.toEqual([])
+  })
+
   it('rejects direct unauthenticated grant writes and hash/ref reads without a source envelope', async () => {
     delete process.env.AE_SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
@@ -983,7 +1009,9 @@ describe('Agent Access consequence proof reservation', () => {
       await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
         ...command,
         ...(await sourceArgs(command, `nonce:reserve:material:${id}:changed`)),
-      })).resolves.toEqual({ kind: 'refused', code: 'command_changed' })
+      })).resolves.toEqual(id === 'environment'
+        ? { kind: 'conflict', code: 'stale_target' }
+        : { kind: 'refused', code: 'command_changed' })
     },
   )
 
@@ -1529,6 +1557,46 @@ describe('Agent Access OAuth grant cleanup', () => {
 })
 
 describe('durable OAuth refresh families', () => {
+  beforeEach(() => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+  })
+
+  it('refuses a fresh refresh claim after a deployment flip while allowing expiry revocation', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const fixture = await insertRefreshFamilyFixture(backend, 'environment-flip')
+    const create = {
+      grantRef: fixture.oauthGrantRef, keyId: fixture.keyId, clientId: fixture.clientId,
+      tokenHash: 'sha256:environment-flip-refresh', accessTokenHash: 'sha256:environment-flip-access',
+      createdAt: fixture.now, expiresAt: fixture.familyExpiresAt,
+      operationKey: 'oauth-refresh:create:environment-flip', correlationId: 'oauth-refresh:create:environment-flip',
+    }
+    const created = await backend.mutation(api.agentAccessOAuth.createRefreshFamily, {
+      ...create, ...(await sourceArgs(create)),
+    })
+    expect(created.kind).toBe('recorded')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const claim = {
+      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'environment-flip-claim',
+      successorTokenHash: 'sha256:environment-flip-successor', now: fixture.now + 1,
+      claimExpiresAt: fixture.now + 30_001,
+      operationKey: 'oauth-refresh:claim:environment-flip', correlationId: 'oauth-refresh:claim:environment-flip',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...claim, ...(await sourceArgs(claim)),
+    })).resolves.toEqual({ kind: 'invalid_grant' })
+    await expect(backend.run(async (ctx) => ctx.db.query('agentAccessOAuthRefreshTokens')
+      .withIndex('by_tokenHash', (query) => query.eq('tokenHash', create.tokenHash)).unique()))
+      .resolves.toMatchObject({ lifecycle: 'active' })
+    const expired = {
+      ...claim, now: fixture.familyExpiresAt + 1, claimExpiresAt: fixture.familyExpiresAt + 30_001,
+      operationKey: 'oauth-refresh:claim:environment-flip-expired', correlationId: 'oauth-refresh:claim:environment-flip-expired',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...expired, ...(await sourceArgs(expired)),
+    })).resolves.toEqual({ kind: 'revoked' })
+  })
+
   it('projects an owner connection receipt without credential material', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
@@ -1761,6 +1829,23 @@ describe('durable OAuth refresh families', () => {
       claimExpiresAt: commit.createdAt + 30_001,
       operationKey: 'oauth-refresh:recovery', correlationId: 'oauth-refresh:recovery',
     }
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...recovery, ...(await sourceArgs(recovery, 'oauth-refresh:recovery:wrong-environment')),
+    })).resolves.toEqual({ kind: 'invalid_grant' })
+    const blockedRecovery = await backend.run(async (ctx) => ({
+      family: await ctx.db.query('agentAccessOAuthRefreshFamilies')
+        .withIndex('by_familyRef', (query) => query.eq('familyRef', created.family.familyRef)).unique(),
+      consumed: await ctx.db.query('agentAccessOAuthRefreshTokens')
+        .withIndex('by_tokenHash', (query) => query.eq('tokenHash', create.tokenHash)).unique(),
+      successor: await ctx.db.query('agentAccessOAuthRefreshTokens')
+        .withIndex('by_tokenHash', (query) => query.eq('tokenHash', recovery.successorTokenHash)).unique(),
+    }))
+    expect(blockedRecovery.family).toMatchObject({ lifecycle: 'active', currentTokenHash: claim.successorTokenHash })
+    expect(blockedRecovery.consumed).toMatchObject({ lifecycle: 'consumed' })
+    expect(blockedRecovery.consumed?.recoveredAt).toBeUndefined()
+    expect(blockedRecovery.successor).toBeNull()
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
       ...recovery, ...(await sourceArgs(recovery)),
     })).resolves.toMatchObject({

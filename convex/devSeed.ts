@@ -1,4 +1,5 @@
-import { internalMutation } from './_generated/server'
+import { env, internalMutation } from './_generated/server'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   seedDevCatalogArgs,
   seedDevCatalogResult,
@@ -21,23 +22,41 @@ import {
 export const seedDevCatalog = internalMutation({
   args: seedDevCatalogArgs,
   returns: seedDevCatalogResult,
-  handler: seedDevCatalogHandler,
+  handler: async (ctx) => {
+    requireDevelopmentDeployment()
+    return await seedDevCatalogHandler(ctx)
+  },
 })
 
 export const seedOfferingSupply = internalMutation({
   args: seedOfferingSupplyArgs,
   returns: seedOfferingSupplyResult,
-  handler: seedOfferingSupplyHandler,
+  handler: async (ctx, args) => {
+    requireDevelopmentDeployment()
+    return await seedOfferingSupplyHandler(ctx, args)
+  },
 })
 
 export const publishSandboxTool = internalMutation({
   args: publishSandboxToolArgs,
   returns: publishSandboxToolResult,
-  handler: publishSandboxToolHandler,
+  handler: async (ctx, args) => {
+    requireDevelopmentDeployment()
+    return await publishSandboxToolHandler(ctx, args)
+  },
 })
 
 export const seedSandboxSpendingPolicy = internalMutation({
   args: seedSandboxSpendingPolicyArgs,
   returns: seedSandboxSpendingPolicyResult,
-  handler: seedSandboxSpendingPolicyHandler,
+  handler: async (ctx) => {
+    requireDevelopmentDeployment()
+    return await seedSandboxSpendingPolicyHandler(ctx)
+  },
 })
+
+function requireDevelopmentDeployment(): void {
+  if (deploymentPaymentEnvironment(env) !== 'sandbox') {
+    throw new Error('dev_seed_deployment_refused')
+  }
+}

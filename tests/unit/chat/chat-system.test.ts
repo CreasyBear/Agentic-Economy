@@ -5,6 +5,7 @@ import {
   clearAnonymousChatHandoff,
   fetchAnonymousChat,
   projectChatFailure,
+  projectGenerativeTurn,
   projectTranscriptTurns,
   readAnonymousChatHandoff,
   rememberAnonymousChatHandoff,
@@ -39,8 +40,8 @@ describe('anonymous chat recovery', () => {
       caught = error
     }
 
-    expect(projectChatFailure(caught)).toEqual({
-      message: 'Chat is unavailable right now. Your message was not added.',
+    expect(projectChatFailure(caught)).toMatchObject({
+      reason: 'unknown',
       reference: 'chat-request-7',
       browseMarket: true,
     })
@@ -59,8 +60,8 @@ describe('anonymous chat recovery', () => {
       caught = error
     }
 
-    expect(projectChatFailure(caught)).toEqual({
-      message: 'You’ve reached the chat limit. Try again later.',
+    expect(projectChatFailure(caught)).toMatchObject({
+      reason: 'rate_limited',
       reference: 'chat-rate-2',
       browseMarket: true,
     })
@@ -172,6 +173,7 @@ describe('transcript projector', () => {
           output: {
             kind: 'match',
             schemaVersion: 'registry-tools:v3',
+            recommendation: { toolRef: searchRef, by: 'Jev (decision.example)' },
             query: 'weather',
             partialResults: true,
             assessed: { source: 'all', scope: 'page', examined: 1, coverage: 'partial' },
@@ -185,7 +187,7 @@ describe('transcript projector', () => {
               provider: 'Sky Co',
               actionClass: 'retrieve',
               objectClass: 'data',
-              readiness: 'unverified',
+              readiness: 'ready',
               entitlement: 'public',
               price: { kind: 'indicative', label: 'USD 0.50' },
               displayPrice: {
@@ -253,14 +255,31 @@ describe('transcript projector', () => {
 
     const [search, inspection, execute] = turns[0]?.tools ?? []
     expect(search?.kind).toBe('choices')
+    expect(search?.kind === 'choices' ? search.recommendation : undefined).toEqual({
+      toolRef: searchRef, by: 'Jev (decision.example)',
+    })
     expect(search?.kind === 'choices' ? search.choices : undefined).toEqual([{
       toolRef: searchRef,
       title: 'Weather finder',
       provider: 'Sky Co',
       price: 'A$0.51',
       priceValidUntil: 2_000_000_000_000,
-      readiness: 'Not yet verified',
+      readiness: 'ready',
+      callable: true,
     }])
+    expect(turns[0] === undefined ? undefined : projectGenerativeTurn(turns[0]).options).toMatchObject({
+      recommendedId: searchRef,
+      recommendedBy: 'Jev (decision.example)',
+    })
+    const transcript = turns[0]
+    if (transcript === undefined) throw new Error('missing_transcript')
+    const unquoteable = projectGenerativeTurn({
+      ...transcript,
+      tools: transcript.tools.map((card) => card.kind === 'choices' && card.toolId === 'registry.tools.search'
+        ? { ...card, choices: card.choices.map((choice) => ({ ...choice, callable: false })) }
+        : card),
+    })
+    expect(unquoteable.options).not.toHaveProperty('recommendedId')
     expect(search?.kind === 'choices' ? search.count : undefined).toBe(1)
     expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
       { label: 'Decision price', value: 'A$1.99' },
@@ -584,7 +603,7 @@ describe('transcript projector', () => {
       'Rain lookup',
     ])
     expect(compare?.kind === 'choices' ? compare.contrasts : undefined).toEqual([
-      { label: 'Price', value: 'Weather finder: AUD estimate temporarily unavailable; Rain lookup: AUD estimate temporarily unavailable' },
+      { label: 'Price', value: 'Weather finder: US$0.5; Rain lookup: US$0.75' },
       { label: 'Effects', value: 'Weather finder: Data release; Rain lookup: Data release, Financial exposure' },
       { label: 'Data use', value: 'Weather finder: Public; Rain lookup: Personal' },
       { label: 'Readiness', value: 'Weather finder: Ready now; Rain lookup: Setup required' },
@@ -643,7 +662,7 @@ describe('transcript projector', () => {
       provider: 'Sky Co',
       price: 'A$0.51',
       priceValidUntil: 2_000_000_000_000,
-      readiness: 'Not yet verified',
+      readiness: 'unverified',
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')
     clearAnonymousChatHandoff('handoff-thread')

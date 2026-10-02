@@ -84,9 +84,10 @@ describe('auth redirect sanitizer', () => {
     }
   })
 
-  it('keeps the onboarding path and query from an absolute return href', () => {
-    expect(signedInReturnPath('http://127.0.0.1:3024/onboarding?redirect=%2Fowner%2Fsettings', '/onboarding'))
-      .toBe('/onboarding?redirect=%2Fowner%2Fsettings')
-    expect(signedInReturnPath('/activity?agent=prn_invalid', '/onboarding')).toBe('/activity?agent=prn_invalid')
+  it('keeps a safe path and query from an absolute return href', () => {
+    expect(signedInReturnPath('http://127.0.0.1:3024/agent-access?tab=keys', '/market'))
+      .toBe('/agent-access?tab=keys')
+    expect(signedInReturnPath('/activity?agent=prn_invalid', '/market')).toBe('/activity?agent=prn_invalid')
+    expect(signedInReturnPath('https://evil.example/phishing', '/market')).toBe('/phishing')
   })
 })

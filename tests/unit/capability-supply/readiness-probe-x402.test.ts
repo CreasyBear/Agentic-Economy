@@ -4,7 +4,8 @@ import { validatePaymentRequired } from '@x402/core/schemas'
 import { encodeX402PaymentRequiredHeader, runCapabilityReadinessProbe, type X402PaymentRequired } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-import { timezonePaymentRequired20260819Fixture as timezoneX402PaymentRequiredPin } from '@/modules/capability-supply/public'
+import timezonePaymentRequired20260819Fixture from '../../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json'
+const timezoneX402PaymentRequiredPin = timezonePaymentRequired20260819Fixture
 
 import { keylessAuthority, target } from './readiness-probe-harness'
 

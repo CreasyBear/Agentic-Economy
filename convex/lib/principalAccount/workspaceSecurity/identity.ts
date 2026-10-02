@@ -50,11 +50,6 @@ export async function requireActiveAccount(
   identity: UserIdentity,
   canonicalPrincipalRef: ReturnType<typeof principalRef>,
 ): Promise<string> {
-  const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-    db,
-    canonicalPrincipalRef,
-    identity,
-    'require',
-  )
+  const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)
   return activeAccountRef
 }

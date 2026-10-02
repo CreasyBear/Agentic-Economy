@@ -150,7 +150,7 @@ describe('AE CLI provider Tool lifecycle', () => {
         kind: 'ready',
         sourceDigest: `sha256:${'1'.repeat(64)}`,
         sourceRevision: 'rev:one',
-        provenance: { sourceKind: 'x402', sourceUrl: 'https://example.com/pay', authority: 'unverified_public' },
+        provenance: { sourceKind: 'x402', sourceUrl: 'https://example.com/pay', authority: 'observed_external' },
         authentication: [],
         candidates: [],
       })
@@ -173,10 +173,10 @@ describe('AE CLI provider Tool lifecycle', () => {
 
     await expect(runSupplyCommand(['preview'], {
       ...baseOptions,
-      input: JSON.stringify({ kind: 'x402', resourceUrl: 'https://example.com/pay', method: 'GET' }),
+      input: JSON.stringify({ kind: 'x402', method: 'GET' }),
     })).rejects.toMatchObject({
       code: 'supply-input-invalid',
-      message: expect.stringContaining('environment'),
+      message: expect.stringContaining('resourceUrl'),
     })
     expect(fetch).not.toHaveBeenCalled()
   })

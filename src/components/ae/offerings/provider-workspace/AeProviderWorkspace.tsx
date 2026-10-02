@@ -3,7 +3,6 @@ import { useLocation } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeOwnerOfferingsList } from '@/components/ae/offerings/AeOwnerOfferings'
 import { toOfferingSummary, type ProviderWorkspaceProjectionRow } from '@/components/ae/offerings/provider-workspace-projection'
-import { AeConnectReturnPoller } from '@/components/ae/supply/AeConnectReturnPoller'
 import { AeSupplierOnboardingWizard } from '@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard'
 import { ProviderWorkspaceEarningsSection } from '@/components/ae/offerings/ProviderWorkspaceEarningsSection'
 import { ProviderWorkspaceIdentitySection } from '@/components/ae/offerings/ProviderWorkspaceIdentitySection'
@@ -83,13 +82,6 @@ function AvailableWorkspaceBody({
 
   return (
     <div className="grid gap-section">
-      {(sheets.compatibilityConnect === 'return' || sheets.compatibilityConnect === 'refresh') && (
-        <AeConnectReturnPoller
-          onPollReadiness={sheets.readConnect}
-          onReadinessAchieved={sheets.onReadinessAchieved}
-          onResumeVerification={sheets.onResumeVerification}
-        />
-      )}
       {inventory.tools.length === 0 && (
         <AeSupplierOnboardingWizard currentStep="first_tool" providerName={inventory.provider.name} />
       )}

@@ -2,21 +2,21 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { handleClerkSecurityWebhookRequest } from '@/lib/server/clerk-security-webhook'
 import type { ClerkSecurityObservation } from '@/modules/security/account-security'
+import { verifiedClerkWebhook } from '../../helpers/clerk-webhook'
 
 const issuer = 'https://clerk.example.test'
 
 describe('Clerk security webhook', () => {
-  it('verifies before applying one redacted, hashed session observation', async () => {
+  it('applies one redacted, hashed session observation', async () => {
     const applied: ClerkSecurityObservation[] = []
     const incoming = request('delivery_1', sensitiveBody())
-    const response = await handleClerkSecurityWebhookRequest(incoming, {
+    const webhook = await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
+      expect(await verifiedRequest.text()).toBe(sensitiveBody())
+      expect(verifiedRequest.headers.get('svix-id')).toBe('delivery_1')
+      return sessionEvent('session.created')
+    })
+    const response = await handleClerkSecurityWebhookRequest(webhook, {
       issuer,
-      verify: async (verifiedRequest) => {
-        expect(verifiedRequest).toBe(incoming)
-        expect(await verifiedRequest.text()).toBe(sensitiveBody())
-        expect(verifiedRequest.headers.get('svix-id')).toBe('delivery_1')
-        return sessionEvent('session.created')
-      },
       apply: async (command) => {
         applied.push(command)
         return { kind: 'accepted', status: 'applied', eventRef: 'audit:clerk:one' }
@@ -50,14 +50,17 @@ describe('Clerk security webhook', () => {
       'session.ended',
       'session.revoked',
     ].entries()) {
-      const response = await handleClerkSecurityWebhookRequest(request(`delivery_lifecycle_${index}`), {
-        issuer,
-        verify: async () => sessionEvent(type as 'session.created' | 'session.ended' | 'session.revoked'),
-        apply: async (command) => {
-          commands.push(command)
-          return { kind: 'accepted', status: 'applied' }
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request(`delivery_lifecycle_${index}`), async () =>
+          sessionEvent(type as 'session.created' | 'session.ended' | 'session.revoked')),
+        {
+          issuer,
+          apply: async (command) => {
+            commands.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
     }
     expect(new Set(commands.map((command) => command.targetRefHash)).size).toBe(1)
@@ -69,9 +72,8 @@ describe('Clerk security webhook', () => {
       status: 'applied' as const,
       eventRef: command.targetRefHash,
     }))
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_2'), {
-      issuer,
-      verify: async () => ({
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_2'), async () => ({
         type: 'user.updated',
         object: 'event',
         data: {
@@ -82,9 +84,12 @@ describe('Clerk security webhook', () => {
           email_addresses: [{ email_address: 'owner@example.test' }],
         },
         event_attributes: { http_request: { client_ip: '192.0.2.1', user_agent: 'secret-browser' } },
-      }),
-      apply,
-    })
+      })),
+      {
+        issuer,
+        apply,
+      },
+    )
 
     expect(response.status).toBe(200)
     const command = apply.mock.calls[0]?.[0]
@@ -98,49 +103,29 @@ describe('Clerk security webhook', () => {
     'ignores verified unsupported event %s without a Convex write',
     async (type) => {
       const apply = vi.fn()
-      const response = await handleClerkSecurityWebhookRequest(request('delivery_3'), {
-        issuer,
-        verify: async () => ({ type, object: 'event', data: {} }),
-        apply,
-      })
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_3'), async () => ({ type, object: 'event', data: {} })),
+        { issuer, apply },
+      )
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ kind: 'accepted', status: 'ignored' })
       expect(apply).not.toHaveBeenCalled()
     },
   )
 
-  it('rejects failed verification without applying or exposing the verifier error', async () => {
-    const apply = vi.fn()
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_4'), {
-      issuer,
-      verify: async () => { throw new Error('whsec_private verifier details') },
-      apply,
-    })
-    expect(response.status).toBe(400)
-    expect(await response.text()).not.toContain('whsec_private')
-    expect(apply).not.toHaveBeenCalled()
-  })
-
-  it('rejects an oversized body before verification', async () => {
-    const verify = vi.fn()
-    const response = await handleClerkSecurityWebhookRequest(
-      request('delivery_5', 'x'.repeat(257 * 1024)),
-      { issuer, verify },
-    )
-    expect(response.status).toBe(413)
-    expect(verify).not.toHaveBeenCalled()
-  })
 
   it('A1: maps session.revoked to revoke_interactive_credentials', async () => {
     const applied: ClerkSecurityObservation[] = []
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_revoked'), {
-      issuer,
-      verify: async () => sessionEvent('session.revoked'),
-      apply: async (command) => {
-        applied.push(command)
-        return { kind: 'accepted', status: 'applied' }
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_revoked'), async () => sessionEvent('session.revoked')),
+      {
+        issuer,
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
       },
-    })
+    )
     expect(response.status).toBe(200)
     expect(applied[0]?.securityAction).toBe('revoke_interactive_credentials')
   })
@@ -149,14 +134,16 @@ describe('Clerk security webhook', () => {
     'A2: maps %s to observe_only',
     async (eventType) => {
       const applied: ClerkSecurityObservation[] = []
-      const response = await handleClerkSecurityWebhookRequest(request(`delivery_${eventType}`), {
-        issuer,
-        verify: async () => sessionEvent(eventType),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request(`delivery_${eventType}`), async () => sessionEvent(eventType)),
+        {
+          issuer,
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
       expect(applied[0]?.securityAction).toBe('observe_only')
     },
@@ -164,9 +151,8 @@ describe('Clerk security webhook', () => {
 
   it('A3: maps password reset user.updated to revoke_interactive_credentials', async () => {
     const applied: ClerkSecurityObservation[] = []
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_password_reset'), {
-      issuer,
-      verify: async () => ({
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_password_reset'), async () => ({
         type: 'user.updated',
         object: 'event',
         data: {
@@ -174,21 +160,23 @@ describe('Clerk security webhook', () => {
           updated_at: 5_000,
           password_last_updated_at: 5_000,
         },
-      }),
-      apply: async (command) => {
-        applied.push(command)
-        return { kind: 'accepted', status: 'applied' }
+      })),
+      {
+        issuer,
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
       },
-    })
+    )
     expect(response.status).toBe(200)
     expect(applied[0]?.securityAction).toBe('revoke_interactive_credentials')
   })
 
   it('A4: maps profile-only user.updated to observe_only', async () => {
     const applied: ClerkSecurityObservation[] = []
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_profile_edit'), {
-      issuer,
-      verify: async () => ({
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_profile_edit'), async () => ({
         type: 'user.updated',
         object: 'event',
         data: {
@@ -196,12 +184,15 @@ describe('Clerk security webhook', () => {
           updated_at: 6_000,
           two_factor_enabled: true,
         },
-      }),
-      apply: async (command) => {
-        applied.push(command)
-        return { kind: 'accepted', status: 'applied' }
+      })),
+      {
+        issuer,
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
       },
-    })
+    )
     expect(response.status).toBe(200)
     expect(applied[0]?.securityAction).toBe('observe_only')
   })
@@ -209,17 +200,19 @@ describe('Clerk security webhook', () => {
   describe('W-06 profile display name projection', () => {
     it('P1: maps first and last name to profileDisplayName with observe_only', async () => {
       const applied: ClerkSecurityObservation[] = []
-      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p1'), {
-        issuer,
-        verify: async () => userUpdatedEvent({
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_w06_p1'), async () => userUpdatedEvent({
           first_name: 'Ada',
           last_name: 'Lovelace',
-        }),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+        })),
+        {
+          issuer,
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
       expect(applied[0]?.securityAction).toBe('observe_only')
       expect(applied[0]?.profileDisplayName).toBe('Ada Lovelace')
@@ -227,35 +220,39 @@ describe('Clerk security webhook', () => {
 
     it('P2: falls back to username when names are absent', async () => {
       const applied: ClerkSecurityObservation[] = []
-      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p2'), {
-        issuer,
-        verify: async () => userUpdatedEvent({
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_w06_p2'), async () => userUpdatedEvent({
           first_name: null,
           last_name: '',
           username: 'ada',
-        }),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+        })),
+        {
+          issuer,
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
       expect(applied[0]?.profileDisplayName).toBe('ada')
     })
 
     it('P3: omits profileDisplayName for avatar-only updates', async () => {
       const applied: ClerkSecurityObservation[] = []
-      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p3'), {
-        issuer,
-        verify: async () => userUpdatedEvent({
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_w06_p3'), async () => userUpdatedEvent({
           has_image: true,
           image_url: 'https://img.clerk.com/secret-avatar.png',
-        }),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+        })),
+        {
+          issuer,
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
       expect(applied[0]?.profileDisplayName).toBeUndefined()
       expect(JSON.stringify(applied[0])).not.toContain('secret-avatar')
@@ -263,18 +260,20 @@ describe('Clerk security webhook', () => {
 
     it('P4: keeps display name and never forwards plaintext email', async () => {
       const applied: ClerkSecurityObservation[] = []
-      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p4'), {
-        issuer,
-        verify: async () => userUpdatedEvent({
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_w06_p4'), async () => userUpdatedEvent({
           first_name: 'Ada',
           last_name: 'Lovelace',
           email_addresses: [{ email_address: 'ada.lovelace@example.test' }],
-        }),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+        })),
+        {
+          issuer,
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
       expect(applied[0]?.profileDisplayName).toBe('Ada Lovelace')
       expect(JSON.stringify(applied[0])).not.toContain('ada.lovelace@example.test')
@@ -285,36 +284,40 @@ describe('Clerk security webhook', () => {
       ['control character', 'Ada\u0007Lovelace'],
     ])('P5: rejects unsafe display name (%s) but accepts delivery', async (_label, firstName) => {
       const applied: ClerkSecurityObservation[] = []
-      const response = await handleClerkSecurityWebhookRequest(request(`delivery_w06_p5_${_label}`), {
-        issuer,
-        verify: async () => userUpdatedEvent({
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request(`delivery_w06_p5_${_label}`), async () => userUpdatedEvent({
           first_name: firstName,
           last_name: 'Lovelace',
-        }),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+        })),
+        {
+          issuer,
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
       expect(applied[0]?.profileDisplayName).toBeUndefined()
     })
 
     it('P6: password reset still projects profileDisplayName alongside revocation', async () => {
       const applied: ClerkSecurityObservation[] = []
-      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p6'), {
-        issuer,
-        verify: async () => userUpdatedEvent({
+      const response = await handleClerkSecurityWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_w06_p6'), async () => userUpdatedEvent({
           updated_at: 5_000,
           password_last_updated_at: 5_000,
           first_name: 'Ada',
           last_name: 'Lovelace',
-        }),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+        })),
+        {
+          issuer,
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
       expect(response.status).toBe(200)
       expect(applied[0]?.securityAction).toBe('revoke_interactive_credentials')
       expect(applied[0]?.profileDisplayName).toBe('Ada Lovelace')
@@ -322,11 +325,13 @@ describe('Clerk security webhook', () => {
   })
 
   it('returns a retryable response when persistence is unavailable', async () => {
-    const response = await handleClerkSecurityWebhookRequest(request('delivery_6'), {
-      issuer,
-      verify: async () => sessionEvent('session.revoked'),
-      apply: async () => { throw new Error('private persistence failure') },
-    })
+    const response = await handleClerkSecurityWebhookRequest(
+      await verifiedClerkWebhook(request('delivery_6'), async () => sessionEvent('session.revoked')),
+      {
+        issuer,
+        apply: async () => { throw new Error('private persistence failure') },
+      },
+    )
     expect(response.status).toBe(503)
     expect(response.headers.get('Retry-After')).toBe('5')
     expect(await response.text()).not.toContain('private persistence failure')

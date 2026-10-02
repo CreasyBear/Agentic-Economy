@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { env, type MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -93,6 +94,7 @@ export async function registerIssuedAgentBindingForServerHandler(
   args: RegisterIssuedBindingArgs,
 ): Promise<RegisterIssuedBindingResult> {
   const { serviceAuth, ...input } = args
+  if (deploymentPaymentEnvironment(env) !== input.environment) return { kind: 'conflict' }
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null
     || identity.subject.trim().length === 0

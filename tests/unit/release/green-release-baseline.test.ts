@@ -6,6 +6,11 @@ import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
 
 import { DEPLOYMENT_MANIFEST } from '../../../src/lib/deployment/manifest'
+import {
+  inspectNativeMoneyReport,
+  REQUIRED_NATIVE_MONEY_FILES,
+  sanitizeNativeMoneyLog,
+} from '../../../tools/release/native-money-evidence'
 
 type ReleaseScriptMap = Record<string, string>
 
@@ -127,6 +132,140 @@ describe('green release baseline', () => {
     expect(fresh?.if).toContain("startsWith(github.ref, 'refs/tags/v')")
     expect(release?.steps?.some((step) => step.run === 'npm run gate')).toBe(true)
     expect(release?.steps?.some((step) => step.run === 'git diff --exit-code -- convex/_generated')).toBe(true)
+  })
+
+  it('requires isolated credential-free native money proof on PRs and every release event', () => {
+    const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
+    const native = workflow.jobs?.['native-money-proof']
+    expect(native).toBeDefined()
+    expect(native?.if).toBeUndefined()
+    expect(native?.environment).toBeUndefined()
+    expect(native?.needs).toBeUndefined()
+    expect(JSON.stringify(native)).not.toMatch(/secrets\.|vars\.|confirm_live_gateway_spend/u)
+    expect(native?.env).toMatchObject({
+      COMPOSE_PROJECT_NAME: 'ae-native-${{ github.run_id }}-${{ github.run_attempt }}',
+      AE_NATIVE_MONEY_PORT: '3069',
+      AE_FORMANCE_INTEGRATION: 'true',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      AE_FORMANCE_GATEWAY_URL: 'http://127.0.0.1:3069',
+    })
+    expect(native?.steps?.find(step => step.uses === 'actions/setup-node@v4')?.with?.['node-version-file']).toBe('.nvmrc')
+    expect(native?.steps?.some(step => step.run === 'npm install --global npm@11.5.1 --ignore-scripts')).toBe(true)
+    const start = native?.steps?.find(step => step.name === 'Boot isolated pinned native money stack')
+    expect(start?.run).toContain('docker compose -f tests/config/native-money/compose.yml up --detach --wait --wait-timeout 90')
+    const readiness = native?.steps?.find(step => step.name === 'Require actual native Ledger version and health')
+    expect(readiness?.run).toContain('${AE_FORMANCE_GATEWAY_URL}/versions')
+    expect(readiness?.run).toContain('.version == "v2.4.14" and .health == true')
+    expect(readiness?.run).toContain('exit 1')
+    const execute = native?.steps?.find(step => step.name === 'Execute all required native money files')
+    expect(REQUIRED_NATIVE_MONEY_FILES).toEqual([
+      'tests/integration/capability-call-money-matrix.test.ts',
+      'tests/integration/capability-call-workpool.test.ts',
+      'tests/integration/money-formance-boundary.test.ts',
+    ])
+    for (const file of REQUIRED_NATIVE_MONEY_FILES) expect(execute?.run).toContain(file)
+    expect(execute?.run).toContain('npm exec --no -- node tools/dev/run-listed-vitest.ts')
+    expect(execute?.run).toContain('--no-file-parallelism')
+    expect(execute?.run).toContain('--test-timeout=30000')
+    expect(execute?.run).toContain('--reporter=json')
+    const validate = native?.steps?.find(step => step.name === 'Require complete executed assertion evidence')
+    expect(validate?.if).toBe('always()')
+    expect(validate?.run).toContain('node tools/release/native-money-evidence.ts report')
+    const cleanup = native?.steps?.find(step => step.name === 'Remove isolated native containers and volumes')
+    expect(cleanup?.if).toBe('always()')
+    expect(cleanup?.run).toBe('docker compose -f tests/config/native-money/compose.yml down --volumes --remove-orphans --timeout 10')
+    const logs = native?.steps?.find(step => step.name === 'Collect sanitized native service logs')
+    expect(logs?.if).toBe('always()')
+    expect(logs?.run).toContain('node tools/release/native-money-evidence.ts logs')
+    const upload = native?.steps?.find(step => step.name === 'Upload sanitized native money evidence')
+    expect(upload?.if).toBe('always()')
+    expect(upload?.with?.path).toBe('output/native-money/')
+    expect(upload?.with?.['if-no-files-found']).toBe('error')
+    expect(upload?.with?.path).not.toContain('RUNNER_TEMP')
+  })
+
+  it('pins the native stack, confines its listener and retains strict Ledger behavior', () => {
+    const compose = parse(readFileSync(resolve(root, 'tests/config/native-money/compose.yml'), 'utf8')) as {
+      services: Record<string, { image: string, ports?: string[], command?: string[], environment?: Record<string, string>, volumes?: string[], container_name?: string }>
+      volumes: Record<string, unknown>
+      name?: string
+    }
+    expect(compose.name).toBeUndefined()
+    expect(compose.services.postgres?.image).toBe('postgres:16.15-alpine3.24@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea')
+    expect(compose.services.postgres?.ports).toBeUndefined()
+    expect(compose.services.postgres?.environment?.POSTGRES_HOST_AUTH_METHOD).toBe('trust')
+    expect(compose.services.ledger?.image).toBe('ghcr.io/formancehq/ledger:v2.4.14@sha256:9a2902d8d04c67c8a5f6270fc297f8ca5c6cf288f463dfad3984e5d376179c43')
+    expect(compose.services.ledger?.command).toEqual([
+      'serve', '--auto-upgrade', '--worker', '--schema-enforcement-mode=strict',
+      '--experimental-features=false', '--experimental-numscript-interpreter=false',
+      '--default-page-size=50', '--max-page-size=1000',
+    ])
+    expect(compose.services.ledger?.ports).toBeUndefined()
+    expect(compose.services.gateway?.image).toBe('ghcr.io/formancehq/gateway:v2.3.1@sha256:239926753312410ee9a602aa0bffe1e5c89cd340540a98a6df58694f3d6e4165')
+    expect(compose.services.gateway?.ports).toEqual(['127.0.0.1:${AE_NATIVE_MONEY_PORT:-3069}:80'])
+    expect(compose.services.gateway?.volumes).toEqual(['./Caddyfile:/etc/caddy/Caddyfile:ro'])
+    for (const service of Object.values(compose.services)) expect(service.container_name).toBeUndefined()
+    expect(compose.volumes).toEqual({ postgres: {} })
+    const caddy = readFileSync(resolve(root, 'tests/config/native-money/Caddyfile'), 'utf8')
+    expect(caddy).toContain('reverse_proxy ledger:3068')
+    expect(caddy).toContain('http://ledger:3068/_info http://ledger:3068/_healthcheck')
+    expect(caddy).not.toContain('respond')
+  })
+
+  function executedNativeReport() {
+    return {
+      success: true, numFailedTests: 0, numPendingTests: 0, numTodoTests: 0,
+      numFailedTestSuites: 0, numPendingTestSuites: 0,
+      testResults: REQUIRED_NATIVE_MONEY_FILES.map(file => ({
+        name: resolve(root, file), status: 'passed',
+        assertionResults: [{ fullName: `${file} actual native assertion`, status: 'passed', failureMessages: ['private SDK payload'] }],
+      })),
+    }
+  }
+
+  it('accepts executed native assertions and projects only sanitized evidence', () => {
+    const evidence = inspectNativeMoneyReport(executedNativeReport())
+    expect(evidence.status).toBe('passed')
+    expect(evidence.files).toHaveLength(3)
+    expect(evidence.files.every(file => file.assertions.length === 1 && file.assertions[0]?.status === 'passed')).toBe(true)
+    expect(JSON.stringify(evidence)).not.toContain('private SDK payload')
+    expect(JSON.stringify(evidence)).not.toContain(root)
+  })
+
+  it.each(['skipped', 'pending', 'todo', 'failed'])('rejects a %s assertion even when overall counts claim success', status => {
+    const report = executedNativeReport()
+    const first = report.testResults[0]?.assertionResults[0]
+    if (first === undefined) throw new Error('native report fixture missing assertion')
+    first.status = status
+    expect(inspectNativeMoneyReport(report).status).toBe('failed')
+  })
+
+  it('refuses missing, empty, duplicate or aggregate-only native file evidence', () => {
+    const missing = executedNativeReport()
+    missing.testResults.pop()
+    expect(inspectNativeMoneyReport(missing).status).toBe('failed')
+    const empty = executedNativeReport()
+    const first = empty.testResults[0]
+    if (first === undefined) throw new Error('native report fixture missing file')
+    first.assertionResults = []
+    expect(inspectNativeMoneyReport(empty).status).toBe('failed')
+    const duplicate = executedNativeReport()
+    const duplicated = duplicate.testResults[0]
+    if (duplicated === undefined) throw new Error('native report fixture missing file')
+    duplicate.testResults.push(duplicated)
+    expect(inspectNativeMoneyReport(duplicate).status).toBe('failed')
+    expect(inspectNativeMoneyReport({ success: true, numPassedTests: 999 }).status).toBe('failed')
+    expect(inspectNativeMoneyReport(undefined).status).toBe('failed')
+    const failedSuite = executedNativeReport()
+    failedSuite.numFailedTestSuites = 1
+    expect(inspectNativeMoneyReport(failedSuite).status).toBe('failed')
+  })
+
+  it('omits sensitive-shaped service diagnostics from uploaded logs', () => {
+    const output = sanitizeNativeMoneyLog('native ledger started\nAuthorization: Bearer private-value\npostgresql://private-value\nnormal request complete')
+    expect(output).toContain('native ledger started')
+    expect(output).toContain('normal request complete')
+    expect(output).not.toContain('private-value')
   })
 
 

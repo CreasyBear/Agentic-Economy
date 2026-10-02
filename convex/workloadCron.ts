@@ -7,12 +7,13 @@ import { consequenceJsonValue, consequenceOperationValue, consequencePayloadValu
 import { workloadCronNameValue, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import {
   cleanupExpiredAgentAccessOAuthGrantsHandler, cleanupExpiredSourceWriteNoncesHandler,
-  observeX402TreasuryHandler, reconcileBusinessSupplyProjectionsHandler,
+  expireStalePendingApprovalsHandler, observeX402TreasuryHandler,
+  reconcileBusinessSupplyProjectionsHandler, reconcilePromotionalCreditHandler, reconcilePaidCallReportsHandler,
   reconcileDueFacilitatorInvocationsHandler, refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler, refreshMarketFlowHandler,
-  refreshReferenceRateHandler,
-  snapshotMarketplaceMetricsDayHandler,
+  refreshReferenceRateHandler, refreshPaymentReadinessHandler,
+  snapshotMarketplaceMetricsDayHandler, reconcileTreasuryBalancesHandler,
 } from './lib/platform/workloadCron/scheduled'
 
 export const admit = internalQuery({
@@ -56,6 +57,12 @@ export const reconcileDueFacilitatorInvocations = internalAction({
   returns: v.null(),
   handler: reconcileDueFacilitatorInvocationsHandler,
 })
+export const expireStalePendingApprovals = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: expireStalePendingApprovalsHandler,
+})
+
 
 export const refreshFacilitatorDiscovery = internalAction({
   args: {},
@@ -122,3 +129,15 @@ export const snapshotMarketplaceMetricsDay = internalAction({
   returns: v.null(),
   handler: snapshotMarketplaceMetricsDayHandler,
 })
+
+export const reconcilePromotionalCredit = internalAction({
+  args: {}, returns: v.null(), handler: reconcilePromotionalCreditHandler,
+})
+
+export const reconcilePaidCallReports = internalAction({
+  args: {}, returns: v.null(), handler: reconcilePaidCallReportsHandler,
+})
+
+export const reconcileTreasuryBalances = internalAction({ args: {}, returns: v.null(), handler: reconcileTreasuryBalancesHandler })
+
+export const refreshPaymentReadiness = internalAction({ args: {}, returns: v.null(), handler: refreshPaymentReadinessHandler })

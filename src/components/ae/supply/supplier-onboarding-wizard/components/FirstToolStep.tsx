@@ -14,7 +14,7 @@ export function FirstToolStep() {
         <WrenchIcon className="size-4 text-primary" />
         <AlertTitle className="text-xs font-semibold">Step 2: Add Your First Tool</AlertTitle>
         <AlertDescription className="text-xs text-muted-foreground">
-          Import an OpenAPI specification, MCP server definition, or x402 payment contract to publish your first callable tool.
+          Paste a public HTTPS x402 endpoint to list your first Tool.
         </AlertDescription>
       </Alert>
 

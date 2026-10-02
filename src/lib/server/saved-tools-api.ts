@@ -132,7 +132,7 @@ async function liveExternalEntry(resource: string, referenceRate: () => Promise<
   const rate = await referenceRate()
   if (rate === undefined) return { kind: 'found', entry }
   const estimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }, Date.now())
-  return { kind: 'found', entry: estimate === undefined || estimate === 'AUD estimate temporarily unavailable' ? entry : { ...entry, audEstimate: estimate } }
+  return { kind: 'found', entry: estimate?.startsWith('A$') === true ? { ...entry, audEstimate: estimate } : entry }
 }
 export async function resolveSavedList(stored: StoredList): Promise<SavedToolsListResult> {
   if (stored.kind === 'error') return stored

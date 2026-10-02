@@ -1,9 +1,7 @@
-import { X402_SELLER_CANARY_ADMISSION_REQUIRED_REF } from '@/modules/capability-supply/convex'
 import {
   publicationLifecycle,
   validRegistrationContext,
   readinessOutcomeValue,
-  x402SellerCanaryAdmissionIsSatisfied,
 } from '@/modules/capability-supply/public'
 import { v, type Infer } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
@@ -238,37 +236,14 @@ export async function applyObservedCapabilityProbeSideEffects(
     ))
     .unique()
   if (admissionCase !== null) {
-    const evidenceRefs = publication?.registrationEvidenceRefs ?? []
-    const canaryFenceUnsatisfied =
-      evidenceRefs.filter((ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF).length === 1
-      && !x402SellerCanaryAdmissionIsSatisfied(evidenceRefs)
-    if (canaryFenceUnsatisfied) {
-      if (args.healthState === 'healthy' && args.outcome === 'healthy') {
-        await ctx.db.patch(admissionCase._id, {
-          state: admissionCase.state === 'submitted' ? 'under_review' : admissionCase.state,
-          reviewStartedAt: admissionCase.reviewStartedAt ?? args.observedAt,
-          updatedAt: Date.now(),
-        })
-      } else {
-        await ctx.db.patch(admissionCase._id, {
-          state: 'completed',
-          terminalDecision: 'action_required',
-          blockerRefs: [...result.lifecycle.reasons],
-          reviewStartedAt: admissionCase.reviewStartedAt ?? args.observedAt,
-          completedAt: args.observedAt,
-          updatedAt: Date.now(),
-        })
-      }
-    } else {
-      const published = result.lifecycle.state === 'active'
-      await ctx.db.patch(admissionCase._id, {
-        state: 'completed',
-        terminalDecision: published ? 'published' : 'action_required',
-        blockerRefs: published ? [] : [...result.lifecycle.reasons],
-        reviewStartedAt: admissionCase.reviewStartedAt ?? args.observedAt,
-        completedAt: args.observedAt,
-        updatedAt: Date.now(),
-      })
-    }
+    const published = result.lifecycle.state === 'active'
+    await ctx.db.patch(admissionCase._id, {
+      state: 'completed',
+      terminalDecision: published ? 'published' : 'action_required',
+      blockerRefs: published ? [] : [...result.lifecycle.reasons],
+      reviewStartedAt: admissionCase.reviewStartedAt ?? args.observedAt,
+      completedAt: args.observedAt,
+      updatedAt: Date.now(),
+    })
   }
 }

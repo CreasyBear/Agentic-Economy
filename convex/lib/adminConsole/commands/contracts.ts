@@ -4,7 +4,7 @@ import type {
   AdminCommandAction,
   AdminCommandArgs,
 } from '@/lib/operator/admin-console/contracts'
-import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
+import { clerkMfaConsequenceProofValue } from '../../authority/consequence/proof'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 export const ADMIN_OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 
@@ -41,7 +41,7 @@ export function adminCommandArgsValue<
     evidenceRefs: v.array(v.string()),
     expectedStateDigest: v.optional(v.string()),
     approval: approvalIntentValue,
-    proof: v.optional(clerkConsequenceProofValue),
+    proof: v.optional(clerkMfaConsequenceProofValue),
   })
 }
 
@@ -59,6 +59,13 @@ export function adminCommandReceiptValue<
       kind: v.literal('completed'),
       action,
       code: successCodes,
+      effectRefs: v.array(v.string()),
+      auditEventRef: v.string(),
+      correlationId: v.string(),
+    }),
+    v.object({
+      kind: v.literal('pending'),
+      action,
       effectRefs: v.array(v.string()),
       auditEventRef: v.string(),
       correlationId: v.string(),

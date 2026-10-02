@@ -1,5 +1,5 @@
 import { getFunctionName } from 'convex/server'
-import { beforeEach, expect, vi } from 'vitest'
+import { afterEach, beforeEach, expect, vi } from 'vitest'
 type ActionExecutionModule = Record<string, unknown>
 type SignRouteTransportCall = typeof import('@/modules/capability-supply/server').signRouteTransportCall
 const mocks = vi.hoisted(() => {
@@ -146,7 +146,7 @@ vi.mock('undici', () => ({
 
 import { run } from '../../../convex/capabilityCallWorker'
 import { callAttemptIdentityDigest } from '../../../convex/capabilityCallIdentity'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import {
   BASE_MAINNET_NETWORK,
@@ -155,12 +155,10 @@ import {
   BASE_SEPOLIA_USDC_ADDRESS,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
-  connectionAuthoritySnapshotFromProviderConnection,
   createPublicToolRef,
   materializeRuntimePublishedTool,
   publishedToolIdentityDigest,
 } from '@/modules/capability-supply/public'
-import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runtime'
 import {
@@ -178,18 +176,9 @@ import type {
   X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import {
-  createSellerOnboardingCanaryCommitment,
-  sellerOnboardingCanaryExecutionEnvelope,
-} from '@/modules/capability-execution'
 
 export const invocationRef = 'operation-invocation:test-worker'
 export const grantRef = 'grant:test-worker'
-const canaryGrantRef = 'agent-access-grant:platform:seller-onboarding-canary:sandbox:v1'
-const canaryPrincipalId = 'prn_00000000000000000000000000000402'
-const canaryOwnerId = 'acc_00000000000000000000000000000402'
-const canaryCredentialId = 'ae-cdp-seller-onboarding-canary-sandbox-v1'
-const canaryApplicationRef = 'agentic-economy:seller-onboarding-canary'
 const providerCredentialRef = 'env:AE_TEST_PROVIDER_CREDENTIAL'
 export const paymentCredentialRef = 'env:AE_TEST_PAYMENT_CREDENTIAL'
 export const paymentSecretRef = `sec_${'4'.repeat(32)}`
@@ -215,17 +204,15 @@ type WorkerOptions = Readonly<{
   paymentAttemptRead?: 'missing' | 'throw'
   releaseBeforeSubmissionRefused?: boolean
   preparePaymentErrorState?: 'possibly_submitted'
-  invalidResultRemedyResult?: 'completed' | 'refused' | 'throw'
+  httpErrorRemedyResult?: 'completed' | 'refused' | 'throw'
   consumeLeaseResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'duplicate' }> | Readonly<{ kind: 'refused'; code: string }>
   currentTool?: (operation: PublishedTool) => PublishedTool
   releaseCurrentOperation?: (operation: PublishedTool) => PublishedTool
-  authorizationCurrentOperation?: (operation: PublishedTool) => PublishedTool
   alreadyLeased?: boolean
   claimDispatchRefused?: boolean
   activeCharge?: Readonly<Record<string, unknown>>
   stalePrincipal?: boolean
   paymentSigningClaim?: 'expired' | 'unexpired'
-  sellerCanary?: boolean
   sellerPayTo?: string
 }>
 type PaymentState = {
@@ -396,54 +383,10 @@ function sealCurrentOperation(operation: PublishedTool): PublishedTool {
   }
 }
 
-function withCredentiallessX402Connection(
-  operation: PublishedTool,
-  observedAt: number,
-): PublishedTool {
-  const endpoint = new URL(operation.binding.endpointUrl).toString()
-  const host = new URL(endpoint).host.toLowerCase()
-  const connectionRef = 'connection:x402:test-worker'
-  const providerRef = `provider:x402:${host}`
-  const created = createX402ProviderConnection({
-    commandId: 'command:x402:test-worker',
-    connectionRef,
-    owningAccountRef: 'account:test-worker',
-    installedByPrincipalRef: 'principal:test-worker',
-    authorityGrantRef: 'grant:test-worker',
-    authorityGrantGeneration: 1,
-    businessId: operation.identity.businessId,
-    providerRef,
-    providerAccountRef: `x402:${endpoint}`,
-    resourceUrl: endpoint,
-    method: 'POST',
-    payee: '0x1111111111111111111111111111111111111111',
-    evidenceRefs: ['evidence:x402:test-worker'],
-  }, observedAt)
-  if (created.kind !== 'applied') throw new Error('credentialless_x402_worker_fixture_invalid')
-  const operationRef = createPublicToolRef({
-    operationId: operation.operationId,
-    publicationRef: operation.identity.publicationRef,
-    publicationRevision: operation.identity.publicationRevision,
-    contractRef: operation.contract.ref,
-  })
-  const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
-    created.connection,
-    operationRef,
-  )
-  return {
-    ...operation,
-    binding: {
-      ...operation.binding,
-      authority: { kind: 'provider_connection', connectionRef, providerRef },
-    },
-    connectionAuthority,
-  }
-}
-
 export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Record<string, unknown>; state: WorkerState } {
   mocks.cdpX402CustodyConfigurationFromEnvironment.mockReturnValue({
     ...mocks.custodyConfiguration,
-    dailyMaxAtomic: options.sellerCanary === true ? 50_000n : 100_000n,
+    dailyMaxAtomic: 100_000n,
   })
   const now = Date.now()
   const environment = options.environment ?? 'sandbox'
@@ -467,22 +410,14 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             payment: {
               ...baseOperation.identity.payment,
               ...x402Profile,
-              ...(options.sellerPayTo === undefined
-                ? options.sellerCanary === true
-                  ? { payTo: '0x0000000000000000000000000000000000000002' }
-                  : {}
-                : { payTo: options.sellerPayTo }),
+              ...(options.sellerPayTo === undefined ? {} : { payTo: options.sellerPayTo }),
             },
           },
         }
       : baseOperation,
     environment,
   )
-  const operation = sealCurrentOperation(
-    options.sellerCanary === true && kind === 'x402'
-      ? withCredentiallessX402Connection(environmentOperation, now)
-      : environmentOperation,
-  )
+  const operation = sealCurrentOperation(environmentOperation)
   const operationRef = createPublicToolRef({
     operationId: operation.operationId,
     publicationRef: operation.identity.publicationRef,
@@ -500,14 +435,12 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const inputDigest = canonicalDigest(input as StableHashValue)
   const authorityExpiresAt = new Date(now + 60_000).toISOString()
   const acceptedBasis = { kind: 'approval_required' as const, authorityRef: `authority:${invocationRef}` }
-  const limits = { amount: pricingConfigDecisionAmount(operation.pricingConfig) ?? (options.sellerCanary === true
-    ? { currency: 'USD', units: '1', exponent: 6 }
-    : { currency: 'USD', units: '1', exponent: 2 }) }
-  const workerPrincipalId = options.sellerCanary === true ? canaryPrincipalId : 'principal:test-worker'
-  const workerOwnerId = options.sellerCanary === true ? canaryOwnerId : 'owner:test-worker'
-  const workerCredentialId = options.sellerCanary === true ? canaryCredentialId : 'credential:test-worker'
-  const workerApplicationRef = options.sellerCanary === true ? canaryApplicationRef : 'application:test-worker'
-  const workerGrantRef = options.sellerCanary === true ? canaryGrantRef : grantRef
+  const limits = { amount: pricingConfigDecisionAmount(operation.pricingConfig) ?? { currency: 'USD', units: '1', exponent: 2 } }
+  const workerPrincipalId = 'principal:test-worker'
+  const workerOwnerId = 'owner:test-worker'
+  const workerCredentialId = 'credential:test-worker'
+  const workerApplicationRef = 'application:test-worker'
+  const workerGrantRef = grantRef
   const authorityMaterial = {
     callRef: invocationRef,
     toolRef: operationRef,
@@ -545,12 +478,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const releaseCurrentOperation = sealCurrentOperation(
     options.releaseCurrentOperation?.(currentTool) ?? currentTool,
   )
-  const authorizationCurrentOperation = sealCurrentOperation(
-    options.authorizationCurrentOperation?.(releaseCurrentOperation) ?? releaseCurrentOperation,
-  )
   const inputJson = JSON.stringify(input)
   const dispatch: Record<string, unknown> = {
-    ...(kind === 'x402' && options.sellerCanary !== true
+    ...(kind === 'x402'
       ? { quoteRef: `operation-commitment:v1:${'c'.repeat(64)}` }
       : {}),
     callRef: invocationRef,
@@ -573,80 +503,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     workId: 'work:test-worker',
     dispatchState: 'enqueued',
     authority,
-  }
-  const sellerCanary = options.sellerCanary === true
-    ? sellerOnboardingCanaryExecutionEnvelope(createSellerOnboardingCanaryCommitment({
-        ownerId: 'seller-owner:test-worker',
-        businessId: operation.identity.businessId,
-        offeringRef: 'offering:test-worker',
-        offeringRevision: 1,
-        offeringSourceHash: digest('1'),
-        accessPathRef: 'access-path:test-worker',
-        accessPathSourceHash: digest('2'),
-        publicationRef: operation.identity.publicationRef,
-        publicationRevision: operation.identity.publicationRevision,
-        draftOperationRef: operationRef,
-        toolMaterialDigest: operation.materialDigest,
-        contractDigest: operation.identity.contractDigest,
-        bindingDigest: operation.identity.bindingDigest,
-        priceDigest: operation.priceDigest,
-        sellerPayTo: operation.identity.payment.kind === 'x402'
-          ? operation.identity.payment.payTo
-          : '0x0000000000000000000000000000000000000000',
-        sellerClaimDigest: digest('3'),
-        readinessDigest: digest('4'),
-        readinessObservedAt: operation.readiness.observedAt,
-        readinessValidUntil: operation.readiness.validUntil,
-        expectedOutputSchemaDigest: canonicalDigest(operation.contract.outputSchema as StableHashValue),
-        expectedOutputEvidenceDigest: canonicalDigest({
-          kind: 'seller_onboarding_canary_expected_output:v1',
-          toolMaterialDigest: operation.materialDigest,
-          contractDigest: operation.identity.contractDigest,
-          inputDigest,
-          outputSchema: operation.contract.outputSchema,
-          evidence: operation.contract.evidence,
-        } as StableHashValue),
-        inputDigest,
-        idempotencyKey: String(dispatch.idempotencyKey),
-        fundingBudgetRef: 'budget:test-worker',
-        fundingPrincipalId: String(dispatch.principalId),
-        fundingOwnerId: String(dispatch.ownerId),
-        fundingCredentialId: String(dispatch.credentialId),
-        fundingApplicationRef: String(dispatch.applicationRef),
-        fundingGrantRef: workerGrantRef,
-        fundingGrantGeneration: 1,
-        fundingPolicyDigest: digest('a'),
-        requestedSpend: { currency: 'USD', units: '1', exponent: 6 },
-        maximumSpend: { currency: 'USD', units: '10000', exponent: 6 },
-        expiresAt: now + 60_000,
-        now,
-      }))
-    : undefined
-  if (sellerCanary !== undefined) {
-    dispatch.sellerOnboardingCanary = sellerCanary
-    dispatch.callRef = sellerCanary.callRef
-    const canaryAuthorityMaterial = {
-      ...authorityMaterial,
-      callRef: sellerCanary.callRef,
-    }
-    dispatch.authority = {
-      ...canaryAuthorityMaterial,
-      decisionDigest: canonicalDigest({
-        format: 'operation-invoke-authority:v1',
-        invocationRef: canaryAuthorityMaterial.callRef,
-        operationRef: canaryAuthorityMaterial.toolRef,
-        inputDigest: canaryAuthorityMaterial.inputDigest,
-        grantRef: canaryAuthorityMaterial.grantRef,
-        grantGeneration: canaryAuthorityMaterial.grantGeneration,
-        grantDigest: canaryAuthorityMaterial.grantDigest,
-        reference: canaryAuthorityMaterial.reference,
-        targetDigest: canaryAuthorityMaterial.targetDigest,
-        consequence: canaryAuthorityMaterial.consequence,
-        limits: canaryAuthorityMaterial.limits,
-        expiresAt: canaryAuthorityMaterial.expiresAt,
-        acceptedBasis: canonicalAuthorityBasisMaterial(canaryAuthorityMaterial.acceptedBasis),
-      } as StableHashValue),
-    }
   }
   const attemptRef = `operation-attempt:${String(dispatch.callRef)}:1`
   const managedCustody = kind === 'x402'
@@ -686,7 +542,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     expiresAt: now + 90_000,
   }
   const connectionAuthority = operation.connectionAuthority
-  const providerAuthority = connectionAuthority === undefined || sellerCanary !== undefined ? undefined : {
+  const providerAuthority = connectionAuthority === undefined ? undefined : {
     providerRef: connectionAuthority.providerRef,
     providerAccountRef: 'account:mock-provider',
     adapterId: connectionAuthority.adapterId,
@@ -935,37 +791,19 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     }
     {
       if (operation.identity.payment.kind !== 'x402') throw new Error('x402 operation payment missing')
-      const validateCredentiallessBoundary = async (): Promise<void> => {
-        if (sellerCanary === undefined) return
-        const validate = runtime.validateProviderConnectionAuthority
-        const current = operation.connectionAuthority
-        if (validate === undefined || current === undefined) {
-          throw new Error('credentialless_x402_authority_validator_missing')
-        }
-        const validation = await validate({
-          connectionRef: current.connectionRef,
-          providerRef: current.providerRef,
-          adapterId: current.adapterId,
-          authorityGeneration: current.authorityGeneration,
-          authorityDigest: current.authorityDigest,
-        })
-        if (validation.kind !== 'valid') throw new Error('credentialless_x402_authority_invalid')
-      }
-      await validateCredentiallessBoundary()
       const challenge = {
         x402Version: 2 as const,
         resource: { url: operation.binding.endpointUrl },
         accepts: [{
           scheme: 'exact',
           network: x402Profile.network,
-          amount: sellerCanary === undefined ? '10000' : '1',
+          amount: '10000',
           asset: x402Profile.asset,
           payTo: operation.identity.payment.payTo,
           maxTimeoutSeconds: 60,
           extra: {},
         }],
       }
-      await validateCredentiallessBoundary()
       const paymentCredential = runtime.readX402PaymentCredentialRef === undefined
         ? undefined
         : await runtime.readX402PaymentCredentialRef()
@@ -979,7 +817,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         credential: paymentCredential,
         paymentIdentifier,
         selectedRequirement: challenge.accepts[0]!,
-        paymentAmount: { currency: 'USD', units: '1', exponent: sellerCanary === undefined ? 2 : 6 },
+        paymentAmount: { currency: 'USD', units: '1', exponent: 2 },
         attemptRef,
         effectGeneration: 1,
       }
@@ -989,7 +827,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           custodyRef: 'custody:test-worker',
           custodyBudgetRef: 'custody:test-worker',
           custodyGeneration: 7,
-          custodyDailyMaximumUnits: sellerCanary === undefined ? '100000' : '50000',
+          custodyDailyMaximumUnits: '100000',
           authorizationDigest: digest('p'),
         })
       }
@@ -1030,7 +868,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         }
       }
       expect(signed).toBe('signed:payment')
-      await validateCredentiallessBoundary()
       const event: X402PaymentAttemptEvent = {
         paymentIdentifier: request.paymentIdentifier,
         attemptRef,
@@ -1073,6 +910,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     }
     return options.observation ?? {
       transport: 'x402',
+      responseStatus: 200,
       disposition: 'succeeded',
       releaseStarted: true,
       requestDigest: digest('c'),
@@ -1084,14 +922,14 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           success: true,
           transaction: '0xworker-settled',
           network: x402Profile.network,
-          amount: sellerCanary === undefined ? '10000' : '1',
+          amount: '10000',
         },
         digest: digest('s'),
       },
     }
   })
   const chargeAmount = pricingConfigDecisionAmount(operation.pricingConfig)
-    ?? { currency: 'USD', units: '0', exponent: sellerCanary === undefined ? 2 : 6 }
+    ?? { currency: 'USD', units: '0', exponent: 2 }
   const chargeState: 'free_tier' | 'paid' = chargeAmount.units === '0' ? 'free_tier' : 'paid'
   let activeGrantReads = 0
   let currentToolReads = 0
@@ -1103,24 +941,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     journalTransactionRef: `journal:call-reservation:${String(dispatch.callRef)}`,
     treasuryReservationRef: `treasury-reservation:${String(dispatch.callRef)}`,
   }
-  const sellerCanarySnapshot = (candidate: PublishedTool) => ({
-    toolJson: JSON.stringify(candidate),
-    toolRef: operationRef,
-    offeringRef: sellerCanary?.offeringRef ?? 'offering:test-worker',
-    offeringRevision: sellerCanary?.offeringRevision ?? 1,
-    offeringSourceHash: sellerCanary?.offeringSourceHash ?? digest('1'),
-    accessPathRef: sellerCanary?.accessPathRef ?? 'access-path:test-worker',
-    accessPathSourceHash: sellerCanary?.accessPathSourceHash ?? digest('2'),
-    publicationRef: operation.identity.publicationRef,
-    publicationRevision: operation.identity.publicationRevision,
-    sellerPayTo: operation.identity.payment.kind === 'x402'
-      ? operation.identity.payment.payTo
-      : '0x0000000000000000000000000000000000000000',
-    sellerClaimDigest: sellerCanary?.sellerClaimDigest ?? digest('3'),
-    readinessDigest: sellerCanary?.readinessDigest ?? digest('4'),
-    readinessObservedAt: candidate.readiness.observedAt,
-    readinessValidUntil: candidate.readiness.validUntil,
-  })
 
   const ctx = {
     runQuery: vi.fn(async (reference: unknown, args?: Record<string, unknown>) => {
@@ -1129,7 +949,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       switch (queryPath) {
         case 'capabilityCalls:openDispatch': return dispatch
         case 'agentAccessPrincipals:getAgentPrincipal': return principal
-        case 'capabilitySupplyCanaryFunding:readExactSellerOnboardingCanaryPlatformGrant':
         case 'agentAccessPolicy:readActiveGrant':
           activeGrantReads += 1
           if (activeGrantReads === 2) state.events.push('final-grant-revalidation')
@@ -1143,29 +962,17 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
               currentToolReads === 1 ? currentTool : releaseCurrentOperation,
             ),
           }
-        case 'capabilitySupplyCurrentTool:readExactSellerCanaryOperationSnapshot':
-          currentToolReads += 1
-          if (currentToolReads === 2) state.events.push('current-publication-price-revalidation')
-          return sellerCanarySnapshot(
-            currentToolReads === 1
-              ? currentTool
-              : currentToolReads < 3
-                ? releaseCurrentOperation
-                : authorizationCurrentOperation,
-          )
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
         case 'moneyManagedCall:readBooking': return {
           kind: 'available', financialState: managedCallState,
           settlementRefs: ['formance:settle-buyer', 'formance:settle-provider'],
         }
-        case 'moneyManagedCallLifecycle:readReservation': return sellerCanary === undefined ? {
+        case 'moneyManagedCallLifecycle:readReservation': return {
           ...managedCallReservation,
           state: managedCallState,
-        } : null
+        }
         case 'capabilityCalls:readCurrentProviderConnectionAuthority':
-          return sellerCanary === undefined
-            ? { kind: 'credentialed' }
-            : { kind: 'credentialless_x402' }
+          return { kind: 'credentialed' }
         case 'capabilityCalls:readProviderLeaseAuthority':
           if (state.payment.prepare !== undefined) {
             if (options.signingBoundaryProviderAuthority === 'throw') {
@@ -1234,7 +1041,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           dispatch.dispatchState = 'failed'
           dispatch.result = result
           state.records.push({ state: 'refused', dispatchState: 'failed', result })
-          return { kind: 'refused', releaseRequired: sellerCanary === undefined && managedCallState === 'reserved' }
+          return { kind: 'refused', releaseRequired: managedCallState === 'reserved' }
         }
         case 'capabilityCalls:record':
           state.records.push(args)
@@ -1343,7 +1150,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           return { kind: 'claimed' }
         }
         case 'moneyX402PaymentAttempts:prepareX402PaymentAuthorization':
-        case 'moneyX402PaymentAttempts:prepareSellerOnboardingCanaryPaymentAuthorization':
           state.events.push('custody-prepare')
           state.payment.prepare = args
           if (typeof args.requestFingerprint === 'string')
@@ -1445,9 +1251,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           managedCallState = 'released'
           state.reconciliations.push(args)
           return { kind: 'settled' }
-        case 'moneyManagedCallRemedyActions:resolveInvalidResult':
-          if (options.invalidResultRemedyResult === 'throw') throw new Error('remedy interrupted')
-          return options.invalidResultRemedyResult === 'refused'
+        case 'moneyManagedCallRemedyActions:resolveHttpError':
+          if (options.httpErrorRemedyResult === 'throw') throw new Error('remedy interrupted')
+          return options.httpErrorRemedyResult === 'refused'
             ? { kind: 'refused', code: 'credit_restoration_pending' }
             : { kind: 'completed' }
         case 'moneyManagedCallLifecycle:settle':
@@ -1619,6 +1425,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
 }
 
 beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
   mocks.claimCanonicalExecution.mockReset()
   mocks.persistCanonicalReleaseFence.mockReset()
   mocks.persistCanonicalTerminalOutcome.mockReset()
@@ -1646,5 +1453,7 @@ beforeEach(() => {
   vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
   vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', '')
 })
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 export { mocks }

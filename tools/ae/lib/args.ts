@@ -28,6 +28,7 @@ export type CliOptions = {
   state?: string
   filters?: string | Record<string, unknown>
   input?: string
+  prefer?: string
   environment?: string
   provider?: boolean
 }
@@ -155,6 +156,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       state: { type: 'string' },
       filters: { type: 'string' },
       input: { type: 'string' },
+      prefer: { type: 'string' },
       environment: { type: 'string' },
       provider: { type: 'boolean' },
     },
@@ -198,6 +200,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values.state === undefined ? {} : { state: parsed.values.state }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
     ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
+    ...(parsed.values.prefer === undefined ? {} : { prefer: parsed.values.prefer }),
     ...(parsed.values.environment === undefined ? {} : { environment: parsed.values.environment }),
     provider: parsed.values.provider ?? false,
   }

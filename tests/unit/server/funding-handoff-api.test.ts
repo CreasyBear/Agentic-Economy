@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleFundingHandoffAction, publicFundingHandoffResponse, readPublicFundingHandoff } from '@/lib/server/funding-handoff-api'
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
@@ -6,12 +6,16 @@ import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
+
 const authenticate = async () => ({
   isAuthenticated: true as const,
   tokenType: 'api_key' as const,
   id: 'credential:one',
   subject: 'user_agent_one',
   scopes: ['market_tools:call'],
+  claims: { aeEnvironment: 'sandbox' },
 })
 
 const resolvePrincipal: AgentAccessPrincipalResolver = async (projection) => ({

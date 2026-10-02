@@ -4,7 +4,9 @@ import { v, type Infer } from 'convex/values'
 import { accountRef, generateMembershipRef, generateOwnershipRef } from '../../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../../src/modules/principal-account/principal/public'
 import { InteractiveAuthorityError, requireAccessFactForAccount, resolveActiveAccountRefForPrincipal } from '../../../interactiveAuthority'
-import { assertStepUpForSensitiveAction } from '../workspaceSecurity/stepUp'
+import { assertStepUpForSensitiveAction, consumeWorkspaceActionProof, requireWorkspaceActionReplay, requireWorkspaceActionSource, workspaceActionDigest } from '../workspaceSecurity/stepUp'
+import { clerkMfaConsequenceProofValue } from '../../authority/consequence/proof'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { requireCurrentOwnership, type AccountActionContext } from './accountContext'
 import { recordWorkspaceAuditEvent } from './audit'
 import { mfaReverificationRefusalValue } from './contracts'
@@ -28,38 +30,42 @@ const transferWorkspaceReceiptValue = v.union(
 )
 
 export const transferWorkspaceOwnershipArgs = v.object({
+    expectedAccountRef: v.string(),
     successorPrincipalRef: v.string(),
     expectedAccountRevision: v.number(),
     expectedOwnershipRevision: v.number(),
     correlationRef: v.string(),
     idempotencyRef: v.string(),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    proof: v.optional(clerkMfaConsequenceProofValue),
+    ...sourceWriteArgs,
   })
 
 export const transferWorkspaceOwnershipResult = transferWorkspaceReceiptValue
 
 export const transferWorkspaceOwnershipHandler = async (ctx: MutationCtx, args: Infer<typeof transferWorkspaceOwnershipArgs>) => {
+    await requireWorkspaceActionSource(args)
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
     const principal = await requireAccountInteractiveHumanPrincipal(ctx.db, identity)
     const canonicalPrincipalRef = principalRef(principal.principalRef)
-    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-      ctx.db,
-      canonicalPrincipalRef,
-      identity,
-      'require',
-    )
-    const canonicalAccountRef = accountRef(activeAccountRef)
-
     const account = await ctx.db
       .query('accounts')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', canonicalAccountRef))
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', args.expectedAccountRef))
       .unique()
     if (account === null) throw new InteractiveAuthorityError('account_missing')
-
+    const canonicalAccountRef = accountRef(account.accountRef)
     const currentOwnership = await requireCurrentOwnership(ctx.db, account)
+    const actionDigest = workspaceActionDigest('transfer', args, canonicalPrincipalRef, canonicalAccountRef)
 
     if (account.lastAction?.idempotencyRef === args.idempotencyRef) {
+      if (account.lastAction.actorPrincipalRef !== canonicalPrincipalRef) {
+        throw new InteractiveAuthorityError('ownership_mismatch')
+      }
       if (currentOwnership.ownerPrincipalRef === args.successorPrincipalRef) {
+        await requireWorkspaceActionReplay(ctx.db, { action: 'ownership_transferred', idempotencyRef: args.idempotencyRef,
+          commandDigest: actionDigest, actorPrincipalRef: canonicalPrincipalRef, activeAccountRef: canonicalAccountRef })
         return {
           kind: 'replayed' as const,
           accountRef: canonicalAccountRef,
@@ -69,6 +75,9 @@ export const transferWorkspaceOwnershipHandler = async (ctx: MutationCtx, args: 
       }
       throw new InteractiveAuthorityError('idempotency_conflict')
     }
+
+    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
+    if (args.expectedAccountRef !== activeAccountRef) throw new InteractiveAuthorityError('authority_mismatch')
 
     const access = await requireAccessFactForAccount(ctx.db, canonicalPrincipalRef, canonicalAccountRef)
     if (access.kind !== 'ownership') {
@@ -104,7 +113,7 @@ export const transferWorkspaceOwnershipHandler = async (ctx: MutationCtx, args: 
     }
 
     const stepUp = await assertStepUpForSensitiveAction(ctx.db, identity, {
-      accountRef: canonicalAccountRef,
+      accountRef: canonicalAccountRef, ...(args.proof === undefined ? {} : { proof: args.proof }),
     })
     if (stepUp.kind === 'refused') return stepUp
 
@@ -114,6 +123,11 @@ export const transferWorkspaceOwnershipHandler = async (ctx: MutationCtx, args: 
     if (args.expectedOwnershipRevision !== currentOwnership.revision) {
       throw new InteractiveAuthorityError('ownership_revision_conflict')
     }
+
+    const consumed = await consumeWorkspaceActionProof(ctx, identity, { ...(args.proof === undefined ? {} : { proof: args.proof }),
+      actorPrincipalRef: canonicalPrincipalRef, activeAccountRef: canonicalAccountRef,
+      commandDigest: actionDigest, correlationRef: args.correlationRef, idempotencyRef: args.idempotencyRef }, args)
+    if (consumed.kind === 'refused') return consumed
 
     const now = Date.now()
     const actionContext: AccountActionContext = {
@@ -178,7 +192,7 @@ export const transferWorkspaceOwnershipHandler = async (ctx: MutationCtx, args: 
       beforeState: currentOwnership.ownershipRef,
       outcome: newOwnershipRef,
       createdAt: now,
-      redactedPayload: { successorPrincipalRef: args.successorPrincipalRef },
+      redactedPayload: { successorPrincipalRef: args.successorPrincipalRef, actionDigest },
     })
 
     return {

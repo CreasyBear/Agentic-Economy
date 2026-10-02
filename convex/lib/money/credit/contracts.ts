@@ -34,17 +34,15 @@ export const creditAccountResultValue = v.union(
     principalId: v.string(),
     accountId: v.string(),
     balance: exactAmount,
+    purchasedBalance: exactAmount,
+    promotionalBalance: exactAmount,
+    nextPromotionalExpiryAt: v.union(v.number(), v.null()),
     pendingTopup: v.optional(v.object({
       commandRef: v.string(),
       amount: exactAmount,
       state: v.union(v.literal('pending'), v.literal('outcome_unknown')),
       externalRef: v.optional(v.string()),
     })),
-    autoRecharge: v.object({
-      enabled: v.boolean(),
-      threshold: exactAmount,
-      rechargeAmount: exactAmount,
-    }),
     evidence: v.literal('source'),
   }),
   creditRefusalValue,
@@ -100,4 +98,3 @@ export type FormancePeriodSpendRead = Readonly<
   | { kind: 'empty' }
   | { kind: 'setup_required' | 'unavailable' }
 >
-

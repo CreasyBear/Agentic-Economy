@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const invalidPaidOutputObservation = {
   transport: 'x402',
+  responseStatus: 200,
   disposition: 'succeeded',
   releaseStarted: true,
   requestDigest: digest('i'),
@@ -52,6 +53,7 @@ describe('capability operation invocation worker charge/x402', () => {
   ])('preserves contract-valid $label without inference or duplicate effects', async ({ data }) => {
     inference.mockClear()
     const output = { data }
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       outputSchema: advisoryOutputSchema,
@@ -87,181 +89,6 @@ describe('capability operation invocation worker charge/x402', () => {
       settlementStatus: 'settled', quarantinedResponseDigest: digest('response'),
       quarantinedOutputJson: JSON.stringify(output),
     })
-  })
-
-  it('executes a verified seller canary with platform-funded payment facts', async () => {
-    const worker = createWorker('x402', {
-      sellerCanary: true,
-      alreadyLeased: true,
-      currentTool: (operation) => ({
-        ...operation,
-        readiness: {
-          ...operation.readiness,
-          qualificationDigest: digest('q'),
-        },
-      }),
-    })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'completed', result: {
-        kind: 'completed',
-        receipt: {
-          commercialModel: 'seller_canary_x402',
-          state: 'settled',
-          paymentIdentifier: expect.any(String),
-          externalSettlementRef: '0xworker-settled',
-          settlementTransactionHash: '0xworker-settled',
-        },
-      },
-    })
-    expect(worker.state.money).toBeUndefined()
-    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.includes('moneyLedger'))).toEqual([])
-    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.startsWith('moneyManagedCallLifecycle:'))).toEqual([])
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
-    expect(worker.state.mutationCalls.find(({ path }) => path === 'moneyX402PaymentAttempts:recordX402PaymentObservation')?.args)
-      .toMatchObject({
-        dispatchRef: worker.state.dispatch.callRef, settlementStatus: 'settled',
-        transportObservationDigest: expect.any(String), transportRequestDigest: expect.any(String),
-        paymentObservationDigest: expect.any(String), paymentResponseDigest: expect.any(String),
-      })
-    expect(worker.state.payment.prepare).toMatchObject({ custodyDailyMaximumUnits: '50000' })
-  })
-
-  it('refuses a sealed canary when exact operation material drifts before claim', async () => {
-    const worker = createWorker('x402', {
-      sellerCanary: true,
-      currentTool: (operation) => ({
-        ...operation,
-        identity: {
-          ...operation.identity,
-          contractDigest: digest('c'),
-        },
-      }),
-    })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'refused',
-      result: { kind: 'refused', code: 'operation_not_current' },
-    })
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'capabilityCalls:claimDispatch')).toHaveLength(0)
-    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
-    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
-    expect(worker.state.transportCalls).toBe(0)
-  })
-
-  it('stops a canary when the exact platform grant drifts before release', async () => {
-    const worker = createWorker('x402', { sellerCanary: true, alreadyLeased: true, finalGrant: null })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'refused', result: { kind: 'refused', code: 'grant_generation_stale' },
-    })
-    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
-    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
-    expect(worker.state.queryCalls.filter((path) => path === 'capabilitySupplyCanaryFunding:readExactSellerOnboardingCanaryPlatformGrant')).toHaveLength(2)
-  })
-
-  it('keeps customer accounting empty during platform validation', async () => {
-    const worker = createWorker('x402', { sellerCanary: true, alreadyLeased: true })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    expect(worker.state.records.at(-1)).toMatchObject({ state: 'completed', result: { kind: 'completed' } })
-    expect(worker.state.mutationCalls.map(({ path }) => path)
-      .filter((path) => path.includes('moneyLedger'))).toEqual([])
-    expect(mocks.invokePreparedRouteTransport).toHaveBeenCalledTimes(1)
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-  })
-
-  it('stops a sealed canary when the staged operation drifts at the authorization boundary', async () => {
-    const worker = createWorker('x402', {
-      sellerCanary: true,
-      alreadyLeased: true,
-      authorizationCurrentOperation: (operation) => ({
-        ...operation,
-        readiness: {
-          ...operation.readiness,
-          validUntil: operation.readiness.validUntil - 1,
-        },
-      }),
-    })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
-    expect(mocks.guardedFetch).not.toHaveBeenCalled()
-    expect(worker.state.payment.mark).toBeUndefined()
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'reconciliation_required', result: { kind: 'reconciliation_required' },
-    })
-  })
-
-  it('refuses a canary whose seller payee aliases the managed payer before signing or transport', async () => {
-    const worker = createWorker('x402', {
-      sellerCanary: true,
-      sellerPayTo: '0x0000000000000000000000000000000000000001',
-    })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
-    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
-    expect(worker.state.transportCalls).toBe(0)
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'refused',
-      result: { kind: 'refused', code: 'provider_refused' },
-    })
-  })
-
-  it('retains an uncertain platform payment for reconciliation', async () => {
-    const worker = createWorker('x402', {
-      sellerCanary: true,
-      alreadyLeased: true,
-      observation: {
-        transport: 'x402',
-        disposition: 'unknown',
-        releaseStarted: true,
-        requestDigest: digest('u'),
-        responseDigest: digest('u-response'),
-        outputJson: JSON.stringify({ quarantined: true }),
-        paymentSubmissionStatus: 'possibly_submitted',
-        settlementEvidence: { kind: 'unknown', reason: 'network_timeout', digest: digest('u-settlement') },
-      },
-    })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'reconciliation_required', result: { kind: 'reconciliation_required' },
-    })
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
-    expect(worker.state.payment.mark).toMatchObject({ dispatchRef: worker.state.dispatch.callRef })
-    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.startsWith('moneyManagedCallLifecycle:'))).toEqual([])
-    expect(worker.state.mutationCalls.find(({ path }) => path === 'moneyX402PaymentAttempts:recordX402PaymentObservation')?.args)
-      .toMatchObject({
-        settlementStatus: 'unknown',
-        transportRequestDigest: digest('u'),
-        paymentResponseDigest: digest('u-settlement'),
-        quarantinedResponseDigest: digest('u-response'),
-        quarantinedOutputJson: JSON.stringify({ quarantined: true }),
-      })
-  })
-
-  it('holds validation when payment evidence cannot be saved, without signing again on replay', async () => {
-    const worker = createWorker('x402', { sellerCanary: true, failPaymentObservation: true })
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'reconciliation_required', result: { kind: 'reconciliation_required' },
-    })
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'none' })
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
-    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.startsWith('moneyManagedCallLifecycle:'))).toEqual([])
   })
 
   it('brokers sandbox x402 with buyer and managed Base Sepolia custody reservations', async () => {
@@ -305,6 +132,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.qualifiedUse).toEqual([])
   })
   it('brokers production x402 with a buyer reservation and exact external payment', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
 
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
@@ -354,6 +182,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({ state: 'completed' })
   })
   it('continues after atomically reclaiming an expired bare signing claim', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       paymentSigningClaim: 'expired',
@@ -368,6 +197,7 @@ describe('capability operation invocation worker charge/x402', () => {
   it('leaves an unexpired signing claim pending without minting a second intent', async () => {
     vi.useFakeTimers()
     try {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
       const worker = createWorker('x402', {
         environment: 'production',
         paymentSigningClaim: 'unexpired',
@@ -386,6 +216,7 @@ describe('capability operation invocation worker charge/x402', () => {
   })
   it('refuses managed x402 without custody configuration before either persistence write', async () => {
     mocks.cdpX402CustodyConfigurationFromEnvironment.mockImplementationOnce(() => undefined as never)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
 
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
@@ -395,6 +226,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.payment.prepare).toBeUndefined()
   })
   it('releases the reservation when the Provider requirement changes before payment', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
     mocks.invokePreparedRouteTransport.mockResolvedValueOnce({
       transport: 'x402', disposition: 'refused', releaseStarted: false,
@@ -411,10 +243,11 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSigningIntent')
     expect(worker.state.payment.prepare).toBeUndefined()
     expect(worker.state.unknownCharges).toHaveLength(0)
-    expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused', result: { code: 'payment_provider_requirement_stale' } })
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused', result: { code: 'provider_refused' } })
   })
 
   it('releases the managed reservation when signing fails before submission', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       failPaymentSignature: true,
@@ -430,10 +263,11 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
-      result: { kind: 'refused', code: 'payment_signature_unavailable' },
+      result: { kind: 'refused', code: 'provider_refused' },
     })
   })
   it('releases a definite no-authorization refusal only after proving no payment attempt exists', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       failPaymentSignature: true,
@@ -452,7 +286,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
-      result: { kind: 'refused', code: 'payment_signature_unavailable' },
+      result: { kind: 'refused', code: 'provider_refused' },
     })
   })
   it.each([
@@ -462,6 +296,7 @@ describe('capability operation invocation worker charge/x402', () => {
       releaseBeforeSubmissionRefused: true,
     }],
   ])('retains the reservation when %s', async (_label, options) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       failPaymentSignature: true,
@@ -481,6 +316,7 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
   it('requires proof reconciliation when the grant is revoked after the submission fence', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       signingBoundaryGrant: null,
@@ -513,6 +349,7 @@ describe('capability operation invocation worker charge/x402', () => {
     ['invalid', 'connection_not_found'],
     ['throw', 'authority_read_failed'],
   ] as const)('records and releases a %s provider authority failure before signing', async (mode, detail) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       signingBoundaryProviderAuthority: mode,
@@ -532,6 +369,7 @@ describe('capability operation invocation worker charge/x402', () => {
   })
 
   it('records a managed authorization that returns no header after the signing claim', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
     mocks.createCdpEvmX402PaymentSignature.mockImplementationOnce(async () => undefined as never)
 
@@ -548,6 +386,7 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
   it('retains the managed reservation after a post-submit timeout', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       observation: {
@@ -569,23 +408,61 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(1)
     expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
   })
-  it('routes verified paid invalid delivery to the buyer-credit remedy without capturing AUD', async () => {
-    const worker = createWorker('x402', { environment: 'production', observation: invalidPaidOutputObservation })
+
+  it.each(['contract-invalid', 'malformed'] as const)('charges a settled 2xx with %s output once while refusing delivery', async (body) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const { outputJson: _output, responseDigest: _digest, ...withoutBody } = invalidPaidOutputObservation
+    const observation: RouteTransportObservation = body === 'contract-invalid' ? invalidPaidOutputObservation
+      : { ...withoutBody, disposition: 'unknown', failureCode: 'response_json_invalid' }
+    const worker = createWorker('x402', { environment: 'production', observation })
+    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths.filter(path => path === 'moneyManagedCallLifecycle:settle')).toHaveLength(1)
+    expect(paths).not.toContain('moneyManagedCallRemedyActions:resolveHttpError')
+    expect(paths).not.toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused',
+      usage: { chargeState: 'paid', transactionRef: 'formance:settle-buyer' },
+      result: { kind: 'refused', code: 'provider_output_invalid',
+        receipt: { state: 'settled', refundState: 'not_applicable', lossState: 'provider_output_invalid' } },
+    })
+    expect(worker.state.transportCalls).toBe(1)
+  })
+
+  it.each([undefined, 199, 200.5, 600])('holds verified settlement when the paid HTTP status is not chargeable: %s', async (responseStatus) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const { responseStatus: _status, ...withoutStatus } = invalidPaidOutputObservation
+    const worker = createWorker('x402', { environment: 'production', observation: {
+      ...withoutStatus, ...(responseStatus === undefined ? {} : { responseStatus }),
+    } })
+    await handler(worker.ctx, { callRef: invocationRef })
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).not.toContain('moneyManagedCallLifecycle:settle')
+    expect(paths).not.toContain('moneyManagedCallRemedyActions:resolveHttpError')
+    expect(paths).not.toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
+  })
+
+  it.each([400, 500])('routes verified paid HTTP %s to the buyer-credit remedy without capturing AUD', async (responseStatus) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const worker = createWorker('x402', { environment: 'production', observation: {
+      ...invalidPaidOutputObservation, responseStatus, disposition: 'refused', failureCode: `provider_http_${responseStatus}`,
+    } })
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
     expect(paths).not.toContain('moneyManagedCallLifecycle:settle')
-    expect(paths).toContain('moneyManagedCallRemedyActions:resolveInvalidResult')
+    expect(paths).toContain('moneyManagedCallRemedyActions:resolveHttpError')
     expect(paths).not.toContain('qualifiedUse:recordQualifiedUse')
     expect(paths.indexOf('moneyManagedCallLifecycle:markOutcomeUnknown'))
-      .toBeLessThan(paths.indexOf('moneyManagedCallRemedyActions:resolveInvalidResult'))
+      .toBeLessThan(paths.indexOf('moneyManagedCallRemedyActions:resolveHttpError'))
     expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
     expect(worker.state.transportCalls).toBe(1)
   })
 
-  it.each(['refused', 'throw'] as const)('keeps invalid delivery uncharged when its remedy is %s', async (invalidResultRemedyResult) => {
-    const worker = createWorker('x402', { environment: 'production', observation: invalidPaidOutputObservation, invalidResultRemedyResult })
+  it.each(['refused', 'throw'] as const)('keeps HTTP-error recovery held when its remedy is %s', async (httpErrorRemedyResult) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const worker = createWorker('x402', { environment: 'production', observation: { ...invalidPaidOutputObservation, responseStatus: 500, disposition: 'refused' }, httpErrorRemedyResult })
     try { await handler(worker.ctx, { callRef: invocationRef }) } catch (error) {
-      expect(invalidResultRemedyResult).toBe('throw')
+      expect(httpErrorRemedyResult).toBe('throw')
       expect(error).toBeInstanceOf(Error)
     }
     const paths = worker.state.mutationCalls.map(({ path }) => path)
@@ -594,6 +471,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.transportCalls).toBe(1)
   })
   it('retains the managed reservation after any possible submission even when the Provider reports not settled', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       observation: {
@@ -623,6 +501,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(1)
   })
   it('replays a managed Call without a second settlement or transport', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', { environment: 'production' })
     mocks.claimCanonicalExecution.mockReset()
     mocks.claimCanonicalExecution
@@ -642,18 +521,8 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
     expect(worker.state.transportCalls).toBe(1)
   })
-  it('replays a seller canary without a second signature or buyer state', async () => {
-    const worker = createWorker('x402', { sellerCanary: true })
-
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'none' })
-
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
-    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.startsWith('moneyManagedCallLifecycle:'))).toEqual([])
-    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.includes('moneyLedger'))).toEqual([])
-  })
   it('replays an invalid-output terminal result without a second managed settlement', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const worker = createWorker('x402', {
       environment: 'production',
       observation: invalidPaidOutputObservation,
@@ -672,13 +541,13 @@ describe('capability operation invocation worker charge/x402', () => {
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'none' })
     const settlementCalls = worker.state.mutationCalls.filter(({ path }) => path === 'moneyManagedCallLifecycle:settle')
-    expect(settlementCalls).toHaveLength(0)
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyManagedCallRemedyActions:resolveInvalidResult')).toHaveLength(1)
+    expect(settlementCalls).toHaveLength(1)
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyManagedCallRemedyActions:resolveHttpError')).toHaveLength(0)
     expect(worker.state.records[0]).toMatchObject({
       result: {
         receipt: {
           commercialModel: 'account_aud',
-          state: 'reconciliation_required',
+          state: 'settled',
         },
       },
     })

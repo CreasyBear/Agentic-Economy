@@ -79,12 +79,7 @@ export async function hasUnresolvedObligations(ctx: MutationCtx, providerRef: st
   return false
 }
 
-export async function hasUnresolvedPayouts(ctx: MutationCtx, businessId: string): Promise<boolean> {
-  for (const state of ['review', 'held_kyc', 'held_threshold', 'transfer_pending', 'failed', 'outcome_unknown'] as const) {
-    if ((await ctx.db.query('moneyPayouts')
-      .withIndex('by_businessId_and_currency_and_state', (index) => index.eq('businessId', businessId).eq('currency', 'AUD').eq('state', state))
-      .take(1)).length > 0) return true
-  }
+export async function hasUnresolvedPayouts(_ctx: MutationCtx, _businessId: string): Promise<boolean> {
   return false
 }
 

@@ -22,7 +22,9 @@ describe('deployment manifest import seam', () => {
   })
 
   it('does not turn optional provider absence into a fabricated health claim', () => {
-    const result = validateDeploymentManifest({ NODE_ENV: 'development' }, { environment: 'development', nodeMajor: 22 })
+    const result = validateDeploymentManifest({
+      NODE_ENV: 'development', AE_DEPLOYMENT_ENVIRONMENT: 'development', AE_FORMANCE_ENVIRONMENT: 'sandbox',
+    }, { environment: 'development', nodeMajor: 22 })
 
     expect(result.findings).toEqual([])
     expect(result.configuration.conditional.some((group) => group.scope === 'observability:build')).toBe(true)
@@ -30,6 +32,7 @@ describe('deployment manifest import seam', () => {
       'deployment-config',
       'convex-source',
       'source-authority',
+      'production-payment-readiness',
     ])
   })
 })

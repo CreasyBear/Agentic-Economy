@@ -25,7 +25,6 @@ describe('money schema ownership', () => {
       'moneyDocumentSnapshotPages', 'moneyFundingCommands', 'moneyTreasuryObservations',
       'moneyLegalCustomerBindings', 'moneyCustomerTaxFacts', 'moneyProviderObligations', 'moneyX402PaymentAttempts',
       'moneyUsageEvents', 'moneyStripeEvents',
-      'moneyPayoutAccounts', 'moneyPayouts', 'moneyPayoutAllocations', 'moneyConnectAccountCommands',
     ]))
     for (const retired of RETIRED_FINANCIAL_AUTHORITY) expect(byName.has(retired)).toBe(false)
     expect(byName.get('moneyFundingCommands')?.indexes).toEqual(expect.arrayContaining([

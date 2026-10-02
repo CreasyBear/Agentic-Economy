@@ -1,6 +1,6 @@
 import type { ActionCtx } from '../../../_generated/server'
-import { internal } from '../../../_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { publicCallRefusalCode, type CallResult } from '@/modules/capability-execution/call-contracts'
 import { pricingConfigDecisionAmount, pricingConfigDigest } from '@/modules/money/public'
 import type { Infer } from 'convex/values'
 import { usageValue } from '@/modules/capability-execution/convex'
@@ -145,26 +145,6 @@ export async function projectOuterResult(
       )
       return
     }
-    await ctx.runMutation(internal.qualifiedUse.recordQualifiedUse, {
-      callRef: dispatch.callRef,
-      attemptRef,
-      effectGeneration,
-      businessId: operation.identity.businessId,
-      toolRef: dispatch.toolRef,
-      publicationRef: operation.identity.publicationRef,
-      publicationRevision: operation.identity.publicationRevision,
-      contractDigest: operation.identity.contractDigest,
-      bindingDigest: operation.identity.bindingDigest,
-      principalClass: 'agent_key',
-      requestDigest: observation.requestDigest,
-      responseDigest: evidenceHash,
-      evidenceRefs: [`operation:${dispatch.toolRef}`, `attempt:${attemptRef}`],
-      principalId: dispatch.principalId,
-      environment: dispatch.environment,
-      qualifiedAt: Date.parse(recordedAt),
-      usageRef: usage.usageRef,
-      ...(usage.transactionRef === undefined ? {} : { transactionRef: usage.transactionRef }),
-    })
     await finalizeCallDispatch(
       ctx,
       dispatch,
@@ -199,9 +179,9 @@ export async function projectOuterResult(
       result: {
         kind: 'refused',
         toolRef: dispatch.toolRef,
-        code: observation.failureCode ?? 'provider_refused',
+        code: publicCallRefusalCode(observation.failureCode),
         retryable: false,
-      },
+      } satisfies CallResult,
       attemptRef,
       dispatchState: 'failed',
     },

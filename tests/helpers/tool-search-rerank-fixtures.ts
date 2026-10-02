@@ -21,6 +21,7 @@ export function mockSearchTool(
 ): PublicToolDescriptor {
   return {
     toolRef: toolRef as PublicToolRef,
+    runtimeEnvironment: 'production',
     toolId: toolRef,
     callVia: '/api/v1/tools/call',
     paymentLane: 'brokered',

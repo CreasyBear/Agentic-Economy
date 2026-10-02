@@ -18,6 +18,7 @@ import {
   type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
 import { TOOL_PROCURE_PATH, toolProcureInputSchema, toolProcureResultSchema } from '@/modules/capability-execution/procure'
+import { TOOL_SELECTION_PREFERENCES, type ToolSelectionPreference } from '@/modules/common/tool-selection-score'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT, agentAccountSelfResultSchema } from '@/modules/agent-access/account.actions'
 import type { CliOptions } from '../lib/args'
@@ -483,6 +484,9 @@ export async function runCallCommand(
 /** Select without effects, or purchase only the caller's complete exact-input request. */
 export async function runProcureCommand(args: readonly string[], options: CliOptions, stdin: Readable = process.stdin): Promise<void> {
   if (args.length !== 0 || options.input === undefined) throw usageFailure('procure', 'procure-usage')
+  if (options.prefer !== undefined && !TOOL_SELECTION_PREFERENCES.includes(options.prefer as ToolSelectionPreference)) {
+    throw new CliFailure('Preference must be balanced, cheapest or reliable.', { kind: 'INVALID_ARGUMENT', code: 'procure-prefer' })
+  }
   const raw = options.input.trim() === '-' ? await readBoundedStdin(stdin) : options.input
   let input: unknown
   try {
@@ -494,11 +498,17 @@ export async function runProcureCommand(args: readonly string[], options: CliOpt
   if (!parsed.success) throw new CliFailure('Procurement input must contain a need or an exact ToolRef, input, AUD ceiling and purchase key.', {
     kind: 'INVALID_ARGUMENT', code: 'procure-input',
   })
+  if (options.prefer !== undefined && parsed.data.kind !== 'need') {
+    throw new CliFailure('--prefer can only be used when selecting by need.', { kind: 'INVALID_ARGUMENT', code: 'procure-prefer' })
+  }
+  const request = parsed.data.kind === 'need' && options.prefer !== undefined
+    ? { ...parsed.data, prefer: options.prefer as ToolSelectionPreference }
+    : parsed.data
   const apiKey = requireAgentAccessKey('procure', options)
   const outcome = await callJson(options.baseUrl, TOOL_PROCURE_PATH, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(parsed.data),
+    body: JSON.stringify(request),
   })
   const body = requireOk(outcome, TOOL_PROCURE_PATH)
   if (!isRecord(body)) throw new CliFailure('The gateway returned an invalid procurement result.', {
@@ -511,7 +521,11 @@ export async function runProcureCommand(args: readonly string[], options: CliOpt
   })
   if (options.json) { printJson(body); return }
   if (validated.data.status === 'needs_input') {
-    heading(`Selected ${validated.data.toolName}`)
+    heading(`Selected ${validated.data.toolName}${validated.data.reasons.length === 0 ? '' : ` · ${validated.data.reasons.join(' · ')}`}`)
+    line('Alternates:')
+    for (const alternate of validated.data.alternates) {
+      line(`- ${alternate.title} (${alternate.reasons.join(' · ')})`)
+    }
     table([['ToolRef', validated.data.toolRef], ['required input', validated.data.requiredFields.join(', ') || 'none']])
     line(`Input JSON Schema: ${JSON.stringify(validated.data.inputJsonSchema)}`)
     line(`Next: ${JSON.stringify(validated.data.next)}. Supply exact input, maxSpendAud and a fresh idempotencyKey with ae procure --input '<json>'.`)

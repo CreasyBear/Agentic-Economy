@@ -39,7 +39,7 @@ permissions:
 
 concurrency:
   group: kernel-release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -66,6 +66,90 @@ jobs:
         run: npm ci
       - name: Run fast local acceptance check
         run: npm run check
+
+  # This credential-free job runs for every workflow event, including PRs.
+  # Native services, file execution and every assertion must all be proven.
+  native-money-proof:
+    name: Mandatory native money contract proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: ae-native-${{ github.run_id }}-${{ github.run_attempt }}
+      AE_NATIVE_MONEY_PORT: '3069'
+      AE_FORMANCE_INTEGRATION: 'true'
+      AE_FORMANCE_ENVIRONMENT: sandbox
+      AE_FORMANCE_GATEWAY_URL: http://127.0.0.1:3069
+      AE_DEPLOYMENT_ENVIRONMENT: development
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1 --ignore-scripts
+      - name: Frozen dependency install
+        run: npm ci
+      - name: Boot isolated pinned native money stack
+        run: |
+          mkdir -p output/native-money
+          jq -n --arg repositorySha "${GITHUB_SHA}" --arg workflowRun "${GITHUB_RUN_ID}" \
+            '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: "native-money-contract", sanitized: true}' \
+            > output/native-money/source-metadata.json
+          docker compose -f tests/config/native-money/compose.yml up --detach --wait --wait-timeout 90
+      - name: Require actual native Ledger version and health
+        run: |
+          deadline=$((SECONDS + 120))
+          ready=''
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            if curl --fail --silent --show-error --max-time 5 \
+              "${AE_FORMANCE_GATEWAY_URL}/versions" > "${RUNNER_TEMP}/native-money-versions.json" \
+              && jq -e '.versions | any(.name == "ledger" and .version == "v2.4.14" and .health == true)' \
+                "${RUNNER_TEMP}/native-money-versions.json" > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "${ready}" ]; then
+            echo '::error::native Ledger version/health evidence unavailable'
+            exit 1
+          fi
+          jq '{region, env, versions: [.versions[] | {name, version, health}]}' \
+            "${RUNNER_TEMP}/native-money-versions.json" > output/native-money/versions.json
+      - name: Execute all required native money files
+        run: |
+          npm exec --no -- node tools/dev/run-listed-vitest.ts \
+            tests/integration/capability-call-money-matrix.test.ts \
+            tests/integration/capability-call-workpool.test.ts \
+            tests/integration/money-formance-boundary.test.ts \
+            -- --no-file-parallelism --test-timeout=30000 --reporter=default --reporter=json \
+            --outputFile.json="${RUNNER_TEMP}/native-money-vitest.json"
+      - name: Require complete executed assertion evidence
+        if: always()
+        run: |
+          mkdir -p output/native-money
+          node tools/release/native-money-evidence.ts report \
+            "${RUNNER_TEMP}/native-money-vitest.json" output/native-money/native-vitest.json
+      - name: Collect sanitized native service logs
+        if: always()
+        run: |
+          mkdir -p output/native-money
+          docker compose -f tests/config/native-money/compose.yml logs --no-color \
+            > "${RUNNER_TEMP}/native-money-services.log" 2>&1
+          node tools/release/native-money-evidence.ts logs \
+            "${RUNNER_TEMP}/native-money-services.log" output/native-money/services.log
+      - name: Remove isolated native containers and volumes
+        if: always()
+        run: docker compose -f tests/config/native-money/compose.yml down --volumes --remove-orphans --timeout 10
+      - name: Upload sanitized native money evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-native-money-contract
+          path: output/native-money/
+          if-no-files-found: error
+          retention-days: 14
 
   source-proof:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
@@ -110,6 +194,7 @@ jobs:
       # only credential this job receives.
       - name: Run the full local release gate
         env:
+          AE_DEPLOYMENT_ENVIRONMENT: development
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
@@ -167,6 +252,7 @@ jobs:
       - name: Start local stack (anonymous Convex, authenticated Clerk)
         env:
           CONVEX_AGENT_MODE: anonymous
+          AE_DEPLOYMENT_ENVIRONMENT: development
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
@@ -308,11 +394,14 @@ jobs:
 
   authenticated-platform-proof:
     if: github.event_name == 'workflow_dispatch'
-    name: Required exact-revision authenticated multi-agent lifecycle proof
+    name: Required exact-revision authenticated platform proof
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: staging
+    concurrency:
+      group: authenticated-platform-staging
+      cancel-in-progress: false
     env:
       AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
@@ -333,11 +422,12 @@ jobs:
       - name: Install the authenticated Chromium browser
         run: npm exec -- playwright install --with-deps chromium
 
-      - name: Prove the authenticated two-agent lifecycle
+      - name: Prove authenticated Agent, security and commerce journeys
         env:
           AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:authenticated
 
   live-gateway-proof:
@@ -349,6 +439,7 @@ jobs:
     environment: production
     env:
       NODE_ENV: production
+      AE_DEPLOYMENT_ENVIRONMENT: production
       VERCEL_ENV: production
       AE_CANONICAL_BASE_URL: https://agentic-economy-phi.vercel.app
       AE_CANONICAL_HOST_ALLOWLIST: agentic-economy-phi.vercel.app
@@ -376,6 +467,8 @@ jobs:
       AE_X402_CUSTODY_ENABLED: "true"
       AE_X402_CUSTODY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}
       AE_X402_CUSTODY_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}
+      AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC }}
+      AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC }}
       AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
       AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
       AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
@@ -394,6 +487,10 @@ jobs:
       AE_FORMANCE_REQUEST_TIMEOUT_MS: ${{ vars.AE_FORMANCE_REQUEST_TIMEOUT_MS }}
       AE_FORMANCE_ACCESS_CLIENT_ID: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_ID }}
       AE_FORMANCE_ACCESS_CLIENT_SECRET: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_SECRET }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+      SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
+      VITE_SENTRY_ENVIRONMENT: ${{ vars.VITE_SENTRY_ENVIRONMENT }}
       AE_PACKAGE5_WRITES_ENABLED: ${{ vars.AE_PACKAGE5_WRITES_ENABLED }}
       AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: ${{ vars.AE_SUPPLY_HTTP_CREDENTIALS_ENABLED }}
       AE_SUPPLY_MCP_OAUTH_ENABLED: ${{ vars.AE_SUPPLY_MCP_OAUTH_ENABLED }}

@@ -145,13 +145,51 @@ describe('search result state', () => {
       displayPrice: { kind: 'indicative', amount: { currency: 'AUD', units: '1', exponent: 6 },
         rateObservedAt: 1_900_000_000_000, validUntil: 2_000_000_000_000 },
       price: { kind: 'indicative', label: 'USDC 0.000001' }, readiness: 'ready' }
+    const recommendation = { toolRef: TOOL_REF, by: 'Jev (decision.example)' }
     const matched = projectToolCard({
-      type: toolType, state: 'output-available', output: { kind: 'match', results: [item] },
+      type: toolType, state: 'output-available', output: { kind: 'match', results: [item], recommendation },
     })
-    expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1,
+    expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1, recommendation,
       choices: [{ title: 'Lookup A', price: 'A$0.01', priceValidUntil: 2_000_000_000_000 }] })
-    if (matched === null) throw new Error('missing_card')
-    expect(projectToolCard(serializeToolCard(matched))).toEqual(matched)
+    if (matched === null) throw new Error('missing_projected_card')
+    const stored = serializeToolCard(matched)
+    expect(projectToolCard(stored)).toEqual(matched)
+    if (stored === null) throw new Error('missing_stored_card')
+    expect(projectToolCard({ ...stored, recommendation: { toolRef: 'operation:invalid', by: 'Jev' } }))
+      .not.toHaveProperty('recommendation')
+  })
+  it('preserves external listing identity and provider price through shared history', () => {
+    const output = {
+      kind: 'scoped',
+      results: [
+        { id: 'listing-one', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+          host: 'weather-one.example', resourcePath: '/v1/current', networkLabel: 'Base',
+          sourcePrice: '0.002000 USDC', readiness: 'unverified' },
+        { id: 'listing-two', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+          host: 'weather-two.example', resourcePath: '/v2/forecast', networkLabel: 'Ethereum',
+          sourcePrice: '0.003000 USDC', readiness: 'unverified' },
+      ],
+    }
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available',
+      output,
+    })
+    expect(card).toMatchObject({
+      kind: 'choices',
+      choices: [
+        { toolRef: 'listing-one', title: 'Weather lookup', host: 'weather-one.example',
+          resourcePath: '/v1/current', networkLabel: 'Base', sourcePrice: '0.002000 USDC', readiness: 'unverified' },
+        { toolRef: 'listing-two', title: 'Weather lookup', host: 'weather-two.example',
+          resourcePath: '/v2/forecast', networkLabel: 'Ethereum', sourcePrice: '0.003000 USDC', readiness: 'unverified' },
+      ],
+    })
+    if (card === null) throw new Error('missing_external_card')
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+    if (card.kind !== 'choices') throw new Error('missing_external_choices')
+    expect(card.choices.every(choice => choice.callable !== true)).toBe(true)
+    const legacy = serializeToolCard({ ...card, choices: card.choices.map(choice => ({ ...choice, callable: true })) })
+    expect(projectToolCard(legacy)).toEqual(card)
   })
 
   it('carries the live estimate expiry from indexed search to chat instead of retaining an old price', () => {
@@ -169,13 +207,13 @@ describe('search result state', () => {
       state: 'output-available', output })
     expect(card).toMatchObject({ kind: 'choices', choices: [{ price: 'A$0.01', priceValidUntil: 2_000_000_000_000 }] })
   })
-  it('does not present unverified, degraded, or missing health as operational', () => {
+  it('keeps canonical readiness and maps health-status fallback to enums', () => {
     const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.list']}`
     const items = [
-      { toolRef: TOOL_REF, title: 'Unverified', healthStatus: 'unverified', readiness: 'ready' },
-      { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Degraded', healthStatus: 'degraded', readiness: 'ready' },
-      { toolRef: `operation:v1:${'d'.repeat(64)}`, title: 'Unknown', readiness: 'ready' },
-      { toolRef: `operation:v1:${'e'.repeat(64)}`, title: 'Observed', healthStatus: 'operational' },
+      { toolRef: TOOL_REF, title: 'Canonical', source: 'other', healthStatus: 'degraded', readiness: 'ready' },
+      { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Unverified', source: 'other', readiness: 'invalid', healthStatus: 'unverified' },
+      { toolRef: `operation:v1:${'d'.repeat(64)}`, title: 'Degraded', source: 'other', readiness: 'invalid', healthStatus: 'degraded' },
+      { toolRef: `operation:v1:${'e'.repeat(64)}`, title: 'Operational', source: 'other', healthStatus: 'operational' },
     ]
     const card = projectToolCard({
       type: toolType, state: 'output-available', output: { kind: 'ok', items, count: items.length },
@@ -183,15 +221,21 @@ describe('search result state', () => {
     expect(card).toMatchObject({
       kind: 'choices',
       choices: [
-        { title: 'Unverified', readiness: 'Not yet verified' },
-        { title: 'Degraded', readiness: 'Degraded' },
-        { title: 'Unknown' },
-        { title: 'Observed', readiness: 'Operational' },
+        { title: 'Canonical', readiness: 'ready' },
+        { title: 'Unverified', readiness: 'unverified' },
+        { title: 'Degraded', readiness: 'unavailable' },
+        { title: 'Operational', readiness: 'ready' },
       ],
     })
     if (card === null || card.kind !== 'choices') throw new Error('missing_choices')
-    expect(card.choices[2]?.readiness).toBeUndefined()
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+
+    const unknown = projectToolCard({
+      type: toolType,
+      state: 'output-available',
+      output: { kind: 'ok', items: [{ toolRef: `operation:v1:${'f'.repeat(64)}`, title: 'Unknown', source: 'other', readiness: 'invalid', healthStatus: 'unknown' }], count: 1 },
+    })
+    expect(unknown?.kind === 'choices' ? unknown.choices[0]?.readiness : undefined).toBeUndefined()
   })
 
   it('keeps a source outage distinct from a completed no-match', () => {
@@ -286,11 +330,29 @@ describe('inspect Quote tool cards', () => {
       state: 'output-available', output,
     })
     expect(card).toMatchObject({
-      kind: 'status', state: 'refused',
-      summary: 'AE could not complete this Quote request. Contact support before trying again.',
+      kind: 'status', state: 'refused', recoveryReason: 'inspection_unavailable',
     })
     if (card === null) throw new Error('missing_card')
+    render(createElement(ToolCard, { projection: card }))
+    expect(screen.getByRole('link', { name: 'Try another Tool' }).getAttribute('href')).toBe('/market')
+    expect(screen.queryByText('missing_source_write_admission')).toBeNull()
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+  })
+  it('offers Add credit for an insufficient-balance refusal', () => {
+    const output = projectToolQuoteRefusal({
+      toolRef: TOOL_REF, input: {}, code: 'insufficient_balance', retryable: false,
+      correlationRef: 'chat-insufficient-balance',
+      funding: { principalAmount: PRICE, idempotencyKey: 'chat-funding-handoff' },
+    })
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']}`,
+      state: 'output-available', output,
+    })
+    if (card === null) throw new Error('missing_card')
+    const onAddCredit = vi.fn()
+    render(createElement(ToolCard, { projection: card, onAddCredit }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add credit' }))
+    expect(onAddCredit).toHaveBeenCalledWith({ units: PRICE.units, exponent: PRICE.exponent })
   })
 
   it('keeps Account available and Agent maximum on the owner inspect projection', () => {

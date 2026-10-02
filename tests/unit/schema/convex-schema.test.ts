@@ -40,8 +40,6 @@ const durableTables = [
   'accountSecurityPolicies',
   'memberships',
   'externalIdentityBindings',
-  'interactiveSessionSelections',
-  'interactiveOnboardingCompletions',
   'credentials',
   'consequenceProofUses',
   'authorityDelegationGrants',
@@ -62,31 +60,34 @@ const durableTables = [
   'moneyDocuments',
   'moneyDocumentSnapshotPages',
   'moneyFundingCommands',
+  'moneyPromotionalGrants',
   'moneyLegalCustomerBindings',
   'moneyCustomerTaxFacts',
-  'moneyAutoRechargeSettings',
   'moneyReferenceRates',
   'moneyMonthlySpendBudgets',
-  'moneySupplierPreferences',
-  'moneyStripeCustomerBindings',
   'moneyTreasuryObservations',
+  'platformLaunch',
+  'moneyTreasurySettings',
+  'moneyTreasuryCursors',
+  'moneyTreasuryBatches',
+  'moneyTreasurySnapshots',
+  'moneyPaymentReadiness',
+  'moneyTreasuryAlerts',
   'moneyProviderObligations',
-  'moneyConnectAccountCommands',
   'moneyUsageEvents',
   'moneyX402PaymentAttempts',
+  'moneyX402PayeeScreeningChecks',
+  'moneyX402SpendReservations',
   'moneyStripeWebhookInbox',
   'moneyStripeEvents',
-  'moneyPayoutAccounts',
-  'moneyPayouts',
-  'moneyPayoutAllocations',
-  'qualifiedUseReceipts',
   'capabilityContractDocuments',
   'capabilityOfferings',
   'capabilityCallProjections',
   'purchaseResolutionRecords',
   'capabilityQuotes',
   'capabilityCalls',
-  'sellerOnboardingCanaryRearmAudits',
+  'paidCallReports',
+  'toolSelectionDecisions',
   'providerConsequenceJournal',
   'capabilityPublications',
   'capabilityProviderToolProjections',
@@ -120,6 +121,7 @@ const durableTables = [
   'disputes',
   'chatThreads',
   'chatTurns',
+  'chatModelCostRequests',
   'chatThreadShares',
   'actionExecutionControls',
   'actionExecutionAttempts',
@@ -152,6 +154,7 @@ const requiredIndexes = {
     'by_accountRef',
     'by_creationActorPrincipalRef_and_creationIdempotencyRef',
     'by_lifecycle_and_updatedAt',
+    'by_lastAction_actorPrincipalRef_and_lifecycle',
   ],
   accountOwnerships: [
     'by_ownershipRef',
@@ -177,6 +180,9 @@ const requiredIndexes = {
     'by_principalRef_and_lifecycle',
     'by_principalRef_and_issueIdempotencyRef',
     'by_predecessorCredentialRef',
+  ],
+  notificationDeliveries: [
+    'by_recipient_account_event_source',
   ],
   consequenceProofUses: ['by_reverificationId'],
   authorityDelegationGrants: [
@@ -209,7 +215,11 @@ const requiredIndexes = {
     'by_custodyRef',
     'by_authorizationDigest',
     'by_paymentIdentifier',
+    'by_network_and_spendReservationRef',
   ],
+  moneyX402PayeeScreeningChecks: ['by_screeningInvocationRef', 'by_attemptRef_and_effectGeneration', 'by_dispatchRef'],
+  moneyX402SpendReservations: ['by_reservationRef', 'by_attemptRef_and_effectGeneration',
+    'by_platformBudgetRef_and_state_and_settledAt', 'by_platformBudgetRef_and_normalizedPayTo_and_reservedAt', 'by_dispatchRef'],
   moneyUsageEvents: [
     'by_principalId_and_credentialId_and_currency_and_observedAt',
     'by_businessId_and_observedAt',
@@ -221,20 +231,22 @@ const requiredIndexes = {
   moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt', 'by_scopeType_and_scopeRef_and_status'],
   moneyDocuments: ['by_documentRef', 'by_accountRef_and_createdAt'],
   moneyDocumentSnapshotPages: ['by_pageRef', 'by_documentRef_and_position'],
+  moneyPromotionalGrants: ['by_grantRef', 'by_accountRef_and_environment_and_expiresAt', 'by_environment_and_nextWorkAt'],
   moneyFundingCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef', 'by_paymentId', 'by_accountRef_and_createdAt'],
   moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
+  platformLaunch: ['by_environment'],
+  moneyTreasurySettings: ['by_environment'],
+  moneyTreasurySnapshots: ['by_snapshotRef', 'by_environment_and_snapshotAt'],
+  moneyPaymentReadiness: ['by_environment'],
+  moneyTreasuryAlerts: ['by_scope_and_code', 'by_scope_and_state'],
+  moneyTreasuryCursors: ['by_custody'],
+  moneyTreasuryBatches: ['by_batchRef', 'by_custody_and_createdAt'],
   moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
   moneyCustomerTaxFacts: ['by_accountRef'],
-  moneyAutoRechargeSettings: ['by_accountRef'],
   moneyMonthlySpendBudgets: ['by_accountRef'],
-  moneySupplierPreferences: ['by_businessId_and_currency'],
-  moneyStripeCustomerBindings: ['by_accountRef', 'by_stripeCustomerId'],
   moneyProviderObligations: ['by_obligationRef', 'by_callRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
   moneyStripeWebhookInbox: ['by_stripeEventId', 'by_state_and_receivedAt'],
   moneyStripeEvents: ['by_stripeEventId'],
-  moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
-  moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
-  moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
   businesses: [
     'by_slug',
     'by_owningAccountRef_and_updatedAt',
@@ -284,8 +296,10 @@ const requiredIndexes = {
     'by_principalId_and_callRef',
     'by_toolRef_and_state',
     'by_ownerId_and_state_and_createdAt',
+    'by_state_and_result_kind_and_createdAt',
     'by_createdAt',
   ],
+  toolSelectionDecisions: ['by_threadId_and_promptMessageId', 'by_threadId_and_createdAt'],
   capabilityCallProjections: [
     'by_callRef',
     'by_accountRef_and_createdAt',
@@ -308,7 +322,6 @@ const requiredIndexes = {
     'by_state_and_expiresAt',
     'by_createdAt',
   ],
-  sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_callRef', 'by_canaryRef'],
   providerConsequenceJournal: [
     'by_ticketRef',
     'by_effectRef',
@@ -448,9 +461,7 @@ describe('Convex schema', () => {
     )
 
     for (const [tableName, indexes] of Object.entries(requiredIndexes)) {
-      if (tableName === 'moneyPayoutAllocations')
-        expect(tableIndexes[tableName]).toEqual(indexes)
-      else expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
+      expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
   })
 
@@ -472,11 +483,8 @@ describe('Convex schema', () => {
     expectIndexFields('capabilityCalls', 'by_principalId_and_callRef', ['principalId', 'callRef'])
     expectIndexFields('capabilityCalls', 'by_toolRef_and_state', ['toolRef', 'state'])
     expectIndexFields('capabilityCalls', 'by_principalId_and_toolRef_and_state', ['principalId', 'toolRef', 'state'])
-    expectIndexFields('sellerOnboardingCanaryRearmAudits', 'by_callRef', ['callRef'])
     expectIndexFields('moneyProviderObligations', 'by_callRef', ['callRef'])
     expectIndexFields('moneyUsageEvents', 'by_callRef', ['callRef'])
-    expectIndexFields('qualifiedUseReceipts', 'by_callRef', ['callRef'])
-    expectIndexFields('qualifiedUseReceipts', 'by_toolRef_and_qualifiedAt', ['toolRef', 'qualifiedAt'])
     expectIndexFields('businesses', 'by_owningAccountRef_and_publicStatus', ['owningAccountRef', 'publicStatus'])
     expectIndexFields('offeringAccessPaths', 'by_businessId_and_offeringRef', ['businessId', 'offeringRef'])
   })
@@ -635,22 +643,6 @@ describe('Convex schema', () => {
 
     expect(result.proof).toMatchObject({ proofPreset: 'strict', activeAccountRef: 'acc_owner' })
     expect(result.audit).toMatchObject({ sourceSystem: 'ae_recorded', authorityGeneration: 2 })
-  })
-  it('pins the retained payout index field order', () => {
-    const index = (tableName: string, indexDescriptor: string) =>
-      exported.tables
-        .find((table) => table.tableName === tableName)
-        ?.indexes.find((item) => item.indexDescriptor === indexDescriptor)
-
-    expect(
-      index(
-        'moneyPayouts',
-        'by_businessId_and_currency_and_cadence_and_updatedAt',
-      ),
-    ).toEqual({
-      indexDescriptor: 'by_businessId_and_currency_and_cadence_and_updatedAt',
-      fields: ['businessId', 'currency', 'cadence', 'updatedAt'],
-    })
   })
   it('defines the public registry search-document index used by Convex search', () => {
     const registrySearchDocuments = exported.tables.find(

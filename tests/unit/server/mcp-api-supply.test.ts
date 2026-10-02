@@ -3,7 +3,7 @@ import {
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 function connectionServiceStubs() {
   return {
@@ -17,15 +17,11 @@ function connectionServiceStubs() {
   }
 }
 
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+
 describe('MCP host adapter supply', () => {
-  it('dispatches a publication artifact above 64 KiB below the MCP body cap', async () => {
-    const publicationSourceBytes = 262_144
-    const publicationSource = {
-      kind: 'agent_plugin',
-      pluginJson: { payload: 'x'.repeat(publicationSourceBytes) },
-      mcpJson: {},
-      environment: 'sandbox',
-    }
+  it('dispatches an x402 publication artifact above 64 KiB below the MCP body cap', async () => {
+    const publicationArtifactBytes = 262_144
     const body = {
       jsonrpc: '2.0',
       id: 'large-publication',
@@ -34,12 +30,18 @@ describe('MCP host adapter supply', () => {
         name: 'ae_supply_publish',
         arguments: {
           businessRef: 'business:test',
-          source: publicationSource,
+          source: {
+            kind: 'x402',
+            resourceUrl: 'https://provider.example/paid',
+            method: 'POST',
+            environment: 'sandbox',
+          },
           candidateRef: `sha256:${'1'.repeat(64)}`,
           expectedSourceDigest: `sha256:${'2'.repeat(64)}`,
           presentation: { name: 'Lookup', description: 'Looks up one reference.', category: 'Research' },
           consequences: { effects: [], dataUse: [], evidence: [] },
-          pricing: { kind: 'free' },
+          pricing: { kind: 'source_x402' },
+          validationInput: { payload: 'x'.repeat(publicationArtifactBytes) },
           environment: 'sandbox',
           idempotencyKey: 'large-publication-key',
           attestation: { authorisedToPublish: true, informationAccurate: true, publishAfterSuccessfulValidation: true },
@@ -47,12 +49,11 @@ describe('MCP host adapter supply', () => {
       },
     }
     const encoder = new TextEncoder()
-    const sourceBytes = encoder.encode(publicationSource.pluginJson.payload).byteLength
+    const artifactBytes = encoder.encode(body.params.arguments.validationInput.payload).byteLength
     const requestBytes = encoder.encode(JSON.stringify(body)).byteLength
-    expect(sourceBytes).toBe(262_144)
+    expect(artifactBytes).toBe(publicationArtifactBytes)
     expect(requestBytes).toBeGreaterThan(64 * 1024)
     expect(requestBytes).toBeLessThan(320 * 1024)
-
     const supplyService = {
     toolsList: vi.fn(),
       status: vi.fn(),
@@ -67,6 +68,7 @@ describe('MCP host adapter supply', () => {
     const response = await postMcp(body, {
       authenticate: authenticateWithScopes(['market_supply:manage']),
       supplyManagementService: supplyService,
+      rolloutEnvironment: { AE_DEPLOYMENT_ENVIRONMENT: 'development' },
     }, {
       authorization: 'Bearer supply-boundary',
     })
@@ -231,6 +233,7 @@ describe('MCP host adapter supply', () => {
   })
 
   it('fails Package 5 action writes closed in production without hiding read actions', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const supplyService = {
       toolsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
       status: vi.fn(), publish: vi.fn(),
@@ -239,9 +242,9 @@ describe('MCP host adapter supply', () => {
       ...connectionServiceStubs(),
     }
     const options = {
-      authenticate: authenticateWithScopes(['market_supply:manage']),
+      authenticate: authenticateWithScopes(['market_supply:manage'], 'production'),
       supplyManagementService: supplyService,
-      rolloutEnvironment: { NODE_ENV: 'production' },
+      rolloutEnvironment: { NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production' },
     }
     const writeResponse = await postMcp({
       jsonrpc: '2.0', id: 'disabled-supply-write', method: 'tools/call',

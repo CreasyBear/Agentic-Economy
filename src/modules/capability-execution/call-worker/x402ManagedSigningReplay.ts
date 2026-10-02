@@ -29,7 +29,7 @@ export async function replayManagedX402SigningForRecovery(
   operation: PublishedTool,
   toolRef: string,
   aeEnvironment: 'sandbox' | 'production',
-  dependencies: Pick<CdpX402PaymentSignerDependencies, 'environment' | 'createClient'> = {},
+  dependencies: Pick<CdpX402PaymentSignerDependencies, 'environment' | 'createClient' | 'admitSigning'> = {},
 ): Promise<ManagedX402SigningRecoveryResult> {
   const method = x402MethodFromOperation(operation)
   const custodyConfiguration = currentManagedCustodyConfiguration(material, aeEnvironment)
@@ -85,7 +85,7 @@ export async function replayManagedX402SigningForRecovery(
   try {
     const paymentSignature = await replayCdpX402PaymentSigningIntent(
       persistedIntent,
-      dependencies,
+      { ...dependencies, aeEnvironment },
     )
     if (paymentSignature === undefined) return { kind: 'unresolved' }
     const paymentSignatureDigest = canonicalDigest(paymentSignature)

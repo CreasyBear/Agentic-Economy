@@ -12,7 +12,6 @@ import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-direc
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
-import { directoryDate } from './directory-presentation'
 import { useMarketPath } from './market-navigation-context'
 
 type Props = Readonly<{
@@ -29,8 +28,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
   const marketPath = useMarketPath()
   const id = useId()
   const shelves = [
-    { key: 'popular', kicker: 'Adoption', title: 'Popular Tools', description: 'Most Calls reported in the last 30 days.', entries: overview.popular, sort: 'popular' },
-    { key: 'updated', kicker: 'Freshness', title: 'Recently updated', description: 'Service details ordered by the Provider’s published update date.', entries: overview.recentlyUpdated, sort: 'updated' },
+    { key: 'popular', kicker: 'Busiest', title: 'Busiest Tools', description: 'Most calls reported in the last 30 days.', entries: overview.popular, sort: 'popular' },
   ] as const
 
   return <div className="grid min-w-0 gap-12 pb-10 sm:gap-16">
@@ -47,15 +45,12 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
           </div>}
           className="mb-0"
         />
-        {shelf.entries.length === 0 ? <p className="rounded-card border border-dashed border-border px-5 py-8 text-sm text-muted-foreground">{shelf.key === 'popular' ? 'No reported Call activity is available for this selection yet.' : 'No published update dates are available for this selection yet.'}</p> : <CarouselContent className="-ml-4 py-1">
+        {shelf.entries.length === 0 ? <p className="rounded-card border border-dashed border-border px-5 py-8 text-sm text-muted-foreground">No reported usage is available for this selection yet.</p> : <CarouselContent className="-ml-4 py-1">
           {shelf.entries.map(({ entry }) => {
             const item: SavedDirectoryTool = { entry, search: {} }
             return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-              <div className="flex h-full flex-col gap-2.5">
-                <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(item)}
-                  onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
-                {shelf.key === 'updated' && entry.provenance?.updatedAt !== undefined ? <p className="px-1 text-xs text-muted-foreground">Updated {directoryDate(entry.provenance.updatedAt)}</p> : null}
-              </div>
+              <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(item)}
+                onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
             </CarouselItem>
           })}
         </CarouselContent>}

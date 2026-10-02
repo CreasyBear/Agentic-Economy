@@ -16,7 +16,6 @@ import {
 import {
   ADMIN_OVERVIEW_COPY,
   exceptionKindLabel,
-  type AdminConfiguredState,
   type AdminOverviewDataState,
   type AdminOverviewExceptionRow,
   type AdminOverviewExceptionsState,
@@ -25,12 +24,12 @@ import {
 } from './overview.contracts'
 
 
-export function useAdminOverview(formance: AdminConfiguredState): AdminOverviewDataState {
+export function useAdminOverview(): AdminOverviewDataState {
   const overview = useQuery(api.adminConsoleOverview.readAdminOverview, {})
   const [recent] = useState(readRecentAdminRefs)
   if (overview === undefined) return { kind: 'loading' }
   if ('kind' in overview) return { kind: 'refused' }
-  return { kind: 'ready', configuration: { formance, ...overview }, recent }
+  return { kind: 'ready', paymentReadiness: overview.paymentReadiness, recent }
 }
 export function useOverviewExceptions(): AdminOverviewExceptionsState {
   const exceptions = useQuery(api.adminConsoleExceptions.readAdminExceptionOverview, {})

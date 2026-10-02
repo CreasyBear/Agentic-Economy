@@ -1,8 +1,11 @@
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, internalQuery } from './_generated/server'
+import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
+import { isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
 import { activeDirectoryGeneration, directoryGeneration, storedDirectoryEntry } from './lib/market/directoryIndex/rows'
 import { ANALYTICS_VERSION, searchAnalytics, writeAnalytics } from './lib/market/directoryIndex/analytics'
+import { toggleEligibleFacetMembership } from './lib/market/directoryIndex/membership'
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import { reconcileWorkloadCronSnapshot } from './lib/platform/workloadCron/admission'
 
@@ -25,17 +28,39 @@ export const batch = internalMutation({
     const active = await activeDirectoryGeneration(ctx)
     if (generation === null || active?.generation !== args.generation) return { kind: 'stale' as const, processed: 0 }
     if (generation.analyticsVersion === ANALYTICS_VERSION && generation.analyticsStatus === 'ready') return { kind: 'ready' as const, processed: generation.analyticsProcessed ?? generation.ingestedCount }
+    // A cursor is valid only for the projection version that created it.
+    const projectionVersionChanged = generation.analyticsVersion !== ANALYTICS_VERSION
+    const cursor = projectionVersionChanged ? null : generation.analyticsCursor ?? null
     const page = await ctx.db.query('marketExternalRegistryEntries').withIndex('by_generation_and_documentId', q => q.eq('generation', args.generation))
-      .paginate({ numItems: 5, cursor: generation.analyticsCursor ?? null })
+      .paginate({ numItems: 5, cursor })
     for (const row of page.page) {
-      const entry = storedDirectoryEntry(row)
+      const stored = storedDirectoryEntry(row)
+      // Reparse retained source accepts with the current price projection;
+      // directoryEntryJson contains the projection from its original ingest.
+      const entry = { ...stored, prices: projectX402DirectoryEntry(JSON.parse(stored.metadataJson)).prices }
       const projections = await ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_resource', q => q.eq('generation', args.generation).eq('resource', entry.resource)).take(130)
-      for (const projection of projections) await ctx.db.patch(projection._id, searchAnalytics(entry, projection.network))
-      // The projection and memberships commit together. A defined payer order
-      // (including the -1 missing sentinel) identifies a committed v1 projection.
-      if (!projections.some(projection => projection.network === '*' && projection.payersOrder !== undefined)) await writeAnalytics(ctx, args.generation, entry.resource, entry)
+      const universalAnalytics = searchAnalytics(entry, '*')
+      const eligible = isDirectoryEntryEligible({
+        hasOutputSchema: universalAnalytics.hasOutputSchema,
+        hasOutputExample: universalAnalytics.hasOutputExample,
+        minimumUsdPrice: universalAnalytics.minimumUsdPrice,
+        payersOrder: universalAnalytics.payersOrder,
+      })
+      const previousEligible = projections.find(projection => projection.network === '*')?.eligible === true
+      for (const projection of projections) {
+        const analytics = searchAnalytics(entry, projection.network)
+        await ctx.db.patch(projection._id, { ...analytics, minimumUsdPrice: analytics.minimumUsdPrice, eligible })
+      }
+      if (projections.length > 0) {
+        await toggleEligibleFacetMembership(
+          ctx, args.generation, entry.resource, row.directoryCategory ?? 'uncategorized', row.provider, row.networks, eligible, previousEligible,
+        )
+      }
+      // Each analytics version has a separate namespace; rebuild memberships
+      // for every retained source instead of only rows missing a search projection.
+      await writeAnalytics(ctx, args.generation, entry.resource, entry, entry)
     }
-    const processed = (generation.analyticsProcessed ?? 0) + page.page.length
+    const processed = (projectionVersionChanged ? 0 : generation.analyticsProcessed ?? 0) + page.page.length
     await ctx.db.patch(generation._id, {
       analyticsVersion: ANALYTICS_VERSION, analyticsStatus: page.isDone ? 'ready' : 'building',
       analyticsProcessed: processed, analyticsCursor: page.isDone ? undefined : page.continueCursor,

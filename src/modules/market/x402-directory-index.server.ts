@@ -1,11 +1,13 @@
 import { degrade } from '@/lib/observability/degrade'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
 import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import { readX402Directory } from './x402-directory.server'
-import type { X402DirectoryEntry } from './x402-directory'
-import { directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
+import type { DirectoryChoice, X402DirectoryEntry } from './x402-directory'
+import { directoryNetwork, directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
   x402DirectoryProvidersInputSchema, type X402DirectoryProvidersInput, type X402DirectoryProvidersPage,
@@ -20,6 +22,32 @@ type BrowseResult = X402DirectoryCatalogueUnavailable | {
   pageStatus?: 'SplitRecommended' | 'SplitRequired' | null; splitCursor?: string | null
 }
 const browse = sourceQuery<X402DirectoryIndexInput & { alternativeTo?: string; paginationOpts: { numItems: number; cursor: string | null; maximumRowsRead: number } }, BrowseResult>('x402DirectoryIndex:browse')
+const COMPACT_CARD_PAGE = 12
+type CompactCardRow = Readonly<{
+  id: string
+  source: 'coinbase' | 'provider'
+  resource?: string
+  slug?: string
+  sourceRouteRef?: string
+  toolRef?: string
+  choice?: DirectoryChoice
+  title: string
+  summary: string
+  provider: string
+  network: string
+  category?: string
+  minimumUsdPrice?: string
+  calls30d?: number
+  payers30d?: number
+}>
+type CompactCardPage = Readonly<{ kind: 'unavailable'; reason: string }> | Readonly<{
+  kind: 'ok'
+  coverage: { generation: string; completedAt: number }
+  page: readonly CompactCardRow[]
+  continueCursor: string
+  isDone: boolean
+}>
+const compactCards = sourceQuery<{ query: string; network: string; paginationOpts: { numItems: number; cursor: string | null } }, CompactCardPage>('x402DirectoryIndex:searchCompact')
 const overview = sourceQuery<Record<string, never>, X402DirectoryCatalogueOverview>('x402DirectoryIndex:overview')
 const resource = sourceQuery<{ resource: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:resource')
 const analytics = sourceQuery<{ network?: string }, X402DirectoryAnalytics>('x402DirectoryIndex:analytics')
@@ -33,9 +61,73 @@ type DirectoryStatus = {
   lastError?: string
 }
 const status = sourceQuery<Record<string, never>, DirectoryStatus>('x402DirectoryIndex:status')
+/** Card grids paint title, glance, price, access, and activity. Schemas stay on the Tool page. */
+export function toDirectoryCardEntry(entry: X402DirectoryEntry): X402DirectoryEntry {
+  const source = minimumDirectoryUsdPrice(entry)
+  // Match through canonical amounts, preferring an exact option when amounts tie.
+  const matching = source === undefined ? [] : entry.prices.filter(item =>
+    minimumDirectoryUsdPrice({ ...entry, prices: [item] }) === source)
+  const price = matching.find(item => item.scheme === 'exact') ?? matching.find(item => item.scheme === 'upto') ?? matching[0]
+  const description = [...entry.description].slice(0, 100).join('')
+  return {
+    resource: entry.resource,
+    title: [...entry.title].slice(0, 72).join(''),
+    description,
+    protocol: entry.protocol,
+    provider: [...entry.provider].slice(0, 48).join(''),
+    metadataJson: '',
+    prices: price === undefined ? [] : [{
+      network: price.network,
+      ...(price.networkLabel === undefined ? {} : { networkLabel: price.networkLabel }),
+      scheme: price.scheme,
+      amount: price.amount,
+      ...(price.symbol === undefined ? {} : { symbol: price.symbol }),
+      ...(price.decimalAmount === undefined ? {} : { decimalAmount: price.decimalAmount }),
+    }],
+    ...(entry.slug === undefined ? {} : { slug: entry.slug }),
+    ...(entry.serviceName === undefined ? {} : { serviceName: entry.serviceName }),
+    ...(entry.iconUrl === undefined || entry.iconUrl.length > 500 ? {} : { iconUrl: entry.iconUrl }),
+    ...(entry.category === undefined ? {} : { category: entry.category }),
+    ...(entry.choice === undefined ? {} : { choice: entry.choice }),
+    ...(entry.activity === undefined ? {} : { activity: {
+      ...(entry.activity.calls30d === undefined ? {} : { calls30d: entry.activity.calls30d }),
+      ...(entry.activity.payers30d === undefined ? {} : { payers30d: entry.activity.payers30d }),
+      ...(entry.activity.lastCalledAt === undefined ? {} : { lastCalledAt: entry.activity.lastCalledAt }),
+    } }),
+    ...(entry.audEstimate === undefined ? {} : { audEstimate: entry.audEstimate }),
+  }
+}
+
+function cardFromCompact(row: CompactCardRow): X402DirectoryEntry | undefined {
+  if (row.resource === undefined || row.resource.length === 0) return undefined
+  return toDirectoryCardEntry({
+    resource: row.resource,
+    title: row.title,
+    description: row.summary,
+    protocol: 'x402',
+    provider: row.provider,
+    metadataJson: '',
+    prices: row.minimumUsdPrice === undefined ? [] : [{
+      network: row.network, scheme: 'exact', symbol: 'USDC',
+      amount: `${row.minimumUsdPrice} USDC`, decimalAmount: row.minimumUsdPrice,
+    }],
+    ...(row.slug === undefined ? {} : { slug: row.slug }),
+    ...(row.category === undefined ? {} : { category: row.category }),
+    choice: row.choice ?? {
+      access: 'external_listing',
+      ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),
+      ...(row.toolRef === undefined ? {} : { toolRef: row.toolRef }),
+    },
+    ...(row.calls30d === undefined && row.payers30d === undefined ? {} : { activity: {
+      ...(row.calls30d === undefined ? {} : { calls30d: row.calls30d }),
+      ...(row.payers30d === undefined ? {} : { payers30d: row.payers30d }),
+    } }),
+  })
+}
+
 /** One Coinbase observation is shared across the bounded page; no row-level HTTP calls. */
 async function withAudEstimates(entries: readonly X402DirectoryEntry[]): Promise<X402DirectoryEntry[]> {
-  const rate = entries.some(entry => entry.prices.some(price => price.scheme === 'exact' && price.symbol === 'USDC' && price.decimalAmount !== undefined))
+  const rate = entries.some(entry => minimumDirectoryUsdPrice(entry) !== undefined)
     ? await readPersistedReferenceRate() : undefined
   const now = Date.now()
   return entries.map(entry => {
@@ -44,7 +136,7 @@ async function withAudEstimates(entries: readonly X402DirectoryEntry[]): Promise
     const amount = parseDecimalExactAmount('USDC', source, 6)
     if (amount === undefined) return entry
     const audEstimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }, now)
-    return audEstimate === undefined || audEstimate === 'AUD estimate temporarily unavailable' ? entry : { ...entry, audEstimate }
+    return audEstimate?.startsWith('A$') !== true ? entry : { ...entry, audEstimate }
   })
 }
 
@@ -115,7 +207,30 @@ export async function readDirectoryFreshnessField(now: number = Date.now()): Pro
 export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput): Promise<X402DirectoryCatalogue> {
   const parsed = x402DirectoryCatalogueInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
+  const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(process.env))?.network
+  if (network === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
+  if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== network) return { kind: 'unavailable', reason: 'query_invalid' }
   const { directoryCategory, indexCursor, alternativeTo, offset, ...filters } = parsed.data
+  const { query: cardQuery, ...cardFilters } = filters
+  if (cardQuery !== undefined && alternativeTo === undefined && indexCursor === undefined && offset === undefined && directoryCategory === undefined && Object.keys(cardFilters).length === 0) {
+    try {
+      const compact = await callPublicSourceQuery(compactCards, { query: cardQuery, network, paginationOpts: { numItems: COMPACT_CARD_PAGE, cursor: null } })
+      if (compact.kind === 'unavailable') return compact
+      const items = await withAudEstimates(compact.page.flatMap(row => {
+        if (row.network !== network) return []
+        const card = cardFromCompact(row)
+        return card === undefined ? [] : [card]
+      }))
+      return {
+        kind: 'ok', source: 'index', searchMethod: 'native_full_text',
+        page: { kind: 'ok', items, offset: 0, limit: COMPACT_CARD_PAGE, mode: 'search', appliedFilters: { network } },
+        isDone: compact.isDone,
+      }
+    } catch (reason) {
+      console.error('[market] compact directory card read failed, returning source_unavailable', { reason })
+      return { kind: 'unavailable', reason: 'source_unavailable' }
+    }
+  }
   try {
     let engineCursor: string | null = null
     let cursorScope = 'current'
@@ -128,14 +243,14 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       engineCursor = decoded
     }
     const result = await callPublicSourceQuery(browse, {
-      ...filters, ...(alternativeTo === undefined ? {} : { alternativeTo }),
+      ...filters, network, ...(alternativeTo === undefined ? {} : { alternativeTo }),
       ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
       paginationOpts: { numItems: 24, cursor: engineCursor, maximumRowsRead: 512 },
     })
     if (result.kind === 'unavailable') return result
     if (offset) return { kind: 'unavailable', reason: 'index_cursor_required' }
-    const { network, provider, maxUsdPrice } = filters
-    const items = await withAudEstimates(result.page.map(item => ({
+    const { provider, maxUsdPrice } = filters
+    const items = await withAudEstimates(result.page.map(item => toDirectoryCardEntry({
       ...item.entry,
       choice: item.choice ?? { access: 'external_listing' as const },
     })))
@@ -157,7 +272,13 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
   }
 }
 export async function readX402DirectoryCatalogueOverview(): Promise<X402DirectoryCatalogueOverview> {
-  try { return await callPublicSourceQuery(overview, {}) }
+  try {
+    const result = await callPublicSourceQuery(overview, {})
+    if (result.kind !== 'ok') return result
+    const { popular: _popular, recentlyUpdated: _recent, ...rest } = result
+    const { rising: _rising, falling: _falling, ...kept } = rest as typeof rest & { rising?: unknown; falling?: unknown }
+    return { ...kept, popular: [], recentlyUpdated: [] }
+  }
   catch (cause) {
     return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
       site: 'readX402DirectoryCatalogueOverview',
@@ -177,7 +298,16 @@ export async function readX402DirectoryAnalytics(input: { network?: string | und
 export async function readX402DirectoryCatalogueResource(input: { resource: string }): Promise<X402DirectoryCatalogueResource> {
   const parsed = x402DirectoryCatalogueResourceInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
-  try { return await callPublicSourceQuery(resource, parsed.data) }
+  if (deploymentPaymentEnvironment(process.env) === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
+  try {
+    const result = await callPublicSourceQuery(resource, parsed.data)
+    if (result.kind !== 'found' && result.kind !== 'found_upstream') return result
+    const [estimated] = await withAudEstimates([result.item.entry])
+    const entry = estimated ?? result.item.entry
+    // A union spread keeps only shared properties, dropping coverage and indexed item fields.
+    if (result.kind === 'found') return { ...result, item: { ...result.item, entry } }
+    return { kind: 'found_upstream', item: { entry } }
+  }
   catch (cause) {
     return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
       site: 'readX402DirectoryCatalogueResource',
@@ -189,6 +319,8 @@ export async function readX402DirectoryCatalogueResource(input: { resource: stri
 /** Canonical `/tools/<providerHost>/<slug>` lookup - the route's synchronous directory metadata plus the admitted toolRef, when already joined. */
 export async function readX402DirectoryCatalogueBySlug(input: { providerKey: string; slug: string }): Promise<X402DirectoryCatalogueResource> {
   if (input.providerKey.length === 0 || input.slug.length === 0) return { kind: 'unavailable', reason: 'query_invalid' }
+  const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(process.env))?.network
+  if (network === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
   let indexed: X402DirectoryCatalogueResource
   try { indexed = await callPublicSourceQuery(bySlug, input) }
   catch (cause) {
@@ -202,7 +334,7 @@ export async function readX402DirectoryCatalogueBySlug(input: { providerKey: str
   // Tool detail is not the market catalogue request. A missing index row still resolves from the
   // same persisted-or-upstream card destination the route already advertised.
   for (let offset = 0, pages = 0; pages < 3; pages += 1) {
-    const page = await readX402Directory({ provider: input.providerKey, ...(offset === 0 ? {} : { offset }) })
+    const page = await readX402Directory({ network, provider: input.providerKey, ...(offset === 0 ? {} : { offset }) })
     if (page.kind !== 'ok') break
     const match = page.items.find(entry => [entry.slug, directorySlugBase(entry.resource), directorySlugWithMethod(entry.resource, entry.method)]
       .filter((slug): slug is string => slug !== undefined).includes(input.slug))
@@ -216,6 +348,7 @@ export async function readX402DirectoryCatalogueBySlug(input: { providerKey: str
 
 /** Reverse lookup for the `/tools/$toolRef` redirect; `null` keeps the caller on that route. */
 export async function readX402DirectoryCanonicalUrlForTool(input: { toolRef: string }): Promise<{ providerHost: string; slug: string } | null> {
+  if (deploymentPaymentEnvironment(process.env) === undefined) return null
   try { return await callPublicSourceQuery(canonicalUrlForTool, input) }
   catch (cause) {
     return degrade(cause, null, {

@@ -1,5 +1,6 @@
 import { clerk } from '@clerk/testing/playwright'
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './fixtures'
 
 import {
   authenticatedE2EEnvironment,
@@ -34,10 +35,11 @@ test.describe('Package 4 Account commerce', () => {
 
     await page.getByLabel('Credit to add (AUD)').fill('5.00')
     await expect(page.getByLabel('Funding quote').getByText('A$5.00', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Pay A$5.28 and add A$5.00' }).click()
+    await page.getByRole('button', { name: 'Pay A$5.78 and add A$5.00' }).click()
     await page.waitForURL(/^https:\/\/checkout\.stripe\.com\//u)
     await expect(page.getByText('Agentic Economy Account credit', { exact: true })).toBeVisible()
-    await expect(page.getByTestId('product-summary-total-amount').getByText('A$5.28', { exact: true })).toBeVisible()
+    await expect(page.getByText('Australian GST', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('product-summary-total-amount').getByText('A$5.78', { exact: true })).toBeVisible()
 
     await page.goto(`${environment.baseURL}/activity`)
     await expect(page.getByRole('heading', { name: 'Calls', level: 1 })).toBeVisible()

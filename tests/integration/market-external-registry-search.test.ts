@@ -63,10 +63,12 @@ async function getRegistry(params: Readonly<{ query?: string; limit?: number; cu
 describe('GET /api/v1/registry backed by the compact x402 directory index', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
   })
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
     setHttpRateLimitAdmissionForTests(undefined)
     setPublicSourceTransportForTests(undefined)
   })

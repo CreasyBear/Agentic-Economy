@@ -231,6 +231,7 @@ export type ToolProjectionNavigationContract = Readonly<{
 }>;
 export type PublicToolDescriptor = Readonly<{
   toolRef: PublicToolRef;
+  runtimeEnvironment: "sandbox" | "production";
   toolId: string;
   callVia: typeof CURRENT_TOOL_CALL_VIA;
   paymentLane: "brokered";
@@ -296,6 +297,7 @@ export type CapabilityToolSourceRecord = Readonly<{
   operationId: string;
   publicationRef: string;
   publicationRevision: number;
+  runtimeEnvironment: PublicToolDescriptor["runtimeEnvironment"];
   networkId: string;
   contract: CapabilityContract;
   business: PublicToolBusinessRef;

@@ -8,7 +8,7 @@ import {
   vi,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import { createConvexServerFunctionAssertion } from '../../../src/lib/server/convex-source'
 import { principalRef } from '../../../src/modules/principal-account/principal/public'
 import type { Doc } from '../../../convex/_generated/dataModel'
@@ -40,13 +40,18 @@ type WorkspaceProvisionSuccess = Readonly<{
   bindingRef: string
 }>
 
-type WorkspaceProvisionErrorCode =
+type WorkspaceProvisionRefusalCode =
   | 'creator_binding_missing'
   | 'creator_principal_inactive'
-  | 'display_name_invalid'
+  | 'authority_conflict'
   | 'clerk_org_id_invalid'
+  | 'workspace_closed'
 
-const provisionOrganizationWorkspaceForServerRef = internal.workspaceProvisioning.provisionOrganizationWorkspaceForServer
+type WorkspaceProvisionOutcome = WorkspaceProvisionSuccess | Readonly<{
+  kind: 'refused'
+  code: WorkspaceProvisionRefusalCode
+}>
+const provisionOrganizationWorkspaceForServerRef = api.workspaceProvisioning.provisionOrganizationWorkspaceForServer
 
 
 const correlationRef = (label: string) => `test:workspace-provision:${label}`
@@ -55,29 +60,11 @@ const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)
 
 async function expectWorkspaceProvisionFailure(
-  run: () => Promise<unknown>,
-  code: WorkspaceProvisionErrorCode,
+  run: () => Promise<WorkspaceProvisionOutcome>,
+  code: WorkspaceProvisionRefusalCode,
 ): Promise<void> {
-  try {
-    const result = await run()
-    if (
-      result !== null
-      && typeof result === 'object'
-      && 'kind' in result
-      && result.kind === 'refused'
-      && 'code' in result
-    ) {
-      expect(result).toMatchObject({ kind: 'refused', code })
-      return
-    }
-    throw new Error(`expected workspace provision refusal ${code}, got ${JSON.stringify(result)}`)
-  } catch (error) {
-    if (error !== null && typeof error === 'object' && 'code' in error) {
-      expect((error as { code: string }).code).toBe(code)
-      return
-    }
-    throw error
-  }
+  const result = await run()
+  expect(result).toMatchObject({ kind: 'refused', code })
 }
 
 async function buildProvisionServiceAuth(
@@ -96,6 +83,22 @@ async function buildProvisionServiceAuth(
   })
 }
 
+async function requestWorkspaceProvisioning(
+  backend: InteractiveAuthorityBackend,
+  input: Readonly<{
+    clerkOrgId: string
+    displayName: string
+    creatorTokenIdentifier: string
+    correlationRef: string
+  }>,
+): Promise<WorkspaceProvisionOutcome> {
+  const serviceAuth = await buildProvisionServiceAuth(input)
+  return await backend.mutation(provisionOrganizationWorkspaceForServerRef, {
+    ...input,
+    serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
+  })
+}
+
 async function provisionOrganizationWorkspaceForServer(
   backend: InteractiveAuthorityBackend,
   input: Readonly<{
@@ -105,11 +108,9 @@ async function provisionOrganizationWorkspaceForServer(
     correlationRef: string
   }>,
 ): Promise<WorkspaceProvisionSuccess> {
-  const serviceAuth = await buildProvisionServiceAuth(input)
-  return await backend.mutation(provisionOrganizationWorkspaceForServerRef, {
-    ...input,
-    serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
-  })
+  const result = await requestWorkspaceProvisioning(backend, input)
+  if (result.kind === 'refused') throw new Error(`Expected provisioned workspace, got refusal ${result.code}`)
+  return result
 }
 
 
@@ -128,41 +129,6 @@ async function readOrgBindingForClerkOrg(
         .eq('providerNamespace', 'clerk/organization')
         .eq('providerIdentifier', clerkOrgId))
       .unique())
-}
-
-async function readSessionSelection(
-  backend: InteractiveAuthorityBackend,
-): Promise<Doc<'interactiveSessionSelections'> | null> {
-  return await backend.run(async (ctx) =>
-    ctx.db.query('interactiveSessionSelections')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', PRINCIPAL_REF))
-      .unique())
-}
-
-async function insertSessionSelection(
-  backend: InteractiveAuthorityBackend,
-  activeAccountRef: string,
-  revision = 1,
-  selectedAt = NOW,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: PRINCIPAL_REF,
-      activeAccountRef,
-      revision,
-      selectedAt,
-      lastCorrelationRef: correlationRef('seed-selection'),
-    })
-  })
-}
-
-async function deleteSessionSelection(backend: InteractiveAuthorityBackend): Promise<void> {
-  await backend.run(async (ctx) => {
-    const row = await ctx.db.query('interactiveSessionSelections')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', PRINCIPAL_REF))
-      .unique()
-    if (row !== null) await ctx.db.delete(row._id)
-  })
 }
 
 async function readPersonalAccount(
@@ -208,7 +174,7 @@ describe('workspace provisioning (W-11)', () => {
   })
 
   describe('provisionOrganizationWorkspaceForServer', () => {
-    it('P1: first provision creates org account, ownership, binding, and session selection', async () => {
+    it('P1: first provision creates org account and ownership with creator as owner', async () => {
       const backend = createBackend()
       await seedCreatorWithPersonalAccount(backend)
       const before = await collectAuthorityTables(backend)
@@ -242,9 +208,27 @@ describe('workspace provisioning (W-11)', () => {
         changeKind: 'creation',
       })
 
-      expect(await readSessionSelection(backend)).toMatchObject({
-        activeAccountRef: result.accountRef,
-      })
+    })
+
+    it('rejects a public provisioning call without a valid service assertion', async () => {
+      const backend = createBackend()
+      await seedCreatorWithPersonalAccount(backend)
+
+      await expect(backend.mutation(provisionOrganizationWorkspaceForServerRef, {
+        clerkOrgId: CLERK_ORG_ID,
+        displayName: WORKSPACE_DISPLAY_NAME,
+        creatorTokenIdentifier: TOKEN_IDENTIFIER,
+        correlationRef: correlationRef('missing-service-auth'),
+        serviceAuth: {
+          principalId: 'ae:server-function',
+          ownerId: 'ae:server-function',
+          credentialId: 'ae:server-function',
+          scopes: [PROVISION_SCOPE],
+          issuedAt: NOW,
+          signature: 'invalid',
+        },
+      })).rejects.toMatchObject({ code: 'authority_conflict' })
+      expect(await countOrgBindings(backend)).toBe(0)
     })
 
     it('P2: replaying the same clerkOrgId returns the same account without new rows', async () => {
@@ -283,12 +267,59 @@ describe('workspace provisioning (W-11)', () => {
       expect(await countOrgBindings(backend)).toBe(countsAfterFirst.orgBindings)
     })
 
+    it('P2b: a replay after closure refuses without creating another Account or binding', async () => {
+      const backend = createBackend()
+      await seedCreatorWithPersonalAccount(backend)
+      const first = await provisionOrganizationWorkspaceForServer(backend, {
+        clerkOrgId: CLERK_ORG_ID,
+        displayName: WORKSPACE_DISPLAY_NAME,
+        creatorTokenIdentifier: TOKEN_IDENTIFIER,
+        correlationRef: correlationRef('p2b-first'),
+      })
+      const beforeClose = await collectAuthorityTables(backend)
+
+      await backend.run(async (ctx) => {
+        const account = await ctx.db.query('accounts')
+          .withIndex('by_accountRef', (query) => query.eq('accountRef', first.accountRef))
+          .unique()
+        const ownership = await ctx.db.query('accountOwnerships')
+          .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', first.ownershipRef))
+          .unique()
+        const bindings = await ctx.db.query('accountExternalOrganizationBindings')
+          .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+            .eq('providerNamespace', 'clerk/organization')
+            .eq('providerIdentifier', CLERK_ORG_ID))
+          .take(2)
+        const [binding] = bindings
+        if (account === null || ownership === null || binding === undefined) throw new Error('provisioned rows missing')
+        await ctx.db.patch(account._id, { lifecycle: 'closed' })
+        await ctx.db.patch(ownership._id, { lifecycle: 'ended' })
+        await ctx.db.patch(binding._id, { lifecycle: 'revoked' })
+      })
+
+      await expectWorkspaceProvisionFailure(
+        () => requestWorkspaceProvisioning(backend, {
+          clerkOrgId: CLERK_ORG_ID,
+          displayName: WORKSPACE_DISPLAY_NAME,
+          creatorTokenIdentifier: TOKEN_IDENTIFIER,
+          correlationRef: correlationRef('p2b-replay'),
+        }),
+        'workspace_closed',
+      )
+
+      const afterReplay = await collectAuthorityTables(backend)
+      expect(afterReplay.accounts).toHaveLength(beforeClose.accounts.length)
+      expect(afterReplay.ownerships).toHaveLength(beforeClose.ownerships.length)
+      expect(await countOrgBindings(backend)).toBe(1)
+      expect(await readOrgBindingForClerkOrg(backend, CLERK_ORG_ID)).toMatchObject({ lifecycle: 'revoked' })
+    })
+
     it('P3: unknown creatorTokenIdentifier refuses creator_binding_missing', async () => {
       const backend = createBackend()
       await seedCreatorWithPersonalAccount(backend)
 
       await expectWorkspaceProvisionFailure(
-        () => provisionOrganizationWorkspaceForServer(backend, {
+        () => requestWorkspaceProvisioning(backend, {
           clerkOrgId: CLERK_ORG_ID,
           displayName: WORKSPACE_DISPLAY_NAME,
           creatorTokenIdentifier: 'https://clerk.example.test|user_unknown',
@@ -303,7 +334,7 @@ describe('workspace provisioning (W-11)', () => {
       await seedCreatorWithPersonalAccount(backend, { principalLifecycle: 'suspended' })
 
       await expectWorkspaceProvisionFailure(
-        () => provisionOrganizationWorkspaceForServer(backend, {
+        () => requestWorkspaceProvisioning(backend, {
           clerkOrgId: CLERK_ORG_ID,
           displayName: WORKSPACE_DISPLAY_NAME,
           creatorTokenIdentifier: TOKEN_IDENTIFIER,
@@ -316,19 +347,22 @@ describe('workspace provisioning (W-11)', () => {
     it.each([
       ['empty', ''],
       ['whitespace', '   '],
-    ] as const)('P5: invalid displayName (%s) refuses display_name_invalid', async (_label, displayName) => {
+      ['too-long', 'x'.repeat(201)],
+      ['invalid-characters', '\n'],
+    ] as const)('P5: invalid displayName (%s) falls back to Business', async (_label, displayName) => {
       const backend = createBackend()
       await seedCreatorWithPersonalAccount(backend)
 
-      await expectWorkspaceProvisionFailure(
-        () => provisionOrganizationWorkspaceForServer(backend, {
-          clerkOrgId: CLERK_ORG_ID,
-          displayName,
-          creatorTokenIdentifier: TOKEN_IDENTIFIER,
-          correlationRef: correlationRef(`p5-${_label}`),
-        }),
-        'display_name_invalid',
+      const result = await provisionOrganizationWorkspaceForServer(backend, {
+        clerkOrgId: CLERK_ORG_ID,
+        displayName,
+        creatorTokenIdentifier: TOKEN_IDENTIFIER,
+        correlationRef: correlationRef(`p5-${_label}`),
+      })
+      const account = (await collectAuthorityTables(backend)).accounts.find(
+        (row) => row.accountRef === result.accountRef,
       )
+      expect(account).toMatchObject({ displayName: 'Business' })
     })
 
     it.each([
@@ -339,7 +373,7 @@ describe('workspace provisioning (W-11)', () => {
       await seedCreatorWithPersonalAccount(backend)
 
       await expectWorkspaceProvisionFailure(
-        () => provisionOrganizationWorkspaceForServer(backend, {
+        () => requestWorkspaceProvisioning(backend, {
           clerkOrgId,
           displayName: WORKSPACE_DISPLAY_NAME,
           creatorTokenIdentifier: TOKEN_IDENTIFIER,
@@ -422,30 +456,10 @@ describe('workspace provisioning (W-11)', () => {
       })
     })
 
-    it('P10: session selection moves from personal account to the newly created account', async () => {
-      const backend = createBackend()
-      await seedCreatorWithPersonalAccount(backend)
-      await insertSessionSelection(backend, PERSONAL_ACCOUNT_REF)
-
-      const result = await provisionOrganizationWorkspaceForServer(backend, {
-        clerkOrgId: CLERK_ORG_ID,
-        displayName: WORKSPACE_DISPLAY_NAME,
-        creatorTokenIdentifier: TOKEN_IDENTIFIER,
-        correlationRef: correlationRef('p10'),
-      })
-
-      expect(await readSessionSelection(backend)).toMatchObject({
-        activeAccountRef: result.accountRef,
-        revision: 2,
-        selectedAt: NOW,
-        lastCorrelationRef: correlationRef('p10'),
-      })
-    })
   })
 
-
   describe('post-provision active account resolution', () => {
-    it('P13: org_id resolves to the provisioned account after binding exists (inverts W-10 C3)', async () => {
+    it('P13: org_id resolves the provisioned account after binding exists', async () => {
       const backend = createBackend()
       await seedCreatorWithPersonalAccount(backend)
 
@@ -456,20 +470,10 @@ describe('workspace provisioning (W-11)', () => {
         correlationRef: correlationRef('p13'),
       })
 
-      await deleteSessionSelection(backend)
-
       const resolution = await backend.run(async (ctx) =>
-        resolveActiveAccountRefForPrincipal(
-          ctx.db,
-          principalRef(PRINCIPAL_REF),
-          identity({ org_id: CLERK_ORG_ID }),
-          'require',
-        ))
+        resolveActiveAccountRefForPrincipal(ctx.db, principalRef(PRINCIPAL_REF), identity({ org_id: CLERK_ORG_ID })))
 
-      expect(resolution).toMatchObject({
-        activeAccountRef: provisioned.accountRef,
-        selectionState: 'org_bound',
-      })
+      expect(resolution).toEqual({ activeAccountRef: provisioned.accountRef })
     })
   })
 })

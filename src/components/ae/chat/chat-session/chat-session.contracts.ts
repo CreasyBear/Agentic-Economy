@@ -2,8 +2,29 @@ import type { ReactNode } from 'react'
 
 import type { ChatStatus, TranscriptMessage } from '../presentation'
 import type { QuoteConfirmationView, CallOutcomeView } from '@/components/ae/shared/object-family.contracts'
-import type { JsonValue } from '@/modules/capability-contract/public'
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+import type { RunIntent } from '@/modules/chat/run-request'
+import type { ChatRecoveryReason } from '../recovery/recovery.contracts'
+
+export type ChatRunResult =
+  | Readonly<{ kind: 'submitted' }>
+  | Readonly<{ kind: 'not_submitted'; reason: ChatRecoveryReason | 'unknown' }>
+  | Readonly<{ kind: 'outcome_unknown'; callRefs?: readonly string[] }>
+
+
+export type ChatPersistedFailure = Readonly<{
+  reason: string
+  callRefs?: readonly string[]
+}>
+export type ChatPendingResume =
+  | Readonly<{ kind: 'run'; run: RunIntent }>
+  | Readonly<{ kind: 'ask'; ask: string }>
+
+export type ToolPanelSelectionState = Readonly<{
+  scope: string
+  selectedByTurn: Readonly<Record<string, string | null>>
+  closingByTurn: Readonly<Record<string, string>>
+}>
 
 export type ChatProps = Readonly<{
   threadId: string | null
@@ -73,6 +94,8 @@ export type ChatHeaderProps = Readonly<{
   copied: boolean
   ownerChatEnabled?: boolean
   enableProblem?: string
+  balanceLabel?: string | undefined
+  balanceDescription?: string | undefined
   onEnableSpending?: () => void
   mobileHistory: ReactNode
   mobileOpen: boolean
@@ -94,8 +117,12 @@ export type ChatComposerProps = Readonly<{
   status: ChatStatus
   anonymousMessageCount?: number
   anonymousMessageLimitReached: boolean
+  recovery?: ChatRecoveryReason | 'unknown'
   onPromptChange(value: string): void
   onSubmit(): void
+  onRetry?: () => void
+  onEditLast?: () => void
+  onNewChat?: () => void
   onStop?: () => void
 }>
 
@@ -120,13 +147,18 @@ export type ChatTranscriptViewProps = Readonly<{
   onCopyAnswer?: (answer: string) => void
   onEditQuestion?: (prompt: string) => void
   onRetryQuestion?: (prompt: string) => void
+  onNewChat?: () => void
   onClarifyAnswer?: (answer: string) => void
   onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'next-page' }>) => void
   onRepeatSearch?: (query: string) => void
-  onQuoteTool?: (toolRef: string, input: Record<string, JsonValue>) => Promise<boolean>
+  onRunTool?: (toolRef: string, input: RunIntent['input']) => Promise<ChatRunResult>
+  ownerChatEnabled?: boolean
+  enableSpendingBusy?: boolean
+  onEnableSpending?: () => void
   ownerChatThreadId?: string
   ownerChatNow?: number
   onFreshQuote?: (toolName: string, inputSummary: string) => void
+  loadEarlier?: Readonly<{ hasMore: boolean; loading: boolean; onLoad: () => void }>
   readOnly?: boolean
 }>
 
@@ -139,5 +171,20 @@ export type ChatSessionModel = Readonly<{
   header: ChatHeaderViewProps
   composer: ChatComposerProps
   transcript: ChatTranscriptViewProps
+  lastUserText(): string | undefined
+  /** newThread: start a fresh thread, e.g. right after paying turns on (owner-chat turns need their own thread). */
+  submitText(text: string, newThread?: boolean): void
+  onRunTool(toolRef: string, input: RunIntent['input']): Promise<ChatRunResult>
+  retryLastRequest(): void
   pageBusy: boolean
+}>
+
+export type ChatLayoutProps = Readonly<{
+  model: ChatSessionModel
+  ownerChatEnabled?: boolean
+  enableSpendingBusy?: boolean
+  onEnableSpending?: () => void
+  onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: RunIntent) => void
+  balanceLabel?: string | undefined
+  balanceDescription?: string | undefined
 }>

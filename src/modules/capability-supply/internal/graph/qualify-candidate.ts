@@ -20,7 +20,6 @@ import { contractRefFromRow } from '../offering/registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import { publicationLifecycle } from '../publication/lifecycle'
 import { parseAdmittedTransportCatalogMetadata } from '../transport-adapters'
-import { x402SellerCanaryAdmissionIsSatisfied } from '../x402-seller-onboarding/admission'
 import {
   FACILITATOR_DISCOVERY_EVIDENCE_REF,
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
@@ -45,7 +44,6 @@ export type SuppliedCandidateRef = Readonly<{
 export type SuppliedCandidateQualificationReason =
   | 'publication_missing'
   | 'publication_not_current'
-  | 'seller_canary_admission_required'
   | 'candidate_reference_mismatch'
   | 'business_not_currently_published'
   | 'contract_missing_or_inactive'
@@ -107,9 +105,6 @@ export async function qualifySuppliedCandidate(
     && publication.publisherRef === FACILITATOR_DISCOVERY_PUBLISHER_REF
     && publication.sourceKind === 'x402'
     && publication.registrationEvidenceRefs.includes(FACILITATOR_DISCOVERY_EVIDENCE_REF)
-  const sellerCanaryAdmissionCurrent = facilitatorAdmissionCurrent
-    || x402SellerCanaryAdmissionIsSatisfied(publication.registrationEvidenceRefs)
-  if (!sellerCanaryAdmissionCurrent) reasons.push('seller_canary_admission_required')
   if (
     publication.networkId !== candidate.networkId
     || publication.businessId !== candidate.businessId
@@ -332,7 +327,6 @@ export async function qualifySuppliedCandidate(
       method: bindingMethod,
       businessCurrent,
       publicationCurrent,
-      sellerCanaryAdmissionCurrent,
       contractCurrent,
       offeringCurrent,
       bindingCurrent,

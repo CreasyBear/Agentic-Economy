@@ -4,7 +4,7 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
-import { spendingPeriodsValue } from '@/modules/money/public'
+import { spendingPeriodsValue, promotionalCreditAllocationValue, managedCallBookingValue } from '@/modules/money/public'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
@@ -42,61 +42,7 @@ export const callAuthorityValue = v.object({
   acceptedBasis: acceptedAuthorityValue,
 })
 
-export const operationExecutionPurposeValue = v.union(
-  v.literal('market_call'),
-  v.literal('seller_onboarding_canary'),
-)
-
-export const sellerOnboardingCanaryExecutionEnvelopeValue = v.object({
-  executionPurpose: v.literal('seller_onboarding_canary'),
-  canaryRef: v.string(),
-  canaryCommitmentDigest: v.string(),
-  callRef: v.string(),
-  toolRef: v.string(),
-  ownerId: v.string(),
-  businessId: v.string(),
-  offeringRef: v.string(),
-  offeringRevision: v.number(),
-  offeringSourceHash: v.string(),
-  accessPathRef: v.string(),
-  accessPathSourceHash: v.string(),
-  publicationRef: v.string(),
-  publicationRevision: v.number(),
-  toolMaterialDigest: v.string(),
-  contractDigest: v.string(),
-  bindingDigest: v.string(),
-  priceDigest: v.string(),
-  sellerPayTo: v.string(),
-  sellerClaimDigest: v.string(),
-  readinessDigest: v.string(),
-  readinessObservedAt: v.number(),
-  readinessValidUntil: v.number(),
-  expectedOutputSchemaDigest: v.string(),
-  expectedOutputEvidenceDigest: v.string(),
-  expiresAt: v.number(),
-  inputDigest: v.string(),
-  idempotencyKey: v.string(),
-  funding: v.object({
-    kind: v.literal('ae_owned'),
-    principalId: v.string(),
-    ownerId: v.string(),
-    credentialId: v.string(),
-    applicationRef: v.string(),
-    grantRef: v.string(),
-    grantGeneration: v.number(),
-    policyDigest: v.string(),
-    budgetRef: v.string(),
-    maximumSpend: exactAmountValue,
-    requestedSpend: exactAmountValue,
-    ledgerEffects: v.literal('external_spend_only'),
-  }),
-  accountingPolicy: v.object({
-    recordBuyerUsage: v.literal(false),
-    accrueProviderEarnings: v.literal(false),
-    accruePlatformRake: v.literal(false),
-    recordQualifiedUse: v.literal(false),
-  }),
-})
+export const operationExecutionPurposeValue = v.literal('market_call')
 
 export const usageValue = v.object({
   usageRef: v.string(),
@@ -120,7 +66,7 @@ const callReceiptFields = {
   transactionRef: v.optional(v.string()),
   accountingTransactionRefs: v.optional(v.array(v.string())),
   refundState: v.optional(v.union(v.literal('released'), v.literal('not_applicable'), v.literal('unknown'))),
-  lossState: v.optional(v.union(v.literal('none'), v.literal('provider_output_invalid'), v.literal('unknown'))),
+  lossState: v.optional(v.union(v.literal('none'), v.literal('provider_output_invalid'), v.literal('provider_http_error'), v.literal('unknown'))),
   externalSettlementRef: v.optional(v.string()),
   evidenceHash: v.string(),
   issuedAt: v.string(),
@@ -153,28 +99,6 @@ export const callReceiptValue = v.union(
         paymentIdentifier: v.optional(v.string()),
       }),
     ),
-  }),
-  v.object({
-    ...callReceiptFields,
-    commercialModel: v.literal('seller_canary_x402'),
-    providerQuotedAmount: exactAmountValue,
-    agenticEconomyFee: exactAmountValue,
-    totalBuyerAuthorization: exactAmountValue,
-    settlementTransactionHash: v.optional(v.string()),
-    paymentIdentifier: v.optional(v.string()),
-    network: v.literal('eip155:8453'),
-    asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
-  }),
-  v.object({
-    ...callReceiptFields,
-    commercialModel: v.literal('seller_canary_x402'),
-    providerQuotedAmount: exactAmountValue,
-    agenticEconomyFee: exactAmountValue,
-    totalBuyerAuthorization: exactAmountValue,
-    settlementTransactionHash: v.optional(v.string()),
-    paymentIdentifier: v.optional(v.string()),
-    network: v.literal('eip155:84532'),
-    asset: v.literal('0x036CbD53842c5426634e7929541eC2318f3dCF7e'),
   }),
 )
 const authorityRequestValue = v.object({
@@ -221,9 +145,6 @@ export const callResultValue = v.union(
     toolRef: v.string(),
     output: jsonValue,
     evidenceHash: v.string(),
-    // Seller-onboarding canaries are non-buyer conformance proofs. The canary
-    // projector is the only completion path
-    // allowed to omit this field; ordinary completion still requires it.
     usage: v.optional(usageValue),
     receipt: v.optional(callReceiptValue),
   }),
@@ -286,7 +207,25 @@ const providerConsequenceJournalStateValue = v.union(
 )
 
 
+const paidCallReportFields = {
+  reportRef: v.string(), callRef: v.string(), accountRef: v.string(), reporterRef: v.string(),
+  toolRef: v.string(), providerRef: v.string(), environment: v.union(v.literal('sandbox'), v.literal('production')),
+  reason: v.literal('answer_not_useful'), booking: managedCallBookingValue,
+  originalSettlementRefs: v.array(v.string()), originalResolution: purchaseResolutionRecordValidator,
+  reportDigest: v.string(), createdAt: v.number(), updatedAt: v.number(),
+}
+
 export const capabilityCallTables = {
+  paidCallReports: defineTable(v.union(
+    v.object({ ...paidCallReportFields, state: v.literal('pending'), nextWorkAt: v.number() }),
+    v.object({ ...paidCallReportFields, state: v.literal('posted'), postedAt: v.number(), buyerRefundTransactionRef: v.string(), transactionRefs: v.array(v.string()) }),
+  ))
+    .index('by_callRef', ['callRef'])
+    .index('by_accountRef_and_buyerRefundTransactionRef', ['accountRef', 'buyerRefundTransactionRef'])
+    .index('by_reporterRef_and_createdAt', ['reporterRef', 'createdAt'])
+    .index('by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
+    .index('by_environment_and_state_and_nextWorkAt', ['environment', 'state', 'nextWorkAt']),
+
   purchaseResolutionRecords: defineTable({
     ...purchaseResolutionRecordValidator.fields,
     createdAt: v.number(),
@@ -405,15 +344,14 @@ export const capabilityCallTables = {
   capabilityCalls: defineTable({
     quoteRef: v.optional(v.string()),
     callRef: v.string(),
+    // Attribution belongs to the first reservation, never to a later replay.
+    chatTurnRef: v.optional(v.string()),
     principalId: v.string(),
     ownerId: v.string(),
     credentialId: v.string(),
     dispatchedCredentialId: v.optional(v.string()),
     applicationRef: v.string(),
     toolRef: v.string(),
-    // Presence is the complete, server-built seller canary authority. Ordinary
-    // market calls have no canary field and cannot acquire one through invoke.
-    sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
     idempotencyKey: v.string(),
     environment: v.union(v.literal('sandbox'), v.literal('production')),
     grantRef: v.string(),
@@ -432,6 +370,10 @@ export const capabilityCallTables = {
       v.literal('released'),
       v.literal('settled'),
     )),
+    promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
+    formanceReservationAttempt: v.optional(v.object({
+      generation: v.number(), leaseUntil: v.number(), ambiguous: v.boolean(),
+    })),
     formanceReservationRefs: v.optional(v.array(v.string())),
     formanceReservationDigest: v.optional(v.string()),
     formanceReleaseRefs: v.optional(v.array(v.string())),
@@ -463,16 +405,9 @@ export const capabilityCallTables = {
     createdAt: v.number(),
   })
     .index('by_callRef', ['callRef'])
+    .index('by_chatTurnRef', ['chatTurnRef'])
+    .index('by_environment_and_createdAt', ['environment', 'createdAt'])
     .index('by_ownerId_and_buyerSaleTransactionRef', ['ownerId', 'buyerSaleTransactionRef'])
-    .index('by_sellerOnboardingCanary_canaryRef', ['sellerOnboardingCanary.canaryRef'])
-    .index('by_sellerOnboardingCanary_target', [
-      'sellerOnboardingCanary.businessId',
-      'sellerOnboardingCanary.offeringRef',
-      'sellerOnboardingCanary.offeringRevision',
-      'sellerOnboardingCanary.offeringSourceHash',
-      'sellerOnboardingCanary.publicationRef',
-      'sellerOnboardingCanary.publicationRevision',
-    ])
     // Idempotency is keyed by the stable Principal, never by the rotating
     // credential: a replaced credential must replay, not mint a second Call.
     .index('by_principalId_and_idempotencyKey', ['principalId', 'idempotencyKey'])
@@ -485,59 +420,16 @@ export const capabilityCallTables = {
     .index('by_principalId_and_state', ['principalId', 'state'])
     .index('by_principalId_and_toolRef_and_state', ['principalId', 'toolRef', 'state'])
     .index('by_toolRef_and_state', ['toolRef', 'state'])
+    .index('by_toolRef_and_state_and_updatedAt', ['toolRef', 'state', 'updatedAt'])
     .index('by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
+    .index('by_ownerId_and_toolRef_and_state', ['ownerId', 'toolRef', 'state'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
+    .index('by_state_and_result_kind_and_createdAt', ['state', 'result.kind', 'createdAt'])
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt'])
     .index('by_state_and_reconciliation_disposition_reason_nextAttemptAt', [
       'state', 'reconciliation.disposition', 'reconciliation.reason', 'reconciliation.nextAttemptAt',
     ])
     .index('by_createdAt', ['createdAt']),
-  // Append-only proof that a seller canary was re-armed only after either a
-  // durable pre-claim refusal with no canonical attempt, or an exact canonical
-  // safe-before-release attempt whose durable ledgers prove it ended unpaid.
-  sellerOnboardingCanaryRearmAudits: defineTable({
-    auditRef: v.string(),
-    canaryRef: v.string(),
-    callRef: v.string(),
-    priorWorkId: v.string(),
-    rearmedWorkId: v.string(),
-    refusalCode: v.union(
-      v.literal('grant_not_found'),
-      v.literal('grant_generation_stale'),
-      v.literal('operation_not_current'),
-      v.literal('provider_refused'),
-      v.literal('pre_release_failed'),
-    ),
-    priorResultDigest: v.string(),
-    // Optional for compatibility with audits written before structured refusal
-    // provenance was introduced. Every new rearm writes this object.
-    refusalProvenance: v.optional(v.union(
-      v.object({
-        phase: v.literal('pre_claim'),
-        source: v.union(
-          v.literal('known_preclaim_code'),
-          v.literal('legacy_exact_provider_approval'),
-        ),
-        nextAction: v.optional(v.string()),
-      }),
-      v.object({
-        phase: v.literal('safe_before_release'),
-        source: v.literal('canonical_retryable_attempt'),
-        nextAction: v.string(),
-        priorAttemptRef: v.string(),
-        priorAttemptNumber: v.number(),
-        priorEffectGeneration: v.number(),
-        controlDigest: v.string(),
-        attemptDigest: v.string(),
-      }),
-    )),
-    rearmedEnvelopeDigest: v.string(),
-    rearmedAuthorityDigest: v.string(),
-    rearmedAt: v.number(),
-  })
-    .index('by_auditRef', ['auditRef'])
-    .index('by_callRef', ['callRef'])
-    .index('by_canaryRef', ['canaryRef']),
   // Authority-provenance-only journal. It stores no provider or payment secret
   // material; every field either pins the admitted consequence snapshot or
   // prevents a duplicate/ambiguous external effect.

@@ -178,6 +178,7 @@ function ticket(routeInvocation = createTestProviderInvocation({ now: NOW })): C
 
 function environment(overrides: Record<string, string | undefined> = {}) {
   return {
+    AE_DEPLOYMENT_ENVIRONMENT: 'development',
     AE_INFISICAL_BASE_URL: 'https://app.infisical.com',
     AE_INFISICAL_PLATFORM_PROJECT_ID: 'project-platform',
     AE_INFISICAL_PLATFORM_ENVIRONMENT: 'production',
@@ -358,13 +359,13 @@ describe('internal provider consequence route', () => {
     expect(unavailable.status).toBe(503)
   })
 
-  it('executes the provider consequence while keeping both vault secrets out of Convex and the response', async () => {
+  it.each(['development', 'production', undefined])('executes non-x402 provider consequences in %s while keeping vault secrets out of Convex and the response', async (deployment) => {
     const convexBodies: string[] = []
     const externalFetch = vaultAndJournalFetch(convexBodies)
     vi.stubGlobal('fetch', externalFetch)
     mocks.guardedFetch.mockResolvedValue(Response.json({ serviceReference: 'service:test' }))
 
-    const response = await handleProviderConsequenceRequest(consequenceRequest(), environment())
+    const response = await handleProviderConsequenceRequest(consequenceRequest(), environment({ AE_DEPLOYMENT_ENVIRONMENT: deployment }))
     const responseBody = await response.text()
 
     expect(response.status).toBe(200)
@@ -491,6 +492,7 @@ describe('internal provider consequence route', () => {
       'read_authorization',
       'record_signature_digest',
       'mark_possibly_submitted',
+      'checkpoint_response',
       'observe_attempt',
     ])
     expect(convexBodies.join('\n')).not.toContain(CUSTOMER_SECRET)
@@ -498,6 +500,21 @@ describe('internal provider consequence route', () => {
     expect(responseBody).not.toContain(CUSTOMER_SECRET)
     expect(responseBody).not.toContain(SIGNING_KEY)
     expect(responseBody).not.toContain(JOURNAL_TOKEN)
+  })
+
+  it.each(['production', undefined, 'preview'])('refuses raw-key x402 issue and execution before any consequence for %s', async (deployment) => {
+    const externalFetch = vi.fn<typeof globalThis.fetch>()
+    vi.stubGlobal('fetch', externalFetch)
+    const invocation = x402Invocation()
+    const canonicalTicket = ticket(invocation)
+    for (const request of [signingRequest(canonicalTicket), consequenceRequest(canonicalTicket, { invocation })]) {
+      const response = await handleProviderConsequenceRequest(request, environment({ AE_DEPLOYMENT_ENVIRONMENT: deployment }))
+      expect(response.status).toBe(503)
+      await expect(response.json()).resolves.toEqual({ kind: 'unavailable' })
+    }
+    expect(externalFetch).not.toHaveBeenCalled()
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
+    expect(mocks.getVercelOidcToken).not.toHaveBeenCalled()
   })
 
   it('rejects a substituted claims digest before any vault, journal, or provider call', async () => {

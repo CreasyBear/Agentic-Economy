@@ -1,3 +1,4 @@
+import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
@@ -9,7 +10,6 @@ import {
   audFundingPolicyFromCommercialControls,
   evaluateOrganizationMonthlySpendFence,
   normalizePricingConfig,
-  PACKAGE4_FORMANCE_REQUIREMENTS,
   quoteManagedX402BuyerAud,
   type CommercialPolicyControls,
   type ReferenceRate,
@@ -211,7 +211,7 @@ export function quoteFormanceSnapshotIsCurrent(
     && formance.budgetGeneration === grantBudgetGeneration
     && formance.policyGeneration === 1
     && formance.policyDigest === policyDigest
-    && formance.formanceSchemaVersion === PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+    && formance.formanceSchemaVersion === MANAGED_CALL_FORMANCE_SCHEMA_VERSION
     && formance.observedAt <= now
     && now - formance.observedAt <= 15_000
 }
@@ -267,7 +267,7 @@ export async function quotePaidPeriodAdmission(
 ): Promise<QuoteRefusalResult | undefined> {
   if (!input.paid) return undefined
   const spendingPeriods = input.spendingPeriods
-  if (input.formance.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+  if (input.formance.formanceSchemaVersion !== MANAGED_CALL_FORMANCE_SCHEMA_VERSION
     || spendingPeriods === undefined) {
     return refuse(refusalContext, 'budget_exceeded', false, { reason: 'spending_periods_required' })
   }

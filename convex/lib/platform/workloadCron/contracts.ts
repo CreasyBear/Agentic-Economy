@@ -2,6 +2,8 @@ import { v, type Validator } from 'convex/values'
 import type { JsonValue } from '@/modules/capability-contract/public'
 
 export const CONSEQUENCE_OPERATIONS = [
+  'capabilityCallReports:claimWork',
+  'capabilityCallReports:finishWork',
   'capabilityCalls:cancelBeforeClaim',
   'capabilityCalls:claimAutomaticReconciliationCandidate',
   'capabilityCalls:finishAutomaticReconciliation',
@@ -9,6 +11,12 @@ export const CONSEQUENCE_OPERATIONS = [
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
   'moneyTreasury:recordObservation',
+  'moneyReadiness:publish',
+  'moneyTreasuryReconciliation:beginBatch',
+  'moneyTreasuryReconciliation:finishBatch',
+  'moneyTreasuryReconciliation:publishSnapshot',
+  'moneyPromotionalCredit:claimWork',
+  'moneyPromotionalCredit:finishWork',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
 ] as const
 export type ConsequenceOperation = typeof CONSEQUENCE_OPERATIONS[number]
@@ -37,4 +45,3 @@ export function consequenceJsonValueAtDepth(depth: number): Validator<JsonValue,
 // caps nesting before dispatching through the declared operation switch below.
 export const consequenceJsonValue = consequenceJsonValueAtDepth(12)
 export const consequencePayloadValue = v.record(v.string(), consequenceJsonValue)
-

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   FUNDING_QUOTE_VALIDITY_MS,
+  audFundingPolicyFromCommercialControls,
+  calculateAudFundingFinancials,
   commercialPolicyControlsFromFundingProjection,
+  quoteAudAccountFunding,
   quoteFunding,
   readFundingConstraints,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
@@ -46,8 +49,8 @@ describe('funding quote contract', () => {
       expiresAt: 1_000 + FUNDING_QUOTE_VALIDITY_MS,
       principalAmount: { currency: 'AUD', units: '10000000', exponent: 6 },
       serviceFee: { currency: 'AUD', units: '500000', exponent: 6 },
-      taxOnServiceFee: { currency: 'AUD', units: '50000', exponent: 6 },
-      totalPayment: { currency: 'AUD', units: '10550000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '1050000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '11550000', exponent: 6 },
       serviceFeeBps: 500,
       taxOnServiceFeeBps: 1000,
       nextActions: [{
@@ -82,11 +85,31 @@ describe('funding quote contract', () => {
       binding: false,
       principalAmount: { currency: 'AUD', units: '10000000', exponent: 6 },
       serviceFee: { currency: 'AUD', units: '250000', exponent: 6 },
-      taxOnServiceFee: { currency: 'AUD', units: '30000', exponent: 6 },
-      totalPayment: { currency: 'AUD', units: '10280000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '1030000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '11280000', exponent: 6 },
       serviceFeeBps: LIVE_SERVICE_FEE_BPS,
       taxOnServiceFeeBps: 1000,
     })
+  })
+
+
+  it('adds 10% GST on the loaded amount plus the service fee and rounds half-up to the cent', () => {
+    const quote = quoteFunding({
+      amount: { currency: 'AUD', units: '5000000', exponent: 6 },
+      now: 1_000,
+    })
+    expect(quote).toMatchObject({
+      principalAmount: { currency: 'AUD', units: '5000000', exponent: 6 },
+      serviceFee: { currency: 'AUD', units: '250000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '530000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '5780000', exponent: 6 },
+    })
+    const policy = audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS)
+    expect(calculateAudFundingFinancials({
+      principalUnits: 5_000_000n,
+      serviceFeeBps: policy.serviceFeeBps,
+      taxOnServiceFeeBps: policy.taxOnServiceFeeBps,
+    })).toEqual(quoteAudAccountFunding(5_000_000n, policy))
   })
 
   it('rebuilds quote controls from a public projection that omits digest and legal max', () => {

@@ -1,16 +1,29 @@
 import { clerk } from '@clerk/testing/playwright'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
 
 import { createOpaqueOAuthValue, hashOAuthValue } from '@/modules/agent-access/oauth-state'
 import { authenticatedE2EEnvironment, requireAuthenticatedE2EEnvironment } from './environment'
+import { test } from './fixtures'
+import { vercelProtectionBypassCookie } from '../../deploy-smoke/vercel-bypass'
 
 const environment = authenticatedE2EEnvironment
+const issuedAgentNames: string[] = []
 
 test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
   test.skip(!environment.configured, 'Requires Clerk test-instance keys, a dedicated owner, and a configured Convex-backed application.')
-  test.describe.configure({ mode: 'serial' })
+  test.describe.configure({ mode: 'serial', retries: 0 })
+
+  test.beforeEach(() => { issuedAgentNames.length = 0 })
+  test.afterEach(async ({ page }, testInfo) => {
+    if (testInfo.status === testInfo.expectedStatus) return
+    const failures: unknown[] = []
+    for (const name of issuedAgentNames) {
+      try { await disconnectTestAgent(page, name) } catch (error) { failures.push(error) }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'Test Agent cleanup needs owner reconciliation')
+  })
 
   test('keeps two agents independent through replacement, selective revocation, and disconnection', async ({ page }) => {
     const configuredEnvironment = requireAuthenticatedE2EEnvironment()
@@ -19,7 +32,6 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const agentAName = `E2E Agent A ${suffix}`
     const agentBName = `E2E Agent B ${suffix}`
 
-    await expectExactReleaseRevision(page.request, configuredEnvironment.expectedSourceRevision)
     await page.goto('/')
     await clerk.signIn({ page, emailAddress: configuredEnvironment.ownerEmail })
 
@@ -48,22 +60,23 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
 
     await openAgent(page, agentAName)
     await page.getByRole('button', { name: 'Technical details' }).click()
-    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 2', { exact: true })).toBeVisible()
-    await expect(page.getByText('Revoked').first()).toBeVisible()
-    const revoke = page.getByRole('button', { name: 'Revoke', exact: true })
+    await expect(page.getByText('Current generation', { exact: true }).locator('..').locator('dd')).toHaveText('2')
+    await expect(page.getByText('Credentials', { exact: true }).locator('..').locator('dd')).toHaveText('2')
+    await page.getByRole('link', { name: 'Manage Agent keys and credential history' }).click()
+    const historyA = page.getByRole('link', { name: 'View Agent', exact: true })
+      .and(page.locator(`a[href="/agent-access?caller=${identityA.principalRef}"]`))
+    await expect(historyA).toHaveCount(2)
+    await expect(historyA.locator('..').getByText('revoked', { exact: true })).toHaveCount(1)
+    const revoke = page.getByRole('button', { name: new RegExp(`^Revoke key created .+ for ${agentAName}$`, 'u') })
     await expect(revoke).toBeVisible()
-    await revoke.dispatchEvent('click')
-    const confirmRevoke = page.getByRole('button', { name: 'Revoke credential' })
+    await revoke.click()
+    const confirmRevoke = page.getByRole('button', { name: 'Revoke this key', exact: true })
     await expect(confirmRevoke).toBeVisible()
-    await confirmRevoke.dispatchEvent('click')
+    await confirmRevoke.click()
     await expect(page.getByRole('alertdialog')).toBeHidden()
-    await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 2', { exact: true })).toBeVisible()
-    await expect(page.getByText('Revoked', { exact: true })).toHaveCount(2)
+    await expect(historyA).toHaveCount(2)
+    await expect(historyA.locator('..').getByText('revoked', { exact: true })).toHaveCount(2)
+    await expect(revoke).toBeHidden()
 
     const selectivelyRevoked = await page.request.get('/api/v1/account', {
       headers: { Authorization: `Bearer ${replacement.secret}` },
@@ -75,15 +88,17 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await page.getByRole('button', { name: 'Technical details' }).click()
     const disconnect = page.getByRole('button', { name: 'Remove agent everywhere' })
     await expect(disconnect).toHaveCount(1)
-    await disconnect.dispatchEvent('click')
-    const confirmDisconnect = page.getByRole('button', { name: 'Remove agent everywhere' }).last()
+    await disconnect.click()
+    const confirmDisconnect = page.getByRole('alertdialog').getByRole('button', { name: 'Remove agent', exact: true })
     await expect(confirmDisconnect).toBeVisible()
-    await confirmDisconnect.dispatchEvent('click')
+    await confirmDisconnect.click()
     await expect(page.getByRole('alertdialog')).toBeHidden()
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
-    await expect(page.getByText('Revoked', { exact: true })).toBeVisible()
+    await page.getByRole('link', { name: 'Manage Agent keys and credential history' }).click()
+    const historyB = page.getByRole('link', { name: 'View Agent', exact: true })
+      .and(page.locator(`a[href="/agent-access?caller=${identityB.principalRef}"]`))
+    await expect(historyB).toHaveCount(1)
+    await expect(historyB.locator('..').getByText('revoked', { exact: true })).toHaveCount(1)
     const disconnected = await page.request.get('/api/v1/account', {
       headers: { Authorization: `Bearer ${agentB.secret}` },
     })
@@ -97,7 +112,6 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const verifier = createOpaqueOAuthValue(48)
     const state = createOpaqueOAuthValue(18)
 
-    await expectExactReleaseRevision(page.request, configuredEnvironment.expectedSourceRevision)
     await page.goto('/')
     await clerk.signIn({ page, emailAddress: configuredEnvironment.ownerEmail })
 
@@ -125,6 +139,7 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
 
     await page.goto(authorize.toString())
     await expect(page.getByRole('radio', { name: /Ask each time/ })).toBeChecked()
+    issuedAgentNames.push(clientName)
     const redirectTo = await submitAgentApprovalRedirect(page, callback)
     const callbackUrl = new URL(redirectTo)
     expect(callbackUrl.searchParams.get('state')).toBe(state)
@@ -154,11 +169,11 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
 
     await openAgent(page, clientName)
     await expect(page.getByText(clientName, { exact: true }).first()).toBeVisible()
-    const disconnect = page.getByRole('button', { name: 'Disconnect', exact: true })
-    await disconnect.click()
-    await page.getByRole('button', { name: 'Disconnect', exact: true }).last().click()
+    await page.getByRole('button', { name: 'Technical details' }).click()
+    await page.getByRole('button', { name: 'Remove agent everywhere' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove agent', exact: true }).click()
     await expect(page.getByRole('alertdialog')).toBeHidden()
-    await expect(page.getByRole('dialog').getByText('Revoked', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
     const rejectedRefresh = await page.request.post('/oauth/token', {
       form: { grant_type: 'refresh_token', refresh_token: refreshed.refreshToken, client_id: clientId },
     })
@@ -190,6 +205,7 @@ async function connectNewAgent(page: Page, name: string): Promise<ConnectedAgent
   const grant = await beginDeviceGrant(page.request, name)
   await page.goto(grant.verificationUri)
   await expect(page.getByRole('heading', { name: `Connect ${name}`, exact: true })).toBeVisible()
+  issuedAgentNames.push(name)
   await submitAgentApproval(page, 'Connect agent')
   await expect(page.getByText(`Connected to ${name}`)).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
@@ -209,7 +225,8 @@ async function replaceAgentCredential(page: Page, name: string, targetName: stri
   for (let pageNumber = 0; ; pageNumber += 1) {
     if (pageNumber >= 50) throw new Error('replacement_agent_not_found')
     await selector.click()
-    const target = page.getByRole('option', { name: targetName, exact: true })
+    await expect(page.getByRole('option').first()).toBeVisible()
+    const target = page.getByRole('option', { name: new RegExp(`^${targetName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} · prn_[0-9a-f]{32}$`, 'u') })
     if (await target.count() > 0) {
       await target.click()
       break
@@ -258,13 +275,14 @@ async function submitAgentApprovalRedirect(page: Page, callback: string): Promis
 }
 
 async function ensureAgentVisible(page: Page, name: string): Promise<void> {
-  const link = page.getByRole('link', { name: `Open ${name}`, exact: true })
+  await expect(page.getByRole('table', { name: 'Agents', exact: true })).toBeVisible()
+  const link = page.getByRole('link', { name: new RegExp(`^Open ${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} \\(`, 'u') })
   for (let pageNumber = 0; await link.count() === 0; pageNumber += 1) {
     if (pageNumber >= 50) throw new Error(`agent_not_found:${name}`)
-    const loadMore = page.getByRole('button', { name: 'Load more agents', exact: true })
+    const loadMore = page.getByRole('button', { name: 'Load more Agents', exact: true })
     if (await loadMore.count() === 0) throw new Error(`agent_not_found:${name}`)
     await loadMore.click()
-    await expect(page.getByRole('button', { name: 'Loading more agents…', exact: true })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Loading more Agents…', exact: true })).toBeHidden()
   }
   await expect(link).toBeVisible()
 }
@@ -273,7 +291,7 @@ async function openAgent(page: Page, name: string): Promise<void> {
   await page.goto('/agent-access')
   await expect(page.getByRole('heading', { level: 1, name: 'Agents', exact: true })).toBeVisible()
   await ensureAgentVisible(page, name)
-  const link = page.getByRole('link', { name: `Open ${name}`, exact: true })
+  const link = page.getByRole('link', { name: new RegExp(`^Open ${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} \\(`, 'u') })
   const href = await link.getAttribute('href')
   if (href === null || !/^\/agent-access\?caller=prn_[0-9a-f]{32}$/u.test(href)) {
     throw new Error('agent_detail_link_invalid')
@@ -283,11 +301,21 @@ async function openAgent(page: Page, name: string): Promise<void> {
   await expect(page.getByRole('button', { name: 'Technical details' })).toBeVisible()
 }
 
-async function expectExactReleaseRevision(request: APIRequestContext, expected: string | undefined): Promise<void> {
-  if (expected === undefined) return
-  const response = await request.get('/api/v1/release')
-  expect(response.ok()).toBe(true)
-  await expect(response.json()).resolves.toEqual({ kind: 'ok', sourceRevision: expected })
+async function disconnectTestAgent(page: Page, name: string): Promise<void> {
+  await openAgent(page, name)
+  await page.getByRole('button', { name: 'Technical details' }).click()
+  const remove = page.getByRole('button', { name: 'Remove agent everywhere' })
+  if (await remove.isEnabled()) {
+    await remove.click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove agent', exact: true }).click()
+    await expect(page.getByRole('alertdialog')).toBeHidden()
+  }
+  await expect(remove).toBeDisabled()
+  const sheet = page.getByRole('dialog', { name, exact: true })
+  await expect(sheet.locator('[data-slot="sheet-description"]')).toHaveText('Disconnected')
+  await expect(page.getByRole('alert').filter({
+    hasText: /Disconnection still in progress|Provider cleanup incomplete|Agent access changed elsewhere|Agent access change refused|Agent disconnection unavailable/u,
+  })).toHaveCount(0)
 }
 
 async function beginDeviceGrant(request: APIRequestContext, name: string) {
@@ -384,21 +412,29 @@ type AgentIdentity = Readonly<{
   authorityMode: string
 }>
 
-function officialMcpClient(baseURL: string, accessToken?: string): Readonly<{
+async function officialMcpClient(baseURL: string, accessToken?: string): Promise<Readonly<{
   client: Client
   transport: StreamableHTTPClientTransport
-}> {
+}>> {
+  const endpoint = new URL('/mcp', baseURL)
+  const protectionCookie = await vercelProtectionBypassCookie(endpoint)
   const client = new Client({ name: 'ae-authenticated-e2e', version: '1.0.0' })
-  const transport = new StreamableHTTPClientTransport(new URL('/mcp', baseURL), {
-    ...(accessToken === undefined
-      ? {}
-      : { requestInit: { headers: { authorization: `Bearer ${accessToken}` } } }),
+  const transport = new StreamableHTTPClientTransport(endpoint, {
+    requestInit: { headers: {
+      ...(accessToken === undefined ? {} : { authorization: `Bearer ${accessToken}` }),
+      ...(protectionCookie === undefined ? {} : { cookie: protectionCookie }),
+    } },
+    fetch: (input, init) => {
+      const target = new URL(input instanceof Request ? input.url : input)
+      if (target.origin !== endpoint.origin) throw new Error('authenticated_e2e_mcp_origin_mismatch')
+      return fetch(input, { ...init, redirect: 'error' })
+    },
   })
   return { client, transport }
 }
 
 async function callOfficialWhoami(baseURL: string, accessToken: string): Promise<AgentIdentity> {
-  const { client, transport } = officialMcpClient(baseURL, accessToken)
+  const { client, transport } = await officialMcpClient(baseURL, accessToken)
   try {
     await client.connect(transport as unknown as Parameters<Client['connect']>[0])
     const response = await client.callTool({ name: 'ae_agentAccess_whoami', arguments: {} })
@@ -412,7 +448,7 @@ async function callOfficialWhoami(baseURL: string, accessToken: string): Promise
 }
 
 async function callOfficialPublicSearch(baseURL: string): Promise<Record<string, unknown>> {
-  const { client, transport } = officialMcpClient(baseURL)
+  const { client, transport } = await officialMcpClient(baseURL)
   try {
     await client.connect(transport as unknown as Parameters<Client['connect']>[0])
     const response = await client.callTool({

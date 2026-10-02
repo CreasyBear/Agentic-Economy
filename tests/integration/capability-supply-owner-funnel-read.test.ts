@@ -124,25 +124,6 @@ describe('owner supply funnel read', () => {
         callRef: 'call:unknown',
         deliveryState: 'unknown',
       })
-      await ctx.db.insert('qualifiedUseReceipts', {
-        qualifiedUseRef: 'qualified-use:operation-evidence',
-        materialDigest: `sha256:${'1'.repeat(64)}`,
-        callRef: 'call:delivered',
-        attemptRef: 'attempt:delivered',
-        effectGeneration: 1,
-        businessId: String(businessId),
-        toolRef,
-        publicationRef: published.publicationRef,
-        publicationRevision: published.publicationRevision,
-        contractDigest: `sha256:${'4'.repeat(64)}`,
-        bindingDigest: `sha256:${'5'.repeat(64)}`,
-        principalClass: 'agent_key',
-        requestDigest: `sha256:${'2'.repeat(64)}`,
-        responseDigest: `sha256:${'3'.repeat(64)}`,
-        evidenceRefs: ['receipt:delivery'],
-        environment: 'production',
-        qualifiedAt: now - 400,
-      })
     })
 
     const readback = await owner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel, { businessId })
@@ -157,8 +138,7 @@ describe('owner supply funnel read', () => {
         provenance: 'canonical_call_receipts',
       },
       usefulOutcome: {
-        kind: 'observed',
-        qualifiedUseCount: 1,
+        kind: 'unobserved',
         provenance: 'qualified_use_receipts',
       },
     })

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '../../../_generated/api'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
@@ -14,7 +14,9 @@ import {
 } from '../../../../tests/helpers/interactive-authority-seed'
 
 describe('owner invoice history tax admission', () => {
+  afterEach(() => { vi.unstubAllEnvs() })
   it('reports an ungenerated invoice when persisted owner tax facts and production policy admit issuance', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = await seededInteractiveAuthorityBackend()
     const now = Date.now()
     const owner = backend.withIdentity(samIdentity(INTERACTIVE_TOKEN_IDENTIFIER))
@@ -74,8 +76,8 @@ describe('owner invoice history tax admission', () => {
         exponent: 6,
         principalUnits: '5000000',
         serviceFeeUnits: '250000',
-        taxUnits: '30000',
-        totalUnits: '5280000',
+        taxUnits: '530000',
+        totalUnits: '5780000',
         commercialPolicyDigest: canonicalDigest({ kind: 'policy', commandRef }),
         commercialPolicyRefs: ['commercial-policy:production'],
         idempotencyKey: commandRef,

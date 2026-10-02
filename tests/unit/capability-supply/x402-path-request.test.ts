@@ -1,13 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateJsonSchema } from '@/modules/capability-contract/public'
 import { admitFacilitatorDiscoveryItems, admitOfficialBazaarFromPaymentRequired, prepareX402Request } from '@/modules/capability-supply/server'
 import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
-import {
-  onesourcePathRequest20260908Fixture as pathFixture,
-  onesourceUnionRequest20260908Fixture as unionFixture,
-} from '@/modules/capability-supply/public'
+import onesourcePathRequest20260908Fixture from '../../fixtures/x402-bazaar/onesource-path-request-2026-09-08.json'
+const pathFixture = onesourcePathRequest20260908Fixture
+import onesourceUnionRequest20260908Fixture from '../../fixtures/x402-bazaar/onesource-union-request-2026-09-08.json'
+const unionFixture = onesourceUnionRequest20260908Fixture
 import { authority, invokeRouteTransport, preparedX402Custody } from './route-transport-test-harness'
 
 describe('managed x402 path requests', () => {
@@ -98,3 +98,6 @@ describe('managed x402 path requests', () => {
     expect(sign).toHaveBeenCalledOnce()
   })
 })
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+afterEach(() => vi.unstubAllEnvs())

@@ -1,3 +1,4 @@
+import { v } from 'convex/values'
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
   cancelBeforeClaimArgs, dispatchArgs, dispatchResult, finalizeDispatchArgs,
@@ -6,6 +7,10 @@ import {
   reconciledCallAuthorityResult, recordArgs, recordResult, workCompletionArgs,
 } from './lib/capabilityExecution/callLifecycle/contracts'
 import { approvalDecisionResult } from './lib/capabilityExecution/callLifecycle/admissionApproval'
+import {
+  continueApprovalExpiryArgs, continueApprovalExpiryHandler, expireStaleApprovalHandler, expireStalePendingApprovalsHandler,
+} from './lib/capabilityExecution/callLifecycle/admissionApprovals'
+import { workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import { abandonArgs, abandonResult, reserveArgs, reserveResult } from './lib/capabilityExecution/callLifecycle/admissionReservation'
 import { callArgs, admitArgs, admitResult, admitHandler } from './lib/capabilityExecution/callLifecycle/admission'
 import { reserveHandler } from './lib/capabilityExecution/callLifecycle/admissionReserve'
@@ -21,8 +26,12 @@ import {
   completeWorkWithReconciliationInitialization, finishAutomaticReconciliationHandler,
   finalizeDispatchWithReconciliationInitialization, cancelBeforeClaimWithReconciliationInitialization,
   listDueAutomaticReconciliationCandidatesHandler, projectRecoveryWithReconciliationInitialization,
-  recordWithReconciliationInitialization,
+  recordWithReconciliationInitialization, reconcileFinishedDispatchesArgs,
+  reconcileFinishedDispatchesResult, reconcileFinishedDispatchesHandler,
 } from './lib/capabilityExecution/callLifecycle/reconciliation'
+import {
+  quarantineRestoredDispatchesArgs, quarantineRestoredDispatchesResult, quarantineRestoredDispatchesHandler,
+} from './lib/capabilityExecution/callLifecycle/restoredDispatches'
 import {
   resolveCallAgentAuthorityArgs, resolveCallAgentAuthorityResult, resolveCallAgentAuthorityHandler,
   reconcileCallWorkloadAuthorityArgs, readAcceptedCallGrantAfterLimitUpdateArgs,
@@ -37,13 +46,15 @@ import {
   canonicalOwnerCancelHandler, canonicalOwnerReconcileHandler, canonicalOwnerStatusHandler,
   listPendingCallApprovalsArgs, listPendingCallApprovalsResult, decideCallApprovalArgs,
 } from './lib/capabilityExecution/callLifecycle/ownerCallAuthority'
-import { reconcileCallWorkloadAuthorityHandler } from './lib/capabilityExecution/callLifecycle/supplyCanaryAuthority'
+import {
+  reconcileCallWorkloadAuthorityHandler,
+  readAcceptedCallGrantAfterLimitUpdateHandler,
+} from './lib/capabilityExecution/callLifecycle/persistedCallAuthority'
 import {
   beginX402UnpaidProbeArgs, beginX402UnpaidProbeHandler, beginX402UnpaidProbeResult,
   finishX402UnpaidProbeArgs, finishX402UnpaidProbeHandler, finishX402UnpaidProbeResult,
   readX402UnpaidProbeAdmissionArgs, readX402UnpaidProbeAdmissionHandler, readX402UnpaidProbeAdmissionResult,
 } from './lib/capabilityExecution/callLifecycle/x402PreSignProbe'
-import { readAcceptedCallGrantAfterLimitUpdateHandler } from './lib/capabilityExecution/callLifecycle/persistedCallAuthority'
 import { dispatchHandler } from './lib/capabilityExecution/callLifecycle/dispatchEnqueue'
 import { openDispatchHandler, openDispatchArgs, openDispatchResult } from './lib/capabilityExecution/callLifecycle/dispatchOpen'
 import {
@@ -99,6 +110,22 @@ export const listPendingCallApprovals = query({
 export const decideCallApproval = mutation({
   args: decideCallApprovalArgs, returns: approvalDecisionResult, handler: canonicalOwnerApprovalDecisionHandler,
 })
+const approvalExpiryPageValue = v.object({ scanned: v.number(), scheduled: v.number(), blocked: v.number() })
+export const expireStalePendingApprovals = internalMutation({
+  args: { workload: workloadCronSnapshotValue },
+  returns: approvalExpiryPageValue,
+  handler: expireStalePendingApprovalsHandler,
+})
+export const continueApprovalExpiry = internalMutation({
+  args: continueApprovalExpiryArgs,
+  returns: approvalExpiryPageValue,
+  handler: continueApprovalExpiryHandler,
+})
+export const expireStaleApproval = internalMutation({
+  args: { callRef: v.string() },
+  returns: v.null(),
+  handler: expireStaleApprovalHandler,
+})
 export const openDispatch = internalQuery({ args: openDispatchArgs, returns: openDispatchResult, handler: openDispatchHandler })
 export const readPreClaimRefund = internalQuery({
   args: readPreClaimRefundArgs, returns: readPreClaimRefundResult, handler: readPreClaimRefundHandler,
@@ -122,6 +149,14 @@ export const listDueAutomaticReconciliationCandidates = internalQuery({
   args: listDueAutomaticReconciliationCandidatesArgs,
   returns: listDueAutomaticReconciliationCandidatesResult,
   handler: listDueAutomaticReconciliationCandidatesHandler,
+})
+export const reconcileFinishedDispatches = internalMutation({
+  args: reconcileFinishedDispatchesArgs, returns: reconcileFinishedDispatchesResult,
+  handler: reconcileFinishedDispatchesHandler,
+})
+export const quarantineRestoredDispatches = internalMutation({
+  args: quarantineRestoredDispatchesArgs, returns: quarantineRestoredDispatchesResult,
+  handler: quarantineRestoredDispatchesHandler,
 })
 export const claimAutomaticReconciliationCandidate = internalMutation({
   args: claimAutomaticReconciliationCandidateArgs, returns: reconciliationClaimResult,

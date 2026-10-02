@@ -32,13 +32,14 @@ function pinEnv(): void {
 
 export const currentToolRef = `operation:v1:${'a'.repeat(64)}`
 
-export function authenticateWithScopes(scopes: readonly string[]) {
+export function authenticateWithScopes(scopes: readonly string[], environment: 'sandbox' | 'production' = 'sandbox') {
   return async () => ({
     isAuthenticated: true as const,
     tokenType: 'api_key' as const,
     id: 'key:test',
     subject: 'user_test',
     scopes: [...scopes],
+    claims: { aeEnvironment: environment },
   })
 }
 

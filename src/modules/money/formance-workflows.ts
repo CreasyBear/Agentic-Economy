@@ -8,8 +8,20 @@ import {
   readFormanceTransactionByReference,
   type FormanceContext,
   type FormanceMoneyResult,
+  type FormanceMoneyCommand,
+  type FormanceReferenceReadResult,
 } from './formance'
-import { completed, refused, unavailable } from './formance-result'
+import { completed, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult, type FormanceReleaseReadResult } from './formance-result'
+import {
+  prepareFormanceSettledSaleRefund,
+  formanceCommandPostingsMatch,
+  type FormanceSettledSaleRefund,
+} from './internal/formance-settled-sale-refund'
+import {
+  prepareFormancePromotionalCreditGrant,
+  prepareFormancePromotionalCreditExpiry,
+  type FormancePromotionalCreditBooking,
+} from './internal/formance-promotional-credit'
 import {
   balanceAccount,
   balanceAsset,
@@ -44,6 +56,10 @@ import {
 } from './internal/formance-transaction-templates'
 
 export * from './internal/formance-transaction-templates'
+export * from './internal/formance-promotional-credit'
+export { prepareFormanceSettledSaleRefund }
+export type { FormanceSettledSaleRefund }
+export type { FormanceSettlementReadResult, FormanceReservationReadResult, FormanceReleaseReadResult } from './formance-result'
 
 export type FormanceDisplayBalanceResult =
   | Readonly<{
@@ -84,11 +100,97 @@ export async function bookFormanceFundingReversal(
   return executePrepared(context, prepareFormanceFundingReversal(input))
 }
 
+export async function grantFormancePromotionalCredit(
+  context: FormanceContext,
+  input: FormancePromotionalCreditBooking,
+): Promise<FormanceMoneyResult> {
+  return executePromotionalCredit(context, prepareFormancePromotionalCreditGrant(input))
+}
+
+export async function expireFormancePromotionalCredit(
+  context: FormanceContext,
+  input: FormancePromotionalCreditBooking,
+): Promise<FormanceMoneyResult> {
+  return executePromotionalCredit(context, prepareFormancePromotionalCreditExpiry(input))
+}
+
+/** Requires the original valid grant or frozen expiry command. Ensures completion
+ * only after exact reference/template/all metadata/world postings are confirmed.
+ * Invariant: retain the maintained writer's schema/idempotency/revision behavior;
+ * no existing conflict can create another posting. This is history, not current
+ * global spendability or reconstruction of lost administrative approval.
+ * On violation: preflight conflict refuses before writes; unavailable preflight
+ * retains the existing no-write result. Failed confirmation after a possible
+ * write is uncertain at the original reference, never submission-proven-absent.
+ */
+async function executePromotionalCredit(
+  context: FormanceContext,
+  prepared: PreparedCommand,
+): Promise<FormanceMoneyResult> {
+  if (prepared.kind === 'refused') return prepared
+  const command: FormanceMoneyCommand = prepared.command
+  const matches = (actual: Extract<FormanceReferenceReadResult, { kind: 'found' }>): boolean =>
+    actual.reference === command.commandRef && actual.template === command.template
+    && Object.entries(command.metadata).every(([key, value]) => actual.metadata[key] === value)
+    && formanceCommandPostingsMatch(command, actual.postings)
+  const existing = await readFormanceTransactionByReference(context, command.commandRef)
+  if (existing.kind === 'setup_required') return refused(existing.code)
+  if (existing.kind === 'unavailable') return unavailable(existing.code)
+  if (existing.kind === 'found' && !matches(existing)) return refused('formance_promotional_credit_evidence_invalid')
+  // Retain the original schema gate and native writer even for proven replay.
+  const posted = await executeFormanceMoneyCommand(context, command)
+  if (posted.kind !== 'completed') return posted
+  const actual = await readFormanceTransactionByReference(context, command.commandRef)
+  if (actual.kind === 'setup_required') return refused(actual.code)
+  if (actual.kind !== 'found') return unknown(command.commandRef)
+  if (!matches(actual)) return refused('formance_promotional_credit_evidence_invalid')
+  return posted
+}
+
 export async function reserveFormanceManagedCall(
   context: FormanceContext,
   input: FormanceManagedCallBooking,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallReservation(input))
+}
+
+/**
+ * Requires: the original valid frozen booking and its configured native ledger.
+ * Ensures: confirms the complete ordered original reservation only when every
+ *   native reference, template, expected metadata value and posting matches.
+ * Invariant: no writes; this proves historical booking, not current capacity,
+ *   payment absence, delivery or authority to release/retry the payment.
+ * On violation: missing/partial/reverted/conflicting evidence refuses; failed
+ *   reads remain unavailable. At most eight native reads run in each batch.
+ */
+export async function readFormanceManagedCallReservation(
+  context: FormanceContext,
+  booking: FormanceManagedCallBooking,
+): Promise<FormanceReservationReadResult> {
+  const prepared = prepareFormanceManagedCallReservation(booking)
+  if (prepared.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })
+  }
+  const commands = prepared.bulk.commands
+  for (let offset = 0; offset < commands.length; offset += 8) {
+    const batch = commands.slice(offset, offset + 8)
+    const reads = await Promise.all(batch.map(async command =>
+      await readFormanceTransactionByReference(context, command.commandRef)))
+    for (const [index, expected] of batch.entries()) {
+      const actual = reads[index]
+      if (actual?.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: actual.code })
+      if (actual?.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
+      if (actual?.kind !== 'found' || actual.reference !== expected.commandRef
+        || actual.template !== expected.template
+        || !formanceCommandPostingsMatch(expected, actual.postings)
+        || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+        return Object.freeze({ kind: 'refused', code: 'formance_reservation_evidence_invalid' })
+      }
+    }
+  }
+  return Object.freeze({ kind: 'confirmed',
+    transactionRefs: Object.freeze(commands.map(command => command.commandRef)),
+  })
 }
 
 export async function releaseFormanceManagedCall(
@@ -98,11 +200,158 @@ export async function releaseFormanceManagedCall(
   return executePreparedBulk(context, prepareFormanceManagedCallRelease(input))
 }
 
+/**
+ * Requires: the original valid frozen booking and its configured native ledger.
+ * Ensures: confirms only the complete original unpaid release, including treasury
+ *   return and obligation release, with exact references/metadata/postings.
+ * Invariant: read-only historical accounting; no assertion of payment absence,
+ *   original release authority, current spendability or delivery. Paid-result
+ *   remedy shares the buyer release but cannot satisfy this complete bundle.
+ * On violation: missing/partial/reverted/conflicting evidence refuses; failed
+ *   reads stay unavailable. At most eight native reads run in each batch.
+ */
+export async function readFormanceManagedCallRelease(
+  context: FormanceContext,
+  booking: FormanceManagedCallBooking,
+): Promise<FormanceReleaseReadResult> {
+  // The flag is only a builder precondition for reconstructing historical
+  // commands. It is never projected as an authority or absence assertion.
+  const identity = prepareFormanceManagedCallRelease({ booking,
+    externalEvidenceDigest: booking.x402RequirementDigest, submissionProvenAbsent: true,
+  })
+  if (identity.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_release_evidence_invalid' })
+  }
+  const firstRef = identity.bulk.commands[0]?.commandRef
+  if (firstRef === undefined) return Object.freeze({ kind: 'refused', code: 'formance_release_evidence_invalid' })
+  const first = await readFormanceTransactionByReference(context, firstRef)
+  if (first.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: first.code })
+  if (first.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: first.code })
+  if (first.kind !== 'found' || !/^[a-f0-9]{64}$/u.test(first.metadata.external_evidence_digest ?? '')) {
+    return Object.freeze({ kind: 'refused', code: 'formance_release_evidence_invalid' })
+  }
+  const prepared = prepareFormanceManagedCallRelease({ booking, submissionProvenAbsent: true,
+    externalEvidenceDigest: `sha256:${first.metadata.external_evidence_digest}`,
+  })
+  if (prepared.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_release_evidence_invalid' })
+  }
+  const commands = prepared.bulk.commands
+  for (let offset = 0; offset < commands.length; offset += 8) {
+    const batch = commands.slice(offset, offset + 8)
+    const reads = await Promise.all(batch.map(async (command, index) => offset === 0 && index === 0
+      ? first : await readFormanceTransactionByReference(context, command.commandRef)))
+    for (const [index, expected] of batch.entries()) {
+      const actual = reads[index]
+      if (actual?.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: actual.code })
+      if (actual?.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
+      if (actual?.kind !== 'found' || actual.reference !== expected.commandRef
+        || actual.template !== expected.template || !formanceCommandPostingsMatch(expected, actual.postings)
+        || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+        return Object.freeze({ kind: 'refused', code: 'formance_release_evidence_invalid' })
+      }
+    }
+  }
+  return Object.freeze({ kind: 'confirmed',
+    transactionRefs: Object.freeze(commands.map(command => command.commandRef)),
+  })
+}
+
 export async function settleFormanceManagedCall(
   context: FormanceContext,
   input: FormanceManagedCallFinalization,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallSettlement(input))
+}
+
+/**
+ * Requires: the original valid frozen booking and its configured native ledger.
+ * Ensures: confirms only the complete ordered settlement with exact native
+ *   references, templates, metadata and postings reconstructed from that booking.
+ * Invariant: read-only; accounting evidence does not establish delivery or
+ *   authorize a replacement payment, release or refund.
+ * On violation: missing/partial/conflicting evidence refuses; unavailable reads
+ *   remain unavailable and never establish absence of an earlier payment.
+ */
+export async function readFormanceManagedCallSettlement(
+  context: FormanceContext,
+  booking: FormanceManagedCallBooking,
+): Promise<FormanceSettlementReadResult> {
+  // References depend on the original Call/Quote/stage, not on the external
+  // evidence. This digest only derives the references; native proof follows.
+  const identity = prepareFormanceManagedCallSettlement({
+    booking, externalEvidenceDigest: booking.x402RequirementDigest,
+  })
+  if (identity.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  }
+  const saleRef = identity.bulk.commands[0]?.commandRef
+  if (saleRef === undefined) return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  const sale = await readFormanceTransactionByReference(context, saleRef)
+  if (sale.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: sale.code })
+  if (sale.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: sale.code })
+  if (sale.kind !== 'found' || !/^[a-f0-9]{64}$/u.test(sale.metadata.external_evidence_digest ?? '')) {
+    return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  }
+  const original = prepareFormanceManagedCallSettlement({
+    booking, externalEvidenceDigest: `sha256:${sale.metadata.external_evidence_digest}`,
+  })
+  if (original.kind === 'refused') {
+    return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+  }
+  for (const [index, expected] of original.bulk.commands.entries()) {
+    const actual = index === 0 ? sale : await readFormanceTransactionByReference(context, expected.commandRef)
+    if (actual.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: actual.code })
+    if (actual.kind === 'unavailable') return Object.freeze({ kind: 'unavailable', code: actual.code })
+    if (actual.kind !== 'found' || actual.reference !== expected.commandRef
+      || actual.template !== expected.template
+      || !formanceCommandPostingsMatch(expected, actual.postings)
+      || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+      return Object.freeze({ kind: 'refused', code: 'formance_settled_sale_evidence_invalid' })
+    }
+  }
+  return Object.freeze({ kind: 'confirmed',
+    transactionRefs: Object.freeze(original.bulk.commands.map(command => command.commandRef)),
+  })
+}
+
+/**
+ * CONTRACT: refundFormanceSettledSale(context, input)
+ *   Requires: the frozen booking and the complete ordered native settlement
+ *     references, plus a canonical digest of the approved refund report.
+ *   Ensures: executes the same atomic refund bulk on every replay only after
+ *     each original settlement is proven by native readback against a command
+ *     reconstructed from the sale's actual external evidence digest.
+ *   Invariant: missing, unknown or conflicting original evidence never writes
+ *     a refund; treasury and Provider settlement remain untouched.
+ *   On violation: refuses on evidence conflict, or returns source unavailability
+ *     without executing. Native write uncertainty uses the existing bulk result.
+ */
+export async function refundFormanceSettledSale(
+  context: FormanceContext,
+  input: FormanceSettledSaleRefund,
+): Promise<FormanceMoneyResult> {
+  const prepared = prepareFormanceSettledSaleRefund(input)
+  if (prepared.kind === 'refused') return prepared
+  const original = await readFormanceManagedCallSettlement(context, input.booking)
+  if (original.kind === 'refused') return refused(original.code)
+  if (original.kind === 'unavailable') return unavailable(original.code)
+  if (original.transactionRefs.length !== input.originalSettlementRefs.length
+    || original.transactionRefs.some((reference, index) => reference !== input.originalSettlementRefs[index])) {
+    return refused('formance_settled_sale_evidence_invalid')
+  }
+  const posted = await executePreparedBulk(context, prepared)
+  if (posted.kind !== 'completed') return posted
+  // A successful submit/replay must still prove the exact financial effects.
+  // Failure after submission is uncertain, never submission-proven-absent.
+  for (const command of prepared.bulk.commands) {
+    const actual = await readFormanceTransactionByReference(context, command.commandRef)
+    if (actual.kind !== 'found') return unknown(command.commandRef)
+    if (actual.template !== command.template || actual.reference !== command.commandRef
+      || Object.entries(command.metadata).some(([key, value]) => actual.metadata[key] !== value)
+      || !formanceCommandPostingsMatch(command, actual.postings)) return refused('formance_refund_evidence_invalid')
+  }
+  return posted
 }
 
 export async function remedyFormancePaidCall(

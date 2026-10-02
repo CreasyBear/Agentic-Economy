@@ -29,6 +29,21 @@ const detail: AgentDetail = {
 afterEach(() => vi.clearAllMocks())
 
 describe('useAgentSpendingLimits', () => {
+  it('retains reviewed limits and the form when MFA is cancelled or unavailable', async () => {
+    const read = vi.fn().mockResolvedValue(known)
+    const update = vi.fn().mockResolvedValue({ kind: 'refused', code: 'mfa_reverification_required', correlationRef: 'corr-mfa' })
+    const { result } = renderHook(() => useAgentSpendingLimits({ detail, onReadSpendingLimits: read, onUpdateSpendingLimits: update }))
+    await waitFor(() => expect(result.current.view.showHeaderActions).toBe(true))
+    act(() => result.current.handleStartEdit())
+    await waitFor(() => expect(result.current.view.editing).toBe(true))
+    act(() => result.current.setPerCallStr('6'))
+    await act(async () => { result.current.handleSave({ preventDefault: vi.fn() }) })
+    await waitFor(() => expect(update).toHaveBeenCalledOnce())
+    expect(result.current.view.editing).toBe(true)
+    expect(result.current.view.perCallStr).toBe('6')
+    expect(result.current.view.diagnostic?.whatHappened).toMatch(/Verify your identity/)
+    expect(result.current.policy).toEqual(known)
+  })
   it('blocks edits when the selected sheet refresh cannot read an expected grant', async () => {
     const read = vi.fn().mockResolvedValue({ kind: 'unavailable' })
     const update = vi.fn()

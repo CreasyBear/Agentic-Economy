@@ -15,7 +15,7 @@ type ReadContext = Pick<QueryCtx, 'db'>
 type CatalogOrigin = Extract<CapabilityPublicationOfferingDraft['origin'], { kind: 'catalog_offering' }>
 
 export function isNativeSupplySource(kind: string): boolean {
-  return kind === 'openapi_http' || kind === 'mcp' || kind === 'agent_plugin_mcp'
+  return kind === 'openapi_http' || kind === 'mcp' || kind === 'agent_plugin_mcp' || kind === 'x402'
 }
 
 /** New Provider workspaces stay private while their first Tool is validated. */
@@ -51,7 +51,7 @@ async function exactNativeDraft(ctx: ReadContext, businessId: Id<'businesses'>, 
     || revision.sourceHash !== origin.offeringSourceHash
     || path.offeringRef !== origin.offeringRef || path.offeringRevision !== origin.offeringRevision
     || path.offeringSourceHash !== origin.offeringSourceHash || path.sourceHash !== origin.accessPathSourceHash
-    || path.integrationDraft === undefined || path.integrationDraft.sourceKind === 'x402') return null
+    || path.integrationDraft === undefined) return null
   return { offering, path }
 }
 

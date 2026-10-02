@@ -21,13 +21,18 @@ import {
 import {
   cleanupExpiredAgentAccessOAuthGrantsHandler,
   cleanupExpiredSourceWriteNoncesHandler,
+  expireStalePendingApprovalsHandler,
   reconcileDueFacilitatorInvocationsHandler,
+  reconcilePromotionalCreditHandler,
+  reconcilePaidCallReportsHandler,
   refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler,
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
   refreshReferenceRateHandler,
   observeX402TreasuryHandler,
+  reconcileTreasuryBalancesHandler,
+  refreshPaymentReadinessHandler,
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
   reconcileBusinessSupplyProjectionsHandler,
@@ -64,7 +69,10 @@ import {
 const EXPECTED_BINDINGS = {
   'cleanup expired agent access oauth grants': 'workloadCron:cleanupExpiredAgentAccessOAuthGrants',
   'cleanup expired source write nonces': 'workloadCron:cleanupExpiredSourceWriteNonces',
+  'expire stale pending approvals': 'workloadCron:expireStalePendingApprovals',
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
+  'reconcile promotional credit': 'workloadCron:reconcilePromotionalCredit',
+  'reconcile paid Call reports': 'workloadCron:reconcilePaidCallReports',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'reconcile business supply projections': 'workloadCron:reconcileBusinessSupplyProjections',
@@ -72,26 +80,36 @@ const EXPECTED_BINDINGS = {
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
   'refresh USDC/AUD reference rate': 'workloadCron:refreshReferenceRate',
   'observe x402 treasury': 'workloadCron:observeX402Treasury',
+  'reconcile treasury balances': 'workloadCron:reconcileTreasuryBalances',
+  'refresh payment readiness': 'workloadCron:refreshPaymentReadiness',
   'refresh market flow': 'workloadCron:refreshMarketFlow',
   'snapshot marketplace metrics day': 'workloadCron:snapshotMarketplaceMetricsDay',
 } as const
 
 const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
+  reconcilePromotionalCreditHandler,
+  reconcilePaidCallReportsHandler,
   refreshFacilitatorDiscoveryHandler,
   refreshReferenceRateHandler,
   refreshAgenticEconomyApiRegistryHandler,
   observeX402TreasuryHandler,
+  reconcileTreasuryBalancesHandler,
+  refreshPaymentReadinessHandler,
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
 ] as const
 
 const ACTION_HANDLER_WORKLOAD_NAMES = [
   'reconcile due facilitator invocations',
+  'reconcile promotional credit',
+  'reconcile paid Call reports',
   'refresh facilitator discovery',
   'refresh USDC/AUD reference rate',
   'refresh Agentic Economy API registry',
   'observe x402 treasury',
+  'reconcile treasury balances',
+  'refresh payment readiness',
   'refresh market flow',
   'snapshot marketplace metrics day',
 ] as const
@@ -102,8 +120,8 @@ const MUTATION_HANDLERS = [
   reconcileBusinessSupplyProjectionsHandler,
   cleanupExpiredSourceWriteNoncesHandler,
   cleanupExpiredAgentAccessOAuthGrantsHandler,
+  expireStalePendingApprovalsHandler,
 ] as const
-
 const PRE_CLAIM_REFUND_OPERATIONS = [
   'capabilityCalls:claimAutomaticReconciliationCandidate',
   'capabilityCalls:finishAutomaticReconciliation',
@@ -134,6 +152,10 @@ describe('System workload cron boundary', () => {
     expect(convexCrons.crons['refresh facilitator discovery']?.schedule).toEqual({
       type: 'interval',
       hours: 6,
+    })
+    expect(convexCrons.crons['expire stale pending approvals']?.schedule).toEqual({
+      type: 'interval',
+      minutes: 5,
     })
     expect(convexCrons.crons['snapshot marketplace metrics day']?.schedule).toEqual({
       type: 'cron',
@@ -392,8 +414,8 @@ describe('System workload cron boundary', () => {
 
     expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
     // Business projection reconciliation dispatches two mutations under one admission.
-    expect(context.dispatches).toHaveLength(13)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 12 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
+    expect(context.dispatches).toHaveLength(ACTION_HANDLERS.length + MUTATION_HANDLERS.length + 1)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: ACTION_HANDLERS.length + MUTATION_HANDLERS.length }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 
@@ -402,6 +424,8 @@ describe('System workload cron boundary', () => {
     await expect(reconcileDueFacilitatorInvocationsHandler(context.action()))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
     await expect(cleanupExpiredAgentAccessOAuthGrantsHandler(context.mutation()))
+      .rejects.toMatchObject({ code: 'workload_principal_missing' })
+    await expect(expireStalePendingApprovalsHandler(context.mutation()))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
     expect(context.dispatches).toEqual([])
   })

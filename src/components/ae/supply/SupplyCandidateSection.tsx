@@ -71,7 +71,8 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }
       <div className="grid min-w-0 gap-1">
         <p className="font-medium text-foreground">{candidate.title}</p>
         <p className="text-sm text-muted-foreground">{candidate.description}</p>
-        <p className="text-sm text-muted-foreground">{candidate.authentication.kind === 'public' ? 'Public' : 'Connection required'} · {candidate.validationExampleAvailable ? 'Validation input available' : 'Validation input required'}</p>
+        <p className="text-sm text-muted-foreground">{candidate.x402 === undefined ? 'Payment challenge incomplete' : `Price ${candidate.x402.amount} · payTo ${candidate.x402.payTo} · ${candidate.x402.network}`}</p>
+        <p className="text-sm text-muted-foreground">Input {candidate.inputSchema === undefined ? 'not declared' : 'schema declared'} · Output {candidate.outputSchema === undefined ? 'not declared' : 'schema declared'}</p>
         {supported ? null : <p className="text-sm text-destructive">{REASON_COPY[candidate.disposition.reason] ?? `This operation cannot be imported (${candidate.disposition.reason}). Correct its source definition, then find Tools again.`}</p>}
       </div>
     </Label>

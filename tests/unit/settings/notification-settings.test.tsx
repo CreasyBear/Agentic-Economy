@@ -24,6 +24,7 @@ const basePreferences: NotificationPreferencesView = {
   callFailureSpike: true,
   invoiceReady: true,
   teamMembershipChanged: true,
+  agentApprovalRequested: true,
   revision: 0,
 }
 
@@ -39,82 +40,37 @@ describe('OwnerNotificationSettings', () => {
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
     expect(screen.getByRole('heading', { name: 'Email alerts' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Email when credit balance is low' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Email when spend cap is reached' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Email when calls fail repeatedly' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Email when a tax invoice or statement is ready' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Email when team membership changes' })).toBeTruthy()
+    const approvalSwitch = screen.getByRole('switch', { name: 'Email when an Agent needs your approval' })
+    expect(approvalSwitch).toBeChecked()
+    expect(screen.queryByRole('switch', { name: 'Email when credit balance is low' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Email when spend cap is reached' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Email when calls fail repeatedly' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Email when a tax invoice or statement is ready' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Email when team membership changes' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Credit balance alert' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'A$10.00' })).toBeNull()
   })
 
-  it('U2: renders low-balance threshold chips with A$25 (Default) selected', () => {
+
+  it('U3: toggling approval email calls onUpdate with the field and expectedRevision', async () => {
     const onUpdate = vi.fn()
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    expect(screen.getByRole('radio', { name: 'A$10.00' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'A$25.00 (Default)' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'A$50.00' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'A$25.00 (Default)' })).toHaveAttribute('aria-checked', 'true')
-  })
-
-  it('U3: toggling a switch calls onUpdate with the field and expectedRevision', async () => {
-    const onUpdate = vi.fn()
-    render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
-
-    fireEvent.click(screen.getByRole('switch', { name: 'Email when spend cap is reached' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email when an Agent needs your approval' }))
 
     await waitFor(() => {
       expect(onUpdate).toHaveBeenCalledWith({
-        spendCapWarning: false,
+        agentApprovalRequested: false,
         expectedRevision: 0,
       })
     })
-  })
-
-  it('U4: disables threshold chips when low credit balance is off', () => {
-    const onUpdate = vi.fn()
-    render(<OwnerNotificationSettings
-      preferences={{ ...basePreferences, lowCreditBalance: false }}
-      onUpdate={onUpdate}
-    />)
-
-    expect(screen.getByRole('radio', { name: 'A$10.00' })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: 'A$25.00 (Default)' })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: 'A$50.00' })).toBeDisabled()
-  })
-
-  it('U5: changing threshold calls onUpdate with lowCreditThresholdCents 5000', async () => {
-    const onUpdate = vi.fn()
-    render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
-
-    fireEvent.click(screen.getByRole('radio', { name: 'A$50.00' }))
-
-    await waitFor(() => {
-      expect(onUpdate).toHaveBeenCalledWith({
-        lowCreditThresholdCents: 5000,
-        expectedRevision: 0,
-      })
-    })
-  })
-
-  it('U8: announces the live low-balance threshold statement', () => {
-    const onUpdate = vi.fn()
-    render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
-
-    expect(screen.getByText('Alert sent when balance drops below A$25.00.')).toBeTruthy()
-
-    cleanup()
-    render(<OwnerNotificationSettings
-      preferences={{ ...basePreferences, lowCreditBalance: false }}
-      onUpdate={onUpdate}
-    />)
-    expect(screen.getByText('Low-balance alerts are off. Existing spend and call alerts are unchanged.')).toBeTruthy()
   })
 
   it('U9: shows a success toast when update resolves', async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined)
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Email when spend cap is reached' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email when an Agent needs your approval' }))
 
     await waitFor(() => {
       expect(toastSuccess).toHaveBeenCalledWith('Notification preferences updated')
@@ -125,7 +81,7 @@ describe('OwnerNotificationSettings', () => {
     const onUpdate = vi.fn().mockRejectedValue(new Error('network'))
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Email when spend cap is reached' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email when an Agent needs your approval' }))
 
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith(

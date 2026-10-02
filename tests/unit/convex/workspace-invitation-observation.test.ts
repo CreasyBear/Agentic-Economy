@@ -8,7 +8,7 @@ import {
   vi,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   ORGANIZATION_INVITATION_CREATED_OPERATION,
@@ -78,7 +78,7 @@ const recordOrganizationInvitationRevokedForServerRef = makeFunctionReference<
   OrganizationInvitationRevokedResult
 >('workspaceInvitations:recordOrganizationInvitationRevokedForServer')
 
-const provisionOrganizationWorkspaceForServerRef = internal.workspaceProvisioning.provisionOrganizationWorkspaceForServer
+const provisionOrganizationWorkspaceForServerRef = api.workspaceProvisioning.provisionOrganizationWorkspaceForServer
 
 const correlationRef = (label: string) => `test:workspace-invitation:${label}`
 
@@ -195,6 +195,7 @@ async function provisionBoundOrgWorkspace(
     correlationRef: correlationRef(`provision:${clerkOrgId}`),
     serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
   })
+  if (result.kind === 'refused') throw new Error(`provisioning refused: ${result.code}`)
   return result.accountRef
 }
 
@@ -279,7 +280,7 @@ const listInvitationCreatedAuditEvents = listInvitationAuditEvents
 
 async function countTable(
   backend: InteractiveAuthorityBackend,
-  table: 'memberships' | 'accountOwnerships' | 'interactiveSessionSelections',
+  table: 'memberships' | 'accountOwnerships',
 ): Promise<number> {
   return await backend.run(async (ctx) => (await ctx.db.query(table).collect()).length)
 }
@@ -520,20 +521,18 @@ describe('workspaceInvitations recordOrganizationInvitationCreatedForServer (W-1
     expect(serialized).not.toContain('http')
   })
 
-  it('C9: memberships, accountOwnerships, and interactiveSessionSelections are untouched', async () => {
+  it('C9: memberships and accountOwnerships are untouched', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await provisionBoundOrgWorkspace(backend)
 
     const membershipsBefore = await countTable(backend, 'memberships')
     const ownershipsBefore = await countTable(backend, 'accountOwnerships')
-    const selectionsBefore = await countTable(backend, 'interactiveSessionSelections')
 
     await recordOrganizationInvitationCreatedForServer(backend, invitationCommand({ deliveryRef: 'delivery-c9' }))
 
     expect(await countTable(backend, 'memberships')).toBe(membershipsBefore)
     expect(await countTable(backend, 'accountOwnerships')).toBe(ownershipsBefore)
-    expect(await countTable(backend, 'interactiveSessionSelections')).toBe(selectionsBefore)
   })
 
   it('C10: invitation for org A never touches org B account audits', async () => {
@@ -742,14 +741,13 @@ describe('workspaceInvitations recordOrganizationInvitationRevokedForServer (W-1
     expect(serialized).not.toContain('token')
   })
 
-  it('R7: memberships accountOwnerships and interactiveSessionSelections are untouched', async () => {
+  it('R7: memberships and accountOwnerships are untouched', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await provisionBoundOrgWorkspace(backend)
 
     const membershipsBefore = await countTable(backend, 'memberships')
     const ownershipsBefore = await countTable(backend, 'accountOwnerships')
-    const selectionsBefore = await countTable(backend, 'interactiveSessionSelections')
 
     await recordOrganizationInvitationRevokedForServer(backend, revokedInvitationCommand({
       deliveryRef: 'delivery-r7',
@@ -757,7 +755,6 @@ describe('workspaceInvitations recordOrganizationInvitationRevokedForServer (W-1
 
     expect(await countTable(backend, 'memberships')).toBe(membershipsBefore)
     expect(await countTable(backend, 'accountOwnerships')).toBe(ownershipsBefore)
-    expect(await countTable(backend, 'interactiveSessionSelections')).toBe(selectionsBefore)
   })
 
   it('R8: org A revoke never writes org B audits', async () => {

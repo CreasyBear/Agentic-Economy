@@ -155,6 +155,7 @@ const claimHandler = (claimAutomaticReconciliationCandidate as unknown as { _han
 const finishHandler = (finishAutomaticReconciliation as unknown as { _handler: Handler })._handler
 const recordHandler = (record as unknown as { _handler: Handler })._handler
 const scheduledHandler = (reconcileScheduled as unknown as { _handler: Handler })._handler
+const repaired = { scanned: 0, recovered: 0, waiting: 0, unbound: 0, continueCursor: '', isDone: true }
 
 function row(
   callRef: string,
@@ -415,6 +416,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
       }),
       runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
         const path = consequence(reference, args).path
+        if (path.endsWith(':reconcileFinishedDispatches')) return repaired
         if (path.endsWith(':reconcileCallWorkloadAuthority')) return { kind: 'refused' }
         throw new Error(`unexpected_mutation:${path}`)
       }),
@@ -425,10 +427,13 @@ describe('scheduled capability invocation reconciliation worker', () => {
       expiredSelected: 1, expiredQueued: 0, expiredManualReview: 0,
     })
     expect(recoverMock).not.toHaveBeenCalled()
-    expect(ctx.runMutation).toHaveBeenCalledTimes(2)
+    expect(ctx.runMutation).toHaveBeenCalledTimes(3)
+    const [repairReference, repairArgs] = ctx.runMutation.mock.calls[0]!
+    expect(functionPath(repairReference)).toBe('capabilityCalls:reconcileFinishedDispatches')
+    expect(repairArgs).toEqual({ workload: WORKLOAD, cursor: null, createdBefore: expect.any(Number) })
   })
 
-  it('processes candidates serially and continues after one item fails', async () => {
+  it.each([false, true])('processes candidates serially after completion repair failure=%s and continues after one item fails', async (repairFails) => {
     const candidates = [
       { callRef: 'first', attemptCount: 0, nextAttemptAt: 1_000 },
       { callRef: 'second', attemptCount: 1, nextAttemptAt: 1_000 },
@@ -457,6 +462,10 @@ describe('scheduled capability invocation reconciliation worker', () => {
         const dispatched = consequence(reference, args)
         const path = dispatched.path
         args = dispatched.args
+        if (path.endsWith(':reconcileFinishedDispatches')) {
+          if (repairFails) throw new Error('workpool_temporarily_unavailable')
+          return repaired
+        }
         if (path.endsWith(':reconcileCallWorkloadAuthority')) {
           return authorizedInvocation(args.callRef)
         }
@@ -501,6 +510,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
       )),
       runMutation: vi.fn(async (reference: unknown, _args: Record<string, unknown>) => {
         const path = consequence(reference, _args).path
+        if (path.endsWith(':reconcileFinishedDispatches')) return repaired
         if (path.endsWith(':reconcileCallWorkloadAuthority')) {
           return authorizedInvocation(_args.callRef)
         }
@@ -562,6 +572,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
         const dispatched = consequence(reference, args)
         const path = dispatched.path
         args = dispatched.args
+        if (path.endsWith(':reconcileFinishedDispatches')) return repaired
         if (path.endsWith(':reconcileCallWorkloadAuthority')) {
           return authorizedInvocation(args.callRef)
         }

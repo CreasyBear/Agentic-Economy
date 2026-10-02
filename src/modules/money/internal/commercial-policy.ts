@@ -15,12 +15,11 @@ export type CommercialPolicyFamily = typeof COMMERCIAL_POLICY_FAMILIES[number]
 export type CommercialPolicyEnvironment = 'sandbox' | 'production'
 export type CommercialPolicyLifecycle = 'active' | 'superseded' | 'suspended'
 export type CommercialPolicySandboxFixture = 'managed_x402_deterministic_v1'
-export type Package4SandboxDeploymentProfile = 'local_ci' | 'synthetic_vps_fixture'
 
 export const PACKAGE4_FORMANCE_REQUIREMENTS = Object.freeze({
-  ledgerVersion: 'v2.4.12',
+  ledgerVersion: 'v2.4.14',
   gatewayVersion: 'v2.3.1',
-  schemaVersion: 'v1.4.0',
+  schemaVersion: 'v1.6.0',
   sdkVersion: '7.0.0',
   sdkArtifactDigest: 'sha256:8caab624bddecebc5fed54dd7a39116279ee7c29e782cb0923e4f9aa00174104',
   maximumSdkIntegerUnits: '9007199254740991',
@@ -71,6 +70,7 @@ export type CommercialPolicyControl =
     }>
   | Readonly<{
       family: 'operations'
+      paidCallReportsPerDay?: number
       fundingServiceFeeBps: number
       buyerPricingMarginBps: number
       commitmentTtlMs: number
@@ -146,23 +146,6 @@ export const SANDBOX_COMMERCIAL_POLICY_CONTROLS: CommercialPolicyControls = Obje
   }),
 })
 
-export const PACKAGE4_SYNTHETIC_VPS_CONTROLS: CommercialPolicyControls = Object.freeze({
-  ...SANDBOX_COMMERCIAL_POLICY_CONTROLS,
-  treasury_custody: Object.freeze({
-    ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.treasury_custody,
-    deploymentClass: 'synthetic_vps_fixture',
-    postgresProtection: 'managed_pitr',
-    recoveryPointObjectiveMinutes: 5,
-    recoveryTimeObjectiveMinutes: 60,
-  }),
-  operations: Object.freeze({
-    ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.operations,
-    backupControl: 'postgres_pitr',
-    restoreControl: 'production_rehearsed',
-    dailyCloseControl: 'human_signed',
-  }),
-})
-
 export type CommercialPolicyApproval = Readonly<{
   policyRef: string
   family: CommercialPolicyFamily
@@ -226,7 +209,6 @@ export function evaluateCommercialPolicyGate(input: Readonly<{
   now: number
   approvals: readonly CommercialPolicyApproval[]
   sandboxFixture?: CommercialPolicySandboxFixture
-  sandboxDeploymentProfile?: Package4SandboxDeploymentProfile
 }>): CommercialPolicyGateResult {
   if (input.environment === 'sandbox') {
     if (input.sandboxFixture !== 'managed_x402_deterministic_v1') {
@@ -236,13 +218,10 @@ export function evaluateCommercialPolicyGate(input: Readonly<{
         missingFamilies: COMMERCIAL_POLICY_FAMILIES,
       })
     }
-    const deploymentProfile = input.sandboxDeploymentProfile ?? 'local_ci'
-    const controls = deploymentProfile === 'synthetic_vps_fixture'
-      ? PACKAGE4_SYNTHETIC_VPS_CONTROLS
-      : SANDBOX_COMMERCIAL_POLICY_CONTROLS
+    const controls = SANDBOX_COMMERCIAL_POLICY_CONTROLS
     const policyRefs = Object.freeze([
       'commercial-policy-fixture:managed_x402_deterministic_v1',
-      `commercial-policy-deployment:${deploymentProfile}`,
+      'commercial-policy-deployment:local_ci',
     ])
     return Object.freeze({
       kind: 'admitted',
@@ -253,7 +232,7 @@ export function evaluateCommercialPolicyGate(input: Readonly<{
         format: 'ae.commercial-policy-gate:v1',
         environment: 'sandbox',
         fixture: input.sandboxFixture,
-        deploymentProfile,
+        deploymentProfile: 'local_ci',
         controls,
       }),
     })
@@ -390,7 +369,9 @@ export function validCommercialPolicyControl(control: CommercialPolicyControl): 
         && validNonnegativeMinutes(control.recoveryPointObjectiveMinutes)
         && validNonnegativeMinutes(control.recoveryTimeObjectiveMinutes)
     case 'operations':
-      return validBasisPoints(control.fundingServiceFeeBps)
+      return (control.paidCallReportsPerDay === undefined || (Number.isSafeInteger(control.paidCallReportsPerDay)
+          && control.paidCallReportsPerDay >= 0 && control.paidCallReportsPerDay <= 20))
+        && validBasisPoints(control.fundingServiceFeeBps)
         && validBasisPoints(control.buyerPricingMarginBps)
         && Number.isSafeInteger(control.commitmentTtlMs)
         && control.commitmentTtlMs >= 10_000

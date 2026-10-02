@@ -81,23 +81,6 @@ export const membershipValue = v.object({
   endedBy: v.optional(accountActionContextValue),
 })
 
-export const interactiveSessionSelectionValue = v.object({
-  principalRef: v.string(),
-  activeAccountRef: v.string(),
-  revision: v.number(),
-  selectedAt: v.number(),
-  lastCorrelationRef: v.string(),
-})
-
-export const interactiveOnboardingCompletionValue = v.object({
-  accountRef: v.string(),
-  principalRef: v.string(),
-  roleIntent: v.union(v.literal('buyer'), v.literal('supplier')),
-  workspaceName: v.string(),
-  revision: v.number(),
-  completedAt: v.number(),
-  correlationRef: v.string(),
-})
 
 export const accountSecurityPolicyValue = v.object({
   accountRef: v.string(),
@@ -122,6 +105,7 @@ export const userNotificationPreferenceValue = v.object({
   callFailureSpike: v.boolean(),
   invoiceReady: v.boolean(),
   teamMembershipChanged: v.boolean(),
+  agentApprovalRequested: v.optional(v.boolean()),
   revision: v.number(),
   updatedAt: v.number(),
   lastCorrelationRef: v.string(),
@@ -135,6 +119,7 @@ export const notificationEventKindValue = v.union(
   v.literal('call_failure_spike'),
   v.literal('invoice_ready'),
   v.literal('team_membership_changed'),
+  v.literal('agent_approval_requested'),
 )
 
 export const notificationDeliveryStateValue = v.union(
@@ -154,6 +139,8 @@ export const notificationDeliveryValue = v.object({
   suppressCode: v.optional(v.string()),
   vendorMessageId: v.optional(v.string()),
   vendorCode: v.optional(v.string()),
+  lastFailureCode: v.optional(v.string()),
+  workId: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -232,7 +219,8 @@ export const accountTables = {
   accounts: defineTable(accountValue)
     .index('by_accountRef', ['accountRef'])
     .index('by_creationActorPrincipalRef_and_creationIdempotencyRef', ['creationActorPrincipalRef', 'creationIdempotencyRef'])
-    .index('by_lifecycle_and_updatedAt', ['lifecycle', 'updatedAt']),
+    .index('by_lifecycle_and_updatedAt', ['lifecycle', 'updatedAt'])
+    .index('by_lastAction_actorPrincipalRef_and_lifecycle', ['lastAction.actorPrincipalRef', 'lifecycle']),
   accountOwnerships: defineTable(accountOwnershipValue)
     .index('by_ownershipRef', ['ownershipRef'])
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
@@ -243,12 +231,6 @@ export const accountTables = {
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
     .index('by_memberPrincipalRef_and_lifecycle', ['memberPrincipalRef', 'lifecycle'])
     .index('by_accountRef_and_memberPrincipalRef_and_lifecycle', ['accountRef', 'memberPrincipalRef', 'lifecycle']),
-  interactiveSessionSelections: defineTable(interactiveSessionSelectionValue)
-    .index('by_principalRef', ['principalRef'])
-    .index('by_principalRef_and_activeAccountRef', ['principalRef', 'activeAccountRef']),
-  interactiveOnboardingCompletions: defineTable(interactiveOnboardingCompletionValue)
-    .index('by_accountRef', ['accountRef'])
-    .index('by_principalRef', ['principalRef']),
   accountExternalOrganizationBindings: defineTable(accountExternalOrganizationBindingValue)
     .index('by_providerNamespace_and_providerIdentifier', ['providerNamespace', 'providerIdentifier'])
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle']),

@@ -1,3 +1,4 @@
+import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { useQuery } from 'convex/react'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 
@@ -16,16 +17,8 @@ import {
 } from './actions.contracts'
 import { useAdminCommandProof } from './useAdminCommandProof'
 
-function isReverificationCancelled(cause: unknown): boolean {
-  if (typeof cause !== 'object' || cause === null) return false
-  const error = cause as { code?: unknown; clerkRuntimeError?: unknown }
-  return error.clerkRuntimeError === true && error.code === 'reverification_cancelled'
-}
-
 export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSheetController {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
-  const overview = useQuery(api.adminConsoleOverview.readAdminOverview, {})
-  const clerkFvaAbsent = overview !== undefined && 'clerkFva' in overview && overview.clerkFva === 'absent'
   const role = access?.kind === 'allowed' ? access.role : null
   const allowed = role !== null && canAdminRolePerformAction(role, ADMIN_ACTION_PERMISSION[props.action])
   const execute = useAdminCommandProof()
@@ -97,7 +90,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   function unchangedPreview() {
-    return clerkFvaAbsent ? null : ADMIN_REFUSAL_PRESENTATION.mfa_reverification_required.nextStep
+    return ADMIN_REFUSAL_PRESENTATION.mfa_reverification_required.nextStep
   }
 
   function leaveSubmitting() {
@@ -143,7 +136,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     try {
       const receipt = await execute(validated.data)
       if (generation.current !== ticket) return
-      if (receipt == null || (receipt.kind !== 'completed' && receipt.kind !== 'proposed' && receipt.kind !== 'refused')) {
+      if (receipt == null || (receipt.kind !== 'completed' && receipt.kind !== 'pending' && receipt.kind !== 'proposed' && receipt.kind !== 'refused')) {
         setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
         return
       }
@@ -156,7 +149,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       setState((previous) => ({ ...previous, phase: 'receipt', receipt }))
     } catch (cause) {
       if (generation.current !== ticket) return
-      const cancelled = isReverificationCancelled(cause)
+      const cancelled = isReverificationCancelledError(cause)
       if (abandoned.current) {
         abandoned.current = false
         if (!cancelled) {
@@ -176,6 +169,10 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   async function retry(newKey: boolean) {
+    if (state.receipt?.kind === 'pending') {
+      await submit()
+      return
+    }
     if (state.receipt?.kind !== 'refused') return
     const presentation = ADMIN_REFUSAL_PRESENTATION[state.receipt.code]
     if (presentation.retry === 'no') return
@@ -192,7 +189,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   return {
-    ...state, role, allowed, clerkFvaAbsent, pending, setReason, setEvidence,
+    ...state, role, allowed, pending, setReason, setEvidence,
     setTypedEvidence: (value) => setState((previous) => ({ ...previous, typedEvidence: value })),
     next, back, submit, retry, edit,
   }

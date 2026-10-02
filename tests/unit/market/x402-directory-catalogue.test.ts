@@ -6,9 +6,29 @@ import { readX402DirectoryAnalytics, readX402DirectoryCatalogue, readX402Directo
 import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directory-catalogue'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 
-beforeEach(() => { query.mockReset(); upstream.mockReset() })
+beforeEach(() => { query.mockReset(); upstream.mockReset(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('indexed catalogue server boundary', () => {
+  it.each([undefined, 'preview'])('refuses an undeclared money environment %s before querying', async (deployment) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    expect(await readX402DirectoryCatalogue({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(await readX402DirectoryCatalogueResource({ resource: 'https://example.com/tool' })).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(query).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
+  })
+  it.each([['production', 'eip155:8453', 'base-sepolia'], ['development', 'eip155:84532', 'base']])('pins %s compact results to its network', async (deployment, network, opposite) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    expect(await readX402DirectoryCatalogue({ network: opposite })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(query).not.toHaveBeenCalled()
+    query.mockResolvedValue({ kind: 'ok', coverage: { generation: 'g', completedAt: 1 }, isDone: true, continueCursor: '', page: [
+      { id: 'good', source: 'coinbase', resource: 'https://example.com/good', title: 'Good', summary: '', provider: 'example.com', network, minimumUsdPrice: '1' },
+      { id: 'bad', source: 'coinbase', resource: 'https://example.com/bad', title: 'Bad', summary: '', provider: 'example.com', network: opposite, minimumUsdPrice: '1' },
+    ] })
+    const result = await readX402DirectoryCatalogue({ query: 'weather' })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:searchCompact', expect.objectContaining({ network }))
+    expect(result).toMatchObject({ kind: 'ok', page: { items: [{ resource: 'https://example.com/good', prices: [{ network }] }] } })
+  })
+
   it('keeps indexed query order when OpenRouter is blocked', async () => {
     vi.stubEnv('TYPESAFE_API_KEY', '')
     vi.stubEnv('OPENROUTER_API_KEY', 'test-key')
@@ -22,10 +42,10 @@ describe('indexed catalogue server boundary', () => {
     query.mockResolvedValue({ kind: 'ok', coverage, searchMethod: 'native_full_text', page: entries.map(entry => ({ entry })), continueCursor: 'next', isDone: false })
     const result = await readX402DirectoryCatalogue({ query: 'transparent images', network: 'base', maxUsdPrice: 0.1 })
     expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, searchMethod: 'native_full_text', isDone: false, page: {
-      items: entries, appliedFilters: { network: 'base', maxUsdPrice: 0.1 },
+      items: entries.map(entry => ({ ...entry, metadataJson: '' })), appliedFilters: { network: 'eip155:8453', maxUsdPrice: 0.1 },
     } })
     expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', {
-      query: 'transparent images', network: 'base', maxUsdPrice: 0.1,
+      query: 'transparent images', network: 'eip155:8453', maxUsdPrice: 0.1,
       paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 },
     })
     if (result.kind !== 'ok') throw new Error('expected catalogue')
@@ -53,8 +73,8 @@ describe('indexed catalogue server boundary', () => {
       provider: 'EXAMPLE.com',
       indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: 'gen-1', cursor: 'previous' }),
     })
-    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { category: 'creative', provider: 'example.com', paginationOpts: { numItems: 24, cursor: 'previous', maximumRowsRead: 512 } })
-    expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, page: { items: [entry] }, isDone: false, splitCursor: 'split' })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { category: 'creative', provider: 'example.com', network: 'eip155:8453', paginationOpts: { numItems: 24, cursor: 'previous', maximumRowsRead: 512 } })
+    expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, page: { items: [{ ...entry, metadataJson: '' }] }, isDone: false, splitCursor: 'split' })
     if (result.kind === 'ok') {
       expect(result.page.total).toBeUndefined()
       expect(result.indexCursor).toBe(encodeOpaqueCursor({ kind: 'x402-directory', scope: 'gen-1', cursor: 'next' }))
@@ -112,6 +132,65 @@ describe('indexed catalogue server boundary', () => {
     expect(await readX402DirectoryCatalogueResource({ resource: '' })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
     expect(upstream).not.toHaveBeenCalled()
   })
+  it('estimates full resource detail in AUD and leaves misses and invalid rates unchanged', async () => {
+    const rate = { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.239', fetchedAt: Date.now() }
+    const entry = {
+      resource: 'https://example.com/exact', title: 'Weather', description: 'Forecasts', protocol: 'http', method: 'GET',
+      provider: 'example.com', metadataJson: '{"raw":true}', tags: ['weather'],
+      input: { type: 'object', schemaJson: '{"type":"object","properties":{"q":{"type":"string"}}}', exampleJson: '{"q":"sydney"}', fields: [{ name: 'q', path: 'q', location: 'queryParams', source: 'schema' }] },
+      output: { type: 'object', schemaJson: '{"type":"object"}', exampleJson: '{"temp":21}', fields: [{ name: 'temp', path: 'temp', location: 'output', source: 'example' }] },
+      prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '1 USDC', decimalAmount: '1.000000', symbol: 'USDC' }],
+    }
+    const found = {
+      kind: 'found' as const, coverage: { indexedTotal: 4000, generation: 'gen-1' },
+      item: { entry, category: 'weather', categorySource: 'provider_declared' as const, observedAt: 1, sourceDigest: 'digest', toolRef: `operation:v1:${'ab'.repeat(32)}`, choice: { access: 'external_listing' as const } },
+    }
+    const upstreamDetail = { kind: 'found_upstream' as const, item: { entry: { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001000', symbol: 'USDC' }] } } }
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : found)
+    expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual({ ...found, item: { ...found.item, entry: { ...entry, audEstimate: 'A$1.24' } } })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:resource', { resource: entry.resource })
+    expect(query).toHaveBeenCalledWith('referenceRateRefresh:current', {})
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : upstreamDetail)
+    expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual({
+      ...upstreamDetail, item: { entry: { ...upstreamDetail.item.entry, audEstimate: 'A$0.01' } },
+    })
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? null : found)
+    expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual(found)
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? { ...rate, fetchedAt: 0 } : found)
+    expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual(found)
+    query.mockResolvedValue({ kind: 'not_found' })
+    expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual({ kind: 'not_found' })
+    query.mockRejectedValue(new Error('offline'))
+    expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(upstream).not.toHaveBeenCalled()
+  })
+  it('reads a query-only collection as compact cards', async () => {
+    query.mockImplementation(async (name: string) => {
+      if (name === 'referenceRateRefresh:current') return null
+      return {
+        kind: 'ok', coverage: { generation: 'gen-1', completedAt: 1 }, isDone: false, continueCursor: 'scope|next',
+        page: [{
+          id: 'registry:abc', source: 'coinbase', resource: 'https://example.com/tool', slug: 'tool',
+          title: 'Weather', summary: 'Forecasts', provider: 'example.com', network: 'eip155:8453',
+          minimumUsdPrice: '0.01', calls30d: 4, payers30d: 2,
+          choice: { access: 'ae_callable', toolRef: 'operation:v1:' + 'ab'.repeat(32) },
+        }],
+      }
+    })
+    const result = await readX402DirectoryCatalogue({ query: 'weather' })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:searchCompact', {
+      query: 'weather', network: 'eip155:8453', paginationOpts: { numItems: 12, cursor: null },
+    })
+    expect(query).not.toHaveBeenCalledWith('x402DirectoryIndex:browse', expect.anything())
+    if (result.kind !== 'ok') throw new Error('expected compact catalogue')
+    expect(result.page.items[0]).toMatchObject({
+      resource: 'https://example.com/tool', title: 'Weather', description: 'Forecasts', slug: 'tool',
+      metadataJson: '', activity: { calls30d: 4, payers30d: 2 },
+      choice: { access: 'ae_callable' }, prices: [{ symbol: 'USDC', decimalAmount: '0.01' }],
+    })
+    expect(result.page.items[0]).not.toHaveProperty('input')
+    expect(JSON.stringify(result)).not.toContain('schemaJson')
+  })
   it('passes overview facts through and reports transport failures', async () => {
     const overview = { kind: 'ok', categories: [], providers: [], networks: [], popular: [], recentlyUpdated: [] }
     query.mockResolvedValueOnce(overview).mockRejectedValueOnce(new Error('offline'))
@@ -142,7 +221,7 @@ it('passes exact explorer bands and metadata filters to the native index and nev
   const filters = { priceBand: '0_01_to_0_03' as const, adoptionBand: '0' as const, tags: ['search', 'a&b'], bundleSlugs: ['image-tools'], hasInputSchema: false, hasOutputExample: true, minUsdPrice: 0, maxUsdPrice: 0.03, minPayers30d: 0, maxPayers30d: 4 };
   query.mockResolvedValue({ kind: 'unavailable', reason: 'index_unavailable' });
   expect(await readX402DirectoryCatalogue(filters)).toEqual({ kind: 'unavailable', reason: 'index_unavailable' });
-  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { ...filters, paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } });
+  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { ...filters, network: 'eip155:8453', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } });
   expect(upstream).not.toHaveBeenCalled();
   query.mockClear();
   for (const input of [{ minUsdPrice: 0.03, maxUsdPrice: 0.01 }, { minPayers30d: 5, maxPayers30d: 4 }]) {
@@ -236,9 +315,9 @@ describe('directory analytics mapper boundary', () => {
   })
 })
 
-it('accepts momentum sorting through the shared index schema and forwards it to the native index', async () => {
-  expect(x402DirectoryCatalogueInputSchema.safeParse({ sort: 'momentum' }).success).toBe(true)
+it('accepts repeat sorting through the shared index schema and forwards it to the native index', async () => {
+  expect(x402DirectoryCatalogueInputSchema.safeParse({ sort: 'repeat' }).success).toBe(true)
   query.mockResolvedValueOnce({ kind: 'ok', coverage: {}, searchMethod: 'native_index', page: [], continueCursor: 'next', isDone: true })
-  expect(await readX402DirectoryCatalogue({ sort: 'momentum' })).toMatchObject({ kind: 'ok', source: 'index', isDone: true })
-  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { sort: 'momentum', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } })
+  expect(await readX402DirectoryCatalogue({ sort: 'repeat' })).toMatchObject({ kind: 'ok', source: 'index', isDone: true })
+  expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { sort: 'repeat', network: 'eip155:8453', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } })
 })

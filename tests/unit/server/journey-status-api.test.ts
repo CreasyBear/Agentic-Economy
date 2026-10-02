@@ -1,10 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { handleJourneyStatusGet } from '@/lib/server/journey-status-api'
 import { readJourneySourceStatus } from '@/lib/server/journey-status-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import type { CallService } from '@/modules/capability-execution/call-authority'
 
 vi.mock('@/lib/server/journey-status-source', () => ({ readJourneySourceStatus: vi.fn() }))
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
+
 const principal = {
   principalId: `prn_${'1'.repeat(32)}`, ownerId: `acc_${'2'.repeat(32)}`,
   credentialId: 'credential:one', applicationRef: 'agentic-economy', environment: 'sandbox' as const,
@@ -15,7 +18,7 @@ const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'c'.repeat(64)}`
 const turnRef = 'turn_00000000-0000-4000-8000-000000000001'
 const authenticate = async () => ({ isAuthenticated: true as const, tokenType: 'api_key' as const,
-  id: principal.credentialId, subject: 'user_status', scopes: principal.scopes })
+  id: principal.credentialId, subject: 'user_status', scopes: principal.scopes, claims: { aeEnvironment: 'sandbox' } })
 const readCallStatus = vi.fn(async () => ({ kind: 'found' as const, callRef, version: 1, toolRef, state: 'in_progress' as const }))
 const options = { authenticate, resolvePrincipal: async () => principal,
   callService: { readCallStatus } as unknown as CallService }

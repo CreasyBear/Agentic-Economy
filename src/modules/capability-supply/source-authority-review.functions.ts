@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
-import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
+import { readClerkMfaConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 
 import { callSourceMutation, sourceMutation } from '@/lib/server/convex-source'
 import {
@@ -52,20 +52,17 @@ export const reviewSourceAuthorityServer = createServerFn({ method: 'POST' })
       correlationId: `source-authority-review:${reviewDigest}`,
     }
     try {
-      const proof = await requireStrictClerkConsequenceProof(canonicalDigest({
-        scope: 'admin_operator', action: command.action, input: command.input,
-        reasonCode: command.reasonCode, evidenceRefs: command.evidenceRefs,
-      }))
+      const proof = await readClerkMfaConsequenceProof()
+      const reviewedCommand = { ...command, ...(proof === undefined ? {} : { proof }) }
       const sourceWrite = await sourceWriteAdmissionFromContext({
         context,
-        command: { ...command, proof },
+        command: reviewedCommand,
         scope: 'admin_operator',
         operationKey: command.operationKey,
         correlationId: command.correlationId,
       })
       return await callSourceMutation(verifySourceAuthorityMutation, {
-        ...command,
-        proof,
+        ...reviewedCommand,
         sourceWrite,
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       })

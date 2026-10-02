@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createDevelopmentEvidenceVerifier } from '../../../tools/dev/fixtures/capability-supply/development-evidence-fixture'
+import { createDevelopmentEvidenceVerifier } from './fixtures/development-evidence-fixture'
 import {
   collectSuppliedCandidateQuoteAction,
   prepareSuppliedCandidateQuote,

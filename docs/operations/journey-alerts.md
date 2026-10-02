@@ -1,6 +1,9 @@
 # Journey SLI alerts
 
-Create these six alerts in the Sentry UI. Do not script the Sentry API. Each rule is one journey.
+Create these six alerts in the configured monitoring destination. Use the Sentry
+UI for streams actually received there; do not script the Sentry API. Each rule
+is one journey. Until delivery and a test notification are verified, the rule is
+not operational.
 
 ## What is counted
 
@@ -19,7 +22,21 @@ When `SENTRY_DSN` is set, the web server also sends:
 
 Alert on the **metric**, not on the message as well. Counting both double-counts one attempt.
 
-Quote, Call, funding, chat, and publish reach their terminal state inside Convex. Convex does not load the Sentry SDK. Those attempts are the `[ae.journey]` log line. They show up as the metric above only after this Sentry project is receiving the Convex log stream (Sentry → Settings → Integrations → Convex, or an equivalent log drain). Until that stream is connected, create the same rule as a Logs alert on the JSON line. The filters below are the same either way.
+Quote, Call, funding, chat, and publish reach their terminal state inside Convex.
+Convex does not load the Sentry SDK; those attempts emit the `[ae.journey]` log
+line. Convex's [Sentry integration reports exceptions](https://docs.convex.dev/production/integrations/exception-reporting).
+Enabling it does not establish delivery of these logs or creation of `ae.journey`
+metrics.
+
+Configure a separate [Convex log stream](https://docs.convex.dev/production/integrations/log-streams)
+to the approved receiver, then verify the actual journey line arrives. Log
+streams require Convex Pro and support dedicated destinations or a custom webhook;
+neither a new receiver nor a log-to-metric transformation is provisioned by this
+runbook. Use the receiver's log-based rules until an explicit, tested metric
+transformation exists. Count each terminal event through one representation.
+Record the receiving destination, rule, responder and test notification/acknowledgement
+before claiming alert coverage. Missing delivery is unavailable evidence, not a
+healthy zero-event window.
 
 Do not fire a ratio when the window has fewer events than the minimum. One failure in an empty window is not a ratio.
 
@@ -37,7 +54,12 @@ Results returned are good. An error is not.
 | Window | 15 minutes |
 | Minimum | 20 valid events (`journey:search`) |
 
-Logs alert, if the metric is not in the project yet: count lines containing `[ae.journey]` and `"journey":"search"` and `"outcome":"error"`, divided by lines containing `[ae.journey]` and `"journey":"search"`. Same threshold, window, and minimum.
+Logs alert, once the receiver contains these events: count lines containing
+`[ae.journey]`, `"journey":"search"` and `"outcome":"error"`, divided by valid
+Search lines (`match`, `scoped`, `noMatch` or `error`). Alert **above `0.05`**,
+using the same 15-minute window and minimum of 20 valid events. This failure ratio
+is equivalent to the success ratio being below `0.95`: one error in 20 is exactly
+the boundary; two errors in 20 cross it.
 
 ## Quote
 

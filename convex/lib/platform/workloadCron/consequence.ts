@@ -49,6 +49,14 @@ type ConsequenceHandler = (
 // Exhaustive by construction: removing an operation from CONSEQUENCE_OPERATIONS
 // makes its entry here a type error, and no operation can fall through.
 const CONSEQUENCE_HANDLERS: Record<ConsequenceOperation, ConsequenceHandler> = {
+  'moneyReadiness:publish': (ctx, payload) => ctx.runMutation(internal.moneyReadiness.publish, payload as never),
+  'moneyTreasuryReconciliation:publishSnapshot': (ctx, payload) => ctx.runMutation(internal.moneyTreasuryReconciliation.publishSnapshot, payload as never),
+  'moneyTreasuryReconciliation:beginBatch': (ctx, payload) => ctx.runMutation(internal.moneyTreasuryReconciliation.beginBatch, payload as never),
+  'moneyTreasuryReconciliation:finishBatch': (ctx, payload) => ctx.runMutation(internal.moneyTreasuryReconciliation.finishBatch, payload as never),
+  'capabilityCallReports:claimWork': (ctx, payload) => ctx.runMutation(internal.capabilityCallReports.claimWork, payload as never),
+  'capabilityCallReports:finishWork': (ctx, payload) => ctx.runMutation(internal.capabilityCallReports.finishWork, payload as never),
+  'moneyPromotionalCredit:claimWork': (ctx, payload) => ctx.runMutation(internal.moneyPromotionalCredit.claimWork, payload as never),
+  'moneyPromotionalCredit:finishWork': (ctx, payload) => ctx.runMutation(internal.moneyPromotionalCredit.finishWork, payload as never),
   'capabilityCalls:cancelBeforeClaim': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.cancelBeforeClaim, payload as never),
   'capabilityCalls:claimAutomaticReconciliationCandidate': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.claimAutomaticReconciliationCandidate, payload as never),
   'capabilityCalls:finishAutomaticReconciliation': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.finishAutomaticReconciliation, payload as never),

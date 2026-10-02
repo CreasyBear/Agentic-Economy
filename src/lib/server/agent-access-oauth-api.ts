@@ -1,4 +1,5 @@
 import { AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { authRefusalProblem } from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
@@ -95,6 +96,7 @@ export async function handleDeviceAuthorizationPost(request: Request, options: O
     return oauthError('invalid_request', 400)
   }
   const result = await beginDeviceGrant(requireStore(options), {
+    environment: deploymentPaymentEnvironment(process.env),
     client,
     requestedScopes: scopeText.split(/\s+/u),
     ...(requestedAccess === undefined ? {} : { requestedAccess }),
@@ -225,6 +227,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
     return redirectTo(login)
   }
   const result = await beginAuthorizationCodeGrant(requireStore(options), {
+    environment: deploymentPaymentEnvironment(process.env),
     client,
     redirectUri,
     requestedScopes: scopeText.split(/\s+/u),

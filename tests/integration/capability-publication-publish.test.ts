@@ -13,7 +13,7 @@ import {
   convexModules as modules,
   ownerAdmin,
   publishedBusinessOwner,
-  testConsequenceProof,
+  testMfaConsequenceProof,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import {
@@ -67,7 +67,7 @@ describe('capability publication publish', () => {
       action, input, reasonCode, evidenceRefs,
       operationKey, correlationId: operationKey,
       approval: { kind: 'execute' },
-      proof: testConsequenceProof({ subject }, digest),
+      proof: testMfaConsequenceProof({ subject }, digest),
     })
     await expect(owner.mutation(verifySourceAuthority, await withSourceWrite(
       'admin_operator', command('user_authority_review', 'authority-review:unauthorized'),

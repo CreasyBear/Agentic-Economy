@@ -30,7 +30,7 @@ it('carries the decision facts a listing page can show without a Call', () => {
   expect(toDirectoryToolPageModel({
     ...entry,
     prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: '0.002000 USDC', decimalAmount: '0.002000', symbol: 'USDC' }],
-  })).toMatchObject({ priceLabel: 'AUD estimate temporarily unavailable', priceContext: 'Provider lists 0.002 USDC per Call' })
+  })).toMatchObject({ priceLabel: 'US$0.002', priceContext: 'Provider lists 0.002 USDC per Call' })
   expect(toDirectoryToolPageModel({
     ...entry,
     prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: '5680.941049 USDC', decimalAmount: '5680.941049', symbol: 'USDC' }],
@@ -61,7 +61,7 @@ it('carries the decision facts a listing page can show without a Call', () => {
   ])
 })
 
-it('groups a Provider and keeps USDC endpoint prices out of AUD price slots', () => {
+it('groups a Provider and shows buyer prices for each indexed endpoint', () => {
   const search = {
     ...entry,
     resource: 'https://api.exa.ai/search',
@@ -84,19 +84,19 @@ it('groups a Provider and keeps USDC endpoint prices out of AUD price slots', ()
   const surface = toDirectoryServiceSurface(search, [search, contents], false)
   expect(surface.title).toBe('Exa')
   expect(surface.networks).toBe('Base, Solana')
-  expect(surface.priceRange).toBe('AUD estimate temporarily unavailable')
+  expect(surface.priceRange).toBe('US$0.001 · US$0.007')
   expect(surface.endpointCount).toBe('2 endpoints')
   expect(surface.endpoints.map(endpoint => endpoint.path)).toEqual(['/search', '/contents'])
   expect(surface.endpoints[0]?.current).toBe(true)
   expect(surface.endpoints[0]?.activity).toBe('5,900 calls · 87 payers · last 30 days')
-  expect(surface.endpoints.map(endpoint => endpoint.price)).toEqual(['AUD estimate temporarily unavailable', 'AUD estimate temporarily unavailable'])
+  expect(surface.endpoints.map(endpoint => endpoint.price)).toEqual(['US$0.001', 'US$0.007'])
   expect(toDirectoryServiceSurface(search, [], true).endpointCount).toBe('1+ endpoints')
 })
 
-it('labels empty prices as on-request with no Provider price published', () => {
+it('omits price labels when no recognised Provider price is present', () => {
   const model = toDirectoryToolCardModel(entry)
-  expect(model.priceLabel).toBe('Price on request')
-  expect(model.priceContext).toBe('No Provider price published')
+  expect(model.priceLabel).toBe('')
+  expect(model.priceContext).toBe('')
 })
 
 it('shows the listed denomination as source detail, not the buyer price', () => {
@@ -104,7 +104,7 @@ it('shows the listed denomination as source detail, not the buyer price', () => 
     ...entry,
     prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }],
   })
-  expect(model.priceLabel).toBe('AUD estimate temporarily unavailable')
+  expect(model.priceLabel).toBe('US$0.02')
   expect(model.priceContext).toBe('Provider lists 0.02 USDC per Call')
 })
 
@@ -113,39 +113,57 @@ it('keeps a sub-cent published source exact while refusing to invent an AUD rate
     ...entry,
     prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.0000001 USDC', decimalAmount: '0.0000001', symbol: 'USDC' }],
   })
-  expect(model.priceLabel).toBe('AUD estimate temporarily unavailable')
+  expect(model.priceLabel).toBe('US$0.0000001')
   expect(model.priceContext).toBe('Provider lists 0.0000001 USDC per Call')
 })
 
-it('defers unknown atomic amounts to payment details', () => {
+it('labels an upto maximum as up to in USD and AUD', () => {
+  const capped = {
+    ...entry,
+    prices: [{ network: 'eip155:8453', scheme: 'upto', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' }],
+  }
+  expect(toDirectoryToolCardModel(capped).priceLabel).toBe('up to US$0.02')
+  expect(toDirectoryToolCardModel({ ...capped, audEstimate: 'A$0.03' }).priceLabel).toBe('up to A$0.03')
+})
+
+it('omits unknown atomic amounts rather than showing a price hedge', () => {
   const model = toDirectoryToolCardModel({
     ...entry,
     prices: [{ network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', scheme: 'exact', amount: '20000 atomic units (unknown-mint)' }],
   })
-  expect(model.priceLabel).toBe('See payment details')
+  expect(model.priceLabel).toBe('')
 })
 
 it('counts multiple payment options', () => {
   const model = toDirectoryToolCardModel({
     ...entry,
     prices: [
-      { network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC' },
-      { network: 'solana:mainnet', scheme: 'exact', amount: '0.02 USDC' },
+      { network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' },
+      { network: 'solana:mainnet', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' },
     ],
   })
   expect(model.priceContext).toBe('2 Provider payment options · source 0.02 USDC')
 })
 
-it('surfaces Bazaar volume without treating it as an Agentic Economy Call', () => {
-  const model = toDirectoryToolCardModel({ ...entry, activity: { calls30d: 12, lastCalledAt: '2026-09-08T06:00:00.000Z' } })
-  expect(model.activityLabel).toBe('12 reported calls in 30 days')
+it('shows source usage, last payment and AUD price as facts without claiming an Agentic Economy Call', () => {
+  const paidAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+  const model = toDirectoryToolCardModel({
+    ...entry,
+    activity: { calls30d: 12, payers30d: 2, lastCalledAt: paidAt },
+    audEstimate: 'A$0.02',
+  })
+  expect(model.factsLine).toBe('2 buyers · 12 calls this month · paid 2 hours ago · from A$0.02')
   expect(model.callsLabel).toBe('12')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 168128, payers30d: 2 } })).toMatchObject({ callsLabel: '168,128', payersLabel: '2' })
-  expect(model.activityTitle).toBe('Coinbase Bazaar volume, not an Agentic Economy Call. Last reported 8 Sept 2026.')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 1 } }).activityLabel).toBe('1 reported call in 30 days')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 9, payers30d: 2 } }).activityLabel).toBe('9 reported calls · 2 payers in 30 days')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 1, payers30d: 1 } }).activityLabel).toBe('1 reported call · 1 payer in 30 days')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { lastCalledAt: '2026-09-08T06:00:00.000Z' } }).activityLabel).toBe('Last reported 8 Sept 2026')
+  expect(model.payersLabel).toBe('2')
+  expect(model.activityTitle).toContain('Coinbase Bazaar volume, not an Agentic Economy Call.')
+  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 168128, payers30d: 2 } })).toMatchObject({
+    factsLine: '2 buyers · 168,128 calls this month', callsLabel: '168,128', payersLabel: '2',
+  })
+  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 0, payers30d: 0 } }).factsLine).toBe('0 calls this month')
+  expect(toDirectoryToolCardModel({ ...entry, activity: { payers30d: 1 } }).factsLine).toBe('1 buyers')
+  expect(toDirectoryToolCardModel(entry).factsLine).toBeUndefined()
+  expect(toDirectoryToolCardModel({ ...entry, activity: { lastCalledAt: '2026-09-08T06:00:00.000Z' } }).activityTitle)
+    .toBe('Coinbase Bazaar volume, not an Agentic Economy Call. Last reported 8 Sept 2026.')
 })
 
 it('keeps a service icon and two-letter mark for the card', () => {
@@ -212,12 +230,12 @@ it('reads a Provider from its busiest Tool and leaves a quiet host blank', () =>
     key: 'blockrun.ai', label: 'blockrun.ai', count: 48,
     leadCalls: 334244, leadPayers: 183, leadPrice: '0.002', leadTitle: 'AI chat completions', leadSlug: 'api-v1-chat-completions',
   })).toMatchObject({
-    callsLabel: '334,244', payersLabel: '183', priceLabel: 'AUD estimate temporarily unavailable', priceSourceLabel: 'Provider lists 0.002 USDC per Call', toolLabel: '48',
+    callsLabel: '334,244', payersLabel: '183', priceLabel: 'US$0.002', priceSourceLabel: 'Provider lists 0.002 USDC per Call', toolLabel: '48',
     leadTitle: 'AI chat completions', leadSlug: 'api-v1-chat-completions',
   })
   const quiet = toDirectoryProviderRow({ key: 'quiet.example', label: 'quiet.example', count: 1, leadCalls: -1, leadTitle: 'Ghost' })
   expect(quiet.callsLabel).toBe('—')
-  expect(quiet.priceLabel).toBe('—')
+  expect(quiet.priceLabel).toBe('')
   expect(quiet.leadTitle).toBeUndefined()
 })
 

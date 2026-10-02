@@ -33,18 +33,18 @@ describe('durable Provider offboarding', () => {
         })
       }
     })
-    const source = { definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox', kind: 'openapi' } as const
+    const source = { resourceUrl: 'https://provider.example/operation-101', method: 'GET', environment: 'sandbox', kind: 'x402' } as const
     const sourceDigest = `sha256:${'1'.repeat(64)}`
-    const selector = { method: 'get', path: '/operation-101' }
+    const selector = { resourceUrl: source.resourceUrl, method: source.method }
     const command = {
       businessId: fixture.businessId,
       title: 'Operation 101',
       description: 'Proves source-native Offering writes do not load or cap the Provider fleet.',
       category: 'API services',
-      sourceKind: 'openapi' as const,
+      sourceKind: 'x402' as const,
       sourceDescriptorJson: stableStringify(source),
       sourceDigest,
-      sourceRevision: 'openapi:revision-101',
+      sourceRevision: 'x402:revision-101',
       candidateRef: canonicalDigest({ sourceDigest, selector }),
       sourceSelectorJson: stableStringify(selector),
       operationKey: 'provider-offering-cap-removed:create-101',

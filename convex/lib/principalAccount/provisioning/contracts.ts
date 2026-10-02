@@ -3,12 +3,12 @@ import type { MutationCtx } from '../../../_generated/server'
 type WorkspaceProvisioningErrorCode =
   | 'creator_binding_missing'
   | 'creator_principal_inactive'
-  | 'display_name_invalid'
   | 'clerk_org_id_invalid'
   | 'active_organization_mismatch'
   | 'identity_invalid'
   | 'authority_conflict'
   | 'correlation_ref_invalid'
+  | 'workspace_closed'
 
 export class WorkspaceProvisioningError extends Error {
   readonly code: WorkspaceProvisioningErrorCode

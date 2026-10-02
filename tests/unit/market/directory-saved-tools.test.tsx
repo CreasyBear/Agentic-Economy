@@ -17,7 +17,7 @@ vi.mock('@/modules/market/market.functions', () => ({ listSavedToolsForOwner: li
 const ref = `operation:v1:${'a'.repeat(64)}`
 const resource = 'https://example.com/weather'
 const compactId = `registry:${canonicalDigest({ source: 'coinbase', resource }).slice(7)}`
-const entry = { resource, title: 'Current weather feed', description: 'Current provider description', provider: 'example.com', protocol: 'http', prices: [], metadataJson: '{}', audEstimate: 'A$0.02' }
+const entry = { resource, title: 'Current weather feed', description: 'Current provider description', provider: 'example.com', protocol: 'http', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', symbol: 'USDC', decimalAmount: '0.02' }], metadataJson: '{}', audEstimate: 'A$0.02' }
 const savedByOwner = new Map<string, SavedToolListItem[]>()
 const current = () => savedByOwner.get(auth.userId ?? '') ?? []
 

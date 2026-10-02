@@ -18,6 +18,9 @@ import {
 import { exactAmountSchema, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
+import { truncateText } from '@/modules/common/truncate-text'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
+
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
 import { searchVerdict } from './search-verdict'
 import { searchNextActions } from './next-action'
@@ -144,6 +147,9 @@ const searchResultSchema = z.strictObject({
   title: z.string().max(72),
   summary: z.string().max(100),
   provider: z.string().max(48),
+  host: z.string().max(300).optional(),
+  resourcePath: z.string().max(512).optional(),
+  networkLabel: z.string().max(128).optional(),
   actionClass: z.enum(['retrieve', 'transform', 'analyze', 'create', 'mutate', 'other', 'unclassified']),
   objectClass: z.enum(['web', 'document', 'image', 'location', 'chain', 'data', 'other', 'unclassified']),
   category: z.string().max(80).optional(),
@@ -164,6 +170,7 @@ const searchMetaSchema = {
   query: z.string(),
   partialResults: z.boolean(),
   recipient: z.strictObject({ label: z.string(), host: z.string(), data: z.literal('query and candidate summaries') }).optional(),
+  recommendation: z.strictObject({ toolRef: z.string().refine(isPublicToolRef), by: z.string().min(1).max(80) }).optional(),
   freshness: supplyProjectionFreshnessSchema.optional(),
   assessed: z.strictObject({
     source: z.enum(['current', 'coinbase', 'all']),
@@ -300,11 +307,19 @@ function priceLabel(tool: PublicToolDescriptor): string {
   if (display !== undefined) return display
   const price = tool.commercial.price
   if (price.kind === 'on_request') return 'Price confirmed at inspection'
-  if (price.kind === 'fixed') return price.amount.currency === 'AUD'
-    ? formatDisplayAmount(price.amount) : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
-  return price.minimum.currency === 'AUD' && price.maximum.currency === 'AUD'
-    ? `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`
-    : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
+  if (price.kind === 'fixed') return (price.amount.currency === 'AUD'
+    ? formatDisplayAmount(price.amount)
+    : formatDisplayPrice({ kind: 'indicative', amount: price.amount })) ?? 'Price confirmed at inspection'
+  if (price.minimum.currency !== price.maximum.currency) return 'Price confirmed at inspection'
+  const minimum = price.minimum.currency === 'AUD'
+    ? formatDisplayAmount(price.minimum)
+    : formatDisplayPrice({ kind: 'indicative', amount: price.minimum })
+  const maximum = price.maximum.currency === 'AUD'
+    ? formatDisplayAmount(price.maximum)
+    : formatDisplayPrice({ kind: 'indicative', amount: price.maximum })
+  return minimum === undefined || maximum === undefined
+    ? 'Price confirmed at inspection'
+    : `${minimum}–${maximum}`
 }
 
 function projectCompactTool(tool: PublicToolDescriptor) {
@@ -397,9 +412,9 @@ export function projectToolSearchChoices(
       source: 'current',
       access: tool.availability.posture === 'routeable' ? 'ae_callable' : tool.availability.posture,
       toolRef: tool.toolRef,
-      title: Array.from(tool.listing.label).slice(0, 72).join(''),
-      summary: Array.from(tool.summary).slice(0, 100).join(''),
-      provider: Array.from(tool.business.name).slice(0, 48).join(''),
+      title: truncateText(tool.listing.label, 72),
+      summary: truncateText(tool.summary, 100),
+      provider: truncateText(tool.business.name, 48),
       actionClass: 'unclassified',
       objectClass: 'unclassified',
       readiness: projectToolChoiceEvidence(tool).readiness,

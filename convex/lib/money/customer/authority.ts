@@ -56,12 +56,7 @@ async function resolveCustomerAccount(
 }> {
   const principal = await requireInteractiveHumanPrincipal(db, identity)
   const canonicalPrincipalRef = principalRef(principal.principalRef)
-  const res = await resolveActiveAccountRefForPrincipal(
-    db,
-    canonicalPrincipalRef,
-    identity,
-    'require',
-  )
+  const res = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)
   return {
     principal,
     canonicalPrincipalRef,

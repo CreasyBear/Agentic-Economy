@@ -8,7 +8,7 @@ import {
   vi,
 } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import {
   InteractiveAuthorityError,
   requireAccessFactForAccount,
@@ -70,7 +70,7 @@ type OrganizationMembershipCreatedCommand = Readonly<{
 
 type OrganizationMembershipCreatedResult = Readonly<
   | { kind: 'accepted'; status: 'applied' | 'replayed' | 'ignored' }
-  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' }
+  | { kind: 'refused'; code: 'authority_conflict' | 'identity_binding_missing' | 'organization_unbound' }
 >
 
 type OrganizationMembershipUpdatedCommand = OrganizationMembershipCreatedCommand
@@ -110,7 +110,7 @@ const listDirectoryRef = makeFunctionReference<
   }>
 >('workspaceTeam:listDirectory')
 
-const provisionOrganizationWorkspaceForServerRef = internal.workspaceProvisioning.provisionOrganizationWorkspaceForServer
+const provisionOrganizationWorkspaceForServerRef = api.workspaceProvisioning.provisionOrganizationWorkspaceForServer
 
 const correlationRef = (label: string) => `test:workspace-membership:${label}`
 
@@ -227,38 +227,8 @@ async function listMembershipDeletedAuditEvents(backend: InteractiveAuthorityBac
   })
 }
 
-async function insertSessionSelection(
-  backend: InteractiveAuthorityBackend,
-  input: Readonly<{
-    principalRef: string
-    activeAccountRef: string
-  }>,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: input.principalRef,
-      activeAccountRef: input.activeAccountRef,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: 'test:membership-deleted:selection',
-    })
-  })
-}
-
-async function countSessionSelections(
-  backend: InteractiveAuthorityBackend,
-  principalRef?: string,
-): Promise<number> {
-  return await backend.run(async (ctx) => {
-    const rows = await ctx.db.query('interactiveSessionSelections').collect()
-    return principalRef === undefined
-      ? rows.length
-      : rows.filter((row) => row.principalRef === principalRef).length
-  })
-}
-
 async function listDirectoryForOwner(backend: InteractiveAuthorityBackend) {
-  const session = backend.withIdentity(samIdentity(TOKEN_IDENTIFIER))
+  const session = backend.withIdentity(samIdentity(TOKEN_IDENTIFIER, { org_id: CLERK_ORG_ID }))
   return await session.query(listDirectoryRef, {})
 }
 
@@ -325,6 +295,7 @@ async function provisionBoundOrgWorkspace(
     correlationRef: correlationRef(`provision:${clerkOrgId}`),
     serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
   })
+  if (result.kind === 'refused') throw new Error(`provisioning refused: ${result.code}`)
   return result.accountRef
 }
 
@@ -496,7 +467,7 @@ async function listMembershipRows(backend: InteractiveAuthorityBackend, accountR
 
 async function countTable(
   backend: InteractiveAuthorityBackend,
-  table: 'memberships' | 'accountOwnerships' | 'interactiveSessionSelections',
+  table: 'memberships' | 'accountOwnerships',
 ): Promise<number> {
   return await backend.run(async (ctx) => (await ctx.db.query(table).collect()).length)
 }
@@ -626,7 +597,7 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     expect(await listMembershipAuditEvents(backend)).toHaveLength(1)
   })
 
-  it('C4: unknown clerkOrgId is accepted ignored with zero memberships and audits', async () => {
+  it('C4: unknown clerkOrgId refuses organization_unbound with zero memberships and audits', async () => {
     const backend = createBackend()
     await seedMembershipObservationFixture(backend)
     const command = membershipCommand({
@@ -635,14 +606,14 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     })
 
     expect(await recordOrganizationMembershipCreatedForServer(backend, command)).toEqual({
-      kind: 'accepted',
-      status: 'ignored',
+      kind: 'refused',
+      code: 'organization_unbound',
     })
     expect(await listMembershipRows(backend)).toHaveLength(0)
     expect(await listMembershipAuditEvents(backend)).toHaveLength(0)
   })
 
-  it('C5: inactive binding or inactive account is accepted ignored with zero memberships and audits', async () => {
+  it('C5: inactive account is ignored and revoked binding is refused without memberships or audits', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedInviteePrincipalWithBinding(backend)
@@ -677,7 +648,7 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     expect(await recordOrganizationMembershipCreatedForServer(backend, membershipCommand({
       clerkOrgId: OTHER_CLERK_ORG_ID,
       deliveryRef: 'delivery-c5-binding',
-    }))).toEqual({ kind: 'accepted', status: 'ignored' })
+    }))).toEqual({ kind: 'refused', code: 'organization_unbound' })
 
     expect(await listMembershipRows(backend)).toHaveLength(0)
     expect(await listMembershipAuditEvents(backend)).toHaveLength(0)
@@ -774,18 +745,16 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     expect(serialized).not.toContain('http')
   })
 
-  it('C9: accountOwnerships, interactiveSessionSelections, and account revision are untouched', async () => {
+  it('C9: accountOwnerships and account revision are untouched', async () => {
     const backend = createBackend()
     const accountRef = await seedMembershipObservationFixture(backend)
     const revisionBefore = await readAccountRevision(backend, accountRef)
     const ownershipsBefore = await countTable(backend, 'accountOwnerships')
-    const selectionsBefore = await countTable(backend, 'interactiveSessionSelections')
 
     await recordOrganizationMembershipCreatedForServer(backend, membershipCommand({ deliveryRef: 'delivery-c9' }))
 
     expect(await readAccountRevision(backend, accountRef)).toBe(revisionBefore)
     expect(await countTable(backend, 'accountOwnerships')).toBe(ownershipsBefore)
-    expect(await countTable(backend, 'interactiveSessionSelections')).toBe(selectionsBefore)
   })
 
   it('C10: org A join never writes membership or audit on org B', async () => {
@@ -1351,12 +1320,11 @@ describe('workspaceMemberships recordOrganizationMembershipUpdatedForServer (W-1
     expect(audits[0]?.activeAccountRef).toBe(accountRefA)
   })
 
-  it('U16: accountOwnerships, interactiveSessionSelections, and account revision are untouched', async () => {
+  it('U16: accountOwnerships and account revision are untouched', async () => {
     const backend = createBackend()
     const accountRef = await seedUpdatedObservationFixture(backend)
     const revisionBefore = await readAccountRevision(backend, accountRef)
     const ownershipsBefore = await countTable(backend, 'accountOwnerships')
-    const selectionsBefore = await countTable(backend, 'interactiveSessionSelections')
 
     await recordOrganizationMembershipUpdatedForServer(backend, updatedMembershipCommand({
       deliveryRef: 'delivery-u16',
@@ -1364,7 +1332,6 @@ describe('workspaceMemberships recordOrganizationMembershipUpdatedForServer (W-1
 
     expect(await readAccountRevision(backend, accountRef)).toBe(revisionBefore)
     expect(await countTable(backend, 'accountOwnerships')).toBe(ownershipsBefore)
-    expect(await countTable(backend, 'interactiveSessionSelections')).toBe(selectionsBefore)
   })
 
   it('U17: promote then demote applies twice with revision +2 and two updated audits', async () => {
@@ -1444,17 +1411,12 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
   it('D2: same deliveryRefHash replay returns replayed with one ended row and one audit', async () => {
     const backend = createBackend()
     const accountRef = await seedDeletedObservationFixture(backend)
-    await insertSessionSelection(backend, {
-      principalRef: INVITEE_PRINCIPAL_REF,
-      activeAccountRef: accountRef,
-    })
     const command = deletedMembershipCommand({ deliveryRef: 'delivery-d2' })
 
     expect(await recordOrganizationMembershipDeletedForServer(backend, command)).toEqual({
       kind: 'accepted',
       status: 'applied',
     })
-    expect(await countSessionSelections(backend, INVITEE_PRINCIPAL_REF)).toBe(0)
     expect(await recordOrganizationMembershipDeletedForServer(backend, command)).toEqual({
       kind: 'accepted',
       status: 'replayed',
@@ -1462,7 +1424,6 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
 
     expect((await listMembershipRows(backend, accountRef)).filter((row) => row.lifecycle === 'ended')).toHaveLength(1)
     expect(await listMembershipDeletedAuditEvents(backend)).toHaveLength(1)
-    expect(await countSessionSelections(backend, INVITEE_PRINCIPAL_REF)).toBe(0)
   })
 
   it('D3: same deliveryRefHash with conflicting digest refuses authority_conflict', async () => {
@@ -1608,21 +1569,15 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
     })
   })
 
-  it('D8: workspace owner providerIdentifier is ignored and owner session is not deleted', async () => {
+  it('D8: workspace owner providerIdentifier is ignored', async () => {
     const backend = createBackend()
-    const accountRef = await seedMembershipObservationFixture(backend)
-    await insertSessionSelection(backend, {
-      principalRef: PRINCIPAL_OWNER_REF,
-      activeAccountRef: accountRef,
-    })
-    const selectionsBefore = await countSessionSelections(backend, PRINCIPAL_OWNER_REF)
+    await seedMembershipObservationFixture(backend)
 
     const result = await recordOrganizationMembershipDeletedForServer(backend, deletedMembershipCommand({
       deliveryRef: 'delivery-d8',
       providerIdentifier: OWNER_PROVIDER_IDENTIFIER,
     }))
     expect(result).toEqual({ kind: 'accepted', status: 'ignored' })
-    expect(await countSessionSelections(backend, PRINCIPAL_OWNER_REF)).toBe(selectionsBefore)
     expect(await listMembershipDeletedAuditEvents(backend)).toHaveLength(0)
   })
 
@@ -1719,52 +1674,6 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
     const audits = await listMembershipDeletedAuditEvents(backend)
     expect(audits).toHaveLength(1)
     expect(audits[0]?.activeAccountRef).toBe(accountRefA)
-  })
-
-  it('D13: session selection for principal and workspace account is deleted', async () => {
-    const backend = createBackend()
-    const accountRef = await seedDeletedObservationFixture(backend)
-    await insertSessionSelection(backend, {
-      principalRef: INVITEE_PRINCIPAL_REF,
-      activeAccountRef: accountRef,
-    })
-
-    await recordOrganizationMembershipDeletedForServer(backend, deletedMembershipCommand({
-      deliveryRef: 'delivery-d13',
-    }))
-
-    expect(await countSessionSelections(backend, INVITEE_PRINCIPAL_REF)).toBe(0)
-  })
-
-  it('D14: session selection for a different activeAccountRef remains', async () => {
-    const backend = createBackend()
-    const accountRef = await seedDeletedObservationFixture(backend)
-    await insertOrgAccountWithOwnership(backend, {
-      accountRef: SECOND_ORG_ACCOUNT_REF,
-      ownershipRef: SECOND_ORG_OWNERSHIP_REF,
-      displayName: 'Other workspace',
-    })
-    await insertSessionSelection(backend, {
-      principalRef: INVITEE_PRINCIPAL_REF,
-      activeAccountRef: accountRef,
-    })
-    await insertSessionSelection(backend, {
-      principalRef: INVITEE_PRINCIPAL_REF,
-      activeAccountRef: SECOND_ORG_ACCOUNT_REF,
-    })
-
-    await recordOrganizationMembershipDeletedForServer(backend, deletedMembershipCommand({
-      deliveryRef: 'delivery-d14',
-    }))
-
-    const remaining = await backend.run(async (ctx) => {
-      const rows = await ctx.db
-        .query('interactiveSessionSelections')
-        .withIndex('by_principalRef', (query) => query.eq('principalRef', INVITEE_PRINCIPAL_REF))
-        .collect()
-      return rows.map((row) => row.activeAccountRef)
-    })
-    expect(remaining).toEqual([SECOND_ORG_ACCOUNT_REF])
   })
 
   it('D15: accountOwnerships count and accounts revision are unchanged', async () => {

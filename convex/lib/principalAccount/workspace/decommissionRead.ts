@@ -10,7 +10,6 @@ import type { WorkspaceDb } from './identity'
 
 const workspaceFenceReasonValue = v.union(
   v.literal('unsettled_provider_obligations'),
-  v.literal('unwithdrawn_earnings'),
   v.literal('open_calls'),
   v.literal('unreleased_call_holds'),
   v.literal('in_flight_funding'),

@@ -66,7 +66,8 @@ describe('public semantic comfort', () => {
     }
     expect(within(article).getByText(/an authorised Agent acts for that Customer/)).toBeTruthy()
     expect(within(article).getByText(/which Tools it may use/)).toBeTruthy()
-    expect(within(article).getByText(/identifies the Provider, Agentic Economy’s role/)).toBeTruthy()
+    expect(within(article).getByText(/AE supplies its routing service to the Customer as principal/)).toBeTruthy()
+    expect(within(article).getByText(/available Provider or endpoint identity/)).toBeTruthy()
     expect(within(article).queryByText(/supplying party/)).toBeNull()
     expect(within(article).queryByText(/paid request/)).toBeNull()
   })
@@ -84,8 +85,8 @@ describe('public semantic comfort', () => {
     }
     expect(within(article).getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
       .toBe('/privacy/remove-business')
-    expect(within(article).getByRole('link', { name: 'hello@aecon.ai' }).getAttribute('href'))
-      .toBe('mailto:hello@aecon.ai')
+    expect(within(article).getByRole('link', { name: 'Contact Support about your data' }).getAttribute('href'))
+      .toBe('/support')
     expect(within(article).queryByText(/Analytics preferences in the footer/)).toBeNull()
   })
 

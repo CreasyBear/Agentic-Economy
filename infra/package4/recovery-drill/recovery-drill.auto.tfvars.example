@@ -1,2 +1,4 @@
 drill_date      = "20260904"
 source_revision = "0000000000000000000000000000000000000000"
+# Replace with restoreTime from the new baseline, never a guessed or latest time.
+restore_time    = "2026-09-04T00:00:00.000Z"

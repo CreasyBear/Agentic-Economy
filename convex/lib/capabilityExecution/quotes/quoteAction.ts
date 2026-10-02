@@ -1,8 +1,8 @@
+import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { recordJourneyOutcome, recordQuoteJourney } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { bindPersistedManagedX402RequirementRef, inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import { spendingPeriodPreparationIsRetryable } from './quoteValuation'
 import { readOrganizationMonthlySpendSnapshotForQuote } from './environmentHelpers'
 import { refuse } from './refusalHelpers'
@@ -125,7 +125,7 @@ async function evaluateQuoteAction(
         legalCustomerGeneration: subjects.legalCustomerGeneration,
         legalExposureAvailableUnits: subjects.legalExposureUnits,
         policyGeneration: subjects.policyGeneration,
-        formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+        formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
         buyerTaxBps: subjects.buyerTaxBps,
         observedAt: Date.now(),
         ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
@@ -143,18 +143,6 @@ async function evaluateQuoteAction(
       policyDigest: subjects.policyDigest,
       externalEvidenceDigest: subjects.policyDigest,
     },
-    ...(live.kind === 'observed' && subjects.treasury !== undefined
-      ? [{
-          commandRef: `capacity:treasury:${subjects.treasury.custodyRef}:${subjects.treasury.custodyGeneration}`,
-          idempotencyKey: `capacity:treasury:${subjects.treasury.custodyRef}:${subjects.treasury.custodyGeneration}`,
-          kind: 'treasury_usdc' as const,
-          subjectRef: subjects.treasury.custodyRef,
-          generation: subjects.treasury.custodyGeneration,
-          targetUnits: subjects.treasury.targetUnits,
-          policyDigest: subjects.policyDigest,
-          externalEvidenceDigest: subjects.treasury.evidenceDigest,
-        }]
-      : []),
   ]
   if (live.kind === 'observed' && subjects.treasury === undefined) {
     return refuse(args, 'treasury_capacity_unavailable', true)
@@ -168,8 +156,8 @@ async function evaluateQuoteAction(
   const periodSnapshot = spendingPeriods
   if (periodSnapshot === undefined) return refuse(args, 'inspection_unavailable', true)
   const [account, dailyPeriod, monthlyPeriod, exposure, treasury] = await Promise.all([
-    ctx.runAction(internal.moneyFormance.readDisplayBalance, {
-      balanceKind: 'account_aud', subjectRef: subjects.accountRef,
+    ctx.runAction(internal.moneyAccountCreditBalance.read, {
+      accountRef: subjects.accountRef,
     }),
     ctx.runAction(internal.moneyFormance.readSpendingPeriod, {
       principalRef: subjects.principalRef,
@@ -233,7 +221,7 @@ async function evaluateQuoteAction(
         legalCustomerGeneration: subjects.legalCustomerGeneration,
         legalExposureAvailableUnits: exposure.units,
         policyGeneration: subjects.policyGeneration,
-        formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+        formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
         buyerTaxBps: subjects.buyerTaxBps,
         observedAt,
         ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),

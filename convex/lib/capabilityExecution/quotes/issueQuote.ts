@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currentToolDigest } from '@/modules/capability-execution/current-tool-quote'
@@ -9,11 +9,12 @@ import {
   normalizeStoredAgentAccessGrant,
   projectAgentAccessGrant,
 } from '@/modules/agent-access/policy'
-import { splitInclusiveAudTax } from '@/modules/money/public'
 import { materializeRuntimePublishedTool } from '@/modules/capability-supply/public'
 import { jsonObject } from '@/modules/capability-execution/convex'
 
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
+import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
+import { normalizePricingConfig } from '@/modules/money/public'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
@@ -63,6 +64,7 @@ export async function issueQuoteHandler(
   // The coordinating action has already consumed this source-write admission in
   // prepareFinancialSubjects. Internal mutations must not consume the same nonce twice.
   const now = Date.now()
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
   const authority = await resolveCurrentAgentAuthority(
     ctx,
     args.principal,
@@ -84,7 +86,7 @@ export async function issueQuoteHandler(
       return refuse(args, 'grant_not_found', false)
     }
   }
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), authority.principal.environment)) {
+  if (deploymentEnvironment === undefined || deploymentEnvironment !== authority.principal.environment) {
     return refuse(args, 'tool_unsupported', false, { reason: 'This deployment does not admit purchases in this environment.' })
   }
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
@@ -92,7 +94,7 @@ export async function issueQuoteHandler(
   }
   const operation = await readCurrentPublishedTool(ctx, args.toolRef, now)
   if (operation === undefined) return refuse(args, 'tool_not_found', false)
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), operation.runtimeEnvironment)
+  if (operation.runtimeEnvironment !== deploymentEnvironment
     || operation.runtimeEnvironment !== authority.principal.environment) {
     return refuse(args, 'tool_unsupported', false, { reason: 'The current Tool environment is not permitted for this purchase.' })
   }
@@ -109,6 +111,17 @@ export async function issueQuoteHandler(
   if (currentDigest === undefined) return refuse(args, 'tool_not_current', false, {
     capabilityId: operation.contract.ref.capabilityId,
   })
+
+  // Re-read after the coordinating action's external inspection; a mid-request pause must win.
+  const paymentPricing = normalizePricingConfig(operation.pricingConfig)
+  if (paymentPricing.kind !== 'valid') return refuse(args, 'tool_unsupported', false)
+  if (paymentPricing.config.kind !== 'fixed_aud' || paymentPricing.config.amountUnits !== '0') {
+    const paymentAccess = await readAgentPaymentAdmission(ctx, {
+      environment: authority.principal.environment, accountRef: authority.principal.ownerId,
+      grantRef: authority.grantRef, grantGeneration: authority.grantGeneration,
+    }, now)
+    if (paymentAccess.kind === 'refused') return refuse(args, paymentAccess.code, paymentAccess.code === 'payments_not_ready')
+  }
 
   const policyGate = await readCommercialPolicyGate(ctx.db, {
     environment: operation.runtimeEnvironment,
@@ -152,10 +165,8 @@ export async function issueQuoteHandler(
         reason: 'AUD reference rate is missing or older than 24 hours. Retry after the next rate refresh.',
       })
     : refuse(args, 'tool_unsupported', false, { reason: 'Invalid upstream USDC amount.' })
-  const buyerSale = pricing.price.units === '0'
-    ? { revenueUnits: '0', taxUnits: '0' }
-    : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
-  if (buyerSale === undefined) return refuse(args, 'pricing_setup_required', false)
+  if (!/^(?:0|[1-9]\d*)$/u.test(pricing.price.units)) return refuse(args, 'pricing_setup_required', false)
+  const buyerSale = { revenueUnits: pricing.price.units, taxUnits: '0' }
   const paid = pricing.price.units !== '0'
   const organizationMonthlyAdmission = quoteOrganizationMonthlySpendAdmission(
     args,

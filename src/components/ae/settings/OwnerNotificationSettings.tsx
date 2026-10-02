@@ -1,18 +1,12 @@
 import { useState } from 'react'
 
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/ui/toast'
-import { cn } from '@/lib/utils'
-import { formatDisplayAmount } from '@/modules/money/public'
 import {
-  LOW_CREDIT_THRESHOLD_CENTS,
   PREFERENCE_SWITCHES,
   UPDATE_FAILED_DIAGNOSTIC,
   type NotificationPreferencePatch,
-  type NotificationPreferencesView,
   type NotificationUpdateDiagnostic,
 } from '@/modules/principal-account/notification-preferences.view-model'
 
@@ -23,22 +17,6 @@ import type {
 
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
-const THRESHOLD_OPTIONS = LOW_CREDIT_THRESHOLD_CENTS.map((cents) => {
-  const displayAmount = formatDisplayAmount({ currency: 'AUD', exponent: 2, units: String(cents) })
-  return { cents, label: cents === 2500 ? `${displayAmount} (Default)` : displayAmount, displayAmount }
-})
-
-function lowCreditThresholdStatement(preferences: NotificationPreferencesView): string {
-  if (!preferences.lowCreditBalance) {
-    return 'Low-balance alerts are off. Existing spend and call alerts are unchanged.'
-  }
-  const match = THRESHOLD_OPTIONS.find((option) => option.cents === preferences.lowCreditThresholdCents)
-  const amount = match?.displayAmount ?? formatDisplayAmount({
-    currency: 'AUD', exponent: 2, units: String(preferences.lowCreditThresholdCents),
-  })
-  return `Alert sent when balance drops below ${amount}.`
-}
 
 function PreferenceSwitch({
   id,
@@ -69,7 +47,6 @@ export function OwnerNotificationSettings({
 }: OwnerNotificationSettingsProps) {
   const [pending, setPending] = useState(false)
   const [updateDiagnostic, setUpdateDiagnostic] = useState<NotificationUpdateDiagnostic | undefined>()
-  const thresholdDisabled = !preferences.lowCreditBalance
 
   const applyPatch = async (patch: NotificationPreferencePatch) => {
     setUpdateDiagnostic(undefined)
@@ -89,82 +66,28 @@ export function OwnerNotificationSettings({
   }
 
   const controlsDisabled = disabled || pending
-  const thresholdControlsDisabled = thresholdDisabled || controlsDisabled
-
-  const thresholdStatement = lowCreditThresholdStatement(preferences)
-
   return (
     <div className="grid min-w-0 gap-6">
-      <SettingsGroup title="Email alerts" description="Sent to the primary email verified in your Profile.">
-        {PREFERENCE_SWITCHES.map(({ key, label, description }) => (
-          <PreferenceSwitch
-            key={key}
-            id={`preference-${key}`}
-            label={label}
-            description={description}
-            checked={preferences[key]}
-            disabled={controlsDisabled}
-            onToggle={() => {
-              void applyPatch({
-                [key]: !preferences[key],
-                expectedRevision: preferences.revision,
-              })
-            }}
-          />
-        ))}
-      </SettingsGroup>
-      <SettingsGroup title="Credit balance alert">
-        <SettingsRow label="Low balance threshold" description="Choose the balance at which an email is sent.">
-          <div className="grid min-w-0 gap-2 sm:justify-items-end">
-            <RadioGroup
-              value={String(preferences.lowCreditThresholdCents)}
-              onValueChange={(next) => {
-                const cents = Number(next)
-                if (
-                  Number.isNaN(cents)
-                  || preferences.lowCreditThresholdCents === cents
-                  || thresholdControlsDisabled
-                ) return
+      {PREFERENCE_SWITCHES.length > 0 ? (
+        <SettingsGroup title="Email alerts" description="Sent to the primary email verified in your Profile.">
+          {PREFERENCE_SWITCHES.map(({ key, label, description }) => (
+            <PreferenceSwitch
+              key={key}
+              id={`preference-${key}`}
+              label={label}
+              description={description}
+              checked={preferences[key]}
+              disabled={controlsDisabled}
+              onToggle={() => {
                 void applyPatch({
-                  lowCreditThresholdCents: cents,
+                  [key]: !preferences[key],
                   expectedRevision: preferences.revision,
                 })
               }}
-              disabled={thresholdControlsDisabled}
-              aria-label="Low balance alert threshold"
-              className="flex flex-wrap gap-2"
-            >
-              {THRESHOLD_OPTIONS.map(({ cents, label }) => {
-                const selected = preferences.lowCreditThresholdCents === cents
-                const inputId = `low-balance-threshold-${cents}`
-                return (
-                  <Label
-                    key={cents}
-                    htmlFor={inputId}
-                    className={cn(
-                      'flex min-h-touch cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-mono tabular-nums',
-                      selected ? 'border-foreground bg-muted' : 'border-border bg-container',
-                      thresholdControlsDisabled && 'opacity-50 cursor-not-allowed',
-                      TACTILE,
-                    )}
-                  >
-                    <RadioGroupItem
-                      id={inputId}
-                      value={String(cents)}
-                      aria-label={label}
-                      disabled={thresholdControlsDisabled}
-                    />
-                    {label}
-                  </Label>
-                )
-              })}
-            </RadioGroup>
-            <div className="text-sm text-muted-foreground" role="status" aria-live="polite">
-              {thresholdStatement}
-            </div>
-          </div>
-        </SettingsRow>
-      </SettingsGroup>
+            />
+          ))}
+        </SettingsGroup>
+      ) : null}
       <div className="min-h-[2.5rem]" role="status" aria-live="polite">
         {updateDiagnostic ? (
           <div className="grid gap-1 text-sm text-muted-foreground">

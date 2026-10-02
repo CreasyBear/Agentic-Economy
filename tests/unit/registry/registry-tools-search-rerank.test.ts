@@ -18,7 +18,6 @@ const noCandidates = (query: string) => ({
 })
 type DirectoryRow = {
   id: string
-  source: string
   title: string
   summary: string
   provider: string
@@ -26,9 +25,12 @@ type DirectoryRow = {
   objectClass: string
   completedAt: number
   category?: string
+  minimumUsdPrice?: string
+  resource?: string
+  network?: string
 }
 const directoryRow = (id: string): DirectoryRow => ({
-  id, source: 'coinbase', title: 'Timezone conversion', summary: 'Convert a time between cities', provider: 'Open source',
+  id, title: 'Timezone conversion', summary: 'Convert a time between cities', provider: 'Open source',
   actionClass: 'transform', objectClass: 'location', completedAt: Date.now(),
 })
 let directoryRows: DirectoryRow[] = []
@@ -82,6 +84,7 @@ describe('registry.tools.search mixed assessment', () => {
           return { kind: 'ok', coverage: { generation: 'g1', completedAt },
             page: directoryRows.slice(start, end), continueCursor: String(end), isDone: end === directoryRows.length }
         }
+        if (name === 'referenceRateRefresh:current') return null
         throw new Error(`Unexpected source query ${name}`)
       }),
       mutation: vi.fn(), action: vi.fn(),
@@ -120,11 +123,18 @@ describe('registry.tools.search mixed assessment', () => {
 
   it('returns an assessed external-only Bazaar entry as a match without claiming AE callability', async () => {
     vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
-    directoryRows = [directoryRow('directory-1')]
+    directoryRows = [{
+      ...directoryRow('directory-1'),
+      minimumUsdPrice: '0.002000',
+      resource: 'https://weather.example/v2/current?key=private',
+      network: 'eip155:8453',
+    }]
     mockDirectoryAssessment()
     const result = await runSearch('timezone conversion')
     expect(result).toMatchObject({ kind: 'match', assessed: { source: 'all', coverage: 'partial' },
-      results: [{ id: 'directory-1', access: 'external_listing', price: { kind: 'unavailable' },
+      results: [{ id: 'directory-1', access: 'external_listing', sourcePrice: '0.002000 USDC',
+        host: 'weather.example', resourcePath: '/v2/current', networkLabel: 'Base',
+        price: { kind: 'indicative', label: 'US$0.002' },
         next: [{ action: 'describe-external', args: { id: 'directory-1' } }] }] })
     expect(result.next).toEqual([{ action: 'broaden', args: { query: 'timezone conversion' }, authority: 'public' }])
   })

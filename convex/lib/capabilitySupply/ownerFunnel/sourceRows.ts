@@ -25,7 +25,6 @@ export async function readOwnerSupplyRows(
       publications,
       capabilityOfferings,
       providerCallRows,
-      qualifiedUseRows,
     ] = await Promise.all([
       db
         .query('businessOfferings')
@@ -64,12 +63,6 @@ export async function readOwnerSupplyRows(
         .query('capabilityCallProjections')
         .withIndex('by_providerRef_and_createdAt', (q) =>
           q.eq('providerRef', String(business._id)).gte('createdAt', evidenceWindowStartAt),
-        )
-        .take(PROVIDER_EVIDENCE_READ_CAP + 1),
-      db
-        .query('qualifiedUseReceipts')
-        .withIndex('by_businessId_and_qualifiedAt', (q) =>
-          q.eq('businessId', String(business._id)).gte('qualifiedAt', evidenceWindowStartAt),
         )
         .take(PROVIDER_EVIDENCE_READ_CAP + 1),
     ])
@@ -186,9 +179,7 @@ export async function readOwnerSupplyRows(
       ]),
     )
     const providerCallsOverflow = providerCallRows.length > PROVIDER_EVIDENCE_READ_CAP
-    const qualifiedUsesOverflow = qualifiedUseRows.length > PROVIDER_EVIDENCE_READ_CAP
     const boundedProviderCalls = providerCallRows.slice(0, PROVIDER_EVIDENCE_READ_CAP)
-    const boundedQualifiedUses = qualifiedUseRows.slice(0, PROVIDER_EVIDENCE_READ_CAP)
     return {
       kind: 'available' as const,
       offeringRows,
@@ -200,8 +191,6 @@ export async function readOwnerSupplyRows(
       providerConnectionByPublicationRef,
       bindingByPublicationRef,
       providerCallsOverflow,
-      qualifiedUsesOverflow,
       boundedProviderCalls,
-      boundedQualifiedUses,
     }
 }

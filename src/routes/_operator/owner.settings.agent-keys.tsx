@@ -4,14 +4,13 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { AeAgentKeysSettings } from '@/components/ae/settings/agent-keys/AeAgentKeysSettings'
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import {
-  AGENT_KEY_DRAFT_DEFAULTS,
   agentKeyDraftFromSearch,
   isAgentKeyDraftDirty,
   navigateAgentKeyIssueSearch,
   validateAgentKeyIssueSearch,
   type AgentKeyDraft,
 } from '@/components/ae/console/connect-agent-wizard/agent-key-draft'
-import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
+import { readAgentAccessEnvironmentServer, readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
@@ -19,11 +18,12 @@ export const Route = createFileRoute('/_operator/owner/settings/agent-keys')({
   ...operatorRouteOptions,
   validateSearch: validateAgentKeyIssueSearch,
   loader: async () => {
-    const [directory, canonicalBaseUrl] = await Promise.all([
+    const [directory, canonicalBaseUrl, deploymentEnvironment] = await Promise.all([
       readAgentDirectoryServer(),
       readCanonicalBaseUrlServer(),
+      readAgentAccessEnvironmentServer(),
     ])
-    return { directory, canonicalBaseUrl }
+    return { directory, canonicalBaseUrl, deploymentEnvironment }
   },
   head: () => ({ meta: [
     { title: 'Agent keys | Agentic Economy' },
@@ -33,18 +33,18 @@ export const Route = createFileRoute('/_operator/owner/settings/agent-keys')({
 })
 
 function AgentKeysRoute() {
-  const { directory, canonicalBaseUrl } = Route.useLoaderData()
+  const { directory, canonicalBaseUrl, deploymentEnvironment } = Route.useLoaderData()
   const search = Route.useSearch()
   const navigate = useNavigate()
   const anchorRef = useRef<HTMLDivElement>(null)
-  const searchDraft = agentKeyDraftFromSearch(search)
+  const searchDraft = agentKeyDraftFromSearch(search, deploymentEnvironment)
   const [pendingDraft, setPendingDraft] = useState<AgentKeyDraft | null>(null)
   const open = search.issue === 'manual'
   const liveDraft = pendingDraft ?? searchDraft
 
   useEffect(() => {
     setPendingDraft(null)
-  }, [search.issue, search.name, search.env, search.authority, search.perCall, search.daily, search.monthly])
+  }, [search.issue, search.name, search.authority, search.perCall, search.daily, search.monthly])
 
   return (
     <AeNavigationSafetyBoundary
@@ -58,6 +58,7 @@ function AgentKeysRoute() {
     >
       <div ref={anchorRef}>
         <AeAgentKeysSettings
+          deploymentEnvironment={deploymentEnvironment}
           initialDirectory={directory}
           canonicalBaseUrl={canonicalBaseUrl}
           openIssueDialog={open}
@@ -67,8 +68,8 @@ function AgentKeysRoute() {
             navigateAgentKeyIssueSearch(navigate, true, next, true)
           }}
           onWizardOpenChange={(nextOpen) => {
-            const nextDraft = nextOpen ? liveDraft : AGENT_KEY_DRAFT_DEFAULTS
-            setPendingDraft(nextOpen ? null : AGENT_KEY_DRAFT_DEFAULTS)
+            const nextDraft = nextOpen ? liveDraft : agentKeyDraftFromSearch({}, deploymentEnvironment)
+            setPendingDraft(nextOpen ? null : nextDraft)
             navigateAgentKeyIssueSearch(navigate, nextOpen, nextDraft, !nextOpen)
           }}
         />

@@ -116,7 +116,7 @@ export function verifyExactEvmX402Settlement(input: Readonly<{
   ) return false
   if (payer === undefined) return false
 
-  let hasTransfer = false
+  let transferCount = 0
   for (const log of receipt.logs) {
     if (
       typeof log !== 'object'
@@ -142,7 +142,7 @@ export function verifyExactEvmX402Settlement(input: Readonly<{
         && decoded.args.to.toLowerCase() === requirement.payTo.toLowerCase()
         && decoded.args.value === BigInt(requirement.amount)
       if (!matches) return false
-      hasTransfer = true
+      transferCount += 1
     } catch (cause) {
       // A malformed or unrelated log is not settlement evidence.
       degradeBackend(cause, undefined, { site: 'verifyExactEvmX402Settlement', reason: 'invalid_response' })
@@ -150,7 +150,8 @@ export function verifyExactEvmX402Settlement(input: Readonly<{
     }
   }
 
-  return hasTransfer
+  // One authorization is one payment. Duplicate identical logs cannot prove it twice.
+  return transferCount === 1
 }
 
 /** Verify the exact signed transfer identity independently of transaction outcome. */

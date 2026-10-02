@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader } from '@x402/core/http'
 import * as networkServer from '@/modules/network-guard/server'
 import * as networkPublic from '@/modules/network-guard/public'
@@ -11,11 +12,12 @@ import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 import { api, internal } from '../../../convex/_generated/api'
 import { ACTIVE_CHAT_GENERATION_MS } from '../../../convex/chatThreads'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { splitInclusiveAudTax, PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,
+  type ConvexFixtureBackend,
 } from '../../helpers/convex-fixtures'
+import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
 
@@ -24,6 +26,7 @@ import {
   activeCustodyGeneration,
   activeCustodyNetwork,
   withCustodyEnvironment,
+  validCustodyEnvironment,
   recordTreasuryObservation,
   insertMalformedTreasuryObservation,
   testRef,
@@ -36,12 +39,99 @@ import {
   formanceSnapshot,
 } from '../../helpers/quote-fixtures'
 
+// Custody changes invalidate readiness, so these treasury scenarios publish fresh
+// evidence only after entering the configuration each test is exercising.
+async function withReadyCustodyEnvironment<T>(backend: ConvexFixtureBackend, callback: () => Promise<T>,
+  overrides: Readonly<Record<string, string | undefined>> = {}): Promise<T> {
+  return await withCustodyEnvironment(async () => {
+    const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: Date.now() })
+    if (context.kind === 'available' && context.maximumUnits !== null) {
+      await seedTreasuryReadinessFacts(backend, { observation: 'preserve' })
+    }
+    await seedPaymentReadiness(backend)
+    return await callback()
+  }, overrides)
+}
+
+beforeEach(() => {
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+  for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
+  vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
+  vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '10000')
+})
+afterEach(() => { vi.unstubAllEnvs() })
+
+describe('live payment pause at Quote and new Call admission', () => {
+  async function paidQuoteFixture(suffix: string) {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('platformLaunch').withIndex('by_environment', (q) => q.eq('environment', 'production')).unique()
+      if (row === null) await ctx.db.insert('platformLaunch', { environment: 'production', paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone', revision: 1, updatedAt: 1 })
+      else await ctx.db.patch(row._id, { paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone' })
+    })
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const issueArgs = { operationKey: `quote:pause:${suffix}`, correlationId: `quote:pause:${suffix}`, principal: agent.principal, toolRef: fixture.toolRef, input, formance: formanceSnapshot(subjects) }
+    const pause = async () => await backend.run(async (ctx) => {
+      const row = await ctx.db.query('platformLaunch').withIndex('by_environment', (q) => q.eq('environment', 'production')).unique()
+      if (row === null) throw new Error('launch_missing')
+      await ctx.db.patch(row._id, { paymentsOpenTo: 'none' })
+    })
+    return { backend, fixture, agent, input, issueArgs, pause }
+  }
+
+  it('refuses final Quote issuance if payments pause after preparation and before issuance', async () => {
+    const { backend, issueArgs, pause } = await paidQuoteFixture('payment-pause-between-stages')
+    await pause()
+    expect(await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs)).toMatchObject({ kind: 'refused', code: 'payments_paused', retryable: false })
+    expect(await backend.run((ctx) => ctx.db.query('capabilityQuotes').collect())).toEqual([])
+  })
+
+  it('refuses an unused paid Quote after pause but still replays an already accepted Call', async () => {
+    const { backend, issueArgs, pause } = await paidQuoteFixture('payment-pause-new-call')
+    const issued = await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs)
+    if (issued.kind !== 'committed') throw new Error(`quote_refused:${issued.code}`)
+    const row = await backend.run((ctx) => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', (q) => q.eq('quoteRef', issued.quoteRef)).unique())
+    if (row === null) throw new Error('quote_missing')
+    const reservation = {
+      quoteRef: row.quoteRef, callRef: 'call:payment-pause-new', principalId: row.principalId, ownerId: row.accountRef,
+      credentialId: row.credentialId, applicationRef: row.applicationRef, grantRef: row.grantRef,
+      grantGeneration: row.grantGeneration, policyDigest: row.grantPolicyDigest, grantExpiresAt: row.grantExpiresAt,
+      environment: row.environment, toolRef: row.toolRef, idempotencyKey: 'payment-pause-unused',
+      inputDigest: row.inputDigest, requestDigest: canonicalDigest({ quoteRef: row.quoteRef }),
+      toolJson: row.toolJson, inputJson: row.normalizedInputJson, now: Date.now(), organizationMonthlySpend: { enabled: false },
+    }
+    await pause()
+    expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'refused', code: 'operation_not_ready', nextAction: expect.stringContaining('temporarily paused') })
+    expect(await backend.run((ctx) => ctx.db.query('capabilityCalls').collect())).toEqual([])
+    expect((await backend.run((ctx) => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', (q) => q.eq('quoteRef', issued.quoteRef)).unique()))?.state).toBe('issued')
+    await backend.run(async (ctx) => {
+      const launch = await ctx.db.query('platformLaunch').withIndex('by_environment', (q) => q.eq('environment', 'production')).unique()
+      if (launch === null) throw new Error('launch_missing')
+      await ctx.db.patch(launch._id, { paymentsOpenTo: 'everyone' })
+    })
+    expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'reserved' })
+    await pause()
+    expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'replayed', reservation: { callRef: reservation.callRef } })
+    expect(await backend.run((ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+  })
+})
+
 describe('legal customer binding refusals', () => {
   it('forwards legal_customer_required when the legal customer cannot be bound', async () => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'quote-legal-customer'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const owner = { canonicalAccountRef: fixture.accountRef }
     const input = { request: 'Perth' }
     const agent = await seedAgent(backend, owner, fixture.toolRef, suffix, '20000000')
@@ -95,6 +185,8 @@ describe('trusted chat Quote cancellation fence', () => {
     const suffix = `quote-turn-${order}`
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.run(async ctx => {
       const grant = await ctx.db.query('authorityDelegationGrants')
@@ -153,6 +245,8 @@ describe('trusted chat Quote cancellation fence', () => {
       const suffix = `quote-stale-${order}`
       const fixture = await publishCurrentTool(backend, suffix)
       await seedCommercialPolicies(backend, suffix, Date.now())
+      await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+      await seedPaymentReadiness(backend)
       const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef },
         fixture.toolRef, suffix, '20000000')
       await backend.run(async ctx => {
@@ -216,6 +310,8 @@ describe('trusted chat Quote cancellation fence', () => {
     const suffix = 'quote-turn-invalid'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.run(async ctx => {
       const grant = await ctx.db.query('authorityDelegationGrants')
@@ -302,6 +398,8 @@ describe('direct Quote handlers', () => {
     const suffix = 'quote-account-exposure'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
@@ -326,6 +424,8 @@ describe('direct Quote handlers', () => {
     const suffix = 'quote-org-monthly-ceiling'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
@@ -351,11 +451,17 @@ describe('direct Quote handlers', () => {
     expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
   })
 
-  it('refuses production Quote preparation and issuance in hosted alpha before upstream actions', async () => {
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'preview'],
+    ['opposite', 'development'],
+  ] as const)('refuses production Quote preparation and issuance for %s deployment declaration before upstream actions', async (_case, declaration) => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'quote-hosted-alpha'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
@@ -363,7 +469,7 @@ describe('direct Quote handlers', () => {
     const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
     const upstream = vi.fn(async () => { throw new Error('production_quote_upstream_released') })
     const handler = (quote as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
-    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
     try {
       const args = { principal: agent.principal, toolRef: fixture.toolRef, input,
         operationKey: `${suffix}:blocked`, correlationId: `${suffix}:blocked` }
@@ -375,7 +481,8 @@ describe('direct Quote handlers', () => {
         ...args, formance: formanceSnapshot(subjects),
       })).resolves.toMatchObject({ kind: 'refused', code: 'tool_unsupported', retryable: false })
       expect(upstream).not.toHaveBeenCalled()
-    } finally { vi.unstubAllEnvs() }
+      expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+    } finally { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') }
   })
 
   it('refuses issuance when the current Tool environment changes after Quote preparation', async () => {
@@ -383,6 +490,8 @@ describe('direct Quote handlers', () => {
     const suffix = 'quote-environment-drift'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
@@ -414,6 +523,8 @@ describe('direct Quote handlers', () => {
     const suffix = 'quote-handler'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const owner = { canonicalAccountRef: fixture.accountRef }
 
     const input = { request: 'Perth' }
@@ -463,8 +574,7 @@ describe('direct Quote handlers', () => {
     })
     expect(stored.commercialPolicyDigest).toBe(subjects.policyDigest)
 
-    const sale = splitInclusiveAudTax(stored.decisionAudUnits, subjects.buyerTaxBps)
-    if (sale === undefined) throw new Error('quote_tax_split_missing')
+    const sale = { revenueUnits: stored.decisionAudUnits, taxUnits: '0' }
     const evidenceMaterial = {
       format: 'ae.operation-commitment:v1',
       principalId: agent.principal.principalId,
@@ -483,7 +593,7 @@ describe('direct Quote handlers', () => {
       budgetPolicyRef: agent.policy.budget.budgetPolicyRef,
       budgetGeneration: agent.policy.budget.generation,
       maximumSpendPerInvocationUnits: agent.policy.budget.maximumSpendPerCall.units,
-      formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      formanceSchemaVersion: MANAGED_CALL_FORMANCE_SCHEMA_VERSION,
       legalCustomerRef: subjects.legalCustomerRef,
       legalCustomerGeneration: subjects.legalCustomerGeneration,
       buyerRevenueUnits: sale.revenueUnits,
@@ -652,6 +762,8 @@ describe('direct Quote handlers', () => {
     const fixture = await admitDiscoveredToolFixture(backend, { withoutExample: true })
     const owner = await publishedBusinessOwner(backend, 'managed-quote-buyer')
     await seedCommercialPolicies(backend, 'managed-quote', Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, owner, fixture.toolRef, 'managed-quote', '20000000')
     const input = { from: 'UTC', to: 'America/New_York', time: '12:00' }
     const preparationArgs = await withSourceWrite('protected_action', {
@@ -695,6 +807,23 @@ describe('direct Quote handlers', () => {
     })).toBe(true)
     const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.3854', fetchedAt: Date.now() }
     await backend.run(async ctx => { await ctx.db.insert('moneyReferenceRates', { pair: 'USDC/AUD', rate: referenceRate.rate, fetchedAt: referenceRate.fetchedAt }) })
+    await backend.run(async ctx => {
+      for (const observation of await ctx.db.query('moneyTreasuryObservations').collect()) await ctx.db.delete(observation._id)
+    })
+    await recordTreasuryObservation(backend, 'managed-quote-stale', { observedAt: Date.now() - 30 * 60_000 - 1 })
+    const inspectOnly = vi.fn(async () => live)
+    const staleRefusal = await withReadyCustodyEnvironment(backend, async () => await handler(
+      { runMutation: backend.mutation, runAction: inspectOnly },
+      await withSourceWrite('protected_action', {
+        operationKey: 'managed-quote:stale-treasury', correlationId: 'managed-quote:stale-treasury',
+        principal: agent.principal, toolRef: fixture.toolRef, input,
+      }),
+    ))
+    expect(staleRefusal).toMatchObject({ kind: 'refused', code: 'payments_not_ready' })
+    expect(inspectOnly).not.toHaveBeenCalled()
+    expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').collect())).toEqual([])
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const issued = await backend.mutation(internal.capabilityQuotes.issueQuote, {
       operationKey: 'managed-quote:issue', correlationId: 'managed-quote:issue',
       principal: agent.principal, toolRef: fixture.toolRef, input, liveX402Requirement: live.requirement,
@@ -716,6 +845,35 @@ describe('direct Quote handlers', () => {
     expect(JSON.parse(stored!.rateEvidenceJson!).referenceRate).toEqual(referenceRate)
   })
 
+  it('explains why a read-only Agent cannot quote a paid managed Tool', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await admitDiscoveredToolFixture(backend, { withoutExample: true })
+    const owner = await publishedBusinessOwner(backend, 'read-only-managed-quote')
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
+    const agent = await seedAgent(backend, owner, fixture.toolRef, 'read-only-managed-quote', '20000000')
+    await backend.run(async ctx => {
+      const principal = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', q => q.eq('principalId', agent.principal.principalId)).unique()
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', q => q.eq('grantRef', agent.grant.grantRef)).unique()
+      if (principal === null || grant === null) throw new Error('quote_agent_missing')
+      await ctx.db.patch(principal._id, { authorityMode: 'read_only' })
+      await ctx.db.patch(grant._id, { authorityMode: 'read_only' })
+    })
+    const result = await backend.mutation(internal.capabilityQuotes.prepareFinancialSubjects,
+      await withSourceWrite('protected_action', {
+        operationKey: 'read-only-managed-quote', correlationId: 'read-only-managed-quote',
+        principal: { ...agent.principal, authorityMode: 'read_only' },
+        toolRef: fixture.toolRef,
+        input: { from: 'UTC', to: 'America/New_York', time: '12:00' },
+      }))
+    expect(result).toEqual({
+      kind: 'refused', code: 'budget_exceeded',
+      reason: 'This Agent is read-only, so it cannot pay for Tools. Give it a monthly budget in Agents to let it spend.',
+    })
+  })
+
   it.each([
     { label: 'revocation', change: 'revocation' },
     { label: 'withdrawal', change: 'withdrawal' },
@@ -724,6 +882,8 @@ describe('direct Quote handlers', () => {
     const fixture = await admitDiscoveredToolFixture(backend, { withoutExample: true })
     const owner = await publishedBusinessOwner(backend, `inspection-${change}`)
     await seedCommercialPolicies(backend, `inspection-${change}`, Date.now())
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, owner, fixture.toolRef, `inspection-${change}`, '20000000')
     const input = { from: 'UTC', to: 'America/New_York', time: '12:00' }
     await prepareSubjects(backend, agent, fixture.toolRef, input, `inspection-${change}`)
@@ -756,21 +916,22 @@ describe('direct Quote handlers', () => {
     const suffix = 'treasury-same-custody'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
     await recordTreasuryObservation(backend, `${suffix}-old`, {
       totalUnits: '10000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     await recordTreasuryObservation(backend, `${suffix}-new`, {
       totalUnits: '20000000',
       bufferUnits: '3000000',
-      observedAt: 1_800_000_000_001,
+      observedAt: Date.now() - 999,
     })
 
-    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+    const subjects = await withReadyCustodyEnvironment(backend, () => prepareSubjects(
       backend,
       agent,
       fixture.toolRef,
@@ -786,33 +947,129 @@ describe('direct Quote handlers', () => {
     })
   })
 
+  it.each(['missing', 'opening', 'wrong-generation', 'wrong-wallet'] as const)(
+    'does not make fresh observed money spendable with a %s ledger checkpoint', async defect => {
+      const backend = convexTestWithMarketComponents()
+      const suffix = `treasury-checkpoint-${defect}`
+      const fixture = await publishCurrentTool(backend, suffix)
+      await seedCommercialPolicies(backend, suffix, Date.now())
+      await seedPaymentReadiness(backend)
+      const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+      await backend.finishAllScheduledFunctions(() => undefined)
+      await observeHealthyReadiness(backend, fixture, suffix)
+      await recordTreasuryObservation(backend, suffix)
+      await backend.run(async ctx => {
+        const row = await ctx.db.query('moneyTreasuryCursors').withIndex('by_custody', query =>
+          query.eq('environment', 'production').eq('custodyRef', activeCustodyRef)).unique()
+        if (row === null) throw new Error('checkpoint_fixture_missing')
+        if (defect === 'missing') await ctx.db.delete(row._id)
+        else if (defect === 'opening') await ctx.db.patch(row._id, { state: { kind: 'opening', batchRef: 'pending-opening' } })
+        else if (defect === 'wrong-generation') await ctx.db.patch(row._id, { custodyGeneration: row.custodyGeneration + 1 })
+        else await ctx.db.patch(row._id, { address: `0x${'9'.repeat(40)}` })
+      })
+      const subjects = await withReadyCustodyEnvironment(backend, () => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+      expect(subjects.treasury).toBeUndefined()
+    },
+  )
+
+  it.each([
+    { label: 'under ten minutes old', ageMs: 10 * 60_000 - 1, accepted: true },
+    { label: 'exactly ten minutes old', ageMs: 10 * 60_000, accepted: false },
+    { label: 'one millisecond in the future', ageMs: -1, accepted: false },
+  ])('uses treasury evidence only when it is fresh: $label', async ({ ageMs, accepted }) => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = ageMs < 0 ? 'treasury-age-future' : `treasury-age-${ageMs}`
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      await recordTreasuryObservation(backend, suffix, { observedAt: now - ageMs })
+      const prepared = withReadyCustodyEnvironment(backend, () => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+      if (accepted) expect((await prepared).treasury).toMatchObject({ targetUnits: '9000000' })
+      else await expect(prepared).rejects.toThrow('quote_subjects_refused:payments_not_ready')
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('does not fall back from an invalid newest timestamp to older valid evidence', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-newest-future'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      await recordTreasuryObservation(backend, `${suffix}-old`, { observedAt: now - 1_000 })
+      await recordTreasuryObservation(backend, `${suffix}-future`, { observedAt: now + 1 })
+      const prepared = withReadyCustodyEnvironment(backend, () => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+      await expect(prepared).rejects.toThrow('quote_subjects_refused:payments_not_ready')
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('ignores an unsafe observedAt even when recordedAt is current', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-unsafe-time'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, suffix)
+    await backend.run(async (ctx) => {
+      const row = (await ctx.db.query('moneyTreasuryObservations')
+        .withIndex('by_custody_and_observedAt', (query) => query
+          .eq('environment', 'production')
+          .eq('custodyRef', activeCustodyRef)
+          .eq('custodyGeneration', activeCustodyGeneration))
+        .order('desc').take(1))[0]
+      if (row === undefined) throw new Error('treasury observation missing')
+      await ctx.db.patch(row._id, { observedAt: Date.now() - 1_000.5, recordedAt: Date.now() })
+    })
+    const prepared = withReadyCustodyEnvironment(backend, () => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+    await expect(prepared).rejects.toThrow('quote_subjects_refused:payments_not_ready')
+  })
+
   it('ignores old generations and other custody rows without an environment fallback', async () => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'treasury-identity-filter'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
     await recordTreasuryObservation(backend, `${suffix}-active`, {
       totalUnits: '10000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     await recordTreasuryObservation(backend, `${suffix}-old-generation`, {
       custodyGeneration: activeCustodyGeneration - 1,
       totalUnits: '90000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_002,
+      observedAt: Date.now() - 998,
     })
     await recordTreasuryObservation(backend, `${suffix}-other-custody`, {
       custodyRef: 'custody:quote:other',
       totalUnits: '80000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_003,
+      observedAt: Date.now() - 997,
     })
 
-    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+    const subjects = await withReadyCustodyEnvironment(backend, () => prepareSubjects(
       backend,
       agent,
       fixture.toolRef,
@@ -830,26 +1087,27 @@ describe('direct Quote handlers', () => {
     const suffix = 'treasury-no-active-match'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
     await recordTreasuryObservation(backend, `${suffix}-old-generation`, {
       custodyGeneration: activeCustodyGeneration - 1,
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     await recordTreasuryObservation(backend, `${suffix}-other-custody`, {
       custodyRef: 'custody:quote:other',
-      observedAt: 1_800_000_000_001,
+      observedAt: Date.now() - 999,
     })
 
-    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+    const prepared = withReadyCustodyEnvironment(backend, () => prepareSubjects(
       backend,
       agent,
       fixture.toolRef,
       { request: 'Perth' },
       suffix,
     ))
-    expect(subjects.treasury).toBeUndefined()
+    await expect(prepared).rejects.toThrow('quote_subjects_refused:payments_not_ready')
   })
 
   it.each([
@@ -860,16 +1118,17 @@ describe('direct Quote handlers', () => {
     const suffix = 'treasury-invalid-config'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
     await recordTreasuryObservation(backend, suffix)
 
-    const subjects = await withCustodyEnvironment(
+    const prepared = withReadyCustodyEnvironment(backend,
       () => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix),
       overrides,
     )
-    expect(subjects.treasury).toBeUndefined()
+    await expect(prepared).rejects.toThrow('quote_subjects_refused:payments_not_ready')
   })
 
   it.each([
@@ -880,32 +1139,33 @@ describe('direct Quote handlers', () => {
     const suffix = `treasury-no-fallback-${kind}`
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
     await recordTreasuryObservation(backend, `${suffix}-old`, {
       totalUnits: '10000000',
       bufferUnits: '1000000',
-      observedAt: 1_800_000_000_000,
+      observedAt: Date.now() - 1000,
     })
     if (kind === 'malformed') {
-      await insertMalformedTreasuryObservation(backend, `${suffix}-new`, 1_800_000_000_001)
+      await insertMalformedTreasuryObservation(backend, `${suffix}-new`, Date.now() - 999)
     } else {
       await recordTreasuryObservation(backend, `${suffix}-new`, {
         totalUnits: '100',
         bufferUnits: '200',
-        observedAt: 1_800_000_000_001,
+        observedAt: Date.now() - 999,
       })
     }
 
-    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+    const prepared = withReadyCustodyEnvironment(backend, () => prepareSubjects(
       backend,
       agent,
       fixture.toolRef,
       { request: 'Perth' },
       suffix,
     ))
-    expect(subjects.treasury).toBeUndefined()
+    await expect(prepared).rejects.toThrow('quote_subjects_refused:payments_not_ready')
   })
 
   it('rejects an active observation with an unexpected payment network', async () => {
@@ -913,6 +1173,7 @@ describe('direct Quote handlers', () => {
     const suffix = 'treasury-network-mismatch'
     const fixture = await publishCurrentTool(backend, suffix)
     await seedCommercialPolicies(backend, suffix, Date.now())
+    await seedPaymentReadiness(backend)
     const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
@@ -920,7 +1181,7 @@ describe('direct Quote handlers', () => {
       network: 'eip155:1',
     })
 
-    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+    const subjects = await withReadyCustodyEnvironment(backend, () => prepareSubjects(
       backend,
       agent,
       fixture.toolRef,

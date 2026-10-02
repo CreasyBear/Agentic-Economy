@@ -536,6 +536,7 @@ describe('canonical agent authority boundary', () => {
 function testBackend() {
   vi.useFakeTimers()
   vi.setSystemTime(NOW)
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
   return convexTest(schema, convexModules)
 }
 

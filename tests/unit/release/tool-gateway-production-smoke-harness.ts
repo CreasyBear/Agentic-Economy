@@ -45,6 +45,7 @@ export const amount = { currency: "AUD", units: "750000", exponent: 6 };
 export const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
 export const tool = {
   toolRef,
+  runtimeEnvironment: "production",
   toolId: "operation:provider:paid",
   callVia: CALL_ROUTE_CONTRACT.call.path,
   paymentLane: "brokered",
@@ -245,8 +246,8 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
   const rake = { currency: "AUD", units: "150000", exponent: 6 };
   const topupAmount = { currency: "AUD", units: "5000000", exponent: 6 };
   const fee = { currency: "AUD", units: "250000", exponent: 6 };
-  const tax = { currency: "AUD", units: "30000", exponent: 6 };
-  const topupCharge = { currency: "AUD", units: "5280000", exponent: 6 };
+  const tax = { currency: "AUD", units: "530000", exponent: 6 };
+  const topupCharge = { currency: "AUD", units: "5780000", exponent: 6 };
   const sourceRevision = "a".repeat(40);
   const runId = `ae-release-smoke:${sourceRevision}:run-1`;
   const controlRefCandidate = `operation:v1:${"c".repeat(64)}`;
@@ -295,7 +296,6 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
   const account = (balance: typeof amount) => ({
     principalId,
     balance,
-    autoRecharge: { enabled: false, threshold: zero, rechargeAmount: zero },
     evidence: "source" as const,
   });
   const usage = (
@@ -426,38 +426,6 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
     providerPaidBefore: zero,
     providerPaidAfter: net,
     replayAdditionalDebits: 0 as const,
-    providerTransfers: {
-      beforePayout: {
-        payoutRef: `${runId}:payout`,
-        count: 0,
-        transferIdsDigest: canonicalDigest({
-          format: "stripe-transfer-ids:v1",
-          payoutRef: `${runId}:payout`,
-          transferIdDigests: [],
-        }),
-        transferIdDigests: [],
-      },
-      afterInitialPayout: {
-        payoutRef: `${runId}:payout`,
-        count: 1,
-        transferIdsDigest: canonicalDigest({
-          format: "stripe-transfer-ids:v1",
-          payoutRef: `${runId}:payout`,
-          transferIdDigests: [digest("f")],
-        }),
-        transferIdDigests: [digest("f")],
-      },
-      afterReplay: {
-        payoutRef: `${runId}:payout`,
-        count: 1,
-        transferIdsDigest: canonicalDigest({
-          format: "stripe-transfer-ids:v1",
-          payoutRef: `${runId}:payout`,
-          transferIdDigests: [digest("f")],
-        }),
-        transferIdDigests: [digest("f")],
-      },
-    },
   };
   const baselineUsage = usage(0, 0, 0, zero, []);
   const afterOwnerUsage = usage(1, 0, 1, zero, ["free_tier"]);
@@ -664,6 +632,7 @@ export function gatewaySmokeEnvironment(
   const runId = `ae-release-smoke:${sourceRevision}:run-1`;
   return {
     AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND: "true",
+    AE_DEPLOYMENT_ENVIRONMENT: "production",
     AE_GATEWAY_SMOKE_RUN_ID: runId,
     AE_GATEWAY_SMOKE_BASE_URL: "https://gateway.example",
     AE_GATEWAY_SMOKE_JOB_QUERY: "paid",
@@ -686,7 +655,7 @@ export function gatewaySmokeEnvironment(
     AE_RELEASE_CONVEX_DEPLOYMENT_ID: "convex:smoke",
     AE_RELEASE_CONVEX_URL: "https://convex.example",
     CLERK_SECRET_KEY: "sk_test_smoke",
-    STRIPE_SECRET_KEY: "sk_live_smoke",
+    STRIPE_SECRET_KEY: "rk_live_smoke",
     STRIPE_WEBHOOK_SECRET: "whsec_smoke",
     STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: "txr_au_gst_10_inclusive",
     AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID: "sess_smoke",

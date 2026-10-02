@@ -21,8 +21,8 @@ const topUp: AeInvoiceHistoryRow = {
   description: 'Account top-up',
   principalUnits: '5000000',
   serviceFeeUnits: '250000',
-  taxUnits: '30000',
-  totalUnits: '5280000',
+  taxUnits: '530000',
+  totalUnits: '5780000',
   status: 'succeeded',
   appliedTransactionRef: 'transaction:paid',
   hasPaymentReceipt: true,
@@ -42,8 +42,11 @@ it('renders real top-up receipt actions and exports invoice rows without linking
   />)
 
   expect(screen.getByText('Account top-up')).toBeInTheDocument()
-  expect(screen.getByText('A$5.28')).toBeInTheDocument()
+  expect(screen.getByText('A$5.78')).toBeInTheDocument()
+  expect(screen.getByText('A$0.53 GST included')).toBeInTheDocument()
   expect(screen.getByText('Paid')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Trust centre (opens in a new tab)' }))
+    .toHaveAttribute('href', '/trust#receipts')
   expect(container.querySelector('a[href^="/calls/"]')).toBeNull()
 
   fireEvent.click(screen.getByRole('button', { name: 'Tax invoice' }))

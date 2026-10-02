@@ -1,5 +1,5 @@
 import { convexTest, type TestConvex } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import schema from '../../convex/schema'
 import { internal } from '../../convex/_generated/api'
@@ -14,6 +14,8 @@ import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 
 const GRANT_REF = 'grt_d2000000000000000000000000000001'
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
 type CatalogBackend = TestConvex<typeof schema>
 
 describe('system offering source authority', () => {

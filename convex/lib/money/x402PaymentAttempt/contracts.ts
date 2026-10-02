@@ -104,6 +104,7 @@ export type RecordObservationArgs = {
   paymentObservationDigest: string
   settlementStatus: 'settled' | 'not_settled' | 'unknown'
   paymentResponseDigest?: string
+  responseStatus?: number
   quarantinedResponseDigest?: string
   quarantinedOutputJson?: string
   observedAt: number
@@ -120,6 +121,7 @@ export type ReconcileArgs = {
   paymentIdentifier: string
   challengeDigest: string
   settlementStatus: 'settled' | 'not_settled'
+  paymentUnusedProof?: 'expired_unused' | 'authorization_cancelled'
   amountUnits: string
   currency: string
   exponent: number

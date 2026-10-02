@@ -8,7 +8,7 @@ import workpool from '@convex-dev/workpool/convex.config'
 import workflow from '@convex-dev/workflow/convex.config'
 
 const app = defineApp({
-  // Required = needed in every environment, including a fresh anonymous local deployment with nothing set.
+  // Every deployment declares its money environment, including anonymous local development.
   // Everything else is environment-specific (Clerk/Stripe/CDP/OpenRouter/x402/feature flags), stays optional, and is surfaced by `ae doctor`.
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
@@ -21,8 +21,17 @@ const app = defineApp({
     AE_CHAT_PROXY_SECRET: v.optional(v.string()),
     AE_SITE_URL: v.optional(v.string()),
     AE_RELEASE_SOURCE_REVISION: v.optional(v.string()),
-    AE_SERVICE_MODE: v.optional(v.literal('hosted_alpha')),
+    AE_DEPLOYMENT_ENVIRONMENT: v.union(v.literal('production'), v.literal('development')),
+    AE_FORMANCE_ENVIRONMENT: v.optional(v.string()),
+    AE_FORMANCE_GATEWAY_URL: v.optional(v.string()),
+    AE_FORMANCE_LEDGER: v.optional(v.string()),
+    AE_FORMANCE_ACCESS_CLIENT_ID: v.optional(v.string()),
+    AE_FORMANCE_ACCESS_CLIENT_SECRET: v.optional(v.string()),
+    AE_FORMANCE_REQUEST_TIMEOUT_MS: v.optional(v.string()),
     CLERK_JWT_ISSUER_DOMAIN: v.optional(v.string()),
+    RESEND_API_KEY: v.optional(v.string()),
+    NOTIFICATION_FROM_EMAIL: v.optional(v.string()),
+    CLERK_SECRET_KEY: v.optional(v.string()),
     AE_CONVEX_SERVER_FUNCTION_TOKEN: v.optional(v.string()),
     AE_SECRET_LIFECYCLE_RPC_TOKEN: v.optional(v.string()),
     AE_ROUTE_CALL_SIGNING_SECRET: v.optional(v.string()),
@@ -45,7 +54,8 @@ const app = defineApp({
     AE_X402_CUSTODY_ENABLED: v.optional(v.string()),
     AE_X402_CUSTODY_MAX_ATOMIC: v.optional(v.string()),
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: v.optional(v.string()),
-    AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: v.optional(v.string()),
+    AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: v.optional(v.string()),
+    AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: v.optional(v.string()),
     AE_PACKAGE5_WRITES_ENABLED: v.optional(v.string()),
     AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: v.optional(v.string()),
     AE_SUPPLY_MCP_OAUTH_ENABLED: v.optional(v.string()),
@@ -60,6 +70,7 @@ const app = defineApp({
 
 app.use(workpool)
 app.use(workpool, { name: 'stripeWebhookWorkpool' })
+app.use(workpool, { name: 'notificationWorkpool' })
 app.use(workflow)
 app.use(rateLimiter)
 app.use(agent)

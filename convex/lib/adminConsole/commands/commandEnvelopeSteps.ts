@@ -35,7 +35,7 @@ export async function persistReceipt<A extends AdminCommandAction>(
   operationName: string,
   key: string,
   requestHash: string,
-  status: 'succeeded' | 'failed_terminal',
+  status: 'in_progress' | 'succeeded' | 'failed_terminal',
   receipt: AdminCommandReceipt<A>,
 ): Promise<void> {
   await writeAdminOperationKey(ctx, {
@@ -70,6 +70,9 @@ const PROOF_FAILURE_BY_ACTION: {
     proof_replayed: 'proof_replayed',
     command_changed: 'mfa_reverification_required',
   },
+  grant_promotional_credit: MFA_PROOF_FAILURES,
+  set_payments_paused: MFA_PROOF_FAILURES,
+  change_treasury_thresholds: MFA_PROOF_FAILURES,
 }
 
 export function proofFailure<A extends AdminCommandAction>(

@@ -6,6 +6,9 @@ import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { sourceWriteCommandDigest, verifySourceWriteAdmission } from '@/modules/security/source-write-admission'
 import { installTestSourceWriteSecret } from '../../helpers/source-write-admission'
 
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
+
 const turnRef = `turn_${'0'.repeat(8)}-${'0'.repeat(4)}-4000-8000-${'0'.repeat(12)}`
 const snapshot = { turnRef, threadId: 'thread_test', promptMessageId: 'message_test', sequence: 7, state: 'completed' as const, callRefs: [`operation-invocation:v1:${'a'.repeat(64)}`], inFlightCallRefs: [] }
 const post = () => new Request('https://ae.example/api/v1/chat/turns', {
@@ -45,7 +48,7 @@ describe('chat Turn source-write admission', () => {
     const keyOptions: ChatTurnOptions = {
       authenticate: async () => ({
         isAuthenticated: true, tokenType: 'api_key', id: 'ak_test', subject: 'user_test',
-        scopes: ['market_tools:call'],
+        scopes: ['market_tools:call'], claims: { aeEnvironment: 'sandbox' },
       }),
       resolvePrincipal: async (projection) => ({
         ...projection, principalId: 'prn_00000000000040008000000000000043',

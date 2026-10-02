@@ -22,31 +22,22 @@ import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 export const SUPPLY_OFFER_SENTENCE = 'Connect a Tool you already run. Agentic Economy checks what agents can buy.'
 
 const SUPPLY_STEPS = [
-  { number: '01', title: 'Choose one Tool', detail: 'Choose one bounded Tool with exact inputs and one usable outcome—not an entire app or account.' },
-  { number: '02', title: 'Add its source', detail: 'Start with a supported OpenAPI document, remote MCP server, Agent Plugin bundle, or public x402 endpoint.' },
-  { number: '03', title: 'Describe and check it', detail: 'Provide price, access, effects, data use, and evidence. The check can reach your configured source.' },
-  { number: '04', title: 'Submit, then check status', detail: 'A submitted Tool is not yet published. Read its current status before sharing it with agents.' },
+  { number: '01', title: 'Paste the endpoint', detail: 'Paste one public HTTPS x402 URL. If both GET and POST return a payment challenge, choose the method.' },
+  { number: '02', title: 'Read the challenge', detail: 'The payment challenge supplies the network, price, schema, and payTo. There is no separate price or environment choice.' },
+  { number: '03', title: 'Prove the payee', detail: 'Sign one claim that this business controls that payTo. Do not paste a private key.' },
+  { number: '04', title: 'Record the Tool', detail: 'One authority statement records the listing. It becomes callable when the readiness check passes; otherwise the page names the missing fact.' },
 ] as const
 
 const SUPPLY_REQUIREMENTS = [
-  'One supported source and one Tool you are authorised to list.',
-  'A clear input, expected output, price, material terms, data use, external effects, and evidence of completion.',
-  'A safe example for the check. It may call your configured source, consume its quota, or incur its normal cost.',
-  'An existing owner-controlled connection when the source needs credentials. Never paste a raw key or other provider secret into the Tool form.',
+  'One public HTTPS x402 endpoint you are authorised to list for this business.',
+  'A payment challenge that includes the input schema, output schema, amount, network, and payTo.',
+  'One signature proving control of that payTo. Never paste a wallet private key.',
 ] as const
 
 const SUPPLY_SOURCE_FIT = [
   {
-    title: 'Public OpenAPI or MCP',
-    body: 'A public HTTPS API or remote MCP server may be a fit. The source still needs a supported contract and a successful current check.',
-  },
-  {
-    title: 'Source that needs credentials',
-    body: 'Sign in and use an owner-controlled connection. If setup offers no compatible connection, that source cannot be listed yet.',
-  },
-  {
     title: 'Public x402 endpoint',
-    body: 'Use a public HTTPS endpoint that returns the supported payment challenge. Prove control of the payout address; never paste a wallet private key.',
+    body: 'Paste the HTTPS URL that returns the payment challenge. The network in that challenge is the environment. Prove control of payTo; never paste a wallet private key.',
   },
 ] as const
 
@@ -106,7 +97,7 @@ export function AeSupplyLanding({
             <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
             <AeSiteHeading as="h2" size="md">Check whether your Tool is a fit.</AeSiteHeading>
             <AeSiteBody muted size="sm">
-              List one Tool an agent can search, inspect, and call. Public sources need no provider secret. For a source that needs credentials, use an existing owner-controlled connection; this flow does not collect a raw provider key.
+              List one x402 Tool an agent can search, inspect, and call. Paste the public HTTPS endpoint. This page does not ask for OpenAPI, MCP, an API key, or a private key.
             </AeSiteBody>
           </div>
           <ul className="m-0 grid gap-intra pl-5 text-sm text-muted-foreground">

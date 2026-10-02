@@ -20,6 +20,7 @@ export function operationDescriptor(toolRef: string, summary = 'Current referenc
     toolRef,
     callVia: CALL_ROUTE_CONTRACT.call.path,
     paymentLane: 'brokered',
+      runtimeEnvironment: 'production',
     toolId: 'reference.lookup',
     contract: {
       capabilityId: 'reference.lookup',

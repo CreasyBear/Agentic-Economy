@@ -34,11 +34,6 @@ const personal = {
     displayName: 'Example Account',
     lifecycle: 'active',
   }],
-  sessionSelection: {
-    activeAccountRef: 'acc_11111111111111111111111111111111',
-    selectedAt: 3,
-    revision: 1,
-  },
   notificationPreferences: [{
     accountRef: 'acc_11111111111111111111111111111111',
     lowCreditBalance: true,
@@ -47,6 +42,7 @@ const personal = {
     callFailureSpike: true,
     invoiceReady: true,
     teamMembershipChanged: true,
+    agentApprovalRequested: true,
     revision: 4,
     updatedAt: 4,
   }],
@@ -84,7 +80,6 @@ describe('assemblePersonalDataExport', () => {
       account: {
         principalRef: personal.principal.principalRef,
         displayName: 'Alex Owner',
-        activeAccountRef: personal.sessionSelection.activeAccountRef,
       },
       sections: {
         workspaceProfile: personal.linkedAccounts,

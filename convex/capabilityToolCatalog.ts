@@ -16,6 +16,7 @@ import {
 import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
+import { chatModelCostBindingValue } from '@/modules/chat/model-cost'
 import { internal } from './_generated/api'
 import { action, internalAction, type ActionCtx } from './_generated/server'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './lib/capabilitySupply/tool/contracts'
@@ -138,9 +139,14 @@ export const presentSearch = internalAction({
     result: publicSearchReturns,
     query: v.string(),
     request: v.optional(v.string()),
+    modelCostBinding: v.optional(chatModelCostBindingValue),
   },
   returns: presentSearchReturns,
-  handler: (_ctx, args) => presentSearchDecision({ result: args.result as ToolSearchWireResult, query: args.query, ...(args.request === undefined ? {} : { request: args.request }) }),
+  handler: (ctx, args) => presentSearchDecision({
+    result: args.result as ToolSearchWireResult, query: args.query,
+    ...(args.request === undefined ? {} : { request: args.request }),
+    ...(args.modelCostBinding === undefined ? {} : { modelCostBinding: args.modelCostBinding }),
+  }, ctx),
 })
 
 

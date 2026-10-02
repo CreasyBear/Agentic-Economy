@@ -1,12 +1,13 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscoveryAction'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { toolRecordProjection } from '../../convex/lib/capabilitySupply/tool/projection'
 import { reconcileReadyItems } from '../../convex/lib/capabilitySupply/facilitatorDiscovery/readyItems'
-import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
+import timezonePaymentRequired20260819Fixture from '../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json'
+const timezoneFixture = timezonePaymentRequired20260819Fixture
 import { convexModules } from '../helpers/convex-fixtures'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
@@ -85,6 +86,27 @@ async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof conve
 }
 
 describe('facilitator discovery reconciliation', () => {
+  beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+  afterEach(() => vi.unstubAllEnvs())
+
+  it.each(['development', undefined, 'preview'])('refuses a prepared mainnet publication in %s before creating supply', async (deployment) => {
+    const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
+    const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
+    expect(admission.admitted).toHaveLength(1)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
+    const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: reconcileReadyItems(admission.admitted), complete: false, deadlineAt: Date.now() + 60_000, workload,
+    })
+    expect(result).toMatchObject({ published: 0, skipped: 1, toolRefs: [] })
+    expect(await backend.run(async ctx => ({
+      offerings: await ctx.db.query('capabilityOfferings').collect(),
+      publications: await ctx.db.query('capabilityPublications').collect(),
+      bindings: await ctx.db.query('capabilityTransportBindings').collect(),
+      businesses: await ctx.db.query('businesses').collect(),
+    }))).toEqual({ offerings: [], publications: [], bindings: [], businesses: [] })
+  })
+
   it('refreshes changed metadata without mutating old registrations and converges on repeat discovery', async () => {
     const backend = convexTest(schema, convexModules)
     const workload = await seedFacilitatorDiscoveryWorkload(backend)

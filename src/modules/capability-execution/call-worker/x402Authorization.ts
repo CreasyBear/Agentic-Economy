@@ -32,6 +32,7 @@ import {
   readX402EvmReceipt,
 } from './x402Settlement'
 import { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
+import { admitManagedX402Signing } from './x402SigningAdmission'
 import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   currentManagedCustodyConfiguration,
@@ -246,6 +247,10 @@ async function signAndCommitManagedAuthorization(
   const paymentSignature = await createCdpEvmX402PaymentSignature(request, {
     requestFingerprintContext,
     authorityExpiresAt,
+    admitSigning: async (intent) => await admitManagedX402Signing(ctx, {
+      custodyRef: material.custodyRef, authorizationDigest: material.authorizationDigest,
+      custodyGeneration: custodyConfiguration.credentialGeneration,
+    }, intent),
     ...(persistedIntent === undefined
       ? {
           onUnsignedMaterial: async (intent) => {
@@ -386,10 +391,6 @@ export function createX402PaymentCallbacks(
     ? undefined
     : Date.parse(input.dispatch.authority.expiresAt)
   const managedBuyer = input.useCustodySigner === true
-    && input.dispatch.sellerOnboardingCanary === undefined
-  const managedCanary = input.useCustodySigner === true
-    && (input.dispatch.environment === 'sandbox' || input.dispatch.environment === 'production')
-    && input.dispatch.sellerOnboardingCanary?.executionPurpose === 'seller_onboarding_canary'
 
   const settleManagedPreparationFailure = async (
     attempt: X402AttemptMaterial | null | undefined,
@@ -439,7 +440,7 @@ export function createX402PaymentCallbacks(
     prepared: X402PreparedAuthorization,
     byDigest: boolean,
   ): Promise<string | undefined> => {
-    if (!managedBuyer && !managedCanary) return undefined
+    if (!managedBuyer) return undefined
     const requestFingerprint = requestFingerprintFromPrepared(prepared)
     const requestFingerprintContext = input.useCustodySigner === true
       ? (() => {
@@ -618,7 +619,7 @@ export function createX402PaymentCallbacks(
         & X402PaymentAuthorizationIdentity
         & Readonly<{ authorityExpiresAt: number }>,
     ) => {
-      if (!managedBuyer && !managedCanary) return undefined
+      if (!managedBuyer) return undefined
       if (
         request.attemptRef !== input.durableAttemptRef
         || request.effectGeneration !== input.effectGeneration
@@ -686,7 +687,10 @@ export function createX402PaymentCallbacks(
           asset: request.selectedRequirement.asset,
           payTo: request.selectedRequirement.payTo,
           amountUnits: request.paymentAmount.units,
-          currency: request.paymentAmount.currency,
+          // Managed custody admits only the canonical USDC6 profile. Preserve
+          // the Tool's USD denomination in its request/Quote; the payment
+          // attempt and its later events identify the token actually spent.
+          currency: input.useCustodySigner === true ? 'USDC' : request.paymentAmount.currency,
           exponent: request.paymentAmount.exponent,
           ...(reservationRef === undefined ? {} : { reservationRef }),
         }
@@ -703,9 +707,7 @@ export function createX402PaymentCallbacks(
               ...(requestFingerprint === undefined ? {} : { requestFingerprint }),
             }
         const prepared = await ctx.runMutation(
-          managedCanary
-            ? internal.moneyX402PaymentAttempts.prepareSellerOnboardingCanaryPaymentAuthorization
-            : internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
+          internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
           prepareArgs,
         )
         return requestFingerprint === undefined
@@ -739,7 +741,7 @@ export function createX402PaymentCallbacks(
         effectGeneration: input.effectGeneration,
         ...paymentEvent,
         amountUnits: amount.units,
-        currency: amount.currency,
+        currency: input.useCustodySigner === true ? 'USDC' : amount.currency,
         exponent: amount.exponent,
       })
       input.onPaymentPossiblySubmitted?.()
@@ -775,7 +777,7 @@ export function createX402PaymentCallbacks(
           : 'observed',
         evidenceRefs: [...event.evidenceRefs],
         amountUnits: amount.units,
-        currency: amount.currency,
+        currency: input.useCustodySigner === true ? 'USDC' : amount.currency,
         exponent: amount.exponent,
       })
     },

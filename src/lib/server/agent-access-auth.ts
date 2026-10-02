@@ -5,6 +5,7 @@ import { authContinuation } from '@/lib/http/auth-continuation'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { canonicalResolvedPrincipal, type AgentAccessCredentialProjection } from '@/lib/server/agent-access-principal'
 import { problem } from '@/lib/server/problem'
 import { currentRequestCorrelationId, readRequestCorrelationId, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -15,7 +16,6 @@ import {
 } from '@/lib/server/source-write-admission'
 import {
   AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-  AGENT_ACCESS_ENVIRONMENT_VALUES,
   MARKET_TOOLS_CALL_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
@@ -242,10 +242,20 @@ export async function authenticateAgentAccess(
   if (options.requiredMode !== undefined && !agentAuthorityModeAllows(authorityMode, options.requiredMode)) {
     return { kind: 'refused', status: 403, reason: 'scope_required' }
   }
+  const deploymentEnvironment = deploymentPaymentEnvironment(process.env)
+  const environment = claims?.aeEnvironment
+  if (deploymentEnvironment === undefined
+    || (environment !== 'sandbox' && environment !== 'production')
+    || environment !== deploymentEnvironment) {
+    return { kind: 'refused', status: 401, reason: 'authentication_required' }
+  }
+  if (environment === 'production' && authorityMode === 'unrestricted_test_only') {
+    return { kind: 'refused', status: 403, reason: 'scope_required' }
+  }
   const projection: AgentAccessCredentialProjection = Object.freeze({
     credentialId: candidate.id,
     applicationRef: claimString(claims, 'aeApplicationRef') ?? AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-    environment: environmentFromClaims(claims),
+    environment,
     scopes: Object.freeze([...admittedScopes].sort()),
     authorityMode,
   })
@@ -283,11 +293,4 @@ function canonicalConsequenceResource(value: string | undefined): string | undef
 function claimString(claims: Readonly<Record<string, unknown>> | null | undefined, name: string): string | undefined {
   const value = claims?.[name]
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
-}
-
-function environmentFromClaims(claims: Readonly<Record<string, unknown>> | null | undefined): AgentAccessEnvironment {
-  const value = claimString(claims, 'aeEnvironment')
-  if (value === 'production') return 'production'
-  if (value === 'sandbox' || value === 'development') return 'sandbox'
-  return AGENT_ACCESS_ENVIRONMENT_VALUES[0]
 }

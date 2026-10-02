@@ -25,15 +25,6 @@ import {
   type PricingConfig,
 } from "@/modules/money/public";
 
-export const moneyServerMocks = {
-  beginOwnerPayoutTransferServer: vi.fn(),
-  createOwnerConnectAccountServer: vi.fn(),
-  createOwnerExpressLoginLinkServer: vi.fn(),
-  createOwnerOnboardingLinkServer: vi.fn(),
-  readOwnerPayoutTransferServer: vi.fn(),
-};
-
-vi.mock("@/modules/money/money.functions", () => moneyServerMocks);
 vi.mock("@clerk/tanstack-react-start", () => ({
   useReverification: <T extends (...args: never[]) => unknown>(callback: T) => callback,
 }));
@@ -281,7 +272,7 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
       },
     }],
   });
-  const canaryPricing: PricingConfig = {
+  const pricingConfig: PricingConfig = {
     version: "pricing:v3",
     kind: "managed_x402",
     effectTiming: "payment_required_before_effect",
@@ -299,8 +290,8 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
       ...preparedPublication,
       sourceKind: "x402",
       sourceSelector: { resourceUrl: endpointUrl },
-      pricingConfigJson: JSON.stringify(canaryPricing),
-      priceDigest: pricingConfigDigest(canaryPricing),
+      pricingConfigJson: JSON.stringify(pricingConfig),
+      priceDigest: pricingConfigDigest(pricingConfig),
       binding: {
         ...preparedPublication.binding,
         endpointUrl,

@@ -57,6 +57,7 @@ export const x402PaymentAuthorizationMaterial = v.object({
   paymentObservationDigest: v.optional(v.string()),
   settlementStatus: v.optional(x402PaymentSettlementStatusValue),
   paymentResponseDigest: v.optional(v.string()),
+  responseStatus: v.optional(v.number()),
   reconciliationEvidenceRef: v.optional(v.string()),
   reconciliationEvidenceDigest: v.optional(v.string()),
 })
@@ -134,6 +135,7 @@ export const x402PaymentAttemptReadValue = v.object({
   paymentObservationDigest: v.optional(v.string()),
   settlementStatus: v.optional(x402PaymentSettlementStatusValue),
   paymentResponseDigest: v.optional(v.string()),
+  responseStatus: v.optional(v.number()),
   quarantinedResponseDigest: v.optional(v.string()),
   quarantinedOutputJson: v.optional(v.string()),
   reconciliationEvidenceRef: v.optional(v.string()),
@@ -250,6 +252,7 @@ function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthori
     ...(row.paymentObservationDigest === undefined ? {} : { paymentObservationDigest: row.paymentObservationDigest }),
     ...(row.settlementStatus === undefined ? {} : { settlementStatus: row.settlementStatus }),
     ...(row.paymentResponseDigest === undefined ? {} : { paymentResponseDigest: row.paymentResponseDigest }),
+    ...(row.responseStatus === undefined ? {} : { responseStatus: row.responseStatus }),
     ...(row.reconciliationEvidenceRef === undefined ? {} : { reconciliationEvidenceRef: row.reconciliationEvidenceRef }),
     ...(row.reconciliationEvidenceDigest === undefined ? {} : { reconciliationEvidenceDigest: row.reconciliationEvidenceDigest }),
   }
@@ -310,6 +313,7 @@ function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue>
     ...(row.paymentObservationDigest === undefined ? {} : { paymentObservationDigest: row.paymentObservationDigest }),
     ...(row.settlementStatus === undefined ? {} : { settlementStatus: row.settlementStatus }),
     ...(row.paymentResponseDigest === undefined ? {} : { paymentResponseDigest: row.paymentResponseDigest }),
+    ...(row.responseStatus === undefined ? {} : { responseStatus: row.responseStatus }),
     ...(row.quarantinedResponseDigest === undefined || row.quarantinedOutputJson === undefined
       ? {}
       : {

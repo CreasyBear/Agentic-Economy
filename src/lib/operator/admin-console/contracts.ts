@@ -53,6 +53,9 @@ export type AdminCommandAction =
   | 'revoke_admin_membership'
   | 'verify_capability_source_authority'
   | 'change_commercial_policy'
+  | 'grant_promotional_credit'
+  | 'set_payments_paused'
+  | 'change_treasury_thresholds'
 
 export const ADMIN_ACTION_PERMISSION = {
   set_business_suppression: 'suppress_business',
@@ -61,13 +64,18 @@ export const ADMIN_ACTION_PERMISSION = {
   revoke_admin_membership: 'manage_admin_membership',
   verify_capability_source_authority: 'register_capability_supply',
   change_commercial_policy: 'manage_commercial_policy',
+  grant_promotional_credit: 'grant_promotional_credit',
+  set_payments_paused: 'manage_commercial_policy',
+  change_treasury_thresholds: 'manage_commercial_policy',
 } as const satisfies Record<AdminCommandAction, AdminAction>
 
 export type AdminProposableAction =
+  | 'set_payments_paused'
   | 'set_business_suppression'
   | 'change_commercial_policy'
   | 'grant_admin_membership'
   | 'revoke_admin_membership'
+  | 'grant_promotional_credit'
 
 export type AdminReasonCodeByAction = {
   set_business_suppression:
@@ -81,9 +89,14 @@ export type AdminReasonCodeByAction = {
   revoke_admin_membership: 'offboarding' | 'role_change' | 'compromise_suspected'
   verify_capability_source_authority: 'evidence_verified' | 'evidence_insufficient'
   change_commercial_policy: 'pricing_update' | 'correction'
+  grant_promotional_credit: 'onboarding' | 'correction'
+  set_payments_paused: 'operational_pause' | 'operational_resume' | 'correction'
+  change_treasury_thresholds: 'threshold_update' | 'correction'
 }
 
 export type AdminActionInput = {
+  set_payments_paused: { environment: 'sandbox' | 'production'; paused: boolean }
+  change_treasury_thresholds: { environment: 'sandbox' | 'production'; lowWaterUnits: string; targetFloatUnits: string }
   set_business_suppression: {
     businessId: string
     intent: 'suppress' | 'unsuppress'
@@ -122,15 +135,24 @@ export type AdminActionInput = {
     expiresAt: number
     control: CommercialPolicyControl
   }
+  grant_promotional_credit: {
+    accountRef: string
+    environment: 'sandbox' | 'production'
+    amountUnits: string
+    expiresAt: number
+  }
 }
 
 export type AdminSuccessCodeByAction = {
+  set_payments_paused: 'payments_paused' | 'payments_resumed'
+  change_treasury_thresholds: 'treasury_thresholds_changed'
   set_business_suppression: 'business_suppressed' | 'business_unsuppressed'
   close_removal_dispute: 'dispute_closed'
   grant_admin_membership: 'membership_granted'
   revoke_admin_membership: 'membership_revoked'
   verify_capability_source_authority: 'source_authority_verified' | 'source_authority_insufficient'
   change_commercial_policy: 'commercial_policy_changed'
+  grant_promotional_credit: 'promotional_credit_granted'
 }
 
 export type AdminAuthorityDenialReason = Extract<
@@ -149,12 +171,15 @@ export type SharedAdminRefusalCode =
   | 'admin_missing_evidence'
 
 export type AdminActionRefusalCodes = {
+  set_payments_paused: 'environment_mismatch' | 'payments_not_ready' | import('@/modules/money/treasury-report').TreasuryResumeRefusalCode
+  change_treasury_thresholds: 'environment_mismatch' | 'treasury_thresholds_invalid'
   set_business_suppression: 'business_not_found' | 'suppression_unchanged'
   close_removal_dispute: 'dispute_not_found' | 'dispute_already_closed'
   grant_admin_membership: 'principal_not_found' | 'membership_already_active'
   revoke_admin_membership: 'membership_not_found' | 'last_owner_admin'
   verify_capability_source_authority: 'publication_not_found' | 'source_authority_not_reviewable'
   change_commercial_policy: 'policy_not_found' | 'proof_stale' | 'proof_replayed' | 'authority_mismatch'
+  grant_promotional_credit: 'account_not_found' | 'promotional_credit_invalid' | 'environment_mismatch'
 }
 
 export type AdminApprovalRefusalCode =
@@ -179,6 +204,8 @@ export type ClerkConsequenceProof = Readonly<{
   reverificationId: string
   firstFactorAgeMinutes: number
   secondFactorAgeMinutes: number
+  subject: string
+  evidenceObservedAt: number
 }>
 
 export type AdminApprovalIntent =
@@ -203,6 +230,13 @@ export type AdminCommandReceipt<A extends AdminCommandAction> =
       kind: 'completed'
       action: A
       code: AdminSuccessCodeByAction[A]
+      effectRefs: string[]
+      auditEventRef: string
+      correlationId: string
+    }
+  | {
+      kind: 'pending'
+      action: A
       effectRefs: string[]
       auditEventRef: string
       correlationId: string

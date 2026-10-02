@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import { ACTIVE_CHAT_GENERATION_MS } from '../../convex/chatThreads'
-import { buildDevelopmentPublishedToolEvidence } from '../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
-import { convexTestWithMarketComponents, createTestAgentPrincipal } from '../helpers/convex-fixtures'
+import { buildDevelopmentPublishedToolEvidence } from '../unit/capability-supply/fixtures/development-published-tool-evidence'
+import { convexTestWithMarketComponents, createTestAgentPrincipal, ownerAdmin } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'c'.repeat(64)}`
 const toolJson = JSON.stringify(buildDevelopmentPublishedToolEvidence().tool)
+
+// These tests own reservation, not background inference. Freeze scheduled jobs
+// so an unrelated generator cannot race the active turn under inspection.
+beforeEach(() => vi.useFakeTimers())
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
 
 async function setup(suffix: string) {
   const backend = convexTestWithMarketComponents()
@@ -70,6 +75,58 @@ async function setup(suffix: string) {
 }
 
 describe('atomic key Turn Call reservation fence', () => {
+  it('joins two Calls to one answer cost without changing either Call financial record', async () => {
+    const { backend, reservation, snapshot } = await setup('model-cost-two-calls')
+    const secondCallRef = `operation-invocation:v1:${'e'.repeat(64)}`
+    const secondQuoteRef = `operation-commitment:v1:${'f'.repeat(64)}`
+    await backend.run(async ctx => {
+      const quote = await ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', quoteRef)).unique()
+      if (quote === null) throw new Error('quote_missing')
+      const { _id, _creationTime: _time, ...material } = quote
+      await ctx.db.insert('capabilityQuotes', { ...material, quoteRef: secondQuoteRef })
+    })
+    expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'reserved' })
+    // The fixture's policy admits one concurrent Call. A two-Call answer can
+    // complete its first contribution before purchasing the next one.
+    await backend.run(async ctx => {
+      const first = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+      if (first === null) throw new Error('call_missing')
+      await ctx.db.patch(first._id, { state: 'completed' })
+    })
+    expect(await backend.mutation(internal.capabilityCalls.reserve, { ...reservation,
+      callRef: secondCallRef, quoteRef: secondQuoteRef, idempotencyKey: 'second-model-cost-call',
+    })).toMatchObject({ kind: 'reserved' })
+    const turn = (await snapshot()).turn
+    if (turn?.threadId === undefined || turn.promptMessageId === undefined) throw new Error('turn_missing')
+    const binding = { turnRef: turn.turnRef, threadId: turn.threadId, promptMessageId: turn.promptMessageId }
+    const before = await backend.run(ctx => ctx.db.query('capabilityCalls').collect())
+    for (const [requestRef, amountUsd] of [['sdk:first:0', '0.1'], ['sdk:first:1', '0.2']] as const) {
+      await backend.mutation(internal.chatModelCost.begin, { ...binding, requestRef,
+        source: 'openrouter', purpose: 'initial', requestedModel: 'test/model',
+      })
+      await backend.mutation(internal.chatModelCost.observe, { ...binding, requestRef,
+        model: 'test/model', inputTokens: 10, outputTokens: 20,
+        accounting: { status: 'priced', amountUsd, source: 'inline' },
+      })
+    }
+    await backend.mutation(internal.chatTurns.finishTurn, { turnRef: turn.turnRef,
+      promptMessageId: turn.promptMessageId, state: 'completed' })
+    const admin = await ownerAdmin(backend, 'user_answer-cost-admin')
+    const views = await Promise.all([callRef, secondCallRef].map(async value =>
+      admin.query(api.adminConsoleObjects.readAdminObject, { ref: { kind: 'call', ref: value } })))
+    for (const view of views) {
+      if (view.kind !== 'call') throw new Error('call_missing')
+      expect(view.answerModelCost).toMatchObject({ cost: {
+        turnRef: turn.turnRef, status: 'complete', knownCostUsd: '0.3', requestCount: 2, unknownRequestCount: 0,
+      }, callRefs: [callRef, secondCallRef], callsTruncated: false })
+      expect(view.receipt.usage).toBeUndefined()
+      expect(JSON.stringify(view.answerModelCost)).not.toContain('Run a Tool')
+    }
+    expect(await backend.run(ctx => ctx.db.query('capabilityCalls').collect())).toEqual(before)
+    expect(await backend.query(internal.chatModelCost.readTurn, { turnRef: turn.turnRef }))
+      .toMatchObject({ knownCostUsd: '0.3' })
+  })
+
   it('cancellation first leaves no Call and does not consume the Quote', async () => {
     const { backend, reservation, cancel, snapshot } = await setup('cancel-first')
     expect(await cancel()).toEqual({ kind: 'stopped', turnRef: reservation.turnRef, inFlightEffects: [] })
@@ -85,6 +142,7 @@ describe('atomic key Turn Call reservation fence', () => {
     expect(await backend.mutation(internal.capabilityCalls.reserve, reservation))
       .toMatchObject({ kind: 'reserved', reservation: { callRef } })
     const beforeCancel = await snapshot()
+    expect(beforeCancel.calls[0]?.chatTurnRef).toBe(reservation.turnRef)
     expect(beforeCancel.quote).toMatchObject({ state: 'consumed', consumedCallRef: callRef })
     expect(beforeCancel.turn).toMatchObject({ inFlightCallRefs: [callRef] })
     // An older reservation without a Turn link must be repaired on replay,
@@ -239,6 +297,12 @@ describe('atomic key Turn Call reservation fence', () => {
       expect(await backend.mutation(internal.chatTurns.finishTurn, {
         turnRef: next.turnRef, promptMessageId: next.promptMessageId, state: 'working',
       })).toBe(true)
+      if (order === 'reserve-first') {
+        expect(await backend.mutation(internal.capabilityCalls.reserve, {
+          ...reservation, turnRef: next.turnRef,
+        })).toMatchObject({ kind: 'replayed', reservation: { callRef } })
+        expect((await snapshot()).calls[0]?.chatTurnRef).toBe(reservation.turnRef)
+      }
       expect((await snapshot()).turn).toMatchObject({
         state: 'canceled', cancelRequestedAt: expect.any(Number),
       })

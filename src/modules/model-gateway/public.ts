@@ -177,5 +177,5 @@ export function openRouterCostUsd(metadata: ProviderMetadata | undefined): numbe
     return undefined
   }
   const cost: unknown = usage.cost
-  return typeof cost === 'number' && Number.isFinite(cost) ? cost : undefined
+  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined
 }

@@ -32,6 +32,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     },
     sessionId: 'session_test',
   }),
+  useAuth: () => ({ isLoaded: true, isSignedIn: true, orgId: 'org_test' }),
   UserButton: () => <button type="button" aria-label="Account menu" />,
   OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
   SignOutButton: ({ children }: { children: ReactElement }) => children,

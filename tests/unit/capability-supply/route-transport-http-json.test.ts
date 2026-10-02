@@ -47,6 +47,7 @@ describe('registered route transport runtime', () => {
     expect(observed).toMatchObject({
       transport: 'http',
       disposition: 'succeeded',
+      responseStatus: 200,
       releaseStarted: true,
       outputJson: JSON.stringify({ serviceReference: 'service:123' }),
       providerReceipt: 'receipt:http:123',
@@ -81,6 +82,7 @@ describe('registered route transport runtime', () => {
     })
     expect(wrongStatus).toMatchObject({
       disposition: 'unknown',
+      responseStatus: 200,
       failureCode: 'response_status_invalid',
     })
 
@@ -95,6 +97,7 @@ describe('registered route transport runtime', () => {
     })
     expect(accepted).toMatchObject({
       disposition: 'succeeded',
+      responseStatus: 201,
       outputJson: JSON.stringify({ serviceReference: 'service:201' }),
     })
 
@@ -112,8 +115,33 @@ describe('registered route transport runtime', () => {
     })
     expect(wrongMedia).toMatchObject({
       disposition: 'unknown',
+      responseStatus: 201,
       failureCode: 'response_content_type_invalid',
     })
+  })
+
+  it.each([
+    [200, 'not-json', 'response_json_invalid'],
+    [500, 'provider failed', 'provider_http_500'],
+  ] as const)('retains HTTP %s without usable JSON', async (status, body, failureCode) => {
+    const observed = await invokeRouteTransport(invocation(), {
+      send: vi.fn<RouteTransportFetch>().mockResolvedValueOnce(new Response(body, { status })),
+      resolveCredential: resolveProviderCredential('provider-secret'),
+    })
+    expect(observed).toMatchObject({ responseStatus: status, failureCode })
+    expect(observed).not.toHaveProperty('outputJson')
+  })
+
+  it('retains HTTP status when the response body stream fails', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) { controller.error(new Error('body unavailable')) },
+    })
+    const observed = await invokeRouteTransport(invocation(), {
+      send: vi.fn<RouteTransportFetch>().mockResolvedValueOnce(new Response(body, { status: 200 })),
+      resolveCredential: resolveProviderCredential('provider-secret'),
+    })
+    expect(observed).toMatchObject({ responseStatus: 200, failureCode: 'response_unreadable' })
+    expect(observed).not.toHaveProperty('outputJson')
   })
 
   it('routes a public HTTP binding without resolving or sending a credential', async () => {

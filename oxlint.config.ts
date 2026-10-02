@@ -119,8 +119,6 @@ export default defineConfig({
         'convex/lib/brokeredDisputeEvidence/**/*.ts',
         'src/lib/ui/contract-scans.ts',
         'src/lib/ui/contract-scans/**/*.ts',
-        'src/modules/money/internal/payout-policy.ts',
-        'src/modules/money/internal/payout-policy/**/*.ts',
         'src/modules/principal-account/account/registry.ts',
         'src/modules/principal-account/account/registry/**/*.ts',
       ],

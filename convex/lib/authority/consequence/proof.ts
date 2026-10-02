@@ -19,6 +19,56 @@ export const clerkConsequenceProofValue = v.object({
   secondFactorAgeMinutes: v.number(),
 })
 
+export type ClerkMfaConsequenceProofInput = ClerkConsequenceProofInput & Readonly<{
+  subject: string
+  evidenceObservedAt: number
+}>
+export const clerkMfaConsequenceProofValue = clerkConsequenceProofValue.extend({
+  subject: v.string(),
+  evidenceObservedAt: v.number(),
+})
+
+export function isValidClerkMfaEvidence(
+  proof: ClerkConsequenceProofInput,
+  subject: string,
+): proof is ClerkMfaConsequenceProofInput {
+  return isValidClerkFactorEvidence(proof)
+    && proof.secondFactorAgeMinutes >= 0
+    && 'subject' in proof && proof.subject === subject && subject.length > 0
+    && 'evidenceObservedAt' in proof && typeof proof.evidenceObservedAt === 'number'
+    && Number.isSafeInteger(proof.evidenceObservedAt) && proof.evidenceObservedAt > 0
+}
+
+/** Call only after verifying the exact command's source-write envelope. Requires
+ * the original authenticated Clerk subject, not a canonical-account proxy.
+ * Ensures both factors remain fresh from the signed JWT issue time; missing,
+ * first-factor-only, wrong-user or stale evidence never grants authority. */
+export function deriveMfaConsequenceProof(input: Readonly<{
+  proof: ClerkConsequenceProofInput
+  subject: string
+  now: number
+}>): ReturnType<typeof deriveStrictConsequenceProof> {
+  if (!isValidClerkMfaEvidence(input.proof, input.subject)
+    || !Number.isSafeInteger(input.now)
+    || input.proof.evidenceObservedAt > input.now + 5_000) {
+    return { kind: 'refused', code: 'reauthentication_required' }
+  }
+  const age = Math.max(input.proof.firstFactorAgeMinutes, input.proof.secondFactorAgeMinutes)
+  if (age >= STRICT_PROOF_MAX_AGE_MINUTES) return { kind: 'refused', code: 'proof_stale' }
+  const verifiedAt = input.proof.evidenceObservedAt - age * MINUTE_MS
+  const expiresAt = verifiedAt + STRICT_PROOF_MAX_AGE_MINUTES * MINUTE_MS
+  if (expiresAt <= input.now) return { kind: 'refused', code: 'proof_stale' }
+  return { kind: 'ok', proof: {
+    reverificationId: input.proof.reverificationId,
+    factorEvidence: {
+      firstFactorAgeMinutes: input.proof.firstFactorAgeMinutes,
+      secondFactorAgeMinutes: input.proof.secondFactorAgeMinutes,
+    },
+    verifiedAt,
+    expiresAt,
+  } }
+}
+
 export type StrictConsequenceProof = Readonly<{
   reverificationId: string
   factorEvidence: ClerkFactorEvidence
@@ -87,6 +137,10 @@ export function isValidClerkFactorEvidence(input: Readonly<{
     && input.secondFactorAgeMinutes >= -1
 }
 
+/** Requires authenticated evidence and effect preconditions checked by the caller.
+ * Ensures one proof belongs to one actor, Account, command and idempotency key;
+ * only that same operation may replay it. The caller must commit consumption
+ * and the consequence in the same mutation so failures roll back both. */
 export async function consumeConsequenceProof(
   ctx: Pick<MutationCtx, 'db'>,
   input: ConsequenceProofUse,
@@ -99,7 +153,7 @@ export async function consumeConsequenceProof(
       || existing.activeAccountRef !== input.activeAccountRef) {
       return { kind: 'refused', code: 'proof_replayed' }
     }
-    if (existing.commandDigest !== input.commandDigest) {
+    if (existing.commandDigest !== input.commandDigest || existing.idempotencyRef !== input.idempotencyRef) {
       return { kind: 'refused', code: 'command_changed' }
     }
     return {

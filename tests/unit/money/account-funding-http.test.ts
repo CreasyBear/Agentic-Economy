@@ -1,5 +1,50 @@
-import { sourceMocks, stripeMocks } from './owner-payout-server-harness'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as ConvexSourceModule from '@/lib/server/convex-source'
+import type * as SourceWriteAdmissionModule from '@/lib/server/source-write-admission'
+import type * as StripeMoneyProviderModule from '@/lib/server/stripe-money-provider'
+import type * as TanstackReactStartModule from '@tanstack/react-start'
+
+const sourceMocks = vi.hoisted(() => ({
+  callPublicSourceAction: vi.fn(),
+  callSourceAction: vi.fn(),
+  callPublicSourceQuery: vi.fn(),
+  callPublicSourceMutation: vi.fn(),
+  callSourceQuery: vi.fn(),
+  callSourceMutation: vi.fn(),
+  createConvexServerFunctionAssertion: vi.fn(),
+  sourceWriteAdmissionFromContext: vi.fn(),
+  sourceWriteAdmissionFromRequest: vi.fn(),
+}))
+const stripeMocks = vi.hoisted(() => ({
+  createStripeMoneyProvider: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof TanstackReactStartModule>()),
+  createServerFn: () => ({
+    validator: () => ({ handler: (handler: unknown) => handler }),
+    handler: (handler: unknown) => handler,
+  }),
+}))
+vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexSourceModule>()),
+  callPublicSourceAction: sourceMocks.callPublicSourceAction,
+  callSourceAction: sourceMocks.callSourceAction,
+  callPublicSourceQuery: sourceMocks.callPublicSourceQuery,
+  callPublicSourceMutation: sourceMocks.callPublicSourceMutation,
+  callSourceQuery: sourceMocks.callSourceQuery,
+  callSourceMutation: sourceMocks.callSourceMutation,
+  createConvexServerFunctionAssertion: sourceMocks.createConvexServerFunctionAssertion,
+}))
+vi.mock('@/lib/server/stripe-money-provider', async (importOriginal) => ({
+  ...(await importOriginal<typeof StripeMoneyProviderModule>()),
+  createStripeMoneyProvider: stripeMocks.createStripeMoneyProvider,
+}))
+vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof SourceWriteAdmissionModule>()),
+  sourceWriteAdmissionFromContext: sourceMocks.sourceWriteAdmissionFromContext,
+  sourceWriteAdmissionFromRequest: sourceMocks.sourceWriteAdmissionFromRequest,
+}))
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -7,6 +52,7 @@ import {
   ingestVerifiedStripeEventThroughSource,
   readAccountFundingConstraintsThroughSource,
   readAccountFundingThroughSource,
+  readPlatformFundingConstraintsThroughSource,
 } from '@/modules/money/server'
 import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
 
@@ -31,8 +77,8 @@ function command(overrides: Record<string, unknown> = {}) {
     exponent: 6 as const,
     principalUnits: '5000000',
     serviceFeeUnits: '250000',
-    taxUnits: '30000',
-    totalUnits: '5280000',
+    taxUnits: '530000',
+    totalUnits: '5780000',
     commercialPolicyDigest: `sha256:${'1'.repeat(64)}`,
     commercialPolicyRefs: ['sandbox:managed_x402_deterministic_v1'],
     idempotencyKey: input.idempotencyKey,
@@ -55,11 +101,35 @@ function command(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Account AUD funding HTTP boundary', () => {
-  it('refuses live Stripe configuration when deployment is hosted_alpha', async () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    const sourceWriteAdmission = {
+      keyId: 'test',
+      scope: 'billing',
+      operationKey: 'test',
+      correlationId: 'test',
+      commandDigest: 'sha256:test',
+      nonce: 'test',
+      issuedAt: 1,
+      method: 'POST',
+      initiatorOrigin: 'https://ae.test',
+      targetOrigin: 'https://ae.test',
+      targetPath: '/test',
+      targetQuery: '',
+      bodyDigest: 'sha256:body',
+      signature: 'test',
+    }
+    sourceMocks.sourceWriteAdmissionFromContext.mockResolvedValue(sourceWriteAdmission)
+    sourceMocks.sourceWriteAdmissionFromRequest.mockResolvedValue(sourceWriteAdmission)
+  })
+  afterEach(() => { vi.unstubAllEnvs() })
+
+  it('refuses live Stripe configuration in a development deployment', async () => {
     await expect(readAccountFundingConstraintsThroughSource({
       env: {
-        AE_SERVICE_MODE: 'hosted_alpha',
-        STRIPE_SECRET_KEY: 'sk_live_secret_key_material',
+        AE_DEPLOYMENT_ENVIRONMENT: 'development',
+        STRIPE_SECRET_KEY: 'rk_live_secret_key_material',
         STRIPE_WEBHOOK_SECRET: 'whsec_secret',
       },
     })).resolves.toMatchObject({
@@ -68,6 +138,98 @@ describe('Account AUD funding HTTP boundary', () => {
       retryable: false,
     })
   })
+
+  it.each([undefined, 'preview'] as const)(
+    'refuses funding with %s declaration before source or provider effects', async (declaration) => {
+      const env = { AE_DEPLOYMENT_ENVIRONMENT: declaration }
+      const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+      const resolveOwnerId = vi.fn(async () => 'owner-1')
+      const runtime = { env, provider, resolveOwnerId }
+      await expect(readPlatformFundingConstraintsThroughSource(runtime))
+        .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      await expect(readAccountFundingConstraintsThroughSource(runtime))
+        .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      await expect(beginAccountFundingThroughSource(input, {}, runtime))
+        .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      await expect(readAccountFundingThroughSource({ commandRef: 'missing', idempotencyKey: 'missing' }, {}, runtime))
+        .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      expect(resolveOwnerId).not.toHaveBeenCalled()
+      expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled()
+      expect(sourceMocks.callPublicSourceQuery).not.toHaveBeenCalled()
+      expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
+      expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
+      expect(provider.readCreditPayment).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['development', 'production'] as const)(
+    'refuses public and owner constraints without Stripe configuration in %s', async (declaration) => {
+      const runtime = { env: { AE_DEPLOYMENT_ENVIRONMENT: declaration } }
+      await expect(readPlatformFundingConstraintsThroughSource(runtime))
+        .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      await expect(readAccountFundingConstraintsThroughSource(runtime))
+        .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      expect(sourceMocks.callPublicSourceQuery).not.toHaveBeenCalled()
+      expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled()
+      expect(stripeMocks.createStripeMoneyProvider).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    ['development', 'sandbox', 'rk_test_configured'],
+    ['production', 'production', 'rk_live_configured'],
+  ] as const)('reads public constraints only for the configured %s rail', async (declaration, environment, key) => {
+    sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({ kind: 'available', environment })
+    await expect(readPlatformFundingConstraintsThroughSource({ env: {
+      AE_DEPLOYMENT_ENVIRONMENT: declaration, STRIPE_SECRET_KEY: key, STRIPE_WEBHOOK_SECRET: 'whsec_configured',
+    } })).resolves.toMatchObject({ kind: 'available', environment })
+    expect(sourceMocks.callPublicSourceQuery).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ environment }))
+  })
+
+  it.each([
+    ['development', 'rk_live_wrong'],
+    ['production', 'rk_test_wrong'],
+    ['production', 'sk_live_unrestricted'],
+  ] as const)('refuses public constraints for %s with %s before source access', async (declaration, key) => {
+    await expect(readPlatformFundingConstraintsThroughSource({ env: {
+      AE_DEPLOYMENT_ENVIRONMENT: declaration, STRIPE_SECRET_KEY: key, STRIPE_WEBHOOK_SECRET: 'whsec_configured',
+    } })).resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+    expect(sourceMocks.callPublicSourceQuery).not.toHaveBeenCalled()
+    expect(stripeMocks.createStripeMoneyProvider).not.toHaveBeenCalled()
+  })
+
+  it('refuses an opposite caller mode before funding source or provider effects', async () => {
+    const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+    const resolveOwnerId = vi.fn(async () => 'owner-1')
+    await expect(beginAccountFundingThroughSource(input, {}, {
+      env: { AE_DEPLOYMENT_ENVIRONMENT: 'development' }, mode: 'live', provider, resolveOwnerId,
+    })).resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+    expect(resolveOwnerId).not.toHaveBeenCalled()
+    expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
+    expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 'preview', 'production'] as const)(
+    'refuses a sandbox agent handoff under %s deployment before reserve or payment', async (declaration) => {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+      const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+      const service = createFundingHandoffService(
+        new Request('https://ae.test/api/v1/account/funding-sessions', { method: 'POST' }), '{}', provider,
+      )
+      const result = await service.create({
+        input: { principalAmount: { currency: 'AUD', exponent: 6, units: '5000000' }, idempotencyKey: 'fenced' },
+        principal: {
+          principalId: 'principal:agent-one', ownerId: 'account:one', credentialId: 'credential:one',
+          applicationRef: 'agentic-economy', environment: 'sandbox',
+          scopes: ['market_operations:invoke'], authorityMode: 'read_only',
+        },
+        correlationId: 'fenced',
+      })
+      expect(result).toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      expect(sourceMocks.callPublicSourceMutation).not.toHaveBeenCalled()
+      expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
+    },
+  )
 
   it('reads display constraints from the same environment selected for funding admission', async () => {
     const constraints = {
@@ -86,8 +248,84 @@ describe('Account AUD funding HTTP boundary', () => {
     sourceMocks.callSourceQuery.mockResolvedValueOnce(constraints)
     const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
 
-    await expect(readAccountFundingConstraintsThroughSource({ provider, mode: 'live' })).resolves.toEqual(constraints)
+    await expect(readAccountFundingConstraintsThroughSource({
+      provider, mode: 'live', env: { AE_DEPLOYMENT_ENVIRONMENT: 'production' },
+    })).resolves.toEqual(constraints)
     expect(sourceMocks.callSourceQuery).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ environment: 'production' }))
+  })
+
+  it.each([
+    ['development', 'production'],
+    ['production', 'sandbox'],
+  ] as const)(
+    'refuses owner readback in declared %s for stored %s command before provider read or bind',
+    async (declaration, storedEnvironment) => {
+      const durable = command({ environment: storedEnvironment, externalRef: 'cs_opposite_owner' })
+      sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
+      const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+
+      await expect(readAccountFundingThroughSource({ externalRef: 'cs_opposite_owner' }, {}, {
+        env: { AE_DEPLOYMENT_ENVIRONMENT: declaration }, provider,
+      })).resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
+      expect(provider.readCreditPayment).not.toHaveBeenCalled()
+      expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
+      expect(sourceMocks.callSourceAction).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    ['development', 'production'],
+    ['production', 'sandbox'],
+  ] as const)(
+    'refuses pending handoff status in declared %s for stored %s command before provider read or bind',
+    async (declaration, storedEnvironment) => {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+      sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: command({
+        environment: storedEnvironment, externalRef: 'cs_opposite_handoff', state: 'pending',
+      }) })
+      const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+      const service = createFundingHandoffService(
+        new Request('https://ae.test/api/v1/account/funding-sessions/cs_opposite_handoff'), '{}', provider,
+      )
+      const result = await service.status({
+        input: { fundingSessionId: 'cs_opposite_handoff' },
+        principal: {
+          principalId: 'principal:agent-one', ownerId: 'account:one', credentialId: 'credential:one',
+          applicationRef: 'agentic-economy', environment: storedEnvironment,
+          scopes: ['market_operations:invoke'], authorityMode: 'read_only',
+        },
+        correlationId: 'opposite-handoff',
+      })
+      expect(result).toMatchObject({ kind: 'error', code: 'stripe_setup_required', nextAction: { kind: 'poll' } })
+      expect(provider.readCreditPayment).not.toHaveBeenCalled()
+      expect(sourceMocks.callPublicSourceMutation).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    ['expired', 'expired'],
+    ['async_payment_failed', 'failed'],
+  ] as const)('keeps terminal %s handoff status readable after a declaration change', async (terminalReason, kind) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: command({
+      environment: 'sandbox', externalRef: 'cs_terminal_handoff', state: 'failed', terminalReason,
+    }) })
+    const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+    const service = createFundingHandoffService(
+      new Request('https://ae.test/api/v1/account/funding-sessions/cs_terminal_handoff'), '{}', provider,
+    )
+    const result = await service.status({
+      input: { fundingSessionId: 'cs_terminal_handoff' },
+      principal: {
+        principalId: 'principal:agent-one', ownerId: 'account:one', credentialId: 'credential:one',
+        applicationRef: 'agentic-economy', environment: 'sandbox',
+        scopes: ['market_operations:invoke'], authorityMode: 'read_only',
+      },
+      correlationId: 'terminal-handoff',
+    })
+    expect(result).toMatchObject({ kind, fundingSessionId: 'cs_terminal_handoff' })
+    expect(provider.readCreditPayment).not.toHaveBeenCalled()
+    expect(sourceMocks.callPublicSourceMutation).not.toHaveBeenCalled()
   })
 
   it('returns one direct hosted Checkout handoff after durable reserve and evidence bind', async () => {
@@ -167,7 +405,7 @@ describe('Account AUD funding HTTP boundary', () => {
       evidence: {
         provider: 'stripe' as const,
         externalRef: 'cs_account_funding_one',
-        amount: { currency: 'AUD', units: '5280000', exponent: 6 },
+        amount: { currency: 'AUD', units: '5780000', exponent: 6 },
         status: 'pending' as const,
         checkoutStatus: 'open' as const,
         paymentStatus: 'unpaid' as const,
@@ -214,11 +452,12 @@ describe('Account AUD funding HTTP boundary', () => {
       commandRef: durable.commandRef,
       principalId: durable.actorPrincipalRef,
       accountRef: durable.accountRef,
-      amount: { currency: 'AUD', units: '5280000', exponent: 6 },
+      amount: { currency: 'AUD', units: '5780000', exponent: 6 },
     }))
   })
 
-  it('does not return a paid recovery session before its durable funding booking succeeds', async () => {
+  it.each(['pending', 'source_write_denied', 'payment_binding_invalid'] as const)(
+    'retains the original recovery command after paid-provider evidence meets %s', async (binding) => {
     const durable = { ...command(), externalRef: 'cs_paid_recovery_pending' }
     const payment = {
       kind: 'hosted_redirect' as const,
@@ -241,7 +480,9 @@ describe('Account AUD funding HTTP boundary', () => {
     }
     sourceMocks.callSourceMutation
       .mockResolvedValueOnce({ kind: 'accepted', command: durable })
-      .mockResolvedValueOnce({ kind: 'accepted', command: { ...durable, state: 'pending' } })
+      .mockResolvedValueOnce(binding === 'pending'
+        ? { kind: 'accepted', command: { ...durable, state: 'pending' } }
+        : { kind: 'refused', code: binding, retryable: false })
     const provider = {
       createOrRecoverCreditPayment: vi.fn().mockResolvedValue(payment),
       readCreditPayment: vi.fn(),
@@ -250,7 +491,31 @@ describe('Account AUD funding HTTP boundary', () => {
     await expect(beginAccountFundingThroughSource(input, {}, {
       resolveOwnerId: async () => 'owner-1',
       provider,
-    })).resolves.toEqual({ kind: 'refused', code: 'funding_pending', retryable: true })
+    })).resolves.toEqual({ kind: 'outcome_unknown', code: 'funding_outcome_unknown', retryable: false,
+      commandRef: durable.commandRef, status: 'outcome_unknown' })
+    expect(provider.createOrRecoverCreditPayment).toHaveBeenCalledOnce()
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    { providerCode: 'credit_topup_outcome_unknown', deadline: Number.MAX_SAFE_INTEGER },
+    { providerCode: 'payment_binding_invalid', deadline: Number.MAX_SAFE_INTEGER },
+    { providerCode: 'credit_topup_outcome_unknown', deadline: 0 },
+  ] as const)('retains the original locator after provider refusal $providerCode with deadline $deadline', async ({ providerCode, deadline }) => {
+    const durable = command({ providerRecoveryDeadlineAt: deadline })
+    sourceMocks.callSourceMutation
+      .mockResolvedValueOnce({ kind: 'accepted', command: durable })
+      .mockResolvedValueOnce({ kind: 'refused', code: 'source_write_denied', retryable: false })
+    const provider = {
+      createOrRecoverCreditPayment: vi.fn().mockResolvedValue({ kind: 'refused', code: providerCode, retryable: true }),
+      readCreditPayment: vi.fn(),
+    }
+    await expect(beginAccountFundingThroughSource(input, {}, {
+      resolveOwnerId: async () => 'owner-1', provider,
+    })).resolves.toEqual({ kind: 'outcome_unknown', code: 'funding_outcome_unknown', retryable: false,
+      commandRef: durable.commandRef, status: 'outcome_unknown' })
+    expect(provider.createOrRecoverCreditPayment).toHaveBeenCalledOnce()
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(deadline === 0 ? 2 : 1)
   })
 
   it('uses live Stripe configuration only as a production policy gate signal', async () => {
@@ -268,6 +533,7 @@ describe('Account AUD funding HTTP boundary', () => {
       resolveOwnerId: async () => 'owner-1',
       provider,
       mode: 'live',
+      env: { AE_DEPLOYMENT_ENVIRONMENT: 'production' },
     })).resolves.toEqual({
       kind: 'refused',
       code: 'commercial_policy_required',
@@ -418,7 +684,7 @@ describe('Account AUD funding HTTP boundary', () => {
     const evidence = {
       provider: 'stripe' as const,
       externalRef: 'cs_account_funding_webhook',
-      amount: { currency: 'AUD', units: '528', exponent: 2 },
+      amount: { currency: 'AUD', units: '578', exponent: 2 },
       status: 'succeeded' as const,
       checkoutStatus: 'complete' as const,
       paymentStatus: 'paid' as const,

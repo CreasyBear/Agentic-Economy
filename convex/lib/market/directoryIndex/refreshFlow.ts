@@ -108,6 +108,9 @@ export const applyPageHandler = async (ctx: MutationCtx, args: Infer<typeof appl
     // Advancing by its window avoids re-reading a rounded-down final offset.
     const nextOffset = complete || !pageDone ? args.offset : args.offset + DIRECTORY_INDEX_PAGE_SIZE
     const ingestedCount = generation.ingestedCount + inserted
+    const analyticsBehind = generation.analyticsVersion === undefined
+      ? generation.terminalObserved === true
+      : generation.analyticsVersion < ANALYTICS_VERSION
     const next = {
       nextOffset, pageItemCursor: pageDone ? 0 : startItem + args.items.length, ingestedCount, sourceReportedInitial: generation.sourceReportedInitial ?? args.reportedTotal,
       sourceReportedLatest: args.reportedTotal,
@@ -120,9 +123,13 @@ export const applyPageHandler = async (ctx: MutationCtx, args: Infer<typeof appl
       // availability on this alone, so a mid-run patch never makes the live
       // generation look "not ready yet" (rows.ts:activeDirectoryGeneration).
       terminalObserved: complete || generation.terminalObserved === true,
-      ...(complete ? { status: 'complete' as const, completedAt: args.observedAt, analyticsVersion: ANALYTICS_VERSION, analyticsStatus: 'ready' as const } : {}),
+      ...(complete ? {
+        status: 'complete' as const, completedAt: args.observedAt,
+        ...(analyticsBehind ? {} : { analyticsVersion: ANALYTICS_VERSION, analyticsStatus: 'ready' as const }),
+      } : {}),
     }
     await ctx.db.patch(generation._id, next)
+    if (complete && analyticsBehind) await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexBackfill.start, {})
     if (complete && state !== null) {
       await ctx.db.replace(state._id, {
         key: 'coinbase', activeGeneration: args.generation,

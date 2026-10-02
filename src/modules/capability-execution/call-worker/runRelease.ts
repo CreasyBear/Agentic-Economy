@@ -15,22 +15,18 @@ import type { ActionCtx } from '../../../../convex/_generated/server'
 import type { ChargeSettlementResult } from '@/modules/capability-execution/call-projection/contracts'
 import { parseContractOutput } from '@/modules/capability-execution/call-projection/contract-output'
 import { projectOuterResult } from '../../../../convex/lib/capabilityExecution/callProjection/outerResult'
-import { projectSellerOnboardingCanaryResult } from '../../../../convex/lib/capabilityExecution/callProjection/canary'
 import { readCanonicalSnapshot } from '../../../../convex/lib/capabilityExecution/callProjection/port'
 import { convergePreRelease, type WorkerResult } from './charge'
-import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks, createManagedX402PaymentCallbacks, credentiallessX402ConnectionAuthorityValidator, recordX402TransportObservation, routeInvocation, X402_MANAGED_CUSTODY_REF } from './x402Route'
+import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks, credentiallessX402ConnectionAuthorityValidator, routeInvocation, X402_MANAGED_CUSTODY_REF } from './x402Route'
 import { issueProviderLease, providerCredentialReader, providerLeaseAuthorityValidator, settleProviderLease, type ProviderLeaseAuthority } from './lease'
 import { runCommittedManagedX402Transport } from './brokeredX402'
 import { type CallPreparation } from './runPreparation'
 import {
+  gateCurrentOperationBeforeRelease,
   gateGrantValidityBeforeRelease,
-  gateSellerCanarySnapshotBeforeRelease,
   readGrantStillValidForRelease,
-  sellerCanaryReleaseFenceSnapshotMatches,
   type GrantValidityExpectation,
-  type SellerCanaryOperationSnapshot,
 } from './call-execution-gates'
-import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import {
   invokeProviderConsequenceViaVercel,
   providerConsequenceX402PaymentCustodyAvailable,
@@ -51,7 +47,6 @@ export async function releaseCallRun(
     input,
     isX402,
     economicRail,
-    executionContext,
     pricingConfig,
     connectionAuthority,
     isCredentiallessX402Connection,
@@ -66,14 +61,13 @@ export async function releaseCallRun(
     baseBinding,
     callIdentity,
   } = preparedContext
-  const isManagedCanary = economicRail === 'managed_testnet_canary'
   let leaseRef: string | undefined
   let leaseAuthority: ProviderLeaseAuthority | undefined
   const beforeLease = await readCanonicalSnapshot(port, dispatch.callRef, durableAttemptRef)
   if (beforeLease === undefined) return { kind: 'none' }
   if (beforeLease.control.control.control.state === 'cancelled') return { kind: 'none' }
   if (beforeLease.control.control.control.state === 'reconciliation_required') return { kind: 'none' }
-  if (isX402 && economicRail !== 'brokered_x402' && !isManagedCanary) {
+  if (isX402 && economicRail !== 'brokered_x402') {
     return await convergePreRelease(
       ctx,
       dispatch,
@@ -83,7 +77,7 @@ export async function releaseCallRun(
       'Inspect a managed x402 Operation before invoking it.',
     )
   }
-  if (connectionAuthority !== undefined && economicRail !== 'brokered_x402' && !isManagedCanary) {
+  if (connectionAuthority !== undefined && economicRail !== 'brokered_x402') {
     const lease = await issueProviderLease(ctx, {
       dispatch,
       operation,
@@ -99,9 +93,7 @@ export async function releaseCallRun(
     leaseAuthority = lease.leaseAuthority
   }
 
-  let paymentMaximumSpend: ExactAmount | undefined = isManagedCanary
-    ? dispatch.sellerOnboardingCanary?.funding.requestedSpend
-    : undefined
+  let paymentMaximumSpend: ExactAmount | undefined = undefined
   if (economicRail === 'brokered_x402') {
     const payment = parseAdmittedX402CatalogPayment(baseBinding.adapterId, baseBinding.configJson)
     if (payment === undefined || pricingConfig.kind !== 'managed_x402'
@@ -144,9 +136,9 @@ export async function releaseCallRun(
   const preparation = prepareRegisteredRouteTransportInvocation(
     invocation,
     isX402
-      ? connectionAuthority !== undefined && economicRail !== 'brokered_x402' && !isManagedCanary
+      ? connectionAuthority !== undefined && economicRail !== 'brokered_x402'
         ? providerConsequenceX402PaymentCustodyAvailable
-        : economicRail === 'brokered_x402' || isManagedCanary
+        : economicRail === 'brokered_x402'
         ? () => true
         : () => x402PaymentCredentialRefFromEnvironment() !== undefined
       : undefined,
@@ -171,29 +163,13 @@ export async function releaseCallRun(
   let fenced: CanonicalClaimSnapshot | undefined
   const persistBrokeredReleaseFence = async (): Promise<boolean> => {
     try {
-        if (dispatch.sellerOnboardingCanary !== undefined) {
-        if (dispatch.sellerOnboardingCanary.expiresAt <= Date.now()) return false
-        const exactSnapshot = await ctx.runQuery(
-          internal.capabilitySupplyCurrentTool.readExactSellerCanaryOperationSnapshot,
-          {
-            publicationRef: dispatch.sellerOnboardingCanary.publicationRef,
-            revision: dispatch.sellerOnboardingCanary.publicationRevision,
-          },
-        )
-        const exactOperation = exactSnapshot === null
-          ? undefined
-          : parsePublishedToolSnapshot(exactSnapshot.toolJson)
-        if (!sellerCanaryReleaseFenceSnapshotMatches(dispatch, exactSnapshot as SellerCanaryOperationSnapshot | null, exactOperation)) {
-          return false
-        }
-      }
       if (fenced !== undefined) return true
       const fencedResult = await persistCanonicalReleaseFence(
         { snapshot: claimed, recordedAt: new Date().toISOString() },
         port,
       )
       if (fencedResult.kind === 'refused') return false
-      if (economicRail === 'brokered_x402' && dispatch.sellerOnboardingCanary === undefined) {
+      if (economicRail === 'brokered_x402') {
         const submissionFence = await ctx.runMutation(
           internal.moneyManagedCallLifecycle.markPossiblySubmitted,
           {
@@ -231,7 +207,7 @@ export async function releaseCallRun(
     if (Date.parse(authorityExpiresAt) <= Date.now()) throw new Error('operation_authority_expired')
     return await guardedFetch(target, { ...init, dispatcher })
   }
-  const readProviderCredential = connectionAuthority === undefined || economicRail === 'brokered_x402' || isManagedCanary
+  const readProviderCredential = connectionAuthority === undefined || economicRail === 'brokered_x402'
     ? undefined
     : providerCredentialReader(ctx, connectionAuthority, dispatch)
   const validateProviderAuthority = connectionAuthority === undefined
@@ -242,7 +218,7 @@ export async function releaseCallRun(
           connectionAuthority,
           operation.binding.endpointUrl,
         )
-      : economicRail === 'brokered_x402' || isManagedCanary
+      : economicRail === 'brokered_x402'
       ? brokeredProviderAuthorityValidator(ctx, connectionAuthority)
       : providerLeaseAuthorityValidator(ctx, connectionAuthority, dispatch)
   const grantValidityExpectation: GrantValidityExpectation = {
@@ -277,25 +253,13 @@ export async function releaseCallRun(
             brokeredPaymentPossiblySubmitted = true
           },
         })
-      : isManagedCanary
-        ? createManagedX402PaymentCallbacks(ctx, {
-            dispatch,
-            operation,
-            connectionAuthority,
-            durableAttemptRef,
-            effectGeneration: claimed.attempt.effectGeneration,
-            operationKeyDigest,
-            dispatcher,
-            isGrantStillValid,
-            validateProviderAuthority,
-          })
-        : undefined
+      : undefined
   const runtime: RouteTransportRuntime = {
     send,
-    resolveCredential: economicRail === 'brokered_x402' || isManagedCanary
+    resolveCredential: economicRail === 'brokered_x402'
       ? () => undefined
       : credentialFromEnvironment,
-    readX402PaymentCredentialRef: economicRail === 'brokered_x402' || isManagedCanary
+    readX402PaymentCredentialRef: economicRail === 'brokered_x402'
       ? () => X402_MANAGED_CUSTODY_REF
       : x402PaymentCredentialRefFromEnvironment,
     ...(validateProviderAuthority === undefined ? {} : {
@@ -305,7 +269,7 @@ export async function releaseCallRun(
       readProviderConnectionCredentialRef: readProviderCredential,
     }),
     ...(paymentCallbacks ?? {}),
-    ...(economicRail === 'brokered_x402' || isManagedCanary
+    ...(economicRail === 'brokered_x402'
       ? { beforeX402PaymentAuthorizationRead: persistBrokeredReleaseFence }
       : {}),
   }
@@ -319,7 +283,7 @@ export async function releaseCallRun(
     await closeDispatcher()
     return grantValidityRefusal
   }
-  const currentOperationResult = await gateSellerCanarySnapshotBeforeRelease(ctx, {
+  const currentOperationResult = await gateCurrentOperationBeforeRelease(ctx, {
     dispatch,
     claimed,
     pinnedOperation: operation,
@@ -475,7 +439,7 @@ export async function releaseCallRun(
     }
     let observation: RouteTransportObservation
     try {
-      observation = connectionAuthority !== undefined && !isManagedCanary
+      observation = connectionAuthority !== undefined
         ? await invokeProviderConsequenceViaVercel(ctx, {
             invocation,
             requestDigest: preparation.prepared.requestDigest,
@@ -490,74 +454,34 @@ export async function releaseCallRun(
         failureCode: `operation_transport_${errorName(error)}`,
       }
     }
-    const recordedX402Observation = isManagedCanary
-      ? await recordX402TransportObservation(ctx, {
-          dispatch,
-          operation,
-          observation,
-          durableAttemptRef,
-          durableEffectGeneration,
-          operationKeyDigest,
-        })
-      : undefined
     // Delivery and payment consequences use the declared contract; semantic suspicion is advisory.
     const outputValidation = parseContractOutput(observation, descriptor)
     const deliveryOutcome = chargeSettlementOutcome(observation, economicRail, outputValidation.valid)
-    const settledPayment = isManagedCanary
-      && recordedX402Observation?.settlementStatus === 'settled'
-      && recordedX402Observation.settlementRef !== undefined
-      ? {
-          paymentIdentifier: operationKeyDigest,
-          externalSettlementRef: recordedX402Observation.settlementRef,
-          settlementTransactionHash: recordedX402Observation.settlementRef,
-        }
-      : {}
     const settlement = deliveryOutcome === 'unknown'
       ? {
           kind: 'reconciliation_required' as const,
-          ...(isManagedCanary ? { paymentIdentifier: operationKeyDigest } : {}),
         }
       : {
           kind: 'settled' as const,
           outcome: deliveryOutcome,
-          ...settledPayment,
         }
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)
     const recordedAt = new Date().toISOString()
     finalizationStarted = true
-    if (isManagedCanary) {
-      if (executionContext?.kind !== 'seller_onboarding_canary' || fenced === undefined) {
-        throw new Error('seller_canary_release_context_missing')
-      }
-      await projectSellerOnboardingCanaryResult(
-        ctx,
-        dispatch,
-        operation,
-        descriptor,
-        observation,
-        recordedAt,
-        settlement,
-        durableAttemptRef,
-        durableEffectGeneration,
-        outputValidation,
-        fenced,
-      )
-    } else {
-      await projectOuterResult(
-        ctx,
-        dispatch,
-        operation,
-        descriptor,
-        observation,
-        recordedAt,
-        undefined,
-        settlement,
-        durableAttemptRef,
-        durableEffectGeneration,
-        outputValidation,
-        fenced,
-      )
-    }
+    await projectOuterResult(
+      ctx,
+      dispatch,
+      operation,
+      descriptor,
+      observation,
+      recordedAt,
+      undefined,
+      settlement,
+      durableAttemptRef,
+      durableEffectGeneration,
+      outputValidation,
+      fenced,
+    )
     return { kind: 'recorded' }
   } catch (error) {
     if (finalizationStarted) throw error
@@ -596,36 +520,20 @@ export async function releaseCallRun(
       failureCode: `operation_worker_${errorName(error)}`,
     }
     finalizationStarted = true
-    if (isManagedCanary && fenced !== undefined) {
-      await projectSellerOnboardingCanaryResult(
-        ctx,
-        dispatch,
-        operation,
-        descriptor,
-        unknownObservation,
-        recordedAt,
-        { kind: 'reconciliation_required' },
-        durableAttemptRef,
-        durableEffectGeneration,
-        { valid: false },
-        fenced,
-      )
-    } else {
-      await projectOuterResult(
-        ctx,
-        dispatch,
-        operation,
-        descriptor,
-        unknownObservation,
-        recordedAt,
-        undefined,
-        { kind: 'reconciliation_required' },
-        durableAttemptRef,
-        durableEffectGeneration,
-        { valid: false },
-        fenced,
-      )
-    }
+    await projectOuterResult(
+      ctx,
+      dispatch,
+      operation,
+      descriptor,
+      unknownObservation,
+      recordedAt,
+      undefined,
+      { kind: 'reconciliation_required' },
+      durableAttemptRef,
+      durableEffectGeneration,
+      { valid: false },
+      fenced,
+    )
     return { kind: 'recorded' }
   } finally {
     await dispatcher.close().catch(() => undefined)

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { convexTest } from 'convex-test'
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -11,6 +11,8 @@ vi.mock('@coinbase/cdp-sdk', async (original) => ({ ...await original<typeof imp
 
 
 describe('native admitted Tool catalogue', () => {
+  beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+  afterEach(() => vi.unstubAllEnvs())
   it('does not recommend unrelated Tools merely because a request contains filler words', async () => {
     const backend = convexTest(schema, convexModules)
     await admitDiscoveredToolFixture(backend)

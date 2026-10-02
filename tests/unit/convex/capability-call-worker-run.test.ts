@@ -59,8 +59,7 @@ describe('capability operation invocation worker run', () => {
   })
 
   it.each(['principal', 'reserved Tool', 'current Tool'] as const)(
-    'refuses a production %s in hosted alpha before provider or custody effects', async (boundary) => {
-      vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    'refuses a production %s in a development deployment before provider or custody effects', async (boundary) => {
       try {
         const production = createWorker('http', { environment: 'production' })
         const worker = boundary === 'principal' ? production : createWorker('http', {
@@ -76,21 +75,36 @@ describe('capability operation invocation worker run', () => {
         expect(mocks.invokeProviderConsequenceViaVercel).not.toHaveBeenCalled()
         expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
         expect(worker.state.mutationCalls.filter(({ path }) => path === 'capabilityCalls:claimDispatch')).toHaveLength(0)
-      } finally { vi.unstubAllEnvs() }
+      } finally { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development') }
     },
   )
 
-  it('completes a sandbox Tool in hosted alpha', async () => {
-    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+  it.each([undefined, 'preview'] as const)(
+    'refuses dispatch with %s deployment declaration before claim or provider effects', async (declaration) => {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+      const worker = createWorker('http')
+      await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
+      expect(worker.state.records.at(-1)).toMatchObject({
+        state: 'refused', result: { kind: 'refused', code: 'environment_mismatch' },
+      })
+      expect(worker.state.transportCalls).toBe(0)
+      expect(worker.state.mutationCalls.filter(({ path }) => path === 'capabilityCalls:claimDispatch')).toHaveLength(0)
+      expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+      expect(mocks.invokeProviderConsequenceViaVercel).not.toHaveBeenCalled()
+      expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    },
+  )
+
+  it('completes a sandbox Tool in a development deployment', async () => {
     try {
       const worker = createWorker('http', { priceUnits: '0' })
       await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
       expect(worker.state.records.at(-1)).toMatchObject({ state: 'completed' })
       expect(worker.state.transportCalls).toBe(1)
-    } finally { vi.unstubAllEnvs() }
+    } finally { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development') }
   })
 
-  it('preserves recovery of a possibly released production Call in hosted alpha', async () => {
+  it.each([undefined, 'development'] as const)('preserves recovery of a possibly released production Call under %s declaration', async (declaration) => {
     const worker = createWorker('http', { environment: 'production', alreadyLeased: true })
     const runQuery = worker.ctx.runQuery as (reference: unknown, args: unknown) => Promise<unknown>
     const control = await runQuery(internal.actionExecutionControl.readControl, { executionRef: invocationRef }) as {
@@ -101,14 +115,14 @@ describe('capability operation invocation worker run', () => {
     }) as { release: { state: string } }
     control.control.control.release = 'possibly_released'
     attempt.release.state = 'possibly_released'
-    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
     try {
       await handler(worker.ctx, { callRef: invocationRef })
       expect(worker.state.records.some(record => record.state === 'refused')).toBe(false)
       expect(worker.state.dispatch.dispatchState).toBe('reconciliation_required')
       expect(worker.state.transportCalls).toBe(0)
       expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
-    } finally { vi.unstubAllEnvs() }
+    } finally { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development') }
   })
 
   it('refuses when the current readiness commitment changed after admission', async () => {

@@ -1,5 +1,6 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isRecord } from '@/modules/common/is-record'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import { isX402PaymentRequirementForProfile, type X402PaymentProfile } from './x402-payment-profile'
 import type { X402PaymentSignatureRequest } from './x402-challenge'
@@ -52,17 +53,6 @@ function normalizeTypedDataValue(value: unknown): unknown {
 }
 
 export function isUnsignedMaterial(value: unknown): value is CdpX402PaymentUnsignedMaterial {
-  return isUnsignedMaterialShape(value, true)
-}
-
-export function isRecoverableUnsignedMaterial(value: unknown): value is CdpX402PaymentUnsignedMaterial {
-  return isUnsignedMaterialShape(value, false)
-}
-
-function isUnsignedMaterialShape(
-  value: unknown,
-  requireSchemaValidDomain: boolean,
-): value is CdpX402PaymentUnsignedMaterial {
   if (!isRecord(value) || value.x402Version !== 2) return false
   if (!isRecord(value.resource) || typeof value.resource.url !== 'string') return false
   if (!isRecord(value.accepted) || !isRecord(value.accepted.extra)) return false
@@ -89,11 +79,80 @@ function isUnsignedMaterialShape(
     || !isRecord(value.typedData.types)
     || typeof value.typedData.primaryType !== 'string'
     || !isRecord(value.typedData.message)
-    || (requireSchemaValidDomain && (
+    || (
       typeof value.typedData.domain.chainId !== 'number'
       || !Number.isSafeInteger(value.typedData.domain.chainId)
       || value.typedData.domain.chainId <= 0
-    ))
+    )
+  ) return false
+  return true
+}
+
+const EIP3009_TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+} as const
+const EIP3009_FIELDS = ['from', 'to', 'value', 'validAfter', 'validBefore', 'nonce'] as const
+
+/**
+ * Requires one supported USDC lane and the exact EIP-3009 signing schema.
+ * Ensures every signed field describes the accepted payment authorization.
+ * No lifetime check here: forensic replay may inspect an expired authorization.
+ */
+export function isExactUnsignedMaterial(
+  material: CdpX402PaymentUnsignedMaterial,
+  profile: X402PaymentProfile,
+  maxAtomic?: bigint,
+): boolean {
+  if (
+    !isUnsignedMaterial(material)
+    || !isX402PaymentRequirementForProfile(material.accepted, profile, maxAtomic)
+  ) return false
+  const { authorization, typedData, accepted } = material
+  const { domain, message } = typedData
+  if (
+    Object.keys(authorization).length !== EIP3009_FIELDS.length
+    || Object.keys(message).length !== EIP3009_FIELDS.length
+    || !isEvmAddress(authorization.from)
+    || !isEvmAddress(authorization.to)
+    || !isEvmAddress(message.from)
+    || !isEvmAddress(message.to)
+    || !isEip3009Nonce(authorization.nonce)
+    || !isEip3009Nonce(message.nonce)
+    || authorization.from.toLowerCase() !== message.from.toLowerCase()
+    || accepted.payTo.toLowerCase() !== authorization.to.toLowerCase()
+    || authorization.to.toLowerCase() !== message.to.toLowerCase()
+    || accepted.amount !== authorization.value
+    || authorization.value !== message.value
+    || authorization.validAfter !== message.validAfter
+    || authorization.validBefore !== message.validBefore
+    || authorization.nonce.toLowerCase() !== message.nonce.toLowerCase()
+    || !decimalAtomicAmount(authorization.value)
+    || !decimalAtomicAmount(authorization.validAfter)
+    || !decimalAtomicAmount(authorization.validBefore)
+    || BigInt(authorization.value) >= 2n ** 256n
+    || BigInt(authorization.validAfter) >= 2n ** 256n
+    || BigInt(authorization.validBefore) >= 2n ** 256n
+    || BigInt(authorization.validAfter) >= BigInt(authorization.validBefore)
+    || paymentAuthorizationExpiryFromValidBefore(authorization.validBefore) === undefined
+    || typedData.primaryType !== 'TransferWithAuthorization'
+    || stableStringify(typedData.types as StableHashValue) !== stableStringify(EIP3009_TYPES)
+    || Object.keys(domain).length !== 4
+    || typeof accepted.extra.name !== 'string'
+    || accepted.extra.name.length === 0
+    || typeof accepted.extra.version !== 'string'
+    || accepted.extra.version.length === 0
+    || domain.name !== accepted.extra.name
+    || domain.version !== accepted.extra.version
+    || domain.chainId !== chainIdFromNetwork(profile.network)
+    || !isEvmAddress(domain.verifyingContract)
+    || domain.verifyingContract.toLowerCase() !== profile.asset.toLowerCase()
   ) return false
   return true
 }

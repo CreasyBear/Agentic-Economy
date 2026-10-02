@@ -3,9 +3,124 @@ import { describe, expect, it } from 'vitest'
 import {
   bootValidationClass,
   clerkMiddlewareConfigured,
+  deploymentPaymentEnvironment,
   resolveDeploymentMode,
+  readReleaseSourceRevision,
   vercelPreviewHosts,
 } from '@/lib/deployment/environment'
+
+describe('readReleaseSourceRevision', () => {
+  const revision = 'a'.repeat(40)
+  const otherRevision = 'b'.repeat(40)
+
+  it.each([
+    ['explicit local', { AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['provider only', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision }, revision],
+    ['matching markers', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['trimmed markers', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: ` ${revision}\n`, AE_RELEASE_SOURCE_REVISION: `\t${revision} ` }, revision],
+    ['blank provider falls back', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: ' \t', AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['blank explicit uses provider', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: ' ' }, revision],
+    ['conflicting markers', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: otherRevision }, undefined],
+    ['malformed provider refuses fallback', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: 'bad', AE_RELEASE_SOURCE_REVISION: revision }, undefined],
+    ['malformed explicit refuses provider', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: revision, AE_RELEASE_SOURCE_REVISION: 'bad' }, undefined],
+    ['uppercase explicit', { AE_RELEASE_SOURCE_REVISION: 'A'.repeat(40) }, undefined],
+    ['short explicit', { AE_RELEASE_SOURCE_REVISION: revision.slice(1) }, undefined],
+    ['long provider', { VERCEL: '1', VERCEL_GIT_COMMIT_SHA: `${revision}0` }, undefined],
+    ['missing', {}, undefined],
+    ['non-Vercel provider ignored', { VERCEL_GIT_COMMIT_SHA: revision }, undefined],
+    ['non-Vercel explicit authoritative', { VERCEL: '0', VERCEL_GIT_COMMIT_SHA: otherRevision, AE_RELEASE_SOURCE_REVISION: revision }, revision],
+    ['exact provider flag required', { VERCEL: ' 1', VERCEL_GIT_COMMIT_SHA: revision }, undefined],
+  ])('selects only coherent identity: %s', (_label, input, expected) => {
+    const env = Object.freeze({ ...input })
+    const original = { ...env }
+    expect(readReleaseSourceRevision(env)).toBe(expected)
+    expect(env).toEqual(original)
+  })
+})
+
+describe('deploymentPaymentEnvironment', () => {
+  it.each([
+    ['production', 'production'],
+    ['development', 'sandbox'],
+  ] as const)('maps exact %s declarations to %s', (declaration, expected) => {
+    expect(deploymentPaymentEnvironment({ AE_DEPLOYMENT_ENVIRONMENT: declaration })).toBe(expected)
+  })
+
+  it.each([
+    undefined,
+    '',
+    ' ',
+    '\t\n',
+    ' production',
+    'production ',
+    ' development ',
+    '\tdevelopment\n',
+    'Production',
+    'PRODUCTION',
+    'Development',
+    'DEVELOPMENT',
+    'sandbox',
+    'preview',
+    'test',
+    'staging',
+    'invalid',
+  ])('returns undefined for unsupported declaration %j', (declaration) => {
+    expect(deploymentPaymentEnvironment({ AE_DEPLOYMENT_ENVIRONMENT: declaration })).toBeUndefined()
+  })
+
+  it.each([
+    ['production', 'production', 'development', 'preview', 'sandbox', 'sk_test_example'],
+    ['development', 'sandbox', 'production', 'production', 'live', 'sk_live_example'],
+  ] as const)(
+    'uses the %s declaration despite conflicting hosting, service and key hints',
+    (declaration, expected, nodeEnvironment, vercelEnvironment, serviceMode, stripeKey) => {
+      expect(deploymentPaymentEnvironment({
+        AE_DEPLOYMENT_ENVIRONMENT: declaration,
+        NODE_ENV: nodeEnvironment,
+        VERCEL_ENV: vercelEnvironment,
+        AE_SERVICE_MODE: serviceMode,
+        STRIPE_SECRET_KEY: stripeKey,
+        CF_PAGES_BRANCH: 'main',
+      })).toBe(expected)
+    },
+  )
+
+  it.each([
+    ['production', 'production', 'live', 'sk_live_example'],
+    ['development', 'preview', 'sandbox', 'sk_test_example'],
+  ] as const)(
+    'returns undefined without a declaration despite %s hosting and payment hints',
+    (nodeEnvironment, vercelEnvironment, serviceMode, stripeKey) => {
+      expect(deploymentPaymentEnvironment({
+        NODE_ENV: nodeEnvironment,
+        VERCEL_ENV: vercelEnvironment,
+        AE_SERVICE_MODE: serviceMode,
+        STRIPE_SECRET_KEY: stripeKey,
+        CF_PAGES_BRANCH: 'main',
+      })).toBeUndefined()
+    },
+  )
+
+  it('returns undefined when the environment has no declaration', () => {
+    expect(deploymentPaymentEnvironment({})).toBeUndefined()
+  })
+
+  it.each(['production', 'development', ' production', undefined])(
+    'does not mutate the environment for declaration %j',
+    (declaration) => {
+      const env = Object.freeze({
+        AE_DEPLOYMENT_ENVIRONMENT: declaration,
+        NODE_ENV: 'production',
+        STRIPE_SECRET_KEY: 'sk_test_example',
+      })
+      const original = { ...env }
+
+      deploymentPaymentEnvironment(env)
+
+      expect(env).toEqual(original)
+    },
+  )
+})
 
 describe('resolveDeploymentMode', () => {
   it('prefers Vercel production over NODE_ENV', () => {

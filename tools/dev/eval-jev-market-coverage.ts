@@ -6,12 +6,16 @@
  * Complexity choice: one experiment runner and data artifacts, not a new market service.
  */
 import { createHash } from 'node:crypto'
+import { listX402DiscoveryResources } from '@coinbase/cdp-sdk'
+import type { X402DiscoveryResource } from '@coinbase/cdp-sdk'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { X402DirectoryEntry } from '../../src/modules/market/x402-directory'
 import type { JevQuestion } from '../../src/modules/decision-engine/contracts'
+import type { X402DirectoryEntry } from '../../src/modules/market/x402-directory'
+import { projectX402DirectoryEntry } from '../../src/modules/market/x402-directory-projection'
+import { readX402DirectoryRawPage } from '../../src/modules/market/x402-directory-source.server'
 
 const needs = [
   { id: 'paper', request: 'Help a Japanese-speaking colleague understand this photographed English document.', contributions: [
@@ -101,8 +105,7 @@ async function main() {
       controls: ['original upstream need search', 'round-robin original/component/catalogue lexical results', 'lexical ordering of expanded pool', 'Jev ordering of identical expanded pool'],
       limits: { pageSize: 1000, maxPages: 30, candidatesPerRetrieval: 20, jevBatchSize: 12, timeoutMs: 10000, retries: 0 },
       codeHash: digest(await readFile(new URL(import.meta.url), 'utf8')) })
-    const { listX402DiscoveryResources } = await import('@coinbase/cdp-sdk')
-    const { readX402DirectoryRawPage, projectX402DirectoryEntry } = await import('../../src/modules/market/x402-directory.server')
+
     const catalogue = new Map<string, Card>()
     const reportedTotals: number[] = []
     let ended = false
@@ -121,7 +124,7 @@ async function main() {
     const search = async (query: string) => {
       const page = await readX402DirectoryRawPage({ query })
       if (page.kind !== 'ok') { retrievalFailures.push(query); return [] }
-      return page.items.map(item => { const card = cardFrom(projectX402DirectoryEntry(item)); if (!catalogue.has(card.resource)) catalogue.set(card.resource, card); return card.resource })
+      return page.items.map((item: X402DiscoveryResource) => { const card = cardFrom(projectX402DirectoryEntry(item)); if (!catalogue.has(card.resource)) catalogue.set(card.resource, card); return card.resource })
     }
     const pools: Pool[] = []
     // Capture catalogue lexical universe before search appends recently observed entries.

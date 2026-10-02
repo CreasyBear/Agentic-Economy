@@ -23,7 +23,7 @@ it('shows complete indexed Provider counts and links to exact storefronts and se
   expect(screen.getByText('5,900')).toBeTruthy()
   const priceCell = screen.getByRole('link', { name: 'View Tools from example.com' }).closest('tr')?.querySelectorAll('td')[1]
   const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
-  expect(buyerPrice?.textContent).toMatch(/AUD.*unavailable/i)
+  expect(buyerPrice?.textContent).toBe('US$0.001')
   expect(buyerPrice?.textContent).not.toContain('USDC')
   expect(sourcePrice?.textContent).toMatch(/Provider.*0\.001 USDC/)
   const store = new URL(screen.getByRole('link', { name: 'View Tools from example.com' }).getAttribute('href')!, 'https://aecon.ai')

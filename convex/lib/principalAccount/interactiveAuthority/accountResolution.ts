@@ -5,24 +5,23 @@ import {
   ACCESS_FACT_QUERY_LIMIT,
   CLERK_ORGANIZATION_PROVIDER_NAMESPACE,
 } from './constants'
-import { clerkActiveOrganizationId, type InteractiveAccountSelectionState } from './clerk'
+import { clerkActiveOrganizationId } from './clerk'
 import { InteractiveAuthorityError } from './errors'
 import type { AuthorityDb } from './shared'
 
-async function resolveClosedWorkspaceActorAccountRef(
+/** The one Account a principal last acted on after it was closed, or null when that is ambiguous. */
+export async function resolveClosedWorkspaceActorAccountRef(
   db: AuthorityDb,
   canonicalPrincipalRef: PrincipalRef,
 ): Promise<string | null> {
   const closedAccounts = await db
     .query('accounts')
-    .filter((filter) => filter.and(
-      filter.eq(filter.field('lifecycle'), 'closed'),
-      filter.eq(filter.field('lastAction.actorPrincipalRef'), canonicalPrincipalRef),
-    ))
-    .collect()
-  if (closedAccounts.length !== 1) return null
+    .withIndex('by_lastAction_actorPrincipalRef_and_lifecycle', (query) => query
+      .eq('lastAction.actorPrincipalRef', canonicalPrincipalRef)
+      .eq('lifecycle', 'closed'))
+    .take(2)
   const [account] = closedAccounts
-  return account?.accountRef ?? null
+  return closedAccounts.length === 1 ? account?.accountRef ?? null : null
 }
 
 async function collectAccessibleAccountRefs(
@@ -45,47 +44,15 @@ async function collectAccessibleAccountRefs(
   ]))
 }
 
-type ActiveAccountResolutionMode = 'require' | 'nullable'
-
-type ActiveAccountResolution<M extends ActiveAccountResolutionMode = ActiveAccountResolutionMode> = Readonly<{
-  activeAccountRef: M extends 'require' ? string : string | null
-  selectionState: InteractiveAccountSelectionState
-}>
-
-export async function resolveActiveAccountRefForPrincipal<M extends ActiveAccountResolutionMode>(
+export async function resolveActiveAccountRefForPrincipal(
   db: AuthorityDb,
   canonicalPrincipalRef: PrincipalRef,
   identity: UserIdentity | undefined,
-  mode: M,
-): Promise<ActiveAccountResolution<M>> {
-  const accounts = await collectAccessibleAccountRefs(db, canonicalPrincipalRef)
-  if (accounts.length === 0) {
+): Promise<Readonly<{ activeAccountRef: string }>> {
+  const accountRefs = await collectAccessibleAccountRefs(db, canonicalPrincipalRef)
+  if (accountRefs.length === 0) {
     const closedAccountRef = await resolveClosedWorkspaceActorAccountRef(db, canonicalPrincipalRef)
-    if (closedAccountRef !== null) {
-      return { activeAccountRef: closedAccountRef, selectionState: 'unique' } as ActiveAccountResolution<M>
-    }
-    throw new InteractiveAuthorityError('account_access_missing')
-  }
-  if (accounts.length === 1) {
-    const firstAccount = accounts[0]
-    if (firstAccount === undefined) {
-      throw new InteractiveAuthorityError('account_access_missing')
-    }
-    return { activeAccountRef: firstAccount, selectionState: 'unique' } as ActiveAccountResolution<M>
-  }
-
-  const selectionRows = await db
-    .query('interactiveSessionSelections')
-    .withIndex('by_principalRef', (query) => query.eq('principalRef', canonicalPrincipalRef))
-    .take(2)
-  if (selectionRows.length > 1) {
-    throw new InteractiveAuthorityError('authority_fact_invalid')
-  }
-  const [selectionRow] = selectionRows
-  if (selectionRow !== undefined) {
-    if (accounts.includes(selectionRow.activeAccountRef)) {
-      return { activeAccountRef: selectionRow.activeAccountRef, selectionState: 'selected' } as ActiveAccountResolution<M>
-    }
+    if (closedAccountRef !== null) return { activeAccountRef: closedAccountRef }
     throw new InteractiveAuthorityError('account_access_missing')
   }
 
@@ -103,13 +70,43 @@ export async function resolveActiveAccountRefForPrincipal<M extends ActiveAccoun
     const [orgBinding] = orgBindings
     if (orgBinding !== undefined
       && orgBinding.lifecycle === 'active'
-      && accounts.includes(orgBinding.accountRef)) {
-      return { activeAccountRef: orgBinding.accountRef, selectionState: 'org_bound' } as ActiveAccountResolution<M>
+      && accountRefs.includes(orgBinding.accountRef)) {
+      return { activeAccountRef: orgBinding.accountRef }
     }
   }
 
-  if (mode === 'nullable') {
-    return { activeAccountRef: null, selectionState: 'selection_required' } as ActiveAccountResolution<M>
-  }
-  throw new InteractiveAuthorityError('active_account_selection_required')
+  const [onlyAccountRef] = accountRefs
+  if (accountRefs.length === 1 && onlyAccountRef !== undefined) return { activeAccountRef: onlyAccountRef }
+
+  // Two or more Accounts and no usable organization claim: a total order, never an error.
+  // Active Accounts win over suspended or pending ones; then personal before organization-bound,
+  // then the Account this principal created, then the oldest.
+  const accounts = await Promise.all(accountRefs.map(async (accountRef) => {
+    const rows = await db
+      .query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', accountRef))
+      .take(2)
+    if (rows.length > 1) throw new InteractiveAuthorityError('account_ambiguous')
+    const [account] = rows
+    if (account === undefined) throw new InteractiveAuthorityError('account_missing')
+    return account
+  }))
+  const active = accounts.filter((account) => account.lifecycle === 'active')
+  const candidates = await Promise.all((active.length > 0 ? active : accounts).map(async (account) => {
+    const activeOrgBindings = await db
+      .query('accountExternalOrganizationBindings')
+      .withIndex('by_accountRef_and_lifecycle', (query) =>
+        query.eq('accountRef', account.accountRef).eq('lifecycle', 'active'))
+      .take(1)
+    return { account, hasActiveOrgBinding: activeOrgBindings.length > 0 }
+  }))
+  candidates.sort((left, right) =>
+    Number(left.hasActiveOrgBinding) - Number(right.hasActiveOrgBinding)
+    || Number(left.account.creationActorPrincipalRef !== canonicalPrincipalRef)
+      - Number(right.account.creationActorPrincipalRef !== canonicalPrincipalRef)
+    || left.account.createdAt - right.account.createdAt
+    || (left.account.accountRef < right.account.accountRef ? -1 : left.account.accountRef > right.account.accountRef ? 1 : 0))
+  const [selected] = candidates
+  if (selected === undefined) throw new InteractiveAuthorityError('account_access_missing')
+  return { activeAccountRef: selected.account.accountRef }
 }

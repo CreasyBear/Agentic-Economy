@@ -67,6 +67,18 @@ describe('ChatHeader', () => {
     expect(screen.getByRole('heading', { name: 'Ask' }).className).not.toContain('sr-only')
   })
 
+  it('names total available credit and exposes the purchased and promotional breakdown', () => {
+    render(<ChatHeader authenticated threadId={null} threadTitle={null} busy={false} sharePath={null} copied={false}
+      balanceLabel="A$15.00" balanceDescription="Purchased credit A$5.00. Promotional credit A$10.00. Next expiry tomorrow."
+      mobileHistory={null} mobileOpen={false} onMobileOpenChange={() => undefined}
+      onToggleHistory={() => undefined} onNewChat={() => undefined} onIssueShare={() => undefined}
+      onRevokeShare={() => undefined} onCopyShare={() => undefined} />)
+    const balance = screen.getByRole('link', { name: 'Available credit A$15.00' })
+    expect(document.getElementById(balance.getAttribute('aria-describedby')!)?.textContent)
+      .toBe('Purchased credit A$5.00. Promotional credit A$10.00. Next expiry tomorrow.')
+    expect(balance.getAttribute('href')).toBe('/owner/credit')
+  })
+
   it('shows the guest sign-in line inside the mobile history sheet', () => {
     vi.stubGlobal('innerWidth', 390)
     const onMobileOpenChange = vi.fn()

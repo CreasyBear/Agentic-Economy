@@ -2,6 +2,7 @@ import Stripe from "stripe";
 
 import { isMoneyRefusal, type MoneyRefusal } from "@/modules/money/public";
 import {
+  expectedStripeMoneyModeForDeployment,
   readStripeMoneyProviderConfig,
   validateStripeMoneyProviderConfig,
   type StripeMoneyClient,
@@ -12,10 +13,14 @@ import {
 export function resolveStripeMoneyProviderContext(
   input: StripeMoneyProviderInput,
 ): StripeMoneyProviderContext | MoneyRefusal {
+  const expectedMode = expectedStripeMoneyModeForDeployment(
+    input.env ?? process.env,
+    input.mode,
+  );
   const configResult =
     input.config === undefined
       ? readStripeMoneyProviderConfig(input.env ?? process.env, input.mode)
-      : validateStripeMoneyProviderConfig(input.config, input.mode);
+      : validateStripeMoneyProviderConfig(input.config, expectedMode);
   if (isMoneyRefusal(configResult)) return configResult;
   return {
     config: configResult,

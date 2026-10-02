@@ -48,8 +48,8 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
     >
       <div className="flex flex-col gap-4 py-4">
         {command.allowed ? null : <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.permission}</AlertDescription></Alert>}
-        {command.clerkFvaAbsent && (command.phase === 'preview' || command.phase === 'confirm' || (command.phase === 'receipt' && command.receipt?.kind === 'refused'))
-          ? <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.fvaUnavailable} <a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Account security</a></AlertDescription></Alert>
+        {command.phase === 'receipt' && command.receipt?.kind === 'refused' && command.receipt.code === 'mfa_reverification_required'
+          ? <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.mfaRequired} <a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Account security</a></AlertDescription></Alert>
           : null}
         {command.error === null ? null : <Alert role="alert" variant="destructive"><AlertDescription>{command.error}</AlertDescription></Alert>}
         {command.phase === 'reason' ? (

@@ -24,7 +24,7 @@ import { rescaleExactAmount } from '@/modules/money/public'
 export type ConvexFixtureBackend = TestConvex<typeof schema>
 export type ConvexFixtureAdmin = Pick<
   ConvexFixtureBackend,
-  'mutation' | 'query' | 'action'
+  'mutation' | 'query' | 'action' | 'run'
 >
 export const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../convex/**/*.{ts,js}')).map(
@@ -75,12 +75,16 @@ export function convexTestWithWorkers(
   const backend = convexTestWithMarketComponents()
   registerWorkpool(backend)
   registerWorkpool(backend, 'stripeWebhookWorkpool')
+  registerWorkpool(backend, 'notificationWorkpool')
   if (options.pauseWorkpool === true) {
     void backend.run(async (ctx) => {
       await ctx.runMutation(components.workpool.config.update, {
         maxParallelism: 0,
       })
       await ctx.runMutation(components.stripeWebhookWorkpool.config.update, {
+        maxParallelism: 0,
+      })
+      await ctx.runMutation(components.notificationWorkpool.config.update, {
         maxParallelism: 0,
       })
     })
@@ -254,6 +258,27 @@ export function testConsequenceProof(
     reverificationId: `test:${canonicalDigest({ identity, commandDigest })}`,
     firstFactorAgeMinutes: 0,
     secondFactorAgeMinutes: -1,
+  }
+}
+
+/** Explicit MFA evidence for consequence tests; the general strict fixture
+ * intentionally retains Clerk's first-factor fallback for other boundaries. */
+export function testMfaConsequenceProof(
+  identity: Readonly<{ subject: string; tokenIdentifier?: string }>,
+  commandDigest: string,
+): Readonly<{
+  reverificationId: string
+  firstFactorAgeMinutes: number
+  secondFactorAgeMinutes: number
+  subject: string
+  evidenceObservedAt: number
+}> {
+  return {
+    reverificationId: `test:mfa:${canonicalDigest({ identity, commandDigest, nonce: crypto.randomUUID() })}`,
+    firstFactorAgeMinutes: 0,
+    secondFactorAgeMinutes: 0,
+    subject: identity.subject,
+    evidenceObservedAt: Date.now(),
   }
 }
 

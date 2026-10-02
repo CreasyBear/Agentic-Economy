@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
-import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
+import timezonePaymentRequired20260819Fixture from '../../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json'
+const timezoneFixture = timezonePaymentRequired20260819Fixture
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
 import { authority, invocation, invokeRouteTransport, preparedX402Custody, providerAuthority, registeredBinding } from './route-transport-test-harness'
 
@@ -85,3 +86,6 @@ it('executes a real admitted Bazaar binding with USDC authority and the selected
   expect(sign).toHaveBeenCalledWith(expect.objectContaining({ selectedRequirement: expect.objectContaining({ amount: '250' }) }))
   expect(send).toHaveBeenCalledTimes(2)
 })
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+afterEach(() => vi.unstubAllEnvs())

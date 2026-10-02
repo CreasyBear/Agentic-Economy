@@ -73,18 +73,26 @@ const x402ReconciliationEvidence = {
   digest: canonicalDigest(x402ReconciliationEvidenceMaterial),
 }
 const receipt: CallReceipt = {
-  commercialModel: 'seller_canary_x402',
+  commercialModel: 'account_aud',
   receiptRef: 'receipt:operation-one',
   state: 'settled',
-  network: 'eip155:8453',
-  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  providerQuotedAmount: { currency: 'USDC', units: '100', exponent: 6 },
-  agenticEconomyFee: { currency: 'USDC', units: '10', exponent: 6 },
-  totalBuyerAuthorization: { currency: 'USDC', units: '110', exponent: 6 },
+  buyerCharge: { currency: 'AUD', units: '100', exponent: 6 },
+  serviceFee: { currency: 'AUD', units: '10', exponent: 6 },
+  totalBuyerCharge: { currency: 'AUD', units: '110', exponent: 6 },
+  providerObligation: {
+    amount: { currency: 'USDC', units: '100', exponent: 6 },
+    settlementMethod: 'managed_x402',
+    payoutEligible: false,
+  },
+  providerSettlement: {
+    network: 'eip155:8453',
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    amount: { currency: 'USDC', units: '100', exponent: 6 },
+    transactionHash: '0xsettlement',
+    paymentIdentifier: 'payment:opaque',
+  },
   priceDigest: 'sha256:price',
   transactionRef: 'money:operation-one',
-  settlementTransactionHash: '0xsettlement',
-  paymentIdentifier: 'payment:opaque',
   accountingTransactionRefs: ['money:operation-one'],
   refundState: 'not_applicable',
   lossState: 'none',
@@ -201,8 +209,8 @@ describe('Call recovery actions', () => {
     expect(settled).toMatchObject({
       receipt: {
         state: 'settled',
-        commercialModel: 'seller_canary_x402',
-        paymentIdentifier: 'payment:opaque',
+        commercialModel: 'account_aud',
+        providerSettlement: { paymentIdentifier: 'payment:opaque' },
       },
     })
 

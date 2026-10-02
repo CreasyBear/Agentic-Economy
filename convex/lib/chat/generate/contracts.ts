@@ -6,6 +6,7 @@ export const generateArgs = v.object({
   promptMessageId: v.string(),
   authority: v.optional(interactiveAuthorityContextValue),
   turnRef: v.optional(v.string()),
+  deadlineAt: v.optional(v.number()),
 })
 export const generateResult = v.null()
 export type GenerateArgs = Infer<typeof generateArgs>

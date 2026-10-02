@@ -6,6 +6,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import { insertToolEvidence } from './marketListingEvidence'
 
 export type MarketEvidenceKind =
+  | 'ae_answer_reported'
   | 'ae_invocation'
   | 'ae_invocation_completed'
   | 'ae_settlement'
@@ -27,7 +28,7 @@ export async function recordMarketEvidenceFact(
   kind: MarketEvidenceKind,
   sourceRef: string,
   occurredAt: number,
-  listing?: Readonly<{ toolRef: string; durationMs?: number }>,
+  listing?: Readonly<{ toolRef: string; durationMs?: number; reporterRef?: string }>,
 ): Promise<void> {
   const existing = await ctx.db.query('marketEvidenceFacts')
     .withIndex('by_kind_and_sourceRef', (query) => query.eq('kind', kind).eq('sourceRef', sourceRef))
@@ -41,6 +42,7 @@ export async function recordMarketEvidenceFact(
       ? {}
       : {
           toolRef: listing.toolRef,
+          ...(listing.reporterRef === undefined ? {} : { reporterRef: listing.reporterRef }),
           ...(listing.durationMs === undefined ? {} : { durationMs: listing.durationMs }),
         }),
   })

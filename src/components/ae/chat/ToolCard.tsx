@@ -27,25 +27,36 @@ import {
   chatShowingTools,
   chatToolStatus,
 } from '@/lib/public/chat-ia'
-import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import {
   toolCardState,
+  toolChoiceReadinessLabel,
   type ChatNeedActions,
   type ToolCardProjection,
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
 import { NeedSaveAction } from './need-save-action/NeedSaveAction'
-import type { SearchNextProps, ToolCardProps } from './presentation'
+import { PaidCallReportControl } from '@/components/ae/call-receipt/PaidCallReportControl'
+import { RecoveryNotice } from './recovery/RecoveryNotice'
+import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './presentation'
+import type { RunIntent } from '@/modules/chat/run-request'
+import { readChatRecoveryReason } from './recovery/recovery.view-model'
+import type { ChatRecoveryReason } from './recovery/recovery.contracts'
+
+type ToolCardProps = ToolCardBaseProps & Readonly<{
+  onAddCredit?: ((shortfall?: { units: string; exponent: number }, run?: RunIntent) => void) | undefined
+}>
 
 export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
-
-const READY_NOW_LABEL = getStatusPresentation('ready_now').label
-const SETUP_REQUIRED_LABEL = getStatusPresentation('setup_required').label
-const UNAVAILABLE_LABEL = getStatusPresentation('unavailable').label
+export const PaidCallReportOwnerContext = createContext<Readonly<{ onPosted: () => void }> | null>(null)
 
 function inspectHref(toolRef: string): string {
   return `/tools/${encodeURIComponent(toolRef)}`
 }
+function safeRecoveryReason(reason: string | undefined, fallback: ChatRecoveryReason): ChatRecoveryReason {
+  const known = readChatRecoveryReason(reason)
+  return known === 'unknown' ? fallback : known
+}
+
 
 function choiceInitial(title: string): string {
   return title.trim().charAt(0).toUpperCase() || 'T'
@@ -53,22 +64,21 @@ function choiceInitial(title: string): string {
 
 
 function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
-  const highlightedReadiness = choice.readiness === READY_NOW_LABEL
-    || choice.readiness === SETUP_REQUIRED_LABEL || choice.readiness === UNAVAILABLE_LABEL
+  const readinessLabel = choice.readiness === undefined ? undefined : toolChoiceReadinessLabel(choice.readiness)
   return (
     <Item
       variant="muted"
       size="sm"
       render={
-        <a href={choice.detailHref ?? inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness)}>
+        <a href={choice.detailHref ?? inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness === 'ready' ? 'Ready now' : undefined)}>
           <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
             {choiceInitial(choice.title)}
           </ItemMedia>
           <ItemContent>
             <ItemHeader>
               <ItemTitle>{choice.title}</ItemTitle>
-              {choice.readiness === undefined || !highlightedReadiness ? null : (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === READY_NOW_LABEL ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{choice.readiness}</span>
+              {readinessLabel === undefined ? null : (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === 'ready' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{readinessLabel}</span>
               )}
             </ItemHeader>
             {choice.provider === undefined ? null : (
@@ -112,7 +122,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
                 </TableCell>
                 <TableCell>{choice.provider ?? ''}</TableCell>
                 <TableCell className="tabular-nums">{choice.price ?? ''}</TableCell>
-                <TableCell>{choice.readiness ?? ''}</TableCell>
+                <TableCell>{choice.readiness === undefined ? '' : toolChoiceReadinessLabel(choice.readiness)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -163,30 +173,36 @@ export function SearchNext({ next, onContinueSearch, onRepeatSearch, signedThrea
     return <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
       className={buttonVariants({ variant: 'outline', size: 'sm' })}>Browse Tools in the Market</a>
   }
-  if (next.action === 'broaden') return <p className="text-sm">Next: broaden “{next.args.query}” or browse the Market.</p>
-  if (next.action === 'retry') return <p className="text-sm">Next: retry “{next.args.query}”.</p>
+  if (next.action === 'broaden') return (
+    <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
+      className={buttonVariants({ variant: 'outline', size: 'sm' })}>{chatBrowseMarket}</a>
+  )
+  if (next.action === 'retry') return onRepeatSearch === undefined
+    ? <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
+      className={buttonVariants({ variant: 'outline', size: 'sm' })}>{chatBrowseMarket}</a>
+    : <Button type="button" variant="outline" size="sm" className="min-h-touch"
+      onClick={() => onRepeatSearch(next.args.query)}>Try again</Button>
   return null
 }
 
-function CardBody({ projection }: { projection: ToolCardProjection }) {
+function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['onAddCredit'], reportOwner?: { onPosted: () => void } | null) {
   switch (projection.kind) {
     case 'working':
     case 'clarify':
       return null
-    case 'status':
-      return (
-        <Alert variant={projection.state === 'error' ? 'destructive' : 'default'}>
-          <AlertDescription>{projection.summary}</AlertDescription>
-        </Alert>
-      )
+    case 'status': {
+      if (projection.state === 'attention') {
+        return <Alert><AlertDescription>{projection.summary}</AlertDescription></Alert>
+      }
+      const funding = projection.funding
+      const reason = safeRecoveryReason(projection.recoveryReason, 'tool_unavailable')
+      return <RecoveryNotice reason={reason}
+        {...(reason !== 'insufficient_balance' || onAddCredit === undefined
+          ? {} : { onAddCredit: () => onAddCredit(funding) })} />
+    }
     case 'choices':
       return (
         <div className="grid gap-related">
-          {projection.verdict === 'scoped' ? (
-            <Alert><AlertDescription>{projection.coverage === 'complete'
-              ? 'These external listings are not callable through AE.'
-              : 'Only part of the catalogue was assessed. These external listings are not an AE Tool recommendation.'}</AlertDescription></Alert>
-          ) : null}
           {projection.choices.length === 0 ? null : projection.toolId === 'registry.tools.compare' || projection.surface === 'compare'
             ? <CompareTable choices={projection.choices} />
             : <ChoiceList choices={projection.choices} />}
@@ -201,10 +217,24 @@ function CardBody({ projection }: { projection: ToolCardProjection }) {
         : <AeFactList density="compact" facts={projection.facts} />
     case 'execute':
       return (
-        <Alert variant={projection.state === 'reconciliation_required' ? 'destructive' : 'default'}>
-          <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
-          <AlertDescription>{projection.summary}</AlertDescription>
-        </Alert>
+        <div className="grid gap-intra">
+          {projection.state === 'refused' || projection.state === 'reconciliation_required' ? (
+            <RecoveryNotice
+              reason={safeRecoveryReason(projection.recoveryReason, projection.state === 'reconciliation_required' ? 'outcome_unknown' : 'tool_unavailable')}
+              {...(projection.callRef === undefined ? {} : { callRefs: [projection.callRef] })}
+              {...(projection.state !== 'refused' || projection.recoveryReason !== 'insufficient_balance' || onAddCredit === undefined
+                ? {} : { onAddCredit: () => onAddCredit() })}
+            />
+          ) : (
+            <Alert variant="default">
+              <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
+              <AlertDescription>{projection.summary}</AlertDescription>
+            </Alert>
+          )}
+          {projection.state === 'completed' && projection.paid !== undefined && projection.callRef !== undefined && reportOwner != null
+            ? <PaidCallReportControl key={projection.callRef} callRef={projection.callRef} paidLabel={projection.paid} onPosted={reportOwner.onPosted} />
+            : projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
+        </div>
       )
     default: {
       const exhaustive: never = projection
@@ -225,7 +255,7 @@ function ExecuteNextAction({ projection }: Readonly<{
   projection: Extract<ToolCardProjection, { kind: 'execute' }>
 }>) {
   const suggestedNextAction = projection.suggestedNextAction
-  if (suggestedNextAction === undefined) return null
+  if (suggestedNextAction === undefined || projection.state === 'reconciliation_required' || projection.state === 'refused') return null
   if (suggestedNextAction.href !== undefined) {
     return (
       <a
@@ -250,8 +280,9 @@ const STATUS_VARIANT = {
   error: 'destructive',
 } as const
 
-export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread }: ToolCardProps) {
+export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread, onAddCredit }: ToolCardProps) {
   const needActions = useContext(ChatNeedActionsContext)
+  const reportOwner = useContext(PaidCallReportOwnerContext)
   if (projection.kind === 'working') {
     return (
       <p className="flex items-center gap-related text-sm text-muted-foreground" role="status">
@@ -273,7 +304,7 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
         </CardAction>
       </CardHeader>
       <CardContent>
-        <CardBody projection={projection} />
+        {cardBody(projection, onAddCredit, reportOwner)}
       </CardContent>
       {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
         || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (
@@ -285,9 +316,11 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
             {...(signedThread === undefined ? {} : { signedThread })} />}
           {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
         </CardFooter>
-      ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined ? (
-        <CardFooter>
+      ) : projection.kind === 'execute' ? (
+        <CardFooter className="flex flex-wrap gap-related">
           <ExecuteNextAction projection={projection} />
+          <a href="/trust" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
+            className="inline-flex min-h-touch items-center text-sm text-muted-foreground underline underline-offset-4">Trust centre</a>
         </CardFooter>
       ) : null}
     </Card>

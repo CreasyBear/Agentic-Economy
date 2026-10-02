@@ -22,6 +22,7 @@ import {
   prepareFundedProductionBuyer,
   prepareFundedSandboxBuyer as prepareFundedSandboxBuyerHarness,
   quoteByCallKey,
+  readEvidence,
   registerRotatingBuyer,
   seedPrincipal,
   type PrepareBuyerOptions,
@@ -31,6 +32,7 @@ import { components, api, internal } from '../../convex/_generated/api'
 import {
   convexTestWithWorkers,
   publishedBusinessOwner,
+  testMfaConsequenceProof,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import {
@@ -51,6 +53,7 @@ import {
   quoteAudAccountFunding,
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
+import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../helpers/payment-readiness-fixture'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
@@ -89,6 +92,14 @@ import {
 
 const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
 const external = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn() }))
+// External vendor result only: canonical audit, current authority and all four
+// durable spend ceilings still run through the registered production path.
+vi.mock('@/modules/money/x402-payee-screening.server', () => ({
+  screenX402Payee: async (request: Record<string, unknown>) => ({ ...request,
+    provider: 'trm-wallet-screening', outcome: 'clear', startedAt: Date.now(), checkedAt: Date.now(),
+    reason: 'native_journey_external_provider_fixture',
+  }),
+}))
 vi.mock('@coinbase/cdp-sdk', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   CdpClient: class { constructor() { return external.cdpClient() } },
@@ -462,39 +473,6 @@ async function statusQueryArgs(principal: TestPrincipal, callRef: string, suffix
   return await withSourceWriteCommand('protected_action', args, args)
 }
 
-async function readEvidence(
-  backend: ConvexFixtureBackend,
-  callRef: string,
-) {
-  return await backend.run(async (ctx) => {
-    const call = await ctx.db.query('capabilityCalls')
-      .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
-      .unique()
-    const control = await ctx.db.query('actionExecutionControls')
-      .withIndex('by_executionRef', (query) => query.eq('executionRef', callRef))
-      .unique()
-    const attempt = await ctx.db.query('actionExecutionAttempts')
-      .withIndex('by_executionRef_and_attemptRef', (query) => (
-        query.eq('executionRef', callRef).eq('attemptRef', call?.attemptRef ?? '')
-      ))
-      .unique()
-    const projection = await ctx.db.query('capabilityCallProjections')
-      .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
-      .unique()
-    const history = await ctx.db.query('actionExecutionHistory')
-      .withIndex('by_executionRef_and_executionVersion', (query) => query.eq('executionRef', callRef))
-      .order('asc')
-      .collect()
-    return {
-      call,
-      control,
-      attempt,
-      history,
-      projection,
-    }
-  })
-}
-
 afterEach(() => {
   vi.useRealTimers()
   quoteByCallKey.clear()
@@ -537,6 +515,8 @@ describe('capability Call Workpool lifecycle', () => {
         input,
       } = await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
       await seedCommercialPolicies(backend, Date.now())
+      await seedTreasuryReadinessFacts(backend, { observation: 'preserve', availableUnits: '9990000' })
+      await seedPaymentReadiness(backend)
       const deliveries: string[] = []
       const providerRequests: Array<{ url: string; paid: boolean }> = []
       const settlementHash: Hex = `0x${'6'.repeat(64)}`
@@ -647,7 +627,13 @@ describe('capability Call Workpool lifecycle', () => {
       if (pending.kind !== 'pending') throw new Error(`production_call_missing:${JSON.stringify(pending)}`)
       await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
       const completed = await readEvidence(backend, pending.callRef)
-      expect(completed.call).toMatchObject({
+      const signingEvidence = await backend.run(async ctx => ({
+        screening: (await ctx.db.query('moneyX402PayeeScreeningChecks').collect()).map(row => ({
+          admission: row.admission, code: row.refusalCode, provider: row.decision.outcome })),
+        attempts: (await ctx.db.query('moneyX402PaymentAttempts').collect()).map(row => ({
+          state: row.state, code: row.authorizationFailureCode, detail: row.authorizationFailureDetail })),
+      }))
+      expect(completed.call, JSON.stringify(signingEvidence)).toMatchObject({
         state: 'completed',
         environment: 'production',
         quoteRef: quote.quoteRef,
@@ -709,6 +695,8 @@ describe('capability Call Workpool lifecycle', () => {
       const { backend, published, buyer, resource, readBalance, signedAuthorizations, input } =
         await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
       await seedCommercialPolicies(backend, Date.now())
+      await seedTreasuryReadinessFacts(backend, { observation: 'preserve', availableUnits: '9990000' })
+      await seedPaymentReadiness(backend)
       const original = resource.paymentRequired
       const cases = [
         ['network', (challenge: typeof original) => ({ ...challenge, accepts: challenge.accepts.map((item) => ({ ...item, network: BASE_SEPOLIA_NETWORK })) })],
@@ -883,8 +871,7 @@ describe('capability Call Workpool lifecycle', () => {
     if (winner?.kind !== 'pending') throw new Error('period_race_winner_missing')
     const booking = await backend.query(internal.moneyManagedCall.readBooking, { callRef: winner.callRef })
     if (booking.kind !== 'available' || booking.booking.spendingPeriods === undefined) throw new Error('period_race_booking_missing')
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
     expect(await quote('period-race-refreshed')).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
     const key = 'period-race-cancel'
@@ -999,8 +986,7 @@ describe('capability Call Workpool lifecycle', () => {
       kind: 'refused', code: 'commercial_policy_unavailable', retryable: false,
       nextAction: 'Request a new Quote for this Tool to check current funds and spending limits. Contact AE support if the purchase remains unavailable.',
     })
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     const shortfall = await quote('funds-refresh')
     expect(shortfall).toMatchObject({ kind: 'refused', code: 'insufficient_balance', retryable: false })
     if (shortfall.kind !== 'refused' || shortfall.continuation?.action !== 'funding.handoff.create') throw new Error('funds_handoff_missing')
@@ -1091,8 +1077,7 @@ describe('capability Call Workpool lifecycle', () => {
       expect(newQuote).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
     }
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     const cancel = async (callRef: string, key: string) => await backend.action(api.capabilityCalls.cancelCall, {
       ...await recoveryActionArgs(successor, callRef, key, `cancel:${key}`), idempotencyKey: key,
     })
@@ -1112,6 +1097,87 @@ describe('capability Call Workpool lifecycle', () => {
     await expectAgentPeriodBalances(formance, booking.booking, limitUnits)
     expect(signedAuthorizations).toHaveLength(0)
     expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+  })
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('reports a completed paid answer and recovers after native refund before local acknowledgement', async () => {
+    let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
+    const { backend, published, buyer, resource, payer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
+      buyerSetup: async backend => { registered = await registerRotatingBuyer(backend, '5000000', '5000000'); return registered },
+    })
+    if (registered === undefined) throw new Error('report_owner_missing')
+    const owner = registered.owner
+    const transactionHash: Hex = `0x${'6'.repeat(64)}`
+        providerFetch.mockImplementation(async (_url, init) => {
+      const payment = new Headers(init?.headers as HeadersInit).get('payment-signature')
+      if (payment === null) return new UndiciResponse('', { status: 402,
+        headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) } })
+      const { authorization } = decodePaymentSignatureHeader(payment).payload as {
+        authorization: { from: Hex; to: Hex; value: string; validAfter: string; validBefore: string; nonce: Hex }
+      }
+      external.receipt.mockResolvedValue({ transactionHash, status: 'success', confirmations: 12n,
+        blockHash: `0x${'7'.repeat(64)}`, blockNumber: 100n,
+        observedBlockTimestamp: BigInt(Math.floor(Date.now() / 1000)), authorizationState: true,
+        transactionTo: BASE_SEPOLIA_USDC_ADDRESS,
+        transactionInput: encodeFunctionData({ abi: eip3009ABI, functionName: 'transferWithAuthorization', args: [
+          authorization.from, authorization.to, BigInt(authorization.value), BigInt(authorization.validAfter),
+          BigInt(authorization.validBefore), authorization.nonce, 27, `0x${'b'.repeat(64)}`, `0x${'c'.repeat(64)}`,
+        ] }),
+        logs: [{ address: BASE_SEPOLIA_USDC_ADDRESS,
+          data: encodeAbiParameters([{ type: 'uint256' }], [BigInt(authorization.value)]),
+          topics: encodeEventTopics({ abi: erc20Abi, eventName: 'Transfer', args: { from: authorization.from, to: authorization.to } }),
+        }],
+      })
+      return new UndiciResponse(JSON.stringify({ result: 'reported answer' }), { status: 200, headers: { 'Content-Type': 'application/json',
+        'Payment-Response': encodePaymentResponseHeader({ success: true, transaction: transactionHash,
+          network: BASE_SEPOLIA_NETWORK, payer: payer.address }),
+      } })
+    })
+    const pending = await invokeCall(backend, buyer.principal, published.toolRef, 'report-completed', 'report-completed')
+    if (pending.kind !== 'pending') throw new Error(`report_call_missing:${JSON.stringify(pending)}`)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    const original = (await readEvidence(backend, pending.callRef)).call
+    const signingEvidence = await backend.run(async ctx => ({
+      screening: (await ctx.db.query('moneyX402PayeeScreeningChecks').collect()).map(row => ({
+        admission: row.admission, code: row.refusalCode, provider: row.decision.outcome })),
+      attempts: (await ctx.db.query('moneyX402PaymentAttempts').collect()).map(row => ({
+        state: row.state, code: row.authorizationFailureCode, detail: row.authorizationFailureDetail,
+        currency: row.currency, exponent: row.exponent,
+      })),
+    }))
+    expect(original, JSON.stringify(signingEvidence)).toMatchObject({ state: 'completed', formanceFinancialState: 'settled', result: { kind: 'completed' } })
+    expect(signingEvidence.screening).toEqual([{ admission: 'admitted', code: undefined, provider: 'clear' }])
+    expect(signingEvidence.attempts).toEqual([expect.objectContaining({ currency: 'USDC', exponent: 6 })])
+    expect(await owner.query(api.capabilityCallReports.readOwner, { callRef: pending.callRef }))
+      .toMatchObject({ kind: 'eligible', amountUnits: '12000', remainingToday: 3 })
+    expect(await backend.action(api.capabilityCallReports.reportOwner, { callRef: pending.callRef }))
+      .toMatchObject({ kind: 'refused', code: 'owner_required' })
+    expect(await owner.mutation(internal.capabilityCallReports.admit, { callRef: pending.callRef }))
+      .toMatchObject({ kind: 'pending' })
+    const work = await backend.mutation(internal.capabilityCallReports.claimWork, { callRef: pending.callRef })
+    if (work === null) throw new Error('report_work_missing')
+    // Native posting succeeds, then the process stops before recording completion.
+    expect(await backend.action(internal.moneyFormance.refundSettledSale, work)).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await owner.query(api.capabilityCallReports.readOwner, { callRef: pending.callRef })).toMatchObject({ kind: 'pending' })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    const retries = await Promise.all([0, 1].map(() => owner.action(api.capabilityCallReports.reportOwner, { callRef: pending.callRef })))
+    expect(retries).toEqual([expect.objectContaining({ kind: 'posted' }), expect.objectContaining({ kind: 'posted' })])
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    const after = await readEvidence(backend, pending.callRef)
+    expect(after.call).toMatchObject({ state: 'completed', formanceFinancialState: 'released',
+      formanceSettlementRefs: original!.formanceSettlementRefs,
+      result: { kind: 'completed', output: original!.result!.kind === 'completed' ? original!.result!.output : null,
+        receipt: { state: 'refunded', refundState: 'released' } }, usage: { chargeState: 'refunded' } })
+    expect(after.projection).toMatchObject({ state: 'completed', deliveryState: 'delivered', paymentState: 'released', providerObligationState: 'settled' })
+    const evidence = await backend.run(async ctx => ({
+      reports: await ctx.db.query('paidCallReports').collect(),
+      facts: await ctx.db.query('marketEvidenceFacts').withIndex('by_kind_and_sourceRef', q => q.eq('kind', 'ae_answer_reported')).collect(),
+      resolution: await ctx.db.query('purchaseResolutionRecords').withIndex('by_callRef', q => q.eq('callRef', pending.callRef)).unique(),
+    }))
+    expect(evidence.reports).toHaveLength(1)
+    expect(evidence.facts).toHaveLength(1)
+    expect(evidence.resolution).toMatchObject({ terminalState: 'refunded' })
+    expect(evidence.reports[0]?.originalResolution).toMatchObject({ terminalState: 'completed' })
+    expect(signedAuthorizations).toHaveLength(1)
   })
 
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('updates owner limits without reviving stale Quotes, reminting usage or stranding accepted Calls', async () => {
@@ -1134,11 +1200,12 @@ describe('capability Call Workpool lifecycle', () => {
     if (original.kind !== 'available') throw new Error('policy_original_booking_missing')
     await expectAgentPeriodBalances(formance, original.booking, '24000')
     const amount = (units: string) => ({ currency: 'AUD', exponent: 6, units })
-    const update = (expectedGeneration: number, units: string, key: string) => owner.mutation(api.agentSpendingPolicy.updateForServer, {
+    const update = async (expectedGeneration: number, units: string, key: string, withMfa = false) => owner.mutation(api.agentSpendingPolicy.updateForServer, await withSourceWrite('protected_action', {
       principalRef: buyer.principal.principalId, expectedGeneration, idempotencyKey: key,
       maximumSpendPerCall: amount('12000'), maximumDailySpend: amount(units), maximumMonthlySpend: amount(units),
-      correlationRef: `policy-update:${key}`,
-    })
+      correlationRef: `policy-update:${key}`, operationKey: `agent-spending-limits:${key}`, correlationId: `policy-update:${key}`,
+      ...(withMfa ? { proof: testMfaConsequenceProof({ subject: registered!.subject }, `policy-update:${key}`) } : {}),
+    }))
     expect(await owner.query(api.agentSpendingPolicy.readCurrent, { principalRef: buyer.principal.principalId }))
       .toMatchObject({ kind: 'known', generation: 1, maximumDailySpend: amount('36000') })
     const lowered = await update(1, '12000', 'lower')
@@ -1148,8 +1215,7 @@ describe('capability Call Workpool lifecycle', () => {
       principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, quoteRef: stale.quoteRef,
       idempotencyKey: 'stale-policy-call', operationKey: 'stale-policy-call', correlationId: 'stale-policy-call',
     }))).toMatchObject({ kind: 'refused', code: 'operation_not_current' })
-    expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+    expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', stale.quoteRef)).unique()))
       .toMatchObject({ state: 'issued' })
     expect(await quote('lowered')).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
@@ -1162,14 +1228,14 @@ describe('capability Call Workpool lifecycle', () => {
 
     // A real native increase succeeds before its source acknowledgement. A newer
     // owner decision must recover that exact pending command, then only its delta.
-    expect(await update(2, '24000', 'intermediate')).toMatchObject({ kind: 'completed', generation: 3 })
+    expect(await update(2, '24000', 'intermediate', true)).toMatchObject({ kind: 'completed', generation: 3 })
     const pending = await backend.mutation(internal.capabilityQuotes.prepareSpendingPeriods, {
       principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, toolRef: published.toolRef,
     })
     if (pending.kind !== 'prepared' || pending.commands.length !== 2) throw new Error('policy_pending_delta_missing')
     const submitted = await backend.action(internal.moneyFormance.adjustSpendingPeriod, pending.commands[0]!)
     expect(submitted).toMatchObject({ kind: 'completed', replayed: false })
-    expect(await update(3, '36000', 'latest')).toMatchObject({ kind: 'completed', generation: 4 })
+    expect(await update(3, '36000', 'latest', true)).toMatchObject({ kind: 'completed', generation: 4 })
     const latest = await quote('latest-after-lost-ack')
     expect(latest).toMatchObject({ kind: 'committed' })
     await expectAgentPeriodBalances(formance, original.booking, '24000')
@@ -1248,8 +1314,7 @@ describe('capability Call Workpool lifecycle', () => {
         expect(await readFormanceDisplayBalance(formance, { balanceKind, subjectRef, generation, now: Date.now() }))
           .toMatchObject({ kind: 'available', units })
       }
-      const rows = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-        .filter((row) => row.sellerOnboardingCanary === undefined))
+      const rows = await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())
       expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({ callRef: winner.callRef, formanceFinancialState: 'reserved' })
       expect(signedAuthorizations).toHaveLength(0)
@@ -1292,6 +1357,75 @@ describe('capability Call Workpool lifecycle', () => {
   })
 
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each([
+    { status: 200, body: '{"unexpected":true}', label: 'invalid JSON shape' },
+    { status: 200, body: 'not-json', label: 'malformed JSON' },
+    { status: 500, body: 'Provider error', label: 'settled HTTP error' },
+  ])('reconciles $label through the local Formance ledger with one payment and stable replay', async ({ status, body }) => {
+    const { formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer()
+    const transactionHash: Hex = `0x${'6'.repeat(64)}`
+    let paidRequests = 0
+    providerFetch.mockImplementation(async (_url, init) => {
+      const payment = new Headers(init?.headers as HeadersInit).get('payment-signature')
+      if (payment === null) return new UndiciResponse('', { status: 402,
+        headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) } })
+      paidRequests += 1
+      const { authorization } = decodePaymentSignatureHeader(payment).payload as {
+        authorization: { from: Hex; to: Hex; value: string; validAfter: string; validBefore: string; nonce: Hex }
+      }
+      external.receipt.mockResolvedValue({ transactionHash, status: 'success', confirmations: 12n,
+        blockHash: `0x${'7'.repeat(64)}`, blockNumber: 100n,
+        observedBlockTimestamp: BigInt(Math.floor(Date.now() / 1000)), authorizationState: true,
+        transactionTo: BASE_SEPOLIA_USDC_ADDRESS,
+        transactionInput: encodeFunctionData({ abi: eip3009ABI, functionName: 'transferWithAuthorization', args: [
+          authorization.from, authorization.to, BigInt(authorization.value), BigInt(authorization.validAfter),
+          BigInt(authorization.validBefore), authorization.nonce, 27, `0x${'b'.repeat(64)}`, `0x${'c'.repeat(64)}`,
+        ] }),
+        logs: [{ address: BASE_SEPOLIA_USDC_ADDRESS,
+          data: encodeAbiParameters([{ type: 'uint256' }], [BigInt(authorization.value)]),
+          topics: encodeEventTopics({ abi: erc20Abi, eventName: 'Transfer', args: { from: authorization.from, to: authorization.to } }),
+        }],
+      })
+      return new UndiciResponse(body, { status, headers: { 'Content-Type': 'application/json',
+        'Payment-Response': encodePaymentResponseHeader({ success: true, transaction: transactionHash,
+          network: BASE_SEPOLIA_NETWORK, payer: payer.address }),
+      } })
+    })
+    const pending = await invokeCall(backend, buyer.principal, published.toolRef, 'paid-status-proof', 'paid-status-proof')
+    if (pending.kind !== 'pending') throw new Error(`paid_status_call_not_pending:${pending.kind}`)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    const terminal = await readEvidence(backend, pending.callRef)
+    const charged = status < 300
+    expect(terminal.call, JSON.stringify(terminal.call?.result)).toMatchObject({ state: 'refused',
+      formanceFinancialState: charged ? 'settled' : 'released',
+      result: { kind: 'refused', code: charged ? 'provider_output_invalid' : 'provider_refused',
+        receipt: { state: charged ? 'settled' : 'refunded',
+          lossState: charged ? 'provider_output_invalid' : 'provider_http_error',
+          refundState: charged ? 'not_applicable' : 'released' } },
+    })
+    expect(terminal.projection).toMatchObject({ deliveryState: 'not_delivered', paymentState: charged ? 'settled' : 'released' })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: charged ? '9988000' : '10000000' })
+    const accountingRefs = terminal.call?.result && 'receipt' in terminal.call.result
+      ? terminal.call.result.receipt?.accountingTransactionRefs : undefined
+    expect(accountingRefs).toHaveLength(2)
+    const ledger = await Promise.all(accountingRefs!.map(ref => readFormanceTransactionByReference(formance, ref)))
+    expect(ledger).toMatchObject([
+      { kind: 'found', template: charged ? 'BUYER_SALE_SETTLED' : 'CALL_RELEASED_AUD' },
+      { kind: 'found', template: 'PROVIDER_SETTLED' },
+    ])
+    await expect(backend.query(internal.marketListingEvidence.selectionEvidenceInternal, { toolRefs: [published.toolRef] }))
+      .resolves.toMatchObject([{ aeCompleted: 0, aeFailed: 1 }])
+    expect(await backend.action(internal.capabilityCallWorker.run, { callRef: pending.callRef })).toEqual({ kind: 'none' })
+    expect(await invokeCall(backend, buyer.principal, published.toolRef, 'paid-status-proof', 'paid-status-proof'))
+      .toEqual(callResultSchema.parse(terminal.call!.result))
+    const replay = await readEvidence(backend, pending.callRef)
+    expect(replay.call?.formanceSettlementRefs).toEqual(terminal.call?.formanceSettlementRefs)
+    expect(replay.call?.formanceReleaseRefs).toEqual(terminal.call?.formanceReleaseRefs)
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: charged ? '9988000' : '10000000' })
+    expect(paidRequests).toBe(1)
+    expect(signedAuthorizations).toHaveLength(1)
+  }, 60_000)
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each([
     ...['none', 'before_dispatch', 'after_claim'].map(policyUpdatePhase => ({
       policyUpdatePhase, label: 'baseline', providerOutput: { result: 'literal sandbox buyer result' },
     })),
@@ -1307,13 +1441,15 @@ describe('capability Call Workpool lifecycle', () => {
     let revocationGrantRef = buyer.grantRef
     const updatePolicyForAcceptedCall = async () => {
       if (registered === undefined) throw new Error('policy_worker_owner_missing')
-      const updated = await registered.owner.mutation(api.agentSpendingPolicy.updateForServer, {
+      const updated = await registered.owner.mutation(api.agentSpendingPolicy.updateForServer, await withSourceWrite('protected_action', {
         principalRef: buyer.principal.principalId, expectedGeneration: 1,
         idempotencyKey: 'policy-before-worker', correlationRef: 'policy-before-worker',
+        operationKey: 'agent-spending-limits:policy-before-worker', correlationId: 'policy-before-worker',
+        proof: testMfaConsequenceProof({ subject: registered.subject }, 'policy-before-worker'),
         maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '1200000' },
         maximumDailySpend: { currency: 'AUD', exponent: 6, units: '3600000' },
         maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '3600000' },
-      })
+      }))
       if (updated.kind !== 'completed') throw new Error('policy_worker_update_failed')
       revocationGrantRef = updated.grantRef
     }
@@ -1380,7 +1516,6 @@ describe('capability Call Workpool lifecycle', () => {
     const beforeWork = await readEvidence(backend, pending.callRef)
     expect(beforeWork.call).toMatchObject({ formanceFinancialState: 'reserved' })
     if (beforeWork.call?.workId === undefined) throw new Error('buyer_work_missing')
-    expect(beforeWork.call?.sellerOnboardingCanary).toBeUndefined()
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
     if (policyUpdatePhase === 'before_dispatch') await updatePolicyForAcceptedCall()
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
@@ -1476,6 +1611,7 @@ describe('capability Call Workpool lifecycle', () => {
           tokenType: 'api_key' as const,
           id: buyer.principal.credentialId,
           subject: 'user_paid_terminal',
+          claims: { aeEnvironment: buyer.principal.environment },
           scopes: [...buyer.principal.scopes],
         }),
         resolvePrincipal: async () => buyer.principal,
@@ -1520,8 +1656,7 @@ describe('capability Call Workpool lifecycle', () => {
       expect(await readBalance()).toMatchObject(balanceAfter)
       expect(deliveries).toHaveLength(1)
       expect(signedAuthorizations).toHaveLength(1)
-      expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-        .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+      expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     } finally {
       restoreTerminalTransport()
       await terminalServer.close()
@@ -1532,8 +1667,7 @@ describe('capability Call Workpool lifecycle', () => {
     expect(replay).toMatchObject({ kind: 'completed', callRef: pending.callRef, output: providerOutput })
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
-    const rows = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-      .filter((row) => row.sellerOnboardingCanary === undefined))
+    const rows = await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())
     expect(rows).toHaveLength(1)
     expect(rows[0]?.formanceReservationRefs).toEqual(reservations)
     expect(rows[0]?.formanceSettlementRefs).toEqual(settlements)
@@ -1615,9 +1749,6 @@ describe('capability Call Workpool lifecycle', () => {
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each(['before claim', 'after possible submission'] as const)(
     'resumes a paid Call from fresh installed CLI processes after acknowledgement loss %s', async (interruption) => {
       const { backend, published, buyer, resource, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer({})
-      const platformCanaries = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-        .filter((row) => row.sellerOnboardingCanary !== undefined))
-      expect(platformCanaries).toHaveLength(1)
       await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
       let paidRequests = 0
       providerFetch.mockImplementation(async (_url, init) => {
@@ -1656,10 +1787,9 @@ describe('capability Call Workpool lifecycle', () => {
         }
         const first = await runFreshCli(['call', published.toolRef, '--input', JSON.stringify(INPUT), '--idempotency-key', 'paid-recovery-purchase'])
         expect(first).toMatchObject({ status: 1, result: { code: 'call-transport-unknown' } })
-        const recoveryRef = (first.result.detail as { recoveryRef: string }).recoveryRef
+        const recoveryRef = (first.result.refs as { recoveryRef: string }).recoveryRef
         expect(recoveryRef).toEqual(expect.any(String))
-        const calls = await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-          .filter((row) => row.sellerOnboardingCanary === undefined))
+        const calls = await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())
         expect(calls).toHaveLength(1)
         const callRef = calls[0]!.callRef
         const reservationRefs = calls[0]!.formanceReservationRefs
@@ -1677,7 +1807,10 @@ describe('capability Call Workpool lifecycle', () => {
         expect(status).toMatchObject({ status: 0, result: {
           kind: 'call', ref: callRef, principalRef: buyer.principal.principalId, workState: 'working',
           recovery: { kind: 'found', callRef, state: interruption === 'before claim' ? 'in_progress' : 'reconciliation_required' },
-          next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+          next: [
+            { action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' },
+            { action: 'wait', args: { callRef, afterVersion: expect.any(Number) }, authority: 'same_principal' },
+          ],
         } })
         const cancelled = await runFreshCli(['cancel', callRef, '--idempotency-key', 'paid-recovery-cancel'])
         expect(cancelled, JSON.stringify(cancelled)).toMatchObject({ status: 0, result: {
@@ -1698,8 +1831,7 @@ describe('capability Call Workpool lifecycle', () => {
         expect(await readBalance()).toMatchObject({ kind: 'available', units: interruption === 'before claim' ? '10000000' : '9988000' })
         expect(paidRequests).toBe(interruption === 'before claim' ? 0 : 1)
         expect(signedAuthorizations).toHaveLength(paidRequests)
-        expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-          .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+        expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
         expect(await runFreshCli(['call', 'resume', recoveryRef])).toMatchObject({ status: 0, result: { callRef } })
         expect(await readBalance()).toMatchObject({ kind: 'available', units: interruption === 'before claim' ? '10000000' : '9988000' })
         expect(paidRequests).toBe(interruption === 'before claim' ? 0 : 1)
@@ -1733,6 +1865,7 @@ describe('capability Call Workpool lifecycle', () => {
               tokenType: 'api_key' as const,
               id: buyer.principal.credentialId,
               subject: 'user_paid_recovery',
+              claims: { aeEnvironment: buyer.principal.environment },
               scopes: [...buyer.principal.scopes],
             }),
             resolvePrincipal: async () => buyer.principal,
@@ -1771,8 +1904,7 @@ describe('capability Call Workpool lifecycle', () => {
           expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
           expect(paidRequests).toBe(0)
           expect(signedAuthorizations).toHaveLength(0)
-          expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-            .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+          expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
         }
         if (interruption === 'after possible submission') {
           const statusResponse = await fetch(`${served.origin}/api/v1/calls/${encodeURIComponent(callRef)}`, {
@@ -1800,6 +1932,7 @@ describe('capability Call Workpool lifecycle', () => {
               tokenType: 'api_key' as const,
               id: buyer.principal.credentialId,
               subject: 'user_paid_recovery',
+              claims: { aeEnvironment: buyer.principal.environment },
               scopes: [...buyer.principal.scopes],
             }),
             resolvePrincipal: async () => buyer.principal,
@@ -1842,8 +1975,7 @@ describe('capability Call Workpool lifecycle', () => {
           expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
           expect(paidRequests).toBe(1)
           expect(signedAuthorizations).toHaveLength(1)
-          expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-            .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+          expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
           expect(current.receipt).toMatchObject({
             state: 'reconciliation_required',
             totalBuyerCharge: { currency: 'AUD', units: '12000', exponent: 6 },
@@ -1868,8 +2000,7 @@ describe('capability Call Workpool lifecycle', () => {
           expect(reconciled, JSON.stringify(reconciled)).toMatchObject({ status: 0, result: { kind: 'found', callRef, state: 'reconciliation_required' } })
           const freshPurchase = await runFreshCli(['call', published.toolRef, '--input', JSON.stringify(INPUT)])
           expect(freshPurchase).toMatchObject({ status: 1, result: { code: 'call-recovery-required' } })
-          expect(await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect())
-            .filter((row) => row.sellerOnboardingCanary === undefined))).toHaveLength(1)
+          expect(await backend.run(async (ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
           expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
           expect(paidRequests).toBe(1)
           expect(signedAuthorizations).toHaveLength(1)
@@ -1884,6 +2015,7 @@ describe('capability Call Workpool lifecycle', () => {
   )
 
   it('executes once, replays without another effect, and refuses a revoked grant before claim', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const signingSecretSentinel = 'call-workpool-signing-secret-sentinel-32-bytes'
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', signingSecretSentinel)
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
@@ -2225,6 +2357,7 @@ describe('capability Call Workpool lifecycle', () => {
   }, 15_000)
 
   it('runs the installed CLI through served routes and one real durable backend receipt', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
     installTestSourceWriteSecret()

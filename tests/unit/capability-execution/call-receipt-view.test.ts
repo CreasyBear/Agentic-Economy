@@ -12,14 +12,22 @@ import {
 const callRef = 'invocation:receipt-view'
 const toolRef = `operation:v1:${'b'.repeat(64)}`
 const releasedReceipt: CallReceipt = {
-  commercialModel: 'seller_canary_x402',
+  commercialModel: 'account_aud',
   receiptRef: 'receipt:released',
   state: 'refunded',
-  network: 'eip155:8453',
-  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  providerQuotedAmount: { currency: 'USDC', units: '100', exponent: 6 },
-  agenticEconomyFee: { currency: 'USDC', units: '10', exponent: 6 },
-  totalBuyerAuthorization: { currency: 'USDC', units: '110', exponent: 6 },
+  buyerCharge: { currency: 'AUD', units: '100', exponent: 6 },
+  serviceFee: { currency: 'AUD', units: '10', exponent: 6 },
+  totalBuyerCharge: { currency: 'AUD', units: '110', exponent: 6 },
+  providerObligation: {
+    amount: { currency: 'USDC', units: '100', exponent: 6 },
+    settlementMethod: 'managed_x402',
+    payoutEligible: false,
+  },
+  providerSettlement: {
+    network: 'eip155:8453',
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    amount: { currency: 'USDC', units: '100', exponent: 6 },
+  },
   priceDigest: 'sha256:released-price',
   transactionRef: 'money:released',
   accountingTransactionRefs: ['money:released'],
@@ -67,6 +75,20 @@ describe('public Call receipt projection', () => {
     expect(view.issue?.whatHappened).toBe('The service did not complete. You were not charged; your reserved credit has been restored.')
     expect(view.issue?.userNext).toBe('Return to the Tool to review a new Quote.')
     expect(view.complete).toBe(false)
+  })
+
+  it('describes a reported delivered sale as returned credit while retaining the answer', () => {
+    const view = projectCallReceipt({ kind: 'found', version: 1, callRef, toolRef, state: 'terminal',
+      purchaseResolution: { ...releasedResolution, terminalState: 'refunded', deliveryState: 'delivered' },
+      result: { kind: 'completed', callRef, toolRef, output: { answer: 'kept' }, evidenceHash: 'sha256:answer', receipt: releasedReceipt,
+        usage: { usageRef: 'usage:answer', chargeState: 'refunded', amount: releasedReceipt.totalBuyerCharge,
+          priceDigest: releasedReceipt.priceDigest, observedAt: releasedResolution.resolvedAt } },
+    })
+    expect(view.statusLabel).toBe('Credit returned')
+    expect(view.complete).toBe(true)
+    expect(view.statusDetail).toContain('original credit sources')
+    expect(view.issue?.moneyMovement).not.toContain('Reserved')
+    expect(view.issue?.userNext).toBe('The answer remains available below.')
   })
 
   it('keeps conflicting or disputed resolution facts uncertain', () => {

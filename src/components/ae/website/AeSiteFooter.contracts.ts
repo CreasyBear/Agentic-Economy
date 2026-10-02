@@ -18,6 +18,7 @@ export const FOOTER_NAVIGATION = [
     id: 'footer-legal',
     title: 'Legal',
     links: [
+      { to: '/trust', label: 'Trust centre', reloadDocument: false },
       { to: '/privacy', label: 'Privacy', reloadDocument: false },
       { to: '/terms', label: 'Terms', reloadDocument: false },
       { to: '/privacy/remove-business', label: 'Remove a listing', reloadDocument: false },

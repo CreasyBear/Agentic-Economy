@@ -27,7 +27,14 @@ export function CreditFundPanel({
   onCreditRefresh,
   unavailable = {},
 }: CreditFundPanelProps) {
-  const balance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
+  const purchasedBalance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
+  const balance = accountBalance?.kind === 'available' ? accountBalance.totalBalance ?? accountBalance.balance : undefined
+  const promotionalBalance = accountBalance?.kind === 'available' ? accountBalance.promotionalBalance : undefined
+  const nextPromotionalExpiryAt = accountBalance?.kind === 'available' ? accountBalance.nextPromotionalExpiryAt : undefined
+  const expiryLabel = nextPromotionalExpiryAt == null ? undefined : new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZone: 'Australia/Perth', timeZoneName: 'short',
+  }).format(nextPromotionalExpiryAt)
   const balanceUnavailable = accountBalance === undefined || accountBalance.kind === 'refused'
   const balanceRefreshUnavailable = unavailable.balance === true && accountBalance?.kind === 'available'
   const balanceLocked = accountBalance?.kind === 'available' && accountBalance.locked
@@ -75,6 +82,23 @@ export function CreditFundPanel({
           <p className="font-mono text-2xl font-medium tracking-tight tabular-nums">
             {balance === undefined ? 'Checking…' : formatDisplayAmount(balance)}
           </p>
+          {purchasedBalance === undefined || promotionalBalance === undefined ? null : (
+            <dl className="grid gap-1 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <dt>Purchased credit</dt>
+                <dd className="font-mono tabular-nums text-foreground">{formatDisplayAmount(purchasedBalance)}</dd>
+              </div>
+              {promotionalBalance === undefined ? null : (
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <dt>Promotional credit</dt>
+                  <dd className="font-mono tabular-nums text-foreground">{formatDisplayAmount(promotionalBalance)}</dd>
+                </div>
+              )}
+            </dl>
+          )}
+          {promotionalBalance !== undefined && promotionalBalance.units !== '0' && expiryLabel !== undefined ? (
+            <p className="text-sm text-muted-foreground">Next promotional credit expiry: {expiryLabel}.</p>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             {balanceLocked
               ? 'Locked for reconciliation; new paid Calls are refused.'
@@ -109,7 +133,6 @@ export function CreditFundPanel({
         />
       </div>
       <div className="flex flex-wrap gap-4 text-sm">
-        <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/payment-methods">Manage payment methods</Link>
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/spending">Configure spending defaults</Link>
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/receipts">View receipts &amp; invoices</Link>
       </div>

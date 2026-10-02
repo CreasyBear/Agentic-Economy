@@ -14,10 +14,17 @@ const publicTerminals = new Set([
   normalize(resolve('src/modules/action-execution/contracts.ts')),
 ])
 const developmentProviderFixturePattern =
-  /provider-operation-fixture|tools\/dev\/fixtures\/(?:provider-operation|provider-tool)/u
+  /provider-operation-fixture|tools\/dev\/fixtures\/(?:provider-operation|provider-tool)|tests\/unit\/action-execution\/fixtures\/provider-tool/u
 
 function referencesDevelopmentProviderFixture(source: string): boolean {
   return developmentProviderFixturePattern.test(source)
+}
+
+function productionReferencesDevelopmentProviderFixture(path: string, source: string): boolean {
+  if (!referencesDevelopmentProviderFixture(source)) return false
+  if (path !== 'src/modules/module-boundaries.ts') return true
+  const withoutWhiteBoxImporters = source.replace(/importers:\s*\[[\s\S]*?\]/gu, '')
+  return referencesDevelopmentProviderFixture(withoutWhiteBoxImporters)
 }
 
 function hostBoundaryViolations(source: string): readonly string[] {
@@ -88,19 +95,27 @@ describe('Action execution public host graph', () => {
 
   it('keeps the development provider-operation fixture outside production graphs', () => {
     expect(referencesDevelopmentProviderFixture(
-      "import { fixture } from 'tools/dev/fixtures/provider-tool/development-provider-tool-fixture'",
+      "import { fixture } from 'tests/unit/action-execution/fixtures/provider-tool/development-provider-tool-fixture'",
     )).toBe(true)
     expect(referencesDevelopmentProviderFixture(
       "import { fixture } from 'tools/dev/fixtures/provider-operation/development-provider-operation-fixture'",
     )).toBe(true)
+    expect(productionReferencesDevelopmentProviderFixture(
+      'src/modules/module-boundaries.ts',
+      "import { fixture } from 'tests/unit/action-execution/fixtures/provider-tool/development-provider-tool-fixture'",
+    )).toBe(true)
+    expect(productionReferencesDevelopmentProviderFixture(
+      'src/modules/module-boundaries.ts',
+      "importers: ['tests/unit/action-execution/fixtures/provider-tool/development-provider-tool-runner.ts']",
+    )).toBe(false)
     const violations = productionSourceFiles.filter((path) => {
       const source = readFileSync(path, 'utf8')
-      return referencesDevelopmentProviderFixture(source)
+      return productionReferencesDevelopmentProviderFixture(path, source)
     })
 
     expect(violations).toEqual([])
     expect(existsSync('src/modules/provider-operation-fixture')).toBe(false)
-    expect(existsSync('tools/dev/fixtures/provider-tool')).toBe(true)
+    expect(existsSync('tests/unit/action-execution/fixtures/provider-tool')).toBe(true)
   })
 
   it('keeps moved development fixtures outside production source graphs', () => {
@@ -121,7 +136,7 @@ describe('Action execution public host graph', () => {
     expect(violations).toEqual([])
     expect(globSync('src/modules/capability-supply/development-*.ts')).toEqual([])
     expect(oldFixturePaths.filter(existsSync)).toEqual([])
-    expect(existsSync('tools/dev/fixtures/capability-supply')).toBe(true)
+    expect(existsSync('tests/unit/capability-supply/fixtures')).toBe(true)
     expect(existsSync('tools/dev/fixtures/action-execution')).toBe(true)
   })
 })

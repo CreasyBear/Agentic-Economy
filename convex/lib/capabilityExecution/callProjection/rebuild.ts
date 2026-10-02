@@ -17,8 +17,7 @@ export async function rebuildHandler(ctx: MutationCtx, args: ObjectType<typeof r
   let rebuilt = 0
   for (const row of page.page) {
     if (
-      row.sellerOnboardingCanary !== undefined
-      || row.result === undefined
+      row.result === undefined
       || row.dispatchState === undefined
       || row.state === 'pending'
       || row.state === 'cancelled'

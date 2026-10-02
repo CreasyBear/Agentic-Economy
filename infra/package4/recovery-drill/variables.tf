@@ -21,3 +21,13 @@ variable "source_revision" {
     error_message = "source_revision must be a full Git commit SHA."
   }
 }
+
+variable "restore_time" {
+  description = "Exact UTC cutoff from the accepted quiesced Formance baseline; wait until RDS reports it restorable before applying."
+  type        = string
+
+  validation {
+    condition     = can(formatdate("YYYY-MM-DD", var.restore_time)) && can(regex("Z$", var.restore_time))
+    error_message = "restore_time must be the baseline's RFC3339 UTC timestamp ending in Z."
+  }
+}

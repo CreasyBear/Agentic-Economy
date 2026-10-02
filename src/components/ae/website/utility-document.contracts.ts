@@ -21,6 +21,7 @@ export const utilityDocumentNavigation = [
   { to: '/about', label: 'About' },
   { to: '/support', label: 'Support' },
   { to: '/status', label: 'Status' },
+  { to: '/trust', label: 'Trust centre' },
   { to: '/privacy', label: 'Privacy' },
   { to: '/terms', label: 'Terms' },
 ] as const

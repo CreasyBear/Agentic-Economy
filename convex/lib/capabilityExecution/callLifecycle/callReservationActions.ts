@@ -5,7 +5,7 @@ import { internal } from '../../../_generated/api'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { pricingConfigDecisionAmount } from '@/modules/money/public'
-import { callResultSchema, type CallResult } from '@/modules/capability-execution/call-contracts'
+import { callResultSchema, publicCallRefusalCode, type CallResult } from '@/modules/capability-execution/call-contracts'
 import {
   callResultValue,
 } from '@/modules/capability-execution/convex'
@@ -353,10 +353,13 @@ export async function readReplayHandler(
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
   if (!callIdentityMatches(row, args)) return null
   if (row.result !== undefined) assertCallResultJson(row.result)
+  const result = row.result?.kind === 'refused'
+    ? { ...row.result, code: publicCallRefusalCode(row.result.code) }
+    : row.result
   return {
     toolRef: row.toolRef,
     state: row.state,
-    ...(row.result === undefined ? {} : { result: structuredClone(row.result) }),
+    ...(result === undefined ? {} : { result: structuredClone(result) }),
     ...(row.usage === undefined ? {} : { usage: row.usage }),
     ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
     ...(row.attemptRef === undefined ? {} : { attemptRef: row.attemptRef }),

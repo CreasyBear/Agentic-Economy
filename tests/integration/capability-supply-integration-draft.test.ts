@@ -25,11 +25,12 @@ describe('Provider source integration draft', () => {
       'integration-draft-browser-foreign',
     )
     const source = {
-      kind: 'openapi' as const,
-      definitionUrl: 'https://provider.example/openapi.json',
+      kind: 'x402' as const,
+      resourceUrl: 'https://provider.example/lookup',
+      method: 'POST' as const,
       environment: 'production' as const,
     }
-    const selector = { serverUrl: 'https://provider.example/', path: '/lookup', method: 'post' }
+    const selector = { resourceUrl: 'https://provider.example/lookup', method: 'POST' }
     const sourceDigest = canonicalDigest({ source: 'provider-openapi-browser-v1' })
     const candidateRef = canonicalDigest({ sourceDigest, selector })
     const command = {
@@ -40,7 +41,7 @@ describe('Provider source integration draft', () => {
       sourceKind: source.kind,
       sourceDescriptorJson: stableStringify(source),
       sourceDigest,
-      sourceRevision: `openapi:${sourceDigest}`,
+      sourceRevision: `x402:${sourceDigest}`,
       candidateRef,
       sourceSelectorJson: stableStringify(selector),
       operationKey: 'supply-integration-draft:browser-owner',
@@ -65,8 +66,8 @@ describe('Provider source integration draft', () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await createPublishedBusinessOwner(backend, 'draft-terms-owner')
     const { owner: foreignOwner } = await createPublishedBusinessOwner(backend, 'draft-terms-foreign')
-    const source = { kind: 'openapi' as const, definitionUrl: 'https://provider.example/openapi.json', environment: 'production' as const }
-    const selector = { serverUrl: 'https://provider.example/', path: '/lookup', method: 'post' }
+    const source = { kind: 'x402' as const, resourceUrl: 'https://provider.example/lookup', method: 'POST' as const, environment: 'production' as const }
+    const selector = { resourceUrl: 'https://provider.example/lookup', method: 'POST' }
     const sourceDigest = canonicalDigest({ source: 'terms-v1' })
     const candidateRef = canonicalDigest({ sourceDigest, selector })
     const terms = {
@@ -79,7 +80,7 @@ describe('Provider source integration draft', () => {
     const command = {
       businessId, title: terms.name, description: terms.description, category: terms.category,
       sourceKind: source.kind, sourceDescriptorJson: stableStringify(source), sourceDigest,
-      sourceRevision: `openapi:${sourceDigest}`, candidateRef, sourceSelectorJson: stableStringify(selector),
+      sourceRevision: `x402:${sourceDigest}`, candidateRef, sourceSelectorJson: stableStringify(selector),
       terms, operationKey: canonicalDigest({ candidateRef, terms }), correlationId: 'owner-terms',
     }
     await expect(owner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
@@ -171,11 +172,12 @@ describe('Provider source integration draft', () => {
     )
     const principal = await seedSupplyAgentPrincipal(backend, canonicalAccountRef, 'integration-draft')
     const source = {
-      kind: 'openapi' as const,
-      definitionUrl: 'https://provider.example/openapi.json',
+      kind: 'x402' as const,
+      resourceUrl: 'https://provider.example/lookup',
+      method: 'POST' as const,
       environment: 'production' as const,
     }
-    const selector = { serverUrl: 'https://provider.example/', path: '/lookup', method: 'post' }
+    const selector = { resourceUrl: 'https://provider.example/lookup', method: 'POST' }
     const sourceDigest = canonicalDigest({ source: 'provider-openapi-v1' })
     const candidateRef = canonicalDigest({ sourceDigest, selector })
     const command = {
@@ -186,7 +188,7 @@ describe('Provider source integration draft', () => {
       sourceKind: source.kind,
       sourceDescriptorJson: stableStringify(source),
       sourceDigest,
-      sourceRevision: `openapi:${sourceDigest}`,
+      sourceRevision: `x402:${sourceDigest}`,
       candidateRef,
       sourceSelectorJson: stableStringify(selector),
       operationKey: 'supply-integration-draft:one',
@@ -210,10 +212,10 @@ describe('Provider source integration draft', () => {
     expect(resumed).toMatchObject({
       kind: 'available',
       draft: {
-        sourceKind: 'openapi',
+        sourceKind: 'x402',
         sourceDescriptorJson: stableStringify(source),
         sourceDigest,
-        sourceRevision: `openapi:${sourceDigest}`,
+        sourceRevision: `x402:${sourceDigest}`,
         candidateRef,
         sourceSelectorJson: stableStringify(selector),
       },
@@ -262,8 +264,8 @@ describe('Provider source integration draft', () => {
       toolRef: resumed.offeringRef,
       state: 'Draft',
       source: {
-        kind: 'openapi',
-        revision: `openapi:${sourceDigest}`,
+        kind: 'x402',
+        revision: `x402:${sourceDigest}`,
         digest: sourceDigest,
       },
       health: {
@@ -287,7 +289,7 @@ describe('Provider source integration draft', () => {
       }],
     })
     expect(ownerDirectory.kind === 'available' ? JSON.parse(ownerDirectory.page[0]!.statusJson) : ownerDirectory)
-      .toMatchObject({ schemaVersion: 'provider_tools:v1', state: 'Draft', source: { kind: 'openapi' } })
+      .toMatchObject({ schemaVersion: 'provider_tools:v1', state: 'Draft', source: { kind: 'x402' } })
     await expect(foreignOwner.query(
       api.capabilityProviderTools.readOwner,
       { businessId, offeringRef: resumed.offeringRef, now: 1_000 },
@@ -332,16 +334,16 @@ describe('Provider source integration draft', () => {
       'integration-draft-secrets',
     )
     const principal = await seedSupplyAgentPrincipal(backend, canonicalAccountRef, 'integration-draft-secrets')
-    const selector = { serverUrl: 'https://provider.example/mcp', toolName: 'lookup', protocolVersion: '2025-06-18' }
-    const sourceDigest = canonicalDigest({ source: 'provider-mcp-v1' })
+    const selector = { resourceUrl: 'https://provider.example/paid', method: 'POST' }
+    const sourceDigest = canonicalDigest({ source: 'provider-x402-v1' })
     const base = {
       businessId,
       title: 'Reference lookup',
       description: 'Looks up one public reference.',
       category: 'Research',
-      sourceKind: 'mcp' as const,
+      sourceKind: 'x402' as const,
       sourceDigest,
-      sourceRevision: `mcp:${sourceDigest}`,
+      sourceRevision: `x402:${sourceDigest}`,
       candidateRef: canonicalDigest({ sourceDigest, selector }),
       sourceSelectorJson: stableStringify(selector),
       operationKey: 'supply-integration-draft:secrets',
@@ -349,8 +351,9 @@ describe('Provider source integration draft', () => {
       agentPrincipal: principal,
     }
     const secretSource = {
-      kind: 'mcp' as const,
-      serverUrl: 'https://provider.example/mcp?token=secret',
+      kind: 'x402' as const,
+      resourceUrl: 'https://provider.example/paid?token=secret',
+      method: 'POST' as const,
       environment: 'production' as const,
     }
     await expect(backend.mutation(
@@ -362,8 +365,9 @@ describe('Provider source integration draft', () => {
     )).resolves.toEqual({ kind: 'refused', reason: 'source_contains_credential' })
 
     const cleanSource = {
-      kind: 'mcp' as const,
-      serverUrl: 'https://provider.example/mcp',
+      kind: 'x402' as const,
+      resourceUrl: 'https://provider.example/paid',
+      method: 'POST' as const,
       environment: 'production' as const,
     }
     await expect(backend.mutation(

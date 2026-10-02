@@ -17,16 +17,14 @@ export type AgentKeyDraft = Readonly<{
 export type AgentKeyIssueSearch = Readonly<{
   issue?: 'manual'
   name?: string
-  env?: ConnectAgentEnvironment
   authority?: ConnectAgentAuthorityMode
   perCall?: string
   daily?: string
   monthly?: string
 }>
 
-export const AGENT_KEY_DRAFT_DEFAULTS: AgentKeyDraft = {
+export const AGENT_KEY_DRAFT_DEFAULTS: Omit<AgentKeyDraft, 'environment'> = {
   name: '',
-  environment: 'sandbox',
   authorityMode: 'spending_policy',
   perCallAmount: '5.00',
   dailyAmount: '25.00',
@@ -37,17 +35,16 @@ const DRAFT_AMOUNT = /^\d{1,6}(\.\d{1,2})?$/u
 
 export function isAgentKeyDraftDirty(draft: AgentKeyDraft): boolean {
   return draft.name.length > 0
-    || draft.environment !== AGENT_KEY_DRAFT_DEFAULTS.environment
     || draft.authorityMode !== AGENT_KEY_DRAFT_DEFAULTS.authorityMode
     || draft.perCallAmount !== AGENT_KEY_DRAFT_DEFAULTS.perCallAmount
     || draft.dailyAmount !== AGENT_KEY_DRAFT_DEFAULTS.dailyAmount
     || draft.monthlyAmount !== AGENT_KEY_DRAFT_DEFAULTS.monthlyAmount
 }
 
-export function agentKeyDraftFromSearch(search: AgentKeyIssueSearch): AgentKeyDraft {
+export function agentKeyDraftFromSearch(search: AgentKeyIssueSearch, environment: ConnectAgentEnvironment): AgentKeyDraft {
   return {
     name: search.name ?? AGENT_KEY_DRAFT_DEFAULTS.name,
-    environment: search.env ?? AGENT_KEY_DRAFT_DEFAULTS.environment,
+    environment,
     authorityMode: search.authority ?? AGENT_KEY_DRAFT_DEFAULTS.authorityMode,
     perCallAmount: search.perCall ?? AGENT_KEY_DRAFT_DEFAULTS.perCallAmount,
     dailyAmount: search.daily ?? AGENT_KEY_DRAFT_DEFAULTS.dailyAmount,
@@ -77,7 +74,6 @@ export function agentKeySearchFromDraft(open: boolean, draft: AgentKeyDraft): Ag
   return {
     issue: 'manual',
     ...(draft.name.length > 0 ? { name: draft.name } : {}),
-    ...(draft.environment === AGENT_KEY_DRAFT_DEFAULTS.environment ? {} : { env: draft.environment }),
     ...(draft.authorityMode === AGENT_KEY_DRAFT_DEFAULTS.authorityMode ? {} : { authority: draft.authorityMode }),
     ...(draft.perCallAmount === AGENT_KEY_DRAFT_DEFAULTS.perCallAmount ? {} : { perCall: draft.perCallAmount }),
     ...(draft.dailyAmount === AGENT_KEY_DRAFT_DEFAULTS.dailyAmount ? {} : { daily: draft.dailyAmount }),
@@ -92,7 +88,6 @@ function draftAmount(value: unknown): string | undefined {
 export function validateAgentKeyIssueSearch(search: Record<string, unknown>): AgentKeyIssueSearch {
   const issue = z.object({ issue: z.literal('manual').optional() }).parse(search).issue
   const name = typeof search.name === 'string' && search.name.length <= 80 ? search.name : undefined
-  const env = search.env === 'sandbox' || search.env === 'production' ? search.env : undefined
   const authority = search.authority === 'spending_policy'
     || search.authority === 'read_only'
     || search.authority === 'approval_required'
@@ -104,7 +99,6 @@ export function validateAgentKeyIssueSearch(search: Record<string, unknown>): Ag
   return {
     ...(issue === undefined ? {} : { issue }),
     ...(name === undefined ? {} : { name }),
-    ...(env === undefined ? {} : { env }),
     ...(authority === undefined ? {} : { authority }),
     ...(perCall === undefined ? {} : { perCall }),
     ...(daily === undefined ? {} : { daily }),

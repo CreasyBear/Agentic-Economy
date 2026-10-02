@@ -18,7 +18,11 @@ export type ScheduledWorkload = Readonly<{
 }>
 
 export const SCHEDULED_WORKLOADS = [
+  { name: 'refresh payment readiness', workloadKind: 'cron', handler: 'refreshPaymentReadiness', interval: { minutes: 5 } },
+  { name: 'reconcile paid Call reports', workloadKind: 'reconciliation', handler: 'reconcilePaidCallReports', interval: { minutes: 1 } },
+  { name: 'reconcile promotional credit', workloadKind: 'reconciliation', handler: 'reconcilePromotionalCredit', interval: { minutes: 1 } },
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
+  { name: 'expire stale pending approvals', workloadKind: 'reconciliation', handler: 'expireStalePendingApprovals', interval: { minutes: 5 } },
   { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery', interval: { hours: 6 } },
   { name: 'refresh USDC/AUD reference rate', workloadKind: 'cron', handler: 'refreshReferenceRate', interval: { hours: 6 } },
   // 7 days (168h), not 24h: refreshAgenticEconomyApiRegistry rewrites ~14,541
@@ -35,7 +39,8 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'cleanup expired agent access oauth grants', workloadKind: 'cron', handler: 'cleanupExpiredAgentAccessOAuthGrants', interval: { hours: 1 } },
   { name: 'snapshot marketplace metrics day', workloadKind: 'cron', handler: 'snapshotMarketplaceMetricsDay', daily: { hourUTC: 16, minuteUTC: 10 } },
   { name: 'refresh market flow', workloadKind: 'cron', handler: 'refreshMarketFlow', daily: { hourUTC: 1, minuteUTC: 15 } },
-  { name: 'observe x402 treasury', workloadKind: 'cron', handler: 'observeX402Treasury', interval: { minutes: 15 } },
+  { name: 'reconcile treasury balances', workloadKind: 'reconciliation', handler: 'reconcileTreasuryBalances', interval: { minutes: 15 } },
+  { name: 'observe x402 treasury', workloadKind: 'cron', handler: 'observeX402Treasury', interval: { minutes: 5 } },
 ] as const satisfies readonly ScheduledWorkload[]
 
 export type ScheduledWorkloadName = typeof SCHEDULED_WORKLOADS[number]['name']
@@ -44,14 +49,19 @@ export type ScheduledWorkloadName = typeof SCHEDULED_WORKLOADS[number]['name']
 export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'cleanup expired agent access oauth grants',
   'cleanup expired source write nonces',
+  'expire stale pending approvals',
   'observe x402 treasury',
   'reconcile business supply projections',
   'reconcile due facilitator invocations',
+  'reconcile paid Call reports',
+  'reconcile promotional credit',
+  'reconcile treasury balances',
   'refresh Agentic Economy API registry',
   'refresh capability supply readiness',
   'refresh current market presence',
   'refresh facilitator discovery',
   'refresh USDC/AUD reference rate',
   'refresh market flow',
+  'refresh payment readiness',
   'snapshot marketplace metrics day',
 ] as const satisfies readonly ScheduledWorkloadName[]

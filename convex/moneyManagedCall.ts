@@ -1,6 +1,6 @@
 import { internalQuery, internalMutation } from './_generated/server'
 import { readBookingArgs, readBookingResult, readBookingHandler } from './lib/money/managedCall/booking'
-import { attachReservationArgs, attachReservationResult, attachReservationHandler, markReservationUnknownArgs, markReservationUnknownResult, markReservationUnknownHandler } from './lib/money/managedCall/reservation'
+import { claimReservationAttemptArgs, claimReservationAttemptResult, claimReservationAttemptHandler, attachReservationArgs, attachReservationResult, attachReservationHandler, markReservationUnknownArgs, markReservationUnknownResult, markReservationUnknownHandler, repairReservationArgs, repairReservationResult, repairReservationHandler } from './lib/money/managedCall/reservation'
 
 export const readBooking = internalQuery({
   args: readBookingArgs.fields,
@@ -18,4 +18,12 @@ export const markReservationUnknown = internalMutation({
   args: markReservationUnknownArgs.fields,
   returns: markReservationUnknownResult,
   handler: markReservationUnknownHandler,
+})
+
+export const claimReservationAttempt = internalMutation({
+  args: claimReservationAttemptArgs.fields, returns: claimReservationAttemptResult, handler: claimReservationAttemptHandler,
+})
+
+export const repairReservation = internalMutation({
+  args: repairReservationArgs.fields, returns: repairReservationResult, handler: repairReservationHandler,
 })

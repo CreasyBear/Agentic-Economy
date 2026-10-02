@@ -2,7 +2,7 @@ import type { LanguageModelV4 } from '@ai-sdk/provider'
 import type { UIMessageChunk } from 'ai'
 import { mockModel } from '@convex-dev/agent'
 import { getFunctionName, makeFunctionReference } from 'convex/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { components, internal } from '../../convex/_generated/api'
 import type { ActionCtx } from '../../convex/_generated/server'
@@ -34,6 +34,8 @@ vi.mock('@/modules/model-gateway/public', async (importOriginal) => {
     },
   }
 })
+
+afterEach(() => vi.unstubAllEnvs())
 
 const ANONYMOUS_CHAT_PROXY_SECRET = 'anonymous-chat-proxy-test-secret-01'
 const anonymousChatAdmissionKey = (salt: string): string =>
@@ -85,6 +87,8 @@ const admitHttp = makeFunctionReference<'mutation', {
 
 describe('anonymous operation chat transport', () => {
   it('does not turn unsupported lookup results into a verified Tool recommendation', async () => {
+    // Exercise model-led recovery when immediate catalogue lookup cannot run.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       ...Array.from({ length: 5 }, (_, index) => [{
@@ -123,6 +127,8 @@ describe('anonymous operation chat transport', () => {
   })
 
   it('streams a single fallback message when the required lookup yields no answer', async () => {
+    // Exercise model-led recovery when immediate catalogue lookup cannot run.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       [{ type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
@@ -141,6 +147,8 @@ describe('anonymous operation chat transport', () => {
     expect(body.match(/"type":"finish"/gu)).toHaveLength(1)
   })
   it('does not present exploratory planning as the guest answer', async () => {
+    // Exercise model-led recovery when immediate catalogue lookup cannot run.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       [
@@ -184,6 +192,7 @@ describe('anonymous operation chat transport', () => {
     expect(body).not.toContain('lodash')
   })
   it('returns completed Tool facts when the post-tool model step fails', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const { toolRef } = await admitDiscoveredToolFixture(backend)
     const model = mockModel({ contentSteps: [[{
@@ -197,7 +206,16 @@ describe('anonymous operation chat transport', () => {
       return original(options)
     })
     const body = await backend.action(async ctx => {
-      const response = await streamAnonymousChatResponse(ctx,
+      const observedCtx = new Proxy(ctx, {
+        get(target, property, receiver) {
+          if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) =>
+            getFunctionName(args[0]) === 'capabilityToolCatalog:searchInternal'
+              ? Promise.reject(new Error('catalogue_unavailable'))
+              : Reflect.apply(target.runAction, target, args)
+          return Reflect.get(target, property, receiver) as unknown
+        },
+      }) as ActionCtx
+      const response = await streamAnonymousChatResponse(observedCtx,
         [{ role: 'user', content: 'Describe the timezone Tool' }], model)
       return await response.text()
     })
@@ -205,6 +223,30 @@ describe('anonymous operation chat transport', () => {
     expect(body).not.toContain('chat_stream_failed')
     expect(body).not.toContain('injected_post_tool_model_failure')
     expect(attempts).toBe(2)
+  })
+
+  it('streams typed recovery without duplicating it as assistant prose', async () => {
+    const backend = convexTestWithMarketComponents()
+    const model = mockModel()
+    vi.spyOn(model, 'doStream').mockRejectedValue(new Error('injected_generation_failure'))
+    const body = await backend.action(async ctx => {
+      const unavailableCatalogue = new Proxy(ctx, {
+        get(target, property, receiver) {
+          if (property === 'runAction') return () => Promise.reject(new Error('catalogue_unavailable'))
+          return Reflect.get(target, property, receiver) as unknown
+        },
+      }) as ActionCtx
+      const response = await streamAnonymousChatResponse(
+        unavailableCatalogue, [{ role: 'user', content: 'Find a current weather Tool' }], model,
+      )
+      return await response.text()
+    })
+    const chunks = body.split('\n').filter(line => line.startsWith('data: {'))
+      .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
+    expect(chunks).toContainEqual(expect.objectContaining({
+      type: 'data-chat-failure', data: { reason: 'generation_failed' },
+    }))
+    expect(chunks.filter(chunk => chunk.type === 'text-delta')).toEqual([])
   })
   it('streams from a fake model without creating Agent threads or messages', async () => {
     const backend = convexTestWithMarketComponents()
@@ -248,7 +290,10 @@ describe('anonymous operation chat transport', () => {
     ]))
 
     expect(streamed.body).not.toContain('A weather Operation is available.')
-    expect(streamed.queries).toEqual([])
+    expect(streamed.queries).toEqual([
+      'x402DirectoryIndex:searchCompactInternal',
+      'x402DirectoryIndex:status',
+    ])
     expect(streamed.mutations).toEqual([])
     expect(anonymousThreads.page).toEqual([])
     expect(sentinelThreads.page).toEqual([])

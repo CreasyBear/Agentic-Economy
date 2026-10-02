@@ -6,7 +6,7 @@ import { SANDBOX_COMMERCIAL_POLICY_CONTROLS } from '@/modules/money/public'
 import type { AdminCommandAction, AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import {
   convexTestWithMarketComponents, nonAdmin, ownerAdmin, reviewerAdmin,
-  supportAdmin, testConsequenceProof, type ConvexFixtureBackend,
+  supportAdmin, testMfaConsequenceProof, type ConvexFixtureBackend,
 } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
@@ -30,13 +30,12 @@ function args<A extends AdminCommandAction>(
     input: command.input, reasonCode: command.reasonCode, evidenceRefs: command.evidenceRefs,
     ...(command.expectedStateDigest === undefined ? {} : { expectedStateDigest: command.expectedStateDigest }),
   })
-  return { ...command, proof: testConsequenceProof({ subject: actor }, digest) }
+  return { ...command, proof: testMfaConsequenceProof({ subject: actor }, digest) }
 }
 function sourceCommand(actor: string, key: string, overrides: Partial<AdminCommandArgs<'verify_capability_source_authority'>> = {}) {
   return args(actor, { action: 'verify_capability_source_authority', input: sourceInput,
     reasonCode: 'evidence_verified', evidenceRefs: ['review:source:123'],
     operationKey: key, correlationId: key, approval: { kind: 'execute' },
-    proof: { reverificationId: 'ignored', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1 },
     ...overrides,
   })
 }
@@ -44,7 +43,6 @@ function policyCommand(actor: string, key: string, overrides: Partial<AdminComma
   return args(actor, { action: 'change_commercial_policy', input: policyInput,
     reasonCode: 'pricing_update', evidenceRefs: ['approval:commercial-policy:123'],
     operationKey: key, correlationId: key, approval: { kind: 'execute' },
-    proof: { reverificationId: 'ignored', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1 },
     ...overrides,
   })
 }

@@ -114,7 +114,7 @@ function am09ReturnedCheckout(input: Readonly<{
     evidence: {
       provider: 'stripe',
       externalRef: input.externalRef,
-      amount: { currency: 'AUD', units: '10550000', exponent: 6 },
+      amount: { currency: 'AUD', units: '11550000', exponent: 6 },
       status: input.status,
       checkoutStatus: input.checkoutStatus,
       paymentStatus: input.status === 'succeeded' ? 'paid' : 'unpaid',
@@ -156,6 +156,21 @@ afterEach(() => {
 function openLedger() {
   fireEvent.click(screen.getByRole('tab', { name: 'Ledger' }))
 }
+
+describe('promotional credit presentation', () => {
+  it('shows total and its funding sources without substituting total for purchased credit', () => {
+    render(<AeOwnerCredit accountBalance={{ kind: 'available', accountRef: 'account:promo',
+      balance: { currency: 'AUD', units: '5000000', exponent: 6 },
+      totalBalance: { currency: 'AUD', units: '15000000', exponent: 6 },
+      promotionalBalance: { currency: 'AUD', units: '10000000', exponent: 6 },
+      nextPromotionalExpiryAt: Date.UTC(2027, 0, 1), locked: false, version: 1,
+    }} />)
+    expect(screen.getAllByText('A$15.00').length).toBeGreaterThan(0)
+    expect(screen.getByText('Purchased credit')).toBeTruthy()
+    expect(screen.getByText('Promotional credit')).toBeTruthy()
+    expect(screen.getByText(/Next promotional credit expiry:/)).toBeTruthy()
+  })
+})
 
 describe('owner credit target', () => {
   it('renders booked Account transactions instead of Agent activity approximations', () => {
@@ -382,7 +397,7 @@ describe('owner credit target', () => {
       documents={[{
         documentRef: 'money-document:adjustment:am11-failed',
         kind: 'adjustment',
-        amountUnits: '5280000',
+        amountUnits: '5780000',
         residualUnits: '0',
         sourceTransactionRefs: ['formance:tx:am11-failed'],
         policyRefs: ['commercial-policy:sandbox:v1'],
@@ -596,7 +611,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })
 
-  it('itemizes Australian GST on the platform fee in the funding quote', () => {
+  it('itemizes Australian GST on the loaded amount and platform fee in the funding quote', () => {
     render(
       <AeAccountFundingPanel
         port={{ begin: vi.fn(), read: vi.fn() }}
@@ -610,9 +625,9 @@ describe('assistant access components', () => {
     expect(quote.getByText('Platform fee')).toBeTruthy()
     expect(quote.getByText('A$0.50')).toBeTruthy()
     expect(quote.getByText('Australian GST (10%)')).toBeTruthy()
-    expect(quote.getByText('A$0.05')).toBeTruthy()
-    expect(screen.getByText(/Includes A\$0\.05 Australian GST \(10%\) on the platform fee\./)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })).toBeTruthy()
+    expect(quote.getByText('A$1.05')).toBeTruthy()
+    expect(screen.getByText(/Adds A\$1\.05 Australian GST \(10%\) on the loaded amount and platform fee\./)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i })).toBeTruthy()
   })
 
   it('states the payment outcome when funding is unavailable', () => {
@@ -693,12 +708,12 @@ describe('assistant access components', () => {
     fireEvent.click(tenDollarChoice)
     expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('true')
     expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('10')
-    const quotedPayment = screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })
+    const quotedPayment = screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i })
     expect(screen.getByRole('group', { name: 'Funding quote and payment' }).contains(quotedPayment)).toBe(true)
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '7.50' } })
     expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByRole('button', { name: /pay A\$7\.92 and add A\$7\.50/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /pay A\$8\.67 and add A\$7\.50/i })).toBeTruthy()
   })
 
   it.each([
@@ -728,7 +743,7 @@ describe('assistant access components', () => {
     expect(input.getAttribute('aria-invalid')).toBe('false')
     expect(screen.queryByRole('alert')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledOnce())
     expect(begin).toHaveBeenCalledWith({
       amount: { currency: 'AUD', units: '10000000', exponent: 6 },
@@ -765,13 +780,13 @@ describe('assistant access components', () => {
 
     const input = screen.getByLabelText(/other amount/i)
     fireEvent.change(input, { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
 
     await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce())
-    expect(screen.getByRole('button', { name: /pay A\$10\.11 and add A\$10\.00/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /pay A\$11\.11 and add A\$10\.00/i })).toBeTruthy()
     expect(begin).toHaveBeenCalledOnce()
 
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.11 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.11 and add A\$10\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
     expect(begin.mock.calls[1]?.[0]).toMatchObject({
       amount: { currency: 'AUD', units: '10000000', exponent: 6 },
@@ -797,12 +812,12 @@ describe('assistant access components', () => {
 
     const input = screen.getByLabelText(/other amount/i)
     fireEvent.change(input, { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
 
     await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce())
     expect(begin).toHaveBeenCalledOnce()
     expect(screen.getByRole('alert').textContent).toContain('could not be refreshed')
-    expect((screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }) as HTMLButtonElement).disabled).toBe(true)
 
     rerender(<AeAccountFundingPanel
       port={{ begin, read: vi.fn() }}
@@ -819,7 +834,7 @@ describe('assistant access components', () => {
     const port: AccountFundingPort = { begin, read: vi.fn() }
     render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(1))
     const firstKey = begin.mock.calls[0]?.[0].idempotencyKey
     expect(window.sessionStorage.getItem('ae.account-funding.attempt.user_owner')).toBe(firstKey)
@@ -827,7 +842,7 @@ describe('assistant access components', () => {
 
     render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
     expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('10.00')
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
     expect(begin.mock.calls[1]?.[0].idempotencyKey).toBe(firstKey)
     cleanup()
@@ -844,7 +859,7 @@ describe('assistant access components', () => {
       evidence: {
         provider: 'stripe',
         externalRef: 'cs_test_bound',
-        amount: { currency: 'AUD', units: '1055', exponent: 2 },
+        amount: { currency: 'AUD', units: '1155', exponent: 2 },
         status: 'pending',
         checkoutStatus: 'open',
         paymentStatus: 'unpaid',
@@ -883,8 +898,8 @@ describe('assistant access components', () => {
     const quote = within(screen.getByLabelText('Funding quote'))
     expect(quote.getByText('Platform fee')).toBeTruthy()
     expect(quote.getByText('A$0.50')).toBeTruthy()
-    expect(quote.getByText('A$0.05')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    expect(quote.getByText('A$1.05')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
 
     await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl))
     expect(begin).toHaveBeenCalledWith({
@@ -906,7 +921,7 @@ describe('assistant access components', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')).toBeNull()
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.78 and add A\$5\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
     expect(begin.mock.calls[1]?.[0]?.idempotencyKey).not.toBe(firstKey)
     expect(begin.mock.calls[1]?.[0]?.amount.units).toBe('5000000')
@@ -916,7 +931,7 @@ describe('assistant access components', () => {
     const session: CreditPaymentSession = {
       kind: 'hosted_redirect',
       evidence: {
-        provider: 'stripe', externalRef: 'cs_blocked', amount: { currency: 'AUD', units: '10550000', exponent: 6 },
+        provider: 'stripe', externalRef: 'cs_blocked', amount: { currency: 'AUD', units: '11550000', exponent: 6 },
         status: 'pending', checkoutStatus: 'open', paymentStatus: 'unpaid', checkoutMode: 'hosted_page',
         checkoutExpiresAt: 3_600_000, requestDigest: 'digest:request', metadataDigest: 'digest:metadata',
         checkoutSessionDigest: 'digest:checkout', evidenceDigest: 'digest:evidence', evidenceRef: 'stripe:checkout:cs_blocked', observedAt: 1,
@@ -929,7 +944,7 @@ describe('assistant access components', () => {
     render(<AeAccountFundingPanel port={{ begin, read: vi.fn() }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
 
     expect(await screen.findByText(/This payment attempt is preserved/u)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue secure payment' })).toBeTruthy()
@@ -943,7 +958,7 @@ describe('assistant access components', () => {
     const session: CreditPaymentSession = {
       kind: 'hosted_redirect',
       evidence: {
-        provider: 'stripe', externalRef: locator.externalRef, amount: { currency: 'AUD', units: '10550000', exponent: 6 },
+        provider: 'stripe', externalRef: locator.externalRef, amount: { currency: 'AUD', units: '11550000', exponent: 6 },
         status: 'pending', checkoutStatus: 'open', paymentStatus: 'unpaid', checkoutMode: 'hosted_page',
         checkoutExpiresAt: 3_600_000, requestDigest: 'digest:request', metadataDigest: 'digest:metadata',
         checkoutSessionDigest: 'digest:checkout', evidenceDigest: 'digest:evidence', evidenceRef: 'stripe:checkout:cs_readback', observedAt: 1,
@@ -996,7 +1011,7 @@ describe('assistant access components', () => {
       constraints={{ ...fundingConstraints, serviceFeeBps: 100 }}
     />)
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
-    expect(screen.getByRole('button', { name: /pay A\$10\.11 and add A\$10\.00/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /pay A\$11\.11 and add A\$10\.00/i })).toBeTruthy()
   })
 
   it('persists and reuses an outcome-unknown command locator without offering a retry', async () => {
@@ -1012,7 +1027,7 @@ describe('assistant access components', () => {
     render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
 
     expect(await screen.findByText(/do not start another payment/i)).toBeTruthy()
     const raw = window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')
@@ -1046,7 +1061,7 @@ describe('assistant access components', () => {
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')).toBeNull()
     expect(new URL(window.location.href).searchParams.get('funding')).toBeNull()
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.78 and add A\$5\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(1))
     expect(begin.mock.calls[0]?.[0]?.idempotencyKey).toMatch(/^account-funding:/u)
     expect(begin.mock.calls[0]?.[0]?.amount.units).toBe('5000000')
@@ -1071,7 +1086,7 @@ describe('assistant access components', () => {
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')).toBeNull()
     expect(new URL(window.location.href).searchParams.get('funding')).toBeNull()
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.78 and add A\$5\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(1))
     expect(begin.mock.calls[0]?.[0]?.idempotencyKey).toMatch(/^account-funding:/u)
   })
@@ -1083,7 +1098,7 @@ describe('assistant access components', () => {
       <AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />
     )
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
 
     expect(begin).toHaveBeenCalledOnce()
     expect(await screen.findByText(/account funding is unavailable/i)).toBeTruthy()

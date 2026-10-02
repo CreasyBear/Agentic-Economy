@@ -30,6 +30,7 @@ function providerOfferingPrices(
   pricingConfigJson: string | undefined,
   offering: Doc<'capabilityOfferings'>,
   networkId: string,
+  sourceKind: Doc<'capabilityPublications'>['sourceKind'],
 ): DirectoryEntry['prices'] {
   if (pricingConfigJson !== undefined) {
     try {
@@ -40,8 +41,9 @@ function providerOfferingPrices(
         if (config.kind === 'managed_x402') {
           const amount = pricingConfigSourceAmount(config)
           const decimalAmount = new Decimal(amount.units).div(new Decimal(10).pow(amount.exponent)).toFixed()
-          return [{ network: networkId, scheme: 'exact', amount: amount.units, asset: amount.currency, symbol: amount.currency, decimalAmount }]
+          return [{ network: config.sourceRequirement.network, scheme: 'exact', amount: amount.units, asset: amount.currency, symbol: amount.currency, decimalAmount }]
         }
+        if (sourceKind === 'x402') return []
         const display = displayPriceFromPricingConfig(config)
         if (display.kind === 'fixed') {
           const amount = display.amount
@@ -52,9 +54,10 @@ function providerOfferingPrices(
       }
     } catch (cause) {
       void cause;
-      // fallback to offering presentation price if pricingConfigJson parsing fails
+      // Only legacy non-x402 sources can fall back to a presentation price.
     }
   }
+  if (sourceKind === 'x402') return []
   const price = offering.presentation.price
   if (price === undefined || price.kind === 'on_request') return []
   const amount = price.kind === 'fixed' ? price.amount : price.minimum
@@ -82,7 +85,7 @@ export function providerDirectoryEntry(
     // consistent across both sources.
     provider: providerKey,
     category: business.category.trim().toLowerCase() || 'uncategorized',
-    prices: providerOfferingPrices(publication.pricingConfigJson, offering, publication.networkId),
+    prices: providerOfferingPrices(publication.pricingConfigJson, offering, publication.networkId, publication.sourceKind),
     metadataJson: '',
   }
 }

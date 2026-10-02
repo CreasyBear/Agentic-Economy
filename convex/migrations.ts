@@ -31,8 +31,8 @@ export const removeOfferingPrice = migrations.define({
  * `eligible`/`providerKey` on existing marketDirectorySearchEntries rows
  * across every generation, so the new fields can be tightened from optional
  * to required once this completes. Computed entirely from columns already
- * stored at write time (hasOutputSchema/hasOutputExample/payersOrder/
- * provider) via the same predicate applied going forward
+ * stored at write time (hasOutputSchema/hasOutputExample/minimumUsdPrice/
+ * payersOrder/provider) via the same predicate applied going forward
  * (src/modules/market/x402-directory-index.ts:isDirectoryEntryEligible) —
  * no re-fetch of the source entry needed. Idempotent: already-backfilled
  * rows are skipped.
@@ -43,7 +43,10 @@ export const backfillDirectoryEligibility = migrations.define({
     if (doc.eligible !== undefined && doc.providerKey !== undefined) return
     return {
       eligible: isDirectoryEntryEligible({
-        hasOutputSchema: doc.hasOutputSchema === true, hasOutputExample: doc.hasOutputExample === true, payersOrder: doc.payersOrder ?? -1,
+        hasOutputSchema: doc.hasOutputSchema === true,
+        hasOutputExample: doc.hasOutputExample === true,
+        minimumUsdPrice: doc.minimumUsdPrice,
+        payersOrder: doc.payersOrder ?? -1,
       }),
       providerKey: directoryProviderKey(doc.provider),
     }

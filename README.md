@@ -146,7 +146,11 @@ Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
 `npm run dev:local` starts the local Convex deployment, verifies its URL, and
-starts Vite with real Clerk identity. Once Vite is ready, it independently
+starts Vite with real Clerk identity. It explicitly sets
+`AE_DEPLOYMENT_ENVIRONMENT=development` in both runtimes. Hosted Vercel and
+Convex deployments must each declare the same `development` or `production`
+value; missing or mismatched declarations refuse new money operations.
+Once Vite is ready, it independently
 starts optional owner-authority seeding, directory scan kickoff (unless a
 complete catalogue generation exists), sandbox Tool publication, and FX refresh;
 failure of one optional stage does not stop the app. `ae doctor` reports
@@ -160,6 +164,14 @@ To bind a buyer credential, after startup run `npm run connect:local --
 URL and user code; approve in the browser as the owner. Consent approval requires
 Clerk's strict reverification, so there is no headless approval path anywhere.
 Use `--provider` to bind a provider credential the same way.
+
+In each Clerk instance, add
+`{"reverification_id":"{{session.reverification_id}}"}` to the customized
+**session token** claims, following [Clerk's action correlation guide](https://clerk.com/docs/guides/secure/reverification#correlate-a-reverification-with-a-specific-action).
+Operator commands, spending-limit increases, workspace closure/ownership transfer
+and owner-chat approvals require fresh verification of both factors. The web
+server signs the verified session evidence for Convex; adding `fva` to a Convex
+JWT template cannot establish this check. Spending reductions need no MFA prompt.
 
 For a **Clerk development instance only**, use a dedicated test owner for
 inbox-free local consent: create a Clerk user with an address such as

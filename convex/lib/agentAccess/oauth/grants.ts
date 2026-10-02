@@ -1,8 +1,9 @@
 import { v, type ObjectType } from 'convex/values'
 import type { GenericDatabaseReader } from 'convex/server'
 import { agentAccessConsentReservationValue } from '@/modules/agent-access/public'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { internal } from '../../../_generated/api'
-import type { MutationCtx, QueryCtx } from '../../../_generated/server'
+import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import type { DataModel, Doc } from '../../../_generated/dataModel'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from '../../platform/workloadCron/context'
@@ -122,6 +123,12 @@ export async function insertGrantHandler(
   args: ObjectType<typeof insertGrantArgs>,
 ) {
   await requireOAuthSourceWrite(ctx, args)
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
+  if (deploymentEnvironment === undefined
+    || args.grant.requestedAccess.environment !== deploymentEnvironment
+    || args.grant.approvedAccess.environment !== deploymentEnvironment) {
+    throw new Error('agent_access_oauth_environment_mismatch')
+  }
   if (args.grant.revision !== 1) {
     throw new Error('agent_access_oauth_invalid_initial_revision')
   }
@@ -193,6 +200,10 @@ export async function updateGrantHandler(
   args: ObjectType<typeof updateGrantArgs>,
 ) {
   await requireOAuthSourceWrite(ctx, args)
+  if (args.patch.approvedAccess !== undefined
+    && args.patch.approvedAccess.environment !== deploymentPaymentEnvironment(env)) {
+    throw new Error('agent_access_oauth_environment_mismatch')
+  }
   if (!Number.isSafeInteger(args.expectedRevision) || args.expectedRevision < 1) {
     throw new Error('agent_access_oauth_invalid_expected_revision')
   }

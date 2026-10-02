@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
 import type { CallService } from '@/modules/capability-execution/call-authority'
@@ -32,6 +32,7 @@ function officialClient(
           id: 'key:official-client-test',
           subject: 'user_official_client_test',
           scopes: scopes === null ? [] : [...scopes],
+          claims: { aeEnvironment: 'sandbox' },
         }),
         resolvePrincipal: async (projection) => ({
           ...projection,
@@ -55,6 +56,8 @@ async function connectOfficialClient(
   await client.connect(transport as unknown as Parameters<Client['connect']>[0])
   return client
 }
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter with the official client', () => {
   it('compiles every admitted tool contract while removing repeated schema bytes', async () => {

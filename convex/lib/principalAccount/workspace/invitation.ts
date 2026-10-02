@@ -24,9 +24,7 @@ export const invitationContextHandler = async (ctx: QueryCtx): Promise<
   if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
   const principal = await requireDirectoryInteractiveHumanPrincipal(ctx.db, identity)
   const canonicalPrincipalRef = principalRef(principal.principalRef)
-  const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
-    ctx.db, canonicalPrincipalRef, identity, 'require',
-  )
+  const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(ctx.db, canonicalPrincipalRef, identity)
   const access = await requireAccessFactForAccount(ctx.db, canonicalPrincipalRef, accountRef(activeAccountRef))
   if (access.kind !== 'ownership' && access.row.role !== 'org:admin') return { kind: 'role_restricted' }
   const bindings = await ctx.db.query('accountExternalOrganizationBindings')

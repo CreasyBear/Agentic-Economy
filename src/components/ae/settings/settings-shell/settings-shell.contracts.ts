@@ -16,8 +16,7 @@ export const settingsNavigation: readonly SettingsNavGroup[] = [
     { label: 'Tax', href: '/owner/settings/tax' },
   ] },
   { label: 'Billing', items: [
-    { label: 'Payment methods', href: '/owner/settings/payment-methods' },
-    { label: 'Receipts & invoices', href: '/owner/settings/receipts' },
+    { label: 'Receipts', href: '/owner/settings/receipts' },
     { label: 'Spending defaults', href: '/owner/settings/spending' },
   ] },
   { label: 'Developers', items: [

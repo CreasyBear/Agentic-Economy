@@ -1,4 +1,3 @@
-import { isReverificationHint } from '@clerk/shared/authorization-errors'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import type { z } from 'zod'
@@ -10,21 +9,20 @@ import {
 } from '@/components/ae/admin/actions/actions.contracts'
 import { reportAdminInvariant } from '@/lib/observability/admin-event-props'
 import { callSourceMutation, sourceMutation } from '@/lib/server/convex-source'
-import { requireStrictClerkConsequenceProof, type ClerkConsequenceProofInput } from '@/lib/server/clerk-consequence-proof'
+import { readClerkMfaConsequenceProof, type ClerkMfaConsequenceProofInput } from '@/lib/server/clerk-consequence-proof'
 import { readOperatorContextThroughSource } from '@/lib/server/operator-context.functions'
 import {
   sourceWriteAdmissionFromContext,
   sourceWriteRequestFromAdmission,
 } from '@/lib/server/source-write-admission'
 import type { AdminCommandAction, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   SourceWriteAdmission,
   SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
 
 type AdminWireArgs<A extends AdminCommandAction> = Extract<z.output<typeof adminCommandRequestSchema>, { action: A }> & Readonly<{
-  proof: ClerkConsequenceProofInput
+  proof?: ClerkMfaConsequenceProofInput
   sourceWrite: SourceWriteAdmission
   sourceWriteRequest: SourceWriteAdmissionRequest
 }>
@@ -35,6 +33,10 @@ const grantAdminMembership = sourceMutation<AdminWireArgs<'grant_admin_membershi
 const revokeAdminMembership = sourceMutation<AdminWireArgs<'revoke_admin_membership'>, AdminCommandReceipt<'revoke_admin_membership'>>('security:revokeAdminMembership')
 const verifySourceAuthority = sourceMutation<AdminWireArgs<'verify_capability_source_authority'>, AdminCommandReceipt<'verify_capability_source_authority'>>('capabilitySupply:verifyCapabilitySourceAuthority')
 const changeCommercialPolicy = sourceMutation<AdminWireArgs<'change_commercial_policy'>, AdminCommandReceipt<'change_commercial_policy'>>('moneyCommercialPolicy:change')
+const grantPromotionalCredit = sourceMutation<AdminWireArgs<'grant_promotional_credit'>, AdminCommandReceipt<'grant_promotional_credit'>>('moneyPromotionalCredit:grant')
+
+const setPaymentsPaused = sourceMutation<AdminWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
+const changeTreasuryThresholds = sourceMutation<AdminWireArgs<'change_treasury_thresholds'>, AdminCommandReceipt<'change_treasury_thresholds'>>('adminTreasuryCommands:changeThresholds')
 
 export const submitAdminCommandServer = createServerFn({ method: 'POST' })
   .validator((data) => adminCommandRequestSchema.parse(data))
@@ -45,29 +47,12 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
       if (actor.kind !== 'authorized' || !actor.allowedSurfaces.includes('admin')) {
         return { kind: 'refused', action: data.action, code: 'missing_membership', correlationId: data.correlationId }
       }
-      let proof: ClerkConsequenceProofInput
-      try {
-        proof = await requireStrictClerkConsequenceProof(canonicalDigest({
-          scope: 'admin_operator',
-          action: data.action,
-          input: data.input,
-          reasonCode: data.reasonCode,
-          evidenceRefs: data.evidenceRefs,
-          ...(data.expectedStateDigest === undefined ? {} : { expectedStateDigest: data.expectedStateDigest }),
-        }))
-      } catch (cause) {
-        if (isReverificationHint(cause)
-          || (cause instanceof Error && (
-            cause.message === 'authentication_required' || cause.message === 'security_evidence_unavailable'
-          ))) {
-          return { kind: 'refused', action: data.action, code: 'mfa_reverification_required', correlationId: data.correlationId }
-        }
-        throw cause
-      }
-      if (proof.secondFactorAgeMinutes < 0) {
-        return { kind: 'refused', action: data.action, code: 'mfa_reverification_required', correlationId: data.correlationId }
-      }
-      const command = { ...data, proof }
+      // Convex checks current authority and an exact recorded operation before
+      // requiring MFA for a new effect. A lost acknowledgement can therefore
+      // be recovered after the original verification has expired.
+      const proof = await readClerkMfaConsequenceProof()
+      const evidence = proof === undefined ? {} : { proof }
+      const command = { ...data, ...evidence }
       const sourceWrite = await sourceWriteAdmissionFromContext({
         context,
         command,
@@ -78,23 +63,32 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
       const sourceWriteRequest = sourceWriteRequestFromAdmission(sourceWrite)
       let receipt: AdminActionSheetReceipt
       switch (data.action) {
+        case 'set_payments_paused':
+          receipt = await callSourceMutation(setPaymentsPaused, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
+          break
+        case 'change_treasury_thresholds':
+          receipt = await callSourceMutation(changeTreasuryThresholds, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
+          break
         case 'set_business_suppression':
-          receipt = await callSourceMutation(setBusinessSuppression, { ...data, proof, sourceWrite, sourceWriteRequest })
+          receipt = await callSourceMutation(setBusinessSuppression, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
         case 'close_removal_dispute':
-          receipt = await callSourceMutation(closeRemovalDispute, { ...data, proof, sourceWrite, sourceWriteRequest })
+          receipt = await callSourceMutation(closeRemovalDispute, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
         case 'grant_admin_membership':
-          receipt = await callSourceMutation(grantAdminMembership, { ...data, proof, sourceWrite, sourceWriteRequest })
+          receipt = await callSourceMutation(grantAdminMembership, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
         case 'revoke_admin_membership':
-          receipt = await callSourceMutation(revokeAdminMembership, { ...data, proof, sourceWrite, sourceWriteRequest })
+          receipt = await callSourceMutation(revokeAdminMembership, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
         case 'verify_capability_source_authority':
-          receipt = await callSourceMutation(verifySourceAuthority, { ...data, proof, sourceWrite, sourceWriteRequest })
+          receipt = await callSourceMutation(verifySourceAuthority, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
         case 'change_commercial_policy':
-          receipt = await callSourceMutation(changeCommercialPolicy, { ...data, proof, sourceWrite, sourceWriteRequest })
+          receipt = await callSourceMutation(changeCommercialPolicy, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
+          break
+        case 'grant_promotional_credit':
+          receipt = await callSourceMutation(grantPromotionalCredit, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
       }
       captureAdminCommand(actor.principalRef, receipt)

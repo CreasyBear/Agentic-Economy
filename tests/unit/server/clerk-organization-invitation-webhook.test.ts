@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { handleClerkOrganizationInvitationWebhookRequest } from '@/lib/server/clerk-organization-invitation-webhook'
 import type { OrganizationInvitationCreatedObservation } from '@/modules/workspace-invitation/organization-invitation-observation'
 import { handleClerkWebhookRequest } from '@/routes/api.clerk.webhook'
+import { verifiedClerkWebhook } from '../../helpers/clerk-webhook'
 
 type OrganizationInvitationRevokedObservation = OrganizationInvitationCreatedObservation
 type OrganizationInvitationObservationResult = Readonly<
@@ -29,14 +30,12 @@ describe('Clerk organization invitation webhook (W-16)', () => {
     it('H1: verified organizationInvitation.created applies one redacted command', async () => {
       const applied: OrganizationInvitationCreatedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
-      const response = await handleClerkOrganizationInvitationWebhookRequest(incoming, {
-        issuer,
-        verify: async (verifiedRequest) => {
-          expect(verifiedRequest).toBe(incoming)
-          expect(await verifiedRequest.text()).toBe(sensitiveBody())
-          expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
-          return invitationCreatedEvent()
-        },
+      const webhook = await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
+        expect(await verifiedRequest.text()).toBe(sensitiveBody())
+        expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
+        return invitationCreatedEvent()
+      })
+      const response = await handleClerkOrganizationInvitationWebhookRequest(webhook, {
         apply: async (command) => {
           applied.push(command)
           return { kind: 'accepted', status: 'applied' }
@@ -55,14 +54,15 @@ describe('Clerk organization invitation webhook (W-16)', () => {
 
     it('H2: command hashes match sha256 digest pattern', async () => {
       const applied: OrganizationInvitationCreatedObservation[] = []
-      await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h2'), {
-        issuer,
-        verify: async () => invitationCreatedEvent(),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+      await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_h2'), async () => invitationCreatedEvent()),
+        {
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
+      )
 
       expect(applied[0]?.deliveryRefHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
       expect(applied[0]?.invitationRefHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
@@ -71,15 +71,15 @@ describe('Clerk organization invitation webhook (W-16)', () => {
 
     it('H3: serialized command contains no sensitive invitation material', async () => {
       const applied: OrganizationInvitationCreatedObservation[] = []
-      await handleClerkOrganizationInvitationWebhookRequest(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), {
-        issuer,
-        verify: async () => invitationCreatedEvent(),
-        apply: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
+      await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), async () => invitationCreatedEvent()),
+        {
+          apply: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
         },
-      })
-
+      )
       const serialized = JSON.stringify(applied[0])
       expect(serialized).not.toContain(INVITEE_EMAIL)
       expect(serialized).not.toContain(SENSITIVE_DELIVERY_REF)
@@ -97,16 +97,17 @@ describe('Clerk organization invitation webhook (W-16)', () => {
         'first@example.test',
         'second@example.test',
       ].entries()) {
-        const response = await handleClerkOrganizationInvitationWebhookRequest(request(`delivery_h4_${index}`), {
-          issuer,
-          verify: async () => invitationCreatedEvent({
+        const response = await handleClerkOrganizationInvitationWebhookRequest(
+          await verifiedClerkWebhook(request(`delivery_h4_${index}`), async () => invitationCreatedEvent({
             data: { email_address: email },
-          }),
-          apply: async (command) => {
-            commands.push(command)
-            return { kind: 'accepted', status: 'applied' }
+          })),
+          {
+            apply: async (command) => {
+              commands.push(command)
+              return { kind: 'accepted', status: 'applied' }
+            },
           },
-        })
+        )
         expect(response.status).toBe(200)
       }
 
@@ -121,16 +122,17 @@ describe('Clerk organization invitation webhook (W-16)', () => {
         'invitee@example.test',
         'INVITEE@EXAMPLE.TEST',
       ].entries()) {
-        const response = await handleClerkOrganizationInvitationWebhookRequest(request(`delivery_h5_${index}`), {
-          issuer,
-          verify: async () => invitationCreatedEvent({
+        const response = await handleClerkOrganizationInvitationWebhookRequest(
+          await verifiedClerkWebhook(request(`delivery_h5_${index}`), async () => invitationCreatedEvent({
             data: { email_address: email },
-          }),
-          apply: async (command) => {
-            commands.push(command)
-            return { kind: 'accepted', status: 'applied' }
+          })),
+          {
+            apply: async (command) => {
+              commands.push(command)
+              return { kind: 'accepted', status: 'applied' }
+            },
           },
-        })
+        )
         expect(response.status).toBe(200)
       }
 
@@ -139,13 +141,12 @@ describe('Clerk organization invitation webhook (W-16)', () => {
 
     it('H6: invalid role returns 400 problem', async () => {
       const apply = vi.fn()
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h6'), {
-        issuer,
-        verify: async () => invitationCreatedEvent({
+      const response = await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_h6'), async () => invitationCreatedEvent({
           data: { role: 'org:custom_role' },
-        }),
-        apply,
-      })
+        })),
+        { apply },
+      )
 
       expect(response.status).toBe(400)
       expect(apply).not.toHaveBeenCalled()
@@ -158,12 +159,8 @@ describe('Clerk organization invitation webhook (W-16)', () => {
     ] as const)('H7: invalid svix-id (%s) returns 400 problem', async (_label, svixId) => {
       const apply = vi.fn()
       const response = await handleClerkOrganizationInvitationWebhookRequest(
-        request('delivery_h7', '{}', svixId),
-        {
-          issuer,
-          verify: async () => invitationCreatedEvent(),
-          apply,
-        },
+        await verifiedClerkWebhook(request('delivery_h7', '{}', svixId), async () => invitationCreatedEvent()),
+        { apply },
       )
 
       expect(response.status).toBe(400)
@@ -177,13 +174,12 @@ describe('Clerk organization invitation webhook (W-16)', () => {
       ['created_at', { created_at: undefined }],
     ] as const)('H8: missing %s returns 400 problem', async (_field, patch) => {
       const apply = vi.fn()
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h8'), {
-        issuer,
-        verify: async () => invitationCreatedEvent({
+      const response = await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_h8'), async () => invitationCreatedEvent({
           data: patch,
-        }),
-        apply,
-      })
+        })),
+        { apply },
+      )
 
       expect(response.status).toBe(400)
       expect(apply).not.toHaveBeenCalled()
@@ -191,53 +187,27 @@ describe('Clerk organization invitation webhook (W-16)', () => {
 
     it('H9: non-pending status returns 400 problem', async () => {
       const apply = vi.fn()
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h9'), {
-        issuer,
-        verify: async () => invitationCreatedEvent({
-          data: { status: 'accepted' },
-        }),
-        apply,
-      })
-
-      expect(response.status).toBe(400)
-      expect(apply).not.toHaveBeenCalled()
-    })
-
-    it('H10: failed verification returns 400 without leaking verifier secrets', async () => {
-      const apply = vi.fn()
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h10'), {
-        issuer,
-        verify: async () => { throw new Error('whsec_private verifier details') },
-        apply,
-      })
-
-      expect(response.status).toBe(400)
-      expect(await response.text()).not.toContain('whsec_private')
-      expect(apply).not.toHaveBeenCalled()
-    })
-
-    it('H11: oversized body returns 413 without calling verifier', async () => {
-      const verify = vi.fn()
       const response = await handleClerkOrganizationInvitationWebhookRequest(
-        request('delivery_h11', 'x'.repeat(257 * 1024)),
-        { issuer, verify },
+        await verifiedClerkWebhook(request('delivery_h9'), async () => invitationCreatedEvent({
+          data: { status: 'accepted' },
+        })),
+        { apply },
       )
-
-      expect(response.status).toBe(413)
-      expect(verify).not.toHaveBeenCalled()
+      expect(response.status).toBe(400)
+      expect(apply).not.toHaveBeenCalled()
     })
+
 
     it('H12: organizationInvitation.accepted returns ignored without applying', async () => {
       const apply = vi.fn()
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h12_accepted'), {
-        issuer,
-        verify: async () => ({
+      const response = await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_h12_accepted'), async () => ({
           type: 'organizationInvitation.accepted',
           object: 'event',
           data: invitationCreatedEvent().data,
-        }),
-        apply,
-      })
+        })),
+        { apply },
+      )
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ kind: 'accepted', status: 'ignored' })
@@ -247,14 +217,12 @@ describe('Clerk organization invitation webhook (W-16)', () => {
     it('H15: organizationInvitation.revoked with status revoked calls applyRevoked', async () => {
       const applied: OrganizationInvitationRevokedObservation[] = []
       const incoming = request(SENSITIVE_DELIVERY_REF, sensitiveBody())
-      const response = await handleClerkOrganizationInvitationWebhookRequest(incoming, {
-        issuer,
-        verify: async (verifiedRequest) => {
-          expect(verifiedRequest).toBe(incoming)
-          expect(await verifiedRequest.text()).toBe(sensitiveBody())
-          expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
-          return invitationRevokedEvent({ data: { updated_at: 4_500 } })
-        },
+      const webhook = await verifiedClerkWebhook(incoming, async (verifiedRequest) => {
+        expect(await verifiedRequest.text()).toBe(sensitiveBody())
+        expect(verifiedRequest.headers.get('svix-id')).toBe(SENSITIVE_DELIVERY_REF)
+        return invitationRevokedEvent({ data: { updated_at: 4_500 } })
+      })
+      const response = await handleClerkOrganizationInvitationWebhookRequest(webhook, {
         applyRevoked: async (command) => {
           applied.push(command)
           return { kind: 'accepted', status: 'applied' }
@@ -273,14 +241,15 @@ describe('Clerk organization invitation webhook (W-16)', () => {
 
     it('H16: serialized revoked command contains no sensitive invitation material', async () => {
       const applied: OrganizationInvitationRevokedObservation[] = []
-      await handleClerkOrganizationInvitationWebhookRequest(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), {
-        issuer,
-        verify: async () => invitationRevokedEvent(),
-        applyRevoked: async (command) => {
-          applied.push(command)
-          return { kind: 'accepted', status: 'applied' }
-        },
-      } satisfies InvitationWebhookDependencies)
+      await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request(SENSITIVE_DELIVERY_REF, sensitiveBody()), async () => invitationRevokedEvent()),
+        {
+          applyRevoked: async (command) => {
+            applied.push(command)
+            return { kind: 'accepted', status: 'applied' }
+          },
+        } satisfies InvitationWebhookDependencies,
+      )
 
       const serialized = JSON.stringify(applied[0])
       expect(serialized).not.toContain(INVITEE_EMAIL)
@@ -295,11 +264,10 @@ describe('Clerk organization invitation webhook (W-16)', () => {
 
     it('H17: revoked invitation with non-revoked status returns 400 without calling applier', async () => {
       const applyRevoked = vi.fn()
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h17'), {
-        issuer,
-        verify: async () => invitationRevokedEvent({ data: { status: 'pending' } }),
-        applyRevoked,
-      } satisfies InvitationWebhookDependencies)
+      const response = await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_h17'), async () => invitationRevokedEvent({ data: { status: 'pending' } })),
+        { applyRevoked } satisfies InvitationWebhookDependencies,
+      )
 
       expect(response.status).toBe(400)
       expect(applyRevoked).not.toHaveBeenCalled()
@@ -307,22 +275,20 @@ describe('Clerk organization invitation webhook (W-16)', () => {
 
     it('H18: revoked invitation missing updated_at returns 400 without calling applier', async () => {
       const applyRevoked = vi.fn()
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h18'), {
-        issuer,
-        verify: async () => invitationRevokedEvent({ data: { updated_at: undefined } }),
-        applyRevoked,
-      } satisfies InvitationWebhookDependencies)
+      const response = await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_h18'), async () => invitationRevokedEvent({ data: { updated_at: undefined } })),
+        { applyRevoked } satisfies InvitationWebhookDependencies,
+      )
 
       expect(response.status).toBe(400)
       expect(applyRevoked).not.toHaveBeenCalled()
     })
 
     it('H14: applier failure returns 503 with Retry-After and no cause leak', async () => {
-      const response = await handleClerkOrganizationInvitationWebhookRequest(request('delivery_h14'), {
-        issuer,
-        verify: async () => invitationCreatedEvent(),
-        apply: async () => { throw new Error('private persistence failure') },
-      })
+      const response = await handleClerkOrganizationInvitationWebhookRequest(
+        await verifiedClerkWebhook(request('delivery_h14'), async () => invitationCreatedEvent()),
+        { apply: async () => { throw new Error('private persistence failure') } },
+      )
 
       expect(response.status).toBe(503)
       expect(response.headers.get('Retry-After')).toBe('5')
@@ -331,7 +297,7 @@ describe('Clerk organization invitation webhook (W-16)', () => {
   })
 
   describe('handleClerkWebhookRequest', () => {
-    it.each(['session.removed', 'organization.created'] as const)(
+    it.each(['session.removed', 'organization.updated'] as const)(
       'H13: verified unsupported %s returns ignored without applying invitation command',
       async (type) => {
         const apply = vi.fn()

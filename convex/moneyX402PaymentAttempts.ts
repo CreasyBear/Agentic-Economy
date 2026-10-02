@@ -50,16 +50,33 @@ import {
   readX402PaymentAuthorizationHandler,
   readX402PaymentAuthorizationReturns,
 } from './lib/money/x402PaymentAttempt/read'
-import { prepareSellerOnboardingCanaryPaymentAuthorizationHandler } from './lib/money/x402PaymentAttempt/canary'
 import { beginResponseRecoveryHandler, responseRecoveryIsCurrentHandler } from './lib/money/x402PaymentAttempt/responseRecovery'
 import { persistedCallAuthorityIsCurrent } from './lib/money/billingAuthorization/persistedCall'
 import { persistedPaidCallConsequenceIsAdmitted } from './lib/capabilityExecution/callLifecycle/paidConsequenceAdmission'
+import { recordDefinitiveSigningRejectionArgs, recordDefinitiveSigningRejectionHandler,
+  readDefinitiveSigningRejectionArgs, readDefinitiveSigningRejectionReturns,
+  readDefinitiveSigningRejectionHandler } from './lib/money/x402PaymentAttempt/spendResolution'
 
-/** Platform validation uses the same durable signing attempt, without a buyer reservation. */
-export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutation({
-  args: prepareX402PaymentAuthorizationArgs,
-  returns: prepareX402PaymentAuthorizationReturns,
-  handler: prepareSellerOnboardingCanaryPaymentAuthorizationHandler,
+export const recordDefinitiveSigningRejection = internalMutation({
+  args: recordDefinitiveSigningRejectionArgs.fields,
+  returns: v.boolean(),
+  handler: recordDefinitiveSigningRejectionHandler,
+})
+export const readDefinitiveSigningRejection = internalQuery({
+  args: readDefinitiveSigningRejectionArgs.fields,
+  returns: readDefinitiveSigningRejectionReturns,
+  handler: readDefinitiveSigningRejectionHandler,
+})
+import {
+  recordScreeningAndReserveSigningArgs,
+  recordScreeningAndReserveSigningReturns,
+  recordScreeningAndReserveSigningHandler,
+} from './lib/money/x402PaymentAttempt/spendAdmission'
+
+export const recordScreeningAndReserveSigning = internalMutation({
+  args: recordScreeningAndReserveSigningArgs,
+  returns: recordScreeningAndReserveSigningReturns,
+  handler: recordScreeningAndReserveSigningHandler,
 })
 
 export const prepareX402PaymentAuthorization = internalMutation({
@@ -138,7 +155,7 @@ export const checkpointX402Response = internalMutation({
   args: {
     dispatchRef: v.string(), attemptRef: v.string(), effectGeneration: v.number(),
     toolRef: v.string(), inputDigest: v.string(), paymentIdentifier: v.string(),
-    responseDigest: v.string(), outputJson: v.string(),
+    responseStatus: v.number(), responseDigest: v.optional(v.string()), outputJson: v.optional(v.string()),
     settlementTransactionRef: v.optional(v.string()),
     requestDigest: v.string(), paymentResponseDigest: v.optional(v.string()),
   },

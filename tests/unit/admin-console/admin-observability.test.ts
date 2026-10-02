@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { reverificationError } from '@clerk/shared/authorization-errors'
 
 import { principalRef } from '@/modules/principal-account/principal/public'
 
@@ -23,7 +22,7 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 vi.mock('@tanstack/react-start/server', () => ({ setResponseHeader: vi.fn() }))
 vi.mock('@/lib/server/operator-context.functions', () => ({ readOperatorContextThroughSource: server.operator }))
-vi.mock('@/lib/server/clerk-consequence-proof', () => ({ requireStrictClerkConsequenceProof: server.proof }))
+vi.mock('@/lib/server/clerk-consequence-proof', () => ({ readClerkMfaConsequenceProof: server.proof }))
 vi.mock('@/lib/server/source-write-admission', () => ({
   sourceWriteAdmissionFromContext: server.mint,
   sourceWriteRequestFromAdmission: vi.fn(),
@@ -120,32 +119,40 @@ describe('admin observability boundary', () => {
     expect(properties).toEqual(lookupProperties)
   })
 
-  it('returns a not-applied MFA refusal without minting or mutating, and reports no invariant', async () => {
+  it('returns the authoritative MFA refusal for a new command without reporting an invariant', async () => {
     server.operator.mockResolvedValue({
       kind: 'authorized', principalRef: actor, allowedSurfaces: ['admin'],
     })
-    server.proof.mockRejectedValue(reverificationError('strict'))
+    server.proof.mockResolvedValue(undefined)
+    server.mint.mockResolvedValue({ signature: 'signed:without-proof' })
+    server.mutate.mockResolvedValue({ kind: 'refused', action: 'grant_admin_membership',
+      code: 'mfa_reverification_required', correlationId: 'admin:correlation' })
     const receipt = await server.handler(commandRequest)
     expect(receipt).toEqual({
       kind: 'refused', action: 'grant_admin_membership',
       code: 'mfa_reverification_required', correlationId: 'admin:correlation',
     })
-    expect(server.mint).not.toHaveBeenCalled()
-    expect(server.mutate).not.toHaveBeenCalled()
+    expect(server.mint).toHaveBeenCalledWith(expect.objectContaining({ command: commandRequest.data }))
+    expect(server.mutate).toHaveBeenCalledOnce()
+    expect(server.mutate.mock.calls[0]?.[1]).not.toHaveProperty('proof')
     expect(sentry.captureServerException).not.toHaveBeenCalled()
   })
 
-  it('refuses a first-factor-only claim before source-write admission or mutation', async () => {
+  it('recovers the original completed receipt when fresh MFA is unavailable', async () => {
     server.operator.mockResolvedValue({
       kind: 'authorized', principalRef: actor, allowedSurfaces: ['admin'],
     })
-    server.proof.mockResolvedValue({
-      reverificationId: 'reverify:first-only', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1,
-    })
-    const receipt = await server.handler(commandRequest)
-    expect(receipt).toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
-    expect(server.mint).not.toHaveBeenCalled()
-    expect(server.mutate).not.toHaveBeenCalled()
+    server.proof.mockResolvedValue(undefined)
+    server.mint.mockResolvedValue({ signature: 'signed:receipt-retry' })
+    const receipt = { kind: 'completed', action: 'grant_admin_membership', code: 'membership_granted',
+      effectRefs: ['membership:one'], auditEventRef: 'audit:one', correlationId: 'admin:correlation' }
+    server.mutate.mockResolvedValue(receipt)
+    expect(await server.handler(commandRequest)).toEqual(receipt)
+    expect(server.mutate).toHaveBeenCalledWith('security:grantAdminMembership', expect.objectContaining({
+      ...commandRequest.data, sourceWrite: { signature: 'signed:receipt-retry' },
+    }))
+    expect(server.mutate.mock.calls[0]?.[1]).not.toHaveProperty('proof')
+    expect(sentry.captureServerException).not.toHaveBeenCalled()
   })
 
   it('refuses non-admin sessions before proof or mutation', async () => {
@@ -157,10 +164,29 @@ describe('admin observability boundary', () => {
     expect(sentry.captureServerException).not.toHaveBeenCalled()
   })
 
+  it('signs the exact command with verified MFA subject and timestamp before mutation', async () => {
+    server.operator.mockResolvedValue({ kind: 'authorized', principalRef: actor, allowedSurfaces: ['admin'] })
+    const proof = { reverificationId: 'reverify:exact', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0,
+      subject: 'user_admin', evidenceObservedAt: 1_800_000_000_000 }
+    server.proof.mockResolvedValue(proof)
+    server.mint.mockResolvedValue({ signature: 'signed:exact' })
+    const receipt = { kind: 'completed', action: 'grant_admin_membership', code: 'membership_granted',
+      effectRefs: ['membership:one'], auditEventRef: 'audit:one', correlationId: 'admin:correlation' }
+    server.mutate.mockResolvedValue(receipt)
+    expect(await server.handler(commandRequest)).toEqual(receipt)
+    expect(server.mint).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'admin_operator', command: { ...commandRequest.data, proof },
+    }))
+    expect(server.mutate).toHaveBeenCalledWith('security:grantAdminMembership', expect.objectContaining({
+      ...commandRequest.data, proof, sourceWrite: { signature: 'signed:exact' },
+    }))
+  })
+
   it('captures source-write failures with Sentry while surfacing unknown outcome', async () => {
     server.operator.mockResolvedValue({ kind: 'authorized', principalRef: actor, allowedSurfaces: ['admin'] })
     server.proof.mockResolvedValue({
       reverificationId: 'reverify:1', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0,
+      subject: 'user_admin', evidenceObservedAt: Date.now(),
     })
     const failure = new Error('source transport failed')
     server.mint.mockRejectedValue(failure)

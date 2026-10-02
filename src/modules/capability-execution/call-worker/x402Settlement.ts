@@ -227,6 +227,7 @@ export async function recordX402TransportObservation(
     ?? (x402SettlementStatus === 'unknown'
       ? 'unknown'
       : 'observed')
+  const responseStatus = input.observation.responseStatus
   await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentObservation, {
     dispatchRef: input.dispatch.callRef,
     attemptRef: input.durableAttemptRef,
@@ -238,6 +239,9 @@ export async function recordX402TransportObservation(
     transportRequestDigest: input.observation.requestDigest,
     paymentObservationDigest: paymentObservationDigest(input.observation, input.operationKeyDigest),
     settlementStatus: x402SettlementStatus,
+    ...(responseStatus !== undefined && Number.isSafeInteger(responseStatus)
+      && responseStatus >= 100 && responseStatus <= 599
+      ? { responseStatus } : {}),
     ...(settlementDigest === undefined
       ? {}
       : { paymentResponseDigest: settlementDigest }),

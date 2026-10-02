@@ -45,6 +45,9 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
         principalId: result.principalId,
         accountId: result.accountId,
         balance: result.balance,
+        ...(result.purchasedBalance === undefined ? {} : { purchasedBalance: result.purchasedBalance }),
+        ...(result.promotionalBalance === undefined ? {} : { promotionalBalance: result.promotionalBalance }),
+        ...(result.nextPromotionalExpiryAt === undefined ? {} : { nextPromotionalExpiryAt: result.nextPromotionalExpiryAt }),
         ...(result.pendingTopup === undefined ? {} : {
           pendingTopup: {
             commandRef: result.pendingTopup.commandRef,
@@ -55,11 +58,6 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
               : { externalRef: result.pendingTopup.externalRef }),
           },
         }),
-        autoRecharge: {
-          enabled: result.autoRecharge.enabled,
-          threshold: result.autoRecharge.threshold,
-          rechargeAmount: result.autoRecharge.rechargeAmount,
-        },
         evidence: result.evidence,
       }
     },
@@ -92,5 +90,4 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
     },
   }
 }
-
 

@@ -1,11 +1,12 @@
+import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
+import { claimPromotionalCredit } from '../../money/promotionalCredit/allocation'
+import type { PromotionalCreditAllocation } from '@/modules/money/public'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { activeChatTurnForMoney } from '../../chat/threads/ownership'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   parsePublishedToolSnapshot,
   publishedToolMaterialMatches,
-  type SellerOnboardingCanaryExecutionEnvelope,
 } from '@/modules/capability-supply/public'
 import type { CallIdempotencyReservation } from '@/modules/capability-execution/call-authority'
 import { recordMarketEvidenceFact } from '../../../marketEvidence'
@@ -92,42 +93,6 @@ function existingReservationMatches(existing: CallRow, args: ReserveArgs): boole
     existing.requestDigest === args.requestDigest,
     operationSnapshotMatches(existing, args),
     existing.inputJson === args.inputJson,
-    canonicalOptionalCanary(existing.sellerOnboardingCanary) === canonicalOptionalCanary(args.sellerOnboardingCanary),
-  ].every(Boolean)
-}
-
-export function canonicalOptionalCanary(
-  value: SellerOnboardingCanaryExecutionEnvelope | undefined,
-): string | undefined {
-  return value === undefined ? undefined : canonicalDigest(value as never)
-}
-
-function canaryEnvelopeMatchesReservation(args: ReserveArgs): boolean {
-  const canary = args.sellerOnboardingCanary
-  if (canary === undefined) return true
-  return [
-    (args.environment === 'sandbox' || args.environment === 'production'),
-    canary.executionPurpose === 'seller_onboarding_canary',
-    canary.callRef === args.callRef,
-    canary.toolRef === args.toolRef,
-    canary.inputDigest === args.inputDigest,
-    canary.idempotencyKey === args.idempotencyKey,
-    canary.readinessValidUntil > args.now,
-    canary.expiresAt > args.now,
-    canary.expiresAt <= canary.readinessValidUntil,
-    canary.funding.kind === 'ae_owned',
-    canary.funding.principalId === args.principalId,
-    canary.funding.ownerId === args.ownerId,
-    canary.funding.credentialId === args.credentialId,
-    canary.funding.applicationRef === args.applicationRef,
-    canary.funding.grantRef === args.grantRef,
-    canary.funding.grantGeneration === args.grantGeneration,
-    canary.funding.policyDigest === args.policyDigest,
-    canary.funding.ledgerEffects === 'external_spend_only',
-    canary.accountingPolicy.recordBuyerUsage === false,
-    canary.accountingPolicy.accrueProviderEarnings === false,
-    canary.accountingPolicy.accruePlatformRake === false,
-    canary.accountingPolicy.recordQualifiedUse === false,
   ].every(Boolean)
 }
 
@@ -151,14 +116,12 @@ async function loadReservationCommitment(
   ctx: MutationCtx,
   args: ReserveArgs,
 ): Promise<CommitmentRow | null> {
-  if (args.sellerOnboardingCanary !== undefined) return null
   return await ctx.db.query('capabilityQuotes')
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
     .unique()
 }
 
 function commitmentMatchesReservation(commitment: CommitmentRow | null, args: ReserveArgs): boolean {
-  if (args.sellerOnboardingCanary !== undefined) return commitment === null
   if (commitment === null) return false
   return [
     commitment.state === 'issued',
@@ -184,15 +147,17 @@ async function persistReservedCall(
   reservation: CallIdempotencyReservation,
   commitment: CommitmentRow | null,
   formanceFinancialState?: 'reservation_pending',
+  promotionalCreditAllocation?: PromotionalCreditAllocation,
 ): Promise<void> {
   await ctx.db.insert('capabilityCalls', {
     ...reservation,
+    ...(args.turnRef === undefined ? {} : { chatTurnRef: args.turnRef }),
     ...(args.toolJson === undefined ? {} : { toolJson: args.toolJson }),
     ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
-    ...(args.sellerOnboardingCanary === undefined
-      ? {}
-      : { sellerOnboardingCanary: structuredClone(args.sellerOnboardingCanary) }),
     ...(formanceFinancialState === undefined ? {} : { formanceFinancialState }),
+    ...(promotionalCreditAllocation === undefined ? {} : {
+      promotionalCreditAllocation: { ...promotionalCreditAllocation, grants: [...promotionalCreditAllocation.grants] },
+    }),
     ownerId: args.ownerId,
     state: 'pending',
     createdAt: args.now,
@@ -231,7 +196,6 @@ export async function reserveHandler(
     || !await activeChatTurnForMoney(ctx, turn))) {
     return missingGrant()
   }
-  if (!canaryEnvelopeMatchesReservation(args)) return { kind: 'conflict' }
   // Keyed by the stable Principal: a rotated credential replays the original
   // reservation instead of minting a second Call under the same key.
   const existing = await ctx.db.query('capabilityCalls')
@@ -241,6 +205,8 @@ export async function reserveHandler(
   const reservation = reservationFromArgs(args)
   const replay = existing[0]
   if (replay !== undefined) {
+    // A later answer may replay this Call; its original model-cost attribution
+    // remains on the stored Call. Historical unlinked Calls stay unlinked.
     const result = await replayExistingReservation(ctx, replay, args)
     if (result.kind === 'replayed' && turn !== null) {
       await attachCallToTurn(ctx, turn, result.reservation.callRef)
@@ -263,6 +229,21 @@ export async function reserveHandler(
   if (grantDecision.kind === 'refused') return grantDecision
   const normalizedGrant = grantDecision.grant
 
+  // A previously accepted Call replays above; an unused Quote still needs current purchase admission.
+  if (commitment !== null && commitment.decisionAudUnits !== '0') {
+    const paymentAccess = await readAgentPaymentAdmission(ctx, {
+      environment: args.environment, accountRef: args.ownerId,
+      grantRef: args.grantRef, grantGeneration: normalizedGrant.generation,
+    }, Date.now())
+    if (paymentAccess.kind === 'refused') return {
+      kind: 'refused', code: 'operation_not_ready', retryable: paymentAccess.code === 'payments_not_ready',
+      nextAction: paymentAccess.code === 'payments_paused'
+        ? 'Paid Tool purchases are temporarily paused. You can keep searching and comparing Tools.'
+        : paymentAccess.code === 'payments_not_ready' ? 'Paid Tool purchases are temporarily unavailable. You can keep searching and comparing Tools.'
+        : 'Paid Tool purchases are currently available to Admins only. You can keep searching and comparing Tools.',
+    }
+  }
+
   const periodRefusal = await spendingPeriodAdmissionRefusal(ctx, args, commitment, normalizedGrant)
   if (periodRefusal !== null) return periodRefusal
 
@@ -274,12 +255,22 @@ export async function reserveHandler(
   const paidPeriodAwareCall = commitment !== null
     && commitment.decisionAudUnits !== '0'
     && commitment.spendingPeriods !== undefined
+  const promotion = paidPeriodAwareCall && commitment.formanceSchemaVersion === 'v1.5.0'
+    ? await claimPromotionalCredit(ctx, {
+      accountRef: args.ownerId, environment: args.environment,
+      amountUnits: commitment.decisionAudUnits, now: Date.now(),
+    }) : undefined
+  if (promotion?.kind === 'refused') return {
+    kind: 'refused', code: 'commercial_policy_unavailable', retryable: false,
+    nextAction: 'Credit allocation is unavailable. Contact support before retrying.',
+  }
   await persistReservedCall(
     ctx,
     args,
     reservation,
     commitment,
     paidPeriodAwareCall ? 'reservation_pending' : undefined,
+    promotion?.allocation,
   )
   if (turn !== null) await attachCallToTurn(ctx, turn, reservation.callRef)
   await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.callRef, args.now, {
@@ -288,4 +279,3 @@ export async function reserveHandler(
 
   return { kind: 'reserved', reservation }
 }
-

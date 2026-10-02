@@ -339,11 +339,11 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   procure: {
     ...deriveCliCommand(TOOL_PROCURE_ACTION_ID),
-    args: "--input '<json-request>'",
+    args: "--input '<json-request>' [--prefer <cheapest|balanced|reliable>]",
     group: 'call_recover',
     rootOrder: 1,
     guidance: [
-      'Need: --input \'{"kind":"need","need":"<capability>"}\' selects without a Quote, Call or purchase key.',
+      'Need: --input \'{"kind":"need","need":"<capability>"}\' selects without a Quote, Call or purchase key. Use --prefer to choose cheapest, balanced (default), or reliable.',
       'Exact: supply the returned ToolRef, complete caller-owned input, maxSpendAud and a fresh idempotencyKey in --input JSON.',
       'Pass --input - to read one bounded JSON request from standard input.',
     ],

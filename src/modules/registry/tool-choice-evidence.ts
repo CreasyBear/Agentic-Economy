@@ -1,4 +1,6 @@
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
+import type { PaymentEnvironment } from '@/lib/deployment/environment'
 import { projectToolHealth } from '@/modules/capability-supply/tool-health'
 
 export function projectToolChoiceEvidence(tool: PublicToolDescriptor) {
@@ -20,7 +22,10 @@ export function projectToolChoiceEvidence(tool: PublicToolDescriptor) {
   }
 }
 
-export function isProductionToolChoice(tool: PublicToolDescriptor): boolean {
+export function isDeploymentToolChoice(tool: PublicToolDescriptor, environment: PaymentEnvironment | undefined): boolean {
+  if (environment === undefined || tool.runtimeEnvironment !== environment) return false
+  if (tool.payment?.network !== undefined
+    && tool.payment.network !== x402PaymentProfileForEnvironment(environment)?.network) return false
   const evidence = projectToolChoiceEvidence(tool)
-  return evidence.network !== 'testnet' && evidence.healthStatus !== 'degraded'
+  return evidence.healthStatus !== 'degraded'
 }

@@ -318,6 +318,10 @@ function isAllowedModulePublicSeam(violation: ScanViolation): boolean {
 
 function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
   if (violation.rule !== "forbidden-handshake-import") return false;
+  // Read-only finalized ERC-20 observation adapter; ABI encoding only, no signer.
+  if (violation.file === "convex/lib/money/treasury/chainObservation.ts") {
+    return /from\s+['"]viem['"]/.test(violation.excerpt);
+  }
   if (
     violation.file ===
     "src/modules/capability-supply/internal/facilitator-discovery-client.ts"
@@ -347,6 +351,7 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
     "src/modules/capability-supply/internal/route-transport-mcp.ts",
     "src/modules/capability-supply/internal/route-transport-x402.ts",
     "src/modules/capability-supply/internal/x402-directory-protocol.ts",
+    "src/modules/capability-supply/internal/x402-directory-projection-facts.ts", // reads x402 default asset and network facts for directory projection; no payment execution
     "src/modules/capability-supply/internal/x402-offer-receipt.ts",
     "src/modules/capability-supply/internal/x402-evm-protocol.ts",
     "src/modules/capability-supply/internal/x402-payment-signer.ts",

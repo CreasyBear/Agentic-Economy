@@ -10,6 +10,9 @@ import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/to
 import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
 import { marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
 import type * as DemandFunctions from '@/modules/market-demand/market-demand.functions'
+// The rate-limit setup preloads degrade and its telemetry dependency. Reload
+// that graph so this file's capture mock observes the real degrade calls.
+vi.hoisted(() => vi.resetModules())
 const owner = vi.hoisted(() => ({ userId: 'alice' as string | null }))
 const listSavedToolsForOwner = vi.hoisted(() => vi.fn())
 const saveToolForOwner = vi.hoisted(() => vi.fn())
@@ -108,7 +111,7 @@ describe('native x402 catalogue', () => {
 })
 
 it('compares Provider-listed source prices and Coinbase activity without a sideways mobile table', () => {
-  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC` }], outputSummary: `Output ${index}`, ...(index === 0 ? { activity: { calls30d: 66 } } : {}) }))
+  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }], outputSummary: `Output ${index}`, ...(index === 0 ? { activity: { calls30d: 66 } } : {}) }))
   show(undefined, priced)
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
   expect((screen.getByRole('button', { name: 'Compare Tools' }) as HTMLButtonElement).disabled).toBe(true)
@@ -153,7 +156,7 @@ it('keeps Provider price evidence secondary and settlement networks off Tool car
   expect(row?.textContent).toContain('External listing · inspect')
   const priceCell = row?.querySelectorAll('td')[2]
   const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
-  expect(buyerPrice?.textContent).toMatch(/AUD.*unavailable/i)
+  expect(buyerPrice?.textContent).toBe('US$1')
   expect(buyerPrice?.textContent).not.toContain('USDC')
   expect(sourcePrice?.textContent).toMatch(/Provider.*1 USDC/)
   expect(screen.queryByText('Base')).toBeNull()
@@ -351,19 +354,21 @@ describe('indexed x402 catalogue controls', () => {
   })
 
   it('never puts the Convex page cursor in the market URL and offers a next page instead', () => {
-    show({ ...nativeFilters, sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    show({ ...nativeFilters, sort: 'adoption' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(screen.queryByRole('link', { name: 'Next page' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'First page' })).toBeNull()
     for (const link of screen.getAllByRole('link')) expect(new URL(link.getAttribute('href')!, 'https://aecon.ai').searchParams.has('indexCursor')).toBe(false)
     expect(screen.getByRole('button', { name: 'Next page' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Previous page' })).toBeNull()
     const ordering = screen.getByRole('group', { name: 'Catalogue ordering and display' })
-    expect(ordering.className).toContain('grid-cols-[minmax(0,1fr)_auto]')
-    expect(ordering.className).not.toContain('flex-wrap')
-    expect(within(ordering).getByRole('combobox', { name: 'Sort Tools' }).className).toContain('h-11!')
-    expect(within(ordering).getByRole('button', { name: /^Filters/ }).className).toContain('h-11')
-    const pages = screen.getByRole('navigation', { name: 'Catalogue pages' })
-    expect(pages.className).toContain('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]')
+    const sortResults = within(ordering).getByRole('group', { name: 'Sort results' })
+    expect(within(sortResults).getByRole('button', { name: 'Most used' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(sortResults).getByRole('button', { name: 'Busiest' })).toBeTruthy()
+    expect(within(sortResults).getByRole('button', { name: 'Recently paid' })).toBeTruthy()
+    expect(within(sortResults).getByRole('button', { name: 'Repeat buyers' })).toBeTruthy()
+    expect(within(sortResults).getByRole('button', { name: 'Cheapest' })).toBeTruthy()
+    expect(within(ordering).getByRole('button', { name: /^Filters/ })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Catalogue pages' })).toBeTruthy()
   })
   it('replaces the list with the next page, then returns to the first page without another request', async () => {
     const nextItems = entries.slice(2, 4)
@@ -457,11 +462,10 @@ describe('indexed x402 catalogue controls', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, query: 'weather', sort: 'relevance', directoryCategory: 'media' }))
     expect(router.state.location.search).not.toHaveProperty('indexCursor')
   })
-  it('changes sort through its control while preserving filters, without ever adding a cursor', async () => {
+  it('changes sort through its chip row while preserving filters, without ever adding a cursor', async () => {
     const { router } = show({ ...nativeFilters, sort: 'popular' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
-    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Sort Tools' }), { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByRole('option', { name: 'Recently updated' }))
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, sort: 'updated' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Recently paid' }))
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, sort: 'active' }))
     expect(router.state.location.search).not.toHaveProperty('indexCursor')
   })
   it('keeps 12 providers on each page by reading further into the sorted Tool list', async () => {
@@ -538,7 +542,8 @@ const searchRows = [
     id: directoryId, source: 'coinbase', access: 'external_listing',
     title: 'External Forecast', summary: 'Published weather endpoint', provider: 'example.com',
     actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
-    price: { kind: 'unavailable' }, detailRef: `/api/v1/registry/detail?id=${directoryId}`,
+    sourcePrice: '1 USDC',
+    price: { kind: 'indicative', label: 'US$1' }, detailRef: `/api/v1/registry/detail?id=${directoryId}`,
     next: [{ action: 'describe-external', args: { id: directoryId }, authority: 'public' }],
     freshness: { source: 'x402_directory', state: 'stale', completedAt: Date.UTC(2026, 8, 26), staleAfterMs: 10800000 },
   },
@@ -565,7 +570,7 @@ describe('canonical Market search', () => {
     expect(screen.getByText('AE-callable · ready')).toBeTruthy()
     expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
     expect(screen.getByText('Indicative AUD · A$0.01')).toBeTruthy()
-    expect(screen.getByText('AUD estimate unavailable')).toBeTruthy()
+    expect(screen.getByText('Provider price · US$1')).toBeTruthy()
     expect(screen.getByText(/AE supply projection · fresh/)).toBeTruthy()
     expect(screen.getByText(/Coinbase Bazaar index · stale/)).toBeTruthy()
     expect(screen.getByText(/not applied to this search/)).toBeTruthy()

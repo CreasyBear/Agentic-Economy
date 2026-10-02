@@ -7,7 +7,6 @@ import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import { callAuthorityValue, callResultValue } from '@/modules/capability-execution/convex'
-import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
 
 type CallRow = Doc<'capabilityCalls'>
 type PersistedOperationAuthority = Infer<typeof callAuthorityValue>
@@ -26,7 +25,6 @@ export type OpenDispatchValue = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   toolRef: string
-  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   idempotencyKey: string
   inputDigest: string
   requestDigest: string
@@ -62,7 +60,6 @@ export function persistedDispatchMatches(row: CallRow, dispatch: OpenDispatchVal
     row.applicationRef === dispatch.applicationRef,
     row.environment === dispatch.environment,
     row.toolRef === dispatch.toolRef,
-    canonicalOptionalCanary(row.sellerOnboardingCanary) === canonicalOptionalCanary(dispatch.sellerOnboardingCanary),
     row.idempotencyKey === dispatch.idempotencyKey,
     row.inputDigest === dispatch.inputDigest,
     row.requestDigest === dispatch.requestDigest,
@@ -78,12 +75,6 @@ export function persistedDispatchMatches(row: CallRow, dispatch: OpenDispatchVal
   if ((row.authority === undefined) !== (dispatch.authority === undefined)) return false
   return row.authority === undefined
     || canonicalDigest(row.authority as never) === canonicalDigest(dispatch.authority as never)
-}
-
-export function canonicalOptionalCanary(
-  value: SellerOnboardingCanaryExecutionEnvelope | undefined,
-): string | undefined {
-  return value === undefined ? undefined : canonicalDigest(value as never)
 }
 
 export function commandMatchesDispatch(command: unknown, dispatch: OpenDispatchValue): boolean {

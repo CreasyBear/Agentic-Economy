@@ -1,13 +1,12 @@
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import {
   prepareProviderReversalResultValue,
   providerReversalArgsValue,
   type ProviderReversalArgs,
 } from './contracts'
-import { markProviderObligationDisputed, readObligation, reversalRefused } from './state'
+import { readObligation, reversalRefused } from './state'
 import type { Infer } from 'convex/values'
 
 export const prepareOwnerReversalArgs = providerReversalArgsValue.fields
@@ -16,6 +15,11 @@ export const prepareOwnerReversalResult = prepareProviderReversalResultValue
 const BOUNDED_REF = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,499}$/u
 const SHA256 = /^sha256:[a-f0-9]{64}$/u
 
+/** Requires the current buyer Account owner and exact original purchase identity.
+ * Ensures only an existing exact reversal receipt can replay; no new cash credit.
+ * Invariant: buyer remedy is separate from proof of returned corporate USDC.
+ * On violation: refuse without changing settled or unresolved reversal evidence.
+ */
 export async function prepareOwnerReversalHandler(
   ctx: MutationCtx,
   args: ProviderReversalArgs,
@@ -52,55 +56,11 @@ export async function prepareOwnerReversalHandler(
         transactionRef: reversalTransactionRef,
       }
     }
-    await markProviderObligationDisputed(ctx, row, args)
     return reversalRefused('provider_reversal_conflict')
   }
-  if (row.reversalState !== undefined) {
-    const sameRequest = row.reversalCommandRef === args.commandRef
-      && row.reversalIdempotencyKey === args.idempotencyKey
-      && row.reversalEvidenceDigest === args.evidenceDigest
-    if (sameRequest) return { kind: 'prepared' }
-    await markProviderObligationDisputed(ctx, row, args)
-    return reversalRefused('provider_reversal_conflict')
-  }
-  if (row.state !== 'settled' || row.updatedAt !== args.expectedUpdatedAt) {
-    return reversalRefused('provider_reversal_state_changed')
-  }
-  const consequence = await admitInteractiveOwnerConsequence(ctx, {
-    actor,
-    action: 'provider_obligation.reverse',
-    target: {
-      targetType: 'provider_obligation',
-      targetRef: row.obligationRef,
-      targetRevision: Math.max(1, row.updatedAt),
-    },
-    requiredScopes: ['billing'],
-    resourceRefs: [`provider-obligation:${row.obligationRef}`],
-    budgetAmount: 0,
-    consequenceSummary: `Reverse the settled Provider obligation ${row.obligationRef}.`,
-    statusReadbackRef: '/owner/credit',
-    command: {
-      version: 'ae.provider-obligation-reversal:v1',
-      obligationRef: row.obligationRef,
-      callRef: row.callRef,
-      settlementTransactionRef: row.settlementTransactionRef,
-      providerAmountUnits: row.providerAmountUnits,
-      evidenceRef: args.evidenceRef,
-      evidenceDigest: args.evidenceDigest,
-    },
-    correlationRef: args.correlationId,
-    idempotencyRef: args.idempotencyKey,
-    ...(args.proof === undefined ? {} : { proof: args.proof }),
-    now: Date.now(),
-  })
-  if (consequence.kind === 'refused') return reversalRefused(consequence.code)
-  await ctx.db.patch(row._id, {
-    reversalCommandRef: args.commandRef,
-    reversalIdempotencyKey: args.idempotencyKey,
-    reversalEvidenceDigest: args.evidenceDigest,
-    reversalState: 'pending',
-    evidenceRefs: [...new Set([...row.evidenceRefs, args.evidenceRef])].slice(-32),
-    updatedAt: Date.now(),
-  })
-  return { kind: 'prepared' }
+  // A buyer instruction and a digest do not prove the return of AE's corporate
+  // cash. New and unresolved legacy reversals cannot credit the treasury. Keep
+  // their evidence intact for reconciliation; buyer remedies refund AUD through
+  // the Call report flow without rewriting the settled Provider payment.
+  return reversalRefused('provider_settlement_evidence_invalid')
 }

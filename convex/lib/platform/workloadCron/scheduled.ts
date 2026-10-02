@@ -34,6 +34,15 @@ export async function reconcileDueFacilitatorInvocationsHandler(ctx: WorkloadCro
     {},
   )
 }
+export async function expireStalePendingApprovalsHandler(ctx: WorkloadCronMutationContext): Promise<null> {
+  return await runAdmittedMutation(
+    ctx,
+    'expire stale pending approvals',
+    internal.capabilityCalls.expireStalePendingApprovals,
+    {},
+  )
+}
+
 
 export async function refreshFacilitatorDiscoveryHandler(ctx: WorkloadCronActionContext): Promise<null> {
   return await runAdmittedAction(
@@ -121,4 +130,20 @@ export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActi
   await ctx.runQuery(internal.workloadCron.admit, { name: 'snapshot marketplace metrics day' })
   await ctx.runAction(internal.adminConsoleMetrics.snapshotMarketplaceMetricsDay, {})
   return null
+}
+
+export async function reconcilePromotionalCreditHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'reconcile promotional credit', internal.moneyPromotionalCredit.sweep, {})
+}
+
+export async function reconcilePaidCallReportsHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'reconcile paid Call reports', internal.capabilityCallReports.sweep, {})
+}
+
+export async function reconcileTreasuryBalancesHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'reconcile treasury balances', internal.moneyTreasurySnapshot.reconcile, {})
+}
+
+export async function refreshPaymentReadinessHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'refresh payment readiness', internal.moneyReadinessRefresh.refresh, {})
 }

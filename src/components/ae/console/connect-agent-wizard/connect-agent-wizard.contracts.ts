@@ -27,6 +27,7 @@ export type ConnectAgentWizardDraft = Readonly<{
 }>
 
 export type ConnectAgentWizardPorts = Readonly<{
+  deploymentEnvironment: ConnectAgentEnvironment
   open?: boolean
   onOpenChange: (open: boolean) => void
   onIssue: ConnectAgentWizardIssuePort
@@ -56,12 +57,6 @@ export type AgentNameFieldProps = Readonly<{
   invalid?: boolean
   inputRef?: Ref<HTMLInputElement>
   onChange: (value: string) => void
-}>
-
-export type EnvironmentRadioCardsProps = Readonly<{
-  value: ConnectAgentEnvironment
-  disabled: boolean
-  onChange: (value: ConnectAgentEnvironment) => void
 }>
 
 export type AuthorityModeRadioCardsProps = Readonly<{

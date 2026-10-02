@@ -1,10 +1,11 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { capabilityPublicationProvenanceDigest, preparePublicationDraft } from '@/modules/capability-supply/public'
 import { FACILITATOR_DISCOVERY_PUBLISHER_REF, dereferenceLocalSchema, parseFacilitatorDiscoverySourceImport } from '@/modules/capability-supply/convex'
 import { pricingConfigDigest, normalizePricingConfig, type PricingConfig } from '@/modules/money/public'
-import type { MutationCtx } from '../../../_generated/server'
+import { env, type MutationCtx } from '../../../_generated/server'
 import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { SOURCE_EVIDENCE, type FacilitatorDiscoveryAdmissionItem } from './contracts'
 import { facilitatorRuntimeEnvironment, routeIdentity } from './identity'
@@ -19,7 +20,7 @@ export async function reconcileDraft(
   const sourceImport = parseFacilitatorDiscoverySourceImport(draft.sourceImportJson)
   if (sourceImport === undefined || sourceImport.kind !== 'x402') return 'skipped'
   const runtimeEnvironment = facilitatorRuntimeEnvironment(sourceImport)
-  if (runtimeEnvironment === undefined) return 'skipped'
+  if (runtimeEnvironment === undefined || runtimeEnvironment !== deploymentPaymentEnvironment(env)) return 'skipped'
   const route = routeIdentity(sourceImport)
   if (route === undefined) return 'skipped'
   const sourceResource = isRecord(sourceImport.resource) ? sourceImport.resource : undefined

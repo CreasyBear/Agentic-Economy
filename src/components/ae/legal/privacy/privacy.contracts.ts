@@ -1,10 +1,10 @@
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
-// Source: `git log -1 --format=%cs -- src/routes/privacy.tsx` in the marketing repo returned 2026-09-13.
-export const privacyLastUpdated = '13 September 2026'
+// Alpha draft: processor locations, retention schedule and legal contact ownership need review.
+export const privacyLastUpdated = '1 October 2026'
 export const privacyTitle = 'Privacy policy.'
 export const privacyIntro = 'How Agentic Economy collects and uses data.'
-export const privacyOpening = 'This policy sets out what information AE handles, why it is used, who receives it and how you can exercise your rights. It applies to the services you use, including our website.'
+export const privacyOpening = 'This draft describes information handled by the website, accounts, chat and Tool Calls. Confirmed legal contact details, processor locations and a retention schedule are required before publication.'
 export const privacyTermsLead = 'Read alongside our'
 export const privacyTermsLink = 'terms of service'
 export const privacyOaicLead = 'Australian privacy information and complaints guidance are available from the'
@@ -16,17 +16,16 @@ export const privacySections = [
     id: 'scope',
     heading: 'Who this policy covers',
     body: [
-      'This policy governs how Agentic Economy (AE, we, us) handles personal information across our website and platform. It covers customers, authorised users, agents acting for businesses, providers and people whose information appears in requests.',
-      'The website offers an enquiry form and an optional email waitlist. It has no public accounts or payment inputs. The account, payment and service-request provisions apply when you use those services.',
-      'Agentic Economy may handle information for its own account administration, billing, security and legal purposes, and process Customer content on a business Customer’s instructions. The applicable agreement sets out those roles. A Provider may handle information independently or on instructions, depending on the Tool; the service offer explains that role before the Customer’s purchase.',
+      'This policy covers how Agentic Economy (AE, we, us) handles personal information across the website and platform. It covers individual and business Customers, authorised users, Agents, Tool Providers and people whose information appears in requests.',
+      'The platform includes accounts, chat, spending permissions, promotional credits and paid Tool Calls. The invitation-only alpha uses promotional credits; it does not offer card purchases. A future funding service may involve additional payment information and a notice before use.',
+      'AE handles information for account administration, service delivery, financial records, security and legal purposes. A selected Tool Provider or model service also receives information needed for its part of the request. Those recipients may have their own data practices; using AE does not establish that every Provider acts only on AE’s instructions.',
     ],
   },
   {
     id: 'collection',
     heading: 'Information collected and its sources',
     body: [
-      'When you join the waitlist, Resend processes your email address and subscription status for AE. Submitting the form adds your address directly to the launch waitlist. We use this information for launch access and important product updates. You can unsubscribe through our update emails. Resend also processes delivery records.',
-      'When you use the enquiry form, we receive your name, email address, subject and message to respond to your enquiry. Resend delivers the message to our Google Workspace mailbox. Sending an enquiry does not subscribe you to the waitlist.',
+      'We receive information you submit through account, chat, Tool and support interactions, including contact details and the content of a request. Where account email notifications are enabled, Resend receives the verified recipient email address and notification subject and text for delivery. This is separate from marketing consent.',
       'Website delivery may involve IP addresses, request URLs, timestamps, browser and device details, and security or error logs processed by hosting infrastructure.',
       'For platform accounts, AE collects business and administrator details, contact information, account roles, authentication records, permissions and support correspondence from customers and their authorised users. Verification information may come from the customer, payment or identity partners, or lawful public sources where needed for a specified purpose.',
       'Paid-service records may include funding references, Credit, prices, reservations, charges, refunds, invoices, provider identifiers, request status and settlement references. Payment partners may collect payment instrument or identity information directly. AE limits the payment information it receives to the purposes described in this policy.',
@@ -39,16 +38,17 @@ export const privacySections = [
     body: [
       'AE uses information to establish and administer accounts, authenticate users and agents, apply permissions and spending controls, route and deliver requests, maintain usage records, reconcile payments, handle refunds, assist customers and providers, and investigate service failures.',
       'AE may also need information to protect the service, detect fraud and misuse, comply with applicable legal obligations, respond to lawful requests and establish or defend legal claims. A materially different use requires an appropriate legal basis and an updated notice or consent where required.',
-      'For service improvement, AE uses aggregate or appropriately de-identified information where practicable. AE does not sell personal information or use customer prompts, files or outputs to train general-purpose models. Any optional use beyond service delivery requires a specific explanation and separate agreement.',
+      'For service improvement, AE uses aggregate or appropriately de-identified information where practicable. AE does not sell personal information or use Customer prompts, files or outputs to train its own general-purpose models. This statement does not describe an independent Provider’s or model host’s practices. Any optional AE use beyond service delivery requires a specific explanation and separate agreement.',
     ],
   },
   {
     id: 'requests',
     heading: 'Prompts, files and provider delivery',
     body: [
-      'A Call can require Agentic Economy to forward relevant inputs to the selected Provider and return its output. The Customer should minimise personal information in prompts and files and have authority to disclose information about other people. An Agent’s ability to send data is not evidence of consent from every person named in it.',
-      'The service offer identifies the provider, material data categories, purposes, locations where practicable and applicable retention or training conditions. Provider terms are provided before purchase. The service offer discloses any differences between the provider’s data practices and AE’s commitments, including whether the provider uses inputs or outputs for training.',
-      'Operational storage may be needed for delivery, recovery, support or disputes. Any payload retention and replay capability must be disclosed with its purpose and retention period. AE will separate transaction records from full payloads so that accounting needs do not justify keeping the underlying content indefinitely.',
+      'Preparing a Quote can send the actual proposed inputs to the selected Tool Provider to check its price, before payment or final Call approval. Running the Call sends the relevant inputs and returns its response. Minimise personal information and have authority to disclose information about other people. An Agent’s access does not establish their consent.',
+      'Chat sends relevant messages, conversation context and Tool results to the configured model service. Tool selection may also send the request and candidate summaries to a ranking service. OpenRouter and configured model or ranking hosts may process this information. The selected host may vary with the model and routing configuration.',
+      'Tool details can show a Provider or endpoint and declared input categories, purposes and release stages. These declarations are not an independent audit of Provider behaviour. They do not always specify retention, training use or processing countries. Do not send sensitive or confidential material unless the available terms and controls meet your requirements; ask Support when they are unclear.',
+      'AE stores chat and Call content needed for the service, including request inputs and outputs, as well as separate transaction and recovery records. A payment receipt is not the only record of a request. The retention section below describes the limits of this draft.',
     ],
   },
   {
@@ -56,15 +56,16 @@ export const privacySections = [
     heading: 'Sensitive information and consequential uses',
     body: [
       'Sensitive information includes health information, identity documents and biometrics. AE will handle it with protections appropriate to its sensitivity and applicable law. Customers are responsible for the authority and consent required to submit it and for selecting a service suited to their requirements.',
-      'The platform is intended for business use by authorised adults, not as a service directed to children. Information about children in customer content still requires appropriate authority and protection.',
+      'Accounts are for adults, including people acting for organisations. The service is not directed to children. Information about children in Customer content still requires appropriate authority and protection.',
     ],
   },
   {
     id: 'sharing',
     heading: 'Who receives information',
     body: [
-      'Recipients may include selected service providers, hosting and infrastructure providers, payment and settlement partners, identity or fraud-prevention providers, support providers and professional advisers, limited to their relevant functions. Account administrators may see their organisation’s users, permissions, usage and billing records according to their roles.',
-      'AE will distinguish providers acting on its instructions from independent recipients and disclose their functions, relevant locations and commitments governing customer content. Access is limited to authorised people and providers with an operational need.',
+      'Clerk handles sign-in and account identity. Convex stores application records, including accounts, permissions, chat and Call data. Website hosting infrastructure handles requests and delivery logs. Account administrators can see information permitted by their roles. Selected Tool Providers and model or ranking services receive the inputs described above.',
+      'Formance handles financial amounts, references and transaction metadata. Coinbase Developer Platform handles AE’s custody signing and wallet requests. Blockchain RPC providers receive address, balance and settlement queries. These financial references may be linkable to a Customer; they are not necessarily anonymous. AE pays Providers from its own wallet, rather than holding cryptocurrency for Customers.',
+      'Sentry receives diagnostics when enabled. Filtering removes many sensitive fields, but free-text errors can still contain personal information. Email delivery, support and professional advisers receive information needed for their work. If card funding is later offered, Stripe’s hosted checkout will collect payment details and receive the amount and funding reference; alpha access does not require card details.',
       'AE may disclose information where legally required or otherwise lawfully justified, including to regulators or courts. Requests should be assessed and disclosures limited to their lawful scope. A business transfer may involve necessary disclosures under confidentiality and appropriate protections; affected people must receive notice where required.',
     ],
   },
@@ -72,9 +73,9 @@ export const privacySections = [
     id: 'transfers',
     heading: 'Overseas processing and public networks',
     body: [
-      'Some providers or infrastructure may process information outside Australia. AE will identify likely recipient countries where practicable, assess applicable overseas-disclosure obligations and apply suitable contractual and operational protections before disclosing information overseas. Processing is not restricted to Australia unless agreed for a particular service.',
+      'Providers and infrastructure may process information outside Australia. Processing is not restricted to Australia unless expressly agreed for a particular service. This draft does not yet provide a complete list of likely recipient countries; that list and the applicable overseas-disclosure arrangements must be reviewed before publication.',
       'If a request uses a public settlement network, transaction identifiers, addresses, amounts or timing may be visible to third parties and difficult or impossible to erase. AE will explain the settlement data flow for the service and keep prompts, files and direct personal identifiers off public ledgers. Account deletion cannot remove records from an independently operated public network.',
-      'AE will use the transfer arrangements required by applicable law for the relevant locations and processing roles.',
+      'Ask Support before submitting information subject to a particular location or transfer requirement. An endpoint’s domain or a blockchain network does not establish where a Provider processes the request.',
     ],
   },
   {
@@ -101,17 +102,17 @@ export const privacySections = [
     id: 'retention',
     heading: 'Retention and deletion',
     body: [
-      'AE retains identifiable information only for a documented service, legal or other lawful purpose, then securely deletes it or appropriately de-identifies it. Different categories need different periods. Closing an account does not necessarily permit immediate destruction of invoices, dispute records or legally required verification material.',
-      'AE will make the applicable retention periods available for: account data for administration and closure; request content for delivery and any disclosed recovery window; financial records for applicable recordkeeping obligations; security logs for a justified investigation period; and support records for resolving issues. Retention periods depend on the service, the purpose of collection and applicable legal requirements.',
-      'AE will apply deletion requests across active systems and providers, subject to legal holds and backup retention. Information awaiting backup expiry will remain protected from ordinary use, and restored backups will remain subject to the deletion request. Where retention is required, AE will explain the category, reason and limitation where lawful.',
+      'Chat and Call content, account data, financial records, diagnostics and support correspondence serve different purposes and may need different retention periods. This draft does not yet set a complete retention schedule. That schedule must be confirmed before publication; do not assume that closing a chat immediately deletes all copies.',
+      'A deletion request must be assessed separately for active content, financial and dispute records, backups and information already disclosed to independent Providers. Legal recordkeeping and unresolved transactions can limit deletion. Public blockchain records cannot be erased by closing an AE account.',
+      'Use Support to request access, correction or deletion and to ask what is retained and why. AE will explain applicable limits where lawful. This draft does not promise immediate deletion from every backup or independent recipient.',
     ],
   },
   {
     id: 'security',
     heading: 'Security and incident response',
     body: [
-      'AE will protect personal information using measures appropriate to its sensitivity and risk, including access restrictions, credential protection, secure transmission and storage where appropriate, monitoring, staff and provider controls, and incident response. Service-specific security requirements are documented in the applicable processing agreement.',
-      'AE will assess suspected incidents, contain and investigate them, preserve necessary evidence, and cooperate with affected customers and providers. Where notification obligations apply, AE will notify the relevant people and authorities as required by law. AE will also meet the incident-notice requirements of its customer processing agreements.',
+      'AE uses account access controls, protected credentials, request validation and diagnostics to reduce risk. No internet service can promise perfect security. A Tool listing or successful payment does not certify the Provider’s security practices. Agree any additional security requirements before submitting information that depends on them.',
+      'Report suspected exposure or a security issue privately through Support. Do not send passwords, API keys or other people’s private data in the report. AE will assess and investigate incidents and meet applicable notification obligations and any separately agreed incident-notice commitments.',
     ],
   },
   {
@@ -135,15 +136,15 @@ export const privacySections = [
     id: 'processing',
     heading: 'Business-customer processing arrangements',
     body: [
-      'The applicable data-processing agreement sets out the subject matter, duration, purposes, data types and people concerned; documented instructions; confidentiality; security measures; provider authorisation and change notices; overseas transfers; incident assistance; support for individual rights; and return or deletion at the end of service.',
-      'AE will provide proportionate information and cooperation to demonstrate compliance with that agreement and address unlawful instructions. The agreement allocates responsibilities when a customer selects an independent provider. Service-specific audit rights, provider objection procedures and technical controls are set out in that agreement. The processing agreement supplements this policy.',
+      'If an organisation requires a data-processing agreement, specific retention periods, location restrictions or audit rights, agree those requirements before using the service for that information. This public notice does not itself provide a negotiated processing agreement or establish that each independent Provider can meet those requirements.',
+      'Any separately accepted processing agreement sets out the parties’ roles, instructions, data types, confidentiality, security, recipients, transfers, incident assistance and treatment of data when the service ends. Mandatory legal obligations continue to apply.',
     ],
   },
   {
     id: 'complaints',
     heading: 'Contact and privacy complaints',
     body: [
-      'Customers can raise privacy requests and complaints through the support contact in their service agreement. You can also email hello@aecon.ai or use our contact page.',
+      'Raise a privacy request or complaint through Support. The final contracting entity and privacy contact details must be confirmed before this draft is published.',
       'A complaint should identify the issue, relevant dates and the outcome sought, without unnecessary sensitive information. AE will acknowledge the complaint, investigate it and provide a reasoned response, with escalation where appropriate. Where Australian privacy law applies, a person may raise an unresolved complaint with the Office of the Australian Information Commissioner through oaic.gov.au. Other competent authorities may be available under applicable law.',
     ],
   },
@@ -151,7 +152,7 @@ export const privacySections = [
     id: 'updates',
     heading: 'Changes to this policy',
     body: [
-      'This policy was last updated on 12 September 2026. AE reviews it when its services, information practices or legal obligations change.',
+      'This draft was last updated on 1 October 2026. AE reviews the policy when its services, information practices or legal obligations change.',
       'Revisions display their update date. Material changes require appropriate notice before new handling begins, and fresh consent where required. Publishing a revised notice does not retrospectively authorise an unrelated use of information already collected.',
     ],
   },

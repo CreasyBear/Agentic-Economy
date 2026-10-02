@@ -18,7 +18,10 @@ export type AudFundingPolicy = Readonly<{
   legalCustomerMaximumAccessibleUnits: bigint
 }>
 
-// The platform fee applies to Account loading (service fee + GST), never to Quote/Call usage; see commercial-policy controls.
+// GST is charged once, at Account loading: taxOnServiceFeeBps of (loaded amount + service fee), added on top.
+// Calls do not add GST. Micro-AUD (exponent 6) uses half-up basis points, (units * bps + 5_000) / 10_000.
+// The quoted fee and GST are then rounded half-up to the cent, ((units + 5_000) / 10_000) * 10_000.
+// A$5.00 + 5% fee + 10% GST is 5_000_000 + 250_000 + 530_000 = 5_780_000.
 export function audFundingPolicyFromCommercialControls(
   controls: CommercialPolicyControls,
 ): AudFundingPolicy {
@@ -62,8 +65,10 @@ export function calculateAudFundingFinancials(input: Readonly<{
     || !basisPoints(input.taxOnServiceFeeBps)) {
     throw new Error('aud_funding_financials_invalid')
   }
-  const serviceFeeUnits = roundedBasisPoints(input.principalUnits, input.serviceFeeBps)
-  const taxUnits = roundedBasisPoints(serviceFeeUnits, input.taxOnServiceFeeBps)
+  const serviceFeeUnits = roundAudUnitsToCent(roundedBasisPoints(input.principalUnits, input.serviceFeeBps))
+  const taxUnits = roundAudUnitsToCent(
+    roundedBasisPoints(input.principalUnits + serviceFeeUnits, input.taxOnServiceFeeBps),
+  )
   return Object.freeze({
     principalUnits: input.principalUnits,
     serviceFeeUnits,
@@ -84,18 +89,10 @@ export function quoteAudAccountFunding(principalUnits: bigint, policy: AudFundin
     || principalUnits % policy.incrementUnits !== 0n) {
     return undefined
   }
-  const calculated = calculateAudFundingFinancials({
+  return calculateAudFundingFinancials({
     principalUnits,
     serviceFeeBps: policy.serviceFeeBps,
     taxOnServiceFeeBps: policy.taxOnServiceFeeBps,
-  })
-  const serviceFeeUnits = roundAudUnitsToCent(calculated.serviceFeeUnits)
-  const taxUnits = roundAudUnitsToCent(calculated.taxUnits)
-  return Object.freeze({
-    principalUnits,
-    serviceFeeUnits,
-    taxUnits,
-    totalUnits: principalUnits + serviceFeeUnits + taxUnits,
   })
 }
 

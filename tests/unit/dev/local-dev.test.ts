@@ -7,6 +7,7 @@ import {
   anonymousDeploymentEnvSeed,
   buildConvexDevArgs,
   buildConvexEnvSetArgs,
+  buildConvexPaymentEnvironmentSetArgs,
   buildConvexInitArgs,
   buildConvexSelectArgs,
   buildStages,
@@ -25,6 +26,7 @@ import {
   isCatalogueComplete,
   isConvexReadyOutput,
   isViteReadyOutput,
+  matchesConfiguredLocalConvexUrl,
   missingClerkEnvNames,
   needsClerkPlaceholder,
   parseLauncherFlags,
@@ -90,6 +92,12 @@ describe('local development launcher', () => {
       'set',
       'CLERK_JWT_ISSUER_DOMAIN',
       'https://release-proof.invalid',
+    ])
+    expect(buildConvexPaymentEnvironmentSetArgs()).toEqual([
+      'convex', 'env', 'set', '--deployment', 'local', 'AE_DEPLOYMENT_ENVIRONMENT', 'development',
+    ])
+    expect(buildConvexPaymentEnvironmentSetArgs(true)).toEqual([
+      'convex', 'env', 'set', 'AE_DEPLOYMENT_ENVIRONMENT', 'development',
     ])
   })
 
@@ -250,13 +258,16 @@ describe('convex child env', () => {
     ])
   })
 
-  it('leaves an already-configured Clerk issuer domain and timeout untouched', () => {
+  it('sets anonymous CLI selection even with a configured Clerk issuer and timeout', () => {
     const { lines, log } = recorder()
     const env = {
       CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev',
       CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '600',
     }
-    expect(convexChildEnv(env, { anonymous: true, log })).toBe(env)
+    expect(convexChildEnv(env, { anonymous: true, log })).toEqual({
+      ...env, CONVEX_AGENT_MODE: 'anonymous',
+    })
+    expect(env).not.toHaveProperty('CONVEX_AGENT_MODE')
     expect(lines).toEqual([])
   })
 
@@ -327,9 +338,9 @@ describe('convex dev timeout', () => {
   })
 
   it('falls back to the generic launcher timeout when the env var is absent or unparseable', () => {
-    expect(convexDevTimeoutMs({})).toBe(120_000)
-    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: 'not-a-number' })).toBe(120_000)
-    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '0' })).toBe(120_000)
+    expect(convexDevTimeoutMs({})).toBe(360_000)
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: 'not-a-number' })).toBe(360_000)
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '0' })).toBe(360_000)
   })
 })
 
@@ -363,6 +374,28 @@ describe('effective environment', () => {
     expect(sources.CONVEX_URL).toBe('.env.development.local')
     expect(sources.VITE_CONVEX_URL).toBe('.env.local')
     expect(env.PATH).toBe('/usr/bin')
+  })
+
+  it('pins development for every child even when process or dotenv declares production', () => {
+    const inherited = effectiveEnv({ AE_DEPLOYMENT_ENVIRONMENT: 'production' }, [])
+    expect(inherited.env.AE_DEPLOYMENT_ENVIRONMENT).toBe('development')
+    expect(inherited.sources.AE_DEPLOYMENT_ENVIRONMENT).toBe('local launcher')
+    const file = effectiveEnv({}, [{ name: '.env.local', contents: 'AE_DEPLOYMENT_ENVIRONMENT=production\n' }])
+    expect(file.env.AE_DEPLOYMENT_ENVIRONMENT).toBe('development')
+    expect(file.sources.AE_DEPLOYMENT_ENVIRONMENT).toBe('local launcher')
+  })
+
+  it('only reuses the backend selected in this checkout local config', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ae-local-convex-'))
+    try {
+      expect(matchesConfiguredLocalConvexUrl('http://127.0.0.1:3210', directory)).toBe(false)
+      mkdirSync(join(directory, '.convex/local/default'), { recursive: true })
+      writeFileSync(join(directory, '.convex/local/default/config.json'), JSON.stringify({ ports: { cloud: 3210 } }))
+      expect(matchesConfiguredLocalConvexUrl('http://127.0.0.1:3210', directory)).toBe(true)
+      expect(matchesConfiguredLocalConvexUrl('http://localhost:3210/', directory)).toBe(true)
+      expect(matchesConfiguredLocalConvexUrl('http://127.0.0.1:3211', directory)).toBe(false)
+      expect(matchesConfiguredLocalConvexUrl('https://example.com:3210', directory)).toBe(false)
+    } finally { rmSync(directory, { recursive: true, force: true }) }
   })
 
   it('drops CONVEX_DEPLOYMENT from both the inherited env and the files', () => {

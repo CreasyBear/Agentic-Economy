@@ -3,31 +3,18 @@
 import { v } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
-import { projectX402DirectoryEntry, readX402DirectoryRawPage } from '@/modules/market/x402-directory.server'
+import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
+import { readX402DirectoryRawPage } from '@/modules/market/x402-directory-source.server'
 import { x402DirectoryResolveInputSchema, type X402DirectoryResolution, type X402DirectoryResolutionReason } from '@/modules/market/x402-directory'
-import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
-import { directoryEntryMatchesFilters, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
-import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
+import { directoryEntryMatchesFilters } from '@/modules/market/x402-directory-index'
+import { directoryNetwork } from '@/modules/market/x402-directory-index'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/convex'
 import { api, internal } from './_generated/api'
-import { action } from './_generated/server'
+import { action, env } from './_generated/server'
 import { reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 
-/**
- * Ineligible resources refuse the same way a filter mismatch would:
- * eligibility is the directory's own quality bar
- * (src/modules/market/x402-directory-index.ts:isDirectoryEntryEligible).
- * The payer clause is only enforced when the source actually reported
- * activity at all (`entry.activity !== undefined`) — a resource with no
- * activity telemetry whatsoever (as opposed to reported-and-insufficient)
- * isn't a genuine discovery-catalogue observation to hold to this bar.
- */
-function directoryResolutionEligible(entry: X402DirectoryEntry): boolean {
-  if (entry.activity === undefined) return true
-  const flags = directoryMetadataFlags(entry)
-  const payersOrder = entry.activity.payers30d ?? -1
-  return isDirectoryEntryEligible({ hasOutputSchema: flags.hasOutputSchema, hasOutputExample: flags.hasOutputExample, payersOrder })
-}
 
 function boundedResolutionReason(reason: string): X402DirectoryResolutionReason {
   switch (reason) {
@@ -61,6 +48,11 @@ export const resolve = action({
   handler: async (ctx, args): Promise<X402DirectoryResolution> => {
     const parsed = x402DirectoryResolveInputSchema.safeParse(args)
     if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
+    const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(env))?.network
+    if (network === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
+    if (parsed.data.network !== undefined && directoryNetwork(parsed.data.network) !== network) {
+      return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
+    }
     const { resource, ...context } = parsed.data
     const indexed = await ctx.runQuery(internal.x402DirectoryIndex.selectedSource, {
       resource, ...(context.network === undefined ? {} : { network: context.network }),
@@ -69,7 +61,6 @@ export const resolve = action({
     })
     let selected: unknown
     if (indexed.kind === 'found') {
-      if (!directoryResolutionEligible(indexed.entry)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
       selected = JSON.parse(indexed.sourceJson) as unknown
     }
     else if (indexed.kind === 'not_found') return { kind: 'unavailable', reason: 'resource_not_found' }
@@ -82,8 +73,7 @@ export const resolve = action({
       const candidate = page.items.find(item => item.resource === resource)
       if (candidate === undefined) return { kind: 'unavailable', reason: 'resource_not_found' }
       const candidateEntry = projectX402DirectoryEntry(candidate)
-      if (!directoryEntryMatchesFilters(candidateEntry, context)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
-      if (!directoryResolutionEligible(candidateEntry)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
+      if (!directoryEntryMatchesFilters(candidateEntry, { ...context, network })) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
       selected = candidate
     }
     try {

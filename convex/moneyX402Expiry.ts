@@ -1,8 +1,10 @@
+import { restorePromotionalCredit } from './lib/money/promotionalCredit/allocation'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation, type QueryCtx } from './_generated/server'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
+import { resolveX402SpendReservation } from './lib/money/x402PaymentAttempt/spendResolution'
 
 const owner = (nonce: string) => `expired-unused:${nonce}`
 const proof = {
@@ -20,9 +22,14 @@ export const claim = internalMutation({
   returns: v.union(v.null(), v.object({ evidenceDigest: v.string() })),
   handler: async (ctx, args) => {
     const call = await readCall(ctx, args.callRef)
+    // Unused proof for a restored nonce cannot exclude a later post-snapshot
+    // attempt. Keep the exact manual settlement hold before any evidence write.
+    if (call?.state === 'reconciliation_required'
+      && call.reconciliation?.disposition === 'manual_review'
+      && call.reconciliation.reason === 'unknown_settlement') return null
     if (call === null || call.state !== 'reconciliation_required'
       || call.formanceFinancialState !== 'outcome_unknown'
-      || call.sellerOnboardingCanary !== undefined || call.result?.kind !== 'reconciliation_required'
+      || call.result?.kind !== 'reconciliation_required'
       || call.result.receipt?.commercialModel !== 'account_aud'
       || call.result.evidence.attemptRef !== args.attemptRef
       || call.result.evidence.effectGeneration !== args.effectGeneration
@@ -71,7 +78,7 @@ export const finish = internalMutation({
       || call.formanceFinancialState !== 'outcome_unknown'
       || !call.reconciliation?.leaseOwner?.startsWith('expired-unused:')
       || call.result?.kind !== 'reconciliation_required' || call.result.receipt?.commercialModel !== 'account_aud'
-      || args.transactionRefs.length !== 2) return { kind: 'refused' as const }
+      || args.transactionRefs.length !== 2 + (call.promotionalCreditAllocation?.grants.length ?? 0)) return { kind: 'refused' as const }
     const { attemptRef, effectGeneration } = call.result.evidence
     const attempt = await ctx.db.query('moneyX402PaymentAttempts')
       .withIndex('by_attemptRef_and_effectGeneration', q => q.eq('attemptRef', attemptRef).eq('effectGeneration', effectGeneration)).unique()
@@ -83,6 +90,10 @@ export const finish = internalMutation({
     const transactionRef = args.transactionRefs[0]
     if (transactionRef === undefined) return { kind: 'refused' as const }
     const now = Date.now()
+    if (call.promotionalCreditAllocation !== undefined) {
+      const restored = await restorePromotionalCredit(ctx, call.promotionalCreditAllocation, call.ownerId, call.environment, now)
+      if (restored.kind !== 'restored') throw new Error('promotional_credit_restore_failed')
+    }
     const result = {
       kind: 'refused' as const, toolRef: call.toolRef, code: 'source_unavailable' as const, retryable: false,
       nextAction: 'The service did not complete and payment expired unused. Your credit has been restored. You can make a new request from the Tool page.',
@@ -91,6 +102,7 @@ export const finish = internalMutation({
         accountingTransactionRefs: [...args.transactionRefs], transactionRef,
       },
     }
+    await resolveX402SpendReservation(ctx, attempt, { kind: 'unused', proof: 'expired_unused', evidenceDigest: args.evidenceDigest })
     await ctx.db.patch(attempt._id, { state: 'observed', settlementStatus: 'not_settled', paymentUnsignedMaterialJson: undefined })
     await ctx.db.patch(obligation._id, { state: 'reversed', updatedAt: now,
       evidenceRefs: [...new Set([...obligation.evidenceRefs, ...args.transactionRefs, args.evidenceDigest])].slice(-32) })
@@ -111,6 +123,10 @@ export const schedule = internalMutation({
   handler: async (ctx, args) => {
     const call = await readCall(ctx, args.callRef)
     if (call?.state !== 'reconciliation_required') return false
+    // Even exhausted retries must not replace this hold with recovery_failed;
+    // doing so would reopen local-absence recovery from the restored control.
+    if (call.reconciliation?.disposition === 'manual_review'
+      && call.reconciliation.reason === 'unknown_settlement') return false
     const attempt = args.attempt ?? 0
     if (attempt >= 5) {
       await ctx.db.patch(call._id, { reconciliation: {

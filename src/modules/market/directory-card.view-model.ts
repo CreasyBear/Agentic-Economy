@@ -1,24 +1,36 @@
 import Decimal from 'decimal.js'
+import { formatRelativeTime } from '@/lib/ui/format-time'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
-import { formatDisplayPrice } from '@/modules/money/public'
 import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import type { SavedDirectoryTool, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
+import { formatDisplayPrice } from '@/modules/money/public'
 import { degrade } from '@/lib/observability/degrade'
 
 export { absorbProviderEntries, DIRECTORY_LIST_PAGE_SIZE, groupDirectoryProviders } from './internal/directory-provider-pagination'
 
-/** AUD is the primary estimate; published USDC remains a source detail below it. */
-export function directoryPrice(entry: X402DirectoryEntry): string {
-  if (entry.audEstimate !== undefined) return entry.audEstimate
-  const price = entry.prices[0]
-  if (price === undefined) return 'Price on request'
-  return listedPriceAmount(price) === undefined ? 'See payment details' : audEstimateUnavailable
+/** Select the lowest recognised USDC option, preferring exact when amounts tie. */
+function selectedDirectoryUsdPrice(entry: X402DirectoryEntry) {
+  const amount = minimumDirectoryUsdPrice(entry)
+  if (amount === undefined) return undefined
+  const matching = entry.prices.filter(price =>
+    (price.scheme === 'exact' || price.scheme === 'upto')
+    && minimumDirectoryUsdPrice({ ...entry, prices: [price] }) === amount)
+  const price = matching.find(option => option.scheme === 'exact') ?? matching.find(option => option.scheme === 'upto')
+  return price === undefined ? undefined : { amount, price }
 }
 
-const audEstimateUnavailable = formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
+/** A fresh AUD estimate first; exact USDC translated to US dollars otherwise. */
+export function directoryPrice(entry: X402DirectoryEntry): string {
+  const selected = selectedDirectoryUsdPrice(entry)
+  if (selected === undefined) return ''
+  const prefix = selected.price.scheme === 'upto' ? 'up to ' : ''
+  if (entry.audEstimate !== undefined) return `${prefix}${entry.audEstimate}`
+  const amount = formatListedAmount(selected.amount)
+  return amount === undefined ? '' : `${prefix}US$${amount}`
+}
 
 /** Format the published source amount without rounding away settlement precision. */
 function listedPriceAmount(price: X402DirectoryEntry['prices'][number]): string | undefined {
@@ -53,14 +65,14 @@ function groupDigits(whole: string): string {
 
 /** Buyer-facing provenance for a directory price before AE admission and Quote. */
 export function directoryPriceContext(entry: X402DirectoryEntry): string {
-  const price = entry.prices[0]
-  if (price === undefined) return 'No Provider price published'
-  const quotedSource = entry.audEstimate === undefined ? undefined : minimumDirectoryUsdPrice(entry)
-  const formattedSource = quotedSource === undefined ? undefined : formatListedAmount(quotedSource)
-  const listed = formattedSource === undefined ? listedPriceAmount(price) : `${formattedSource} USDC`
+  const selected = selectedDirectoryUsdPrice(entry)
+  if (selected === undefined) return ''
+  const formattedSource = formatListedAmount(selected.amount)
+  if (formattedSource === undefined) return ''
+  const listed = `${selected.price.scheme === 'upto' ? 'up to ' : ''}${formattedSource} USDC`
   const source = entry.prices.length > 1
-    ? `${entry.prices.length} Provider payment options${listed === undefined ? '' : ` · source ${listed}`}`
-    : listed === undefined ? 'Provider price per Call' : `Provider lists ${listed} per Call`
+    ? `${entry.prices.length} Provider payment options · source ${listed}`
+    : `Provider lists ${listed} per Call`
   if (entry.audEstimate === undefined) return source
   return `${entry.choice?.access === 'external_listing' || entry.choice === undefined ? 'Provider-listed estimate' : 'Indicative before Quote'} · ${source}`
 }
@@ -132,20 +144,17 @@ export function directoryInitials(providerLine: string): string {
   return (letters.slice(0, 2) || 'AE').toUpperCase()
 }
 
-function countPhrase(count: number, singular: string, plural: string): string {
-  return count === 1 ? `1 ${singular}` : `${count} ${plural}`
-}
 
 function countLabel(value: number | undefined): string | undefined {
   if (value === undefined || !Number.isSafeInteger(value) || value < 0) return undefined
   return value.toLocaleString('en-AU')
 }
 
-/** A listed source USDC amount from the directory. An em dash means the figure is absent. */
+/** Buyer-facing USD from a published source USDC amount. */
 export function directoryUsdLabel(decimalAmount: string | undefined): string {
   if (decimalAmount === undefined) return '—'
   const formatted = formatListedAmount(decimalAmount)
-  return formatted === undefined ? '—' : `${formatted} USDC`
+  return formatted === undefined ? '—' : `US$${formatted}`
 }
 
 export type DirectoryProviderRowModel = Readonly<{
@@ -168,6 +177,7 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
   const title = calls === undefined ? undefined : provider.leadTitle?.trim()
   const slug = calls === undefined ? undefined : provider.leadSlug?.trim()
   const sourcePrice = calls === undefined ? '—' : directoryUsdLabel(provider.leadPrice)
+  const sourceAmount = sourcePrice === '—' ? undefined : sourcePrice.slice(3)
   return {
     key: provider.key,
     initials: directoryInitials(provider.key),
@@ -175,8 +185,8 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
     toolLabel: provider.count.toLocaleString('en-AU'),
     callsLabel: calls ?? '—',
     payersLabel: payers ?? '—',
-    priceLabel: sourcePrice === '—' ? '—' : audEstimateUnavailable,
-    ...(sourcePrice === '—' ? {} : { priceSourceLabel: `Provider lists ${sourcePrice} per Call` }),
+    priceLabel: sourcePrice === '—' ? '' : sourcePrice,
+    ...(sourceAmount === undefined ? {} : { priceSourceLabel: `Provider lists ${sourceAmount} USDC per Call` }),
     ...(title === undefined || title.length === 0 ? {} : { leadTitle: title }),
     ...(slug === undefined || slug.length === 0 ? {} : { leadSlug: slug }),
   }
@@ -204,7 +214,7 @@ export type DirectoryToolCardModel = Readonly<{
   description?: string
   outputLabel?: string
   glance?: string
-  activityLabel?: string
+  factsLine?: string
   activityTitle?: string
   callsLabel?: string
   payersLabel?: string
@@ -224,24 +234,19 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
   const payers30d = entry.activity?.payers30d
   const callsLabel = countLabel(calls30d)
   const payersLabel = countLabel(payers30d)
-  const lastReported = entry.activity?.lastCalledAt === undefined ? undefined : directoryDate(entry.activity.lastCalledAt)
+  const lastCalledAt = entry.activity?.lastCalledAt
+  const lastReported = lastCalledAt === undefined ? undefined : directoryDate(lastCalledAt)
   const bazaarTitle = lastReported === undefined
     ? 'Coinbase Bazaar volume, not an Agentic Economy Call.'
     : `Coinbase Bazaar volume, not an Agentic Economy Call. Last reported ${lastReported}.`
-  const activity =
-    calls30d !== undefined && calls30d > 0
-      ? {
-          activityLabel: [
-            countPhrase(calls30d, 'reported call', 'reported calls'),
-            ...(payers30d !== undefined && payers30d > 0 ? [countPhrase(payers30d, 'payer', 'payers')] : []),
-          ].join(' · ') + ' in 30 days',
-          activityTitle: bazaarTitle,
-        }
-      : lastReported !== undefined
-        ? { activityLabel: `Last reported ${lastReported}`, activityTitle: bazaarTitle }
-        : entry.provenance?.updatedAt !== undefined
-          ? { activityLabel: `Updated ${directoryDate(entry.provenance.updatedAt)}` }
-          : {}
+  const relativePaid = lastCalledAt === undefined ? undefined : formatRelativeTime(lastCalledAt)
+  const paidFact = relativePaid === undefined ? undefined : `paid ${relativePaid === 'just now' ? 'recently' : relativePaid}`
+  const factsLine = [
+    payers30d !== undefined && payers30d > 0 && payersLabel !== undefined ? `${payersLabel} buyers` : undefined,
+    calls30d !== undefined && callsLabel !== undefined ? `${callsLabel} calls this month` : undefined,
+    paidFact,
+    entry.audEstimate === undefined ? undefined : `from ${entry.audEstimate}`,
+  ].filter((fact): fact is string => fact !== undefined).join(' · ')
   return {
     title,
     providerHost,
@@ -261,7 +266,8 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     ...(rawDescription !== undefined && rawDescription !== '' ? { description: rawDescription } : {}),
     ...(outputLabel === undefined ? {} : { outputLabel }),
     ...(glance === undefined ? {} : { glance }),
-    ...activity,
+    ...(factsLine.length === 0 ? {} : { factsLine }),
+    ...(lastCalledAt === undefined ? {} : { activityTitle: bazaarTitle }),
     ...(callsLabel === undefined ? {} : { callsLabel }),
     ...(payersLabel === undefined ? {} : { payersLabel }),
     ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }),
@@ -309,7 +315,7 @@ export function toSavedDirectoryRowModel(item: SavedToolListItem): SavedDirector
     return {
       title: tool.listing.label,
       provider: tool.business.name,
-      price: formatDisplayPrice(tool.commercial.displayPrice ?? { kind: 'unavailable' }) ?? audEstimateUnavailable,
+      price: formatDisplayPrice(tool.commercial.displayPrice) ?? '',
       access: 'AE-callable',
       toolRef: tool.toolRef,
     }
@@ -460,7 +466,6 @@ export function toDirectoryServiceSurface(
     return true
   })
   const providerLine = directoryProviderLine(current)
-  const hasListedPrice = entries.some(entry => entry.prices.length > 0)
   const networks = [...new Set(entries.flatMap(entry => entry.prices.map(price => price.networkLabel ?? price.network)))].slice(0, 4)
   const count = truncated ? `${entries.length}+` : String(entries.length)
   return {
@@ -468,7 +473,7 @@ export function toDirectoryServiceSurface(
     host: directoryProviderKey(current.provider),
     ...(current.category === undefined ? {} : { category: current.category }),
     networks: networks.length === 0 ? 'Not published' : networks.join(', '),
-    priceRange: hasListedPrice ? audEstimateUnavailable : 'Price on request',
+    priceRange: [...new Set(entries.map(directoryPrice).filter(price => price.length > 0))].join(' · '),
     endpointCount: count === '1' ? '1 endpoint' : `${count} endpoints`,
     endpoints: entries.map(entry => {
       const calls = countLabel(entry.activity?.calls30d) ?? '—'

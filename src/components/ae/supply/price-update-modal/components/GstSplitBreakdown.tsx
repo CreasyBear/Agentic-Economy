@@ -8,7 +8,7 @@ export function GstSplitBreakdown({ baseText, gstText, totalText }: GstSplitBrea
         <span className="font-mono tabular-nums">{baseText}</span>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground">GST (10%)</span>
+        <span className="text-muted-foreground">GST</span>
         <span className="font-mono tabular-nums">{gstText}</span>
       </div>
       <div className="flex items-center justify-between gap-2">

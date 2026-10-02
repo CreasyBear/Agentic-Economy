@@ -8,12 +8,9 @@ import {
 import {
   beginAccountFundingThroughSource,
   readAccountFundingThroughSource as readTopupPaymentThroughSource,
-  readOwnerPayoutTransferThroughSource,
-  runOwnerPayoutTransferThroughSource,
 } from "../../src/modules/money/server";
 import {
   readStripeMoneyProviderConfig,
-  readStripeTransfersByGroup,
   verifyStripeMoneyWebhook,
 } from "../../src/lib/server/stripe-money-provider";
 import {
@@ -22,9 +19,7 @@ import {
   exactAmountSchema,
   isMoneyRefusal,
   KeyUsageViewSchema,
-  StrictLivePayoutReceiptSchema,
   accountRefForOwner,
-  accountRefForProvider,
   AUD_EXPONENT,
   audFundingPolicyFromCommercialControls,
   quoteAudAccountFunding,
@@ -45,14 +40,12 @@ import {
 
 import {
   GatewaySmokeError,
-  type GatewayPayoutProviderTransferReadback,
   type GatewayTopupObservation,
   type GatewayTopupPreparationArtifact,
   type HostedTopupReadback,
 } from "./tool-gateway-production-smoke-receipt";
 import {
   parseGatewayOwnerProviderEarnings,
-  sanitizeGatewayPayoutProviderTransfers,
   type HostedMoneySnapshot,
   type StrictCreditActivityView,
 } from "./tool-gateway-production-smoke-money";
@@ -80,9 +73,6 @@ export type HostedMoneyRuntime = Readonly<{
   payoutRef: string;
   payoutIdempotencyKey: string;
   readSnapshot: () => Promise<HostedMoneySnapshot>;
-  readProviderTransfers: (
-    payoutRef: string,
-  ) => Promise<GatewayPayoutProviderTransferReadback>;
   observeTopup: (
     expected: GatewayTopupPreparationArtifact,
   ) => Promise<GatewayTopupObservation>;
@@ -260,22 +250,6 @@ export function createHostedMoneyRuntime(
       );
     }
     return matches[0];
-  };
-
-  const readProviderTransfers = async (
-    transferGroup: string,
-  ): Promise<GatewayPayoutProviderTransferReadback> => {
-    const transfers = await readStripeTransfersByGroup({
-      config: stripeConfig,
-      client: stripe,
-      transferGroup,
-    });
-    if (isMoneyRefusal(transfers))
-      throw new GatewaySmokeError(`gateway_smoke_payout_${transfers.code}`);
-    return sanitizeGatewayPayoutProviderTransfers(
-      transferGroup,
-      transfers.map(({ transferId }) => transferId),
-    );
   };
 
   const topupReadback = async (
@@ -676,67 +650,14 @@ export function createHostedMoneyRuntime(
   };
 
   const payoutReadback = async (
-    input: Readonly<{
+    _input: Readonly<{
       payoutRef: string;
       idempotencyKey: string;
       amount?: ExactAmount;
     }>,
-    begin: boolean,
+    _begin: boolean,
   ): Promise<StrictLivePayoutReceipt> => {
-    const result = begin
-      ? await runOwnerPayoutTransferThroughSource(
-          {
-            businessId: controlBusinessId,
-            currency,
-            payoutRef: input.payoutRef,
-            amount: exactAmountSchema.parse(input.amount),
-            idempotencyKey: input.idempotencyKey,
-          },
-          context,
-        )
-      : await readOwnerPayoutTransferThroughSource(
-          {
-            businessId: controlBusinessId,
-            currency,
-            payoutRef: input.payoutRef,
-            idempotencyKey: input.idempotencyKey,
-          },
-          context,
-        );
-    if (result.kind !== "ok")
-      throw new GatewaySmokeError(`gateway_smoke_payout_${result.code}`);
-    const transfer = record(result.transfer);
-    if (
-      transfer === undefined ||
-      transfer.state !== "paid" ||
-      transfer.transferStatus !== "succeeded" ||
-      typeof transfer.stripeTransferId !== "string" ||
-      typeof transfer.evidenceDigest !== "string"
-    )
-      throw new GatewaySmokeError(
-        "gateway_smoke_payout_transfer_not_succeeded",
-      );
-    return StrictLivePayoutReceiptSchema.parse({
-      payoutRef: transfer.payoutRef,
-      payoutCommandId: transfer.payoutCommandId,
-      supplierBusinessId: controlBusinessId,
-      payoutAccountRef: accountRefForProvider(controlBusinessId, currency),
-      stripeAccountDigest: canonicalDigest({
-        format: "stripe-account:v1",
-        destinationAccountId: transfer.destinationAccountId,
-      }),
-      stripeTransferDigest: canonicalDigest({
-        format: "stripe-transfer:v1",
-        transferId: transfer.stripeTransferId,
-      }),
-      transferEvidenceDigest: transfer.evidenceDigest,
-      providerNetAmount: transfer.amount,
-      providerHeldBefore: transfer.providerHeldBefore,
-      providerHeldAfter: transfer.providerHeldAfter,
-      providerPaidBefore: transfer.providerPaidBefore,
-      providerPaidAfter: transfer.providerPaidAfter,
-      replayAdditionalDebits: 0,
-    });
+    throw new GatewaySmokeError("gateway_smoke_payout_retired");
   };
 
   const money: HostedMoneyRuntime = {
@@ -750,7 +671,6 @@ export function createHostedMoneyRuntime(
     payoutRef,
     payoutIdempotencyKey,
     readSnapshot,
-    readProviderTransfers,
     beginTopup,
     observeTopup,
     readControlActivity: readActivity,

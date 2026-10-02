@@ -22,7 +22,6 @@ import {
 import {
   bindingIntegrityIsValid,
   offeringIntegrityIsValid,
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
 } from '@/modules/capability-supply/convex'
 
 import type { Doc, Id } from '../../../_generated/dataModel'
@@ -227,16 +226,12 @@ export async function reuseExactStagedPublication(
     publicationRevision: 1,
     contractRef,
   })
-  const admissionFenceCount = publication.registrationEvidenceRefs.filter(
-    (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-  ).length
   const sourceSelector = publication.sourceSelector
   const priceDigest = publication.priceDigest
   const runtimeEnvironment = exactOwnerX402Environment(input.args.prepared, input.args.sellerClaim)
   if (
     existingEvidenceOfferingHash !== offering.registrationHash
     || existingEvidenceBindingHash !== binding.registrationHash
-    || admissionFenceCount !== 1
     || publication.businessId !== input.args.businessId
     || runtimeEnvironment === undefined
     || publication.runtimeEnvironment !== runtimeEnvironment

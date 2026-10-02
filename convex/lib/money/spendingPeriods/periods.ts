@@ -91,7 +91,6 @@ async function cleanLegacyHistory(ctx: MutationCtx, principalRef: string, monthS
     .take(129)
   if (calls.length > 128) return false
   for (const call of calls) {
-    if (call.sellerOnboardingCanary !== undefined) continue
     if (call.quoteRef === undefined) return false
     const quoteRef = call.quoteRef
     const quotes = await ctx.db.query('capabilityQuotes')

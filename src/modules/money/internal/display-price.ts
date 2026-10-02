@@ -11,28 +11,42 @@ function formatAudCents(amount: ExactAmount): string | undefined {
   return `A$${cents / 100n}.${(cents % 100n).toString().padStart(2, '0')}`
 }
 
-/** An indicative AUD amount or exact USDC source plus a fresh Coinbase observation. */
+function formatUsdAmount(amount: ExactAmount): string | undefined {
+  const exact = readExactAmount(amount)
+  if (exact === undefined || (exact.currency !== 'USD' && exact.currency !== 'USDC')) return undefined
+  const units = BigInt(exact.units)
+  const padded = units.toString().padStart(exact.exponent + 1, '0')
+  const splitAt = padded.length - exact.exponent
+  const whole = padded.slice(0, splitAt)
+  const fraction = padded.slice(splitAt).replace(/0+$/u, '')
+  const subCent = units > 0n && exact.exponent > 2
+    && units < 10n ** BigInt(exact.exponent - 2)
+  return `US$${whole}.${subCent ? fraction : fraction.padEnd(2, '0')}`
+}
+
+/** An indicative amount; USDC falls back to its exact USD value without fresh AUD evidence. */
 export function formatDisplayPrice(
   display: Readonly<{
     kind: 'indicative'
     amount: ExactAmount
-    validUntil: number
+    validUntil?: number
     referenceRate?: ReferenceRate
   }> | Readonly<{ kind: 'unavailable' }> | undefined,
   now = Date.now(),
 ): string | undefined {
-  if (display === undefined) return undefined
-  if (display.kind === 'unavailable' || !Number.isSafeInteger(now)
-    || !Number.isSafeInteger(display.validUntil) || display.validUntil <= now) {
-    return 'AUD estimate temporarily unavailable'
+  if (display === undefined || display.kind === 'unavailable') return undefined
+  const withinEstimateWindow = Number.isSafeInteger(now)
+    && display.validUntil !== undefined
+    && Number.isSafeInteger(display.validUntil)
+    && display.validUntil > now
+  if (display.amount.currency === 'USDC') {
+    const aud = withinEstimateWindow && display.referenceRate !== undefined
+      ? convertUsdcToAud(display.amount, display.referenceRate, now)
+      : undefined
+    return (aud === undefined ? undefined : formatAudCents(aud)) ?? formatUsdAmount(display.amount)
   }
-  const amount = display.amount.currency === 'USDC'
-    ? display.referenceRate === undefined
-      ? undefined
-      : convertUsdcToAud(display.amount, display.referenceRate, now)
-    : display.amount
-  const formatted = amount === undefined ? undefined : formatAudCents(amount)
-  return formatted ?? 'AUD estimate temporarily unavailable'
+  if (display.amount.currency === 'USD') return formatUsdAmount(display.amount)
+  return withinEstimateWindow ? formatAudCents(display.amount) : undefined
 }
 
 /** A known AUD amount (balance or ledger row), without an estimate window. */

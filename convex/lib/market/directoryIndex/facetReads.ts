@@ -1,13 +1,11 @@
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
-import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { analyticsNamespace, eligibleFacetsNamespace } from './analytics'
 import { coverageValue, facetValue, indexedEntryValue, unavailableValue } from './contracts'
 import { directoryFacets } from './facets'
-import { activeDirectoryGeneration, directoryCoverage, directoryState, indexedDirectoryEntry } from './rows'
+import { activeDirectoryGeneration, directoryCoverage, directoryState } from './rows'
 
-type SearchRow = Doc<'marketDirectorySearchEntries'>
 /**
  * Category/provider/network counts default to the eligible-only namespace
  * (mirrored at write time in x402DirectoryIndexStore.writeFacetMembership);
@@ -73,16 +71,13 @@ export const overviewReturns = v.union(unavailableValue, v.object({
 export const overviewHandler = async (ctx: QueryCtx) => {
     const generation = await activeDirectoryGeneration(ctx)
     if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
-    const [categories, providers, networks, popularRows, updatedRows, risingRows, fallingRows] = await Promise.all([
+    const [categories, providers, networks] = await Promise.all([
       readFacets(ctx, generation.generation, 'category', 128, true), readFacets(ctx, generation.generation, 'provider', 12, true), readFacets(ctx, generation.generation, 'network', 32, true),
-      ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_network_and_elig_and_popularOrder', q => q.eq('generation', generation.generation).eq('network', '*').eq('eligible', true).gt('popularOrder', 0)).order('desc').take(6),
-      ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_network_and_elig_and_updatedOrder', q => q.eq('generation', generation.generation).eq('network', '*').eq('eligible', true).gt('updatedOrder', 0)).order('desc').take(6),
-      // Momentum stays un-narrowed (out of Lane 1's scope, see orderedDirectoryRows).
-      ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_network_and_momentumOrder', q => q.eq('generation', generation.generation).eq('network', '*').gt('momentumOrder', 0)).order('desc').take(6),
-      ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_network_and_momentumOrder', q => q.eq('generation', generation.generation).eq('network', '*').gt('momentumOrder', 0)).order('asc').take(6),
     ])
-    const hydrate = async (rows: SearchRow[]) => (await Promise.all(rows.map(async row => ({ row, entry: await ctx.db.get(row.entryId) })))).flatMap(({ row, entry }) => entry === null ? [] : [indexedDirectoryEntry(entry, row)])
-    const [popular, recentlyUpdated, rising, falling] = await Promise.all([hydrate(popularRows), hydrate(updatedRows), hydrate(risingRows), hydrate(fallingRows)])
+    const popular: Array<never> = []
+    const recentlyUpdated: Array<never> = []
+    const rising: Array<never> = []
+    const falling: Array<never> = []
     // Tags/bundles stay generation-wide (deferred, see readFacets comment).
     const labels = generation.analyticsStatus === 'ready' ? { tags: await readFacets(ctx, generation.generation, 'tag', 64, false), bundleSlugs: await readFacets(ctx, generation.generation, 'bundle', 64, false) } : {}
     return { kind: 'ok' as const, coverage: directoryCoverage(generation), categories, providers, networks, popular, recentlyUpdated, rising, falling, ...labels }

@@ -1,55 +1,19 @@
 import {
-  cpSync,
   existsSync,
   lstatSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
-import { spawn, spawnSync } from 'node:child_process'
+import { copyReleaseSource, runConvexCommand, terminateIsolatedProcesses } from './convex-anonymous-runtime'
 
 const root = resolve(process.cwd())
 const generatedDirectory = join('convex', '_generated')
 const generatedSourceFiles = ['api.d.ts', 'api.js', 'dataModel.d.ts', 'server.d.ts', 'server.js'] as const
-const requiredRootFiles = ['package.json', 'package-lock.json', 'tsconfig.json', 'convex.json'] as const
-const requiredSourceDirectories = ['src', 'convex'] as const
 const anonymousClerkJwtIssuerDomain = 'https://release-proof.invalid'
-
-function copyReleaseSource(target: string): void {
-  for (const name of requiredRootFiles) cpSync(resolve(root, name), resolve(target, name))
-  for (const name of requiredSourceDirectories) {
-    cpSync(resolve(root, name), resolve(target, name), { recursive: true })
-  }
-  const nodeModules = resolve(root, 'node_modules')
-  if (!existsSync(nodeModules)) throw new Error('convex_anonymous_codegen_node_modules_missing')
-  symlinkSync(nodeModules, resolve(target, 'node_modules'), 'dir')
-}
-
-function anonymousEnvironment(isolatedRoot: string): NodeJS.ProcessEnv {
-  return {
-    ...(process.env.HOME === undefined ? {} : { HOME: process.env.HOME }),
-    ...(process.env.PATH === undefined ? {} : { PATH: process.env.PATH }),
-    ...(process.env.TMPDIR === undefined ? {} : { TMPDIR: process.env.TMPDIR }),
-    CI: '1',
-    NO_COLOR: '1',
-    CONVEX_AGENT_MODE: 'anonymous',
-    CLERK_JWT_ISSUER_DOMAIN: anonymousClerkJwtIssuerDomain,
-    npm_config_audit: 'false',
-    npm_config_cache: resolve(isolatedRoot, '.npm-cache'),
-    npm_config_fetch_retries: '2',
-    npm_config_fetch_retry_maxtimeout: '10000',
-    npm_config_fetch_retry_mintimeout: '1000',
-    npm_config_fetch_timeout: '30000',
-    npm_config_fund: 'false',
-    npm_config_prefer_offline: 'true',
-    npm_config_update_notifier: 'false',
-    npm_config_userconfig: resolve(isolatedRoot, '.npmrc'),
-  }
-}
 
 function listFiles(directory: string): string[] {
   const files: string[] = []
@@ -78,110 +42,23 @@ function generatedDrift(isolatedRoot: string): string[] {
   })
 }
 
-const wait = async (milliseconds: number): Promise<void> => {
-  await new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds))
-}
-
-function isolatedProcessIds(isolatedRoot: string, processGroup?: number): number[] {
-  const result = spawnSync('ps', ['-axo', 'pid=,pgid=,uid=,command='], { encoding: 'utf8' })
-  if (result.status !== 0) throw new Error('convex_anonymous_process_inspection_failed')
-  const currentUid = typeof process.getuid === 'function' ? process.getuid() : undefined
-  return (result.stdout ?? '')
-    .split('\n')
-    .map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/u))
-    .filter((match): match is RegExpMatchArray => match !== null)
-    .filter((match) => {
-      const groupMatches = processGroup !== undefined && Number.parseInt(match[2]!, 10) === processGroup
-      const ownerMatches = currentUid === undefined || Number.parseInt(match[3]!, 10) === currentUid
-      return match[4]!.includes(isolatedRoot) || (groupMatches && ownerMatches)
-    })
-    .map((match) => Number.parseInt(match[1]!, 10))
-    .filter((pid) => Number.isSafeInteger(pid) && pid > 0 && pid !== process.pid)
-}
-
-async function terminateIsolatedProcesses(isolatedRoot: string, processGroup?: number): Promise<void> {
-  const initial = isolatedProcessIds(isolatedRoot, processGroup)
-  for (const pid of initial) {
-    try {
-      process.kill(pid, 'SIGTERM')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
-    }
-  }
-  if (initial.length > 0) await wait(250)
-  for (const pid of isolatedProcessIds(isolatedRoot, processGroup)) {
-    try {
-      process.kill(pid, 'SIGKILL')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
-    }
-  }
-  if (initial.length > 0) await wait(100)
-  if (isolatedProcessIds(isolatedRoot, processGroup).length > 0) {
-    throw new Error('convex_anonymous_process_cleanup_failed')
-  }
-}
-
-async function runConvex(isolatedRoot: string, args: readonly string[]): Promise<void> {
-  const convexCli = resolve(isolatedRoot, 'node_modules', 'convex', 'bin', 'main.js')
-  const child = spawn(process.execPath, [convexCli, ...args], {
-    cwd: isolatedRoot,
-    detached: true,
-    env: anonymousEnvironment(isolatedRoot),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.setEncoding('utf8')
-  child.stderr.setEncoding('utf8')
-  child.stdout.on('data', (chunk: string) => { stdout = `${stdout}${chunk}`.slice(-8_000) })
-  child.stderr.on('data', (chunk: string) => { stderr = `${stderr}${chunk}`.slice(-8_000) })
-  let timedOut = false
-  const timer = setTimeout(() => {
-    timedOut = true
-    child.kill('SIGTERM')
-    try {
-      process.kill(-child.pid!, 'SIGTERM')
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'ESRCH' && code !== 'EPERM') child.kill('SIGKILL')
-    }
-  }, 180_000)
-  const result = await new Promise<Readonly<{ status: number | null; error?: Error }>>((resolvePromise) => {
-    child.once('error', (error) => resolvePromise({ status: null, error }))
-    child.once('close', (status) => resolvePromise({ status }))
-  })
-  clearTimeout(timer)
-  await terminateIsolatedProcesses(isolatedRoot, child.pid)
-  if (timedOut) throw new Error(`convex_anonymous_${args[0] ?? 'command'}_failed:timeout`)
-  if (result.error !== undefined) {
-    throw new Error(`convex_anonymous_${args[0] ?? 'command'}_failed:${result.error.message}`)
-  }
-  if (result.status !== 0) {
-    const output = `${stdout}\n${stderr}`
-      .replaceAll(isolatedRoot, '<isolated-checkout>')
-      .replaceAll(root, '<source-checkout>')
-      .replaceAll(resolve(root, 'node_modules'), '<node_modules>')
-      .trim()
-    throw new Error(`convex_anonymous_${args[0] ?? 'command'}_failed:${output}`)
-  }
-}
-
 async function run(): Promise<void> {
   const isolatedRoot = mkdtempSync(resolve(tmpdir(), 'ae-convex-source-proof-'))
+  let generatedCount = 0
   try {
-    copyReleaseSource(isolatedRoot)
+    copyReleaseSource(root, isolatedRoot)
     for (const name of generatedSourceFiles) {
       rmSync(resolve(isolatedRoot, generatedDirectory, name))
     }
-    await runConvex(isolatedRoot, ['init'])
-    await runConvex(isolatedRoot, [
+    await runConvexCommand({ sourceRoot: root, isolatedRoot, args: ['init'] })
+    await runConvexCommand({ sourceRoot: root, isolatedRoot, args: ['env', 'set', 'AE_DEPLOYMENT_ENVIRONMENT', 'development'] })
+    await runConvexCommand({ sourceRoot: root, isolatedRoot, args: [
       'env',
       'set',
       'CLERK_JWT_ISSUER_DOMAIN',
       anonymousClerkJwtIssuerDomain,
-    ])
-    await runConvex(isolatedRoot, ['codegen', '--typecheck=disable'])
+    ] })
+    await runConvexCommand({ sourceRoot: root, isolatedRoot, args: ['codegen', '--typecheck=disable'] })
     for (const name of generatedSourceFiles) {
       if (!existsSync(resolve(isolatedRoot, generatedDirectory, name))) {
         throw new Error(`convex_generated_source_missing:${name}`)
@@ -191,12 +68,12 @@ async function run(): Promise<void> {
     if (drift.length > 0) {
       throw new Error(`convex_generated_source_drift:${drift.join(',')}`)
     }
-    const generatedCount = listFiles(resolve(isolatedRoot, generatedDirectory)).length
-    process.stdout.write(`CONVEX_ANONYMOUS_CODEGEN_PASS files=${generatedCount}\n`)
+    generatedCount = listFiles(resolve(isolatedRoot, generatedDirectory)).length
   } finally {
     await terminateIsolatedProcesses(isolatedRoot)
     rmSync(isolatedRoot, { recursive: true, force: true })
   }
+  process.stdout.write(`CONVEX_ANONYMOUS_CODEGEN_PASS files=${generatedCount}\n`)
 }
 
 await run()

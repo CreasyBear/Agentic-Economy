@@ -1,4 +1,4 @@
-import type { Principal, PrincipalRef } from '../../principal/public'
+import type { PrincipalRef } from '../../principal/public'
 
 declare const accountRefBrand: unique symbol
 declare const ownershipRefBrand: unique symbol
@@ -55,7 +55,7 @@ export type Account = Readonly<{
   lastAction: AccountActionContext
 }>
 
-export type OwnershipChangeKind = 'creation' | 'transfer' | 'succession'
+type OwnershipChangeKind = 'creation' | 'transfer' | 'succession'
 
 export type AccountOwnership = Readonly<{
   ownershipRef: OwnershipRef
@@ -85,56 +85,6 @@ export type Membership = Readonly<{
   endedBy?: AccountActionContext
 }>
 
-export type VerifiedRecoveryParticipantApproval = Readonly<{
-  approvalRef: string
-  accountRef: AccountRef
-  participantPrincipalRef: PrincipalRef
-  incumbentOwnerPrincipalRef: PrincipalRef
-  successorOwnerPrincipalRef: PrincipalRef
-  recoveryPolicyRevision: number
-  frozenAccountRevision: number
-  frozenAt: number
-  verifiedAt: number
-  expiresAt: number
-  verificationRef: string
-  lifecycle: 'verified' | 'revoked'
-  createdAt: number
-  createdBy: AccountActionContext
-}>
-
-export type SuccessionAuthorizationParticipant = Readonly<{
-  authorizationRef: string
-  accountRef: AccountRef
-  approvalRef: string
-  participantPrincipalRef: PrincipalRef
-  verificationRef: string
-  verifiedAt: number
-  recoveryPolicyRevision: number
-  frozenAccountRevision: number
-  createdAt: number
-  createdBy: AccountActionContext
-}>
-
-export type SuccessionAuthorization = Readonly<{
-  authorizationRef: string
-  accountRef: AccountRef
-  incumbentOwnerPrincipalRef: PrincipalRef
-  successorOwnerPrincipalRef: PrincipalRef
-  recoveryPolicyRevision: number
-  frozenAccountRevision: number
-  frozenAt: number
-  availableAt: number
-  authorizedAt: number
-  expiresAt: number
-  verifiedParticipantCount: number
-  lifecycle: 'active' | 'consumed'
-  revision: number
-  createdAt: number
-  createdBy: AccountActionContext
-  consumedAt?: number
-  consumedBy?: AccountActionContext
-  successorOwnershipRef?: OwnershipRef
-}>
 
 export type ActiveAccountContext = Readonly<{
   accountRef: AccountRef
@@ -144,17 +94,8 @@ export type ActiveAccountContext = Readonly<{
   idempotencyRef: string
 }>
 
-export type CrossAccountAttribution = Readonly<{
-  actorPrincipalRef: PrincipalRef
-  activeAccountRef: AccountRef
-  counterpartyAccountRef: AccountRef
-  correlationRef: string
-  idempotencyRef: string
-  activeAccountRevision: number
-  counterpartyAccountRevision: number
-}>
 
-export type AccountRegistryErrorCode =
+type AccountRegistryErrorCode =
   | 'account_context_access_denied'
   | 'account_context_mismatch'
   | 'account_cross_account_self_forbidden'
@@ -207,41 +148,4 @@ export class AccountRegistryError extends Error {
   }
 }
 
-export type RevisionedReplacement<Value> = Readonly<{
-  value: Value
-  expectedRevision: number
-}>
-
-export type AccountRegistryCommit = Readonly<{
-  accountInsert?: Account
-  accountReplacement?: RevisionedReplacement<Account>
-  ownershipInserts?: readonly AccountOwnership[]
-  ownershipReplacements?: readonly RevisionedReplacement<AccountOwnership>[]
-  membershipInserts?: readonly Membership[]
-  membershipReplacements?: readonly RevisionedReplacement<Membership>[]
-  successionAuthorizationParticipantInserts?: readonly SuccessionAuthorizationParticipant[]
-  successionAuthorizationInsert?: SuccessionAuthorization
-  successionAuthorizationReplacement?: RevisionedReplacement<SuccessionAuthorization>
-}>
-
-export type AccountRegistryTransaction = Readonly<{
-  getPrincipal(principalRef: PrincipalRef): Promise<Principal | undefined>
-  getAccount(accountRef: AccountRef): Promise<Account | undefined>
-  getAccountByCreationIdempotency(actorPrincipalRef: PrincipalRef, idempotencyRef: string): Promise<Account | undefined>
-  getOwnership(ownershipRef: OwnershipRef): Promise<AccountOwnership | undefined>
-  getMembership(membershipRef: MembershipRef): Promise<Membership | undefined>
-  getActiveMembership(accountRef: AccountRef, memberPrincipalRef: PrincipalRef): Promise<Membership | undefined>
-  getVerifiedRecoveryParticipantApproval(approvalRef: string): Promise<VerifiedRecoveryParticipantApproval | undefined>
-  getSuccessionAuthorization(authorizationRef: string): Promise<SuccessionAuthorization | undefined>
-  commit(change: AccountRegistryCommit): Promise<void>
-}>
-
-export type AccountRegistryStore = Readonly<{
-  transact<Result>(operation: (transaction: AccountRegistryTransaction) => Promise<Result>): Promise<Result>
-}>
-
-export type AccountRegistryOptions = Readonly<{
-  now?: () => number
-  randomUuid?: () => string
-}>
 

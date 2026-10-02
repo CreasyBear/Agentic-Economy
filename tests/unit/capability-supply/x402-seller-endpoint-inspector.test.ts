@@ -16,7 +16,9 @@ import {
   type X402PaymentRequired,
 } from '@/modules/capability-supply/server'
 import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
-import { syntheticPostPaymentRequiredFixture as syntheticPost, type PublishedTool } from '@/modules/capability-supply/public'
+import syntheticPostPaymentRequiredFixture from '../../fixtures/x402-bazaar/synthetic-post-payment-required.json'
+const syntheticPost = syntheticPostPaymentRequiredFixture
+import { type PublishedTool } from '@/modules/capability-supply/public'
 
 const endpointUrl = 'https://seller.example.test/v1/enrich'
 

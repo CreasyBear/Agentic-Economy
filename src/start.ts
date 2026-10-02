@@ -16,7 +16,20 @@ import { boundaryCauseKind, captureBackendException } from '@/lib/observability/
 
 // This shared entry is also evaluated in the browser. Validate shared server
 // prerequisites on first request; operation-only config is checked where used.
+// Requires an exact safe router probe. Ensures diagnostics can explain invalid
+// boot/auth configuration, including release identity, without admitting pages,
+// writes or server functions.
+// Invariant: skipping validation never marks its cache successful; readiness
+// still runs its own checks. All other requests retain the existing failure.
+function isRouterDiagnosticRead(ctx: { request: Request; handlerType: 'router' | 'serverFn' }): boolean {
+  if (ctx.handlerType !== 'router' || (ctx.request.method !== 'GET' && ctx.request.method !== 'HEAD')) return false
+  const path = new URL(ctx.request.url).pathname
+  return (path === '/api/health' || path === '/api/ready' || path === '/api/v1/release')
+    && apiRequestBoundaryResponse(ctx.request) === undefined
+}
+
 const bootEnvironmentMiddleware = createMiddleware().server(async (ctx) => {
+  if (isRouterDiagnosticRead(ctx)) return ctx.next()
   const { ensureBootEnvironmentValidated } = await import('@/lib/deployment/validate-boot-env.server')
   ensureBootEnvironmentValidated()
   return ctx.next()
@@ -36,7 +49,7 @@ let serverTelemetryStarted = false
 
 export const observabilityRequestMiddleware = createMiddleware().server(async (ctx) => {
   const url = new URL(ctx.request.url)
-  if (url.pathname === '/api/health' || url.pathname === '/api/ready') return ctx.next()
+  if (isRouterDiagnosticRead(ctx)) return ctx.next()
 
   if (!serverTelemetryStarted) {
     serverTelemetryStarted = true
@@ -129,7 +142,7 @@ const publicPagePaths: Record<string, true> = {
 }
 const protectedTopLevelPaths: Record<string, true> = {
   '/account': true, '/admin': true, '/agent-access': true, '/api': true,
-  '/activity': true, '/fund': true, '/mcp': true, '/onboarding': true, '/owner': true,
+  '/activity': true, '/fund': true, '/mcp': true, '/owner': true,
   '/sign-in': true, '/sign-up': true, '/t': true,
 }
 
@@ -144,19 +157,21 @@ function isPublicDocumentRequest(request: Request, pathname: string): boolean {
 
 export function clerkPreviewOrProductionMiddleware() {
   if (!clerkMiddlewareConfigured(process.env)) return []
-  const clerk = clerkMiddleware(() => {
-    // Browser sessions retain Clerk middleware. Machine routes verify bearer
-    // secrets in their handlers; session handshake/bot checks are not an
-    // identity prerequisite for /api/v1/* or /mcp.
-    const origin = resolveCanonicalOrigin()
-    return origin.startsWith('https://') ? { authorizedParties: [origin] } : {}
-  })
   return [createMiddleware().server((ctx) => {
+    if (isRouterDiagnosticRead(ctx)) return ctx.next()
     const pathname = new URL(ctx.request.url).pathname
     const browserChatSession = (pathname === '/api/v1/chat/turns' || pathname.startsWith('/api/v1/chat/turns/'))
       && !ctx.request.headers.has('authorization')
     if (isPublicDocumentRequest(ctx.request, pathname)) return ctx.next()
     if (!browserChatSession && (pathname === '/mcp' || pathname.startsWith('/api/v1/'))) return ctx.next()
+    // Construct auth only after exact router diagnostic/public-read admission:
+    // even broken auth configuration cannot intercept diagnostic reads.
+    const clerk = clerkMiddleware(() => {
+      // Machine handlers retain their own bearer admission; browser sessions
+      // retain Clerk. This does not change either route's authentication policy.
+      const origin = resolveCanonicalOrigin()
+      return origin.startsWith('https://') ? { authorizedParties: [origin] } : {}
+    })
     const serve = clerk.options.server
     if (serve === undefined) throw new Error('Clerk request middleware is missing its server handler')
     return serve(ctx)

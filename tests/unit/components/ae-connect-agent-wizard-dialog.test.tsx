@@ -9,9 +9,10 @@ import { AeConnectAgentWizardDialog } from '@/components/ae/console/connect-agen
 afterEach(cleanup)
 
 describe('AeConnectAgentWizardDialog (W-26)', () => {
-  it('T1: renders dialog chrome with name, environment, and authority options', () => {
+  it('T1: renders dialog chrome with deployment environment and authority options', () => {
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={vi.fn()}
@@ -21,8 +22,8 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByRole('dialog', { name: /connect an agent/i })).toBeInTheDocument()
     expect(screen.getByText(/step 1 of 2 · set policy/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/agent name/i)).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /sandbox/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /production/i })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /sandbox/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /production/i })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /browse only/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /ask each time/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /work within limits/i })).toBeInTheDocument()
@@ -33,6 +34,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     const onDraftChange = vi.fn()
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={vi.fn()}
@@ -50,6 +52,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByLabelText(/agent name/i)).toHaveValue('Research bot')
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Research bot 2' } })
     expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ name: 'Research bot 2' }))
+    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ environment: 'sandbox' }))
     expect(JSON.stringify(onDraftChange.mock.calls)).not.toContain('sek_')
   })
 
@@ -57,6 +60,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     const onIssue = vi.fn()
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}
@@ -90,6 +94,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}
@@ -133,6 +138,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="production"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}
@@ -142,8 +148,6 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     const nameInput = screen.getByLabelText(/agent name/i)
     fireEvent.change(nameInput, { target: { value: 'Prod Worker' } })
 
-    const prodRadio = screen.getByRole('radio', { name: /production/i })
-    fireEvent.click(prodRadio)
 
     const perCallInput = screen.getByLabelText(/max spend per call/i)
     const dailyInput = screen.getByLabelText(/daily spend limit/i)
@@ -176,6 +180,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="production"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}
@@ -183,7 +188,6 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Prod Worker' } })
-    fireEvent.click(screen.getByRole('radio', { name: /production/i }))
 
     const perCallInput = screen.getByLabelText(/max spend per call/i)
     const dailyInput = screen.getByLabelText(/daily spend limit/i)
@@ -206,6 +210,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}
@@ -235,6 +240,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={onOpenChange}
         onIssue={onIssue}
@@ -269,6 +275,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={onOpenChange}
         onIssue={onIssue}
@@ -298,6 +305,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}
@@ -336,6 +344,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}
@@ -359,6 +368,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     const onIssue = vi.fn().mockResolvedValue(undefined)
     render(
       <AeConnectAgentWizardDialog
+        deploymentEnvironment="sandbox"
         open={true}
         onOpenChange={vi.fn()}
         onIssue={onIssue}

@@ -94,11 +94,17 @@ export async function vercelProtectionBypassCookie(baseUrl: URL): Promise<string
     return undefined
   }
 
+  if (baseUrl.protocol !== 'https:' || baseUrl.username !== '' || baseUrl.password !== '') {
+    throw new Error('Vercel protection bypass requires an HTTPS origin without URL credentials.')
+  }
+
   const response = await fetch(new URL('/', baseUrl), {
     redirect: 'manual',
+    signal: AbortSignal.timeout(15_000),
     headers,
   })
-  const cookie = response.headers.get('set-cookie')?.split(';')[0]
+  const cookie = response.headers.getSetCookie()
+    .find((header) => header.startsWith('_vercel_jwt='))?.split(';')[0]
 
   if (cookie === undefined || cookie.trim().length === 0) {
     throw new Error('Vercel protection bypass did not return a bypass cookie.')

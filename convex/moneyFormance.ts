@@ -1,27 +1,30 @@
 "use node"
 
+import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import {
   accountHistoryResultValue, buyerAdjustmentArgs,
   capacitySyncArgs, displayBalanceArgs, displayBalanceResult, finalizeManagedCallArgs,
   fundingBookingArgs, healthResult, installationResult,
-  managedCallBookingArgs, moneyResult, periodSpendResult,
+  managedCallBookingArgs, managedCallSettlementReadResult, managedCallReservationReadResult, managedCallReleaseReadResult, moneyResult, periodSpendResult,
   readAccountHistoryArgs, readPeriodSpendArgs, readStatementPageArgs,
   releaseExpiredUnusedCallArgs, releaseManagedCallArgs, reverseProviderSettlementArgs,
   spendingPeriodAdjustmentValue, spendingPeriodArgs, spendingPeriodResult,
+  promotionalCreditArgs, readCreditBalanceArgs, accountCreditBalanceValue,
   statementPageResult,
 } from './lib/money/formance/contracts'
 import { healthHandler, installSchemaHandler } from './lib/money/formance/gateway'
 import {
-  readAccountHistoryHandler,
+  readAccountHistoryHandler, readCreditBalanceHandler,
   readDisplayBalanceHandler, readPeriodSpendHandler, readSpendingPeriodHandler,
-  readStatementPageHandler,
+  readStatementPageHandler, readManagedCallSettlementHandler, readManagedCallReservationHandler, readManagedCallReleaseHandler,
 } from './lib/money/formance/reads'
 import {
   adjustSpendingPeriodHandler, bookBuyerAdjustmentHandler, bookFundingReversalHandler,
   bookFundingSettlementHandler, releaseExpiredUnusedCallHandler, releaseManagedCallHandler,
-  remedyPaidCallHandler, reserveManagedCallHandler, reverseProviderSettlementHandler,
+  refundSettledSaleHandler, remedyPaidCallHandler, reserveManagedCallHandler, reverseProviderSettlementHandler,
   settleManagedCallHandler, syncCapacityHandler,
+  grantPromotionalCreditHandler, expirePromotionalCreditHandler,
 } from './lib/money/formance/postings'
 
 export const health = internalAction({ args: {}, returns: healthResult, handler: healthHandler })
@@ -59,6 +62,15 @@ export const readDisplayBalance = internalAction({
 export const reserveManagedCall = internalAction({
   args: managedCallBookingArgs, returns: moneyResult, handler: reserveManagedCallHandler,
 })
+export const readManagedCallSettlement = internalAction({
+  args: managedCallBookingArgs, returns: managedCallSettlementReadResult, handler: readManagedCallSettlementHandler,
+})
+export const readManagedCallReservation = internalAction({
+  args: managedCallBookingArgs, returns: managedCallReservationReadResult, handler: readManagedCallReservationHandler,
+})
+export const readManagedCallRelease = internalAction({
+  args: managedCallBookingArgs, returns: managedCallReleaseReadResult, handler: readManagedCallReleaseHandler,
+})
 export const releaseManagedCall = internalAction({
   args: releaseManagedCallArgs, returns: moneyResult, handler: releaseManagedCallHandler,
 })
@@ -73,4 +85,20 @@ export const remedyPaidCall = internalAction({
 })
 export const reverseProviderSettlement = internalAction({
   args: reverseProviderSettlementArgs, returns: moneyResult, handler: reverseProviderSettlementHandler,
+})
+
+export const grantPromotionalCredit = internalAction({
+  args: promotionalCreditArgs, returns: moneyResult, handler: grantPromotionalCreditHandler,
+})
+export const expirePromotionalCredit = internalAction({
+  args: promotionalCreditArgs, returns: moneyResult, handler: expirePromotionalCreditHandler,
+})
+
+export const readCreditBalance = internalAction({
+  args: readCreditBalanceArgs, returns: accountCreditBalanceValue, handler: readCreditBalanceHandler,
+})
+
+export const refundSettledSale = internalAction({
+  args: { booking: v.object(managedCallBookingArgs), originalSettlementRefs: v.array(v.string()), reportDigest: v.string() },
+  returns: moneyResult, handler: refundSettledSaleHandler,
 })

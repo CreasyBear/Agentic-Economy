@@ -102,7 +102,7 @@ describe('POST /api/v1/tools/procure route', () => {
     const body = await response.json()
     expect(body).toMatchObject({
       status: 'delivered', quoteRef, callRef, idempotencyKey: exactRequest.idempotencyKey,
-      price: { totalAud: 'A$0.01', netAud: 'A$0.01', gstAud: 'A$0.01' },
+      price: { totalAud: 'A$0.01', netAud: 'A$0.01', gstAud: 'A$0.00' },
       next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
     })
     expect(service.quoteTool).toHaveBeenCalledTimes(1)

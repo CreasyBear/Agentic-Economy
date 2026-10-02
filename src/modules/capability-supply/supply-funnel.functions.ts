@@ -62,8 +62,6 @@ export type {
   OwnerSupplyFunnelReadback,
   OwnerSupplyMaintenanceInput,
   OwnerSupplyOfferingReadback,
-  OwnerSellerCanaryReadback,
-  OwnerSellerCanaryPromotionResult,
   OwnerSupplyReadbackSource,
   SupplyCallLogRow,
   SupplyFunnelActionContext,

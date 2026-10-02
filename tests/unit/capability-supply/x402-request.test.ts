@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prepareX402Request } from '@/modules/capability-supply/server'
 import { admitBazaarDiscoveryInfo } from '@/modules/capability-supply/server'
 import { admitOfficialBazaarFromPaymentRequired, admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 
 
-import { syntheticPostPaymentRequiredFixture as syntheticPost } from '@/modules/capability-supply/public'
+import syntheticPostPaymentRequiredFixture from '../../fixtures/x402-bazaar/synthetic-post-payment-required.json'
+const syntheticPost = syntheticPostPaymentRequiredFixture
 
 describe('managed request serialization', () => {
   const endpoint = new URL('https://example.com/tool?fixed=yes')
@@ -72,3 +73,6 @@ function minimalCdpDeclaration(method: string) {
       ...(body ? { bodyType: { type: 'string', enum: ['json'] }, body: { type: 'object' } } : {}),
     }, required: body ? ['type', 'method', 'bodyType', 'body'] : ['type', 'method'], additionalProperties: false } } }, routeTemplate: '/tool' }
 }
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+afterEach(() => vi.unstubAllEnvs())

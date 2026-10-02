@@ -129,6 +129,10 @@ describe('x402 EVM settlement verification', () => {
     ['correct authorization has wrong transfer', { receipt: { ...receipt, logs: [
       { address: payTo, data: transfer.data, topics: transfer.topics },
     ] } }],
+    ['duplicate exact transfer', { receipt: { ...receipt, logs: [
+      { address: BASE_MAINNET_USDC_ADDRESS, data: transfer.data, topics: transfer.topics },
+      { address: BASE_MAINNET_USDC_ADDRESS, data: transfer.data, topics: transfer.topics },
+    ] } }],
     ['conflicting transfer', { receipt: { ...receipt, logs: [
       { address: BASE_MAINNET_USDC_ADDRESS, data: transfer.data, topics: transfer.topics },
       { address: BASE_MAINNET_USDC_ADDRESS, data: conflictingTransfer.data, topics: conflictingTransfer.topics },

@@ -4,7 +4,7 @@ import { BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS } from '@/modules/capab
 import { refreshCapabilityCommand } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { publicationPorts } from '../../../capabilitySupplyPublish'
-import { DEV_SEED_CATALOG_ACCOUNT_REF } from './authority'
+import { DEV_SEED_CATALOG_ACCOUNT_REF, DEV_SEED_CATALOG_PUBLISHER_REF } from './authority'
 import { sandboxToolPublicationSource } from './sandboxPublish'
 import { SANDBOX_TESTNET_BUSINESS_SLUG, SANDBOX_TESTNET_CAPABILITY_ID } from './sandboxTestnet'
 import { SANDBOX_TOOL_NETWORK_ID, sandboxToolBindingId, sandboxToolContractDocumentJson, sandboxToolEvidenceRef, sandboxToolOfferingId, type SandboxToolCatalogOrigin, type SandboxToolSpec } from './sandboxFixture'
@@ -199,7 +199,7 @@ async function assertExactSandboxTestnetPublicationMaterial(
     || publication.businessId !== expectedBusinessId
     || publication.runtimeEnvironment !== 'sandbox'
     || publication.sourceKind !== 'x402'
-    || publication.publisherRef !== 'system:dev-seed'
+    || publication.publisherRef !== DEV_SEED_CATALOG_PUBLISHER_REF
     || publication.authorityMode !== 'ae_curated_external'
     || publication.pricingConfigJson === undefined
     || canonicalDigest(JSON.parse(publication.pricingConfigJson)) !== canonicalDigest(spec.pricingConfig)) {

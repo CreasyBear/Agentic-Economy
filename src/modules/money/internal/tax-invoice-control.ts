@@ -1,5 +1,3 @@
-import Decimal from 'decimal.js'
-
 import type { CommercialPolicyControls } from './commercial-policy'
 
 const ABN_WEIGHTS = Object.freeze([10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19])
@@ -67,39 +65,4 @@ export function admitTaxInvoiceIssuance(input: Readonly<{
     return Object.freeze({ kind: 'withheld', reason: 'customer_not_gst_registered' })
   }
   return Object.freeze({ kind: 'admitted' })
-}
-
-export function calculateAudGstSplit(
-  grossUnits: string,
-  gstBps: number,
-): Readonly<{ grossUnits: string; netUnits: string; gstUnits: string }> | undefined {
-  if (!/^(?:0|[1-9]\d*)$/u.test(grossUnits)
-    || !Number.isSafeInteger(gstBps)
-    || gstBps < 0
-    || gstBps > 10_000) {
-    return undefined
-  }
-  const gross = BigInt(grossUnits)
-  if (gstBps === 0) {
-    return Object.freeze({
-      grossUnits,
-      netUnits: grossUnits,
-      gstUnits: '0',
-    })
-  }
-  const gst = BigInt(new (Decimal.clone({ precision: grossUnits.length + 20 }))(grossUnits)
-    .mul(gstBps)
-    .div(10_000 + gstBps)
-    .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
-    .toFixed(0))
-  if (gst < 0n || gst > gross) return undefined
-  const net = gross - gst
-  const netUnits = net.toString()
-  const gstUnits = gst.toString()
-  if (BigInt(netUnits) + BigInt(gstUnits) !== gross) return undefined
-  return Object.freeze({
-    grossUnits,
-    netUnits,
-    gstUnits,
-  })
 }

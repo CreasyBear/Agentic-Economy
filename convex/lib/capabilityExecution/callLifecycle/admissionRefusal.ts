@@ -138,10 +138,9 @@ export async function spendingPeriodAdmissionRefusal(
   commitment: CommitmentRow | null,
   grant: NormalizedStoredAgentAccessGrant,
 ): Promise<GrantRefusal | null> {
-  if (commitment === null || args.sellerOnboardingCanary !== undefined
-    || commitment.decisionAudUnits === '0') return null
+  if (commitment === null || commitment.decisionAudUnits === '0') return null
   const periods = commitment.spendingPeriods
-  if (commitment.formanceSchemaVersion !== 'v1.4.0' || periods === undefined) {
+  if (!['v1.4.0', 'v1.5.0'].includes(commitment.formanceSchemaVersion) || periods === undefined) {
     return {
       kind: 'refused',
       code: 'budget_exceeded',

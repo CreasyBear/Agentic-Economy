@@ -116,7 +116,7 @@ function ownerCheckoutBindEvidence(
   const [request, checkout, payment, evidence] = input.digestChars ?? ['b', 'c', 'd', 'e']
   return {
     externalRef: input.externalRef,
-    amount: { currency: 'AUD' as const, units: '5280000', exponent: 6 as const },
+    amount: { currency: 'AUD' as const, units: '5780000', exponent: 6 as const },
     status: 'succeeded' as const,
     evidenceRef: `stripe:checkout:${input.externalRef}`,
     requestDigest: sha256(request),
@@ -182,22 +182,37 @@ async function publishedOwnerFixture(slug: string) {
 
 describe('Account AUD funding through Formance', () => {
   const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
-  beforeEach(() => { process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY })
+  beforeEach(() => {
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+  })
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
     if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
   })
 
-  it('refuses production funding when deployment is hosted_alpha', async () => {
-    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
-    const { backend, fixture } = await publishedOwnerFixture('funding-hosted-alpha-fence')
-    await expect(ownerReserve(fixture, 'account-funding:hosted-alpha-fence', {
-      environment: 'production',
-      expectedPolicyDigest: sha256('production-policy'),
-    })).resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'preview'],
+    ['opposite', 'production'],
+  ] as const)('refuses owner and agent funding for %s deployment declaration before commands', async (name, declaration) => {
+    if (reserveAgentHandoff === undefined) throw new Error('Agent funding handoff function missing')
+    const { backend, fixture } = await publishedOwnerFixture(`funding-${name}-environment-fence`)
+    const agent = await fundingBuyerAgent(backend, fixture.owner, `user_funding-${name}-environment-fence`)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+    await expect(ownerReserve(fixture, `account-funding:${name}-environment-fence`))
+      .resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
+    await expect(backend.mutation(reserveAgentHandoff, await withSourceWrite('billing', {
+      principalAmountUnits: '5000000', environment: 'sandbox', idempotencyKey: `caller-${name}`,
+      successReturnRef: 'https://ae.test/fund/{CHECKOUT_SESSION_ID}',
+      cancelReturnRef: 'https://ae.test/fund/cancelled',
+      checkoutExpiresAt: (Math.floor(Date.now() / 1000) + 3600) * 1000,
+      agentPrincipal: agent, operationKey: 'moneyAccountFunding:reserveAgentHandoff',
+      correlationId: `funding-agent-${name}`,
+    }))).resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
     await expect(backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())).resolves.toEqual([])
-    vi.unstubAllEnvs()
   })
 
   it('refuses a changed funding policy before creating a funding command', async () => {
@@ -216,7 +231,7 @@ describe('Account AUD funding through Formance', () => {
     const first = await fixture.owner.mutation(reserve, await withSourceWrite('billing', base))
     expect(first).toMatchObject({ kind: 'accepted', command: {
       accountRef: fixture.canonicalAccountRef, principalUnits: '10000000',
-      serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: '10550000', state: 'pending',
+      serviceFeeUnits: '500000', taxUnits: '1050000', totalUnits: '11550000', state: 'pending',
     } })
     if (first.kind !== 'accepted') throw new Error('funding fixture not reserved')
     const storedBeforeConflict = await backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())
@@ -355,13 +370,14 @@ describe('Account AUD funding through Formance', () => {
   })
 
   it('prepares one exact booking and finalizes only the returned Formance reference', async () => {
+    vi.useFakeTimers()
     const commandRef = 'account-funding:formance-one'
     const backend = convexTestWithWorkers()
     const fixture = await publishedBusinessOwner(backend, 'formance-account-funding')
     const reserved = await ownerReserve(fixture, commandRef, { inputDigest: sha256('a') })
     expect(reserved).toMatchObject({ kind: 'accepted', command: {
       accountRef: fixture.canonicalAccountRef, principalUnits: '5000000', serviceFeeUnits: '250000',
-      taxUnits: '30000', totalUnits: '5280000', state: 'pending',
+      taxUnits: '530000', totalUnits: '5780000', state: 'pending',
     } })
     if (reserved.kind !== 'accepted' || reserved.command.metadataDigest === undefined) {
       throw new Error('funding fixture not reserved')
@@ -385,7 +401,7 @@ describe('Account AUD funding through Formance', () => {
     const prepared = await fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEvent, actionArgs)
     expect(prepared).toMatchObject({ kind: 'prepared', booking: {
       commandRef, accountRef: fixture.canonicalAccountRef,
-      principalUnits: '5000000', serviceFeeUnits: '250000', taxUnits: '30000', totalUnits: '5280000',
+      principalUnits: '5000000', serviceFeeUnits: '250000', taxUnits: '530000', totalUnits: '5780000',
     } })
     const formanceTransactionRef = 'formance:tx:funding-formance-one'
     await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
@@ -404,7 +420,8 @@ describe('Account AUD funding through Formance', () => {
     )).resolves.toEqual({
       kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef,
     })
-    await backend.finishAllScheduledFunctions(() => undefined)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.finishInProgressScheduledFunctions()
     const rows = await fundingRows(backend, commandRef)
     expect(rows).toMatchObject({
       command: { state: 'succeeded', appliedTransactionRef: formanceTransactionRef },
@@ -542,8 +559,8 @@ describe('Account AUD funding through Formance', () => {
         accountRef: fixture.canonicalAccountRef,
         principalUnits: '5000000',
         serviceFeeUnits: '250000',
-        taxUnits: '30000',
-        totalUnits: '5280000',
+        taxUnits: '530000',
+        totalUnits: '5780000',
       },
     })
 
@@ -592,7 +609,7 @@ describe('Account AUD funding through Formance', () => {
     expect(rows.adjustment).toMatchObject({
       kind: 'adjustment',
       sourceTransactionRefs: [reversalRef],
-      amountUnits: '5280000',
+      amountUnits: '5780000',
     })
   })
 
@@ -783,7 +800,7 @@ describe('Account AUD funding through Formance', () => {
       if (command === null) throw new Error('settled_funding_missing')
       await ctx.db.patch(command._id, { metadataDigest })
     })
-    const amount = { currency: 'AUD' as const, units: '5280000', exponent: 6 as const }
+    const amount = { currency: 'AUD' as const, units: '5780000', exponent: 6 as const }
     const readback = {
       externalRef: `cs_${paymentId}`,
       amount,
@@ -1227,10 +1244,9 @@ describe('Account AUD funding through Formance', () => {
         kind: 'adjustment',
         state: 'rendering',
         sourceTransactionRefs: [reversalRef],
-        amountUnits: '5280000',
+        amountUnits: '5780000',
         workId: expect.any(String),
       }),
     ])
   })
 })
-

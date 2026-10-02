@@ -8,7 +8,7 @@ import {
   materializePublishedTool,
   materializeRuntimePublishedTool,
 } from '@/modules/capability-supply/public'
-import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import { projectOuterResult } from '../../../convex/lib/capabilityExecution/callProjection/outerResult'
 
 export const principal: AgentAccessPrincipal = {

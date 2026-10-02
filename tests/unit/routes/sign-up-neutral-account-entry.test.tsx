@@ -45,20 +45,19 @@ afterEach(() => {
 })
 
 describe('sign-up account entry', () => {
-  it('S1: returns an unqualified sign-up to workspace onboarding', () => {
+  it('S1: returns an unqualified sign-up to the market', () => {
     const Component = routeState.SignUp
     if (Component === null) throw new Error('Sign-up route was not captured.')
 
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
-    expect(screen.getByText(/you’ll set up your Workspace/)).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(document.body.textContent).toContain('Workspace')
     expect(routeState.clerkProps).toMatchObject({
-      fallbackRedirectUrl: '/onboarding',
-      forceRedirectUrl: '/onboarding',
+      fallbackRedirectUrl: '/market',
+      forceRedirectUrl: '/market',
       signInFallbackRedirectUrl: '/owner/settings',
       signInUrl: '/sign-in',
     })
@@ -68,7 +67,7 @@ describe('sign-up account entry', () => {
     expect(container.querySelectorAll('.min-h-touch').length).toBeGreaterThanOrEqual(4)
   })
 
-  it('S2: preserves supplier copy while continuing through onboarding with redirect', () => {
+  it('S2: preserves supplier copy and returns to the requested destination', () => {
     routeState.search = { redirect: '/owner/supply' }
     const Component = routeState.SignUp
     if (Component === null) throw new Error('Sign-up route was not captured.')
@@ -78,14 +77,14 @@ describe('sign-up account entry', () => {
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
     expect(screen.getByText(/Tool publishing Workspace/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
-      fallbackRedirectUrl: '/onboarding?redirect=%2Fowner%2Fsupply',
-      forceRedirectUrl: '/onboarding?redirect=%2Fowner%2Fsupply',
+      fallbackRedirectUrl: '/owner/supply',
+      forceRedirectUrl: '/owner/supply',
       signInFallbackRedirectUrl: '/owner/supply',
       signInUrl: '/sign-in',
     })
   })
 
-  it('S3: preserves agent-connect copy while continuing through onboarding with redirect', () => {
+  it('S3: preserves agent-connect copy and returns to the requested destination', () => {
     routeState.search = { redirect: '/agent-access' }
     const Component = routeState.SignUp
     if (Component === null) throw new Error('Sign-up route was not captured.')
@@ -95,8 +94,8 @@ describe('sign-up account entry', () => {
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
     expect(screen.getByText(/Agent connection you started/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
-      fallbackRedirectUrl: '/onboarding?redirect=%2Fagent-access',
-      forceRedirectUrl: '/onboarding?redirect=%2Fagent-access',
+      fallbackRedirectUrl: '/agent-access',
+      forceRedirectUrl: '/agent-access',
       signInFallbackRedirectUrl: '/agent-access',
       signInUrl: '/sign-in',
     })

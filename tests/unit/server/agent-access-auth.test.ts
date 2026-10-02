@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   authenticateAgentAccess,
@@ -57,7 +57,9 @@ vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
 beforeEach(() => {
   vi.clearAllMocks()
   vi.unstubAllEnvs()
+  vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
 })
+afterEach(() => { vi.unstubAllEnvs() })
 
 describe('agent access authentication', () => {
   it('resolves the production binding mutation with locator fields and exact required scopes only', async () => {
@@ -173,6 +175,7 @@ describe('agent access authentication', () => {
         id: 'ak_attacker_selected_principal',
         subject: 'user_attacker_selected_account',
         scopes: liveScopes,
+        claims: { aeEnvironment: 'sandbox' },
       }),
       resolvePrincipal,
     })).resolves.toMatchObject({
@@ -186,6 +189,7 @@ describe('agent access authentication', () => {
   })
 
   it('verifies bearer secrets directly for both machine user agents and checks the current key', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const verify = vi.fn().mockResolvedValue({
       id: 'ak_hosted',
       subject: 'user_hosted',
@@ -241,6 +245,7 @@ describe('agent access authentication', () => {
       id: 'ak_no_resolver',
       subject: 'user_no_resolver',
       scopes: liveScopes,
+      claims: { aeEnvironment: 'sandbox' },
     })
 
     await expect(authenticateAgentAccess({ authenticate }))
@@ -259,6 +264,7 @@ describe('agent access authentication', () => {
       id: 'ak_canonical_validation',
       subject: 'user_canonical_validation',
       scopes: liveScopes,
+      claims: { aeEnvironment: 'sandbox' },
     })
     const resolvedScopes: Array<readonly string[]> = []
     const canonical = {
@@ -318,7 +324,7 @@ describe('agent access authentication', () => {
       id: 'ak_claims',
       subject: 'user_claims',
       scopes: liveScopes,
-      claims: { aeApplicationRef: '  claims-app  ', aeEnvironment: 'development' },
+      claims: { aeApplicationRef: '  claims-app  ', aeEnvironment: 'sandbox' },
     })
     await expect(authenticateCanonically({
       authenticate,
@@ -332,18 +338,77 @@ describe('agent access authentication', () => {
       authenticate,
       requiredScope: null,
     })).resolves.toMatchObject({ kind: 'authenticated' })
-    for (const aeEnvironment of ['sandbox', '', 42]) {
+    for (const aeEnvironment of ['', 42, 'development']) {
       await expect(authenticateCanonically({
         authenticate: async () => ({
           ...await authenticate(),
           claims: { aeApplicationRef: 42, aeEnvironment },
         }),
-      })).resolves.toMatchObject({
-        kind: 'authenticated',
-        principal: { applicationRef: 'agentic-economy', environment: 'sandbox' },
-      })
+      })).resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
     }
   })
+
+  it('refuses a production unrestricted credential before resolving its principal', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const resolvePrincipal = vi.fn(resolveCanonicalPrincipal)
+    await expect(authenticateAgentAccess({
+      consequenceResource: TEST_CONSEQUENCE_RESOURCE, resolvePrincipal,
+      authenticate: async () => ({
+        isAuthenticated: true, tokenType: 'api_key', id: 'ak_unrestricted', subject: 'user_unrestricted',
+        scopes: [MARKET_TOOLS_CALL_SCOPE, 'customer_requests:unrestricted_test_only'], claims: { aeEnvironment: 'production' },
+      }),
+    })).resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
+    expect(resolvePrincipal).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['development', undefined],
+    ['development', null],
+    ['development', ''],
+    ['development', ' sandbox'],
+    ['development', 'sandbox '],
+    ['development', 'development'],
+    ['development', 42],
+    ['development', 'production'],
+    ['production', 'sandbox'],
+    [undefined, 'sandbox'],
+    ['preview', 'sandbox'],
+  ] as const)('refuses deployment %s with raw key environment %s before principal resolution', async (declaration, aeEnvironment) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+    const resolvePrincipal = vi.fn(resolveCanonicalPrincipal)
+    await expect(authenticateAgentAccess({
+      consequenceResource: TEST_CONSEQUENCE_RESOURCE,
+      resolvePrincipal,
+      authenticate: async () => ({
+        isAuthenticated: true, tokenType: 'api_key', id: 'ak_claim_fence',
+        subject: 'user_claim_fence', scopes: liveScopes,
+        ...(aeEnvironment === undefined ? {} : { claims: { aeEnvironment } }),
+      }),
+    })).resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
+    expect(resolvePrincipal).not.toHaveBeenCalled()
+    expect(adapterMocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 'production'] as const)(
+    'uses current key claims and refuses %s after a valid candidate claim', async (aeEnvironment) => {
+      const resolvePrincipal = vi.fn(resolveCanonicalPrincipal)
+      await expect(authenticateAgentAccess({
+        consequenceResource: TEST_CONSEQUENCE_RESOURCE,
+        resolvePrincipal,
+        authenticate: async () => ({
+          isAuthenticated: true, tokenType: 'api_key', id: 'ak_current_claim',
+          subject: 'user_current_claim', scopes: liveScopes, claims: { aeEnvironment: 'sandbox' },
+        }),
+        verifyKeyState: async () => ({
+          id: 'ak_current_claim', subject: 'user_current_claim', revoked: false,
+          expired: false, scopes: liveScopes,
+          ...(aeEnvironment === undefined ? {} : { claims: { aeEnvironment } }),
+        }),
+      })).resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
+      expect(resolvePrincipal).not.toHaveBeenCalled()
+      expect(adapterMocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
+    },
+  )
 
   it('admits exactly one declared alternative scope and binds canonical resolution to the matched scope', async () => {
     const resolvedScopes: Array<readonly string[]> = []
@@ -353,6 +418,7 @@ describe('agent access authentication', () => {
       id: 'ak_profile_identity',
       subject: 'user_profile_identity',
       scopes,
+      claims: { aeEnvironment: 'sandbox' },
     })
     const resolvePrincipal: AgentAccessPrincipalResolver = async (projection, requiredScopes) => {
       resolvedScopes.push(requiredScopes)
@@ -396,12 +462,14 @@ describe('agent access authentication', () => {
   it('keeps a scoped Clerk API key as a locator for a canonical principal', async () => {
     const verifyKeyState = async () => ({
       id: 'ak_123', subject: 'user_123', revoked: false, expired: false, scopes: liveScopes,
+      claims: { aeEnvironment: 'sandbox' },
     })
     await expect(authenticateCanonically({
       requiredScope: MARKET_TOOLS_CALL_SCOPE,
       authenticate: async () => ({
         isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123', userId: 'user_123', orgId: null,
         scopes: liveScopes,
+        claims: { aeEnvironment: 'sandbox' },
       }),
       verifyKeyState,
     })).resolves.toEqual({ kind: 'authenticated', principal: {
@@ -422,6 +490,7 @@ describe('agent access authentication', () => {
         userId: 'user_org_owner',
         orgId: 'org_123',
         scopes: liveScopes,
+        claims: { aeEnvironment: 'sandbox' },
       }),
       verifyKeyState: async () => ({
         id: 'ak_org_scoped',
@@ -429,6 +498,7 @@ describe('agent access authentication', () => {
         revoked: false,
         expired: false,
         scopes: liveScopes,
+        claims: { aeEnvironment: 'sandbox' },
       }),
     })).resolves.toMatchObject({
       kind: 'authenticated',
@@ -509,6 +579,7 @@ describe('agent access authentication', () => {
     const authenticate = async () => ({
       isAuthenticated: true, tokenType: 'api_key' as const, id: 'ak_123', subject: 'user_123',
       userId: 'user_123', orgId: null, scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE],
+      claims: { aeEnvironment: 'sandbox' },
     })
     await expect(authenticateCanonically({ requiredScope: MARKET_TOOLS_CALL_SCOPE, authenticate, requiredMode: 'approval_required' }))
       .resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })

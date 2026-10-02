@@ -28,10 +28,14 @@ export {
 } from './cdp-x402-payment-authorization'
 export {
   cdpX402PolicyRulesDigest,
-  cdpX402SellerCanaryPolicyIsExact,
-  cdpX402SellerCanaryPolicyRules,
+  cdpX402ManagedPolicyIsExact,
+  cdpX402ManagedPolicyRules,
 } from './cdp-x402-payment-policy'
 export { observeCdpX402Treasury } from './cdp-x402-payment-treasury'
+export {
+  readCdpX402CustodyReadiness,
+  type CdpX402CustodyReadinessResult,
+} from './cdp-x402-custody-readiness'
 export {
   createCdpEvmX402PaymentSignature,
   replayCdpX402PaymentSigningIntent,

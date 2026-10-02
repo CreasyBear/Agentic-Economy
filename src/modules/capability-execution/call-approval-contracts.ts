@@ -57,4 +57,5 @@ export type CallApprovalDecisionResult =
         | 'authority_not_pending'
         | 'grant_not_current'
         | 'invocation_invalid'
+        | 'mfa_reverification_required'
     }>

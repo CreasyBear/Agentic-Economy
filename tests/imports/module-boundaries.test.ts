@@ -177,6 +177,21 @@ describe('module surface and dependency manifest', () => {
     const result = scanTestOnlyModuleBoundaries(manifest, [consumer], fixtureRoot)
     expect(result.violations.map(({ rule }) => rule)).toContain('module-unused-test-exception')
   })
+
+  it('keeps entry surfaces unique within each module', () => {
+    for (const module of MODULE_BOUNDARY_MANIFEST.modules) {
+      const seen = new Set<string>()
+      const duplicates = new Set<string>()
+      for (const surface of module.entrySurfaces) {
+        if (seen.has(surface)) duplicates.add(surface)
+        seen.add(surface)
+      }
+      expect(
+        duplicates,
+        `Module "${module.name}" has duplicate entrySurfaces: ${Array.from(duplicates).join(', ')}`,
+      ).toEqual(new Set())
+    }
+  })
 })
 
 function fixtureManifest(

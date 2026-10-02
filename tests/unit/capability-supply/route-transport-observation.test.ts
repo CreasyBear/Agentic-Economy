@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
+import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
+import { transportObservationDigest } from '@/modules/capability-supply/public'
 
 import {
   authority,
@@ -13,6 +15,22 @@ import {
 } from './route-transport-test-harness'
 
 describe('registered route transport runtime', () => {
+  it('binds a present HTTP status into the transport observation digest', () => {
+    const observation = {
+      transport: 'x402' as const, disposition: 'unknown' as const,
+      releaseStarted: true, requestDigest: 'sha256:request',
+    }
+    expect(transportObservationDigest({ ...observation, responseStatus: 200 }))
+      .not.toBe(transportObservationDigest({ ...observation, responseStatus: 500 }))
+  })
+
+  it.each([0, 99, 600, 200.5, '200', null])('rejects invalid response status %s', (responseStatus) => {
+    expect(parseRouteTransportObservationJson(JSON.stringify({
+      transport: 'x402', disposition: 'unknown', releaseStarted: true,
+      requestDigest: 'sha256:request', responseStatus,
+    }))).toBeUndefined()
+  })
+
   it.each([
     ['raw provider credential', { value: 'provider-secret' }],
     ['full bearer echo', { nested: { echo: 'Bearer provider-secret' } }],

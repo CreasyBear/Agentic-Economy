@@ -63,7 +63,7 @@ type GrantArgs = {
   operationKey: string
   correlationId: string
   approval: { kind: 'execute' }
-  proof: { reverificationId: string; firstFactorAgeMinutes: number; secondFactorAgeMinutes: number }
+  proof: { reverificationId: string; firstFactorAgeMinutes: number; secondFactorAgeMinutes: number; subject: string; evidenceObservedAt: number }
   sourceWriteRequest: SourceWriteAdmissionRequest
   sourceWrite: SourceWriteAdmission
 }
@@ -552,7 +552,9 @@ async function signedGrant(
     proof: {
       reverificationId: `test:${canonicalDigest({ subject: 'user_owner', commandDigest })}`,
       firstFactorAgeMinutes: 0,
-      secondFactorAgeMinutes: -1,
+      secondFactorAgeMinutes: 0,
+      subject: 'user_owner',
+      evidenceObservedAt: Date.now(),
     },
   }, { nonce })
 }

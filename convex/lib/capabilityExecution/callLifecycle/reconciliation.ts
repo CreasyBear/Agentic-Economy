@@ -1,6 +1,11 @@
 import { v, type Infer } from 'convex/values'
+import type { WorkId } from '@convex-dev/workpool'
+import { internal } from '../../../_generated/api'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
+import { marketDispatchWorkpool } from '../../../marketDispatchWorkpool'
+import { reconcileWorkloadCronSnapshot } from '../../platform/workloadCron/admission'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from '../../platform/workloadCron/context'
 import { callReconciliationValue } from '@/modules/capability-execution/convex'
 import { cancelBeforeClaimHandler } from './dispatchCancellation'
 import { claimDispatchHandler } from './dispatchClaim'
@@ -247,6 +252,60 @@ export async function completeWorkWithReconciliationInitialization(
     : args)
   await initializeReconciliationIfAbsent(ctx, args.context.callRef, Date.now())
   return result
+}
+
+export const reconcileFinishedDispatchesArgs = {
+  workload: workloadCronSnapshotValue,
+  cursor: v.union(v.string(), v.null()),
+  createdBefore: v.number(),
+} as const
+export const reconcileFinishedDispatchesResult = v.object({
+  scanned: v.number(),
+  recovered: v.number(),
+  waiting: v.number(),
+  unbound: v.number(),
+  continueCursor: v.string(),
+  isDone: v.boolean(),
+})
+
+export async function reconcileFinishedDispatchesHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ workload: Infer<typeof workloadCronSnapshotValue>; cursor: string | null; createdBefore: number }>,
+): Promise<Infer<typeof reconcileFinishedDispatchesResult>> {
+  if (!Number.isSafeInteger(args.createdBefore) || args.createdBefore < 0 || args.createdBefore > Date.now()) {
+    throw new Error('dispatch_reconciliation_cutoff_invalid')
+  }
+  if (args.cursor !== null && args.cursor.trim().length === 0) throw new Error('dispatch_reconciliation_cursor_invalid')
+  const workload = await reconcileWorkloadCronSnapshot(ctx, 'reconcile due facilitator invocations', parseWorkloadCronSnapshot(args.workload))
+  const page = await ctx.db.query('capabilityCalls')
+    .withIndex('by_state_and_result_kind_and_createdAt', query => query
+      .eq('state', 'pending').eq('result.kind', 'pending').lte('createdAt', args.createdBefore))
+    .order('asc')
+    .paginate({ numItems: RECONCILIATION_MAX_CANDIDATES, cursor: args.cursor })
+  let recovered = 0
+  let waiting = 0
+  let unbound = 0
+  for (const row of page.page) {
+    if (row.workId === undefined) { unbound++; continue }
+    const status = await marketDispatchWorkpool.status(ctx, row.workId as WorkId)
+    if (status.state !== 'finished') { waiting++; continue }
+    await completeWorkWithReconciliationInitialization(ctx, {
+      workId: row.workId,
+      context: { callRef: row.callRef },
+      result: { kind: 'failed', error: 'dispatch_completion_unavailable' },
+    })
+    const current = await ctx.db.get(row._id)
+    if (current !== null && current.state !== 'pending') recovered++
+  }
+  if (!page.isDone) {
+    if (page.continueCursor.trim().length === 0 || page.continueCursor === args.cursor) {
+      throw new Error('dispatch_reconciliation_cursor_invalid')
+    }
+    await ctx.scheduler.runAfter(0, internal.capabilityCalls.reconcileFinishedDispatches, {
+      workload, cursor: page.continueCursor, createdBefore: args.createdBefore,
+    })
+  }
+  return { scanned: page.page.length, recovered, waiting, unbound, continueCursor: page.continueCursor, isDone: page.isDone }
 }
 
 export async function listDueAutomaticReconciliationCandidatesHandler(

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { makeFunctionReference } from 'convex/server'
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -12,13 +12,15 @@ import {
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
 } from '../../../src/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
-import { ownerAdmin, testConsequenceProof } from '../../helpers/convex-fixtures'
+import { ownerAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
     .map(([path, load]) => [path.replace('../../../convex/', './'), load]),
 )
+
+afterEach(() => vi.unstubAllEnvs())
 
 type PolicyChangeResult = AdminCommandReceipt<'change_commercial_policy'>
 
@@ -63,12 +65,13 @@ function command(
     input, evidenceRefs, reasonCode, action,
     operationKey, correlationId: operationKey,
     approval: { kind: 'execute' },
-    proof: testConsequenceProof({ subject }, digest),
+    proof: testMfaConsequenceProof({ subject }, digest),
   }
 }
 
 describe('commercial policy persistence', () => {
   it('projects the authenticated sandbox funding limits without exposing approval records', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     const backend = convexTest(schema, convexModules)
     const owner = await ownerAdmin(backend, 'user_funding-constraints')
 
@@ -91,6 +94,7 @@ describe('commercial policy persistence', () => {
   })
 
   it('projects public funding numbers without the owner digest or legal max', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     const backend = convexTest(schema, convexModules)
     const projected = await backend.query(readPlatformFundingConstraints, {
       environment: 'sandbox',
@@ -112,6 +116,7 @@ describe('commercial policy persistence', () => {
   })
 
   it('refuses the owner funding projection without an authenticated owner', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     const backend = convexTest(schema, convexModules)
     const refused = await backend.query(readOwnerFundingConstraints, {
       environment: 'sandbox',
@@ -127,6 +132,7 @@ describe('commercial policy persistence', () => {
   })
 
   it('ignores caller now on the public funding projection', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTest(schema, convexModules)
     const wallNow = Date.now()
     const twoDays = 2 * 86_400_000
@@ -168,6 +174,7 @@ describe('commercial policy persistence', () => {
   })
 
   it('reads one bounded canonical production decision across all six families', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTest(schema, convexModules)
     const now = Date.now()
     await backend.run(async (ctx) => {
@@ -204,6 +211,22 @@ describe('commercial policy persistence', () => {
       policyDigest: expect.stringMatching(/^sha256:/u),
       controls: PRODUCTION_COMMERCIAL_POLICY_CONTROLS,
     })
+  })
+
+  it.each([
+    [undefined, 'sandbox'],
+    ['', 'sandbox'],
+    [' development ', 'sandbox'],
+    ['production', 'sandbox'],
+    ['development', 'production'],
+  ] as const)('refuses declaration %j for requested %s policy', async (declaration, requested) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+    const backend = convexTest(schema, convexModules)
+    const result = await backend.query(async (ctx) => readCommercialPolicyGate(ctx.db, {
+      environment: requested, now: Date.now(),
+      sandboxFixture: 'managed_x402_deterministic_v1',
+    }))
+    expect(result).toEqual({ kind: 'refused', code: 'commercial_policy_environment_mismatch' })
   })
 
   it('replaces and suspends the current row without leaving two active policies', async () => {

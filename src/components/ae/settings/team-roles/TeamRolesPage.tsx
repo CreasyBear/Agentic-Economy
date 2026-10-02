@@ -8,7 +8,7 @@ export function TeamRolesPage({ members, inviteAvailability }: TeamRolesPageProp
   const invite = useInviteTeamMember()
   const inviteReason = {
     role_restricted: 'Only workspace owners and admins can invite members. Ask an owner or admin to send the invitation.',
-    organization_unset: 'This workspace has no active Clerk organization binding. Switch to a workspace connected to a Clerk organization to invite members.',
+    organization_unset: 'Invitations become available once your Business is set up. If you just created it, refresh in a few seconds.',
     binding_unavailable: 'This workspace has an unavailable organization binding. Ask the workspace owner to resolve its active bindings before inviting members.',
   } as const
   return <SettingsPage title="Team & roles" description="People who can act for this workspace and their Agentic Economy roles.">

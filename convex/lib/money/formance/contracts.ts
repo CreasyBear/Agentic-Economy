@@ -1,12 +1,27 @@
 import { v } from 'convex/values'
 
 import { accountHistoryResultValue, managedCallBookingArgs } from '../../../moneyLedgerValues'
-import { spendingPeriodAdjustmentValue } from '../../../../src/modules/money/public'
+import { accountCreditBalanceValue, eligiblePromotionalGrantValue, spendingPeriodAdjustmentValue } from '../../../../src/modules/money/public'
 
 export { accountHistoryResultValue, managedCallBookingArgs, spendingPeriodAdjustmentValue }
 
 export const setupRequired = v.object({ kind: v.literal('setup_required'), code: v.string() })
 export const unavailable = v.object({ kind: v.literal('unavailable'), code: v.string() })
+export const managedCallSettlementReadResult = v.union(
+  v.object({ kind: v.literal('confirmed'), transactionRefs: v.array(v.string()) }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+  unavailable,
+)
+export const managedCallReservationReadResult = v.union(
+  v.object({ kind: v.literal('confirmed'), transactionRefs: v.array(v.string()) }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+  unavailable,
+)
+export const managedCallReleaseReadResult = v.union(
+  v.object({ kind: v.literal('confirmed'), transactionRefs: v.array(v.string()) }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+  unavailable,
+)
 export const moneyResult = v.union(
   v.object({
     kind: v.literal('completed'),
@@ -175,3 +190,11 @@ export const reverseProviderSettlementArgs = {
   originalSettlementRef: v.string(),
   correctionEvidenceDigest: v.string(),
 }
+
+export const promotionalCreditArgs = {
+  grantRef: v.string(), accountRef: v.string(), amountUnits: v.string(),
+  expiresAt: v.number(), commandDigest: v.string(), revision: v.optional(v.number()),
+}
+
+export { accountCreditBalanceValue }
+export const readCreditBalanceArgs = { accountRef: v.string(), grants: v.array(eligiblePromotionalGrantValue) }

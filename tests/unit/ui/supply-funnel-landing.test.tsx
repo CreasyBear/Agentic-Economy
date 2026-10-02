@@ -19,14 +19,10 @@ describe("supply landing", () => {
         .getAttribute("href"),
     ).toBe("/owner/operations/new");
     expect(screen.getByRole("heading", { name: "Check whether your Tool is a fit." })).toBeDefined();
-    expect(screen.getByText(/List one Tool an agent can search/i)).toBeDefined();
-    expect(screen.getByText(/supported OpenAPI document, remote MCP server/i)).toBeDefined();
-    expect(screen.getByText(/Never paste a raw key/i)).toBeDefined();
     expect(screen.getByText(/may consume provider quota or cost/i)).toBeDefined();
     expect(screen.getByText(/does not publish the Tool, create earnings, or guarantee delivery/i)).toBeDefined();
     expect(screen.getByText(/Publication means the current Tool passed/i)).toBeDefined();
     expect(screen.getByRole("heading", { name: "Public x402 endpoint" })).toBeDefined();
-    expect(screen.getByText(/Prove control of the payout address; never paste a wallet private key/i)).toBeDefined();
     expect(screen.queryByRole("link", { name: "x402 Provider requirements" })).toBeNull();
     expect(screen.getByRole("heading", { name: "What agents can inspect" })).toBeDefined();
     expect(screen.getByText("Quote API")).toBeDefined();

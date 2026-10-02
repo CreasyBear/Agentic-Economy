@@ -2,6 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ClerkRuntimeError } from '@clerk/shared/error'
 
 vi.mock('@/lib/ui/toast', () => ({
   toast: {
@@ -17,6 +18,8 @@ vi.mock('@/lib/observability/degrade', () => ({
 }))
 
 import { useConnectAgentWizard } from './useConnectAgentWizard'
+import { degrade } from '@/lib/observability/degrade'
+import { toast } from '@/lib/ui/toast'
 
 function submitHook(result: { current: ReturnType<typeof useConnectAgentWizard> }) {
   const event = { preventDefault: vi.fn() }
@@ -33,6 +36,7 @@ describe('useConnectAgentWizard', () => {
   it('defaults to sandbox static spending presentation', () => {
     const { result } = renderHook(() =>
       useConnectAgentWizard({
+        deploymentEnvironment: 'sandbox',
         onOpenChange: vi.fn(),
         onIssue: vi.fn(),
       }),
@@ -43,18 +47,16 @@ describe('useConnectAgentWizard', () => {
     expect(result.current.view.isNameValid).toBe(false)
   })
 
-  it('switches to editable spending limits in production', () => {
+  it('shows editable spending limits in a production deployment', () => {
     const { result } = renderHook(() =>
       useConnectAgentWizard({
+        deploymentEnvironment: 'production',
         onOpenChange: vi.fn(),
         onIssue: vi.fn(),
       }),
     )
 
-    act(() => {
-      result.current.handleEnvironmentChange('production')
-    })
-
+    expect(result.current.view.environment).toBe('production')
     expect(result.current.view.spendingPresentation).toBe('editable')
   })
 
@@ -62,6 +64,7 @@ describe('useConnectAgentWizard', () => {
     const onIssue = vi.fn().mockResolvedValue({ kind: 'created', keyId: 'k1', secret: 's1' })
     const { result } = renderHook(() =>
       useConnectAgentWizard({
+        deploymentEnvironment: 'production',
         onOpenChange: vi.fn(),
         onIssue,
       }),
@@ -69,7 +72,6 @@ describe('useConnectAgentWizard', () => {
 
     act(() => {
       result.current.handleNameChange('Trim Agent')
-      result.current.handleEnvironmentChange('production')
       result.current.setPerCallAmount('  5.00  ')
       result.current.setDailyAmount(' 25.00 ')
       result.current.setMonthlyAmount(' 100.00 ')
@@ -90,6 +92,7 @@ describe('useConnectAgentWizard', () => {
     const onIssue = vi.fn()
     const { result } = renderHook(() =>
       useConnectAgentWizard({
+        deploymentEnvironment: 'production',
         onOpenChange: vi.fn(),
         onIssue,
       }),
@@ -97,7 +100,6 @@ describe('useConnectAgentWizard', () => {
 
     act(() => {
       result.current.handleNameChange('Zero Agent')
-      result.current.handleEnvironmentChange('production')
       result.current.setPerCallAmount('0.00')
       result.current.setDailyAmount('25.00')
       result.current.setMonthlyAmount('100.00')
@@ -115,6 +117,7 @@ describe('useConnectAgentWizard', () => {
     const onIssue = vi.fn()
     const { result } = renderHook(() =>
       useConnectAgentWizard({
+        deploymentEnvironment: 'production',
         onOpenChange: vi.fn(),
         onIssue,
       }),
@@ -122,7 +125,6 @@ describe('useConnectAgentWizard', () => {
 
     act(() => {
       result.current.handleNameChange('Order Agent')
-      result.current.handleEnvironmentChange('production')
       result.current.setPerCallAmount('50.00')
       result.current.setDailyAmount('20.00')
       result.current.setMonthlyAmount('100.00')
@@ -141,6 +143,7 @@ describe('useConnectAgentWizard', () => {
     const onSuccess = vi.fn()
     const { result } = renderHook(() =>
       useConnectAgentWizard({
+        deploymentEnvironment: 'sandbox',
         onOpenChange: vi.fn(),
         onIssue,
         onSuccess,
@@ -162,6 +165,7 @@ describe('useConnectAgentWizard', () => {
   it('resets fields when dialog closes via handleOpenChange', () => {
     const { result } = renderHook(() =>
       useConnectAgentWizard({
+        deploymentEnvironment: 'production',
         onOpenChange: vi.fn(),
         onIssue: vi.fn(),
       }),
@@ -169,7 +173,6 @@ describe('useConnectAgentWizard', () => {
 
     act(() => {
       result.current.handleNameChange('Temp')
-      result.current.handleEnvironmentChange('production')
       result.current.setAuthorityMode('read_only')
     })
 
@@ -178,7 +181,55 @@ describe('useConnectAgentWizard', () => {
     })
 
     expect(result.current.view.name).toBe('')
-    expect(result.current.view.environment).toBe('sandbox')
+    expect(result.current.view.environment).toBe('production')
     expect(result.current.view.authorityMode).toBe('spending_policy')
+  })
+
+  it('keeps production through a tampered initial draft, close, and reopen', () => {
+    const onDraftChange = vi.fn()
+    const initialDraft = {
+      name: 'Saved agent',
+      environment: 'sandbox' as const,
+      authorityMode: 'approval_required' as const,
+      perCallAmount: '5.00',
+      dailyAmount: '25.00',
+      monthlyAmount: '100.00',
+    }
+    const { result, rerender } = renderHook(({ open }) => useConnectAgentWizard({
+      deploymentEnvironment: 'production',
+      open,
+      onOpenChange: vi.fn(),
+      onIssue: vi.fn(),
+      initialDraft,
+      onDraftChange,
+    }), { initialProps: { open: true } })
+
+    expect(result.current.view.environment).toBe('production')
+    act(() => result.current.handleNameChange('Changed agent'))
+    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ environment: 'production' }))
+    act(() => result.current.handleOpenChange(false))
+    expect(result.current.view.environment).toBe('production')
+    rerender({ open: false })
+    rerender({ open: true })
+    expect(result.current.view.name).toBe('Saved agent')
+    expect(result.current.view.environment).toBe('production')
+  })
+
+  it('keeps the issue wizard ready without logging when step-up is cancelled', async () => {
+    const onIssue = vi.fn().mockRejectedValue(
+      new ClerkRuntimeError('Reverification was cancelled', { code: 'reverification_cancelled' }),
+    )
+    const onOpenChange = vi.fn()
+    const { result } = renderHook(() => useConnectAgentWizard({ deploymentEnvironment: 'sandbox', onOpenChange, onIssue }))
+
+    act(() => result.current.handleNameChange('Research Agent'))
+    await submitHook(result)
+
+    expect(result.current.view.name).toBe('Research Agent')
+    expect(result.current.view.diagnostic).toBeNull()
+    expect(result.current.view.isSubmitting).toBe(false)
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(degrade).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
   })
 })

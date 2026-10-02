@@ -8,7 +8,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { OwnerCallContext } from '@/modules/capability-execution/call-recovery-contracts'
 import { callResultValue, usageValue } from '@/modules/capability-execution/convex'
-import { createPublicToolRef, parsePublishedToolSnapshot, type SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
+import { createPublicToolRef, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import { assertCallResultJson } from './callIdentity'
 import { callState, environment, ownerCallContextValue, recoveryValue } from './contracts'
 
@@ -82,6 +82,7 @@ export async function listAgentCallSummariesHandler(
 }
 
 export type RecoveryRow = Readonly<{
+  requiresManualSettlementReview?: true
   quoteRef?: string
   callRef: string
   principalId: string
@@ -91,7 +92,6 @@ export type RecoveryRow = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   toolRef: string
-  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   inputDigest: string
   requestDigest: string
   grantGeneration: number
@@ -118,6 +118,10 @@ function projectRecoveryRow(row: CallRow): RecoveryRow | null {
   if (row.toolJson === undefined || row.inputJson === undefined) return null
   if (row.result !== undefined) assertCallResultJson(row.result)
   return {
+    ...(row.state === 'reconciliation_required'
+      && row.reconciliation?.disposition === 'manual_review'
+      && row.reconciliation.reason === 'unknown_settlement'
+      ? { requiresManualSettlementReview: true as const } : {}),
     ...(row.quoteRef === undefined ? {} : { quoteRef: row.quoteRef }),
     callRef: row.callRef,
     principalId: row.principalId,
@@ -127,9 +131,6 @@ function projectRecoveryRow(row: CallRow): RecoveryRow | null {
     environment: row.environment,
     state: row.state,
     toolRef: row.toolRef,
-    ...(row.sellerOnboardingCanary === undefined
-      ? {}
-      : { sellerOnboardingCanary: structuredClone(row.sellerOnboardingCanary) }),
     inputDigest: row.inputDigest,
     requestDigest: row.requestDigest,
     grantGeneration: row.grantGeneration,

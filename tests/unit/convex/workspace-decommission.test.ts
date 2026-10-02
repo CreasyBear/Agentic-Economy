@@ -1,5 +1,7 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
+import { withSourceWrite } from '../../helpers/source-write-admission'
+import type { ClerkMfaConsequenceProofInput } from '../../../convex/lib/authority/consequence/proof'
 
 import { internal } from '../../../convex/_generated/api'
 import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
@@ -41,7 +43,6 @@ const staleMfaFva = [1, 999]
 
 type WorkspaceFenceReason =
   | 'unsettled_provider_obligations'
-  | 'unwithdrawn_earnings'
   | 'open_calls'
   | 'unreleased_call_holds'
   | 'in_flight_funding'
@@ -93,6 +94,7 @@ const readEligibilityRef = makeFunctionReference<
 const closeWorkspaceRef = makeFunctionReference<
   'mutation',
   Readonly<{
+    expectedAccountRef: string
     confirmationName: string
     expectedAccountRevision: number
     expectedOwnershipRevision: number
@@ -105,6 +107,7 @@ const closeWorkspaceRef = makeFunctionReference<
 const transferWorkspaceOwnershipRef = makeFunctionReference<
   'mutation',
   Readonly<{
+    expectedAccountRef: string
     successorPrincipalRef: string
     expectedAccountRevision: number
     expectedOwnershipRevision: number
@@ -126,6 +129,7 @@ const correlationRef = (label: string) => `test:workspace-decommission:${label}`
 const idempotencyRef = (label: string) => `idem:workspace-decommission:${label}`
 
 function closePayload(overrides: Partial<{
+  expectedAccountRef: string
   confirmationName: string
   expectedAccountRevision: number
   expectedOwnershipRevision: number
@@ -133,6 +137,7 @@ function closePayload(overrides: Partial<{
   idempotencyRef: string
 }> = {}) {
   return {
+    expectedAccountRef: ACCOUNT_REF,
     confirmationName: DISPLAY_NAME,
     expectedAccountRevision: ACCOUNT_REVISION,
     expectedOwnershipRevision: OWNERSHIP_REVISION,
@@ -143,6 +148,7 @@ function closePayload(overrides: Partial<{
 }
 
 function transferPayload(overrides: Partial<{
+  expectedAccountRef: string
   successorPrincipalRef: string
   expectedAccountRevision: number
   expectedOwnershipRevision: number
@@ -150,6 +156,7 @@ function transferPayload(overrides: Partial<{
   idempotencyRef: string
 }> = {}) {
   return {
+    expectedAccountRef: ACCOUNT_REF,
     successorPrincipalRef: TEAMMATE_PRINCIPAL_REF,
     expectedAccountRevision: ACCOUNT_REVISION,
     expectedOwnershipRevision: OWNERSHIP_REVISION,
@@ -172,8 +179,9 @@ async function closeWorkspace(
   input = closePayload(),
   presentedIdentity: UserIdentity = identity(),
 ): Promise<CloseWorkspaceReceipt> {
-  const session = backend.withIdentity(presentedIdentity)
-  return await session.mutation(closeWorkspaceRef, input)
+  const { fva: _fva, ...authenticated } = presentedIdentity
+  const session = backend.withIdentity(authenticated)
+  return await session.mutation(closeWorkspaceRef, await signedWorkspaceCommand(input, presentedIdentity))
 }
 
 async function transferWorkspaceOwnership(
@@ -181,8 +189,22 @@ async function transferWorkspaceOwnership(
   input = transferPayload(),
   presentedIdentity: UserIdentity = identity(),
 ): Promise<TransferWorkspaceReceipt> {
-  const session = backend.withIdentity(presentedIdentity)
-  return await session.mutation(transferWorkspaceOwnershipRef, input)
+  const { fva: _fva, ...authenticated } = presentedIdentity
+  const session = backend.withIdentity(authenticated)
+  return await session.mutation(transferWorkspaceOwnershipRef, await signedWorkspaceCommand(input, presentedIdentity))
+}
+
+async function signedWorkspaceCommand<T extends { idempotencyRef: string; correlationRef: string }>(
+  input: T, presentedIdentity: UserIdentity = identity(), proofOverride?: ClerkMfaConsequenceProofInput,
+) {
+  const factors = presentedIdentity.fva
+  const proof = proofOverride ?? (Array.isArray(factors) && factors.length === 2 ? {
+    reverificationId: `reverification:${input.idempotencyRef}`,
+    firstFactorAgeMinutes: factors[0] as number, secondFactorAgeMinutes: factors[1] as number,
+    subject: presentedIdentity.subject, evidenceObservedAt: Date.now(),
+  } : undefined)
+  return await withSourceWrite('protected_action', { ...input, operationKey: input.idempotencyRef,
+    correlationId: input.correlationRef, ...(proof === undefined ? {} : { proof }) })
 }
 
 async function expectRefusal(run: () => Promise<unknown>, code: string): Promise<void> {
@@ -281,29 +303,6 @@ async function seedTeammateInteractiveAuthority(backend: InteractiveAuthorityBac
       expiresAt: NOW + 60_000,
       updatedAt: NOW,
     })
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef: TEAMMATE_PRINCIPAL_REF,
-      activeAccountRef: ACCOUNT_REF,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: correlationRef('teammate-selection'),
-    })
-  })
-}
-
-async function seedSessionSelection(
-  backend: InteractiveAuthorityBackend,
-  principalRef: string,
-  activeAccountRef: string,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('interactiveSessionSelections', {
-      principalRef,
-      activeAccountRef,
-      revision: 1,
-      selectedAt: NOW,
-      lastCorrelationRef: correlationRef('session'),
-    })
   })
 }
 
@@ -397,37 +396,6 @@ async function seedSupplierPayableObligation(backend: InteractiveAuthorityBacken
   return providerRef
 }
 
-async function seedPayout(
-  backend: InteractiveAuthorityBackend,
-  state: 'held_threshold' | 'transfer_pending' | 'paid',
-  businessId: string,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('moneyPayouts', {
-      payoutRef: `payout:w14:${state}`,
-      businessId,
-      owningAccountRef: ACCOUNT_REF,
-      authorityPrincipalRef: PRINCIPAL_REF,
-      authorityGrantRef: 'grant:w14',
-      authorityGrantGeneration: 1,
-      authorityResourceRefs: ['resource:w14'],
-      currency: 'AUD',
-      exponent: 6,
-      grossAccrualUnits: '1000000',
-      rakeUnits: '100000',
-      providerNetUnits: '900000',
-      minimumPayoutUnits: '500000',
-      cadence: 'daily',
-      state,
-      periodStart: '2026-09-01',
-      periodEnd: '2026-09-02',
-      idempotencyKey: `payout:w14:${state}`,
-      createdAt: NOW,
-      updatedAt: NOW,
-    })
-  })
-}
-
 async function seedCall(
   backend: InteractiveAuthorityBackend,
   input: Readonly<{
@@ -478,8 +446,8 @@ async function seedFunding(
       exponent: 6,
       principalUnits: '5000000',
       serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
+      taxUnits: '530000',
+      totalUnits: '5780000',
       commercialPolicyDigest: canonicalDigest({ kind: 'policy' }),
       commercialPolicyRefs: ['commercial-policy:sandbox'],
       idempotencyKey: `funding:w14:${state}`,
@@ -585,11 +553,6 @@ async function listMemberships(backend: InteractiveAuthorityBackend) {
     .collect())
 }
 
-async function listSessionSelectionsForAccount(backend: InteractiveAuthorityBackend) {
-  return await backend.run(async (ctx) => await ctx.db.query('interactiveSessionSelections')
-    .filter((filter) => filter.eq(filter.field('activeAccountRef'), ACCOUNT_REF))
-    .collect())
-}
 
 async function readOrgBinding(backend: InteractiveAuthorityBackend) {
   return await backend.run(async (ctx) => {
@@ -737,33 +700,6 @@ describe('workspaceAccounts readWorkspaceDecommissionEligibility (W-14)', () => 
     })
   })
 
-  it.each(['held_threshold', 'transfer_pending'] as const)(
-    'E7: payout %s fences unwithdrawn_earnings',
-    async (state) => {
-      const backend = createBackend()
-      await seedAuthority(backend)
-      const businessId = await seedSupplierBusiness(backend)
-      await seedPayout(backend, state, businessId)
-
-      await expect(readEligibility(backend)).resolves.toMatchObject({
-        canClose: false,
-        fences: expect.arrayContaining(['unwithdrawn_earnings']),
-      })
-    },
-  )
-
-  it('E8: payout paid does not add earnings fence', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    const businessId = await seedSupplierBusiness(backend)
-    await seedPayout(backend, 'paid', businessId)
-
-    await expect(readEligibility(backend)).resolves.toMatchObject({
-      canClose: true,
-      fences: [],
-    })
-  })
-
   it('E9: call pending fences open_calls', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
@@ -833,10 +769,9 @@ describe('workspaceAccounts readWorkspaceDecommissionEligibility (W-14)', () => 
     await expectRefusal(() => backend.query(readEligibilityRef, {}), 'identity_invalid')
   })
 
-  it('E15: closed account as active selection refuses account_inactive', async () => {
+  it('E15: closed account refuses account_inactive', async () => {
     const backend = createBackend()
     await seedAuthority(backend, { accountLifecycle: 'closed' })
-    await seedSessionSelection(backend, PRINCIPAL_REF, ACCOUNT_REF)
 
     await expectRefusal(() => readEligibility(backend), 'account_inactive')
   })
@@ -859,18 +794,6 @@ describe('workspaceAccounts closeWorkspace (W-14)', () => {
 
     const memberships = await listMemberships(backend)
     expect(memberships.every((row) => row.lifecycle === 'ended')).toBe(true)
-  })
-
-  it('C2: session selections for closed account are removed', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedTeammateMembership(backend)
-    await seedSessionSelection(backend, PRINCIPAL_REF, ACCOUNT_REF)
-    await seedSessionSelection(backend, TEAMMATE_PRINCIPAL_REF, ACCOUNT_REF)
-
-    await closeWorkspace(backend)
-
-    expect(await listSessionSelectionsForAccount(backend)).toEqual([])
   })
 
   it('C3: active agent grant and delegation are revoked', async () => {
@@ -1001,7 +924,7 @@ describe('workspaceAccounts closeWorkspace (W-14)', () => {
     ['malformed', identity({ fva: [1] })],
     ['without a second factor', identity({ fva: noMfaFva })],
     ['with stale factors', identity({ fva: staleMfaFva })],
-  ])('C14: signed fva %s refuses before any close write even when workspace MFA policy is off', async (
+  ])('C14: signed server proof %s refuses before any close write even when workspace MFA policy is off', async (
     _label,
     presentedIdentity,
   ) => {
@@ -1020,6 +943,8 @@ describe('workspaceAccounts closeWorkspace (W-14)', () => {
     await seedAuthority(backend)
     const forgedPayload = {
       ...closePayload(),
+      operationKey: closePayload().idempotencyRef,
+      correlationId: closePayload().correlationRef,
       factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
     }
 
@@ -1042,7 +967,6 @@ describe('workspaceAccounts closeWorkspace (W-14)', () => {
   it('C17: interactive authority on closed account throws account_inactive', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await seedSessionSelection(backend, PRINCIPAL_REF, ACCOUNT_REF)
     await closeWorkspace(backend)
 
     await expect(backend.run(async (ctx) =>
@@ -1292,11 +1216,174 @@ describe('workspaceAccounts transferWorkspaceOwnership (W-14)', () => {
     await seedTeammateMembership(backend)
     const forgedPayload = {
       ...transferPayload(),
+      operationKey: transferPayload().idempotencyRef,
+      correlationId: transferPayload().correlationRef,
       factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
     }
 
     await expect(
       backend.withIdentity(identity()).mutation(transferWorkspaceOwnershipRef, forgedPayload),
     ).rejects.toThrow(/factorEvidence|extra field/i)
+  })
+})
+
+describe('server-signed workspace MFA consequences', () => {
+  const freshProof = (): ClerkMfaConsequenceProofInput => ({ reverificationId: 'proof:workspace:bounded',
+    firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1, subject: identity().subject, evidenceObservedAt: Date.now() })
+
+  it.each(['unsigned', 'first_factor', 'stale', 'wrong_subject', 'modified_command'] as const)(
+    '%s refuses closure without consuming proof or nonce', async mode => {
+      const backend = createBackend()
+      await seedAuthority(backend)
+      const proof = { ...freshProof(),
+        ...(mode === 'first_factor' ? { secondFactorAgeMinutes: -1 } : {}),
+        ...(mode === 'stale' ? { evidenceObservedAt: Date.now() - 10 * 60_000 } : {}),
+        ...(mode === 'wrong_subject' ? { subject: 'user_other' } : {}),
+      }
+      const command = await signedWorkspaceCommand(closePayload(), identity(), proof)
+      const { fva: _fva, ...authenticated } = identity()
+      if (mode === 'unsigned') {
+        const { sourceWrite: _source, sourceWriteRequest: _request, ...unsigned } = command
+        await expectRefusal(() => backend.withIdentity(authenticated).mutation(closeWorkspaceRef, unsigned), 'authority_mismatch')
+      } else if (mode === 'modified_command') {
+        await expectRefusal(() => backend.withIdentity(authenticated).mutation(closeWorkspaceRef,
+          { ...command, expectedOwnershipRevision: OWNERSHIP_REVISION + 1 }), 'authority_mismatch')
+      } else {
+        await expect(backend.withIdentity(authenticated).mutation(closeWorkspaceRef, command)).resolves.toEqual({
+          kind: 'refused', code: 'mfa_reverification_required',
+        })
+      }
+      expect(await readAccount(backend)).toMatchObject({ lifecycle: 'active', revision: ACCOUNT_REVISION })
+      expect(await backend.run(async ({ db }) => ({ proofs: await db.query('consequenceProofUses').collect(),
+        nonces: await db.query('sourceWriteNonces').collect() }))).toEqual({ proofs: [], nonces: [] })
+    },
+  )
+
+  it('an exact completed retry needs no fresh proof, permits new correlation, and rejects changed revision', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const payload = closePayload()
+    expect(await closeWorkspace(backend, payload)).toMatchObject({ kind: 'closed' })
+    expect(await closeWorkspace(backend, { ...payload, correlationRef: 'retry:another-correlation' },
+      identity({ fva: undefined }))).toMatchObject({ kind: 'replayed', accountRef: ACCOUNT_REF })
+    await expectRefusal(() => closeWorkspace(backend, { ...payload, expectedAccountRevision: ACCOUNT_REVISION + 1 }),
+      'idempotency_conflict')
+    expect(await backend.run(async ({ db }) => await db.query('consequenceProofUses').collect())).toHaveLength(1)
+  })
+
+  it('concurrent competing closes commit one closure and one proof use', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const results = await Promise.allSettled([
+      closeWorkspace(backend, closePayload({ idempotencyRef: 'close:race:first' })),
+      closeWorkspace(backend, closePayload({ idempotencyRef: 'close:race:second' })),
+    ])
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect(await backend.run(async ({ db }) => await db.query('consequenceProofUses').collect())).toHaveLength(1)
+    expect((await listOwnerships(backend)).filter(row => row.lifecycle === 'ended')).toHaveLength(1)
+  })
+
+  it('a still-fresh proof used for another consequence requests MFA and leaves the workspace active', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const proof = freshProof()
+    await backend.run(async ({ db }) => { await db.insert('consequenceProofUses', {
+      reverificationId: proof.reverificationId, actorPrincipalRef: PRINCIPAL_REF, activeAccountRef: ACCOUNT_REF,
+      commandDigest: canonicalDigest({ action: 'previous-command' }), proofPreset: 'strict',
+      factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
+      verifiedAt: Date.now() - 60_000, expiresAt: Date.now() + 9 * 60_000,
+      correlationRef: 'previous:correlation', idempotencyRef: 'previous:command',
+    }) })
+    const command = await signedWorkspaceCommand(closePayload(), identity(), proof)
+    await expect(backend.withIdentity(identity({ fva: undefined })).mutation(closeWorkspaceRef, command))
+      .resolves.toEqual({ kind: 'refused', code: 'mfa_reverification_required' })
+    expect(await readAccount(backend)).toMatchObject({ lifecycle: 'active' })
+    expect(await backend.run(async ({ db }) => await db.query('sourceWriteNonces').collect())).toHaveLength(0)
+  })
+
+  it('switching to another owned Account cannot retarget a signed close, while its exact closed receipt stays readable', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const otherAccountRef = `acc_${'d'.repeat(32)}`
+    const otherOwnershipRef = `own_${'d'.repeat(32)}`
+    await backend.run(async ({ db }) => {
+      const account = await db.query('accounts').withIndex('by_accountRef', q => q.eq('accountRef', ACCOUNT_REF)).unique()
+      const ownership = await db.query('accountOwnerships').withIndex('by_ownershipRef', q => q.eq('ownershipRef', OWNERSHIP_REF)).unique()
+      if (account === null || ownership === null) throw new Error('workspace_target_fixture_missing')
+      const { _id: _accountId, _creationTime: _accountTime, ...accountFields } = account
+      const { _id: _ownershipId, _creationTime: _ownershipTime, ...ownershipFields } = ownership
+      await db.insert('accounts', { ...accountFields, accountRef: otherAccountRef, currentOwnershipRef: otherOwnershipRef })
+      await db.insert('accountOwnerships', { ...ownershipFields, ownershipRef: otherOwnershipRef, accountRef: otherAccountRef })
+      await db.insert('accountExternalOrganizationBindings', { bindingRef: `eob_${'d'.repeat(32)}`,
+        accountRef: otherAccountRef, providerNamespace: 'clerk/organization', providerIdentifier: 'org_switched_target',
+        lifecycle: 'active', revision: 1, createdAt: NOW, updatedAt: NOW })
+    })
+    const signed = await signedWorkspaceCommand(closePayload(), identity(), freshProof())
+    const switched = identity({ org_id: 'org_switched_target', fva: undefined })
+    await expectRefusal(() => backend.withIdentity(switched).mutation(closeWorkspaceRef, signed), 'authority_mismatch')
+    expect(await readAccount(backend)).toMatchObject({ lifecycle: 'active' })
+    expect(await closeWorkspace(backend)).toMatchObject({ kind: 'closed', accountRef: ACCOUNT_REF })
+    expect(await backend.withIdentity(switched).mutation(closeWorkspaceRef,
+      await signedWorkspaceCommand(closePayload(), identity({ fva: undefined })))).toMatchObject({
+      kind: 'replayed', accountRef: ACCOUNT_REF,
+    })
+    expect(await backend.run(async ({ db }) => await db.query('accounts')
+      .withIndex('by_accountRef', q => q.eq('accountRef', otherAccountRef)).unique())).toMatchObject({ lifecycle: 'active' })
+  })
+
+  it('an exact completed transfer stays readable after the original actor switches Accounts, without new MFA or effects', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedTeammateMembership(backend)
+    const otherAccountRef = `acc_${'e'.repeat(32)}`
+    const otherOwnershipRef = `own_${'e'.repeat(32)}`
+    await backend.run(async ({ db }) => {
+      const account = await db.query('accounts').withIndex('by_accountRef', q => q.eq('accountRef', ACCOUNT_REF)).unique()
+      const ownership = await db.query('accountOwnerships').withIndex('by_ownershipRef', q => q.eq('ownershipRef', OWNERSHIP_REF)).unique()
+      if (account === null || ownership === null) throw new Error('workspace_transfer_target_fixture_missing')
+      const { _id: _accountId, _creationTime: _accountTime, ...accountFields } = account
+      const { _id: _ownershipId, _creationTime: _ownershipTime, ...ownershipFields } = ownership
+      await db.insert('accounts', { ...accountFields, accountRef: otherAccountRef, currentOwnershipRef: otherOwnershipRef })
+      await db.insert('accountOwnerships', { ...ownershipFields, ownershipRef: otherOwnershipRef, accountRef: otherAccountRef })
+      await db.insert('accountExternalOrganizationBindings', { bindingRef: `eob_${'e'.repeat(32)}`,
+        accountRef: otherAccountRef, providerNamespace: 'clerk/organization', providerIdentifier: 'org_transfer_switched',
+        lifecycle: 'active', revision: 1, createdAt: NOW, updatedAt: NOW })
+    })
+    const payload = transferPayload()
+    expect(await transferWorkspaceOwnership(backend, payload)).toMatchObject({ kind: 'transferred', accountRef: ACCOUNT_REF })
+    const before = await backend.run(async ({ db }) => ({ account: await db.query('accounts')
+      .withIndex('by_accountRef', q => q.eq('accountRef', ACCOUNT_REF)).unique(),
+      ownerships: await db.query('accountOwnerships').collect(), proofs: await db.query('consequenceProofUses').collect(),
+      nonces: await db.query('sourceWriteNonces').collect() }))
+    expect(await transferWorkspaceOwnership(backend, { ...payload, correlationRef: 'transfer:retry:changed-correlation' },
+      identity({ org_id: 'org_transfer_switched', fva: undefined }))).toMatchObject({ kind: 'replayed', accountRef: ACCOUNT_REF })
+    expect(await backend.run(async ({ db }) => ({ account: await db.query('accounts')
+      .withIndex('by_accountRef', q => q.eq('accountRef', ACCOUNT_REF)).unique(),
+      ownerships: await db.query('accountOwnerships').collect(), proofs: await db.query('consequenceProofUses').collect(),
+      nonces: await db.query('sourceWriteNonces').collect() }))).toEqual(before)
+    expect(await backend.run(async ({ db }) => await db.query('accounts')
+      .withIndex('by_accountRef', q => q.eq('accountRef', otherAccountRef)).unique())).toMatchObject({ revision: ACCOUNT_REVISION })
+  })
+
+  it('another human cannot read a historical transfer receipt using its key and successor when the audit is absent', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedTeammateMembership(backend)
+    await seedTeammateInteractiveAuthority(backend)
+    const payload = transferPayload()
+    expect(await transferWorkspaceOwnership(backend, payload)).toMatchObject({ kind: 'transferred' })
+    await backend.run(async ({ db }) => {
+      const audit = await db.query('auditEvents').withIndex('by_eventId', q =>
+        q.eq('eventId', `audit:workspace:account.workspace.ownership_transferred:${payload.idempotencyRef}`)).unique()
+      if (audit === null) throw new Error('workspace_transfer_audit_fixture_missing')
+      await db.delete(audit._id)
+    })
+    const before = await readAccount(backend)
+    await expectRefusal(() => transferWorkspaceOwnership(backend, payload, teammateIdentity()), 'ownership_mismatch')
+    expect(await readAccount(backend)).toEqual(before)
+    expect(await backend.run(async ({ db }) => await db.query('consequenceProofUses').collect())).toHaveLength(1)
+    expect(await backend.run(async ({ db }) => await db.query('sourceWriteNonces').collect())).toHaveLength(1)
+    expect(await transferWorkspaceOwnership(backend, payload, identity({ fva: undefined })))
+      .toMatchObject({ kind: 'replayed', accountRef: ACCOUNT_REF })
   })
 })

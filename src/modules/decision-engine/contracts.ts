@@ -81,6 +81,20 @@ export type DecisionGatewayOptions = Readonly<{
   disableJev?: boolean
   disableSecondaryLlm?: boolean
   fetchImpl?: typeof fetch
+  inferenceObserver?: JevInferenceObserver
+}>
+
+/** One durable intent per actual SDK fetch; usage never implies a Jev price. */
+export type JevInferenceObservation = Readonly<{
+  requestRef: string
+  outcome: 'completed' | 'failed'
+  model?: string
+  inputTokens?: number
+  outputTokens?: number
+}>
+export type JevInferenceObserver = Readonly<{
+  beforeAttempt(input: Readonly<{ requestRef: string; requestedModel: string }>): Promise<void>
+  afterAttempt(input: JevInferenceObservation): Promise<void>
 }>
 
 /** Operational inference failure; contains no upstream payload or credential. */
@@ -88,7 +102,7 @@ export class JevUnavailableError extends Error {
   constructor(readonly reason:
     | 'disabled' | 'missing_key' | 'cancelled' | 'timeout' | 'rate_limited'
     | 'authentication' | 'service_unavailable' | 'connection' | 'invalid_response'
-    | 'evidence_too_large') {
+    | 'evidence_too_large' | 'observation_unavailable') {
     super(`jev_${reason}`)
     this.name = 'JevUnavailableError'
   }

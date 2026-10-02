@@ -67,7 +67,7 @@ export type Am12RefundEventType = 'refund.created' | 'refund.updated' | 'refund.
 export function am10BindEvidence(metadataDigest: string, slug: string) {
   return {
     externalRef: `cs_am10_${slug}`,
-    amount: { currency: 'AUD' as const, units: '5280000', exponent: 6 as const },
+    amount: { currency: 'AUD' as const, units: '5780000', exponent: 6 as const },
     status: 'succeeded' as const,
     evidenceRef: `stripe:checkout:cs_am10_${slug}`,
     requestDigest: `sha256:${'b'.repeat(64)}`,
@@ -106,8 +106,8 @@ export function am10SettlementBooking(bound: Am10BoundFunding) {
     idempotencyKey: bound.idempotencyKey,
     principalUnits: '5000000',
     serviceFeeUnits: '250000',
-    taxUnits: '30000',
-    totalUnits: '5280000',
+    taxUnits: '530000',
+    totalUnits: '5780000',
   }
 }
 
@@ -145,7 +145,7 @@ export function refundEvent(input: Readonly<{
     status: input.status ?? 'succeeded' as const,
     amount: {
       currency: 'AUD',
-      units: input.amountUnits ?? '528',
+      units: input.amountUnits ?? '578',
       exponent: 2,
     },
     payloadDigest: input.payloadDigest ?? `sha256:${'5'.repeat(64)}`,
@@ -216,8 +216,8 @@ export async function insertSettledFunding(
       exponent: 6,
       principalUnits: '5000000',
       serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
+      taxUnits: '530000',
+      totalUnits: '5780000',
       commercialPolicyDigest: fundingSha256('1'),
       commercialPolicyRefs: ['commercial-policy:sandbox'],
       idempotencyKey: input.commandRef,

@@ -1,4 +1,4 @@
-import { ArrowUpRight, Code2, Image, Search, ShoppingBag, ShieldCheck, TrendingUp } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
@@ -18,52 +18,33 @@ type DirectoryHomeDiscoveryProps = Readonly<{
   compareDisabled: (resource: string) => boolean
 }>
 
-const editorialOrder = ['creative', 'research', 'developer', 'finance', 'commerce', 'identity'] as const
-const navigation = {
-  creative: { label: 'Create', icon: Image }, research: { label: 'Research', icon: Search },
-  developer: { label: 'Build', icon: Code2 }, finance: { label: 'Markets', icon: TrendingUp },
-  commerce: { label: 'Commerce', icon: ShoppingBag }, identity: { label: 'Identity', icon: ShieldCheck },
-} as const
-
-/** Editorial collections of live directory matches, using the installed Embla carousel. */
+/** Evidence-based marketplace shelves; the server omits empty or failed reads. */
 export function DirectoryHomeDiscovery({ home, onSave, isSaved, saveDisabled, saveUnknown = false, onCompare, isComparing, compareDisabled }: DirectoryHomeDiscoveryProps) {
-  const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
+  const rails = home.rails.filter(rail => rail.items.length > 0)
   return <div className="pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px)+2rem)] md:pb-8">
-    <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
-      {rails.map(rail => {
-        const item = navigation[rail.id]
-        const Icon = item.icon
-        return <a key={rail.id} href={`#directory-collection-${rail.id}`} className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5')}><Icon className="size-4" aria-hidden="true" />{item.label}</a>
-      })}
-    </nav>
     <div className="grid gap-12 sm:gap-16">
       {rails.map(rail => <section key={rail.id} className="min-w-0 scroll-mt-[calc(var(--header-height)+1rem)] scroll-mb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px)+1rem)]" aria-labelledby={`directory-collection-${rail.id}`}>
-        <Carousel opts={{ align: 'start', loop: false }} aria-label={`${rail.category} Tools`}>
+        <Carousel opts={{ align: 'start', loop: false }} aria-label={`${rail.title} Tools`}>
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">
-              <p className="mb-2 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">{rail.category}</p>
               <h2 id={`directory-collection-${rail.id}`} className="text-2xl font-medium tracking-tight sm:text-3xl">{rail.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{rail.description}</p>
+              <p className="mt-2 line-clamp-1 text-sm leading-relaxed text-muted-foreground">{rail.subtitle}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <a href={`#directory-collection-${rail.id}`} aria-label={`View collection: ${rail.category}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>View collection<ArrowUpRight className="size-4" aria-hidden="true" /></a>
-              {rail.kind === 'ok' && rail.items.length > 0 ? <>
-                <CarouselPrevious className="static size-10 min-h-touch translate-y-0" aria-label={`Previous ${rail.category} Tools`} />
-                <CarouselNext className="static size-10 min-h-touch translate-y-0" aria-label={`Next ${rail.category} Tools`} />
-              </> : null}
+              <a href={`/market?sort=${rail.sort}`} aria-label={`See all ${rail.title}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>See all<ArrowUpRight className="size-4" aria-hidden="true" /></a>
+              <CarouselPrevious className="static size-10 min-h-touch translate-y-0" aria-label={`Previous ${rail.title} Tools`} />
+              <CarouselNext className="static size-10 min-h-touch translate-y-0" aria-label={`Next ${rail.title} Tools`} />
             </div>
           </div>
-          {rail.kind === 'unavailable' ? <p role="status" className="rounded-xl border border-border bg-muted/30 px-5 py-8 text-sm text-muted-foreground">This collection could not be loaded. See all Tools to keep looking.</p>
-            : rail.items.length === 0 ? <p className="rounded-xl border border-border bg-muted/30 px-5 py-8 text-sm text-muted-foreground">No matches were returned for this collection. See all Tools to keep looking.</p>
-            : <CarouselContent className="-ml-4 py-1">
+          <CarouselContent className="-ml-4 py-1">
               {rail.items.slice(0, 8).map(entry => {
-                const item = { entry, search: rail.search }
+                const item = { entry, search: {} }
                 return <CarouselItem key={entry.resource} className="h-full basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
                   <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(item)} saveDisabled={saveDisabled === true} saveUnknown={saveUnknown}
                     onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 </CarouselItem>
               })}
-            </CarouselContent>}
+          </CarouselContent>
         </Carousel>
       </section>)}
     </div>

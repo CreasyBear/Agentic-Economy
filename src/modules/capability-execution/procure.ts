@@ -2,6 +2,7 @@ import { idempotencyKeySchema } from '@/modules/common/action'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import { z } from 'zod'
+import { TOOL_SELECTION_PREFERENCES } from '@/modules/common/tool-selection-score'
 import { callRefusalCodeSchema } from './call-contracts'
 import { toolQuoteRefusalCodeSchema } from './quote'
 
@@ -12,6 +13,7 @@ export const toolProcureInputSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('need'),
     need: z.string().trim().min(3).max(4096),
+    prefer: z.enum(TOOL_SELECTION_PREFERENCES).describe('How to choose between matching Tools: cheapest, balanced (default), or reliable').optional(),
   }),
   z.strictObject({
     kind: z.literal('exact'),
@@ -69,6 +71,12 @@ export const toolProcureResultSchema = z.discriminatedUnion('status', [
     status: z.literal('needs_input'),
     toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
     toolName: z.string(),
+    reasons: z.array(z.string()),
+    alternates: z.array(z.strictObject({
+      toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
+      title: z.string(),
+      reasons: z.array(z.string()),
+    })).max(2),
     inputJsonSchema: z.record(z.string(), jsonValueSchema),
     requiredFields: z.array(z.string()),
     next: z.strictObject({

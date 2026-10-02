@@ -122,6 +122,8 @@ export type CdpX402PaymentSignerDependencies = Readonly<{
   createClient?: (configuration: CdpX402CustodyConfiguration) => CdpClientLike
   persistedIntent?: CdpX402PaymentSigningIntent
   onUnsignedMaterial?: (intent: CdpX402PaymentSigningIntent) => Promise<void> | void
+  /** Required at runtime: commit fresh admission of this exact intent before CDP signing. */
+  admitSigning?: (intent: CdpX402PaymentSigningIntent) => Promise<boolean>
   requestFingerprintContext?: CdpX402RequestFingerprintContext
   /** Exact admitted Call authority bound, in Unix milliseconds. */
   authorityExpiresAt?: number

@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 
 import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
-import { spendingPeriodsValue } from '@/modules/money/public'
+import { managedCallBookingValue } from '@/modules/money/public'
 
 export const identifier = v.string()
 export const accountHistoryResultValue = v.union(
@@ -10,8 +10,8 @@ export const accountHistoryResultValue = v.union(
     entries: v.array(v.object({
       transactionId: v.string(), transactionRef: v.union(v.string(), v.null()),
       occurredAt: v.number(), recordedAt: v.union(v.number(), v.null()),
-      kind: v.union(v.literal('funding'), v.literal('funding_reversal'), v.literal('call_spend'),
-        v.literal('document_adjustment'), v.literal('unmapped')),
+      kind: v.union(v.literal('funding'), v.literal('funding_reversal'), v.literal('call_spend'), v.literal('call_refund'), v.literal('promotional_refund'),
+        v.literal('document_adjustment'), v.literal('promotional_grant'), v.literal('promotional_use'), v.literal('promotional_expiry'), v.literal('unmapped')),
       accountEffect: v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) }),
       documentEffectUnits: v.string(), reverted: v.boolean(), revertedAt: v.union(v.number(), v.null()),
       sourceRef: v.union(v.string(), v.null()), sourceDigest: v.union(v.string(), v.null()),
@@ -63,34 +63,8 @@ export const billingSourceArgs = {
   ...sourceWriteArgs,
 }
 
-/** The same managed Call booking shape is used by every Formance consequence. */
-export const managedCallBookingArgs = {
-  callRef: v.string(),
-  quoteRef: v.string(),
-  idempotencyKey: v.string(),
-  accountRef: v.string(),
-  principalRef: v.string(),
-  agentBudgetGeneration: v.number(),
-  legalCustomerRef: v.string(),
-  legalCustomerGeneration: v.number(),
-  treasuryRef: v.string(),
-  treasuryGeneration: v.number(),
-  toolRef: v.string(),
-  providerRef: v.string(),
-  authorityGeneration: v.number(),
-  policyGeneration: v.number(),
-  buyerAmountUnits: v.string(),
-  buyerRevenueUnits: v.string(),
-  buyerTaxUnits: v.string(),
-  providerAmountUnits: v.string(),
-  quoteDigest: v.string(),
-  inputDigest: v.string(),
-  policyDigest: v.string(),
-  rateEvidenceDigest: v.string(),
-  treasuryEvidenceDigest: v.string(),
-  x402RequirementDigest: v.string(),
-  spendingPeriods: v.optional(spendingPeriodsValue),
-}
+/** One shared shape for existing Node consequences and frozen reports. */
+export const managedCallBookingArgs = managedCallBookingValue.fields
 export const checkoutEventArg = v.object({
   kind: v.literal('checkout'),
   stripeEventId: identifier,

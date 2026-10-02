@@ -1,3 +1,4 @@
+import { promotionalPurchasedAmounts } from '@/modules/money/public'
 import { v, type Infer } from 'convex/values'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
@@ -45,12 +46,15 @@ export async function materializePurchaseResolutionRecord(
   row: CallRow,
   projection: CallDispatchProjectionShape,
   resolvedAt: number,
+  replacement?: { expectedRecordDigest: string },
 ): Promise<void> {
-  if (row.sellerOnboardingCanary !== undefined) return
   const existing = await ctx.db.query('purchaseResolutionRecords')
     .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
     .unique()
-  if (existing !== null) return
+  if (existing !== null && replacement === undefined) return
+  if (replacement !== undefined && existing?.recordDigest !== replacement.expectedRecordDigest) {
+    throw new Error('purchase_resolution_adjustment_conflict')
+  }
 
   if (row.toolJson === undefined || row.quoteRef === undefined) return
   const quoteRef = row.quoteRef
@@ -67,11 +71,16 @@ export async function materializePurchaseResolutionRecord(
     .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
     .unique()
 
-  const considerationAmount = accountReceipt?.totalBuyerCharge ?? {
+  const promoAllocation = row.promotionalCreditAllocation
+  const purchasedAmounts = promoAllocation === undefined ? undefined : promotionalPurchasedAmounts(
+    quote.decisionAudUnits, quote.buyerTaxUnits, promoAllocation.purchasedUnits,
+  )
+  if (promoAllocation !== undefined && purchasedAmounts === undefined) return
+  const considerationAmount = promoAllocation === undefined ? accountReceipt?.totalBuyerCharge ?? {
     currency: 'AUD',
     units: quote.decisionAudUnits,
     exponent: 6,
-  }
+  } : { currency: 'AUD', units: promoAllocation.purchasedUnits, exponent: 6 }
   const providerObligationAmount = accountReceipt?.providerObligation.amount ?? {
     currency: 'USDC',
     units: quote.sourceUsdcUnits ?? obligation?.providerAmountUnits ?? '0',
@@ -94,15 +103,17 @@ export async function materializePurchaseResolutionRecord(
     ...(accountReceipt?.state === undefined ? {} : { receiptState: accountReceipt.state }),
     ...(accountReceipt?.refundState === undefined ? {} : { receiptRefundState: accountReceipt.refundState }),
     considerationAmount,
-    considerationNetUnits: quote.buyerRevenueUnits,
-    considerationGstUnits: quote.buyerTaxUnits,
+    considerationNetUnits: purchasedAmounts?.revenueUnits ?? quote.buyerRevenueUnits,
+    considerationGstUnits: purchasedAmounts?.taxUnits ?? quote.buyerTaxUnits,
     providerObligationAmount,
     resolvedAt,
   })
   if (built.kind !== 'admitted') return
 
-  await ctx.db.insert('purchaseResolutionRecords', {
-    ...built.record,
-    createdAt: resolvedAt,
-  })
+  if (replacement !== undefined && existing !== null) {
+    // The report retains the prior record; this row is the current resolution.
+    await ctx.db.replace(existing._id, { ...built.record, createdAt: existing.createdAt })
+  } else {
+    await ctx.db.insert('purchaseResolutionRecords', { ...built.record, createdAt: resolvedAt })
+  }
 }

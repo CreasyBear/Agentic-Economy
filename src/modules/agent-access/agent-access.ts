@@ -220,7 +220,7 @@ export type AgentAccessKeyIssueInput = Readonly<{
   scopes?: readonly string[]
   grantRef?: string
   applicationRef?: string
-  environment?: AgentAccessEnvironment
+  environment: AgentAccessEnvironment
   toolAccess?: AgentAccessToolAccess
   toolRefs?: readonly string[]
   maximumSpendPerCall?: ExactAmount
@@ -261,15 +261,17 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
   const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
   const grantRef = input.input.grantRef?.trim() || idempotencyKey
   const applicationRef = input.input.applicationRef?.trim() || AGENT_ACCESS_DEFAULT_APPLICATION_REF
-  const environment = input.input.environment ?? 'sandbox'
+  const environment = input.input.environment
   const expiresInSeconds = input.input.expiresInSeconds ?? AGENT_ACCESS_KEY_TTL_SECONDS
   if (name.length < 1 || name.length > 80 || !/^[A-Za-z0-9][A-Za-z0-9 _.-]{7,127}$/u.test(idempotencyKey)
     || grantRef.length < 1 || grantRef.length > 300 || applicationRef.length < 1 || applicationRef.length > 200
     || authorityMode === undefined || scopes === undefined
+    || (environment !== 'sandbox' && environment !== 'production')
+    || input.spendingPolicy.environment !== environment
     || !validExpiry(expiresInSeconds)
     || !policyMatchesRequestedControls(input.spendingPolicy, input.input)
     || (applicationRef === 'ae-owner-chat'
-      && (authorityMode !== 'approval_required' || input.returnSecret !== false))
+      && (authorityMode !== 'spending_policy' || input.returnSecret !== false))
     || (environment === 'production' && authorityMode === 'unrestricted_test_only')) {
     return { kind: 'error', code: 'invalid_input', retryable: false }
   }

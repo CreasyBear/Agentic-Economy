@@ -42,6 +42,28 @@ export const chatRecovery = {
 
 export const chatHandoffNotice = 'Signed in — messages from here are saved.'
 
+export const chatToolPanel = {
+  review: 'Review and run', run: 'Run', bestMatch: 'Best match',
+  loading: 'Loading what this Tool needs…',
+  unavailable: 'This Tool’s inputs can’t be shown right now. Close this and try again.',
+  jsonLabel: 'Exact Tool input (JSON object)', jsonHelp: 'Enter the input as JSON.',
+  inputLegend: 'Tool inputs',
+  waitForResponse: 'Wait for the current response to finish before running this Tool.',
+  incomplete: 'Complete the required fields to run.',
+  tooLong: 'This input is too long to run from chat (limit 1,500 bytes).',
+  priceNote: 'The price is confirmed before it runs. Credit is reserved first, then charged after payment settles and the Provider returns a successful response, even if the answer is unusable.',
+  runNow: 'Runs within your spending limit. Anything above it asks for your approval first.',
+  runAfterCredit: 'Add credit first, then it runs. Your values are kept while this chat stays open.',
+  submitting: 'Sending…', submitted: 'Run requested. The result appears below.',
+  runNotSent: 'This run didn’t start. Check your message, then try again.',
+  runOutcomeUnknown: 'We couldn’t confirm whether this run started. Check the conversation before trying again to avoid sending it twice.',
+  runAgain: 'Run again', cancel: 'Cancel',
+  fromMessage: 'From your message', providerDefault: 'Provider default',
+} as const
+export function chatToolPanelHeading(title: string): string { return `Review ${title}` }
+export function chatToolPanelComplete(fields: readonly string[]): string { return fields.length === 0 ? chatToolPanel.incomplete : `Complete: ${fields.join(', ')}` }
+export function chatToolPanelMatchedBy(by: string): string { return `Best match chosen by ${by}. Your message and Tool summaries were sent there.` }
+
 export const chatShared = {
   fallbackTitle: 'Shared conversation',
   detail: 'This shared conversation cannot be continued.',
@@ -126,3 +148,4 @@ export function chatShowingTools(shown: number, total: number): string {
   if (shown === 0 || total <= shown) return chatMatchedOperations(total)
   return `Showing ${shown} of ${total}`
 }
+export const chatLoadEarlierMessages = chatShared.loadMore

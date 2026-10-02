@@ -18,6 +18,7 @@ import {
 } from '@/modules/capability-supply/public'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
+import { publicToolDescriptorSchema } from '@/modules/capability-supply/tool-schemas'
 import { registryToolsDescribeAction, registryToolsSearchAction } from '@/modules/registry/tools.actions'
 import { toolCatalogSearchInputSchema, toolChoiceDescribeOutputSchema, toolDescribeInputSchema } from '@/modules/registry/tool-choice-contracts'
 import {
@@ -29,6 +30,7 @@ const operationRecord: CapabilityToolSourceRecord = {
   operationId: 'capability:reference.lookup',
   publicationRef: 'publication:reference.lookup',
   publicationRevision: 3,
+  runtimeEnvironment: 'sandbox',
   networkId: 'ae:public',
   contract: {
     contractFormat: 'ae.capability-contract:v2',
@@ -100,6 +102,17 @@ const projectCapabilityTool = (
 )
 
 describe('public Tool read contract', () => {
+  it.each(['sandbox', 'production'] as const)('preserves %s publication environment through descriptor wire', (runtimeEnvironment) => {
+    const tool = projectCapabilityTool({ ...operationRecord, runtimeEnvironment }, 2_000)
+    expect(tool.runtimeEnvironment).toBe(runtimeEnvironment)
+    const wire = serializeToolDescriptor(tool)
+    expect(wire.runtimeEnvironment).toBe(runtimeEnvironment)
+    expect(deserializeToolDescriptor(wire).runtimeEnvironment).toBe(runtimeEnvironment)
+    expect(publicToolDescriptorSchema.safeParse(tool).success).toBe(true)
+    expect(publicToolDescriptorSchema.safeParse({ ...tool, runtimeEnvironment: undefined }).success).toBe(false)
+    expect(publicToolDescriptorSchema.safeParse({ ...tool, runtimeEnvironment: 'preview' }).success).toBe(false)
+  })
+
   it('projects reference-matched catalog and Provider health from the same facts', () => {
     const now = 2_000
     expect(projectToolHealth({

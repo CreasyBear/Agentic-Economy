@@ -19,7 +19,7 @@ import {
 import { readCurrentActiveAdminMembership, resolveAdminAuthority } from '../../../authz'
 import {
   consumeConsequenceProof,
-  deriveStrictConsequenceProof,
+  deriveMfaConsequenceProof,
 } from '../../authority/consequence/proof'
 import { persistAdminAuthorityMutation } from '../../security/admin/persistence'
 import { persistAuditEvent } from '../../security/audit/persistence'
@@ -34,6 +34,7 @@ export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
   targetType: string
   targetRef: string
   auditEventType: AuditEventType
+  requireExpectedStateDigest?: boolean
   currentStateDigest(): Promise<string | null>
   apply(actor: AllowedAdminAuthority): Promise<
     | {
@@ -43,11 +44,22 @@ export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
         beforeState: string
         afterState: string
       }
+    | {
+        kind: 'pending'
+        effectRefs: string[]
+        beforeState: string
+        afterState: string
+      }
     | { kind: 'refused'; code: AdminActionRefusalCodes[A] }
   >
 }>
 
 
+/** Requires verified source-write material and current Admin authority. Ensures
+ * new commands use both fresh Clerk factors anchored to signed JWT time and the
+ * authenticated subject. Invariant: exact operation replay precedes freshness,
+ * and proof consumption, approvals and effects remain one transaction. On
+ * violation: return the existing MFA refusal before consuming proof or effects. */
 export async function runAdminCommand<A extends AdminCommandAction>(
   ctx: MutationCtx,
   args: AdminCommandWireArgs<A>,
@@ -115,7 +127,7 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (operation.kind === 'replay') {
     if (
       operation.requestHash === requestHash
-      && (operation.status === 'succeeded' || operation.status === 'failed_terminal')
+      && (operation.status === 'in_progress' || operation.status === 'succeeded' || operation.status === 'failed_terminal')
       && operation.resultJson !== null
     ) {
       return parseAdminOperationReceipt(
@@ -142,11 +154,14 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (!validEvidenceRefs(args.evidenceRefs)) return refused(args, 'admin_missing_evidence')
 
   if (args.proof === undefined) return refused(args, 'mfa_reverification_required')
-  const proof = deriveStrictConsequenceProof({ ...args.proof, now: Date.now() })
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null) return refused(args, 'mfa_reverification_required')
+  const proof = deriveMfaConsequenceProof({ proof: args.proof, subject: identity.subject, now: Date.now() })
   if (proof.kind === 'refused') return refused(args, proofFailure(args.action, proof.code))
   if (
-    args.expectedStateDigest !== undefined
-    && args.expectedStateDigest !== await spec.currentStateDigest()
+    (spec.requireExpectedStateDigest === true && args.expectedStateDigest === undefined)
+    || (args.expectedStateDigest !== undefined
+      && args.expectedStateDigest !== await spec.currentStateDigest())
   ) {
     return await persistTerminalRefusal(ctx, args, actorRef, operationName, requestHash, 'target_changed')
   }
@@ -215,6 +230,15 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (!audit.valid) throw new Error(`admin_command_audit_invalid:${audit.reason}`)
   await persistAuditEvent(ctx.db, audit.event)
 
+  if (applied.kind === 'pending') {
+    const receipt: AdminCommandReceipt<A> = {
+      kind: 'pending', action: args.action, effectRefs: applied.effectRefs,
+      auditEventRef: eventId, correlationId: args.correlationId,
+    }
+    await persistReceipt(ctx, actorRef, operationName, args.operationKey, requestHash, 'in_progress', receipt)
+    return receipt
+  }
+
   const receipt: AdminCommandReceipt<A> = {
     kind: 'completed',
     action: args.action,
@@ -226,4 +250,3 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   await persistReceipt(ctx, actorRef, operationName, args.operationKey, requestHash, 'succeeded', receipt)
   return receipt
 }
-

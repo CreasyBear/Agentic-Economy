@@ -90,7 +90,7 @@ export async function runOwnerSupplyReadinessHandler(
     publicationRef: args.publicationRef,
     ...(offering.toolRef === undefined ? {} : { toolRef: offering.toolRef }),
     message: offering.sourceKind === 'x402'
-      ? 'The exact staged Tool is ready for the seller canary. It is not public yet.'
+      ? 'The exact staged Tool is ready. It is not public yet.'
       : 'The admitted public Tool is ready.',
   }
 }
@@ -114,43 +114,6 @@ export async function runOwnerSupplyTestHandler(
   )
   if (offering === undefined || offering.toolRef === undefined) {
     return { step: 'test', state: 'refused', refusal: 'revision_changed' }
-  }
-  if (offering.sourceKind === 'x402') {
-    if (!offering.readinessCompleted) {
-      return { step: 'test', state: 'refused', refusal: 'health_unhealthy' }
-    }
-    if (args.correlationId === undefined) return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
-    const canary = await ctx.runMutation(internal.capabilitySupplyOwnerCanary.requestSellerOnboardingCanary, {
-      businessId: args.businessId,
-      offeringRef: args.offeringRef,
-      offeringRevision: args.offeringRevision,
-      offeringSourceHash: args.offeringSourceHash,
-      publicationRef: args.publicationRef,
-      publicationRevision: args.publicationRevision,
-      ...(args.input === undefined ? {} : { input: args.input }),
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
-      ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
-    })
-    if (canary.kind === 'refused') {
-      return {
-        step: 'test',
-        state: 'refused',
-        refusal: canary.code === 'input_invalid' ? 'input_invalid' : 'canary_admission_refused',
-      }
-    }
-    return {
-      step: 'test',
-      state: 'completed',
-      offeringRef: args.offeringRef,
-      revision: args.offeringRevision,
-      publicationRef: args.publicationRef,
-      toolRef: canary.toolRef,
-      canaryRef: canary.canaryRef,
-      callRef: canary.callRef,
-      message: 'The exact seller canary was admitted and queued on its selected x402 network. Publication remains blocked until settlement and output evidence pass.',
-    }
   }
   const taskStartedAt = Date.now()
   const probeAuthority = await currentOwnerSupplyAuthority(ctx, args.businessId)

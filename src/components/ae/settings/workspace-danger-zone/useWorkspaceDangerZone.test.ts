@@ -55,12 +55,12 @@ const { useQuery, closeWorkspace, transferWorkspaceOwnership } = convexMocks
 
 vi.mock('convex/react', () => ({
   useQuery: (...args: unknown[]) => convexMocks.useQuery(...args),
-  useMutation: (ref: unknown) => {
-    const refName = convexMocks.convexRefName(ref)
-    if (refName.includes('closeWorkspace')) return convexMocks.closeWorkspace
-    if (refName.includes('transferWorkspaceOwnership')) return convexMocks.transferWorkspaceOwnership
-    return vi.fn()
-  },
+
+}))
+
+vi.mock('@/lib/server/workspace-profile.functions', () => ({
+  closeWorkspaceServer: ({ data }: { data: unknown }) => convexMocks.closeWorkspace(data),
+  transferWorkspaceOwnershipServer: ({ data }: { data: unknown }) => convexMocks.transferWorkspaceOwnership(data),
 }))
 
 vi.mock('@/lib/ui/toast', () => ({
@@ -156,6 +156,7 @@ describe('useWorkspaceDangerZone', () => {
       await result.current.closePanel?.onConfirmClose()
     })
     expect(closeWorkspace).toHaveBeenCalledWith({
+      expectedAccountRef: ownerEligible.accountRef,
       confirmationName: 'Acme Corp',
       expectedAccountRevision: 4,
       expectedOwnershipRevision: 3,
@@ -205,6 +206,7 @@ describe('useWorkspaceDangerZone', () => {
     const successor = ownerWithMember.transferCandidates[0]
     expect(successor).toBeDefined()
     expect(transferWorkspaceOwnership).toHaveBeenCalledWith({
+      expectedAccountRef: ownerWithMember.accountRef,
       successorPrincipalRef: successor!.principalRef,
       expectedAccountRevision: 4,
       expectedOwnershipRevision: 3,
@@ -306,7 +308,7 @@ describe('useWorkspaceDangerZone', () => {
     expect(clerkMocks.prompts).toBe(1)
     expect(closeWorkspace).toHaveBeenCalledTimes(2)
     expect(result.current.closePanel?.closeDiagnostic?.nextStep).toBe(
-      'Confirm with a fresh sign-in verification to continue.',
+      'Verify with two-factor authentication to continue.',
     )
     expect(toast.error).toHaveBeenCalledWith('Workspace was not closed')
   })

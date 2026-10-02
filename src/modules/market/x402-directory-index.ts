@@ -18,7 +18,7 @@ export type DirectoryMomentumBand = typeof DIRECTORY_MOMENTUM_BANDS[number]
 export const x402DirectoryIndexInputSchema = x402DirectoryFilterSchema.extend({
   query: z.string().trim().max(SEARCH_QUERY_MAX_LENGTH).optional(),
   category: z.string().trim().min(1).max(80).transform(value => value.toLowerCase()).optional(),
-  sort: z.enum(['relevance', 'popular', 'updated', 'adoption', 'price_asc', 'momentum']).optional(),
+  sort: z.enum(['relevance', 'adoption', 'popular', 'active', 'repeat', 'price_asc']).optional(),
   minUsdPrice: z.number().finite().nonnegative().optional(),
   priceBand: z.enum(DIRECTORY_PRICE_BANDS).optional(),
   adoptionBand: z.enum(DIRECTORY_ADOPTION_BANDS).optional(),
@@ -83,7 +83,7 @@ export function minimumDirectoryUsdPrice(entry: X402DirectoryEntry, network?: st
   let minimum: Decimal | undefined
   for (const price of entry.prices) {
     if (network !== undefined && directoryNetwork(price.network) !== directoryNetwork(network)) continue
-    if (price.scheme !== 'exact' || price.symbol !== 'USDC' || price.decimalAmount === undefined) continue
+    if ((price.scheme !== 'exact' && price.scheme !== 'upto') || price.symbol !== 'USDC' || price.decimalAmount === undefined) continue
     try {
       const amount = new Decimal(price.decimalAmount)
       if (!amount.isFinite() || amount.isNegative()) continue

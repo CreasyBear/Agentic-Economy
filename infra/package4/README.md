@@ -124,7 +124,7 @@ are in `docs/operations/aws-foundation.md`.
 After infrastructure health passes, bind the dedicated Vercel and Convex
 release environments using supported provider interfaces:
 
-- `AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE=synthetic_vps_fixture`
+- `AE_DEPLOYMENT_ENVIRONMENT=development` in both Vercel and Convex
 - `AE_FORMANCE_ENVIRONMENT=sandbox`
 - `AE_FORMANCE_GATEWAY_URL` from the module output
 - `AE_FORMANCE_LEDGER=agentic-economy-release`
@@ -132,15 +132,13 @@ release environments using supported provider interfaces:
 - the Cloudflare Access client ID and secret read from the emitted Secrets
   Manager ARN
 
-Use a dedicated Clerk test instance and Stripe sandbox destination. Production
-validation permits test credentials only when the synthetic release profile is
-present; the ordinary production profile continues to require live credentials
-and a production Formance environment.
-
-The release profile is resolved only on the server and becomes part of the
-commercial-policy digest already stored on every Commitment. Changing the
-profile therefore invalidates older Commitments rather than silently changing
-their infrastructure assumptions.
+Use a dedicated Clerk test instance and restricted Stripe test credentials in
+the development environment. A production deployment declares
+`AE_DEPLOYMENT_ENVIRONMENT=production` in both runtimes and requires production
+Formance and matching restricted live Stripe credentials when Stripe is enabled.
+Missing or mismatched declarations refuse new money operations. Development
+uses the deterministic local fixture; the retired synthetic profile cannot
+select an execution path. Existing policy evidence remains readable.
 
 ## Rotation and recovery
 

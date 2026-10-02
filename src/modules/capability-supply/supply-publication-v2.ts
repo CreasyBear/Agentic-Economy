@@ -1,29 +1,19 @@
 import { z } from 'zod'
 
-import { jsonValueSchema, validateJsonSchema } from '@/modules/capability-contract/public'
+import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-import { exactAmountSchema } from '@/modules/money/public'
-
 import { preparePublicationDraft, type PreparedPublicationDraft } from './internal/publication'
 import { sourceRouteRef } from './internal/source-route-identity'
-import type { ValidOpenApiDocument } from './internal/openapi-import/validation'
-import { resolveOpenApiRecord } from './internal/openapi-import/document'
-import { dereferenceOpenApiSchema } from './internal/schema-deref'
 import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
-  CapabilityPublicationSourceSelector,
 } from './internal/publication-importer-types'
 import type { CapabilityTransportAuthority } from './internal/transport-terms-schema'
 import {
   previewSupplySource,
-  isPublicOpenApiLoadRefusal,
-  loadPublicOpenApi,
   supplySourceInputSchema,
-  type McpSourceDiscovery,
   type SupplyToolCandidate,
   type SupplySourcePreviewDependencies,
 } from './source-preview'
@@ -46,15 +36,6 @@ const evidenceSchema = z.strictObject({
   outputPointer: z.string().max(500),
   purpose: z.enum(['comparison', 'completion', 'recovery']),
 })
-const fixedAudPricingSchema = z.strictObject({
-  kind: z.literal('fixed_aud'),
-  amount: exactAmountSchema.superRefine((amount, context) => {
-    if (amount.currency !== 'AUD' || amount.exponent !== 6) {
-      context.addIssue({ code: 'custom', message: 'fixed_aud_requires_exponent_six_aud' })
-    }
-  }),
-})
-
 export const publishSupplyToolV2InputSchema = z.strictObject({
   businessRef: z.string().trim().min(1).max(200),
   source: supplySourceInputSchema,
@@ -73,11 +54,7 @@ export const publishSupplyToolV2InputSchema = z.strictObject({
     dataUse: z.array(dataUseSchema).max(128),
     evidence: z.array(evidenceSchema).max(64),
   }),
-  pricing: z.union([
-    z.strictObject({ kind: z.literal('free') }),
-    fixedAudPricingSchema,
-    z.strictObject({ kind: z.literal('source_x402') }),
-  ]),
+  pricing: z.strictObject({ kind: z.literal('source_x402') }),
   validationInput: z.record(z.string(), jsonValueSchema).optional(),
   environment: z.enum(['sandbox', 'production']),
   idempotencyKey: idempotencyKeySchema,
@@ -143,28 +120,11 @@ export async function prepareSupplyPublicationV2(
   input: PublishSupplyToolV2Input,
   dependencies: SupplyPublicationV2Dependencies = {},
 ): Promise<SupplyPublicationV2Preparation> {
-  if (input.source.environment !== input.environment) return refused('environment_mismatch')
-
-  let openApiDocument: ValidOpenApiDocument | undefined
+  if (input.pricing.kind !== 'source_x402') return refused('pricing_invalid')
   let x402Inspection: X402SellerEndpointInspection | undefined
-  const mcpDiscoveries: McpSourceDiscovery[] = []
-  const loadOpenApi = dependencies.loadOpenApi ?? loadPublicOpenApi
-  const discoverMcp = dependencies.discoverMcp
-    ?? (await import('./internal/mcp-source-discovery')).discoverMcpSource
   const inspectX402 = dependencies.inspectX402
     ?? (await import('./internal/x402-seller-endpoint-inspector')).inspectX402SellerEndpoint
   const previewDependencies: SupplySourcePreviewDependencies = {
-    loadOpenApi: async (url) => {
-      const loaded = await loadOpenApi(url)
-      if (isPublicOpenApiLoadRefusal(loaded)) return loaded
-      openApiDocument = loaded
-      return loaded
-    },
-    discoverMcp: async (request) => {
-      const discovery = await discoverMcp(request)
-      mcpDiscoveries.push(discovery)
-      return discovery
-    },
     inspectX402: async (request) => {
       x402Inspection = await inspectX402(request)
       return x402Inspection
@@ -183,21 +143,8 @@ export async function prepareSupplyPublicationV2(
       },
     }
   }
-  if (preview.kind === 'remote_selection_required') {
-    return {
-      kind: 'refused',
-      reason: 'source_action_required',
-      requiredAction: {
-        title: 'Select MCP server',
-        description: 'Select one exact remote MCP server from the current source metadata, then submit again.',
-        cta: null,
-        ctaLabel: 'Select server',
-      },
-    }
-  }
   if (preview.sourceDigest !== input.expectedSourceDigest) return refused('source_changed')
   const publicationAuthorityEstablished = dependencies.providerAuthority !== undefined
-    || preview.provenance.authority === 'verified_registry'
   if (publicationAuthorityEstablished && input.attestation.authorisedToPublish !== true) {
     return refused('attestation_required')
   }
@@ -217,7 +164,14 @@ export async function prepareSupplyPublicationV2(
   }
 
   const authority: CapabilityTransportAuthority = dependencies.providerAuthority ?? { kind: 'public_upstream' }
-  const validationInput = input.validationInput ?? await sourceValidationInput(candidate, openApiDocument)
+  if (candidate.x402?.environment !== input.environment) return refused('environment_mismatch')
+  if (input.source.environment !== undefined && input.source.environment !== candidate.x402.environment) {
+    return refused('environment_mismatch')
+  }
+  if (input.source.method !== undefined && input.source.method !== candidate.sourceSelector.method) {
+    return refused('source_changed')
+  }
+  const validationInput = input.validationInput
   const contract = contractMetadata({ ...input, ...(validationInput === undefined ? {} : { validationInput }) }, candidate)
   if (contract === undefined) return refused('consequences_invalid')
   const source = publicationImport({
@@ -225,9 +179,7 @@ export async function prepareSupplyPublicationV2(
     candidate,
     contract,
     authority,
-    openApiDocument,
     x402Inspection,
-    mcpDiscoveries,
   })
   if (source === undefined) return refused('source_changed')
   const pricingConfig = pricingConfigFor(input, candidate)
@@ -251,34 +203,12 @@ export async function prepareSupplyPublicationV2(
     sourceDescriptorJson: stableStringify(input.source as StableHashValue),
     sourceSelectorJson: stableStringify(candidate.sourceSelector as StableHashValue),
     sourceAuthorityState: dependencies.providerAuthority !== undefined
-      || preview.provenance.authority === 'verified_registry'
       ? 'verified'
       : 'review_required',
     ...(validationInput === undefined
       ? {}
       : { validationInputJson: stableStringify(validationInput as StableHashValue) }),
   }
-}
-
-async function sourceValidationInput(candidate: SupplyToolCandidate, document: ValidOpenApiDocument | undefined) {
-  const selector = candidate.sourceSelector
-  if (document === undefined || !('path' in selector) || candidate.inputSchema === undefined) return undefined
-  const path = await resolveOpenApiRecord(document.paths[selector.path], document, dereferenceOpenApiSchema)
-  if (path.kind !== 'resolved' || path.value === undefined) return undefined
-  const operation = await resolveOpenApiRecord(path.value[selector.method], document, dereferenceOpenApiSchema)
-  if (operation.kind !== 'resolved' || operation.value === undefined) return undefined
-  const body = await resolveOpenApiRecord(operation.value.requestBody, document, dereferenceOpenApiSchema)
-  if (body.kind !== 'resolved' || body.value === undefined || !isRecord(body.value.content)) return undefined
-  const media = body.value.content['application/json']
-  if (!isRecord(media)) return undefined
-  const examples = [media.example, ...(isRecord(media.examples)
-    ? Object.values(media.examples).map(example => isRecord(example) ? example.value : undefined)
-    : [])]
-  for (const example of examples) {
-    const parsed = z.record(z.string(), jsonValueSchema).safeParse(example)
-    if (parsed.success && validateJsonSchema(candidate.inputSchema, parsed.data)) return parsed.data
-  }
-  return undefined
 }
 
 function contractMetadata(
@@ -377,49 +307,16 @@ function sourceRouteIdentity(
   input: PublishSupplyToolV2Input,
   candidate: SupplyToolCandidate,
 ): string {
-  const sourceKind = input.source.kind === 'openapi'
-    ? 'openapi_http'
-    : input.source.kind === 'agent_plugin'
-      ? 'agent_plugin_mcp'
-      : input.source.kind
-  const endpointUrl = 'serverUrl' in candidate.sourceSelector
-    ? candidate.sourceSelector.serverUrl
-    : 'resourceUrl' in candidate.sourceSelector
-      ? candidate.sourceSelector.resourceUrl
-      : input.source.kind === 'openapi'
-        ? input.source.definitionUrl
-        : ''
   return sourceRouteRef({
-    sourceKind,
-    sourceSelector: canonicalSourceSelector(input, candidate),
+    sourceKind: 'x402',
+    sourceSelector: { resourceUrl: candidate.sourceSelector.resourceUrl },
     sourceDescriptorJson: stableStringify(input.source as StableHashValue),
-    endpointUrl,
+    endpointUrl: candidate.sourceSelector.resourceUrl,
   }) ?? canonicalDigest({
     version: 'provider-source-route-fallback:v1',
-    sourceKind,
+    sourceKind: 'x402',
     sourceSelector: candidate.sourceSelector as StableHashValue,
   })
-}
-
-function canonicalSourceSelector(
-  input: PublishSupplyToolV2Input,
-  candidate: SupplyToolCandidate,
-): CapabilityPublicationSourceSelector {
-  const selector = candidate.sourceSelector
-  if (input.source.kind === 'openapi' && 'path' in selector) {
-    const method = selector.method.toLowerCase()
-    return { path: selector.path, method: method === 'get' ? 'get' : 'post' }
-  }
-  if (input.source.kind === 'agent_plugin' && 'serverName' in selector) {
-    return { serverName: selector.serverName, toolName: selector.toolName, protocolVersion: selector.protocolVersion }
-  }
-  if (input.source.kind === 'mcp' && 'toolName' in selector) {
-    return { toolName: selector.toolName, protocolVersion: selector.protocolVersion }
-  }
-  if (input.source.kind === 'x402' && 'resourceUrl' in selector) {
-    return { resourceUrl: selector.resourceUrl }
-  }
-  return {}
 }
 
 function publicationImport(args: Readonly<{
@@ -427,63 +324,10 @@ function publicationImport(args: Readonly<{
   candidate: SupplyToolCandidate
   contract: CapabilityContractMetadata
   authority: CapabilityTransportAuthority
-  openApiDocument: unknown
   x402Inspection: X402SellerEndpointInspection | undefined
-  mcpDiscoveries: readonly McpSourceDiscovery[]
 }>): CapabilityPublicationImport | undefined {
   const { input, candidate, contract, authority } = args
   const commercial = commercialFor(input, candidate, authority)
-  if (input.source.kind === 'openapi') {
-    if (!isRecord(args.openApiDocument) || !('path' in candidate.sourceSelector) || !('method' in candidate.sourceSelector)) return undefined
-    const method = candidate.sourceSelector.method.toLowerCase()
-    if (method !== 'get' && method !== 'post') return undefined
-    return {
-      kind: 'openapi_http',
-      document: args.openApiDocument,
-      operation: { path: candidate.sourceSelector.path, method },
-      contract,
-      commercial,
-      evidenceRefs: [input.expectedSourceDigest, input.candidateRef],
-    }
-  }
-  if (input.source.kind === 'mcp') {
-    if (!('toolName' in candidate.sourceSelector) || !('serverUrl' in candidate.sourceSelector)) return undefined
-    return {
-      kind: 'mcp',
-      serverUrl: candidate.sourceSelector.serverUrl,
-      protocolVersion: candidate.sourceSelector.protocolVersion,
-      tool: {
-        name: candidate.sourceSelector.toolName,
-        title: candidate.title,
-        description: candidate.description,
-        inputSchema: candidate.inputSchema,
-        outputSchema: candidate.outputSchema,
-      },
-      contract,
-      commercial,
-      evidenceRefs: [input.expectedSourceDigest, input.candidateRef],
-    }
-  }
-  if (input.source.kind === 'agent_plugin') {
-    if (!('serverName' in candidate.sourceSelector)) return undefined
-    return {
-      kind: 'agent_plugin_mcp',
-      pluginJson: input.source.pluginJson,
-      mcpJson: input.source.mcpJson,
-      serverName: candidate.sourceSelector.serverName,
-      protocolVersion: candidate.sourceSelector.protocolVersion,
-      tool: {
-        name: candidate.sourceSelector.toolName,
-        title: candidate.title,
-        description: candidate.description,
-        inputSchema: candidate.inputSchema,
-        outputSchema: candidate.outputSchema,
-      },
-      contract,
-      commercial,
-      evidenceRefs: [input.expectedSourceDigest, input.candidateRef],
-    }
-  }
   const observation = args.x402Inspection
   if (observation?.kind !== 'observed' || candidate.x402 === undefined || observation.discovery.kind !== 'admitted') return undefined
   const selected = observation.payment.accepts.find(({ alternativeId }) => (
@@ -526,17 +370,7 @@ function publicationImport(args: Readonly<{
   }
 }
 
-function pricingConfigFor(input: PublishSupplyToolV2Input, candidate: SupplyToolCandidate): unknown | undefined {
-  if (input.pricing.kind === 'free') {
-    return candidate.x402 === undefined
-      ? { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '0' }
-      : undefined
-  }
-  if (input.pricing.kind === 'fixed_aud') {
-    return candidate.x402 === undefined
-      ? { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: input.pricing.amount.units }
-      : undefined
-  }
+function pricingConfigFor(_input: PublishSupplyToolV2Input, candidate: SupplyToolCandidate): unknown | undefined {
   if (candidate.x402 === undefined) return undefined
   return {
     version: 'pricing:v3',

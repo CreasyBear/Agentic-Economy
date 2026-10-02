@@ -73,7 +73,7 @@ const preparedMaterial = {
 }
 const publishInput: SupplyPublishInput = {
   businessRef: 'business:supply-actions',
-  source: { kind: 'openapi', definitionUrl: 'https://provider.example/openapi.yaml', environment: 'production' },
+  source: { kind: 'x402', resourceUrl: 'https://provider.example/paid', method: 'POST', environment: 'production' },
   candidateRef: `sha256:${'1'.repeat(64)}`,
   expectedSourceDigest: `sha256:${'2'.repeat(64)}`,
   presentation: { name: 'Reference lookup', description: 'Looks up one reference.', category: 'Research' },
@@ -82,7 +82,7 @@ const publishInput: SupplyPublishInput = {
     dataUse: [{ inputPointer: '/query', classification: 'public', phase: 'execution', purposes: ['lookup'] }],
     evidence: [{ outputPointer: '/result', purpose: 'completion' }],
   },
-  pricing: { kind: 'free' },
+  pricing: { kind: 'source_x402' },
   validationInput: { query: 'example' },
   environment: 'production',
   idempotencyKey: 'idempotency:supply-actions',

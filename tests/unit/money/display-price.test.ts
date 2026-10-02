@@ -65,13 +65,32 @@ describe('buyer AUD presentation', () => {
       .toEqual(aud('1238999999999999999999999999999'))
   })
 
-  it('refuses stale, invalid or unsupported buyer prices instead of presenting source currency', () => {
-    const unavailable = 'AUD estimate temporarily unavailable'
-    expect(formatDisplayPrice({ kind: 'indicative', amount: aud('1'), validUntil: 2000 }, 2000)).toBe(unavailable)
-    expect(formatDisplayPrice({ kind: 'indicative', amount: usdc('1'), validUntil: 2000 }, 1000)).toBe(unavailable)
-    expect(formatDisplayPrice({ kind: 'indicative', amount: usdc('1'), referenceRate: observation, validUntil: REFERENCE_RATE_MAX_AGE_MS + 2000 }, REFERENCE_RATE_MAX_AGE_MS + 1000)).toBe(unavailable)
-    expect(formatDisplayPrice({ kind: 'indicative', amount: { ...aud('1'), currency: 'USD' }, validUntil: 2000 }, 1000)).toBe(unavailable)
-    expect(formatDisplayPrice({ kind: 'unavailable' })).toBe(unavailable)
+  it('formats USD fallbacks to cents and preserves significant sub-cent digits', () => {
+    for (const [amount, label] of [
+      [usdc('0'), 'US$0.00'],
+      [usdc('10000'), 'US$0.01'],
+      [usdc('100000'), 'US$0.10'],
+      [usdc('1200000'), 'US$1.20'],
+      [usdc('1234500'), 'US$1.2345'],
+      [usdc('2000'), 'US$0.002'],
+      [usdc('1'), 'US$0.000001'],
+      [{ currency: 'USD', units: '1', exponent: 0 }, 'US$1.00'],
+    ] as const) {
+      expect(formatDisplayPrice({ kind: 'indicative', amount, validUntil: 2000 }, 1000)).toBe(label)
+    }
+  })
+
+  it('falls back to USDC source value without fresh AUD evidence', () => {
+    expect(formatDisplayPrice({ kind: 'indicative', amount: aud('1'), validUntil: 2000 }, 2000)).toBeUndefined()
+    expect(formatDisplayPrice({ kind: 'indicative', amount: usdc('1'), validUntil: 2000 }, 1000)).toBe('US$0.000001')
+    expect(formatDisplayPrice({
+      kind: 'indicative', amount: usdc('1'), referenceRate: observation,
+      validUntil: REFERENCE_RATE_MAX_AGE_MS + 2000,
+    }, REFERENCE_RATE_MAX_AGE_MS + 1000)).toBe('US$0.000001')
+    expect(formatDisplayPrice({
+      kind: 'indicative', amount: { ...aud('1'), currency: 'EUR' }, validUntil: 2000,
+    }, 1000)).toBeUndefined()
+    expect(formatDisplayPrice({ kind: 'unavailable' })).toBeUndefined()
     expect(formatDisplayPrice(undefined)).toBeUndefined()
     expect(convertUsdcToAud(usdc('1'), observation, REFERENCE_RATE_MAX_AGE_MS + 1000)).toBeUndefined()
     expect(convertUsdcToAud(usdc('1'), { ...observation, rate: '0' }, 1000)).toBeUndefined()

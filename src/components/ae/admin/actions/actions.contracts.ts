@@ -41,7 +41,6 @@ export type AdminActionSheetState = Readonly<{
 export type AdminActionSheetController = AdminActionSheetState & Readonly<{
   role: AdminRole | null
   allowed: boolean
-  clerkFvaAbsent: boolean
   pending: boolean
   setReason: (value: string) => void
   setEvidence: (value: string, selected: boolean) => void
@@ -88,6 +87,9 @@ export const ADMIN_ACTION_COPY = {
   revoke_admin_membership: 'Revoke Admin membership',
   verify_capability_source_authority: 'Verify source authority',
   change_commercial_policy: 'Change commercial policy',
+  grant_promotional_credit: 'Grant promotional credit',
+  set_payments_paused: 'Pause or resume payments',
+  change_treasury_thresholds: 'Change treasury thresholds',
 } satisfies Record<AdminCommandAction, string>
 
 export const ADMIN_REASON_OPTIONS = {
@@ -97,6 +99,9 @@ export const ADMIN_REASON_OPTIONS = {
   revoke_admin_membership: ['offboarding', 'role_change', 'compromise_suspected'],
   verify_capability_source_authority: ['evidence_verified', 'evidence_insufficient'],
   change_commercial_policy: ['pricing_update', 'correction'],
+  grant_promotional_credit: ['onboarding', 'correction'],
+  set_payments_paused: ['operational_pause', 'operational_resume', 'correction'],
+  change_treasury_thresholds: ['threshold_update', 'correction'],
 } as const satisfies { [A in AdminCommandAction]: readonly AdminReasonCodeByAction[A][] }
 export const ADMIN_REASON_LABELS: Record<AdminReasonCodeByAction[AdminCommandAction], string> = {
   policy_violation: 'Policy violation',
@@ -115,6 +120,9 @@ export const ADMIN_REASON_LABELS: Record<AdminReasonCodeByAction[AdminCommandAct
   evidence_insufficient: 'Evidence insufficient',
   pricing_update: 'Pricing update',
   correction: 'Correction',
+  operational_pause: 'Operational pause',
+  operational_resume: 'Operational resume',
+  threshold_update: 'Treasury threshold update',
 }
 
 const commercialControlSchema = z.discriminatedUnion('family', [
@@ -123,7 +131,7 @@ const commercialControlSchema = z.discriminatedUnion('family', [
   z.strictObject({ family: z.literal('accounting_client_money'), minimumFundingPrincipalUnits: z.string(), maximumFundingPrincipalUnits: z.string(), fundingIncrementUnits: z.string(), legalCustomerMaximumAccessibleUnits: z.string(), balanceClassification: z.literal('customer_contract_liability') }),
   z.strictObject({ family: z.literal('privacy_retention'), evidenceRetentionDays: z.number(), legalHoldSupported: z.literal(true) }),
   z.strictObject({ family: z.literal('treasury_custody'), treasuryAsset: z.literal('USDC'), treasuryExponent: z.literal(6), minimumBufferUnits: z.string(), ledgerAuthority: z.literal('formance_community'), formanceLedgerVersion: z.string(), formanceGatewayVersion: z.string(), formanceSchemaVersion: z.string(), maximumSdkIntegerUnits: z.string(), architectureReviewCumulativeUnits: z.string(), deploymentClass: z.enum(['local_ci', 'synthetic_vps_fixture', 'real_money']), postgresProtection: z.enum(['disposable_fixture', 'managed_pitr']), recoveryPointObjectiveMinutes: z.number(), recoveryTimeObjectiveMinutes: z.number() }),
-  z.strictObject({ family: z.literal('operations'), fundingServiceFeeBps: z.number(), buyerPricingMarginBps: z.number(), commitmentTtlMs: z.number(), formanceSdkVersion: z.string(), formanceSdkArtifactDigest: z.string(), backupControl: z.enum(['disposable_fixture', 'postgres_pitr']), restoreControl: z.enum(['disposable_rehearsed', 'production_rehearsed']), dailyCloseControl: z.enum(['not_required_fixture', 'human_signed']) }),
+  z.strictObject({ family: z.literal('operations'), paidCallReportsPerDay: z.number().int().min(0).max(20).optional(), fundingServiceFeeBps: z.number(), buyerPricingMarginBps: z.number(), commitmentTtlMs: z.number(), formanceSdkVersion: z.string(), formanceSdkArtifactDigest: z.string(), backupControl: z.enum(['disposable_fixture', 'postgres_pitr']), restoreControl: z.enum(['disposable_rehearsed', 'production_rehearsed']), dailyCloseControl: z.enum(['not_required_fixture', 'human_signed']) }),
 ])
 
 const approvalSchema = z.discriminatedUnion('kind', [
@@ -141,12 +149,15 @@ const sharedCommand = {
 }
 
 export const adminCommandRequestSchema = z.discriminatedUnion('action', [
+  z.strictObject({ ...sharedCommand, expectedStateDigest: z.string().min(1), action: z.literal('set_payments_paused'), input: z.strictObject({ environment: z.enum(['sandbox', 'production']), paused: z.boolean() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.set_payments_paused) }),
+  z.strictObject({ ...sharedCommand, expectedStateDigest: z.string().min(1), action: z.literal('change_treasury_thresholds'), input: z.strictObject({ environment: z.enum(['sandbox', 'production']), lowWaterUnits: z.string(), targetFloatUnits: z.string() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.change_treasury_thresholds) }),
   z.strictObject({ ...sharedCommand, action: z.literal('set_business_suppression'), input: z.strictObject({ businessId: z.string().min(1), intent: z.enum(['suppress', 'unsuppress']) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.set_business_suppression) }),
   z.strictObject({ ...sharedCommand, action: z.literal('close_removal_dispute'), input: z.strictObject({ disputeId: z.string().min(1) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.close_removal_dispute) }),
   z.strictObject({ ...sharedCommand, action: z.literal('grant_admin_membership'), input: z.strictObject({ targetClerkUserId: z.string().min(1), targetTokenIdentifier: z.string().min(1), role: z.enum(['owner_admin', 'support', 'reviewer']) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.grant_admin_membership) }),
   z.strictObject({ ...sharedCommand, action: z.literal('revoke_admin_membership'), input: z.strictObject({ targetClerkUserId: z.string().min(1), targetTokenIdentifier: z.string().optional() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.revoke_admin_membership) }),
   z.strictObject({ ...sharedCommand, action: z.literal('verify_capability_source_authority'), input: z.strictObject({ publicationRef: z.string().min(1), expectedRevision: z.number().int(), expectedSourceDigest: z.string().min(1) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.verify_capability_source_authority) }),
   z.strictObject({ ...sharedCommand, action: z.literal('change_commercial_policy'), input: z.strictObject({ changeKind: z.enum(['activate', 'replace', 'suspend']), family: z.enum(['commercial_perimeter', 'tax', 'accounting_client_money', 'privacy_retention', 'treasury_custody', 'operations']), environment: z.enum(['sandbox', 'production']), policyRef: z.string().min(1), expectedCurrentPolicyRef: z.string().optional(), revision: z.number().int(), effectiveAt: z.number(), expiresAt: z.number(), control: commercialControlSchema }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.change_commercial_policy) }),
+  z.strictObject({ ...sharedCommand, action: z.literal('grant_promotional_credit'), input: z.strictObject({ accountRef: z.string().min(1), environment: z.enum(['sandbox', 'production']), amountUnits: z.string().regex(/^[1-9]\d*$/u), expiresAt: z.number().int() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.grant_promotional_credit) }),
 ])
 
 export function parseAdminProposalCommand(action: AdminCommandAction, commandJson: string): AdminCommandRequest | null {
@@ -183,6 +194,10 @@ export const ADMIN_SUCCESS_COPY = {
   source_authority_verified: 'Source authority verified',
   source_authority_insufficient: 'Source authority not verified',
   commercial_policy_changed: 'Commercial policy changed',
+  promotional_credit_granted: 'Promotional credit granted',
+  payments_paused: 'Payments paused',
+  payments_resumed: 'Payments resumed',
+  treasury_thresholds_changed: 'Treasury thresholds changed',
 } satisfies Record<AdminSuccessCodeByAction[AdminCommandAction], string>
 
 export const ADMIN_ACTION_SHEET_COPY = {
@@ -192,7 +207,7 @@ export const ADMIN_ACTION_SHEET_COPY = {
   selectReason: 'Select a reason',
   confirmEffect: 'This command cannot be undone from this page. Check the target before confirming.',
   proofNotice: 'Clerk will request reverification if your session needs it.',
-  fvaUnavailable: 'This session has no current MFA claim. Set up or reverify MFA in Account security, then retry this command. No change was made.',
+  mfaRequired: 'Verify with two-factor authentication to complete this command. You can set it up in Account security.',
   noEvidence: 'Add a verified evidence reference before continuing.',
   proposalUnavailable: 'This proposal cannot be reviewed because its command material is unavailable.',
   evidence: 'Evidence references',

@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { isBoundedJsonValue, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import {
   normalizeStoredAgentAccessGrant,
@@ -23,6 +23,7 @@ import { jsonObject } from '@/modules/capability-execution/convex'
 
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { readManagedX402InspectionTarget } from '../../capabilitySupply/currentTool/inspection'
+import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
@@ -41,6 +42,7 @@ import {
 import { env, type MutationCtx } from '../../../_generated/server'
 
 const LEGAL_CUSTOMER_REQUIRED: CommercialPolicyRefusalReason = 'legal_customer_required'
+const MAX_TREASURY_OBSERVATION_AGE_MS = 30 * 60_000
 
 export const prepareFinancialSubjectsArgs = {
   operationKey: v.string(),
@@ -68,6 +70,7 @@ export async function prepareFinancialSubjectsCore(
   args: QuoteArgs,
 ): Promise<FinancialSubjectsResult> {
   const now = Date.now()
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
   const authority = await resolveCurrentAgentAuthority(
     ctx,
     args.principal,
@@ -75,7 +78,7 @@ export async function prepareFinancialSubjectsCore(
     { kind: 'new_operation', toolRef: args.toolRef },
   )
   if (authority === null) return { kind: 'refused', code: 'grant_not_found' }
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), authority.principal.environment)) {
+  if (deploymentEnvironment === undefined || deploymentEnvironment !== authority.principal.environment) {
     return { kind: 'refused', code: 'tool_unsupported', reason: 'This deployment does not admit purchases in this environment.' }
   }
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
@@ -84,7 +87,8 @@ export async function prepareFinancialSubjectsCore(
   const operation = await readCurrentPublishedTool(ctx, args.toolRef, now)
     ?? await readManagedX402InspectionTarget(ctx, args.toolRef, now)
   if (operation === undefined) return { kind: 'refused', code: 'tool_not_found' }
-  if (operation.runtimeEnvironment !== authority.principal.environment) return {
+  if (operation.runtimeEnvironment !== deploymentEnvironment
+    || operation.runtimeEnvironment !== authority.principal.environment) return {
     kind: 'refused', code: 'tool_unsupported',
     reason: `This Tool uses the ${operation.runtimeEnvironment} environment; your agent uses ${authority.principal.environment}. Connect an agent for ${operation.runtimeEnvironment} before calling it.`,
   }
@@ -93,8 +97,21 @@ export async function prepareFinancialSubjectsCore(
   if (!isBoundedJsonValue(args.input) || descriptor.validateInput(args.input).kind !== 'valid') return { kind: 'refused', code: 'input_invalid' }
   const pricing = normalizePricingConfig(operation.pricingConfig)
   if (pricing.kind !== 'valid') return { kind: 'refused', code: 'tool_unsupported' }
+  if (pricing.config.kind !== 'fixed_aud' || pricing.config.amountUnits !== '0') {
+    const paymentAccess = await readAgentPaymentAdmission(ctx, {
+      environment: authority.principal.environment, accountRef: authority.principal.ownerId,
+      grantRef: authority.grantRef, grantGeneration: authority.grantGeneration,
+    }, now)
+    if (paymentAccess.kind === 'refused') return paymentAccess
+  }
   const managedApprovalQuote = pricing.config.kind === 'managed_x402'
     && authority.principal.authorityMode === 'approval_required'
+  if (pricing.config.kind === 'managed_x402'
+    && authority.principal.authorityMode === 'read_only') return {
+      kind: 'refused',
+      code: 'budget_exceeded',
+      reason: 'This Agent is read-only, so it cannot pay for Tools. Give it a monthly budget in Agents to let it spend.',
+    }
   if (pricing.config.kind === 'managed_x402'
     && authority.principal.authorityMode !== 'spending_policy'
     && authority.principal.authorityMode !== 'unrestricted_test_only'
@@ -136,6 +153,9 @@ export async function prepareFinancialSubjectsCore(
     ? undefined
     : cdpX402CustodyBudgetRef(custodyConfiguration, environment)
   const custodyGeneration = custodyConfiguration?.credentialGeneration
+  const treasuryCursor = custodyRef === undefined ? null
+    : await ctx.db.query('moneyTreasuryCursors').withIndex('by_custody', query =>
+        query.eq('environment', environment).eq('custodyRef', custodyRef)).unique()
   const observation = custodyRef === undefined || custodyGeneration === undefined
     ? undefined
     : (await ctx.db.query('moneyTreasuryObservations')
@@ -146,9 +166,18 @@ export async function prepareFinancialSubjectsCore(
         .order('desc')
         .take(1))[0]
   const treasuryTarget = observation === undefined
+    || treasuryCursor === null || treasuryCursor.state.kind === 'opening'
+    || treasuryCursor.custodyGeneration !== custodyGeneration
+    || treasuryCursor.bufferTargetUnits !== custodyConfiguration?.maxAtomic.toString()
+    || treasuryCursor.address !== custodyConfiguration?.expectedEvmAddress.toLowerCase()
+    || treasuryCursor.network !== paymentProfile?.network
+    || treasuryCursor.asset !== paymentProfile?.asset.toLowerCase()
     || custodyRef === undefined
     || custodyGeneration === undefined
     || paymentProfile === undefined
+    || !Number.isSafeInteger(observation.observedAt)
+    || observation.observedAt > now
+    || now - observation.observedAt > MAX_TREASURY_OBSERVATION_AGE_MS
     ? undefined
     : treasurySpendableUnits(observation, {
         environment,
@@ -200,7 +229,7 @@ export async function prepareFinancialSubjectsCore(
     legalExposureUnits: fundingPolicy.legalCustomerMaximumAccessibleUnits.toString(),
     policyDigest: policy.policyDigest,
     policyGeneration: 1,
-    buyerTaxBps: policy.controls.tax.callTaxBps ?? 0,
+    buyerTaxBps: 0,
     financialMode,
     authorityDigest: authority.policyDigest,
     dailyLimitUnits: daily.units,

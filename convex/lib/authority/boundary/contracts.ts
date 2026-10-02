@@ -86,6 +86,7 @@ export function canonicalResolveInput(input: ResolveAgentBindingArgs): Readonly<
     || requiredScopes === undefined
     || requiredScopes.some((scope) => !scopes.includes(scope))
     || !AGENT_ACCESS_ENVIRONMENT_VALUES.includes(input.environment)
+    || (input.environment === 'production' && input.authorityMode === 'unrestricted_test_only')
     || !AGENT_ACCESS_AUTHORITY_MODE_VALUES.includes(input.authorityMode)) return undefined
   return { scopes, requiredScopes }
 }

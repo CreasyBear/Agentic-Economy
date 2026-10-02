@@ -3,10 +3,9 @@
 **Status:** active product design contract
 
 **Revised:** 2026-09-21
-Aligned to aecon brand guidelines (PDF, 2026-09). Lived visual law is
+Aligned to aecon brand guidelines (PDF, 2026-09). The lived visual reference is
 `/market?view=discover` (`DirectoryHero.tsx`, `DirectoryHomeDiscovery.tsx`,
-`DirectoryToolCard.tsx`). Those three files are frozen. Every other surface is
-harvested onto that grammar (`docs/operations/design-system-maturity-protocol.md`).
+`DirectoryToolCard.tsx`).
 
 ## Current app and market direction
 

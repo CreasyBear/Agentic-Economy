@@ -14,7 +14,7 @@ const DEFAULT_VITE_URL = 'http://127.0.0.1:3024'
 // dev child overrides this from CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS
 // (see convexDevTimeoutMs) since a 2GB local backend can take several
 // minutes to cold-start, well past this generic default.
-const LOCAL_STARTUP_TIMEOUT_MS = 120_000
+const LOCAL_STARTUP_TIMEOUT_MS = 360_000
 // A grown local database (tens of thousands of rows) can take well past the
 // Convex CLI's own 30s default to cold-start; a fresh clone never notices
 // this because its database is empty.
@@ -129,6 +129,10 @@ export function buildConvexEnvSetArgs(value: string): string[] {
   return ['convex', 'env', 'set', 'CLERK_JWT_ISSUER_DOMAIN', value]
 }
 
+export function buildConvexPaymentEnvironmentSetArgs(anonymous = false): string[] {
+  return ['convex', 'env', 'set', ...(anonymous ? [] : ['--deployment', 'local']), 'AE_DEPLOYMENT_ENVIRONMENT', 'development']
+}
+
 // Matches the placeholder `tools/release/verify-convex-generated-anonymous.ts`
 // already proves anonymous codegen against, so both paths agree on what an
 // unconfigured Clerk looks like.
@@ -166,7 +170,8 @@ export function convexChildEnv(
 ): EnvRecord {
   const needsTimeout = env[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] === undefined
   const needsPlaceholder = anonymous && needsClerkPlaceholder(env)
-  if (!needsTimeout && !needsPlaceholder) return env
+  const needsAnonymousMode = anonymous && env.CONVEX_AGENT_MODE !== 'anonymous'
+  if (!needsTimeout && !needsPlaceholder && !needsAnonymousMode) return env
 
   const next = { ...env }
   if (needsTimeout) {
@@ -175,8 +180,8 @@ export function convexChildEnv(
   if (needsPlaceholder) {
     write('anonymous local deployment: using placeholder CLERK_JWT_ISSUER_DOMAIN (Clerk is not configured locally)')
     next.CLERK_JWT_ISSUER_DOMAIN = ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN
-    next.CONVEX_AGENT_MODE = 'anonymous'
   }
+  if (anonymous) next.CONVEX_AGENT_MODE = 'anonymous'
   return next
 }
 
@@ -286,6 +291,8 @@ export function effectiveEnv(baseEnv: EnvRecord = process.env, files: readonly D
     delete sources[CONVEX_DEPLOYMENT_ENV]
     dropped.push(CONVEX_DEPLOYMENT_ENV)
   }
+  env.AE_DEPLOYMENT_ENVIRONMENT = 'development'
+  sources.AE_DEPLOYMENT_ENVIRONMENT = 'local launcher'
   return { env, sources, dropped }
 }
 
@@ -978,6 +985,16 @@ function convexRunner(supervisor: Supervisor, env: EnvRecord): (reference: strin
 
 const LOCAL_CONVEX_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d{1,5}\/?$/u
 
+export function matchesConfiguredLocalConvexUrl(url: string, cwd = process.cwd()): boolean {
+  if (!LOCAL_CONVEX_URL.test(url)) return false
+  try {
+    const config = JSON.parse(readFileSync(resolvePath(cwd, '.convex/local/default/config.json'), 'utf8'))
+    return Number.isInteger(config.ports?.cloud) && new URL(url).port === String(config.ports.cloud)
+  } catch {
+    return false
+  }
+}
+
 async function setLocalChatShareSecret(secret: string, cwd: string): Promise<void> {
   const config = JSON.parse(readFileSync(resolvePath(cwd, '.convex/local/default/config.json'), 'utf8'))
   if (!Number.isInteger(config.ports?.cloud) || typeof config.adminKey !== 'string') {
@@ -1100,6 +1117,16 @@ async function reportDoctor(supervisor: Supervisor, env: EnvRecord, baseUrl: str
     : `doctor could not run (${formatChildFailure('AE doctor', result)}); the stack is still up`)
 }
 
+async function seedLocalPaymentEnvironment(supervisor: Supervisor, env: EnvRecord, anonymous: boolean): Promise<number> {
+  const seeded = supervisor.add(createManagedChild(
+    'npx', buildConvexPaymentEnvironmentSetArgs(anonymous), env,
+    { label: 'Convex local payment environment' },
+  ))
+  const result = await seeded.done
+  if (childExitStatus(result) !== 0) reportChildFailure('Convex local payment environment', result)
+  return childExitStatus(result)
+}
+
 async function startConvex(supervisor: Supervisor, env: EnvRecord): Promise<{ convex?: ManagedChild, status?: number }> {
   const anonymous = isAnonymousLocalDeployment(env)
   const convexEnv = convexChildEnv(env, { anonymous })
@@ -1148,6 +1175,10 @@ async function startConvex(supervisor: Supervisor, env: EnvRecord): Promise<{ co
       return { status: childExitStatus(selectedResult) }
     }
   }
+
+  const paymentEnvironmentStatus = await seedLocalPaymentEnvironment(supervisor, convexEnv, anonymous)
+  if (supervisor.parentSignal !== null) return { status: signalExitStatus(supervisor.parentSignal) }
+  if (paymentEnvironmentStatus !== 0) return { status: paymentEnvironmentStatus }
 
   const convex = supervisor.add(createManagedChild(
     'npx',
@@ -1209,6 +1240,16 @@ async function runLocalStack({ viteArgs, runDoctor }: LauncherFlags): Promise<nu
       // `convex dev` writes the local URL into `.env.local`; re-read the files.
       ;({ env, sources } = launcherEnv())
     } else {
+      if (!matchesConfiguredLocalConvexUrl(existing!.url)) {
+        log(`refusing to seed a reused backend at ${existing!.url}: it does not match .convex/local/default/config.json`)
+        return 1
+      }
+      const anonymous = isAnonymousLocalDeployment(env)
+      const paymentEnvironmentStatus = await seedLocalPaymentEnvironment(
+        supervisor, convexChildEnv(env, { anonymous }), anonymous,
+      )
+      if (supervisor.parentSignal !== null) return signalExitStatus(supervisor.parentSignal)
+      if (paymentEnvironmentStatus !== 0) return paymentEnvironmentStatus
       log(`a local backend is already running at ${existing!.url}; reusing it`)
     }
 

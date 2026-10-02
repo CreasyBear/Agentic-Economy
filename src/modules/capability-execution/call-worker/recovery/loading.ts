@@ -25,7 +25,6 @@ import { internal } from '../../../../../convex/_generated/api'
 import { canonicalPort } from '../../../../../convex/lib/capabilityExecution/callProjection/port'
 import { recoveryControlMatchesCall, recoveryControlUsesPersistedResult } from '../../../../../convex/lib/capabilityExecution/callLifecycle/statusControl'
 import { buildBrokeredX402Receipt } from '../brokeredX402'
-import { buildSellerOnboardingCanaryReceipt } from '../sellerCanaryReceipt'
 import type { RecoveredCall, RecoveryIdentity } from './contracts'
 
 type RecoveryPort = ReturnType<typeof canonicalPort>
@@ -135,10 +134,7 @@ export async function loadRecoveryWorkContext(
   const x402Attempt = await loadX402Attempt(ctx, recovered, control, operation)
   const brokeredReceipt = recoveryReceiptBuilder({
     recovered,
-    control,
     operation,
-    priceAmount,
-    x402Attempt,
     managedReservation,
   })
   const trustedReconciliationEvidenceDigest: { value?: string } = {}
@@ -206,19 +202,13 @@ function recoveryPriceAmount(
 ): ExactAmount | undefined {
   const fixedPriceAmount = pricingConfigDecisionAmount(operation.pricingConfig)
   if (fixedPriceAmount !== undefined) return fixedPriceAmount
-  if (recovered.sellerOnboardingCanary !== undefined) {
-    return recovered.sellerOnboardingCanary.funding.requestedSpend
-  }
   if (managedReservation === null) return undefined
   return { currency: 'AUD', units: managedReservation.decisionAudUnits, exponent: 6 }
 }
 
 function recoveryReceiptBuilder(input: Readonly<{
   recovered: RecoveredCall
-  control: RecoveryControlRow
   operation: PublishedTool
-  priceAmount: ExactAmount
-  x402Attempt: Awaited<ReturnType<typeof loadX402Attempt>>
   managedReservation: Awaited<ReturnType<typeof loadManagedReservation>>
 }>) {
   return (
@@ -237,84 +227,10 @@ function recoveryReceiptBuilder(input: Readonly<{
     if (paymentIdentifier !== undefined) args.paymentIdentifier = paymentIdentifier
     if (refundState !== undefined) args.refundState = refundState
     if (lossState !== undefined) args.lossState = lossState
-    return input.recovered.sellerOnboardingCanary === undefined
-      ? buildBrokeredRecoveryReceipt(input, args)
-      : buildCanaryRecoveryReceipt(input, args)
+    return buildBrokeredRecoveryReceipt(input, args)
   }
 }
 
-function buildCanaryRecoveryReceipt(
-  input: Parameters<typeof recoveryReceiptBuilder>[0],
-  args: RecoveryReceiptArgs,
-): CallReceipt | undefined {
-  const { recovered, control, operation, priceAmount, x402Attempt } = input
-  const canary = recovered.sellerOnboardingCanary
-  if (canary === undefined) {
-    throw new Error('seller_onboarding_canary_receipt_requires_canary')
-  }
-  const persistedReceipt = persistedOperationReceipt(recovered)
-  const receiptInput: Mutable<Parameters<typeof buildSellerOnboardingCanaryReceipt>[0]> = {
-    canary,
-    operation,
-    callRef: recovered.callRef,
-    toolRef: recovered.toolRef,
-    attemptRef: canaryRecoveryAttemptRef(recovered, control, x402Attempt),
-    state: args.state,
-    providerQuotedAmount: priceAmount,
-    evidenceHash: args.evidenceHash,
-    issuedAt: args.issuedAt,
-    refundState: retainedReceiptState(args.refundState, persistedReceipt, 'refundState'),
-    lossState: retainedReceiptState(args.lossState, persistedReceipt, 'lossState'),
-  }
-  const paymentIdentifier = retainedReceiptString(args.paymentIdentifier, persistedReceipt, 'paymentIdentifier')
-  const transactionHash = retainedReceiptString(args.settlementTransactionHash, persistedReceipt, 'settlementTransactionHash')
-  const externalRef = retainedReceiptString(args.externalSettlementRef, persistedReceipt, 'externalSettlementRef')
-  if (paymentIdentifier !== undefined) receiptInput.paymentIdentifier = paymentIdentifier
-  if (transactionHash !== undefined) receiptInput.settlementTransactionHash = transactionHash
-  if (externalRef !== undefined) receiptInput.externalSettlementRef = externalRef
-  return buildSellerOnboardingCanaryReceipt(receiptInput)
-}
-
-function persistedOperationReceipt(recovered: RecoveredCall): CallReceipt | undefined {
-  return recovered.result !== undefined && 'receipt' in recovered.result
-    ? recovered.result.receipt
-    : undefined
-}
-
-function canaryRecoveryAttemptRef(
-  recovered: RecoveredCall,
-  control: RecoveryControlRow,
-  attempt: Awaited<ReturnType<typeof loadX402Attempt>>,
-): string {
-  if (attempt !== null) return attempt.attemptRef
-  if (control.currentAttemptRef !== undefined) return control.currentAttemptRef
-  if (recovered.attemptRef !== undefined) return recovered.attemptRef
-  return `operation-attempt:${recovered.callRef}:1`
-}
-
-function retainedReceiptString(
-  supplied: string | undefined,
-  receipt: CallReceipt | undefined,
-  field: 'paymentIdentifier' | 'settlementTransactionHash' | 'externalSettlementRef',
-): string | undefined {
-  if (supplied !== undefined) return supplied
-  if (receipt === undefined) return undefined
-  if (field === 'externalSettlementRef') return receipt.externalSettlementRef
-  if (receipt.commercialModel !== 'seller_canary_x402') return undefined
-  return receipt[field]
-}
-
-function retainedReceiptState<K extends 'refundState' | 'lossState'>(
-  supplied: CallReceipt[K] | undefined,
-  receipt: CallReceipt | undefined,
-  field: K,
-): NonNullable<CallReceipt[K]> {
-  if (supplied !== undefined) return supplied
-  if (receipt !== undefined && receipt[field] !== undefined) {
-    return receipt[field] as NonNullable<CallReceipt[K]>
-  }
-  return 'unknown'
-}
 
 function buildBrokeredRecoveryReceipt(
   input: Parameters<typeof recoveryReceiptBuilder>[0],
@@ -419,7 +335,6 @@ async function loadManagedReservation(
 ) {
   if (
     operation.identity.adapterId !== 'x402-fetch:v2'
-    || recovered.sellerOnboardingCanary !== undefined
     || recovered.quoteRef === undefined
   ) return null
   return await ctx.runQuery(internal.moneyManagedCallLifecycle.readReservation, {

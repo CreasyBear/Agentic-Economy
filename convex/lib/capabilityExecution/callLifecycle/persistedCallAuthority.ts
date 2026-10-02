@@ -1,3 +1,4 @@
+import type { Infer } from 'convex/values'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
@@ -7,7 +8,7 @@ import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateCanonicalAgentDelegation } from '../../authority/canonicalAgent/authority'
 import { resolveCurrentAgentAuthority } from './agentCallAuthority'
-import type { CurrentAgentAuthority, ReconciledCallAuthority } from './contracts'
+import { reconciledCallAuthorityResult, type CurrentAgentAuthority, type ReconciledCallAuthority } from './contracts'
 import { refuseUnclaimedHandler } from './dispatchRefusal'
 
 function callMatchesCurrentAuthority(
@@ -221,5 +222,17 @@ export async function refuseCallBeforeEffectForInvalidAuthority(
     retryable: false,
     nextAction: 'Refresh the agent grant and retry.',
   })
+}
+
+export async function reconcileCallWorkloadAuthorityHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ callRef: string }>,
+): Promise<Infer<typeof reconciledCallAuthorityResult>> {
+  const authority = await reconcilePersistedCallAuthority(ctx, args.callRef, Date.now())
+  if (authority === null) {
+    await refuseCallBeforeEffectForInvalidAuthority(ctx, args.callRef)
+    return { kind: 'refused' }
+  }
+  return { kind: 'authorized', authority }
 }
 

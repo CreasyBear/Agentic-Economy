@@ -1,4 +1,4 @@
-import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { v, type Infer } from 'convex/values'
 
 import type { Doc } from '../../../_generated/dataModel'
@@ -99,7 +99,8 @@ export async function reserveAgentHandoffHandler(
   ctx: MutationCtx,
   args: Infer<typeof reserveAgentHandoffArgsValue>,
 ): Promise<FundingResult> {
-  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), args.environment)) {
+  const deploymentEnvironment = deploymentPaymentEnvironment(env)
+  if (deploymentEnvironment === undefined || deploymentEnvironment !== args.environment) {
     return refused('environment_mismatch')
   }
   const admission = await admitAgentHandoff(ctx, args)

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   handleToolCallPost as handleCallPostImpl,
@@ -11,6 +11,9 @@ import { toolQuoteResultSchema } from '@/modules/capability-execution/quote'
 import { callMachineResultSchema } from '@/modules/capability-execution/call-contracts'
 import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
 
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
+afterEach(() => vi.unstubAllEnvs())
+
 const operationRef = `operation:v1:${'a'.repeat(64)}`
 const commitmentRef = `operation-commitment:v1:${'b'.repeat(64)}`
 const authenticate = async (scopes: readonly string[] = ['market_tools:call']) => ({
@@ -19,6 +22,7 @@ const authenticate = async (scopes: readonly string[] = ['market_tools:call']) =
   id: 'key:test',
   subject: 'user_test',
   scopes,
+  claims: { aeEnvironment: 'sandbox' },
 })
 const resolveCanonicalPrincipal: AgentAccessPrincipalResolver = async (projection) => ({
   ...projection,
@@ -341,6 +345,7 @@ describe('operation.invoke HTTP adapter', () => {
       expect(body).toMatchObject({
         code: 'authority_required',
         retryable: false,
+        nextAction: 'Ask the Account owner to approve this Call at /agent-access.',
         ownerHandoff: { kind: 'authorize', callRef: 'invocation:test', toolRef: operationRef },
       })
     }

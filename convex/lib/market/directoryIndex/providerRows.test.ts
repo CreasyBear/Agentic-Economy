@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../../_generated/api'
 import { upsertProviderDirectoryRows } from './providerRows'
@@ -24,6 +24,8 @@ const COINBASE_RESOURCE = 'https://provider.example.com/v1/lookup'
 /** Well 8 Lane C: exercises upsertProviderDirectoryRows directly - the write
  * path shared by the publish/withdraw hooks and the hourly reconcile sweep. */
 describe('provider directory rows (Well 8 Lane C)', () => {
+  beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+  afterEach(() => vi.unstubAllEnvs())
   it('absorbs a Coinbase row sharing sourceRouteRef, then lets it be restored once the provider row is withdrawn', async () => {
     const backend = backendWithAggregates()
     const { businessId } = await publishedBusinessOwner(backend, 'lane-c-provider')
@@ -100,7 +102,12 @@ describe('provider directory rows (Well 8 Lane C)', () => {
       })
       await ctx.db.insert('capabilityPublications', {
         publicationRef: 'publication:lane-c-test', toolRef: 'operation:lane-c-test', revision: 1,
-        businessId, networkId: 'eip155:8453', runtimeEnvironment: 'production',
+        businessId, networkId: 'ae:public', runtimeEnvironment: 'production',
+        pricingConfigJson: JSON.stringify({
+          version: 'pricing:v3', kind: 'managed_x402', effectTiming: 'payment_required_before_effect',
+          sourceRequirement: { network: 'eip155:8453', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', atomicUnits: '1000000' },
+          pricingPolicyRef: 'pricing-policy:test', publicDisplay: 'on_request',
+        }),
         capabilityId: 'lookup.exact', version: 1, contractDigest: `sha256:${'b'.repeat(64)}`,
         sourceKind: 'x402', sourceRevision: '1', sourceDigest: `sha256:${'e'.repeat(64)}`,
         sourceRouteRef: ROUTE_REF,
@@ -130,6 +137,7 @@ describe('provider directory rows (Well 8 Lane C)', () => {
     // The Coinbase rows (network '*' and eip155:8453) are absorbed; only the
     // provider's own two rows (same two networks) remain, both source: 'provider'.
     expect(afterPublish).toHaveLength(2)
+    expect(afterPublish.map(row => row.network).sort()).toEqual(['*', 'eip155:8453'])
     for (const row of afterPublish) {
       expect(row.source).toBe('provider')
       expect(row.providerKey).toBe('lane-c-provider')
@@ -141,6 +149,11 @@ describe('provider directory rows (Well 8 Lane C)', () => {
     const entry = await backend.run(async (ctx) => await ctx.db.get(starRow.entryId))
     expect(entry?.source).toBe('provider')
     expect(entry?.name).toBe('Provider Lookup')
+    expect(entry?.networks).toEqual(['eip155:8453'])
+    expect(JSON.parse(entry?.directoryEntryJson ?? '{}').prices).toEqual([
+      expect.objectContaining({ network: 'eip155:8453' }),
+    ])
+    expect(publication.networkId).toBe('ae:public')
     // The fixture proves source precedence, not Call eligibility: its placeholder
     // ToolRef has no registered contract or readiness observation.
     expect(await backend.query(api.x402DirectoryIndex.searchCompact, {
@@ -161,6 +174,27 @@ describe('provider directory rows (Well 8 Lane C)', () => {
       .withIndex('by_generation_and_documentId', (q) => q.eq('generation', GENERATION).eq('documentId', 'registry:coinbase-shared-route'))
       .unique())
     expect(staleCoinbaseEntry).toBeNull()
+
+    // Missing or malformed managed pricing cannot turn a catalog namespace
+    // into payment-network evidence. Reprojection also removes stale facets.
+    const { pricingConfigJson: _originalPricing, ...withoutManagedPricing } = publication
+    for (const pricingConfigJson of [undefined, '{bad-json']) {
+      await backend.run(async (ctx) => upsertProviderDirectoryRows(ctx, {
+        ...withoutManagedPricing,
+        ...(pricingConfigJson === undefined ? {} : { pricingConfigJson }),
+      }))
+      const withoutPricing = await backend.run(async (ctx) => ctx.db.query('marketDirectorySearchEntries')
+        .withIndex('by_generation_and_sourceRouteRef', (q) => q.eq('generation', GENERATION).eq('sourceRouteRef', ROUTE_REF))
+        .collect())
+      expect(withoutPricing.map(row => row.network)).toEqual(['*'])
+      const withoutPricingEntry = await backend.run(async (ctx) => ctx.db.get(withoutPricing[0]!.entryId))
+      expect(withoutPricingEntry?.networks).toEqual([])
+      expect(JSON.parse(withoutPricingEntry?.directoryEntryJson ?? '{}').prices).toEqual([])
+      expect(await backend.query(api.x402DirectoryIndex.searchCompact, {
+        query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+      })).toMatchObject({ kind: 'ok', page: [] })
+    }
+    await backend.run(async (ctx) => upsertProviderDirectoryRows(ctx, publication))
 
     // Withdraw: the provider row is removed...
     const withdrawn = { ...publication, disposition: 'withdrawn' as const }

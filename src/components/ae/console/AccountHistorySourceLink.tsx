@@ -1,7 +1,7 @@
 import type { AccountHistoryEntry } from '@/modules/money/public'
 
 export function AccountHistorySourceLink({ entry }: Readonly<{ entry: AccountHistoryEntry }>) {
-  if (entry.kind === 'call_spend' && entry.sourceRef !== null) {
+  if ((entry.kind === 'call_spend' || entry.kind === 'promotional_use' || entry.kind === 'call_refund' || entry.kind === 'promotional_refund') && entry.sourceRef !== null) {
     return (
       <a href={`/calls/${encodeURIComponent(entry.sourceRef)}`} className="w-fit text-xs font-medium text-primary hover:underline"
         aria-label={`View Call receipt ${entry.sourceRef}`}>

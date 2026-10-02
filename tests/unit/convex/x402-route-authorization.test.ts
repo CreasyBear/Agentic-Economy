@@ -282,7 +282,7 @@ describe('x402 route authorization', () => {
         paymentSigningIdempotencyKey: PAYMENT_SIGNING_KEY,
         paymentUnsignedMaterialDigest: UNSIGNED_MATERIAL_DIGEST,
       }),
-      {},
+      { aeEnvironment: 'production' },
     )
   })
 

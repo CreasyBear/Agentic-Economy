@@ -1,7 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
 } from '@/modules/capability-supply/convex'
 import { v, type Infer } from 'convex/values'
 import type { Id } from '../../../_generated/dataModel'
@@ -11,6 +10,12 @@ import {
   verifySupplyAgentPrincipal,
 } from '../../../agentAccessPrincipals'
 import { nativePublicationCanBeValidated } from '../../../capabilitySupplyNativeAdmission'
+import {
+  DEV_SEED_CATALOG_ACCOUNT_REF,
+  DEV_SEED_CATALOG_MEMBERSHIP_REF,
+  DEV_SEED_CATALOG_PRINCIPAL_REF,
+  DEV_SEED_CATALOG_PUBLISHER_REF,
+} from '../../dev/seed/authority'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
@@ -89,9 +94,6 @@ export async function readCurrentCapabilityProbeAuthority(
     && publication.runtimeEnvironment === 'sandbox'
     && publication.authorityMode === 'provider_owned'
     && publication.sourceKind === 'x402'
-    && (publication.registrationEvidenceRefs ?? []).filter(
-      (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-    ).length === 1
   if (business === null
     || business.suppressedAt !== undefined
     || (business.publicStatus !== 'published' && !exactOwnerStagedBusiness
@@ -148,6 +150,13 @@ export async function readCurrentCapabilityProbeAuthority(
       membershipRef: membership.membershipRef,
       membershipRevision: membership.revision,
     })
+  }
+  if (
+    publication.publisherRef === DEV_SEED_CATALOG_PUBLISHER_REF
+    && publication.authorityMode === 'ae_curated_external'
+  ) {
+    const seedAuthority = await readDevSeedCatalogProbeAuthority(ctx, publication, args.now)
+    if (seedAuthority !== null) return seedAuthority
   }
   const account = await ctx.db
     .query('accounts')
@@ -230,6 +239,64 @@ export async function readCurrentCapabilityProbeAuthority(
   })
 }
 
+
+async function readDevSeedCatalogProbeAuthority(
+  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
+  publication: { publicationRef: string; revision: number; businessId: Id<'businesses'>; publisherRef: string },
+  now: number,
+): Promise<CapabilityProbeAuthority | null> {
+  if (!Number.isSafeInteger(now) || now < 0) return null
+  const [workloadPrincipal, workloadAccount, memberships] = await Promise.all([
+    ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', DEV_SEED_CATALOG_PRINCIPAL_REF))
+      .unique(),
+    ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', DEV_SEED_CATALOG_ACCOUNT_REF))
+      .unique(),
+    ctx.db.query('memberships')
+      .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+        .eq('accountRef', DEV_SEED_CATALOG_ACCOUNT_REF)
+        .eq('memberPrincipalRef', DEV_SEED_CATALOG_PRINCIPAL_REF)
+        .eq('lifecycle', 'active'))
+      .take(2),
+  ])
+  if (
+    workloadPrincipal === null
+    || workloadPrincipal.kind !== 'workload'
+    || workloadPrincipal.lifecycle !== 'active'
+    || workloadAccount === null
+    || workloadAccount.lifecycle !== 'active'
+    || workloadAccount.accountRef !== DEV_SEED_CATALOG_ACCOUNT_REF
+    || memberships.length !== 1
+  ) return null
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', workloadAccount.currentOwnershipRef))
+    .unique()
+  const membership = memberships[0]
+  if (
+    ownership === null
+    || ownership.lifecycle !== 'active'
+    || ownership.accountRef !== workloadAccount.accountRef
+    || ownership.ownerPrincipalRef !== DEV_SEED_CATALOG_PRINCIPAL_REF
+    || membership === undefined
+    || membership.membershipRef !== DEV_SEED_CATALOG_MEMBERSHIP_REF
+  ) return null
+  return withCapabilityProbeAuthorityDigest({
+    publicationRef: publication.publicationRef,
+    publicationRevision: publication.revision,
+    businessId: publication.businessId,
+    publisherPrincipalRef: publication.publisherRef,
+    ownerPrincipalRef: ownership.ownerPrincipalRef,
+    owningAccountRef: workloadAccount.accountRef,
+    ownershipRef: ownership.ownershipRef,
+    accountRevision: workloadAccount.revision,
+    mode: 'system_workload' as const,
+    workloadPrincipalRevision: workloadPrincipal.revision,
+    membershipRef: membership.membershipRef,
+    membershipRevision: membership.revision,
+  })
+}
+
 export function capabilityProbeAuthorityMatches(
   pinned: CapabilityProbeAuthority,
   current: CapabilityProbeAuthority,
@@ -292,10 +359,7 @@ export async function ownerStagedProbeBusinessIsAllowed(
     || (publication.runtimeEnvironment !== 'sandbox'
       && publication.runtimeEnvironment !== 'production')
     || publication.authorityMode !== 'provider_owned'
-    || publication.sourceKind !== 'x402'
-    || (publication.registrationEvidenceRefs ?? []).filter(
-      (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
-    ).length !== 1) return false
+    || publication.sourceKind !== 'x402') return false
   const business = await ctx.db.get(args.businessId)
   return business !== null
     && (business.publicStatus === 'unpublished' || business.publicStatus === 'published')

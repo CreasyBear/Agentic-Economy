@@ -22,10 +22,6 @@ const recoveryChecks: ReadonlyArray<{
     description: 'Review wallet-control authority and its generation separately from Tool readiness.',
   },
   {
-    title: 'Review Provider payout authority',
-    description: 'Confirm the Stripe-hosted payout destination and readiness before another transfer.',
-  },
-  {
     title: 'Retain evidence and contact support',
     description:
       'Copy durable references from Security history — never tokens, signatures, recovery factors, or secrets.',
@@ -43,9 +39,9 @@ export function AeCompromiseRecoveryChecklist() {
         <AlertTitle>This page does not mark the account contained</AlertTitle>
         <AlertDescription>
           Resetting MFA alone does not revoke existing sessions, Agent credentials,
-          Provider connection authority, or Provider payout authority.
+          Provider connection authority.
           <p className="mt-1 text-xs text-muted-foreground">
-            A$0.00 affected — opening this list does not revoke sessions, Agents, or payouts.
+            A$0.00 affected — opening this list does not revoke sessions or Agents.
           </p>
         </AlertDescription>
       </Alert>

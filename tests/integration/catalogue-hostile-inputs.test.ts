@@ -41,6 +41,7 @@ vi.mock('@/modules/capability-supply/tool-source', () => ({
 }))
 
 describe('GET /api/v1/registry hostile inputs', () => {
+  beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
   function source(index: number): IndexedSource {
     const resource = `https://provider.test/tools/${index}`
     const raw = { resource, type: 'http', description: `Research tool ${index}` }
@@ -88,6 +89,7 @@ describe('GET /api/v1/registry hostile inputs', () => {
 
   afterEach(() => {
     setPublicSourceTransportForTests(undefined)
+    vi.unstubAllEnvs()
   })
 
   function registryRequest(params: Readonly<Record<string, string | readonly string[]>>): Request {

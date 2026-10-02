@@ -1,6 +1,35 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
-import type { DeploymentEnvironment } from './manifest'
+
+export type DeploymentEnvironment = 'production' | 'preview' | 'development' | 'test'
+
+export type PaymentEnvironment = 'production' | 'sandbox'
+
+/**
+ * Requires provider revision authority only when VERCEL is exactly '1'.
+ * Ensures a lowercase full Git revision, with any explicit marker agreeing
+ * with the provider's nonblank revision. Undefined means unavailable.
+ * Invariant: identity never grants readiness or changes configuration.
+ * On violation: missing, malformed or conflicting evidence returns undefined.
+ */
+export function readReleaseSourceRevision(env: StringEnvironment): string | undefined {
+  const configured = readTrimmedEnv(env, 'AE_RELEASE_SOURCE_REVISION')
+  const provider = env.VERCEL === '1' ? readTrimmedEnv(env, 'VERCEL_GIT_COMMIT_SHA') : undefined
+  const selected = provider ?? configured
+  if (selected === undefined || !/^[a-f0-9]{40}$/u.test(selected)) return undefined
+  if (configured !== undefined && configured !== selected) return undefined
+  return selected
+}
+
+/** Returns undefined unless the deployment explicitly declares a supported payment environment. */
+export function deploymentPaymentEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+): PaymentEnvironment | undefined {
+  const deploymentEnvironment = env.AE_DEPLOYMENT_ENVIRONMENT
+  if (deploymentEnvironment === 'production') return 'production'
+  if (deploymentEnvironment === 'development') return 'sandbox'
+  return undefined
+}
 
 export function resolveDeploymentMode(env: StringEnvironment): DeploymentEnvironment {
   const nodeEnvironment = readTrimmedEnv(env, 'NODE_ENV')

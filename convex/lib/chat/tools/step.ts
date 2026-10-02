@@ -1,4 +1,5 @@
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 
 export const MAX_CHAT_TOOL_CALLS = 8
 export const MAX_CHAT_EXECUTE_CALLS = 1
@@ -7,8 +8,14 @@ export const MAX_CHAT_STEPS = 5
 export const MAX_CHAT_SEARCHES = 2
 export const CHAT_NO_RESULT_ANSWER = '**Search could not be completed.** Next: try again or browse the Market.'
 
+const MAX_CATALOGUE_FACT_TEXT_CHARS = 240
+
 function markdownText(value: string): string {
-  return value.replace(/[\\`*_{}[\]()#+\-.!|]/gu, character => `\\${character}`)
+  const safeText = sanitizeText(
+    value.slice(0, MAX_CATALOGUE_FACT_TEXT_CHARS).replace(/[\p{Cc}\p{Cf}]/gu, ' '),
+    MAX_CATALOGUE_FACT_TEXT_CHARS,
+  )
+  return safeText.replace(/[\\`*_{}[\]()#+\-.!|]/gu, character => `\\${character}`)
 }
 
 type ChatStepEvidence = Readonly<{
@@ -51,7 +58,7 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
       typeof row === 'object' && row !== null && 'title' in row && typeof row.title === 'string'
         && 'summary' in row && typeof row.summary === 'string')
     if (rows.length > 0) {
-      return `**${rows.map(row => markdownText(row.title)).join(', ')} ${rows.length === 1 ? 'is a Tool to inspect' : 'are Tools to inspect'}.**\n\n${rows.slice(0, 3).map(row => `- ${markdownText(row.title)}: ${markdownText(row.summary)}`).join('\n')}\n\nNext: Open a Tool card to check its inputs and current terms.`
+      return `**${rows.map(row => markdownText(row.title)).join(', ')} ${rows.length === 1 ? 'is a Tool to inspect' : 'are Tools to inspect'}.**\n\n${rows.slice(0, 3).map(row => `- ${markdownText(row.title)}: ${markdownText(row.summary)}`).join('\n')}`
     }
     return null
   }
@@ -61,14 +68,10 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
     ? args.query : null
   if (verdict.kind === 'unavailable') return `**Search is temporarily unavailable.** Next: retry${query === null ? ' the search.' : ` “${markdownText(query)}”.`}`
   if (verdict.kind === 'scoped') {
-    const complete = typeof verdict.assessed === 'object' && verdict.assessed !== null
-      && 'coverage' in verdict.assessed && verdict.assessed.coverage === 'complete'
     const hasNextPage = typeof next === 'object' && next !== null
       && 'action' in next && next.action === 'next-page'
     const followUp = hasNextPage ? ' Use Next page below to continue this search.' : ''
-    return complete
-      ? `**These are external listings to inspect, not AE-callable Tools.**${followUp}`
-      : `**Only part of the catalogue was assessed; no suitable Tool is established yet.**${followUp}`
+    return `**Here are the closest matches.**${followUp}`
   }
   return `**No suitable Tool in the assessed catalogue.** Next: ${query === null ? 'try a broader search.' : `broaden “${markdownText(query)}”.`}`
 }

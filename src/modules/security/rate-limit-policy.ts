@@ -11,11 +11,13 @@ export const RATE_LIMIT_NAMES = [
   'oauth-device-poll',
   'authority-credential-change',
   'payout-transfer',
+  'agent-approval-email',
   'chat-submit',
   'chat-stream',
   'chat-anonymous',
   'chat-anonymous-edge',
   'dispute-open',
+  'paid-call-report',
   'mcp-anonymous',
 ] as const
 
@@ -32,10 +34,12 @@ export const RATE_LIMIT_POLICY: Record<RateLimitName, RateLimitPolicyConfig> = {
   'oauth-device-poll': { kind: 'token bucket', rate: 24, period: MINUTE_MS, capacity: 24 },
   'authority-credential-change': { kind: 'fixed window', rate: 5, period: 10 * MINUTE_MS },
   'payout-transfer': { kind: 'fixed window', rate: 3, period: HOUR_MS },
+  'agent-approval-email': { kind: 'token bucket', rate: 3, period: HOUR_MS, capacity: 3 },
   'chat-submit': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
   'chat-stream': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
   'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
   'chat-anonymous-edge': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
+  'paid-call-report': { kind: 'token bucket', rate: 5, period: MINUTE_MS, capacity: 5 },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE_MS, capacity: 3 },
   'mcp-anonymous': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
 }

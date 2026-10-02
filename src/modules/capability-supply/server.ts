@@ -28,15 +28,17 @@ export {
   createCdpEvmX402PaymentSignature,
   createCdpEvmX402PaymentSignature as createEvmX402PaymentSignature,
   cdpX402PolicyRulesDigest,
-  cdpX402SellerCanaryPolicyIsExact,
-  cdpX402SellerCanaryPolicyRules,
+  cdpX402ManagedPolicyIsExact,
+  cdpX402ManagedPolicyRules,
   cdpX402RequestFingerprint,
   isPaymentSigningIdempotencyKey,
   observeCdpX402Treasury,
+  readCdpX402CustodyReadiness,
   readCdpX402PaymentAuthorization,
   replayCdpX402PaymentSigningIntent,
 } from './internal/cdp-x402-payment-signer'
 export type {
+  CdpX402CustodyReadinessResult,
   CdpX402PaymentAuthorization,
   CdpX402PaymentSignerDependencies,
   CdpX402RequestFingerprintContext,
@@ -115,31 +117,6 @@ export {
   type SuppliedCandidateRef,
   type SuppliedCandidateSourceReference,
 } from './internal/graph'
-
-export {
-  SELLER_ONBOARDING_CANARY_PURPOSE,
-  createSellerOnboardingCanaryCommitment,
-  evaluateX402SellerPromotion,
-  projectSellerOnboardingCanaryStatus,
-  sellerCanaryCompletionEvidenceMatches,
-  sellerOnboardingCanaryExecutionEnvelope,
-  validSellerCanaryPayee,
-} from './internal/x402-seller-onboarding'
-export type {
-  CreateSellerOnboardingCanaryInput,
-  CurrentSellerCanaryQuote,
-  EvaluateX402SellerPromotionInput,
-  OperationExecutionPurpose,
-  SellerCanaryOutputEvidenceRequirement,
-  SellerOnboardingCanaryCommitment,
-  SellerOnboardingCanaryExecutionEnvelope,
-  SellerOnboardingCanaryInvocationObservation,
-  SellerOnboardingCanaryPromotionEvidence,
-  SellerOnboardingCanaryStatus,
-  X402SellerPromotionAnchor,
-  X402SellerPromotionRefusal,
-  X402SellerPromotionResult,
-} from './internal/x402-seller-onboarding'
 
 export {
   prepareSuppliedCandidateQuote,
@@ -231,4 +208,4 @@ export {
   x402DefaultAssetFacts,
   x402LegacyDiscoveryInfo,
   x402NetworkLabel,
-} from './internal/x402-directory-protocol'
+} from './internal/x402-directory-projection-facts'

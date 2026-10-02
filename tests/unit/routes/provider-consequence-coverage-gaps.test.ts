@@ -648,6 +648,7 @@ function rawRequest(body: string, headers: Record<string, string> = {}) {
 
 function environment(overrides: Record<string, string | undefined> = {}) {
   return {
+    AE_DEPLOYMENT_ENVIRONMENT: 'development',
     AE_INFISICAL_BASE_URL: 'https://app.infisical.com',
     AE_INFISICAL_PLATFORM_PROJECT_ID: 'project-platform',
     AE_INFISICAL_PLATFORM_ENVIRONMENT: 'production',

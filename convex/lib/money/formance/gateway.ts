@@ -8,11 +8,27 @@ import {
   type FormanceContext,
 } from '../../../../src/modules/money/formance'
 export {
+  createFormanceContext,
+  readFormanceConfiguration,
+  readFormanceHealth,
+  executeFormanceMoneyCommand,
   readFormanceAccountHistory,
   readFormancePeriodSpend,
   readFormanceStatementPage,
+  type FormanceContext,
 } from '../../../../src/modules/money/formance'
+export { readFormanceTreasurySnapshot, type FormanceTreasurySnapshotResult } from '../../../../src/modules/money/formance-treasury-snapshot'
+export { readFormanceTreasuryAudit, matchTreasuryProviderSettlement, matchTreasuryFunding,
+  matchTreasuryCallCash, matchTreasuryBatch, treasuryAuditCashAddresses, treasuryAuditCallDigest,
+  isTreasuryFundingAuditTransaction, treasuryFundingPrincipalDelta,
+  type FormanceTreasuryAuditResult, type FormanceTreasuryAuditTransaction,
+} from '../../../../src/modules/money/formance-treasury-audit'
+export { bookFormanceTreasuryBatch } from '../../../../src/modules/money/formance-treasury'
 export {
+  readFormanceAccountCreditBalance,
+  grantFormancePromotionalCredit,
+  expireFormancePromotionalCredit,
+  type FormancePromotionalCreditBooking,
   adjustFormanceSpendingPeriod,
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
@@ -24,7 +40,12 @@ export {
   reverseFormanceProviderSettlement,
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
+  readFormanceManagedCallSettlement,
+  readFormanceManagedCallReservation,
+  readFormanceManagedCallRelease,
   remedyFormancePaidCall,
+  refundFormanceSettledSale,
+  type FormanceSettledSaleRefund,
   syncFormanceCapacity,
   type FormanceBuyerAdjustment,
   type FormanceCapacitySync,

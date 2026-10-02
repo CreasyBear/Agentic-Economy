@@ -29,7 +29,7 @@ export function degradeBackend<T>(
       cause: serializeCause(cause),
     }))
   } catch {
-    // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
+    // Intentional bare catch: the reporting path must never throw or recurse.
     // Never let logging failure change control flow.
   }
   return fallback
@@ -54,7 +54,7 @@ export function captureBackendException(
       cause: serializeCause(cause),
     }))
   } catch {
-    // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
+    // Intentional bare catch: the reporting path must never throw or recurse.
     // Never let logging failure change control flow.
   }
 }
@@ -85,11 +85,11 @@ function serializeCause(cause: unknown): unknown {
     JSON.stringify(cause)
     return cause
   } catch {
-    // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
+    // Intentional bare catch: the reporting path must never throw or recurse.
     try {
       return String(cause)
     } catch {
-      // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
+      // Intentional bare catch: the reporting path must never throw or recurse.
       return 'unserializable cause'
     }
   }

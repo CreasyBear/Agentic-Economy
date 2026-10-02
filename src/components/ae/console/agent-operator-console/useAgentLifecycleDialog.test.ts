@@ -135,24 +135,6 @@ describe('useAgentLifecycleDialog', () => {
     await waitFor(() => expect(result.current.revokePending).toBe(false))
   })
 
-  it('freeze mode does not change callback arguments', async () => {
-    const onDisconnectAgent = vi.fn(async () => undefined)
-    const { result } = renderHook(() => useAgentLifecycleDialog({
-      onDisconnectAgent,
-    }))
-    const trigger = document.createElement('button')
-
-    act(() => {
-      result.current.requestDisconnect(detail, trigger)
-      result.current.setRevocationMode('freeze')
-    })
-    await act(async () => {
-      await result.current.confirmLifecycle()
-    })
-
-    expect(onDisconnectAgent).toHaveBeenCalledWith('prn_lifecycle_test')
-  })
-
   it('keeps dialog open on failure with diagnostic toast', async () => {
     const onDisconnectAgent = vi.fn(async () => {
       throw new Error('failed')
@@ -174,19 +156,4 @@ describe('useAgentLifecycleDialog', () => {
     expect(toast.error).toHaveBeenCalledWith('Could not revoke agent access.')
   })
 
-  it('resets revocation mode when dialog closes', () => {
-    const { result } = renderHook(() => useAgentLifecycleDialog({
-      onDisconnectAgent: vi.fn(),
-    }))
-    const trigger = document.createElement('button')
-
-    act(() => {
-      result.current.requestDisconnect(detail, trigger)
-      result.current.setRevocationMode('freeze')
-      result.current.handleLifecycleDialogOpenChange(false)
-    })
-
-    expect(result.current.revocationMode).toBe('drain')
-    expect(result.current.lifecycleTarget).toBeUndefined()
-  })
 })

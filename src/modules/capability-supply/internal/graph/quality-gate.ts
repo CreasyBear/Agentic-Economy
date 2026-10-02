@@ -21,7 +21,6 @@ export type RouteabilityQualityInput = CurrentCatalogToolInput & Readonly<{
   catalogToolCurrent: boolean
   businessCurrent: boolean
   publicationCurrent: boolean
-  sellerCanaryAdmissionCurrent?: boolean
   contractCurrent: boolean
   offeringCurrent: boolean
   bindingCurrent: boolean
@@ -57,7 +56,6 @@ export function exactCurrentCatalogToolIsRouteable(
 export function routeabilityQualityGate(input: RouteabilityQualityInput): boolean {
   return input.businessCurrent
     && input.publicationCurrent
-    && input.sellerCanaryAdmissionCurrent !== false
     && input.contractCurrent
     && input.offeringCurrent
     && input.bindingCurrent

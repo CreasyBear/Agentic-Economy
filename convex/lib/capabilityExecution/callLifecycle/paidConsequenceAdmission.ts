@@ -18,8 +18,7 @@ export async function persistedPaidCallConsequenceIsAdmitted(
   if (call === null || call.authority === undefined || attempt.reservationRef === undefined
     || attempt.submissionStartedAt === undefined) return false
   if (![
-    call.sellerOnboardingCanary === undefined,
-    call.state === 'reconciliation_required' || call.state === 'completed',
+    call.state === 'reconciliation_required' || call.state === 'completed' || call.state === 'refused',
     call.quoteRef !== undefined,
     call.toolRef === attempt.toolRef,
     call.inputDigest === attempt.inputDigest,
@@ -29,8 +28,10 @@ export async function persistedPaidCallConsequenceIsAdmitted(
     attempt.paymentSignatureDigest !== undefined,
     attempt.paymentPayer !== undefined,
     attempt.paymentNonce !== undefined,
-    attempt.quarantinedOutputJson !== undefined,
-    attempt.quarantinedResponseDigest !== undefined,
+    attempt.responseStatus !== undefined && Number.isInteger(attempt.responseStatus)
+      && attempt.responseStatus >= 200 && attempt.responseStatus < 300,
+    attempt.transportObservationDigest !== undefined,
+    attempt.transportRequestDigest !== undefined,
   ].every(Boolean)) return false
   const [control, canonicalAttempt] = await Promise.all([
     ctx.db.query('actionExecutionControls').withIndex('by_executionRef', q => q.eq('executionRef', call.callRef)).unique(),

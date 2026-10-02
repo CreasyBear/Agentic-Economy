@@ -35,6 +35,7 @@ import {
 } from '@/modules/money/formance-workflows'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { readFormanceTreasuryAudit, matchTreasuryFunding, treasuryFundingPrincipalDelta } from '@/modules/money/formance-treasury-audit'
 
 const integrationEnabled = process.env.AE_FORMANCE_INTEGRATION === 'true'
 
@@ -684,6 +685,32 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
     })
   })
 
+  it('matches native funding and refund audit postings including principal, fee and tax', async () => {
+    const context = createFormanceContext({ environment: 'sandbox',
+      gatewayUrl: process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069',
+      ledger: `ae-funding-audit-${digest(`${Date.now()}:${process.pid}`).slice(0, 16)}`, requestTimeoutMs: 10_000 })
+    expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+    const funding = { commandRef: 'funding:audit', idempotencyKey: 'funding:audit', accountRef: 'account:audit',
+      processorRef: 'stripe:audit', principalUnits: '100000000', serviceFeeUnits: '5000000', taxUnits: '500000',
+      totalUnits: '105500000', policyDigest: `sha256:${digest('policy')}`, externalEvidenceDigest: `sha256:${digest('stripe-readback')}` }
+    expect(await bookFormanceFundingSettlement(context, funding)).toMatchObject({ kind: 'completed' })
+    expect(await bookFormanceFundingReversal(context, { ...funding,
+      commandRef: 'account-funding-reversal:inert-one', idempotencyKey: 'account-funding-reversal:inert-one',
+      externalEvidenceDigest: `sha256:${digest('stripe-reversal-readback')}` })).toMatchObject({ kind: 'completed' })
+    const audit = await readFormanceTreasuryAudit(context, { custodyRef: 'custody:funding-proof', custodyGeneration: 1, snapshotAt: Date.now() })
+    expect(audit.kind).toBe('available')
+    if (audit.kind !== 'available') throw new Error(audit.code)
+    const credit = audit.transactions.find(row => row.template === 'FUNDING_SETTLED')
+    const refund = audit.transactions.find(row => row.template === 'FUNDING_REVERSED')
+    if (credit === undefined || refund === undefined) throw new Error('native_funding_audit_missing')
+    expect(matchTreasuryFunding(credit, funding, 'settlement')).toBe(true)
+    expect(matchTreasuryFunding(refund, { ...funding, commandRef: 'account-funding-reversal:inert-one',
+      idempotencyKey: 'account-funding-reversal:inert-one', externalEvidenceDigest: `sha256:${digest('stripe-reversal-readback')}` }, 'reversal')).toBe(true)
+    expect(treasuryFundingPrincipalDelta(credit)).toBe(funding.principalUnits)
+    expect(treasuryFundingPrincipalDelta(refund)).toBe(`-${funding.principalUnits}`)
+    expect(matchTreasuryFunding(credit, { ...funding, serviceFeeUnits: '5000001' }, 'settlement')).toBe(false)
+  })
+
   it('books verified funding and controlled capacities through named workflows', async () => {
     const runDigest = digest(`package4-pr3:${Date.now()}:${process.pid}`)
     const context = createFormanceContext({
@@ -885,6 +912,7 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
       subjectRef: funding.accountRef,
       now: 4_000,
     })).toMatchObject({ kind: 'available', units: '0' })
+
   })
 
   it('lets native atomic bulk choose managed-call winners and preserves exact recovery refs', async () => {

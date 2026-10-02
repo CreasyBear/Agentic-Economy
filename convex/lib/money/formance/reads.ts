@@ -1,14 +1,57 @@
 "use node"
 
+import type { AccountCreditBalance, EligiblePromotionalGrant, FormanceManagedCallBooking } from '@/modules/money/public'
+import type { Infer } from 'convex/values'
+import { managedCallSettlementReadResult, managedCallReservationReadResult, managedCallReleaseReadResult } from './contracts'
+
 import {
   configuredContext,
+  withFormanceContext,
   formanceAccountMetadataDigest,
   readFormanceAccountHistory,
   readFormanceDisplayBalance,
+  readFormanceAccountCreditBalance,
   readFormancePeriodSpend,
   readFormanceSpendingPeriod,
   readFormanceStatementPage,
+  readFormanceManagedCallSettlement,
+  readFormanceManagedCallReservation,
+  readFormanceManagedCallRelease,
 } from './gateway'
+
+export async function readManagedCallSettlementHandler(
+  _ctx: unknown,
+  args: FormanceManagedCallBooking,
+): Promise<Infer<typeof managedCallSettlementReadResult>> {
+  const context = configuredContext()
+  if (context.kind === 'setup_required') return { kind: 'refused', code: context.code }
+  const result = await readFormanceManagedCallSettlement(context.context, args)
+  return result.kind === 'confirmed'
+    ? { kind: 'confirmed', transactionRefs: [...result.transactionRefs] }
+    : result
+}
+export async function readManagedCallReservationHandler(
+  _ctx: unknown,
+  args: FormanceManagedCallBooking,
+): Promise<Infer<typeof managedCallReservationReadResult>> {
+  const context = configuredContext()
+  if (context.kind === 'setup_required') return { kind: 'refused', code: context.code }
+  const result = await readFormanceManagedCallReservation(context.context, args)
+  return result.kind === 'confirmed'
+    ? { kind: 'confirmed', transactionRefs: [...result.transactionRefs] }
+    : result
+}
+export async function readManagedCallReleaseHandler(
+  _ctx: unknown,
+  args: FormanceManagedCallBooking,
+): Promise<Infer<typeof managedCallReleaseReadResult>> {
+  const context = configuredContext()
+  if (context.kind === 'setup_required') return { kind: 'refused', code: context.code }
+  const result = await readFormanceManagedCallRelease(context.context, args)
+  return result.kind === 'confirmed'
+    ? { kind: 'confirmed', transactionRefs: [...result.transactionRefs] }
+    : result
+}
 export async function readPeriodSpendHandler(_ctx: unknown, args: {
   accountRef: string
   periodStartAt: number
@@ -89,4 +132,8 @@ export async function readDisplayBalanceHandler(_ctx: unknown, args: {
   return context.kind === 'setup_required'
     ? context
     : await readFormanceDisplayBalance(context.context, args)
+}
+
+export async function readCreditBalanceHandler(_ctx: unknown, args: { accountRef: string; grants: EligiblePromotionalGrant[] }): Promise<AccountCreditBalance> {
+  return await withFormanceContext(context => readFormanceAccountCreditBalance(context, args))
 }

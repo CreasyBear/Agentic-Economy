@@ -12,7 +12,6 @@ import {
 import {
   BASE_SEPOLIA_NETWORK,
   BASE_SEPOLIA_USDC_ADDRESS,
-  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
   x402SellerClaimDigest,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -317,7 +316,6 @@ describe('owner Base Sepolia staging publication', () => {
       registrationEvidenceRefs: [
         claimEvidence,
         inspectionEvidence,
-        X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
       ],
     })
     const genericProbeTarget = await backend.query(

@@ -67,7 +67,6 @@ export async function upsertCallProjection(
   projection: CallDispatchProjectionShape,
   now: number,
 ): Promise<void> {
-  if (row.sellerOnboardingCanary !== undefined) return
   const operation = callProjectionOperation(row)
   if (operation === undefined) throw new Error('call_projection_operation_invalid')
   const { receipt, accountReceipt } = accountReceiptFromProjection(projection)

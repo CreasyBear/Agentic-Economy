@@ -1,5 +1,6 @@
 import { v, type ObjectType } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -8,6 +9,7 @@ import {
   type AgentAuditInput,
 } from '@/modules/agent-access/public'
 import { normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
+import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import {
   MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
@@ -24,6 +26,7 @@ import {
   validateCanonicalAgentDelegation,
 } from '../../authority/canonicalAgent/authority'
 import { persistAuditEvent } from '../../security/audit/persistence'
+import { resolveBusinessActor } from '../../../authz'
 import { environment, authorityMode, lifecycle } from './verification'
 
 export const agentPrincipalArgs = {
@@ -61,6 +64,24 @@ export const getAgentPrincipalResult = v.union(v.object({
   lifecycle,
   expiresAt: v.optional(v.number()),
 }), v.null())
+
+/** Find only the historical sandbox owner-chat grant for this canonical owner. */
+export async function readLegacyOwnerChatPrincipalHandler(
+  ctx: QueryCtx,
+): Promise<string | null> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null || identity.subject.trim().length === 0) return null
+  const owner = await resolveBusinessActor(ctx)
+  if (owner.kind !== 'authenticated_owner' || owner.authorityProvenance.accessKind !== 'ownership') return null
+  const issuanceKey = `owner-chat-spend-${identity.subject}`
+  const grant = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_grantRef', query => query.eq('grantRef', issuedAgentGrantRef(identity.subject, issuanceKey)))
+    .unique()
+  return grant?.applicationRef === 'ae-owner-chat'
+    && grant.environment === 'sandbox'
+    && grant.ownerId === owner.canonicalAccountRef
+    ? grant.principalId : null
+}
 
 export type AgentPrincipalWrite = Readonly<{
   principalId: string
@@ -240,6 +261,7 @@ export async function registerAgentPrincipalHandler(ctx: MutationCtx, args: Obje
   if (grants.length !== 1) return { kind: 'conflict' as const }
   const [grant] = grants
   if (grant === undefined) return { kind: 'conflict' as const }
+  if (grant.environment !== deploymentPaymentEnvironment(env)) return { kind: 'conflict' as const }
   let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
   try {
     normalizedGrant = normalizeStoredAgentAccessGrant(grant)

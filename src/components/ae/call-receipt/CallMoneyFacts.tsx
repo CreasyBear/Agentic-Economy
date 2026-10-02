@@ -34,23 +34,15 @@ export function CallMoneyFacts({ view }: Readonly<{ view: CallReceiptView }>) {
 }
 
 function ReceiptAuthorizationFacts({ receipt }: Readonly<{ receipt: CallReceipt }>) {
-  const commercialFacts = receipt.commercialModel === 'account_aud'
-    ? [
-        { label: "Buyer charge", value: formatDisplayAmount(receipt.buyerCharge) },
-        { label: "Service fee", value: formatDisplayAmount(receipt.serviceFee) },
-        { label: "Total buyer charge", value: formatDisplayAmount(receipt.totalBuyerCharge) },
-        { label: "Exact buyer charge", value: formatCurrencyAmount(receipt.buyerCharge) },
-        { label: "Exact service fee", value: formatCurrencyAmount(receipt.serviceFee) },
-        { label: "Exact total", value: formatCurrencyAmount(receipt.totalBuyerCharge) },
-      ]
-    : [
-        { label: "Provider quote (source)", value: formatCurrencyAmount(receipt.providerQuotedAmount) },
-        { label: "Agentic Economy fee", value: formatDisplayAmount(receipt.agenticEconomyFee) },
-        { label: "Buyer authorized up to", value: formatDisplayAmount(receipt.totalBuyerAuthorization) },
-        { label: "Exact authorization", value: formatCurrencyAmount(receipt.totalBuyerAuthorization) },
-      ]
   return (
-    <AeFactList facts={commercialFacts} />
+    <AeFactList facts={[
+      { label: "Buyer charge", value: formatDisplayAmount(receipt.buyerCharge) },
+      { label: "Service fee", value: formatDisplayAmount(receipt.serviceFee) },
+      { label: "Total buyer charge", value: formatDisplayAmount(receipt.totalBuyerCharge) },
+      { label: "Exact buyer charge", value: formatCurrencyAmount(receipt.buyerCharge) },
+      { label: "Exact service fee", value: formatCurrencyAmount(receipt.serviceFee) },
+      { label: "Exact total", value: formatCurrencyAmount(receipt.totalBuyerCharge) },
+    ]} />
   )
 }
 

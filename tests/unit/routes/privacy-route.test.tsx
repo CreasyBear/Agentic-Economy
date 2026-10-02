@@ -32,13 +32,15 @@ import '@/routes/privacy'
 afterEach(cleanup)
 
 describe('privacy route', () => {
-  it('renders the published policy, links its contents, and offers correction or removal', () => {
+  it('renders the alpha privacy draft, links its contents, and offers correction or removal', () => {
     const Component = routeState.component
     if (Component === undefined) throw new Error('privacy_route_component_missing')
 
     render(<Component />)
 
     expect(screen.getByText('How Agentic Economy collects and uses data.')).toBeTruthy()
+    expect(screen.getByText(/Alpha draft for review/u)).toBeTruthy()
+    expect(screen.getByText(/retention schedule are required before publication/u)).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: '1. Who this policy covers' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
       .toBe('/privacy/remove-business')

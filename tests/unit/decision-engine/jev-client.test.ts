@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { callJevSystemOne, executeDecisionGateway, JevUnavailableError, jevDiscoveryRecipient } from '@/modules/decision-engine/public'
+import { callJevSystemOne, executeDecisionGateway, JevUnavailableError, jevDiscoveryRecipient, type JevInferenceObservation } from '@/modules/decision-engine/public'
 
 const request = { state: { query: 'private buyer need' }, questions: { fits: { type: 'noul' as const } } }
 const options = { typesafeApiKey: 'ts-test-secret', purpose: 'discovery' as const }
@@ -7,6 +7,94 @@ const response = () => Response.json({ model: 'jev-test', answers: { fits: { typ
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 describe('Jev SDK lifecycle', () => {
+  it('awaits durable begin before I/O and records exact zero usage for that request', async () => {
+    const order: string[] = []
+    const beforeAttempt = vi.fn(async (_input: { requestRef: string; requestedModel: string }) => { order.push('begin') })
+    const afterAttempt = vi.fn(async (_input: JevInferenceObservation) => { order.push('observe') })
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => {
+      order.push('fetch')
+      return Response.json({ model: 'jev-resolved', answers: { fits: { type: 'noul', noul: 0.8 } }, usage: { input_tokens: 0, output_tokens: 0 } })
+    })
+    await callJevSystemOne(request, { ...options, fetchImpl, inferenceObserver: { beforeAttempt, afterAttempt } })
+    expect(order).toEqual(['begin', 'fetch', 'observe'])
+    const observation = afterAttempt.mock.calls[0]?.[0]
+    expect(beforeAttempt.mock.calls[0]?.[0]).toEqual({ requestRef: observation?.requestRef, requestedModel: 'jev-latest' })
+    expect(observation).toEqual({ requestRef: expect.stringMatching(/^jev:[0-9a-f-]{36}$/u), outcome: 'completed', model: 'jev-resolved', inputTokens: 0, outputTokens: 0 })
+  })
+
+  it('blocks every SDK retry when durable begin refuses, without exposing its error', async () => {
+    const beforeAttempt = vi.fn().mockRejectedValue(new Error('private database secret'))
+    const afterAttempt = vi.fn()
+    const fetchImpl = vi.fn<typeof fetch>()
+    await expect(callJevSystemOne(request, {
+      typesafeApiKey: 'ts-test', maxRetries: 2, fetchImpl, inferenceObserver: { beforeAttempt, afterAttempt },
+    })).rejects.toMatchObject({ reason: 'observation_unavailable' })
+    expect(beforeAttempt).toHaveBeenCalledOnce()
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(afterAttempt).not.toHaveBeenCalled()
+  })
+
+  it('preserves a usable answer if completion persistence fails and logs no private error', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const afterAttempt = vi.fn().mockRejectedValue(new Error('private prompt ts-secret'))
+    await expect(callJevSystemOne(request, {
+      ...options, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response()),
+      inferenceObserver: { beforeAttempt: vi.fn().mockResolvedValue(undefined), afterAttempt },
+    })).resolves.toMatchObject({ answers: { fits: { noul: 0.8 } } })
+    expect(afterAttempt).toHaveBeenCalledOnce()
+    expect(JSON.stringify([...log.mock.calls, ...warn.mock.calls])).not.toMatch(/private prompt|ts-secret/u)
+  })
+
+  it('attributes failed retries separately from the successful attempt usage', async () => {
+    const beforeAttempt = vi.fn().mockResolvedValue(undefined)
+    const afterAttempt = vi.fn().mockResolvedValue(undefined)
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('{}', { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ model: 'jev-resolved', answers: { fits: { type: 'noul', noul: 0.8 } }, usage: { input_tokens: 10 } }))
+    const result = await callJevSystemOne(request, { typesafeApiKey: 'ts-test', maxRetries: 1, fetchImpl, inferenceObserver: { beforeAttempt, afterAttempt } })
+    const first = beforeAttempt.mock.calls[0]?.[0].requestRef
+    const second = beforeAttempt.mock.calls[1]?.[0].requestRef
+    expect(first).toBeDefined()
+    expect(second).toBeDefined()
+    expect(first).not.toBe(second)
+    expect(afterAttempt.mock.calls.map(([input]) => input)).toEqual([
+      { requestRef: first, outcome: 'failed' },
+      { requestRef: second, outcome: 'completed', model: 'jev-resolved', inputTokens: 10 },
+    ])
+    expect(result.usage.inputTokens).toBeNull()
+  })
+
+  it('does not create attribution for disabled, missing-key or pre-cancelled requests', async () => {
+    vi.stubEnv('TYPESAFE_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', '')
+    const observer = { beforeAttempt: vi.fn(), afterAttempt: vi.fn() }
+    const fetchImpl = vi.fn<typeof fetch>()
+    for (const extra of [{ disableJev: true }, {}, { signal: AbortSignal.abort(), typesafeApiKey: 'ts-test' }]) {
+      await expect(callJevSystemOne(request, { ...extra, inferenceObserver: observer, fetchImpl })).rejects.toBeInstanceOf(JevUnavailableError)
+    }
+    expect(observer.beforeAttempt).not.toHaveBeenCalled()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('keeps failed and malformed responses unpriced with unknown usage', async () => {
+    const afterAttempt = vi.fn().mockResolvedValue(undefined)
+    await expect(callJevSystemOne(request, {
+      ...options, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ answers: {} })),
+      inferenceObserver: { beforeAttempt: vi.fn().mockResolvedValue(undefined), afterAttempt },
+    })).rejects.toMatchObject({ reason: 'invalid_response' })
+    expect(afterAttempt.mock.calls[0]?.[0]).toEqual({ requestRef: expect.any(String), outcome: 'failed' })
+  })
+
+  it('does not represent a requested fallback model as provider-reported evidence', async () => {
+    const afterAttempt = vi.fn().mockResolvedValue(undefined)
+    const result = await callJevSystemOne(request, {
+      ...options, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ answers: { fits: { type: 'noul', noul: 0.8 } }, usage: { input_tokens: -1, output_tokens: 1.5 } })),
+      inferenceObserver: { beforeAttempt: vi.fn().mockResolvedValue(undefined), afterAttempt },
+    })
+    expect(result.model).toBe('jev-latest')
+    expect(afterAttempt.mock.calls[0]?.[0]).toEqual({ requestRef: expect.any(String), outcome: 'completed' })
+  })
+
   it.each([
     [undefined, null, null],
     [{ input_tokens: 0, output_tokens: 0 }, 0, 0],

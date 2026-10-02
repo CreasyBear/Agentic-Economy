@@ -233,7 +233,6 @@ describe('operator command panel', () => {
     expect(option.getAttribute('data-slot')).toBe('command-item')
     expect(option.closest('[data-slot="command-group"]')).toBeTruthy()
     expect(option.getAttribute('aria-selected')).toBe('true')
-    expect(option.textContent).toMatch(/AUD\b.*unavailable/i)
     expect(option.textContent).toContain('Operational')
     const listbox = screen.getByRole('listbox', { name: 'Matching Tools' })
     expect(listbox.getAttribute('data-slot')).toBe('command-list')
@@ -244,8 +243,8 @@ describe('operator command panel', () => {
     expect(readDetail).toHaveBeenCalledWith(TEST_OPERATION_REF)
 
     const fixture = detailFixture()
-    // A source USD amount without a verified AUD conversion cannot be a buyer price.
-    expect(await screen.findByText('AUD estimate temporarily unavailable')).toBeTruthy()
+    // Exact USD source price remains visible without an AUD conversion.
+    expect(await screen.findByText('US$0.25')).toBeTruthy()
     expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Tool details' }))
     expect(screen.getByText(formatToolAuthentication(fixture.authentication))).toBeTruthy()
     expect(screen.getByText(formatToolReadiness(fixture.availability.posture))).toBeTruthy()
@@ -882,6 +881,7 @@ export function detailFixture(toolRef: string = TEST_OPERATION_REF): PublicToolD
       toolId: 'op_test_a',
       callVia: '/api/v1/tools/call',
       paymentLane: 'brokered',
+      runtimeEnvironment: 'production',
       contract: {
         capabilityId: 'fx.convert',
         version: 1,

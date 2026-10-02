@@ -39,11 +39,15 @@ describe('public funding preflight', () => {
   let restorePublicSource: (() => void) | undefined
 
   beforeEach(() => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    vi.stubEnv('STRIPE_SECRET_KEY', 'rk_test_funding_contract')
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_funding_contract')
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     restorePublicSource = installPlatformFundingQuery()
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     setHttpRateLimitAdmissionForTests(undefined)
     restorePublicSource?.()
     restorePublicSource = undefined
@@ -86,8 +90,8 @@ describe('public funding preflight', () => {
       generatedAt: 10_000,
       principalAmount: { currency: 'AUD', units: '10000000', exponent: 6 },
       serviceFee: { currency: 'AUD', units: '500000', exponent: 6 },
-      taxOnServiceFee: { currency: 'AUD', units: '50000', exponent: 6 },
-      totalPayment: { currency: 'AUD', units: '10550000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '1050000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '11550000', exponent: 6 },
     })
   })
 
@@ -142,8 +146,8 @@ describe('public funding preflight', () => {
       kind: 'funding_quote',
       serviceFeeBps: LIVE_SERVICE_FEE_BPS,
       serviceFee: { currency: 'AUD', units: '250000', exponent: 6 },
-      taxOnServiceFee: { currency: 'AUD', units: '30000', exponent: 6 },
-      totalPayment: { currency: 'AUD', units: '10280000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '1030000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '11280000', exponent: 6 },
     })
 
     const handoff = createFundingHandoffService(

@@ -52,8 +52,8 @@ async function beginDirectGrant(
   requestedScopes: readonly string[] = scopes,
 ) {
   return flow === 'device_code'
-    ? await beginDeviceGrant(store, { client: deviceClient, requestedScopes, requestedAccess, now: 1_000 })
-    : await beginAuthorizationCodeGrant(store, {
+    ? await beginDeviceGrant(store, { environment: 'sandbox', client: deviceClient, requestedScopes, requestedAccess, now: 1_000 })
+    : await beginAuthorizationCodeGrant(store, { environment: 'sandbox',
         client: authClient,
         redirectUri: 'http://localhost/callback',
         requestedScopes,
@@ -66,7 +66,7 @@ async function beginDirectGrant(
 }
 
 async function deviceGrant(store: AgentAccessOAuthStore) {
-  const result = await beginDeviceGrant(store, { client: deviceClient, requestedScopes: scopes, now: 1_000 })
+  const result = await beginDeviceGrant(store, { environment: 'sandbox', client: deviceClient, requestedScopes: scopes, now: 1_000 })
   if (result.kind !== 'ok') throw new Error('device grant did not begin')
   return result.value
 }
@@ -143,7 +143,7 @@ describe('Customer Request OAuth state machine', () => {
       maximumCallsPerHour: 100,
       expiresInSeconds: 86_400,
     }
-    const deviceResult = await beginDeviceGrant(storeFixture(), {
+    const deviceResult = await beginDeviceGrant(storeFixture(), { environment: 'production',
       client: deviceClient,
       requestedScopes: scopes,
       requestedAccess,
@@ -152,7 +152,7 @@ describe('Customer Request OAuth state machine', () => {
     if (deviceResult.kind !== 'ok') throw new Error('device grant did not begin')
     expect(JSON.stringify(deviceResult.value.grant.requestedAccess)).toBe(JSON.stringify(requestedAccess))
 
-    const authResult = await beginAuthorizationCodeGrant(storeFixture(), {
+    const authResult = await beginAuthorizationCodeGrant(storeFixture(), { environment: 'production',
       client: authClient,
       redirectUri: 'http://localhost/callback',
       requestedScopes: scopes,
@@ -172,7 +172,7 @@ describe('Customer Request OAuth state machine', () => {
       expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
     }
     expect(JSON.stringify((await deviceGrant(storeFixture())).grant.requestedAccess)).toBe(JSON.stringify(expectedDefault))
-    const defaultAuthResult = await beginAuthorizationCodeGrant(storeFixture(), {
+    const defaultAuthResult = await beginAuthorizationCodeGrant(storeFixture(), { environment: 'sandbox',
       client: authClient,
       redirectUri: 'http://localhost/callback',
       requestedScopes: scopes,
@@ -187,9 +187,75 @@ describe('Customer Request OAuth state machine', () => {
     expect(authResult.value.grant.revision).toBe(1)
   })
 
+  it.each(['device_code', 'authorization_code'] as const)('refuses missing, invalid, and mismatched environments before inserting a %s grant', async (flow) => {
+    for (const environment of [undefined, 'invalid', 'production'] as const) {
+      const store = storeFixture()
+      const requestedAccess = {
+        environment: 'sandbox' as const,
+        toolAccess: 'all_admitted' as const,
+        toolRefs: [],
+        expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
+      }
+      const input = { environment: environment as 'sandbox' | 'production' | undefined, requestedScopes: scopes, requestedAccess, now: 1_000 }
+      const result = flow === 'device_code'
+        ? await beginDeviceGrant(store, { ...input, client: deviceClient })
+        : await beginAuthorizationCodeGrant(store, {
+            ...input,
+            client: authClient,
+            redirectUri: 'http://localhost/callback',
+            codeChallenge: 'challenge',
+            codeChallengeMethod: 'S256',
+            ownerId: 'owner-one',
+          })
+      expect(result).toEqual({ kind: 'refused', reason: 'invalid_scope' })
+      expect(store.grants.size).toBe(0)
+    }
+  })
+
+  it.each(['device_code', 'authorization_code'] as const)('refuses unrestricted test scopes in production for %s', async (flow) => {
+    const store = storeFixture()
+    const input = { environment: 'production' as const, requestedScopes: ['customer_requests:unrestricted_test_only'], now: 1_000 }
+    const result = flow === 'device_code'
+      ? await beginDeviceGrant(store, { ...input, client: deviceClient })
+      : await beginAuthorizationCodeGrant(store, {
+          ...input,
+          client: authClient,
+          redirectUri: 'http://localhost/callback',
+          codeChallenge: 'challenge',
+          codeChallengeMethod: 'S256',
+          ownerId: 'owner-one',
+        })
+    expect(result).toEqual({ kind: 'refused', reason: 'invalid_scope' })
+    expect(store.grants.size).toBe(0)
+  })
+
+  it('refuses approval when the deployment or either stored access environment differs, without issuing', async () => {
+    for (const mismatch of ['deployment', 'requested', 'approved'] as const) {
+      const store = storeFixture()
+      const started = await deviceGrant(store)
+      await reserveForApproval(store, started.grant)
+      const grant = store.grants.get(started.grant.grantRef)
+      if (grant === undefined) throw new Error('grant reservation missing')
+      if (mismatch === 'requested') store.grants.set(grant.grantRef, { ...grant, requestedAccess: { ...grant.requestedAccess, environment: 'production' } })
+      if (mismatch === 'approved') store.grants.set(grant.grantRef, { ...grant, approvedAccess: { ...grant.approvedAccess, environment: 'production' } })
+      const updatesBefore = store.updates.length
+      let issued = false
+      const result = await approveGrant(store, {
+        environment: mismatch === 'deployment' ? 'production' : 'sandbox',
+        grantRef: grant.grantRef,
+        ownerId: 'owner-one',
+        now: 1_001,
+        issueKey: async () => { issued = true; return { keyId: 'should-not-issue' } },
+      })
+      expect(result).toEqual({ kind: 'refused', reason: 'invalid_grant' })
+      expect(store.updates).toHaveLength(updatesBefore)
+      expect(issued).toBe(false)
+    }
+  })
+
   it('keeps offline access as OAuth lifecycle state only on authorization-code grants', async () => {
     const authStore = storeFixture()
-    const authorized = await beginAuthorizationCodeGrant(authStore, {
+    const authorized = await beginAuthorizationCodeGrant(authStore, { environment: 'sandbox',
       client: authClient,
       redirectUri: 'http://localhost/callback',
       requestedScopes: [...scopes, AGENT_ACCESS_OAUTH_OFFLINE_SCOPE],
@@ -205,7 +271,7 @@ describe('Customer Request OAuth state machine', () => {
       expect(authorized.value.grant.approvedAccess.expiresInSeconds).toBe(30 * 24 * 60 * 60)
     }
 
-    await expect(beginDeviceGrant(storeFixture(), {
+    await expect(beginDeviceGrant(storeFixture(), { environment: 'sandbox',
       client: deviceClient,
       requestedScopes: [...scopes, AGENT_ACCESS_OAUTH_OFFLINE_SCOPE],
       now: 1_000,
@@ -277,7 +343,7 @@ describe('Customer Request OAuth state machine', () => {
 
   it('preserves exact supplier scope through owner approval and refuses mode tampering', async () => {
     const store = storeFixture()
-    const started = await beginDeviceGrant(store, {
+    const started = await beginDeviceGrant(store, { environment: 'sandbox',
       client: deviceClient,
       requestedScopes: [MARKET_SUPPLY_MANAGE_SCOPE],
       now: 1_000,
@@ -285,7 +351,7 @@ describe('Customer Request OAuth state machine', () => {
     if (started.kind !== 'ok') throw new Error('supplier grant did not begin')
     await reserveForApproval(store, started.value.grant)
     const issuedScopes: string[][] = []
-    const approved = await approveGrant(store, {
+    const approved = await approveGrant(store, { environment: 'sandbox',
       grantRef: started.value.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
@@ -300,10 +366,10 @@ describe('Customer Request OAuth state machine', () => {
     if (approved.kind === 'ok') expect(approved.value.grant.requestedScopes).toEqual([MARKET_SUPPLY_MANAGE_SCOPE])
 
     const tamperedStore = storeFixture()
-    const tampered = await beginDeviceGrant(tamperedStore, { client: deviceClient, requestedScopes: [MARKET_SUPPLY_MANAGE_SCOPE], now: 1_000 })
+    const tampered = await beginDeviceGrant(tamperedStore, { environment: 'sandbox', client: deviceClient, requestedScopes: [MARKET_SUPPLY_MANAGE_SCOPE], now: 1_000 })
     if (tampered.kind !== 'ok') throw new Error('supplier grant did not begin')
     await reserveForApproval(tamperedStore, tampered.value.grant)
-    await expect(approveGrant(tamperedStore, {
+    await expect(approveGrant(tamperedStore, { environment: 'sandbox',
       grantRef: tampered.value.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
@@ -316,10 +382,10 @@ describe('Customer Request OAuth state machine', () => {
     const store = storeFixture()
     const started = await deviceGrant(store)
     await reserveForApproval(store, started.grant)
-    const expired = await approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: started.grant.expiresAt, issueKey })
+    const expired = await approveGrant(store, { environment: 'sandbox', grantRef: started.grant.grantRef, ownerId: 'owner-one', now: started.grant.expiresAt, issueKey })
     expect(expired).toEqual({ kind: 'refused', reason: 'expired_token' })
     const validStore = storeFixture()
-    const authStarted = await beginAuthorizationCodeGrant(validStore, {
+    const authStarted = await beginAuthorizationCodeGrant(validStore, { environment: 'sandbox',
       client: authClient,
       redirectUri: 'http://localhost/callback',
       requestedScopes: scopes,
@@ -330,7 +396,7 @@ describe('Customer Request OAuth state machine', () => {
     })
     if (authStarted.kind !== 'ok') throw new Error('authorization grant did not begin')
     await reserveForApproval(validStore, authStarted.value.grant)
-    const ownerMismatch = await approveGrant(validStore, { grantRef: authStarted.value.grant.grantRef, ownerId: 'owner-two', now: 1_001, issueKey })
+    const ownerMismatch = await approveGrant(validStore, { environment: 'sandbox', grantRef: authStarted.value.grant.grantRef, ownerId: 'owner-two', now: 1_001, issueKey })
     expect(ownerMismatch).toEqual({ kind: 'refused', reason: 'owner_mismatch' })
   })
 
@@ -389,13 +455,13 @@ describe('Customer Request OAuth state machine', () => {
     const deniedStarted = await deviceGrant(deniedStore)
     const denied = await denyGrant(deniedStore, { userCode: deniedStarted.userCode, ownerId: 'owner-one', now: 1_001 })
     expect(denied.kind).toBe('ok')
-    const deniedReplay = await approveGrant(deniedStore, { userCode: deniedStarted.userCode, ownerId: 'owner-one', now: 1_002, issueKey })
+    const deniedReplay = await approveGrant(deniedStore, { environment: 'sandbox', userCode: deniedStarted.userCode, ownerId: 'owner-one', now: 1_002, issueKey })
     expect(deniedReplay).toEqual({ kind: 'refused', reason: 'invalid_grant' })
 
     const consumedStore = storeFixture()
     const consumedStarted = await deviceGrant(consumedStore)
     await reserveForApproval(consumedStore, consumedStarted.grant)
-    const approved = await approveGrant(consumedStore, { grantRef: consumedStarted.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey })
+    const approved = await approveGrant(consumedStore, { environment: 'sandbox', grantRef: consumedStarted.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey })
     if (approved.kind !== 'ok') throw new Error('approval failed')
     const claimed = await claimGrantDelivery(consumedStore, { credential: { kind: 'device', grantRef: approved.value.grant.grantRef, clientId: deviceClient.clientId }, now: 1_002 })
     if (claimed.kind !== 'ok') throw new Error('claim failed')
@@ -412,7 +478,7 @@ describe('Customer Request OAuth state machine', () => {
 
   it('enforces PKCE at the claim boundary', async () => {
     const store = storeFixture()
-    const started = await beginAuthorizationCodeGrant(store, {
+    const started = await beginAuthorizationCodeGrant(store, { environment: 'sandbox',
       client: authClient,
       redirectUri: 'http://localhost/callback',
       requestedScopes: scopes,
@@ -423,7 +489,7 @@ describe('Customer Request OAuth state machine', () => {
     })
     if (started.kind !== 'ok') throw new Error('authorization grant did not begin')
     await reserveForApproval(store, started.value.grant)
-    const approved = await approveGrant(store, { grantRef: started.value.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey })
+    const approved = await approveGrant(store, { environment: 'sandbox', grantRef: started.value.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey })
     if (approved.kind !== 'ok' || approved.value.authorizationCode === undefined) throw new Error('authorization grant did not approve')
     const wrong = await claimGrantDelivery(store, { credential: { kind: 'authorization', authorizationCode: approved.value.authorizationCode, clientId: authClient.clientId, redirectUri: 'http://localhost/callback', codeVerifier: 'wrong' }, now: 1_002 })
     expect(wrong).toEqual({ kind: 'refused', reason: 'invalid_pkce' })
@@ -435,7 +501,7 @@ describe('Customer Request OAuth state machine', () => {
     const store = storeFixture()
     const started = await deviceGrant(store)
     await reserveForApproval(store, started.grant)
-    const approved = await approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey })
+    const approved = await approveGrant(store, { environment: 'sandbox', grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey })
     if (approved.kind !== 'ok') throw new Error('approval failed')
     const claimed = await claimGrantDelivery(store, { credential: { kind: 'device', grantRef: approved.value.grant.grantRef, clientId: deviceClient.clientId }, now: 1_002 })
     if (claimed.kind !== 'ok') throw new Error('claim failed')
@@ -451,8 +517,8 @@ describe('Customer Request OAuth state machine', () => {
     await reserveForApproval(store, started.grant)
     let issueCount = 0
     const results = await Promise.all([
-      approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { issueCount += 1; await Promise.resolve(); return { keyId: 'key-one' } } }),
-      approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { issueCount += 1; await Promise.resolve(); return { keyId: 'key-two' } } }),
+      approveGrant(store, { environment: 'sandbox', grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { issueCount += 1; await Promise.resolve(); return { keyId: 'key-one' } } }),
+      approveGrant(store, { environment: 'sandbox', grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { issueCount += 1; await Promise.resolve(); return { keyId: 'key-two' } } }),
     ])
     expect(results.filter((result) => result.kind === 'ok')).toHaveLength(1)
     expect(results.filter((result) => result.kind === 'outcome_unknown')).toHaveLength(1)
@@ -472,7 +538,7 @@ describe('Customer Request OAuth state machine', () => {
     )
     await store.updateGrant(reserved.grantRef, 'issuing', reserved.revision, { issuanceStartedAt: 1_002 }, 1_001)
     let issued = false
-    const resumed = await approveGrant(store, {
+    const resumed = await approveGrant(store, { environment: 'sandbox',
       grantRef: started.grant.grantRef,
       ownerId: 'owner-one',
       now: 31_001,
@@ -496,7 +562,7 @@ describe('Customer Request OAuth state machine', () => {
     const started = await deviceGrant(store)
     await reserveForApproval(store, started.grant, undefined, 'owner-one', 1_001)
     let issueCount = 0
-    const recover = () => approveGrant(store, {
+    const recover = () => approveGrant(store, { environment: 'sandbox',
       grantRef: started.grant.grantRef,
       ownerId: 'owner-one',
       now: 31_001,
@@ -519,7 +585,7 @@ describe('Customer Request OAuth state machine', () => {
       const started = await deviceGrant(store)
       await reserveForApproval(store, started.grant)
       const grantRef = started.grant.grantRef
-      const result = await approveGrant(store, {
+      const result = await approveGrant(store, { environment: 'sandbox',
         grantRef,
         ownerId: 'owner-one',
         now: 1_001,
@@ -546,7 +612,7 @@ describe('Customer Request OAuth state machine', () => {
     const started = await deviceGrant(store)
     await reserveForApproval(store, started.grant)
     const targets: unknown[] = []
-    const approved = await approveGrant(store, {
+    const approved = await approveGrant(store, { environment: 'sandbox',
       grantRef: started.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
@@ -564,7 +630,7 @@ describe('Customer Request OAuth state machine', () => {
     const store = storeFixture()
     const started = await deviceGrant(store)
     await reserveForApproval(store, started.grant, { kind: 'replace_credential', principalRef: 'prn_agent_a', replacementMode: 'planned' })
-    const approved = await approveGrant(store, {
+    const approved = await approveGrant(store, { environment: 'sandbox',
       grantRef: started.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
@@ -601,7 +667,7 @@ describe('Customer Request OAuth state machine', () => {
     const started = await deviceGrant(store)
     await reserveForApproval(store, started.grant, { kind: 'replace_credential', principalRef: '   ', replacementMode: 'planned' })
     let issued = false
-    await expect(approveGrant(store, {
+    await expect(approveGrant(store, { environment: 'sandbox',
       grantRef: started.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,

@@ -1,8 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { verifyWebhook } from '@clerk/tanstack-react-start/webhooks'
 
+import {
+  clerkWebhookFailureResponse,
+  verifyClerkWebhookRequest,
+  type ClerkWebhookVerifier,
+  type VerifiedClerkWebhook,
+} from '@/lib/server/clerk-webhook-core'
 import { handleClerkOrganizationInvitationWebhookRequest } from '@/lib/server/clerk-organization-invitation-webhook'
 import { handleClerkOrganizationMembershipWebhookRequest } from '@/lib/server/clerk-organization-membership-webhook'
+import { handleClerkOrganizationWebhookRequest } from '@/lib/server/clerk-organization-webhook'
 import { handleClerkSecurityWebhookRequest } from '@/lib/server/clerk-security-webhook'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { isRecord } from '@/modules/common/is-record'
@@ -23,25 +29,70 @@ export const Route = createFileRoute('/api/clerk/webhook')({
   },
 })
 
+type ClerkWebhookRouteDependencies = Readonly<{ verify?: ClerkWebhookVerifier }>
+  & NonNullable<Parameters<typeof handleClerkSecurityWebhookRequest>[1]>
+  & NonNullable<Parameters<typeof handleClerkOrganizationInvitationWebhookRequest>[1]>
+  & NonNullable<Parameters<typeof handleClerkOrganizationMembershipWebhookRequest>[1]>
+  & NonNullable<Parameters<typeof handleClerkOrganizationWebhookRequest>[1]>
+
 export async function handleClerkWebhookRequest(
   request: Request,
-  dependencies: Parameters<typeof handleClerkSecurityWebhookRequest>[1] &
-    Parameters<typeof handleClerkOrganizationInvitationWebhookRequest>[1] &
-    Parameters<typeof handleClerkOrganizationMembershipWebhookRequest>[1] = {},
+  dependencies: ClerkWebhookRouteDependencies = {},
+): Promise<Response> {
+  const verification = await verifyClerkWebhookRequest(request, dependencies.verify)
+  if (verification.kind === 'rejected') return verification.response
+
+  const webhook = verification.webhook
+  const eventType = verifiedEventType(webhook)
+  if (eventType === 'organization.created') {
+    return handleWebhookHandler(
+      () => handleClerkOrganizationWebhookRequest(webhook, dependencies),
+      'handleClerkOrganizationWebhookRequest',
+      'workspace_provisioning_unavailable',
+    )
+  }
+  if (
+    eventType === 'organizationMembership.created'
+    || eventType === 'organizationMembership.updated'
+    || eventType === 'organizationMembership.deleted'
+  ) {
+    return handleWebhookHandler(
+      () => handleClerkOrganizationMembershipWebhookRequest(webhook, dependencies),
+      'handleClerkOrganizationMembershipWebhookRequest',
+      'workspace_membership_unavailable',
+    )
+  }
+  if (
+    eventType === 'organizationInvitation.created'
+    || eventType === 'organizationInvitation.revoked'
+  ) {
+    return handleWebhookHandler(
+      () => handleClerkOrganizationInvitationWebhookRequest(webhook, dependencies),
+      'handleClerkOrganizationInvitationWebhookRequest',
+      'workspace_invitation_unavailable',
+    )
+  }
+  return handleWebhookHandler(
+    () => handleClerkSecurityWebhookRequest(webhook, dependencies),
+    'handleClerkSecurityWebhookRequest',
+    'security_history_unavailable',
+  )
+}
+
+async function handleWebhookHandler(
+  handler: () => Promise<Response>,
+  site: string,
+  code: string,
 ): Promise<Response> {
   try {
-    const verified = await (dependencies.verify ?? verifyWebhook)(request.clone())
-    if (isRecord(verified) && typeof verified.type === 'string') {
-      if (verified.type.startsWith('organizationMembership.')) {
-        return await handleClerkOrganizationMembershipWebhookRequest(request, dependencies)
-      }
-      if (verified.type.startsWith('organizationInvitation.')) {
-        return await handleClerkOrganizationInvitationWebhookRequest(request, dependencies)
-      }
-    }
+    return await handler()
   } catch (cause) {
-    void cause
-    // Route through the security handler so verification failures share one response shape.
+    return clerkWebhookFailureResponse(cause, site, code)
   }
-  return await handleClerkSecurityWebhookRequest(request, dependencies)
+}
+
+function verifiedEventType(webhook: VerifiedClerkWebhook): string | undefined {
+  return isRecord(webhook.event) && typeof webhook.event.type === 'string'
+    ? webhook.event.type
+    : undefined
 }

@@ -10,9 +10,10 @@ import { interactiveAuthorityContextValue } from '../../../interactiveAuthority'
 import type { GenerateArgs } from './contracts'
 import { factsFromSavedTurn } from './completedFacts'
 import { streamDurableChatResponse } from './stream'
+import type { ChatTurnFailureReason } from '@/modules/actions/contract'
 
 const DURABLE_CHAT_FAILURE_MESSAGE =
-  "I couldn't finish the answer. Edit your question to try again."
+  "This answer could not be finished. Edit your question and try again."
 const turnEffectsRef = makeFunctionReference<'query', { turnRef: string }, string[]>(
   'chatCall:readTurnEffects',
 )
@@ -78,6 +79,7 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
         ...(current.trustedChatAuthority === undefined ? {} : { trustedChatAuthority: current.trustedChatAuthority }),
         ...(searchTurn === undefined ? {} : { searchTurn }),
         ...(continuation === null ? {} : { continuation }),
+        ...(args.deadlineAt === undefined ? {} : { deadlineAt: args.deadlineAt }),
       },
       openRouterModel(config, config.model),
     )
@@ -111,61 +113,82 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
     }
     return null
   } catch (error) {
-    if (ownerId !== undefined) {
-      try {
-        const effects = args.turnRef === undefined ? [] : await ctx.runQuery(turnEffectsRef, {
-          turnRef: args.turnRef,
-        })
-        let recovered: string | null = null
-        let alreadyAnswered = false
-        if (effects.length === 0) {
-          try {
-            const history = await listMessages(ctx, components.agent, {
-              threadId: args.threadId, paginationOpts: { cursor: null, numItems: 50 },
-            })
-            const prompt = history.page.find(row => row._id === args.promptMessageId)
-            const turn = prompt === undefined ? [] : history.page.filter(row =>
-              row.order === prompt.order && row._id !== prompt._id)
-            alreadyAnswered = turn.some(row => {
-              const message = row.message
-              if (message?.role !== 'assistant' || row.status !== 'success') return false
-              const text = typeof message.content === 'string' ? message.content
-                : Array.isArray(message.content)
-                  ? message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('')
-                  : ''
-              return text.trim().length > 0 && !text.includes("couldn't finish the answer")
-            })
-            recovered = factsFromSavedTurn(turn.flatMap(row => row.message === undefined ? [] : [row.message]))
-          } catch (readError) {
-            console.error('[chat-durable] saved facts unavailable', sanitizeTelemetryError(readError))
-          }
-        }
-        if (!alreadyAnswered) {
-          const recoveryMessage = effects.length === 0
-            ? recovered ?? DURABLE_CHAT_FAILURE_MESSAGE
-            : `I couldn't finish the answer. A Call may already have run. CallRef: ${effects.join(', ')}. Check each Call's status before sending another request; payment may be outcome_unknown.`
-          await saveMessages(ctx, components.agent, {
-            threadId: args.threadId,
-            userId: ownerId,
-            promptMessageId: args.promptMessageId,
-            messages: [{ role: 'assistant', content: recoveryMessage }],
-            agentName: 'Agentic Economy Operation Market',
-            failPendingSteps: true,
-          })
-        }
-      } catch (saveError) {
-        console.error(
-          '[chat-durable] recovery message failed',
-          sanitizeTelemetryError(saveError),
-        )
-      }
-    }
-    if (args.turnRef !== undefined) {
+    console.error('[chat-durable] generation failed', sanitizeTelemetryError(error))
+    if (args.turnRef !== undefined && args.deadlineAt !== undefined && Date.now() >= args.deadlineAt) {
       await ctx.runMutation(internal.chatTurns.finishTurn, {
         turnRef: args.turnRef, promptMessageId: args.promptMessageId, state: 'failed',
+        failureReason: 'generation_timed_out', expectedDeadlineAt: args.deadlineAt,
+      })
+      return null
+    }
+
+    let effects: string[] = []
+    let effectReadFailed = false
+    if (args.turnRef !== undefined) {
+      try {
+        effects = await ctx.runQuery(turnEffectsRef, { turnRef: args.turnRef })
+      } catch (readError) {
+        effectReadFailed = true
+        console.error('[chat-durable] unresolved Calls unavailable', sanitizeTelemetryError(readError))
+      }
+    }
+
+    let alreadyAnswered = false
+    let recovered: string | null = null
+    if (ownerId !== undefined && effects.length === 0 && !effectReadFailed) {
+      try {
+        const history = await listMessages(ctx, components.agent, {
+          threadId: args.threadId, paginationOpts: { cursor: null, numItems: 50 },
+        })
+        const prompt = history.page.find(row => row._id === args.promptMessageId)
+        const turn = prompt === undefined ? [] : history.page.filter(row =>
+          row.order === prompt.order && row._id !== prompt._id)
+        alreadyAnswered = turn.some(row => {
+          const message = row.message
+          if (message?.role !== 'assistant' || row.status !== 'success') return false
+          const text = typeof message.content === 'string' ? message.content
+            : Array.isArray(message.content)
+              ? message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('')
+              : ''
+          return text.trim().length > 0 && text !== DURABLE_CHAT_FAILURE_MESSAGE
+            && !text.includes("couldn't finish the answer")
+        })
+        recovered = factsFromSavedTurn(turn.flatMap(row => row.message === undefined ? [] : [row.message]))
+      } catch (readError) {
+        console.error('[chat-durable] saved facts unavailable', sanitizeTelemetryError(readError))
+      }
+    }
+
+    let recoveredAnswer = alreadyAnswered
+    if (!alreadyAnswered && recovered !== null && ownerId !== undefined) {
+      try {
+        await saveMessages(ctx, components.agent, {
+          threadId: args.threadId, userId: ownerId, promptMessageId: args.promptMessageId,
+          messages: [{ role: 'assistant', content: recovered }],
+          agentName: 'Agentic Economy Operation Market',
+        })
+        recoveredAnswer = true
+      } catch (saveError) {
+        console.error('[chat-durable] recovered answer could not be saved', sanitizeTelemetryError(saveError))
+      }
+    }
+    const failureReason: ChatTurnFailureReason = effectReadFailed || effects.length > 0
+      ? 'outcome_unknown' : 'generation_failed'
+    if (args.turnRef !== undefined) {
+      await ctx.runMutation(internal.chatTurns.finishTurn, {
+        turnRef: args.turnRef, promptMessageId: args.promptMessageId,
+        state: recoveredAnswer ? 'completed' : 'failed',
+        ...(recoveredAnswer ? {} : { failureReason }),
       })
     }
-    throw error
+    if (args.turnRef === undefined && !recoveredAnswer && ownerId !== undefined) {
+      await saveMessages(ctx, components.agent, {
+        threadId: args.threadId, userId: ownerId, promptMessageId: args.promptMessageId,
+        messages: [{ role: 'assistant', content: DURABLE_CHAT_FAILURE_MESSAGE }],
+        agentName: 'Agentic Economy Operation Market', failPendingSteps: true,
+      })
+    }
+    return null
   } finally {
     await ctx.runMutation(internal.chatMessages.clearActiveGeneration, {
       threadId: args.threadId,

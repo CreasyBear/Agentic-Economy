@@ -96,7 +96,7 @@ export async function executeFormanceMoneyBulk(
 ): Promise<FormanceMoneyResult> {
   const startedAt = Date.now()
   const commands = [...bulk.commands]
-  if (commands.length < 2 || commands.length > 4
+  if (commands.length < 2 || commands.length > 103
     || new Set(commands.map(({ commandRef }) => commandRef)).size !== commands.length
     || new Set(commands.map(({ idempotencyKey }) => idempotencyKey)).size !== commands.length) {
     return refused('formance_bulk_invalid')

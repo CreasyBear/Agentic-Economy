@@ -1,5 +1,26 @@
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test'
+import { makeFunctionReference } from 'convex/server'
+import type { ActionCtx } from '../../../convex/_generated/server'
+import schema from '../../../convex/schema'
+import { seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
+import { TREASURY_SNAPSHOT_MAX_AGE_MS } from '@/modules/money/treasury-report'
+import { readWebConfiguration, refreshPaymentReadiness } from '../../../convex/lib/money/readiness/refresh'
+import { backendPaymentReadinessDigest, paymentReadinessExpiresAt, sealPaymentReadinessSnapshot, type PaymentReadinessSnapshot, type PaymentReadinessChecks } from '@/modules/money/payment-readiness'
+import { getFunctionName } from 'convex/server'
+import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ToolSearchResult } from '@/modules/capability-supply/tool-projection'
+
+const readinessIo = vi.hoisted(() => ({ web: vi.fn(), cdp: vi.fn(), ledger: vi.fn(), chain: vi.fn() }))
+vi.mock('@/modules/network-guard/server', () => ({ sendGuardedHttpRequest: readinessIo.web }))
+vi.mock('@/modules/capability-supply/server', async importOriginal => ({
+  ...await importOriginal<typeof import('@/modules/capability-supply/server')>(), readCdpX402CustodyReadiness: readinessIo.cdp,
+}))
+vi.mock('@/modules/money/formance', async importOriginal => ({
+  ...await importOriginal<typeof import('@/modules/money/formance')>(), readFormanceHealth: readinessIo.ledger,
+}))
+vi.mock('../../../convex/lib/money/treasury/chainObservation', () => ({ readTreasuryChainObservation: readinessIo.chain }))
 
 const mocks = vi.hoisted(() => ({
   captureClientError: vi.fn((payload: unknown) => {
@@ -33,6 +54,12 @@ import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { SOURCE_WRITE_FAMILIES } from '@/lib/deployment/manifest'
 
+
+function readyPaymentView(validUntil = Date.now() + 60_000): PaymentReadinessView {
+  return { kind: 'ready', environment: 'production', checkedAt: Date.now(), expiresAt: validUntil, code: null,
+    checks: Object.fromEntries(PAYMENT_READINESS_CHECK_KEYS.map(key => [key, { kind: 'passed', validUntil }])) as PaymentReadinessView['checks'] }
+}
+
 const secret = 'iak1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 
 function clientRequest(body: BodyInit | null, headers: Record<string, string> = {}): Request {
@@ -48,7 +75,7 @@ function clientRequest(body: BodyInit | null, headers: Record<string, string> = 
 }
 function productionReadinessEnvironment(): Record<string, string> {
   return {
-    NODE_ENV: 'production',
+    NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production',
     CONVEX_URL: 'https://convex.example',
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     AE_CANONICAL_BASE_URL: 'https://ae.example',
@@ -71,7 +98,13 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_X402_CUSTODY_ENABLED: 'true',
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
-    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
+    AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: '100000000',
+    AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: '100000000',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc","https://base.other.example/rpc"]}',
+    SENTRY_DSN: 'https://serverkey@example.ingest.sentry.io/1',
+    VITE_SENTRY_DSN: 'https://browserkey@example.ingest.sentry.io/1',
+    SENTRY_ENVIRONMENT: 'production',
+    VITE_SENTRY_ENVIRONMENT: 'production',
     STRIPE_SECRET_KEY: 'rk_live_command_example',
     STRIPE_READBACK_KEY: 'rk_live_readback_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_example',
@@ -115,7 +148,8 @@ describe('operational diagnostics routes', () => {
     // reads a live deployment (a running local backend made these tests
     // report `catalogue: fresh`). Commercial cases override per test.
     setPublicSourceTransportForTests({
-      query: vi.fn(async () => ({ kind: 'unavailable' as const, refreshState: 'none' as const })),
+      query: vi.fn(async reference => getFunctionName(reference) === 'moneyReadiness:readForServer'
+        ? readyPaymentView() : { kind: 'unavailable' as const, refreshState: 'none' as const }),
       mutation: vi.fn(),
       action: vi.fn(),
     } as never)
@@ -143,6 +177,31 @@ describe('operational diagnostics routes', () => {
     await expect(head.text()).resolves.toBe('')
   })
 
+  it.each(['AE_FORMANCE_LEDGER', 'CDP_WALLET_SECRET', 'AE_X402_RPC_URLS_JSON', 'SENTRY_DSN', 'VITE_SENTRY_DSN'])(
+    'refuses production web readiness when %s is missing without probing the backend', async name => {
+      const env = productionReadinessEnvironment()
+      delete env[name]
+      const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
+      const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), { env, fetch: fetchImpl, nodeMajor: 22 })
+      expect(response.status).toBe(503)
+      const body = await response.json()
+      expect(body).toMatchObject({ checks: { config: { status: 'failed', code: 'deployment_manifest_invalid' } },
+        deployment: { paymentEnvironment: 'production', convexOrigin: 'https://convex.example' } })
+      expect(fetchImpl).not.toHaveBeenCalled()
+      expect(JSON.stringify(body)).not.toContain(env.CDP_API_KEY_SECRET)
+    },
+  )
+
+  it('binds ready web evidence to the actual money environment and Convex origin', async () => {
+    const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), {
+      env: productionReadinessEnvironment(), fetch: vi.fn(async () => new Response(null, { status: 200 })), nodeMajor: 22,
+    })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await response.json()).toMatchObject({ status: 'ready',
+      deployment: { paymentEnvironment: 'production', convexOrigin: 'https://convex.example' } })
+  })
+
   it('reports readiness when validated config and Convex reachability pass', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
     const result = await readServerReadiness({
@@ -168,8 +227,9 @@ describe('operational diagnostics routes', () => {
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
-  it('keeps production ready when operation-only settings are absent or malformed', async () => {
+  it('keeps hosted sandbox ready when operation-only settings are absent or malformed', async () => {
     const env = productionReadinessEnvironment()
+    env.AE_DEPLOYMENT_ENVIRONMENT = 'development'
     for (const name of [
       'OPENROUTER_API_KEY', 'AE_LLM_MODEL', 'AE_CHAT_PROXY_SECRET',
       'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET',
@@ -207,7 +267,7 @@ describe('operational diagnostics routes', () => {
     const response = await handleReadyRequest(
       new Request('https://ae.example/api/ready'),
       {
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' },
         fetch: vi.fn(async () => new Response(null, { status: 200 })),
       },
     )
@@ -219,6 +279,7 @@ describe('operational diagnostics routes', () => {
       status: 'ready',
       checks: { config: 'ready', convex: 'ready' },
       commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
+      deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
     })
     const serialized = JSON.stringify(body)
     for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
@@ -232,7 +293,7 @@ describe('operational diagnostics routes', () => {
       headers: { 'x-ae-request-id': correlationId },
     })
     const options = (status: number) => ({
-      env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+      env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' },
       fetch: vi.fn(async () => new Response(null, { status })),
     })
 
@@ -254,7 +315,7 @@ describe('operational diagnostics routes', () => {
   it('projects config diagnostics as names and booleans only', () => {
     const configuredSecret = 'openrouter-test-secret-value'
     const diagnostics = readNamesOnlyReadinessDiagnostics({
-      NODE_ENV: 'production',
+      NODE_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production',
       CONVEX_URL: 'https://convex.example',
       OPENROUTER_API_KEY: configuredSecret,
     }, 22)
@@ -276,7 +337,7 @@ describe('operational diagnostics routes', () => {
   it('fails closed for deployment mode conflicts and credential-bearing Convex URLs', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
     await expect(readServerReadiness({
-      env: { NODE_ENV: 'test', VERCEL_ENV: 'production', CONVEX_URL: 'https://convex.example' },
+      env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', VERCEL_ENV: 'production', CONVEX_URL: 'https://convex.example' },
       fetch: fetchImpl,
     })).resolves.toMatchObject({
       status: 'not_ready',
@@ -285,7 +346,7 @@ describe('operational diagnostics routes', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
 
     await expect(readServerReadiness({
-      env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example?token=secret' },
+      env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example?token=secret' },
       fetch: fetchImpl,
     })).resolves.toMatchObject({
       status: 'not_ready',
@@ -295,9 +356,22 @@ describe('operational diagnostics routes', () => {
   })
 
 
+  it.each([undefined, '', 'sandbox', ' production'])('refuses readiness before probing with declaration %s', async (declaration) => {
+    const fetch = vi.fn()
+    const env = { ...productionReadinessEnvironment(), AE_DEPLOYMENT_ENVIRONMENT: declaration }
+    await expect(readServerReadiness({ env, fetch })).resolves.toMatchObject({
+      status: 'not_ready',
+      checks: { config: { status: 'failed', code: 'deployment_manifest_invalid' } },
+    })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(readNamesOnlyReadinessDiagnostics(env, 22).configuration.required).toContainEqual(
+      expect.objectContaining({ scope: 'environment', status: declaration === undefined || declaration === '' ? 'missing' : 'invalid' }),
+    )
+  })
+
   it('fails readiness closed for missing config and Convex probe failure', async () => {
     const skippedFetch = vi.fn()
-    await expect(readServerReadiness({ env: {}, fetch: skippedFetch })).resolves.toMatchObject({
+    await expect(readServerReadiness({ env: { AE_DEPLOYMENT_ENVIRONMENT: 'development' }, fetch: skippedFetch })).resolves.toMatchObject({
       status: 'not_ready',
       checks: { config: { status: 'failed', code: 'convex_url_missing' } },
     })
@@ -306,7 +380,7 @@ describe('operational diagnostics routes', () => {
     const failedFetch = vi.fn(async () => new Response(null, { status: 503 }))
     const routeResponse = await handleReadyRequest(
       new Request('https://ae.example/api/ready', { headers: { 'x-ae-request-id': 'corr_ready_1' } }),
-      { env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: failedFetch },
+      { env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: failedFetch },
     )
     expect(routeResponse.status).toBe(503)
     expect(routeResponse.headers.get('content-type')).toBe('application/problem+json')
@@ -326,6 +400,7 @@ describe('operational diagnostics routes', () => {
         convex: { status: 'failed', code: 'convex_probe_failed' },
       },
       commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
+      deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
     })
     const serialized = JSON.stringify(body)
     for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
@@ -449,7 +524,7 @@ describe('operational diagnostics routes', () => {
     }
     const stripeOnlyEnv = () => {
       const env = productionReadinessEnvironment()
-      return { STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET }
+      return { STRIPE_SECRET_KEY: 'rk_test_command_example', STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET }
     }
     const readyToolSearchResult = {
       kind: 'ok' as const,
@@ -474,7 +549,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('absent')
     })
@@ -486,7 +561,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('fresh')
     })
@@ -498,7 +573,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('stale')
     })
@@ -510,7 +585,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('failed')
     })
@@ -524,7 +599,7 @@ describe('operational diagnostics routes', () => {
         action: vi.fn(),
       } as never)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.catalogue).toBe('absent')
     })
@@ -532,14 +607,14 @@ describe('operational diagnostics routes', () => {
     it('reports quoting ready when at least one routeable Tool is discoverable', async () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.quoting).toBe('ready')
       expect(toolSearchMocks.readCapabilityToolSearch).toHaveBeenCalledWith({ query: '', limit: 1 })
     })
 
     it('reports quoting unavailable when no routeable Tool is found', async () => {
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.quoting).toBe('unavailable')
     })
@@ -547,7 +622,7 @@ describe('operational diagnostics routes', () => {
     it('degrades quoting to unavailable when the search probe throws', async () => {
       toolSearchMocks.readCapabilityToolSearch.mockRejectedValueOnce(new Error('search unreachable'))
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.quoting).toBe('unavailable')
     })
@@ -556,7 +631,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce(() => new Promise(() => {}))
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' },
         fetch: readyFetch(),
         timeoutMs: 5,
       })
@@ -566,7 +641,7 @@ describe('operational diagnostics routes', () => {
 
     it('reports funding configured from a valid Stripe money provider config alone', async () => {
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -575,7 +650,7 @@ describe('operational diagnostics routes', () => {
 
     it('reports funding configured from the CDP/x402 custody bundle alone', async () => {
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...cdpCustodyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...cdpCustodyEnv() },
         fetch: readyFetch(),
       })
 
@@ -583,7 +658,7 @@ describe('operational diagnostics routes', () => {
     })
 
     it('reports funding missing when neither money rail is configured', async () => {
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.funding).toBe('missing')
     })
@@ -597,7 +672,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -613,7 +688,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -629,7 +704,7 @@ describe('operational diagnostics routes', () => {
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -644,7 +719,7 @@ describe('operational diagnostics routes', () => {
       } as never)
 
       const result = await readServerReadiness({
-        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
         fetch: readyFetch(),
       })
 
@@ -659,7 +734,7 @@ describe('operational diagnostics routes', () => {
       } as never)
       toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
 
-      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'missing', sellable: false })
     })
@@ -674,16 +749,209 @@ describe('operational diagnostics routes', () => {
 
       const response = await handleReadyRequest(
         new Request('https://ae.example/api/ready'),
-        { env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() }, fetch: readyFetch() },
+        { env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() }, fetch: readyFetch() },
       )
 
       expect(response.status).toBe(200)
       const body = await response.json()
       expect(body).toEqual({
         status: 'ready',
+        deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
         checks: { config: 'ready', convex: 'ready' },
         commercial: { catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: true },
       })
     })
+  })
+})
+
+describe('production aggregate payment readiness', () => {
+  let paymentView: unknown
+  const query = vi.fn(async (reference: Parameters<typeof getFunctionName>[0]) => getFunctionName(reference) === 'moneyReadiness:readForServer'
+    ? paymentView : { kind: 'unavailable', refreshState: 'none' })
+  beforeEach(() => {
+    paymentView = readyPaymentView()
+    query.mockReset()
+    query.mockImplementation(async reference => getFunctionName(reference) === 'moneyReadiness:readForServer'
+      ? paymentView : { kind: 'unavailable', refreshState: 'none' })
+    setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never)
+  })
+  afterEach(() => { setPublicSourceTransportForTests(undefined); vi.restoreAllMocks(); vi.unstubAllEnvs() })
+  const request = () => new Request('https://ae.example/api/ready')
+  const readyFetch = () => vi.fn(async () => new Response(null, { status: 200 }))
+  it.each(['missing', 'provider_failed', 'expired', 'incomplete', 'wrong_world', 'future_clock', 'invalid_clock'] as const)(
+    'returns generic503 for %s evidence and preserves HEAD status without detailed checks', async defect => {
+      const view = readyPaymentView()
+      if (defect === 'missing') paymentView = undefined
+      if (defect === 'provider_failed') paymentView = { ...view, kind: 'not_ready', code: 'private_provider_detail',
+        checks: { ...view.checks, sanctions: { kind: 'failed', code: 'private_sanctions_detail' } } }
+      if (defect === 'expired') paymentView = { ...view, expiresAt: Date.now() }
+      if (defect === 'incomplete') paymentView = { ...view, checks: { web_configuration: view.checks.web_configuration } }
+      if (defect === 'wrong_world') paymentView = { ...view, environment: 'sandbox' }
+      if (defect === 'future_clock') paymentView = { ...view, checkedAt: Date.now() + 10_000 }
+      if (defect === 'invalid_clock') paymentView = { ...view, expiresAt: Number.NaN }
+      const options = { env: productionReadinessEnvironment(), fetch: readyFetch(), nodeMajor: 22 }
+      const response = await handleReadyRequest(request(), options)
+      expect(response.status).toBe(503)
+      const body = await response.json()
+      expect(body).toMatchObject({ type: 'about:blank', code: 'server_not_ready', status: 503,
+        checks: { config: 'ready', convex: 'ready', payments: { status: 'failed', code: 'payments_unavailable' } } })
+      const serialized = JSON.stringify(body)
+      for (const privateValue of ['private_provider_detail', 'private_sanctions_detail', 'configurationDigest', 'evidenceDigest', 'cdp-key-secret', 'scopes', 'serviceAuth']) expect(serialized).not.toContain(privateValue)
+      const head = await handleReadyRequest(request(), options, true)
+      expect(head.status).toBe(503)
+      expect(head.headers.get('content-type')).toBe(response.headers.get('content-type'))
+      expect(head.headers.get('cache-control')).toBe('no-store')
+      expect(await head.text()).toBe('')
+    },
+  )
+  it('returns200 only for the complete fresh production view and leaves development static', async () => {
+    const env = productionReadinessEnvironment()
+    const response = await handleReadyRequest(request(), { env, fetch: readyFetch(), nodeMajor: 22 })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ checks: { config: 'ready', convex: 'ready', payments: 'ready' } })
+    paymentView = undefined
+    query.mockClear()
+    const development = await handleReadyRequest(request(), { env: { ...env, AE_DEPLOYMENT_ENVIRONMENT: 'development' }, fetch: readyFetch(), nodeMajor: 22 })
+    expect(development.status).toBe(200)
+    expect((await development.json()).checks).toEqual({ config: 'ready', convex: 'ready' })
+    expect(query.mock.calls.some(([reference]) => getFunctionName(reference) === 'moneyReadiness:readForServer')).toBe(false)
+  })
+  it('rechecks expiry after a delayed commercial probe', async () => {
+    let now = Date.now()
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    paymentView = readyPaymentView(now + 1000)
+    let releaseSearch: (() => void) | undefined
+    const searchBarrier = new Promise<void>(resolve => { releaseSearch = resolve })
+    let observedPayment: (() => void) | undefined
+    const paymentBarrier = new Promise<void>(resolve => { observedPayment = resolve })
+    query.mockImplementation(async reference => {
+      if (getFunctionName(reference) === 'moneyReadiness:readForServer') { observedPayment?.(); return paymentView }
+      return { kind: 'unavailable', refreshState: 'none' }
+    })
+    toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce(async () => { await searchBarrier; return { kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: '', appliedFilters: {}, ranking: [], navigation: [] } })
+    const pending = handleReadyRequest(request(), { env: productionReadinessEnvironment(), fetch: readyFetch(), nodeMajor: 22 })
+    await paymentBarrier
+    // Drain the SDK adapter's awaited return chain while search stays pending
+    // and the evidence is fresh, then expire it before response completion.
+    await new Promise<void>(resolve => setImmediate(resolve))
+    now += 1000
+    releaseSearch?.()
+    const response = await pending
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+  })
+  it('bootstraps real readiness boundaries, then respects current treasury failure and shortened expiry', async () => {
+    const now = Date.now()
+    const env = { ...productionReadinessEnvironment(), AE_SITE_URL: 'https://ae.example', CONVEX_CLOUD_URL: 'https://convex.example' }
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value)
+    const modules = Object.fromEntries(Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
+      .map(([path, load]) => [path.replace('../../../convex/', './'), load]))
+    const backend = convexTest(schema, modules)
+    const publish = makeFunctionReference<'mutation', { snapshot: PaymentReadinessSnapshot }, { kind: 'published'; replayed: boolean } | { kind: 'refused'; code: string }>('moneyReadiness:publish')
+    const registeredRead = makeFunctionReference<'query', { environment: 'sandbox' | 'production'; serviceAuth: import('@/lib/server/convex-source').ConvexServerFunctionAssertion }, PaymentReadinessView>('moneyReadiness:readForServer')
+    let paymentObserved: ((view: PaymentReadinessView) => void) | undefined
+    setPublicSourceTransportForTests({
+      query: async (reference: Parameters<typeof getFunctionName>[0], args: { environment: 'sandbox' | 'production'; serviceAuth: import('@/lib/server/convex-source').ConvexServerFunctionAssertion }) => {
+        if (getFunctionName(reference) !== 'moneyReadiness:readForServer') return { kind: 'unavailable', refreshState: 'none' }
+        const result = await backend.query(registeredRead, args)
+        paymentObserved?.(result)
+        return result
+      },
+      mutation: vi.fn(), action: vi.fn(),
+    } as never)
+    const options = { env, fetch: readyFetch(), nodeMajor: 22 }
+    const initial = await handleReadyRequest(request(), options)
+    expect(initial.status).toBe(503)
+    expect((await initial.clone().json()).checks).toEqual({ config: 'ready', convex: 'ready', payments: { status: 'failed', code: 'payments_unavailable' } })
+    readinessIo.web.mockImplementation(async () => await handleReadyRequest(request(), options))
+    expect(await readWebConfiguration(process.env, 'production', now + 60_000)).toEqual({ kind: 'passed', validUntil: now + 60_000 })
+    readinessIo.cdp.mockResolvedValue({ kind: 'ready' })
+    readinessIo.ledger.mockResolvedValue({ kind: 'ready' })
+    readinessIo.chain.mockResolvedValue({ kind: 'observed', blockTimestamp: now })
+    const passed = { kind: 'passed' as const, validUntil: now + 60_000 }
+    const action = {
+      runQuery: vi.fn(async () => ({ reference_rate: passed, commercial_policy: passed, treasury: passed })),
+      runMutation: async (_reference: unknown, args: { snapshot: PaymentReadinessSnapshot }) => await backend.mutation(publish, args),
+    } as unknown as ActionCtx
+    expect(await refreshPaymentReadiness(action)).toEqual({ kind: 'published', replayed: false })
+    const rows = await backend.run(ctx => ctx.db.query('moneyPaymentReadiness').collect())
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.checks.web_configuration.kind).toBe('passed')
+    expect(rows[0]?.checks.sanctions).toEqual({ kind: 'failed', code: 'trm_tenant_contract_unavailable' })
+    expect((await handleReadyRequest(request(), options)).status).toBe(503)
+    // This separately admitted fixture proves the existing consumer's recovery;
+    // it is not proof that a live sanctions provider is currently implemented.
+    const checks = readyPaymentView(now + 60_000).checks as PaymentReadinessChecks
+    const startedAt = rows[0]!.startedAt + 1
+    vi.spyOn(Date, 'now').mockReturnValue(startedAt + 1)
+    const treasury = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await backend.mutation(publish, { snapshot: sealPaymentReadinessSnapshot({ environment: 'production',
+      configurationDigest: backendPaymentReadinessDigest(process.env), startedAt, completedAt: startedAt + 1,
+      expiresAt: paymentReadinessExpiresAt(startedAt, checks), checks }) })
+    expect((await handleReadyRequest(request(), options)).status).toBe(200)
+    vi.mocked(Date.now).mockReturnValue(startedAt + 2)
+    const treasuryExpiresAt = startedAt + 1002
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve',
+      chainBlockTimestamp: treasuryExpiresAt - TREASURY_SNAPSHOT_MAX_AGE_MS })
+    let releaseSearch: (() => void) | undefined
+    const searchBarrier = new Promise<void>(resolve => { releaseSearch = resolve })
+    const paymentBarrier = new Promise<PaymentReadinessView>(resolve => { paymentObserved = resolve })
+    toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce(async () => {
+      await searchBarrier
+      return { kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: '', appliedFilters: {}, ranking: [], navigation: [] }
+    })
+    const pending = handleReadyRequest(request(), options)
+    const currentView = await paymentBarrier
+    await new Promise<void>(resolve => setImmediate(resolve))
+    vi.mocked(Date.now).mockReturnValue(treasuryExpiresAt)
+    releaseSearch?.()
+    const expired = await pending
+    expect(currentView).toMatchObject({ kind: 'ready', expiresAt: treasuryExpiresAt,
+      checks: { treasury: { kind: 'passed', validUntil: treasuryExpiresAt } } })
+    expect(expired.status).toBe(503)
+    paymentObserved = undefined
+    vi.mocked(Date.now).mockReturnValue(treasuryExpiresAt + 1)
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve', cashCheck: {
+      kind: 'mismatch', code: 'treasury_cash_difference', checkedCount: 1, expectedUnits: '200000000', observedUnits: '190000000',
+      differenceUnits: '-10000000', evidenceRefs: [treasury.snapshotRef],
+    } })
+    const drifted = await handleReadyRequest(request(), options)
+    expect(drifted.status).toBe(503)
+    const outward = await drifted.text()
+    expect(JSON.parse(outward).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+    expect(outward).not.toContain('treasury_reconciliation_required')
+    expect(outward).not.toContain(treasury.snapshotRef)
+  })
+  it.each(['network', 'partial_body', 'redirect'] as const)('bounds actual Convex SDK %s failure without exposing transport details', async failure => {
+    setPublicSourceTransportForTests(undefined)
+    vi.stubEnv('CONVEX_URL', undefined)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
+    const env: Record<string, string> = { ...productionReadinessEnvironment(), CONVEX_URL: 'https://fixture.convex.cloud', VITE_CONVEX_URL: 'https://fixture.convex.cloud' }
+    let aborted = false
+    const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
+      if (init?.method !== 'POST') return new Response(null, { status: 200 })
+      expect(init.redirect).toBe('error')
+      expect(String(init.body)).not.toContain(env.AE_CONVEX_SERVER_FUNCTION_TOKEN)
+      if (failure === 'redirect') {
+        const response = Response.json({ status: 'success', value: readyPaymentView() })
+        Object.defineProperty(response, 'redirected', { value: true })
+        return response
+      }
+      const signal = init.signal
+      if (signal == null) throw new Error('missing_abort_signal')
+      if (failure === 'network') return await new Promise<Response>((_resolve, reject) => {
+        const abort = () => { aborted = true; reject(new DOMException('private-network-details', 'AbortError')) }
+        if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true })
+      })
+      return new Response(new ReadableStream({ start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"status":"success","value":'))
+        const abort = () => { aborted = true; controller.error(new DOMException('private-body-details', 'AbortError')) }
+        if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true })
+      } }), { headers: { 'content-type': 'application/json' } })
+    })
+    const response = await handleReadyRequest(request(), { env, fetch: fetchImpl, timeoutMs: 25, nodeMajor: 22 })
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+    if (failure !== 'redirect') expect(aborted).toBe(true)
   })
 })

@@ -3,7 +3,8 @@ import {
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { executeDecisionGateway } from '@/modules/decision-engine/public'
 
 vi.mock('@/modules/decision-engine/public', async (importOriginal) => ({
@@ -12,6 +13,8 @@ vi.mock('@/modules/decision-engine/public', async (importOriginal) => ({
 }))
 
 const quoteRef = `operation-commitment:v1:${'b'.repeat(64)}`
+
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter tool.call', () => {
   it('authenticates tool.call and delegates the same registered action', async () => {
@@ -54,6 +57,7 @@ describe('MCP host adapter tool.call', () => {
         id: 'key:test',
         subject: 'user_test',
         scopes: ['market_tools:call'],
+        claims: { aeEnvironment: 'sandbox' },
       }),
       resolvePrincipal: async (projection, requiredScopes, consequenceResource) => {
         resolvedScopes.push(requiredScopes)
@@ -97,6 +101,7 @@ describe('MCP host adapter tool.call', () => {
     }, {
       authenticate: async () => ({
         isAuthenticated: true, tokenType: 'api_key', id: 'key:test', subject: 'user_test', scopes: ['market_tools:call'],
+        claims: { aeEnvironment: 'sandbox' },
       }),
       catalogSearcher: async () => [{
         toolRef: currentToolRef, name: 'Dataset search', description: 'Searches datasets',
@@ -127,6 +132,7 @@ describe('MCP host adapter tool.call', () => {
     }, {
       authenticate: async () => ({
         isAuthenticated: true, tokenType: 'api_key', id: 'key:test', subject: 'user_test', scopes: ['market_tools:call'],
+        claims: { aeEnvironment: 'sandbox' },
       }),
       callService: { callTool, readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn() },
     }, { authorization: 'Bearer buyer' })

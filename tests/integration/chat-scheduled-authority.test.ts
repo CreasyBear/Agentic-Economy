@@ -33,6 +33,7 @@ import { generate as chatGenerateRegistration } from '../../convex/chatGenerate'
 import type { Id } from '../../convex/_generated/dataModel'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { CHAT_NO_RESULT_ANSWER } from '../../convex/lib/chat/tools/step'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 async function drainExpectedUnavailableGeneration(
@@ -49,6 +50,7 @@ async function drainExpectedUnavailableGeneration(
 describe('scheduled chat consequence authority', () => {
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
     gatewayProbe.modelCalls.mockClear()
     gatewayProbe.blankFinalAfterTool = false
     delete process.env.OPENROUTER_API_KEY
@@ -241,7 +243,7 @@ describe('scheduled chat consequence authority', () => {
         threadId: `thread:authority-preflight:${caseKind}`,
         promptMessageId: `message:authority-preflight:${caseKind}`,
         authority,
-      })).rejects.toThrow('chat_generation_authority_invalid')
+      })).resolves.toBeNull()
       expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(modelCallsBefore)
       await drainExpectedUnavailableGeneration(backend)
       expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(
@@ -574,7 +576,7 @@ describe('scheduled chat consequence authority', () => {
       threadId: sent.threadId,
       promptMessageId: sent.promptMessageId,
       authority: admittedAuthority,
-    })).rejects.toThrow('chat_generation_authority_invalid')
+    })).resolves.toBeNull()
     expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(modelCallsAfterSettledGeneration)
     const replayMessages = await owner.query(api.chatMessages.listMessages, {
       threadId: sent.threadId,
@@ -611,8 +613,10 @@ describe('scheduled chat consequence authority', () => {
     })).resolves.toMatchObject({ busy: false })
   })
 
-  it('keeps a persistently blank Tool turn visible, failed, and free of duplicate prompts', async () => {
+  it('settles a persistently blank Tool turn with one bounded fallback and no duplicate prompt', async () => {
     process.env.OPENROUTER_API_KEY = 'runtime-authority-regression-key'
+    // With no declared catalogue environment, exercise the model Tool loop directly.
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     gatewayProbe.blankFinalAfterTool = true
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-blank-final')
@@ -625,8 +629,12 @@ describe('scheduled chat consequence authority', () => {
       paginationOpts: { cursor: null, numItems: 20 },
     })
     expect(messages.page.filter(message => message.role === 'user')).toHaveLength(1)
-    expect(messages.page.some(message => message.role === 'assistant' && message.text.includes("I couldn't finish the answer. Edit your question to try again."))).toBe(true)
-    expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim().length === 0)).toHaveLength(1)
+    const answers = messages.page.filter(message => message.role === 'assistant' && message.text.trim().length > 0)
+    expect(answers).toHaveLength(1)
+    expect(answers[0]).toMatchObject({ text: CHAT_NO_RESULT_ANSWER, status: 'success' })
+    expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim().length === 0))
+      .toEqual([expect.objectContaining({ text: ' ', status: 'success' })])
+    expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(1)
     await expect(owner.query(api.chatThreads.getThread, {
       threadId: sent.threadId, now: Date.now(),
     })).resolves.toMatchObject({ busy: false })
@@ -649,7 +657,7 @@ describe('scheduled chat consequence authority', () => {
       threadId: 'thread:settings',
       promptMessageId: 'message:settings',
       authority,
-    })).rejects.toThrow('chat_generation_authority_invalid')
+    })).resolves.toBeNull()
     expect(runMutation).toHaveBeenCalledOnce()
     expect(gatewayProbe.modelCalls).not.toHaveBeenCalled()
 
@@ -659,7 +667,7 @@ describe('scheduled chat consequence authority', () => {
       threadId: 'thread:default-settings',
       promptMessageId: 'message:default-settings',
       authority,
-    })).rejects.toThrow('chat_generation_authority_invalid')
+    })).resolves.toBeNull()
     expect(runMutation).toHaveBeenCalledTimes(2)
   })
 

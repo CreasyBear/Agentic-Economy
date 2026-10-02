@@ -1,5 +1,4 @@
-import Form from '@rjsf/shadcn'
-import { Component, useId, useMemo, useState, type ReactNode } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { BracesIcon, FileJsonIcon } from 'lucide-react'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -12,7 +11,9 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
-import { parsePlaygroundJson, playgroundCallCommand, playgroundSchema, playgroundValidator, supportsPlaygroundForm } from './directory-tool-input'
+import { AeToolInputForm } from '../shared/tool-input-form/AeToolInputForm'
+import { ToolInputFormBoundary } from '../shared/tool-input-form/ToolInputFormBoundary'
+import { parseToolInputJson, toolInputCallCommand, toolInputSchema, toolInputValidator, supportsToolInputForm } from '../shared/tool-input-form/tool-input-form'
 
 export type DirectoryToolPlaygroundProps = Readonly<{
   entry: X402DirectoryEntry
@@ -30,17 +31,17 @@ export function DirectoryToolPlayground(props: DirectoryToolPlaygroundProps) {
 function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }: DirectoryToolPlaygroundProps) {
   const id = useId()
   const canonical = inputSchemaJson !== undefined
-  const schema = useMemo(() => playgroundSchema(inputSchemaJson ?? entry.input?.schemaJson), [inputSchemaJson, entry.input?.schemaJson])
+  const schema = useMemo(() => toolInputSchema(inputSchemaJson ?? entry.input?.schemaJson), [inputSchemaJson, entry.input?.schemaJson])
   const example = canonical ? inputExampleJson : entry.input?.exampleJson
-  const initialValue = parsePlaygroundJson(example)
+  const initialValue = parseToolInputJson(example)
   const initialText = initialValue === undefined ? '{}' : JSON.stringify(initialValue, null, 2)
   const [inputText, setInputText] = useState(initialText)
-  const formAvailable = supportsPlaygroundForm(schema)
+  const formAvailable = supportsToolInputForm(schema)
   const [mode, setMode] = useState(formAvailable ? 'form' : 'json')
-  const value = useMemo(() => parsePlaygroundJson(inputText), [inputText])
-  const validation = useMemo(() => value === undefined ? undefined : schema ? playgroundValidator.validateFormData(value, schema) : undefined, [value, schema])
-  const command = canonical ? playgroundCallCommand(toolRef, schema, inputText) : undefined
-  const outputExample = parsePlaygroundJson(entry.output?.exampleJson)
+  const value = useMemo(() => parseToolInputJson(inputText), [inputText])
+  const validation = useMemo(() => value === undefined ? undefined : schema ? toolInputValidator.validateFormData(value, schema) : undefined, [value, schema])
+  const command = canonical ? toolInputCallCommand(toolRef, schema, inputText) : undefined
+  const outputExample = parseToolInputJson(entry.output?.exampleJson)
   const errors = value === undefined ? ['Enter valid JSON within the input size limit.'] : validation?.errors.map(error => error.stack) ?? []
   const hintId = `${id}-hint`
   const errorId = `${id}-errors`
@@ -68,13 +69,9 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
             {schema ? <TabsTrigger value="schema">Schema</TabsTrigger> : null}
           </TabsList>
           <TabsContent value="form" className="pt-4">
-            {formAvailable && schema && value !== undefined ? <FormBoundary fallback={<div className="grid gap-4"><Alert><AlertDescription>This schema needs the JSON editor.</AlertDescription></Alert>{jsonEditor}</div>}>
-              <Form idPrefix={`${id}-form`} schema={schema} validator={playgroundValidator} formData={value}
-                onChange={event => setInputText(JSON.stringify(event.formData, null, 2) ?? '')}
-                uiSchema={{ 'ui:submitButtonOptions': { norender: true } }}
-                experimental_defaultFormStateBehavior={{ emptyObjectFields: 'skipDefaults', arrayMinItems: { populate: 'never' }, constAsDefaults: 'never' }}
-                omitExtraData={false} liveOmit={false} showErrorList={false} />
-            </FormBoundary> : jsonEditor}
+            {formAvailable && schema && value !== undefined ? <ToolInputFormBoundary fallback={<div className="grid gap-4"><Alert><AlertDescription>This schema needs the JSON editor.</AlertDescription></Alert>{jsonEditor}</div>}>
+              <AeToolInputForm idPrefix={`${id}-form`} schema={schema} value={value} onChange={next => setInputText(JSON.stringify(next, null, 2) ?? '')} />
+            </ToolInputFormBoundary> : jsonEditor}
           </TabsContent>
           <TabsContent value="json" className="pt-4">{jsonEditor}</TabsContent>
           {schema ? <TabsContent value="schema" className="pt-4"><JsonExample title={canonical ? 'Tool input schema' : 'Provider request schema'} code={JSON.stringify(schema, null, 2)} /></TabsContent> : null}
@@ -102,8 +99,3 @@ function JsonExample({ title, code }: Readonly<{ title: string; code: string }>)
   return <CodeBlock code={code} language="json" className="max-h-[32rem] overflow-auto"><CodeBlockHeader><CodeBlockTitle>{title}</CodeBlockTitle><CodeBlockActions><CodeBlockCopyButton aria-label={`Copy ${title}`} /></CodeBlockActions></CodeBlockHeader></CodeBlock>
 }
 
-class FormBoundary extends Component<Readonly<{ children: ReactNode; fallback: ReactNode }>, { failed: boolean }> {
-  override state = { failed: false }
-  static getDerivedStateFromError() { return { failed: true } }
-  override render() { return this.state.failed ? this.props.fallback : this.props.children }
-}

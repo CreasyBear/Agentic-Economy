@@ -4,19 +4,45 @@ import { mockJevFetch } from '../../helpers/tool-search-rerank-fixtures'
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', () => ({ listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
 import { readX402Directory } from '@/modules/market/x402-directory.server'
+import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
+import { minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 
 const resources = Array.from({ length: 20 }, (_, index) => ({
   resource: `https://provider.test/resource/${index}`,
   type: index % 2 === 0 ? 'http' : 'mcp',
   x402Version: 2,
   description: `Resource ${index}`,
-  accepts: [{ network: 'unfamiliar:network', scheme: 'unfamiliar-scheme', amount: '123', asset: 'asset-id' }],
+  accepts: [{ network: 'eip155:8453', scheme: 'unfamiliar-scheme', amount: '123', asset: 'asset-id' }],
 }))
 
+beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('native x402 directory browsing', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('refuses an undeclared deployment or opposite network before requesting the source', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
+    expect(await readX402Directory({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    expect(await readX402Directory({ network: 'base-sepolia' })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(sdk.list).not.toHaveBeenCalled()
+    expect(sdk.search).not.toHaveBeenCalled()
+  })
+
+  it('retains mixed upstream evidence while showing only this deployment lane', async () => {
+    const mixed = { ...resources[0], accepts: [
+      { network: 'eip155:84532', scheme: 'exact', amount: '2000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+      { network: 'eip155:8453', scheme: 'exact', amount: '1000', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+    ] }
+    sdk.list.mockResolvedValue({ items: [mixed, { ...resources[1], accepts: [mixed.accepts[0]] }], pagination: { offset: 0, limit: 20, total: 2 } })
+    const page = await readX402Directory({})
+    if (page.kind !== 'ok') throw new Error('expected directory')
+    expect(page.items).toHaveLength(1)
+    expect(page.items[0]?.prices).toMatchObject([{ network: 'eip155:8453', amount: '0.001000 USDC' }])
+    expect(JSON.parse(page.items[0]!.metadataJson)).toEqual(mixed)
+    expect(page.total).toBe(2)
+  })
 
   it('reranks projected upstream search results while retaining every result and partial status', async () => {
     vi.stubEnv('TYPESAFE_API_KEY', '')
@@ -24,9 +50,9 @@ describe('native x402 directory browsing', () => {
     const fetchImpl = mockJevFetch({ match_0: { type: 'noul', noul: 0.1 }, match_1: { type: 'noul', noul: 0.9 } })
     vi.stubGlobal('fetch', fetchImpl)
     sdk.search.mockResolvedValue({ resources: resources.slice(0, 2), partialResults: true })
-    const page = await readX402Directory({ query: 'image', network: 'base', maxUsdPrice: 0.1 })
-    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'image', network: 'base', maxUsdPrice: '0.1', limit: 20 })
-    expect(page).toMatchObject({ kind: 'ok', partialResults: true, appliedFilters: { network: 'base', maxUsdPrice: 0.1 } })
+    const page = await readX402Directory({ query: 'image', network: 'eip155:8453', maxUsdPrice: 0.1 })
+    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'image', network: 'eip155:8453', maxUsdPrice: '0.1', limit: 20 })
+    expect(page).toMatchObject({ kind: 'ok', partialResults: true, appliedFilters: { network: 'eip155:8453', maxUsdPrice: 0.1 } })
     if (page.kind !== 'ok') throw new Error('expected directory')
     expect(page.items.map(item => item.resource)).toEqual([resources[1]!.resource, resources[0]!.resource])
     expect(JSON.parse(page.items[0]!.metadataJson)).toEqual(resources[1])
@@ -41,7 +67,7 @@ describe('native x402 directory browsing', () => {
     expect(page).toMatchObject({ kind: 'ok', offset: 20, limit: 20, total: 14445, previousOffset: 0, nextOffset: 40 })
     if (page.kind !== 'ok') throw new Error('expected_directory')
     expect(page.items.map((item) => item.resource)).toEqual(resources.map((item) => item.resource))
-    expect(page.items[1]).toMatchObject({ protocol: 'mcp', prices: [{ scheme: 'unfamiliar-scheme', network: 'unfamiliar:network' }] })
+    expect(page.items[1]).toMatchObject({ protocol: 'mcp', prices: [{ scheme: 'unfamiliar-scheme', network: 'eip155:8453' }] })
     expect(JSON.parse(page.items[1]!.metadataJson)).toEqual(resources[1])
   })
 
@@ -51,16 +77,20 @@ describe('native x402 directory browsing', () => {
     expect(page.kind === 'ok' && page.items[0]?.prices[0]?.amount).toBe('500 atomic units (legacy-asset)')
   })
 
-  it.each(['base', 'eip155:8453'])('formats SDK-recognized assets on %s without an AE asset table', async (network) => {
-    sdk.list.mockResolvedValue({ items: [{ ...resources[0], accepts: [{ scheme: 'exact', network, amount: '3000', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }] }], pagination: { limit: 20, offset: 0, total: 1 } })
-    const page = await readX402Directory({})
-    expect(page.kind === 'ok' && page.items[0]?.prices[0]?.amount).toBe('0.003000 USDC')
+  it.each([
+    { network: 'eip155:8453', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+    { network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+    { network: 'eip155:42161', asset: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
+    { network: 'eip155:137', asset: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' },
+  ])('formats registered USDC on $network', async ({ network, asset }) => {
+    const entry = projectX402DirectoryEntry({ ...resources[0], accepts: [{ scheme: 'exact', network, amount: '3000', asset }] })
+    expect(entry.prices[0]).toMatchObject({ amount: '0.003000 USDC', symbol: 'USDC', decimalAmount: '0.003000', scheme: 'exact' })
   })
 
   it('uses native semantic search and exposes partial results without paging or filtering', async () => {
     sdk.search.mockResolvedValue({ resources, partialResults: true })
     const page = await readX402Directory({ query: 'weather' })
-    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'weather', limit: 20 })
+    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'weather', network: 'eip155:8453', limit: 20 })
     expect(page).toMatchObject({ kind: 'ok', partialResults: true, offset: 0, limit: 20 })
     expect(page).not.toHaveProperty('nextOffset')
     expect(page.kind === 'ok' && page.items.length).toBe(20)
@@ -84,7 +114,7 @@ describe('native x402 directory browsing', () => {
     sdk.list.mockRejectedValueOnce(new Error('upstream'))
     expect(await readX402Directory({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
     sdk.list.mockResolvedValueOnce({ items: [], pagination: { offset: 0, limit: 20, total: 0 } })
-    expect(await readX402Directory({})).toEqual({ kind: 'ok', items: [], offset: 0, limit: 20, total: 0, mode: 'browse', appliedFilters: {} })
+    expect(await readX402Directory({})).toEqual({ kind: 'ok', items: [], offset: 0, limit: 20, total: 0, mode: 'browse', appliedFilters: { network: 'eip155:8453' } })
   })
 
   it('sends combined filters to SDK search across the full source and preserves filter context', async () => {
@@ -102,7 +132,7 @@ describe('native x402 directory browsing', () => {
   it('uses upstream search for a filter alone, including a zero maximum', async () => {
     sdk.search.mockResolvedValue({ resources: [], partialResults: false })
     await readX402Directory({ maxUsdPrice: 0 })
-    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ maxUsdPrice: '0', limit: 20 })
+    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ network: 'eip155:8453', maxUsdPrice: '0', limit: 20 })
     expect(sdk.list).not.toHaveBeenCalled()
   })
 
@@ -146,7 +176,7 @@ describe('native x402 directory browsing', () => {
   it('keeps sparse and malformed metadata visible without invented ratings, methods or suitability', async () => {
     sdk.list.mockResolvedValue({ items: [{
       resource: 'opaque-resource', type: 'mcp', serviceName: { malicious: true }, description: 42,
-      accepts: [null, { network: 'base', scheme: 'exact', amount: 'not-money' }],
+      accepts: [null, { network: 'eip155:8453', scheme: 'exact', amount: 'not-money' }],
       quality: { l30DaysTotalCalls: -1, l30DaysUniquePayers: '500 stars' },
       extensions: { bazaar: { info: { input: { method: { injected: true } } } } },
       tags: [1, null, 'real tag'],
@@ -213,15 +243,30 @@ describe('rich provider-declared contracts', () => {
     expect(result.prices[0]).not.toHaveProperty('usdPrice')
     expect(result.prices[0]).not.toHaveProperty('numericAmount')
   })
+  it('prices a Solana USDC exact option and an upto option at its declared maximum', () => {
+    const solana = projectX402DirectoryEntry({
+      resource: 'https://provider.test/solana',
+      accepts: [{ network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', scheme: 'exact', amount: '20000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' }],
+    })
+    expect(solana.prices[0]).toMatchObject({ symbol: 'USDC', decimalAmount: '0.020000', scheme: 'exact' })
+    expect(minimumDirectoryUsdPrice(solana)).toBe('0.02')
+
+    const upto = projectX402DirectoryEntry({
+      resource: 'https://provider.test/upto',
+      accepts: [{ network: 'eip155:8453', scheme: 'upto', amount: '100', maxAmountRequired: '20000', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }],
+    })
+    expect(upto.prices[0]).toMatchObject({ scheme: 'upto', symbol: 'USDC', decimalAmount: '0.020000' })
+    expect(minimumDirectoryUsdPrice(upto)).toBe('0.02')
+  })
   it('uses maintained v1 discovery extraction and preserves output schema when available', async () => {
     const outputSchema = { input: { type: 'http', method: 'GET', query_params: { city: 'Perth' } }, output: { forecast: 'sunny' } }
-    const result = await project({ accepts: [{ network: 'base', scheme: 'exact', maxAmountRequired: '500', asset: 'unknown', outputSchema }] })
+    const result = await project({ accepts: [{ network: 'eip155:8453', scheme: 'exact', maxAmountRequired: '500', asset: 'unknown', outputSchema }] })
     expect(result.method).toBe('GET')
     expect(result.input?.fields).toContainEqual(expect.objectContaining({ name: 'city', location: 'queryParams', source: 'example' }))
     expect(JSON.parse(result.output!.exampleJson!)).toEqual({ forecast: 'sunny' })
     expect(result.output).not.toHaveProperty('schemaJson')
     const schema = { type: 'object', properties: { forecast: { type: 'string' } } }
-    const schemaResult = await project({ accepts: [{ network: 'base', scheme: 'exact', outputSchema: schema }] })
+    const schemaResult = await project({ accepts: [{ network: 'eip155:8453', scheme: 'exact', outputSchema: schema }] })
     expect(JSON.parse(schemaResult.output!.schemaJson!)).toEqual(schema)
   })
 })
@@ -241,11 +286,9 @@ describe('functional Tool labels and network facts', () => {
     expect(page.items[2]!.title.endsWith('…')).toBe(true)
   })
   it('labels known Solana networks without guessing an unknown token denomination', async () => {
-    sdk.list.mockResolvedValue({ items: [{ ...resources[0], accepts: [{ network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', asset: 'unknown-mint', amount: '20000', scheme: 'exact' }] }], pagination: { offset: 0, limit: 20 } })
-    const page = await readX402Directory({})
-    if (page.kind !== 'ok') throw new Error('expected_tools')
-    expect(page.items[0]?.prices[0]).toMatchObject({ networkLabel: 'Solana', amount: '20000 atomic units (unknown-mint)' })
-    expect(page.items[0]?.prices[0]?.symbol).toBeUndefined()
-    expect(page.items[0]?.prices[0]?.decimalAmount).toBeUndefined()
+    const entry = projectX402DirectoryEntry({ ...resources[0], accepts: [{ network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', asset: 'unknown-mint', amount: '20000', scheme: 'exact' }] })
+    expect(entry.prices[0]).toMatchObject({ networkLabel: 'Solana', amount: '20000 atomic units (unknown-mint)' })
+    expect(entry.prices[0]?.symbol).toBeUndefined()
+    expect(entry.prices[0]?.decimalAmount).toBeUndefined()
   })
 })

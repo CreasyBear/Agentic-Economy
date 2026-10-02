@@ -6,7 +6,6 @@ import {
   commercialPolicyRefusalReasonSchema,
   evaluateCommercialPolicyGate,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
-  PACKAGE4_SYNTHETIC_VPS_CONTROLS,
   type CommercialPolicyApproval,
   type CommercialPolicyGateResult,
   type CommercialPolicyRefusalReason,
@@ -69,33 +68,25 @@ describe('commercial policy launch gate', () => {
     })
   })
 
-  it('binds the server-owned synthetic release controls into the sandbox policy digest', () => {
-    const local = evaluateCommercialPolicyGate({
-      environment: 'sandbox',
-      now: NOW,
-      approvals: [],
+  it('keeps the deterministic local policy digest stable', () => {
+    const first = evaluateCommercialPolicyGate({
+      environment: 'sandbox', now: NOW, approvals: [],
       sandboxFixture: 'managed_x402_deterministic_v1',
-      sandboxDeploymentProfile: 'local_ci',
     })
-    const release = evaluateCommercialPolicyGate({
-      environment: 'sandbox',
-      now: NOW,
-      approvals: [],
+    const second = evaluateCommercialPolicyGate({
+      environment: 'sandbox', now: NOW + 1, approvals: [],
       sandboxFixture: 'managed_x402_deterministic_v1',
-      sandboxDeploymentProfile: 'synthetic_vps_fixture',
     })
-
-    expect(release).toMatchObject({
-      kind: 'admitted',
-      controls: PACKAGE4_SYNTHETIC_VPS_CONTROLS,
+    expect(first).toMatchObject({
+      kind: 'admitted', controls: SANDBOX_COMMERCIAL_POLICY_CONTROLS,
       policyRefs: [
         'commercial-policy-fixture:managed_x402_deterministic_v1',
-        'commercial-policy-deployment:synthetic_vps_fixture',
+        'commercial-policy-deployment:local_ci',
       ],
     })
-    expect(release.kind === 'admitted' && local.kind === 'admitted'
-      ? release.policyDigest === local.policyDigest
-      : true).toBe(false)
+    expect(first.kind === 'admitted' && second.kind === 'admitted'
+      ? first.policyDigest === second.policyDigest
+      : false).toBe(true)
   })
 
   it('admits production only when every required family is current', () => {
@@ -173,6 +164,10 @@ describe('commercial policy launch gate', () => {
   })
 
   it.each([
+    ['previous Ledger version', {
+      ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody,
+      formanceLedgerVersion: 'v2.4.12',
+    }],
     ['fixture deployment', {
       ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody,
       deploymentClass: 'synthetic_vps_fixture' as const,
