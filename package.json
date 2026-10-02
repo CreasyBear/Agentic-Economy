@@ -18,7 +18,7 @@
     "dev:sign-in-url": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --env-file-if-exists=.env.development --env-file-if-exists=.env.development.local tools/dev/clerk-sign-in-url.ts",
     "env:example": "tsx tools/release/render-env-example.ts",
     "env:example:check": "tsx tools/release/render-env-example.ts --check",
-    "build": "npm run pack:cli:public && vite build",
+    "build": "npm run pack:cli:public && vite build && node tools/release/verify-server-build.ts",
     "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .cache/typecheck.tsbuildinfo && npm run typecheck:convex",
     "typecheck:convex": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --project convex/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/typecheck-convex.tsbuildinfo",
     "typecheck:release": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit && npm run typecheck:convex:release",

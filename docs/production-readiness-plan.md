@@ -2769,3 +2769,112 @@ gate and React Doctor workflows are manually disabled; retain that setting and
 run repository acceptance locally. Vercel's main-branch web build remains
 automatic. This merge does not deploy the Convex backend, publish a CLI release
 or authorise live-money drills.
+
+## Stage 42 — retire temporary deployments and validate the emitted server
+
+Joel requested Vercel/GitHub cleanup and a clear route from the Wayfinder work
+to production. The current operator view is
+[Current deployments](operations/deployments.md). Vercel/GitHub CLI readback,
+not historical project names, determined the cleanup targets.
+
+### Cleanup boundary and observed state
+
+Vercel team `team_O85TtPPdPANw2OCjrj4dEpxp` retains the application project
+`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, its Production target at `app.aecon.ai`, and
+custom staging environment `env_glJqfVcrMaSi920N4JP1NpI0Ovj6` at `staging.aecon.ai`.
+The marketing project and other public applications remain separate.
+
+Deleted web projects:
+
+| Retired project | Exact project ID | Authority / reason |
+| --- | --- | --- |
+| `agentic-economy-sandbox-tools` | `prj_gyaX8fy0abiwTFfvfqnqrn71Al8p` | Synthetic reference Provider; configured source root removed |
+| `deepsec-agentic-economy-829691ff` | `prj_WvrJJjPicJjaS2ugOiAt7a589Bkj` | Temporary empty security project; no repository, targets or environment entries |
+| `agentic-economy-package4-release` | `prj_ADlGp7Fkox0D2MsAq0RkL3oaNFFn` | Retired synthetic web app; no customer domain or attached Marketplace resource |
+
+Before retirement, the checked-in deployment snapshot probed the Package 4
+web app: health/readiness returned 200, release was
+`6593dbe7b4b8f75304caeed5b468acc497b720f4`, and its unauthenticated Formance edge
+returned 401. The snapshot reported six unverified infrastructure/payment
+checks, not full readiness. The mutation boundary was only the Vercel web
+project and its deployments/settings. Backend and identity instances, financial
+authority, payment/custody mode and value-bearing data were not independently
+recensused and were not deletion targets. Their owning-provider data and
+recovery evidence remain outside this cleanup. A deleted web project requires
+recreation; this is not a ledger/database rollback.
+
+GitHub cleanup removed 22 branch refs after fresh SHA readback and an exact
+ancestor check against `main`. It preserved active worktrees, PR branches,
+`codex/production-money`, the backup branch and the backup repository. The
+founder-console PR #290 was retargeted to `main`. Four sandbox/reference-provider
+environments had zero secrets and variables before deletion. Five historical
+one-time production workflows had no source file on `main` and were disabled;
+their histories remain. The normal kernel and React Doctor workflow settings
+were preserved. Sanitized before-state identities, branch SHAs and action
+readbacks are retained privately; no secret values were exported for cleanup.
+
+### Built-server contract and smallest correction
+
+The merged main web deployment `dpl_G6QnH8ehNkieHTeyRy3WysFtyo5n` was natively
+READY, but health, readiness and release all returned 500. Runtime logs and the
+local Vercel artifact both showed `SyntaxError: Export 'ssr_exports' is not
+defined in module`. The npm lockfile selected Rolldown 1.2.5. The upstream
+[reported failure](https://github.com/TanStack/router/issues/8031) and
+[merged correction](https://github.com/rolldown/rolldown/pull/10743) identify
+the bundler's handling of module exports as the affected boundary.
+
+**Requires:** Node 22 and a completed Vercel server build with emitted JavaScript
+modules. **Ensures:** every emitted server module passes Node's native syntax
+and local-export checks before the build reports success. **Invariant:** the
+validator does not execute application startup, contact providers, change
+data or loosen environment/financial admission. **On violation:** exit nonzero
+with the compiler's diagnostic; absent/empty output also fails. This is a build
+bug, with recovery at build/release time, not a retryable request failure.
+
+Seam analysis: use the existing dependency lockfile and `npm run build` link
+boundary. `npm update rolldown` selected 1.2.12 within the existing Vite/Nitro
+ranges; the change is limited to Rolldown, its native bindings and its Oxc type
+dependency. TanStack's security patch, Nitro pin, application code, SSR code
+splitting and Node/npm policy are preserved. No new runtime dependency or
+framework migration is needed.
+
+Complexity decision: keep one small build command that invokes `node --check`
+over the actual emitted modules. It adds one artifact-directory convention and
+one command to the existing build. It removes the demonstrated hidden risk that
+a successful compiler/bundler run can ship unloadable modules. Source-only
+typechecking and unit tests cannot check that output; changing generated
+bundles or disabling server code splitting would add a wider maintenance and
+runtime cost. Syntax checks do not establish import resolution, environment
+readiness or complete request behavior; built-handler HTTP and deployed probes
+remain separate acceptance evidence.
+
+The new command rejected the previously emitted broken bundle. Its three
+behavior tests cover that undeclared export, valid ESM/CJS without executing
+startup effects, and missing/empty output. The focused release tests pass
+21/21, `npm run check` passes, and the patched build passes native validation
+for all 462 emitted modules. The full `npm run gate` passes under Node
+22.22.0/npm 11.5.1: 7,687 unit tests (one skipped), 2,701 integration tests
+(61 skipped, three todo), 75 boundary checks, 31 SEO checks, 16 browser journeys
+(14 configured skips), 18 accessibility cases and the reproducible CLI package.
+Anonymous Convex regeneration and public-build generation have no protected
+artifact drift. Deployed acceptance remains separate from this source proof.
+
+The built Vercel Node handler was also exercised without backend credentials:
+health and release return 200; readiness returns the intended 503
+`server_not_ready`, `deployment_manifest_invalid`, `convex_probe_skipped` and
+`sellable: false`. The local harness uses a fresh connection per request to
+match the serverless adapter's request/socket lifecycle. This proves the
+emitted code loads and serves diagnostic requests while retaining configuration
+refusal; it does not establish the missing production bindings or paid paths.
+
+The production configuration is independently incomplete: native Vercel
+metadata has no Production `AE_DEPLOYMENT_ENVIRONMENT` entry. Exact named,
+non-secret readback reports Convex `cautious-zebra-473`, Clerk issuer
+`https://clerk.aecon.ai`, Formance environment `sandbox`, and gateway
+`https://formance-alpha.aecon.ai`. Do not relabel those ledger bindings as
+production. #286 and the production prerequisite tickets remain open; neither
+project cleanup nor repaired server output proves real-money readiness.
+
+Joel confirmed that production Formance has not yet been provisioned. Production
+provisioning is the next step; this cleanup does not create a new paid service,
+change custody or move funds.
