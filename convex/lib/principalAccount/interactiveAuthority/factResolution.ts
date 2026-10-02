@@ -28,6 +28,7 @@ import {
   type AuthorityMutationSource,
 } from './shared'
 import type { InteractiveAuthorityFacts } from './contracts'
+import { requireCurrentInteractiveSession } from './sessionProof'
 
 export async function resolveInteractiveAuthorityContext(
   source: AuthorityMutationSource,
@@ -104,6 +105,9 @@ export async function resolveInteractiveAuthorityFactsForToken(
   if (binding.providerState.kind !== 'known' || binding.providerState.value !== 'active') {
     throw new InteractiveAuthorityError('binding_untrusted')
   }
+  // Scheduled reconciliation has no new user presentation and retains the
+  // exact admitted credential/revision comparison in scheduledReconcile.
+  if (identity !== undefined) await requireCurrentInteractiveSession(db, identity, binding)
 
   const credential = requireExactlyOne(
     await db

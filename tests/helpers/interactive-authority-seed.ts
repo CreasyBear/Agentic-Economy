@@ -19,6 +19,8 @@ export type InteractiveAuthoritySeedOptions = Readonly<{
   bindingLifecycle?: 'active' | 'revoked'
   bindingGeneration?: number
   bindingRevision?: number
+  omitSessionRevocationCutoff?: boolean
+  sessionRevocationCutoff?: number
   providerState?: 'active' | 'disabled' | 'unknown'
   credentialBindingRef?: string
   credentialPrincipalRef?: string
@@ -61,6 +63,9 @@ export async function seedInteractiveAuthority(
         providerState,
         lifecycle: options.bindingLifecycle ?? 'active',
         credentialGeneration: options.bindingGeneration ?? 2,
+        ...(options.omitSessionRevocationCutoff === true ? {} : {
+          interactiveSessionsRevokedBefore: options.sessionRevocationCutoff ?? 0,
+        }),
         bindIdempotencyRef: 'bind:sam',
         revision: options.bindingRevision ?? 7,
         createdAt: 1,
@@ -75,6 +80,7 @@ export async function seedInteractiveAuthority(
           providerState: { kind: 'known', value: 'active' },
           lifecycle: 'active',
           credentialGeneration: 2,
+          interactiveSessionsRevokedBefore: 0,
           bindIdempotencyRef: 'bind:sam:duplicate',
           revision: 1,
           createdAt: 1,

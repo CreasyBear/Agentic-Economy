@@ -122,13 +122,13 @@ Joel selected the existing AWS self-hosted Formance route. The production ledger
 is provisioned, bound and verified empty. Backend `cautious-zebra-473` runs
 Stage 49 revision `316094bead7df43e2e722069bd5e309082abec6a`, including explicit
 owner bootstrap, commercial-policy review and protected chat admission. Vercel
-Production `dpl_DWxJpweqthTfcZpC8ftsVe5nwTBj` serves Stage 50 revision
-`6e15ec908d84a096eddaf91fcd43ab9031185d84`; this subsequent web-only change admits
-the configured Clerk frontend through enforced CSP. At 11:26 UTC, release and
-health return HTTP 200, and the real Brave sign-in form renders Google and email
-controls. Readiness remains HTTP 503 with custody disabled and the remaining
-money prerequisites incomplete. Stages 49–50 of the readiness record hold the
-source gate and native acceptance evidence.
+Production `dpl_79FtsQTwNz8FNZdyHWETqdBfRYPV` serves Stage 52 revision
+`8197a2c1b5fd5dac9bd9d6d46448504805ac65b3`, including enforced Clerk CSP and
+canonical HTTPS admission behind Vercel TLS termination. Native readback at
+13:35 UTC verifies that release; release and health return HTTP 200. Readiness
+remains HTTP 503 with custody disabled and the remaining money prerequisites
+incomplete. The readiness record holds the source gate and native acceptance
+evidence.
 [#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) tracks the remaining
 foundation setup. Complete custody enablement/funding, two compatible RPCs,
 screening, commercial policy, treasury, identity and backup/restore acceptance.
@@ -142,7 +142,10 @@ and screening remain pending. Clerk's native readback at 13:18 UTC verifies
 owner authenticator MFA and backup codes. The live session-revocation drill at
 13:24 UTC records exactly one matching application audit event, revokes all
 40 older interactive credentials for that owner, and returns the browser to
-sign-in. Then
+sign-in. The fresh MFA sign-in is observed at 13:31 UTC, but application authority
+recovery is blocked by a missing-token-claim assumption. Stage 53 adds a durable
+revocation cutoff and signed session evidence checks; source verification and
+the production schema deployment are pending. Then
 [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
 proves the authorized real Calls and failure drills before
 [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288) permits launch.

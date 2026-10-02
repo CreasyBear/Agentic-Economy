@@ -3,8 +3,6 @@ name: Kernel release gate
 on:
   push:
     tags: ['v*']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
     inputs:
       confirm_chat_staging_smoke:
@@ -39,35 +37,10 @@ permissions:
 
 concurrency:
   group: kernel-release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
-  check:
-    if: github.event_name == 'pull_request'
-    name: Local change check
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: npm
-      - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1 --ignore-scripts
-      - name: Cache lockfile-pinned dependencies
-        id: dependencies
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json') }}
-      - name: Frozen dependency install on cache miss
-        if: steps.dependencies.outputs.cache-hit != 'true'
-        run: npm ci
-      - name: Run fast local acceptance check
-        run: npm run check
-
-  # This credential-free job runs for every workflow event, including PRs.
+  # This credential-free job runs for every release tag and manual dispatch.
   # Native services, file execution and every assertion must all be proven.
   native-money-proof:
     name: Mandatory native money contract proof

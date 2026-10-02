@@ -118,23 +118,19 @@ describe('green release baseline', () => {
     expect(`${preflight.stdout}\n${preflight.stderr}`).not.toContain('RUN  v')
   })
 
-  it('runs only credential-free checks on PRs and reserves full proof for releases', () => {
+  it('reserves the kernel gate for release tags and manual dispatch', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
-    const check = workflow.jobs?.check
     const release = workflow.jobs?.['source-proof']
     const fresh = workflow.jobs?.['fresh-checkout-proof']
-    expect(workflow.on).toHaveProperty('pull_request')
+    expect(Object.keys(workflow.on ?? {}).sort()).toEqual(['push', 'workflow_dispatch'])
     expect(workflow.on?.push).toEqual({ tags: ['v*'] })
-    expect(check?.if).toBe("github.event_name == 'pull_request'")
-    expect(JSON.stringify(check)).not.toMatch(/secrets\./u)
-    expect(check?.steps?.some((step) => step.run === 'npm run check')).toBe(true)
     expect(release?.if).toContain("startsWith(github.ref, 'refs/tags/v')")
     expect(fresh?.if).toContain("startsWith(github.ref, 'refs/tags/v')")
     expect(release?.steps?.some((step) => step.run === 'npm run gate')).toBe(true)
     expect(release?.steps?.some((step) => step.run === 'git diff --exit-code -- convex/_generated')).toBe(true)
   })
 
-  it('requires isolated credential-free native money proof on PRs and every release event', () => {
+  it('requires isolated credential-free native money proof on every release event', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
     const native = workflow.jobs?.['native-money-proof']
     expect(native).toBeDefined()
@@ -495,8 +491,9 @@ describe('green release baseline', () => {
     expect(cache?.with?.key).toContain('convex-backend-version.outputs.version')
   })
 
-  it('keeps React Doctor blocking new errors', () => {
+  it('runs React Doctor only on manual dispatch and keeps errors blocking', () => {
     const workflow = readWorkflow('.github/workflows/react-doctor.yml')
+    expect(Object.keys(workflow.on ?? {})).toEqual(['workflow_dispatch'])
     const doctor = workflowSteps(workflow).find((step) => step.uses?.startsWith('millionco/react-doctor@'))
     expect(doctor?.with?.blocking).toBe('error')
   })

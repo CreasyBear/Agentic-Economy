@@ -22,6 +22,9 @@ export const externalIdentityBindingValue = v.object({
   providerState: externalProviderStateValue,
   lifecycle: externalIdentityBindingLifecycleValue,
   credentialGeneration: v.number(),
+  // Absent legacy rows require initialization; zero means no observed revocation.
+  // Sessions created at or before a positive cutoff cannot use this binding.
+  interactiveSessionsRevokedBefore: v.optional(v.number()),
   bindIdempotencyRef: v.string(),
   revision: v.number(),
   createdAt: v.number(),
