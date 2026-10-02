@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEPLOYMENT_MANIFEST, SOURCE_WRITE_FAMILIES, validateDeploymentManifest } from '@/lib/deployment/manifest'
-import { validateEnvironment } from '@/lib/deployment/env-schema'
+import { validateClerkWebhookEnvironment, validateEnvironment } from '@/lib/deployment/env-schema'
 
 import {
   ensureBootEnvironmentValidated,
+  ensureClerkWebhookEnvironmentValidated,
   resetBootEnvironmentValidationForTests,
 } from '@/lib/deployment/validate-boot-env.server'
 
@@ -38,9 +39,82 @@ function liveConfiguration(): Record<string, string> {
   }
 }
 
+function clerkWebhookConfiguration(): Record<string, string> {
+  const live = liveConfiguration()
+  const names = new Set(DEPLOYMENT_MANIFEST.configuration.sharedProduction.flatMap(group => group.names))
+  return {
+    ...Object.fromEntries(Object.entries(live).filter(([name]) => names.has(name))),
+    AE_CONVEX_SERVER_FUNCTION_TOKEN: 'webhook-source-token-with-at-least-32-characters',
+  }
+}
+
 afterEach(() => {
   resetBootEnvironmentValidationForTests()
   vi.unstubAllEnvs()
+})
+
+describe('Clerk webhook environment admission', () => {
+  it('retains shared production admission while missing or broken money providers keep full boot closed', () => {
+    const identity = clerkWebhookConfiguration()
+    for (const unrelated of [{}, {
+      AE_FORMANCE_ENVIRONMENT: 'sandbox', AE_FORMANCE_GATEWAY_URL: 'invalid-gateway',
+      AE_X402_RPC_URLS_JSON: 'invalid-rpc-map', CDP_API_KEY_ID: 'unfinished-custody',
+    }]) {
+      const environment = { ...identity, ...unrelated }
+      expect(validateClerkWebhookEnvironment(environment, 'production')).toEqual({ ok: true })
+      expect(validateEnvironment(environment, 'production').ok).toBe(false)
+    }
+  })
+
+  it.each([
+    ['AE_DEPLOYMENT_ENVIRONMENT', undefined],
+    ['AE_DEPLOYMENT_ENVIRONMENT', 'Production'],
+    ['AE_CANONICAL_BASE_URL', undefined],
+    ['AE_CANONICAL_BASE_URL', 'https://ae.example/?unexpected=true'],
+    ['AE_CANONICAL_HOST_ALLOWLIST', 'not a host'],
+    ['CONVEX_URL', undefined],
+    ['CONVEX_URL', 'http://convex.example'],
+    ['VITE_CONVEX_URL', 'https://different-convex.example'],
+    ['CLERK_JWT_ISSUER_DOMAIN', 'https://username:password@clerk.example'],
+    ['CLERK_JWT_ISSUER_DOMAIN', undefined],
+    ['CLERK_WEBHOOK_SIGNING_SECRET', undefined],
+    ['CLERK_WEBHOOK_SIGNING_SECRET', 'whsec_invalid!'],
+    ['VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_wrong-environment'],
+    ['CLERK_SECRET_KEY', 'sk_test_wrong-environment'],
+    ['AE_CONVEX_SERVER_FUNCTION_TOKEN', undefined],
+    ['AE_CONVEX_SERVER_FUNCTION_TOKEN', 'too-short'],
+    ['AE_SOURCE_WRITE_KEY_SESSION', 'malformed'],
+    ['AE_SOURCE_WRITE_PREVIOUS_KEYS_SESSION', 'malformed'],
+    ['VITE_AE_SOURCE_WRITE_DERIVED_KEY_ID_SESSION', 'exposed-key-id'],
+    ['AE_SOURCE_WRITE_SECRET', 'forbidden-root-key-with-at-least-32-characters'],
+    ['AE_X402_PAYMENT_PRIVATE_KEY', 'forbidden-payment-key'],
+  ] as const)('refuses invalid %s without exposing its value', (name, value) => {
+    const result = validateClerkWebhookEnvironment({ ...clerkWebhookConfiguration(), [name]: value }, 'production')
+    expect(result.ok).toBe(false)
+    if (value !== undefined) expect(JSON.stringify(result)).not.toContain(value)
+  })
+
+  it('does not populate full boot validation after accepting a callback', () => {
+    vi.stubEnv('AE_CLI_PREBUILT', undefined)
+    for (const group of DEPLOYMENT_MANIFEST.configuration.requiredProduction) {
+      for (const name of group.names) vi.stubEnv(name, undefined)
+    }
+    for (const name of DEPLOYMENT_MANIFEST.configuration.forbiddenProduction) vi.stubEnv(name, undefined)
+    for (const [name, value] of Object.entries(clerkWebhookConfiguration())) vi.stubEnv(name, value)
+    vi.stubEnv('NODE_ENV', 'production')
+    expect(() => ensureClerkWebhookEnvironmentValidated()).not.toThrow()
+    expect(() => ensureBootEnvironmentValidated()).toThrow('formance_configuration_required')
+  })
+
+  it('rechecks callback configuration even after full boot validation succeeded', () => {
+    vi.stubEnv('AE_CLI_PREBUILT', undefined)
+    for (const name of DEPLOYMENT_MANIFEST.configuration.forbiddenProduction) vi.stubEnv(name, undefined)
+    for (const [name, value] of Object.entries(liveConfiguration())) vi.stubEnv(name, value)
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'webhook-source-token-with-at-least-32-characters')
+    expect(() => ensureBootEnvironmentValidated()).not.toThrow()
+    vi.stubEnv('CLERK_WEBHOOK_SIGNING_SECRET', 'invalid')
+    expect(() => ensureClerkWebhookEnvironmentValidated()).toThrow('clerk_webhook_signing_secret_invalid')
+  })
 })
 
 describe('ensureBootEnvironmentValidated', () => {

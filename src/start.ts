@@ -19,8 +19,8 @@ import { boundaryCauseKind, captureBackendException } from '@/lib/observability/
 // Requires an exact safe router probe. Ensures diagnostics can explain invalid
 // boot/auth configuration, including release identity, without admitting pages,
 // writes or server functions.
-// Invariant: skipping validation never marks its cache successful; readiness
-// still runs its own checks. All other requests retain the existing failure.
+// Invariant: diagnostic reads never mark validation successful; readiness still
+// runs its own checks. The Clerk callback has separate identity admission.
 function isRouterDiagnosticRead(ctx: { request: Request; handlerType: 'router' | 'serverFn' }): boolean {
   if (ctx.handlerType !== 'router' || (ctx.request.method !== 'GET' && ctx.request.method !== 'HEAD')) return false
   const path = new URL(ctx.request.url).pathname
@@ -28,10 +28,17 @@ function isRouterDiagnosticRead(ctx: { request: Request; handlerType: 'router' |
     && apiRequestBoundaryResponse(ctx.request) === undefined
 }
 
+function isClerkWebhookRequest(ctx: { request: Request; handlerType: 'router' | 'serverFn' }): boolean {
+  return ctx.handlerType === 'router' && ctx.request.method === 'POST'
+    && new URL(ctx.request.url).pathname === '/api/clerk/webhook'
+    && apiRequestBoundaryResponse(ctx.request) === undefined
+}
+
 const bootEnvironmentMiddleware = createMiddleware().server(async (ctx) => {
   if (isRouterDiagnosticRead(ctx)) return ctx.next()
-  const { ensureBootEnvironmentValidated } = await import('@/lib/deployment/validate-boot-env.server')
-  ensureBootEnvironmentValidated()
+  const { ensureBootEnvironmentValidated, ensureClerkWebhookEnvironmentValidated } = await import('@/lib/deployment/validate-boot-env.server')
+  if (isClerkWebhookRequest(ctx)) ensureClerkWebhookEnvironmentValidated()
+  else ensureBootEnvironmentValidated()
   return ctx.next()
 })
 
@@ -158,7 +165,9 @@ function isPublicDocumentRequest(request: Request, pathname: string): boolean {
 export function clerkPreviewOrProductionMiddleware() {
   if (!clerkMiddlewareConfigured(process.env)) return []
   return [createMiddleware().server((ctx) => {
-    if (isRouterDiagnosticRead(ctx)) return ctx.next()
+    // Exact service callbacks passed identity boot admission and verify their
+    // native Svix signature in the route; browser sessions are not their auth.
+    if (isRouterDiagnosticRead(ctx) || isClerkWebhookRequest(ctx)) return ctx.next()
     const pathname = new URL(ctx.request.url).pathname
     const browserChatSession = (pathname === '/api/v1/chat/turns' || pathname.startsWith('/api/v1/chat/turns/'))
       && !ctx.request.headers.has('authorization')

@@ -16,6 +16,38 @@ const kindSchemas: Readonly<Record<FieldRule['kind'], z.ZodType<string>>> = {
   'credential-ref': z.string().min(1),
 }
 
+const clerkWebhookConfigurationNames = new Set([
+  ...DEPLOYMENT_MANIFEST.configuration.sharedProduction.flatMap(group => group.names),
+  ...DEPLOYMENT_MANIFEST.configuration.forbiddenProduction,
+  'AE_CANONICAL_HOST_ALLOWLIST',
+])
+
+/**
+ * Requires the declared environment and its identity/source authority rules.
+ * Ensures identity callbacks remain available while money providers need setup.
+ * Invariant: production credential, URL and source-key rules still come from
+ * the manifest; unrelated payment readiness never grants webhook authority.
+ * On violation: return only configuration names/codes, before source mutation.
+ */
+export function validateClerkWebhookEnvironment(
+  env: NodeJS.ProcessEnv,
+  environment: 'development' | 'production',
+): EnvValidationResult {
+  // Preserve development admission; only production sheds unrelated readiness.
+  if (deploymentPaymentEnvironment(env) !== 'production') return validateEnvironment(env, environment)
+
+  const result = validateDeploymentManifest(env, { environment })
+  const problems = result.findings
+    .filter(finding => finding.names.some(name => clerkWebhookConfigurationNames.has(name)
+      || name.startsWith('AE_SOURCE_WRITE_') || name.startsWith('VITE_AE_SOURCE_WRITE_')))
+    .flatMap(finding => finding.names.map(name => Object.freeze({ name, reason: finding.code })))
+  const token = readTrimmedEnv(env, 'AE_CONVEX_SERVER_FUNCTION_TOKEN')
+  if (token !== undefined && token.length < 32) {
+    problems.push({ name: 'AE_CONVEX_SERVER_FUNCTION_TOKEN', reason: 'server_function_auth_invalid' })
+  }
+  return problems.length === 0 ? { ok: true } : { ok: false, problems: Object.freeze(problems) }
+}
+
 /**
  * Requires an explicit money world; production requires the complete manifest.
  * Ensures production boot and diagnostics share one semantic decision.

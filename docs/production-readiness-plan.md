@@ -3116,3 +3116,90 @@ US$10 USDC plus US$2 for gas. Buyer authority limits remain AUD$1 per Call,
 AUD$5/day and AUD$20/month. Install and verify custody controls before funding
 or signing. These are approved limits, not a claim that configuration or funding
 has completed. Launch remains subject to its final acceptance and approval.
+
+### Executed infrastructure and recovery preparation — 2 October 2026
+
+The existing AWS Ledger engine was upgraded from 2.4.12 to the source-pinned
+2.4.14 digest after replay verification against an actual restored database.
+The host's existing reconciliation script and Versions resource now agree;
+the host and RDS were not replaced. Native ledger creation established
+`agentic-economy-production` in its own `production` bucket. The maintained
+schema installer installed versions 1.3–1.6 and replayed successfully. Native
+health reports ready; full scans show zero transactions, zero accounts and four
+schemas. The historical ledger's 45 transactions, 53 accounts and two schemas
+remain unchanged. Runtime bindings have not yet switched to production.
+
+Writers were quiesced by stopping the existing reconciliation timer/service,
+Formance operator, ledger worker and external tunnel. Gateway and Ledger reads
+remained available through private SSM forwarding. The final baseline cutoff is
+`2026-10-02T06:50:34.185Z`; AWS subsequently reported a restorable time of
+`06:53:32Z`. A final custom-format PostgreSQL archive, including both ledgers,
+was restored into an owned local container project. Complete ledger, transaction,
+account-volume and schema digests match the recorded baseline. The application
+retry and two concurrent native retries return the original transaction ID;
+the final historical and production scans remain unchanged. The original
+canonical command was reproduced from its immutable funding record using the
+deployed preparation revision, with private provenance retained.
+
+The final ledger archive is 184,912 bytes, SHA-256
+`9cbe06f4c2d9242e6c82156b40866a1db523fcd53ebcdaaa7fa38e4376b56c16`.
+Private archives, baseline digests and command provenance are retained as
+rollback records. The operator and worker were restored after capture. After
+Cloudflare credential rotation, the external tunnel and reconciliation timer
+were restored; all four deployments have their expected ready replicas. The
+sandbox bucket has not been retired yet.
+
+The saved cloud restore plan creates only the dated private, single-AZ
+`ae-alpha-restore-20261002` database and its temporary network, log and role
+resources, using that exact final cutoff. It does not alter the source database.
+Temporary spend up to US$2 and cleanup approval are pending. Local archive proof
+does not satisfy the requested actual cloud PITR rehearsal.
+
+The production CDP account and project/account policies were created using the
+native SDK and verified against the maintained Base USDC signing rules and
+approved per-signature ceiling. The production vault contains the approved
+daily/payee limits with custody disabled. Removing temporary policy-management
+access still awaits Coinbase passkey confirmation. No wallet funding, signature
+or paid Call has occurred. Production RPC login and the screening-contract
+choice remain pending human actions.
+
+Joel generated `ae-production-formance-application` in Cloudflare. Its exact
+credential and the production ledger binding were stored and read back in the
+production vault; the existing AWS Access secret was rotated and read back too.
+The gateway's existing Service Auth policy now selects only that production
+token. Native HTTP checks reject anonymous and old-token requests with 401 and
+admit the production token. No application runtime binding was changed by that
+rotation. Retain the previous secret version and policy record for controlled
+rollback; do not reapply the historical Terraform token binding over this cutover.
+
+## Stage 47 — admit signed identity callbacks independently of money setup
+
+Full money boot validation prevented Clerk security callbacks, including session
+revocation, from reaching native signature verification during provider setup.
+The exact router `POST /api/clerk/webhook` now has uncached identity admission
+derived from the existing deployment manifest. Browser-session middleware is
+not required for this service callback; the existing native Svix verifier remains
+its authentication boundary.
+
+**Requires:** an explicit environment plus valid identity, canonical URL, Convex
+and source-authority configuration. **Ensures:** a valid signed callback reaches
+the existing authenticated source mutation despite missing or invalid money
+configuration. **Invariant:** native signature verification, body limits, source
+assertions and forbidden production settings remain enforced; callback admission
+cannot populate the full boot cache or turn readiness green. Other methods,
+lookalike paths and server functions retain full boot validation. **On violation:**
+no source mutation; source unavailability after verification remains retryable
+HTTP 503.
+
+The change adds one validator and one exact request predicate inside existing
+files, reusing manifest semantics rather than adding a configuration framework.
+The benefit is removing a money-provider dependency from identity revocation;
+the cost is one explicitly scoped admission branch. Keep this branch bounded to
+the existing callback. All 130 focused checks pass, including native signed
+delivery and source HMAC verification, altered signatures/bodies, the body cap,
+invalid authority configuration, source failure, full-cache separation and closed
+paid routes/readiness. `npm run check` and the full Node 22/npm 11.5.1 merge gate
+pass: 7,794 unit and 2,701 integration tests, clean types/imports, SEO, 16 browser
+journeys, 18 accessibility checks, CLI packaging and the public build. The gate
+uses explicit development/sandbox environment declarations; configured skips
+remain explicit. Deployed callback acceptance remains pending.

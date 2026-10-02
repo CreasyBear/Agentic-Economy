@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { createMiddleware, type RequestServerNextFn, type RequestServerOptions } from '@tanstack/react-start'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -27,10 +28,14 @@ vi.mock('@/lib/observability/sentry.server', () => ({
 import { clerkPreviewOrProductionMiddleware, observabilityRequestMiddleware, securityHeadersRequestMiddleware, startInstance } from '@/start'
 import { handleHealthRequest } from '@/routes/api.health'
 import { handleReadyRequest } from '@/routes/api.ready'
+import { handleClerkWebhookRequest } from '@/routes/api.clerk.webhook'
 import { Route as ReleaseRoute } from '@/routes/api.v1.release'
 import type { RouteHandler } from '@/lib/server/gateway-json-route'
 import { resetBootEnvironmentValidationForTests } from '@/lib/deployment/validate-boot-env.server'
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
+import { DEPLOYMENT_MANIFEST, fieldRules, knownNames, SOURCE_WRITE_FAMILIES } from '@/lib/deployment/manifest'
+import { CLERK_SECURITY_OBSERVE_OPERATION, type ClerkSecurityObservation, type ClerkSecurityObservationResult } from '@/modules/security/account-security'
+import { verifyCustomerRequestServiceAssertion, type CustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 
 // Use installed createStart/getOptions and every registered request middleware.
 // Only the framework's terminal router dispatch is supplied: real diagnostics
@@ -197,7 +202,7 @@ describe('boot and auth admission for router diagnostics', () => {
     expect(mocks.clerkFactory).toHaveBeenCalledOnce()
   })
 
-  it('retains Clerk for diagnostic writes, lookalikes and server functions independently of boot validation', async () => {
+  it('retains Clerk for unsupported methods, lookalikes and server functions independently of boot validation', async () => {
     vi.stubEnv('NODE_ENV', 'development')
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     const options = await startInstance.getOptions()
@@ -207,26 +212,200 @@ describe('boot and auth admission for router diagnostics', () => {
       ['/api/ready', 'POST', 'router'], ['/api/health', 'PUT', 'router'],
       ['/api/ready-extra', 'GET', 'router'], ['/api/health/nested', 'GET', 'router'],
       ['/api/ready', 'GET', 'serverFn'], ['/api/health', 'HEAD', 'serverFn'],
+      ['/api/clerk/webhook', 'GET', 'router'], ['/api/clerk/webhook/', 'POST', 'router'],
+      ['/api/clerk/webhook', 'POST', 'serverFn'],
     ] as const) {
       const request = new Request(`https://ae.example${path}`, { method })
       const next: RequestServerNextFn<Record<string, never>, undefined> = vi.fn()
       expect(() => serve({ request, pathname: path, context: undefined, handlerType, next })).toThrow(clerkSessionError)
       expect(next).not.toHaveBeenCalled()
     }
-    expect(mocks.clerkFactory).toHaveBeenCalledTimes(6)
+    expect(mocks.clerkFactory).toHaveBeenCalledTimes(9)
+  })
+})
+
+describe('Clerk service callback admission', () => {
+  const signingKey = Buffer.alloc(32, 251)
+  const serverToken = 'clerk-webhook-source-authority-with-at-least-32-characters'
+  type SourceObservation = ClerkSecurityObservation & { serviceAuth: CustomerRequestServiceAssertion }
+  const mutation = vi.fn(async (_reference: unknown, _args: SourceObservation): Promise<ClerkSecurityObservationResult> => ({
+    kind: 'accepted', status: 'applied', eventRef: 'security_event_signed_callback',
+  }))
+
+  beforeEach(() => {
+    resetBootEnvironmentValidationForTests()
+    mutation.mockClear()
+    mocks.clerkFactory.mockClear()
+    const names = new Set([
+      ...knownNames, ...fieldRules.map(rule => rule.name),
+      ...DEPLOYMENT_MANIFEST.configuration.forbiddenProduction,
+      ...Object.keys(process.env).filter(name => name.startsWith('AE_SOURCE_WRITE_') || name.startsWith('VITE_AE_SOURCE_WRITE_')),
+    ])
+    for (const name of names) vi.stubEnv(name, undefined)
+    for (const [name, value] of Object.entries({
+      NODE_ENV: 'production', VERCEL_ENV: 'production', AE_DEPLOYMENT_ENVIRONMENT: 'production',
+      AE_CANONICAL_BASE_URL: 'https://ae.example', CONVEX_URL: 'https://convex.example',
+      AE_CONVEX_SERVER_FUNCTION_TOKEN: serverToken,
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example', CLERK_SECRET_KEY: 'sk_live_example',
+      CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example',
+      CLERK_WEBHOOK_SIGNING_SECRET: `whsec_${signingKey.toString('base64')}`,
+      ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map(family =>
+        [`AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`, `${family}:0123456789abcdef0123456789abcdef`])),
+    })) vi.stubEnv(name, value)
+    setPublicSourceTransportForTests({
+      query: vi.fn(async () => ({ kind: 'unavailable', refreshState: 'none' })),
+      mutation, action: vi.fn(),
+    } as never)
+  })
+
+  afterEach(() => {
+    setPublicSourceTransportForTests(undefined)
+    resetBootEnvironmentValidationForTests()
+    vi.unstubAllEnvs()
+  })
+
+  function signedRequest(path = '/api/clerk/webhook', method = 'POST'): Request {
+    const body = JSON.stringify({
+      type: 'session.revoked',
+      data: { id: 'sess_revoked', user_id: 'user_revoked', updated_at: Date.now() },
+    })
+    const deliveryRef = 'msg_signed_revocation'
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const signature = createHmac('sha256', signingKey).update(`${deliveryRef}.${timestamp}.${body}`).digest('base64')
+    return new Request(`https://ae.example${path}`, {
+      method,
+      ...(method === 'GET' || method === 'HEAD' ? {} : { body }),
+      headers: { 'svix-id': deliveryRef, 'svix-timestamp': timestamp, 'svix-signature': `v1,${signature}` },
+    })
+  }
+
+  it('verifies a native signed revocation and binds its source authority while money setup is absent', async () => {
+    const request = signedRequest()
+    const response = await throughStart(request, 'router', vi.fn(() => handleClerkWebhookRequest(request)))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ kind: 'accepted', status: 'applied' })
+    expect(mutation).toHaveBeenCalledOnce()
+    const observed = mutation.mock.calls[0]?.[1]
+    expect(observed).toMatchObject({
+      eventType: 'session.revoked', securityAction: 'revoke_interactive_credentials',
+      providerIdentifier: 'https://clerk.example|user_revoked',
+      serviceAuth: { principalId: 'ae:server-function', scopes: ['account_security:observe'] },
+    })
+    if (observed === undefined) throw new Error('source observation missing')
+    const { serviceAuth, ...command } = observed
+    expect(await verifyCustomerRequestServiceAssertion({
+      key: serverToken, operation: CLERK_SECURITY_OBSERVE_OPERATION, command, assertion: serviceAuth,
+    })).toBe(true)
+    expect(mocks.clerkFactory).not.toHaveBeenCalled()
+
+    for (const [path, method] of [['/account', 'GET'], ['/api/v1/tools/quote', 'POST']] as const) {
+      const terminal = vi.fn(async () => new Response('not admitted'))
+      await expect(throughStart(new Request(`https://ae.example${path}`, { method }), 'router', terminal))
+        .rejects.toThrow('Invalid environment configuration')
+      expect(terminal).not.toHaveBeenCalled()
+    }
+    const readyRequest = new Request('https://ae.example/api/ready')
+    const ready = await throughStart(readyRequest, 'router', vi.fn(() => handleReadyRequest(readyRequest, { timeoutMs: 1 })))
+    expect(ready.status).toBe(503)
+    expect(await ready.json()).toMatchObject({ code: 'server_not_ready', checks: { config: { status: 'failed' } } })
+    expect(mutation).toHaveBeenCalledOnce()
+  })
+
+  it.each(['signature', 'body'] as const)('rejects an altered %s before source mutation', async changed => {
+    const original = signedRequest()
+    let request = original
+    if (changed === 'signature') request.headers.set('svix-signature', 'v1,invalid')
+    else request = new Request(original.url, {
+      method: 'POST', headers: original.headers, body: (await original.text()).replace('user_revoked', 'user_changed'),
+    })
+    const response = await throughStart(request, 'router', vi.fn(() => handleClerkWebhookRequest(request)))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ code: 'clerk_webhook_invalid' })
+    expect(mutation).not.toHaveBeenCalled()
+  })
+
+  it('retains the native callback body limit before source mutation', async () => {
+    const original = signedRequest()
+    const request = new Request(original.url, { method: 'POST', headers: original.headers, body: 'x'.repeat(256 * 1024 + 1) })
+    const response = await throughStart(request, 'router', vi.fn(() => handleClerkWebhookRequest(request)))
+    expect(response.status).toBe(413)
+    expect(mutation).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['AE_DEPLOYMENT_ENVIRONMENT', undefined], ['AE_DEPLOYMENT_ENVIRONMENT', 'invalid'],
+    ['CLERK_WEBHOOK_SIGNING_SECRET', undefined], ['CLERK_JWT_ISSUER_DOMAIN', 'http://clerk.example'],
+    ['VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_wrong'], ['CLERK_SECRET_KEY', 'sk_test_wrong'],
+    ['AE_CANONICAL_BASE_URL', 'https://username:password@ae.example'],
+    ['CONVEX_URL', 'not-a-url'], ['VITE_CONVEX_URL', 'https://other.example'],
+    ['AE_CONVEX_SERVER_FUNCTION_TOKEN', 'short'], ['AE_SOURCE_WRITE_PREVIOUS_KEYS_SESSION', 'invalid'],
+    ['VITE_AE_SOURCE_WRITE_DERIVED_KEY_ID_SESSION', 'exposed'],
+    ['AE_SOURCE_WRITE_SECRET', 'legacy-root-secret-with-at-least-32-characters'],
+  ] as const)('rejects invalid %s before route dispatch or source mutation', async (name, value) => {
+    vi.stubEnv(name, value)
+    const request = signedRequest()
+    const terminal = vi.fn(() => handleClerkWebhookRequest(request))
+    await expect(throughStart(request, 'router', terminal)).rejects.toThrow('Invalid environment configuration')
+    expect(terminal).not.toHaveBeenCalled()
+    expect(mutation).not.toHaveBeenCalled()
+  })
+
+  it('retains retryable source failure after successful native verification', async () => {
+    mutation.mockRejectedValueOnce(new Error('source unavailable'))
+    const request = signedRequest()
+    const response = await throughStart(request, 'router', vi.fn(() => handleClerkWebhookRequest(request)))
+    expect(response.status).toBe(503)
+    expect(response.headers.get('retry-after')).toBe('5')
+    expect(await response.json()).toMatchObject({ code: 'security_history_unavailable' })
+    expect(mutation).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    ['/api/clerk/webhook', 'GET', 'router'], ['/api/clerk/webhook', 'HEAD', 'router'],
+    ['/api/clerk/webhook', 'PUT', 'router'], ['/api/clerk/webhook', 'PATCH', 'router'],
+    ['/api/clerk/webhook', 'DELETE', 'router'], ['/api/clerk/webhook', 'OPTIONS', 'router'],
+    ['/api/clerk/webhook', 'POST', 'serverFn'], ['/api/clerk/webhook/', 'POST', 'router'],
+    ['/api/clerk/webhook-extra', 'POST', 'router'], ['/api/clerk/webhook/nested', 'POST', 'router'],
+    ['/api/clerk/%77ebhook', 'POST', 'router'], ['/api/stripe/webhook', 'POST', 'router'],
+  ] as const)('keeps %s %s %s behind full boot admission', async (path, method, handlerType) => {
+    const request = signedRequest(path, method)
+    const terminal = vi.fn(() => handleClerkWebhookRequest(request))
+    await expect(throughStart(request, handlerType, terminal)).rejects.toThrow('Invalid environment configuration')
+    expect(terminal).not.toHaveBeenCalled()
+    expect(mutation).not.toHaveBeenCalled()
+  })
+
+  it('rejects a normalized raw dot-segment callback path', async () => {
+    const request = signedRequest()
+    Object.defineProperty(request, 'runtime', { value: { node: { req: { url: '/api/clerk/%2e/webhook' } } } })
+    const terminal = vi.fn(() => handleClerkWebhookRequest(request))
+    await expect(throughStart(request, 'router', terminal)).rejects.toThrow('Invalid environment configuration')
+    expect(terminal).not.toHaveBeenCalled()
+    expect(mutation).not.toHaveBeenCalled()
   })
 })
 
 describe('operational probe observability bypass', () => {
-  beforeEach(() => {
-    mocks.readConfig.mockClear()
+  let isolatedMiddleware: typeof observabilityRequestMiddleware
+
+  beforeEach(async () => {
+    // Ordinary requests above can finish the process-wide telemetry setup.
+    // Exercise each cold-start guarantee with a fresh module, after draining it.
+    await vi.dynamicImportSettled()
+    vi.resetModules()
+    mocks.readConfig.mockReset().mockReturnValue({ enabled: true, environment: 'production', posthogHost: 'https://posthog.example' })
     mocks.flushPostHogServer.mockClear()
     mocks.initSentryServer.mockClear()
     mocks.captureServerException.mockClear()
+    isolatedMiddleware = (await import('@/start')).observabilityRequestMiddleware
+  })
+
+  afterEach(async () => {
+    await vi.dynamicImportSettled()
   })
 
   it('does not initialize or flush external observability for health, readiness and release identity', async () => {
-    const server = observabilityRequestMiddleware.options.server
+    const server = isolatedMiddleware.options.server
     if (typeof server !== 'function') throw new Error('observability server middleware missing')
 
     for (const path of ['/api/health', '/api/ready', '/api/v1/release']) {
@@ -248,6 +427,7 @@ describe('operational probe observability bypass', () => {
       expect(nextCalls).toBe(1)
     }
 
+    await vi.dynamicImportSettled()
     expect(mocks.readConfig).not.toHaveBeenCalled()
     expect(mocks.initSentryServer).not.toHaveBeenCalled()
     expect(mocks.flushPostHogServer).not.toHaveBeenCalled()
@@ -264,7 +444,7 @@ describe('operational probe observability bypass', () => {
       context: undefined,
       response: new Response('public content', { status: 200 }),
     })
-    const server = observabilityRequestMiddleware.options.server
+    const server = isolatedMiddleware.options.server
     if (typeof server !== 'function') throw new Error('observability server middleware missing')
     const result = await server({
       request,

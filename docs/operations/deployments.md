@@ -76,9 +76,10 @@ The 2 October inventory found two distinct failures:
 Stage 43 also enables Clerk authenticator/backup-code support, stores the
 production identity and authority settings in Infisical, aligns the Vercel
 authority bindings, and creates an isolated, unfunded CDP production project.
-Its wallet and policies are pending approved signing ceilings. The Clerk
-webhook's native test reaches the application but remains blocked by the
-incomplete boot configuration; delivery is not accepted evidence yet.
+Stage 46 creates its unfunded wallet and verifies the approved signing policies;
+removing temporary policy-management access and binding custody remain pending.
+Stage 47 separates signed Clerk callback admission from incomplete money setup;
+deployed callback acceptance remains pending.
 
 The existing AWS Formance footprint is `ae-alpha`: one private host and a
 Multi-AZ RDS database, with nightly Melbourne backup copies. Repairing the
@@ -90,13 +91,21 @@ actual restore remain unproved.
 Joel selected one production-only AWS footprint on 2 October: reuse the existing
 host, RDS and Formance service; retain an independent sandbox backup and prove
 restore before retiring the sandbox ledger. Production receives a clean ledger,
-with no test balances carried forward. No second permanent AWS stack is approved.
+with no test balances carried forward. Stage 46 upgrades the existing engine to
+Ledger 2.4.14, creates the clean production ledger and verifies an actual local
+restore of the final source archive, including original-command replay. The
+operator, worker, external tunnel and reconciliation timer are healthy. A new
+production-only Cloudflare Access credential replaced sandbox access and is
+verified in the production vault and existing AWS secret. Application runtime
+binding remains pending.
+Sandbox retirement and the actual cloud restore rehearsal remain pending.
+No second permanent AWS stack is approved.
 
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
-Joel selected the existing AWS self-hosted Formance route; a production ledger
-is not provisioned yet, and
-[#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) is the next setup
-step. Complete the actual production Formance, custody, RPC, screening, alert and
+Joel selected the existing AWS self-hosted Formance route; the production ledger
+is provisioned but not yet bound to the application.
+[#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) tracks the remaining
+foundation setup. Complete the production Formance binding, custody, RPC, screening, alert and
 backup/restore prerequisites, bind one coherent production environment, and
 deploy matching web/backend source. Then [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
 proves the authorized real Calls and failure drills before
