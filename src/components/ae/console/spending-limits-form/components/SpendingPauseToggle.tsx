@@ -1,6 +1,6 @@
 import { PauseIcon, PlayIcon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 
 import type { SpendingPauseToggleProps } from '../spending-limits-form.contracts'
 
@@ -13,11 +13,11 @@ export function SpendingPauseToggle({
   return (
     <Button
       type="button"
-      variant={isPaused ? 'default' : 'outline'}
-      size="sm"
+      variant={isPaused ? 'primary' : 'secondary'}
+      size="md"
       disabled={disabled}
       onClick={onTogglePause}
-      className="min-h-touch gap-1.5"
+      className="arc-spending-policy-pause"
     >
       {isPaused ? (
         <>

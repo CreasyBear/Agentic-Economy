@@ -3,22 +3,11 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { ProductListing } from '@/components/arc/market/ProductListing'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Item,
-  ItemContent,
-  ItemDescription,
-  ItemFooter,
-  ItemGroup,
-  ItemHeader,
-  ItemMedia,
-  ItemTitle,
-} from '@/components/ui/item'
-import { Marker, MarkerContent } from '@/components/ui/marker'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Spinner } from '@/components/ui/spinner'
 import {
   chatBelowMatch,
@@ -41,6 +30,9 @@ import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './pres
 import type { RunIntent } from '@/modules/chat/run-request'
 import { readChatRecoveryReason } from './recovery/recovery.view-model'
 import type { ChatRecoveryReason } from './recovery/recovery.contracts'
+import './ToolResultComposition.css'
+
+const secondaryLink = `${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.sm}`
 
 type ToolCardProps = ToolCardBaseProps & Readonly<{
   onAddCredit?: ((shortfall?: { units: string; exponent: number }, run?: RunIntent) => void) | undefined
@@ -66,67 +58,55 @@ function choiceInitial(title: string): string {
 function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
   const readinessLabel = choice.readiness === undefined ? undefined : toolChoiceReadinessLabel(choice.readiness)
   return (
-    <Item
-      variant="muted"
-      size="sm"
-      render={
-        <a href={choice.detailHref ?? inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness === 'ready' ? 'Ready now' : undefined)}>
-          <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
-            {choiceInitial(choice.title)}
-          </ItemMedia>
-          <ItemContent>
-            <ItemHeader>
-              <ItemTitle>{choice.title}</ItemTitle>
-              {readinessLabel === undefined ? null : (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === 'ready' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{readinessLabel}</span>
-              )}
-            </ItemHeader>
-            {choice.provider === undefined ? null : (
-              <ItemDescription>{choice.provider}</ItemDescription>
-            )}
-            {choice.access === undefined ? null : (
-              <ItemFooter className="text-muted-foreground">{choice.access === 'external_listing' ? 'External listing · not callable through AE' : choice.access}</ItemFooter>
-            )}
-          </ItemContent>
-          {choice.price === undefined ? null : (
-            <AeToolPrice price={choice.price} {...(choice.priceValidUntil === undefined ? {} : { validUntil: choice.priceValidUntil })} size="sm" className="basis-full sm:ms-auto sm:basis-auto" />
-          )}
-        </a>
-      }
-    />
+    <a className="arc-listing-card arc-tool-choice"
+      href={choice.detailHref ?? inspectHref(choice.toolRef)}
+      aria-label={chatChoiceLinkName(choice.title, choice.readiness === 'ready' ? 'Ready now' : undefined)}>
+      <div className="arc-listing-media arc-tool-choice-surface">
+        <span className="arc-tool-choice-initial" aria-hidden="true">{choiceInitial(choice.title)}</span>
+        {choice.provider === undefined ? null : <span className="arc-tool-choice-provider">{choice.provider}</span>}
+        {readinessLabel === undefined ? null : <span className="arc-tool-choice-readiness" data-ready={choice.readiness === 'ready'}>
+          <span aria-hidden="true" />{readinessLabel}
+        </span>}
+      </div>
+      <div className="arc-listing-info arc-tool-choice-info">
+        <h4 className="arc-tool-choice-title">{choice.title}</h4>
+        {choice.access === undefined ? null : <p className="arc-tool-choice-access">{choice.access === 'external_listing' ? 'External listing · not callable through AE' : choice.access}</p>}
+        {choice.price === undefined ? null : <AeToolPrice price={choice.price}
+          {...(choice.priceValidUntil === undefined ? {} : { validUntil: choice.priceValidUntil })}
+          size="sm" className="arc-tool-choice-price" />}
+      </div>
+    </a>
   )
 }
 
 function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
   return (
     <>
-      <div className="min-w-0 md:hidden">
+      <div className="arc-tool-compare-cards">
         <ChoiceList choices={choices} />
       </div>
-      <div className="hidden min-w-0 overflow-x-auto md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tool</TableHead>
-              <TableHead>Provider</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Readiness</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      <div className="arc-tool-compare-scroller">
+        <table className="arc-tool-compare-table" aria-label="Tool comparison">
+          <thead>
+            <tr>
+              <th scope="col">Tool</th><th scope="col">Provider</th>
+              <th scope="col">Price</th><th scope="col">Readiness</th>
+            </tr>
+          </thead>
+          <tbody>
             {choices.map((choice) => (
-              <TableRow key={choice.toolRef}>
-                <TableCell>
+              <tr key={choice.toolRef}>
+                <td>
                   <a href={choice.detailHref ?? inspectHref(choice.toolRef)}>{choice.title}</a>
-                  {choice.belowMatch === true ? <p className="text-sm text-muted-foreground">{chatBelowMatch}</p> : null}
-                </TableCell>
-                <TableCell>{choice.provider ?? ''}</TableCell>
-                <TableCell className="tabular-nums">{choice.price ?? ''}</TableCell>
-                <TableCell>{choice.readiness === undefined ? '' : toolChoiceReadinessLabel(choice.readiness)}</TableCell>
-              </TableRow>
+                  {choice.belowMatch === true ? <p>{chatBelowMatch}</p> : null}
+                </td>
+                <td>{choice.provider ?? ''}</td>
+                <td data-numeric>{choice.price ?? ''}</td>
+                <td>{choice.readiness === undefined ? '' : toolChoiceReadinessLabel(choice.readiness)}</td>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
     </>
   )
@@ -134,19 +114,20 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
 
 function ChoiceList({ choices }: { choices: readonly ToolChoiceRow[] }) {
   return (
-    <ItemGroup className="gap-intra" aria-label="Tools">
+    <section aria-label="Tools">
+      <ProductListing className="arc-tool-choice-gallery">
       {choices.map((choice) => (
-        <ChoiceRow key={choice.toolRef} choice={choice} />
+        <li key={choice.toolRef}><ChoiceRow choice={choice} /></li>
       ))}
-    </ItemGroup>
+      </ProductListing>
+    </section>
   )
 }
 
 function ChoiceRemainder({ count, shown }: { count: number; shown: number }) {
   const remainder = count > shown && shown > 0
   return (
-    <Marker>
-      <MarkerContent>
+    <p className="arc-tool-result-count">
         {chatShowingTools(shown, count)}
         {remainder ? (
           <>
@@ -154,8 +135,7 @@ function ChoiceRemainder({ count, shown }: { count: number; shown: number }) {
             <a href="/market">{chatBrowseMarket}</a>
           </>
         ) : null}
-      </MarkerContent>
-    </Marker>
+    </p>
   )
 }
 
@@ -163,24 +143,24 @@ export function SearchNext({ next, onContinueSearch, onRepeatSearch, signedThrea
   if (next === undefined) return null
   if (next.action === 'next-page') {
     if (signedThread && !next.args.cursor.startsWith('sc1.') && onRepeatSearch !== undefined) {
-      return <Button type="button" variant="outline" size="sm" className="min-h-touch"
+      return <Button type="button" variant="secondary" size="sm"
         onClick={() => onRepeatSearch(next.args.query)}>Search again in this chat</Button>
     }
     if (onContinueSearch !== undefined && (!signedThread || next.args.cursor.startsWith('sc1.'))) {
-      return <Button type="button" variant="outline" size="sm" className="min-h-touch"
+      return <Button type="button" variant="secondary" size="sm"
         onClick={() => onContinueSearch(next)}>Next page</Button>
     }
     return <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}>Browse Tools in the Market</a>
+      className={secondaryLink}>Browse Tools in the Market</a>
   }
   if (next.action === 'broaden') return (
     <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}>{chatBrowseMarket}</a>
+      className={secondaryLink}>{chatBrowseMarket}</a>
   )
   if (next.action === 'retry') return onRepeatSearch === undefined
     ? <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}>{chatBrowseMarket}</a>
-    : <Button type="button" variant="outline" size="sm" className="min-h-touch"
+      className={secondaryLink}>{chatBrowseMarket}</a>
+    : <Button type="button" variant="secondary" size="sm"
       onClick={() => onRepeatSearch(next.args.query)}>Try again</Button>
   return null
 }
@@ -202,7 +182,7 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
     }
     case 'choices':
       return (
-        <div className="grid gap-related">
+        <div className="arc-tool-result-body">
           {projection.choices.length === 0 ? null : projection.toolId === 'registry.tools.compare' || projection.surface === 'compare'
             ? <CompareTable choices={projection.choices} />
             : <ChoiceList choices={projection.choices} />}
@@ -217,7 +197,7 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
         : <AeFactList density="compact" facts={projection.facts} />
     case 'execute':
       return (
-        <div className="grid gap-intra">
+        <div className="arc-tool-result-body">
           {projection.state === 'refused' || projection.state === 'reconciliation_required' ? (
             <RecoveryNotice
               reason={safeRecoveryReason(projection.recoveryReason, projection.state === 'reconciliation_required' ? 'outcome_unknown' : 'tool_unavailable')}
@@ -260,7 +240,7 @@ function ExecuteNextAction({ projection }: Readonly<{
     return (
       <a
         href={suggestedNextAction.href}
-        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        className={secondaryLink}
       >
         {suggestedNextAction.label}
       </a>
@@ -280,12 +260,16 @@ const STATUS_VARIANT = {
   error: 'destructive',
 } as const
 
+/** Requires: a current typed Tool projection; actions and reporting callbacks are caller-owned.
+ * Ensures: main recovery, refusal, cursor, reporting, trust and next-action behavior survives Arc composition.
+ * Invariant: no financial or execution fact is inferred beyond the projection.
+ * On violation: existing refusal and recovery guards decide the message and available actions. */
 export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread, onAddCredit }: ToolCardProps) {
   const needActions = useContext(ChatNeedActionsContext)
   const reportOwner = useContext(PaidCallReportOwnerContext)
   if (projection.kind === 'working') {
     return (
-      <p className="flex items-center gap-related text-sm text-muted-foreground" role="status">
+      <p className="arc-market arc-chat arc-tool-result-working" role="status">
         <Spinner aria-hidden="true" role="presentation" />
         <span>{projection.title}…</span>
       </p>
@@ -294,35 +278,31 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
   if (projection.kind === 'clarify') return null
   const state = toolCardState(projection)
   return (
-      <Card data-tool-card={projection.toolId} className="min-w-0 rounded-card border-0 bg-muted/40 shadow-none">
-      <CardHeader>
-        <CardTitle>
-          <h3 className="m-0">{projection.title}</h3>
-        </CardTitle>
-        <CardAction>
-          <Badge variant={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
+    <DecisionPanel data-tool-card={projection.toolId} className="arc-tool-result">
+      <header className="arc-tool-result-header">
+        <h3>{projection.title}</h3>
+        <Badge variant={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
+      </header>
+      <div className="arc-tool-result-body">
         {cardBody(projection, onAddCredit, reportOwner)}
-      </CardContent>
+      </div>
       {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
         || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (
-        <CardFooter className="grid gap-intra">
+        <footer className="arc-tool-result-actions">
           {projection.kind === 'choices' && projection.count !== undefined ? <ChoiceRemainder count={projection.count} shown={projection.choices.length} /> : null}
           {projection.next === undefined ? null : <SearchNext next={projection.next}
             {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
             {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
             {...(signedThread === undefined ? {} : { signedThread })} />}
           {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
-        </CardFooter>
+        </footer>
       ) : projection.kind === 'execute' ? (
-        <CardFooter className="flex flex-wrap gap-related">
+        <footer className="arc-tool-result-actions">
           <ExecuteNextAction projection={projection} />
           <a href="/trust" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
-            className="inline-flex min-h-touch items-center text-sm text-muted-foreground underline underline-offset-4">Trust centre</a>
-        </CardFooter>
+            className="arc-decision-link">Trust centre</a>
+        </footer>
       ) : null}
-    </Card>
+    </DecisionPanel>
   )
 }

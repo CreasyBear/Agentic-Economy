@@ -1,0 +1,132 @@
+/* KPI geometry adapted from metrics-dashboard.module.css.
+ * Source SHA-256: 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9
+ */
+/* Configuration row geometry adapted from integrations.module.css.
+ * Source SHA-256: 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10
+ */
+.arc-market.arc-overview-metrics,
+.arc-market.arc-overview-configuration {
+  container-type: inline-size;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+}
+.arc-market.arc-overview-metrics { container-name: arc-overview-metrics; }
+.arc-market.arc-overview-configuration { container-name: arc-overview-configuration; }
+
+.arc-market.arc-overview-metrics .arc-overview-kpis {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.arc-market.arc-overview-metrics .arc-overview-kpi {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  align-content: center;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border-left: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+
+.arc-market.arc-overview-metrics .arc-overview-kpi:first-child {
+  border-left: 0;
+}
+
+.arc-market.arc-overview-metrics .arc-overview-kpi-label {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-overview-metrics .arc-overview-kpi-value {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: clamp(20px, calc(1.5vw + 14px), 28px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-overview-configuration .integrations-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: 0;
+  background: var(--surface);
+}
+
+.arc-market.arc-overview-configuration .integrations-list > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  padding: 14px var(--space-5);
+}
+
+.arc-market.arc-overview-configuration .integrations-list > div:last-child {
+  border-bottom: 0;
+}
+
+.arc-market.arc-overview-configuration .integrations-list dt,
+.arc-market.arc-overview-configuration .integrations-list dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-overview-configuration .integrations-list dt {
+  color: var(--text-secondary);
+}
+
+.arc-market.arc-overview-configuration .integrations-list dd {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+@container arc-overview-metrics (max-width: 760px) {
+  .arc-market.arc-overview-metrics .arc-overview-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .arc-market.arc-overview-metrics .arc-overview-kpi:nth-child(3) {
+    border-left: 0;
+  }
+
+  .arc-market.arc-overview-metrics .arc-overview-kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+}
+
+@container arc-overview-metrics (max-width: 440px) {
+  .arc-market.arc-overview-metrics .arc-overview-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .arc-market.arc-overview-metrics .arc-overview-kpi {
+    border-left: 0;
+  }
+
+  .arc-market.arc-overview-metrics .arc-overview-kpi:nth-child(n + 2) {
+    border-top: 1px solid var(--border);
+  }
+
+}
+@container arc-overview-configuration (max-width: 440px) {
+  .arc-market.arc-overview-configuration .integrations-list > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

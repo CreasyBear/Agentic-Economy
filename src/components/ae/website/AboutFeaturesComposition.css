@@ -1,0 +1,215 @@
+/* Adapted from feature-bento, source SHA-256: 43e65b9cb1f229c4d4e08075e681eec4c838d96ef583a606c9278686a45be725. */
+.arc-market.arc-about-features {
+  container: about-features / inline-size;
+}
+
+.arc-market.arc-about-features,
+.arc-market.arc-about-cta {
+  min-width: 0;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.arc-about-features *, .arc-about-cta * { box-sizing: border-box; min-width: 0; }
+
+.arc-about-features-inner {
+  width: min(calc(100% - 32px), 1160px);
+  margin-inline: auto;
+  padding-block: var(--space-16);
+}
+
+.arc-about-feature-header {
+  display: grid;
+  max-width: 36rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+
+.arc-about-feature-title,
+.arc-about-cta-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 1.25rem + 2cqi, 40px);
+  font-weight: 500;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.arc-about-feature-label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.arc-about-feature-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arc-about-feature {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface-muted);
+}
+
+.arc-about-feature-icon {
+  flex: none;
+  color: var(--accent);
+}
+
+.arc-about-feature-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.arc-about-feature-copy h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.3;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.arc-about-feature-copy p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+@container about-features (min-width: 560px) {
+  .arc-about-feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .arc-about-feature[data-size="wide"],
+  .arc-about-feature[data-size="regular"] {
+    grid-column: span 2;
+  }
+
+  .arc-about-feature[data-size="half"] {
+    grid-column: span 1;
+  }
+}
+
+@container about-features (min-width: 880px) {
+  .arc-about-feature-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .arc-about-feature[data-size="wide"] {
+    grid-column: span 4;
+  }
+
+  .arc-about-feature[data-size="regular"] {
+    grid-column: span 2;
+  }
+
+  .arc-about-feature[data-size="half"] {
+    grid-column: span 3;
+  }
+}
+
+@container about-features (max-width: 520px) {
+  .arc-about-features-inner {
+    width: min(calc(100% - 32px), 1160px);
+    padding-block: var(--space-10);
+  }
+
+  .arc-about-feature {
+    padding: var(--space-4);
+  }
+
+  .arc-about-feature-copy h3 {
+    font-size: var(--text-xl);
+  }
+}
+
+/* Adapted from cta-section, source SHA-256: e7aec16de66910b5e1a2c60af49dd6e7fa2490af9b92b7270b69346043acc99b. */
+.arc-market.arc-about-cta {
+  container: about-cta / inline-size;
+}
+
+.arc-about-cta-inner {
+  width: min(calc(100% - 32px), 1160px);
+  margin-inline: auto;
+  padding-block: var(--space-12);
+}
+
+.arc-about-cta-panel {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-16) var(--space-8);
+  background: var(--surface);
+  text-align: center;
+}
+
+.arc-about-cta-title {
+  max-width: 18ch;
+  line-height: 1.15;
+}
+
+.arc-about-cta-description {
+  max-width: 65ch;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.arc-about-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.arc-about-cta-actions a {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-about-cta :where(a, button):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@container about-cta (max-width: 560px) {
+  .arc-about-cta-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .arc-about-cta-actions a {
+    width: 100%;
+  }
+
+  .arc-about-cta-panel {
+    padding: var(--space-10) var(--space-4);
+  }
+}

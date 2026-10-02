@@ -1,6 +1,7 @@
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 
 import type { HomeDirectoryPaginationProps } from '../agent-access-home.contracts'
+import '../AgentHomeComposition.css'
 
 export function HomeDirectoryPagination({
   showIssueMessage,
@@ -9,16 +10,16 @@ export function HomeDirectoryPagination({
   onLoadMore,
 }: HomeDirectoryPaginationProps) {
   return (
-    <div className="grid w-fit gap-intra">
+    <div className="arc-market arc-agent-pagination">
       {showIssueMessage ? (
-        <p role="alert" className="text-sm text-muted-foreground">
+        <p role="alert" className="arc-agent-pagination-issue">
           More Agents could not be loaded. The Agents already shown remain available.
         </p>
       ) : null}
       <Button
         type="button"
         variant="secondary"
-        className="w-fit"
+        className="arc-agent-inline-action"
         disabled={loadingMore}
         onClick={onLoadMore}
       >

@@ -1,16 +1,16 @@
 import { Link } from '@tanstack/react-router'
 
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
 
 import type { ReturnToAddToolProps } from '../connection-handoff.contracts'
+import '../ConnectionHandoffComposition.css'
 
 export function ReturnToAddTool({ returnSearch }: ReturnToAddToolProps) {
   return (
     <Link
       to="/owner/operations/new"
       search={returnSearch}
-      className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+      className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-connection-return`}
     >
       Return to Add Tool
     </Link>

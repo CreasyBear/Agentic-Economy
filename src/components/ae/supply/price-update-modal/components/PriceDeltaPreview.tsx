@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 
 import type { PriceDeltaPreviewProps } from '../price-update-modal.contracts'
 import { GstSplitBreakdown } from './GstSplitBreakdown'
+import '../PriceRevisionComposition.css'
 
 export function PriceDeltaPreview({
   formattedCurrent,
@@ -14,8 +15,8 @@ export function PriceDeltaPreview({
   totalText,
 }: PriceDeltaPreviewProps) {
   return (
-    <div className="min-h-[8.5rem] rounded-lg border border-border bg-muted/30 p-3 grid gap-2.5">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+    <div className="arc-price-revision-preview">
+      <div className="arc-price-revision-comparison">
         <span className="text-muted-foreground">Current Price:</span>
         <span className="font-mono tabular-nums">{formattedCurrent}</span>
         <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />

@@ -1,0 +1,19 @@
+/* Arc Pro integrations connection region + settings-page fields, retrieved 2026-10-01.
+ * Integrations CSS SHA-256 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10.
+ * State, secret retention, external consent and authority remain with the controller.
+ */
+.arc-market.arc-connection-handoff { display: grid; min-width: 0; max-width: 36rem; gap: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-6); background: var(--surface); color: var(--foreground); font-family: var(--font-body); }
+.arc-connection-handoff-copy { min-width: 0; margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-connection-handoff-copy p { margin: 0; }
+.arc-connection-handoff-field { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-connection-handoff-field label { color: var(--foreground); font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); }
+.arc-connection-handoff-input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px var(--space-3); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-sm); }
+.arc-connection-handoff-input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.arc-connection-handoff-input[aria-invalid="true"] { border-color: var(--danger); }
+.arc-connection-handoff-input:disabled { background: var(--surface-muted); color: var(--text-muted); cursor: not-allowed; }
+.arc-connection-handoff-error { margin: 0; color: var(--danger); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-connection-handoff-actions { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-2); }
+.arc-connection-handoff [data-slot="alert-title"], .arc-connection-handoff-status [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.arc-connection-handoff [data-slot="alert-description"], .arc-connection-handoff-status [data-slot="alert-description"] { font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-connection-return { margin-top: var(--space-4); max-width: 100%; text-decoration: none; }
+@media (max-width: 479px) { .arc-market.arc-connection-handoff { padding: var(--space-4); } }

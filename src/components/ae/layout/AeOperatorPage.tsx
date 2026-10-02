@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import type { OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
 import type { OperatorRole } from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
+import './AppFrameComposition.css'
 
 type OperatorPageChrome = Omit<AeOperatorPageProps, 'children' | 'operatorContext'>
 
@@ -152,16 +153,16 @@ function RootOperatorPage(props: AeOperatorPageProps) {
         data-shell-mode="operator"
         tabIndex={-1}
         data-testid="operator-content"
-        className="ae-rail flex min-h-0 flex-1 flex-col outline-none focus:outline-solid focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+        className="arc-market arc-operator-page ae-rail outline-none focus:outline-solid focus:outline-2 focus:outline-offset-2 focus:outline-ring"
       >
         <div
           data-testid="operator-page-stack"
-          className="grid min-h-0 flex-1 content-start gap-section pt-related"
+          className="arc-operator-page-stack"
         >
           {showDescriptionLine ? (
-            <div className="flex flex-wrap items-center gap-related">
+            <div className="arc-operator-page-description-row">
               {description === '' ? null : (
-                <p className="max-w-[65ch] text-pretty text-sm leading-normal text-muted-foreground">
+                <p className="arc-operator-page-description">
                   {description}
                 </p>
               )}

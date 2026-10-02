@@ -5,12 +5,11 @@ import { degrade } from '@/lib/observability/degrade'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AePriceUpdateModal } from './price-update-modal/AePriceUpdateModal'
-import { AeToolTestPlayground } from './tool-test-playground/AeToolTestPlayground'
+import { Button as ArcButton } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import {
@@ -21,6 +20,7 @@ import type {
   ProviderToolAction,
   ProviderToolActionOutcome,
 } from '@/modules/capability-supply/provider-tool-actions.contracts'
+import './ProviderToolComposition.css'
 
 export type AeProviderToolDetailProps = Readonly<{
   name: string
@@ -73,15 +73,15 @@ export function AeProviderToolDetail({
   }
 
   return (
-    <div className="grid gap-section">
-      <section aria-labelledby="provider-tool-state" className="grid gap-related">
-        <div className="flex flex-wrap items-center gap-intra">
-          <h2 id="provider-tool-state" className="font-sans text-xl font-medium tracking-tight">{status.state}</h2>
-          <Badge variant={status.routeability.available ? 'default' : 'outline'}>
+    <div className="arc-market arc-provider-tool-detail">
+      <DecisionPanel aria-labelledby="provider-tool-state" className="arc-provider-tool-state">
+        <div className="arc-provider-tool-state-heading">
+          <h2 id="provider-tool-state" className="arc-provider-tool-state-title">{status.state}</h2>
+          <Badge className="arc-provider-tool-availability" variant={status.routeability.available ? 'default' : 'outline'}>
             {status.routeability.available ? 'Available to buyers' : 'Not available to buyers'}
           </Badge>
         </div>
-        <p className="max-w-[65ch] text-sm text-muted-foreground">{status.state === 'Draft' && resumeHref === undefined
+        <p className="arc-provider-tool-description">{status.state === 'Draft' && resumeHref === undefined
           ? 'This saved Tool has no resumable source. Start another Tool or contact Help with its Tool reference.'
           : stateDescription(status)}</p>
         {firstReason === undefined ? null : (
@@ -106,7 +106,7 @@ export function AeProviderToolDetail({
           {...(onRepublish === undefined ? {} : { onRepublish: () => setConfirmation('republish') })}
           {...(onUpdatePrice === undefined ? {} : { onUpdatePrice: () => setConfirmation('price') })}
         />
-      </section>
+      </DecisionPanel>
 
       <AeSection title="Tool status" description="Current publication facts from Agentic Economy’s canonical admission and routeability checks.">
         <AeFactList facts={[
@@ -128,9 +128,9 @@ export function AeProviderToolDetail({
         ]} />
       </AeSection>
 
-      <details className="rounded-md border border-border px-gutter py-intra">
-        <summary className="min-h-touch cursor-pointer py-intra font-medium">Technical details</summary>
-        <AeFactList density="compact" className="pb-intra" facts={[
+      <details className="arc-provider-tool-technical">
+        <summary className="arc-provider-tool-technical-summary">Technical details</summary>
+        <AeFactList density="compact" className="arc-provider-tool-technical-facts" facts={[
           { label: 'Tool reference', value: status.toolRef, mono: true },
           { label: 'Provider reference', value: status.providerRef, mono: true },
           { label: 'Revision', value: status.revision ?? 'Not assigned' },
@@ -141,26 +141,12 @@ export function AeProviderToolDetail({
         ]} />
       </details>
 
-      {showTestPlayground ? (
-        <AeToolTestPlayground
-          toolName={name}
-          onSendTestRequest={async () => {
-            const start = Date.now()
-            if (onRecheck) {
-              await onRecheck()
-            }
-            return {
-              status: 200,
-              latencyMs: Math.max(1, Date.now() - start),
-              data: {
-                toolRef: status.toolRef,
-                state: status.state,
-                routeable: status.routeability.available,
-                verifiedAt: new Date().toISOString(),
-              },
-            }
-          }}
-        />
+      {showTestPlayground && status.state === 'Published' && status.ownerHandoff === undefined && onRecheck !== undefined ? (
+        <AeSection title="Source verification" description="Check the current source and admission requirements through Agentic Economy.">
+          <ArcButton type="button" variant="secondary" size="md" className="arc-provider-tool-action" disabled={pending} onClick={() => void run(onRecheck)}>
+            {pending ? 'Checking source…' : 'Recheck source'}
+          </ArcButton>
+        </AeSection>
       ) : null}
 
       <AeConfirmDialog
@@ -222,7 +208,7 @@ function PrimaryAction({
     return (
       <a
         href={status.ownerHandoff.cta}
-        className={cn(buttonVariants(), 'min-h-touch w-fit')}
+        className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'arc-provider-tool-action'].join(' ')}
       >
         {status.ownerHandoff.ctaLabel}
       </a>
@@ -233,31 +219,31 @@ function PrimaryAction({
       return (
         <a
           href={resumeHref ?? '/owner/operations/new'}
-          className={cn(buttonVariants(), 'min-h-touch w-fit')}
+          className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'arc-provider-tool-action'].join(' ')}
         >
           {resumeHref === undefined ? 'Add another Tool' : 'Continue setup'}
         </a>
       )
     case 'supply.status':
     case 'supply.offboarding.status':
-      return onRefresh === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRefresh}>{pending ? 'Refreshing…' : 'Refresh status'}</Button>
+      return onRefresh === undefined ? null : <ArcButton type="button" variant="primary" size="md" className="arc-provider-tool-action" disabled={pending} onClick={onRefresh}>{pending ? 'Refreshing…' : 'Refresh status'}</ArcButton>
     case 'supply.recheck':
-      return onRecheck === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRecheck}>{pending ? 'Rechecking…' : 'Recheck source'}</Button>
+      return onRecheck === undefined ? null : <ArcButton type="button" variant="primary" size="md" className="arc-provider-tool-action" disabled={pending} onClick={onRecheck}>{pending ? 'Rechecking…' : 'Recheck source'}</ArcButton>
     case 'supply.republish':
-      return onRepublish === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRepublish}>Republish</Button>
+      return onRepublish === undefined ? null : <ArcButton type="button" variant="primary" size="md" className="arc-provider-tool-action" disabled={pending} onClick={onRepublish}>Republish</ArcButton>
     default:
       if (status.state === 'Published') {
         return (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="arc-provider-tool-actions">
             {onUpdatePrice !== undefined ? (
-              <Button type="button" variant="outline" className="min-h-touch w-fit" disabled={pending} onClick={onUpdatePrice}>
+              <ArcButton type="button" variant="secondary" size="md" className="arc-provider-tool-action" disabled={pending} onClick={onUpdatePrice}>
                 Update Price
-              </Button>
+              </ArcButton>
             ) : null}
             {onWithdraw !== undefined ? (
-              <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onWithdraw}>
+              <ArcButton type="button" variant="primary" size="md" className="arc-provider-tool-action" disabled={pending} onClick={onWithdraw}>
                 Withdraw
-              </Button>
+              </ArcButton>
             ) : null}
           </div>
         )

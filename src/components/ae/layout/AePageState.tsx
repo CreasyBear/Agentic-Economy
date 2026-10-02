@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
+import { FileQuestionIcon } from 'lucide-react'
 
+import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   getAeUiStatePresentation,
   type AeUiState,
   type AeUiStateTone,
 } from '@/lib/ui/ui-state'
+import './RouteLoadingComposition.css'
+import './RouteRecoveryComposition.css'
 
 type AePageStateProps = ({
   state: AeUiState
@@ -56,15 +59,18 @@ export function AePageState({ state, title, description, tone, action, focusTitl
   const eyebrow = pageStateEyebrow(resolvedTone)
 
   return (
-    <AePublicPage
-      kind="tool"
-      title={resolvedTitle}
-      description={resolvedDescription}
-      introRole={role}
-      {...(eyebrow === undefined ? {} : { eyebrow })}
-      {...(action === undefined ? {} : { actions: action })}
-      {...(focusTitle === true ? { focusTitle: true } : {})}
-    />
+    <AePublicPage>
+      <div className="arc-market arc-route-state" role={role} data-tone={resolvedTone}>
+        <div className="arc-route-state-stage" aria-hidden="true"><FileQuestionIcon /></div>
+        <AePageHeader
+          title={resolvedTitle}
+          description={resolvedDescription}
+          {...(eyebrow === undefined ? {} : { eyebrow })}
+          {...(action === undefined ? {} : { actions: action })}
+          {...(focusTitle === true ? { focusTitle: true } : {})}
+        />
+      </div>
+    </AePublicPage>
   )
 }
 
@@ -85,14 +91,14 @@ type AePageSkeletonProps = {
 export function AePageSkeleton({ title, description, shape = 'list' }: AePageSkeletonProps) {
   return (
     <AePublicPage>
-      <div className="ae-rail grid gap-section py-section" aria-busy="true" aria-label={title}>
-        <div className="grid gap-intra">
+      <div className="arc-market arc-route-loading arc-public-loading ae-rail" aria-busy="true" aria-label={title}>
+        <div className="arc-loading-intro">
           {description === undefined ? null : (
             <p className="text-sm text-muted-foreground" role="status">
               {description}
             </p>
           )}
-          <Skeleton className="h-10 w-full max-w-2xl" />
+          <span className="arc-loading-line arc-loading-heading" aria-hidden="true" />
         </div>
         {shape === 'detail' ? <DetailSkeleton /> : shape === 'market' ? <MarketSkeleton /> : <ListSkeleton />}
       </div>
@@ -102,9 +108,12 @@ export function AePageSkeleton({ title, description, shape = 'list' }: AePageSke
 
 function ListSkeleton() {
   return (
-    <div className="grid gap-related" aria-hidden="true">
+    <div className="arc-loading-rows" aria-hidden="true">
       {Array.from({ length: 3 }, (_, index) => (
-        <Skeleton key={index} className="h-28 w-full" />
+        <div key={index} className="arc-loading-record">
+          <span className="arc-loading-line arc-loading-label" />
+          <span className="arc-loading-line" />
+        </div>
       ))}
     </div>
   )
@@ -112,29 +121,29 @@ function ListSkeleton() {
 
 function DetailSkeleton() {
   return (
-    <div className="grid gap-section lg:grid-cols-[minmax(0,1fr)_20rem]" aria-hidden="true">
-      <div className="grid content-start gap-section">
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-64 w-full" />
-        <Skeleton className="h-40 w-full" />
+    <div className="arc-loading-detail" aria-hidden="true">
+      <div className="arc-loading-stack">
+        <div className="arc-loading-pane"><span className="arc-loading-line arc-loading-heading" /><span className="arc-loading-line" /></div>
+        <div className="arc-loading-well" />
+        <div className="arc-loading-pane"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /></div>
       </div>
-      <Skeleton className="h-72 w-full" />
+      <div className="arc-loading-pane"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /><span className="arc-loading-line arc-loading-field" /></div>
     </div>
   )
 }
 
 function MarketSkeleton() {
   return (
-    <div className="grid gap-related" aria-hidden="true">
-      <Skeleton className="h-12 w-full" />
-      <div className="grid gap-related sm:grid-cols-3">
+    <div className="arc-loading-stack" aria-hidden="true">
+      <span className="arc-loading-line arc-loading-field" />
+      <div className="arc-loading-metrics">
         {Array.from({ length: 3 }, (_, index) => (
-          <Skeleton key={index} className="h-touch w-full" />
+          <span key={index} className="arc-loading-line arc-loading-field" />
         ))}
       </div>
-      <div className="grid gap-related">
+      <div className="arc-loading-rows">
         {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-24 w-full" />
+          <div key={index} className="arc-loading-record"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /></div>
         ))}
       </div>
     </div>

@@ -1,6 +1,5 @@
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import './SupplyPublicationComposition.css'
 
 export type TextFieldProps = Readonly<{
   id: string
@@ -26,9 +25,10 @@ export function TextField({
   onChange,
 }: TextFieldProps) {
   return (
-    <Field data-invalid={invalid || undefined}>
+    <Field className="arc-market arc-publication-field" data-invalid={invalid || undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input
+      <input
+        className="arc-publication-input"
         id={id}
         type={type}
         value={value}
@@ -59,5 +59,5 @@ export function TextAreaField({
   disabled = false,
   onChange,
 }: TextAreaFieldProps) {
-  return <Field><FieldLabel htmlFor={id}>{label}</FieldLabel><Textarea id={id} rows={6} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} /><FieldDescription>{description}</FieldDescription><FieldError /></Field>
+  return <Field className="arc-market arc-publication-field"><FieldLabel htmlFor={id}>{label}</FieldLabel><textarea className="arc-publication-textarea" id={id} rows={6} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} /><FieldDescription>{description}</FieldDescription><FieldError /></Field>
 }

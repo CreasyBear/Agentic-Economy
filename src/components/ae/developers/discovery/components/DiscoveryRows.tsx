@@ -1,6 +1,7 @@
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { DEVELOPER_DISCOVERY_UI_COPY } from '../discovery.contracts'
 import type { DeveloperDiscoveryRow } from '../discovery.contracts'
+import '../../DeveloperReferenceComposition.css'
 
 export type DiscoveryRowsProps = Readonly<{
   rows: readonly DeveloperDiscoveryRow[]
@@ -17,15 +18,15 @@ export function DiscoveryRows({ rows }: DiscoveryRowsProps) {
   }
 
   return (
-    <ul className="m-0 grid list-none divide-y divide-border p-0">
+    <ul className="arc-market arc-reference-rows">
       {rows.map((row) => (
-        <li key={row.id} className="grid gap-1 py-3 first:pt-0 last:pb-0">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <span className="font-medium text-foreground">{row.label}</span>
-            <span className="text-sm text-muted-foreground">{row.state}</span>
+        <li key={row.id} className="arc-reference-row">
+          <div className="arc-reference-row-main">
+            <span className="arc-reference-row-label">{row.label}</span>
+            <span className="arc-reference-row-state">{row.state}</span>
           </div>
           {row.description === undefined ? null : (
-            <p className="text-sm text-muted-foreground">{row.description}</p>
+            <p className="arc-reference-row-state">{row.description}</p>
           )}
         </li>
       ))}

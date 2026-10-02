@@ -1,14 +1,15 @@
 import type { WorkspaceDangerDiagnosticSlotProps } from '../workspace-danger-zone.contracts'
+import '../WorkspaceDangerComposition.css'
 
 export function WorkspaceDangerDiagnosticSlot({ diagnostic }: WorkspaceDangerDiagnosticSlotProps) {
   return (
-    <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+    <div className="arc-market arc-workspace-diagnostic-slot" role="status" aria-live="polite">
       {diagnostic ? (
-        <div className="grid gap-1 text-sm text-muted-foreground">
+        <div className="arc-workspace-diagnostic">
           <p>
             <strong>What happened:</strong> {diagnostic.whatHappened}
           </p>
-          <p className="font-mono text-xs tabular-nums">
+          <p className="arc-workspace-diagnostic-money">
             <strong>Financial impact:</strong> {diagnostic.financialImpact}
           </p>
           <p>

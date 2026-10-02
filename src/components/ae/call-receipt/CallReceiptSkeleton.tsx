@@ -1,4 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton'
+import './ReceiptComposition.css'
 
 const SUMMARY_FACT_ROWS = 6
 
@@ -15,11 +16,11 @@ export function CallReceiptSkeleton() {
   return (
     <div
       role="status"
-      className="grid gap-section py-2"
+      className="arc-market arc-call-receipt"
       aria-busy="true"
       aria-label="Loading call receipt"
     >
-      <section className="grid gap-related" aria-hidden="true">
+      <section className="arc-market arc-call-summary" aria-hidden="true">
         <Skeleton className="h-6 w-32 rounded-full" />
         <Skeleton className="h-7 w-48 max-w-full" />
         <Skeleton className="h-4 w-2/3" />
@@ -35,7 +36,7 @@ export function CallReceiptSkeleton() {
       </section>
 
       <section
-        className="grid min-h-[12rem] gap-related rounded-xl border border-border bg-card p-4"
+        className="arc-market arc-call-issue"
         aria-hidden="true"
       >
         {Array.from({ length: 4 }, (_, index) => (
@@ -47,9 +48,9 @@ export function CallReceiptSkeleton() {
         <Skeleton className="h-10 w-full rounded-card" />
       </section>
 
-      <section className="grid min-h-[13.5rem] gap-section" aria-hidden="true">
+      <section className="arc-market arc-call-money-comparison" aria-hidden="true">
         {(['Before', 'After'] as const).map((stack) => (
-          <div key={stack} className="grid gap-related">
+          <div key={stack} className="arc-call-money-group">
             <Skeleton className="h-5 w-40" />
             <div className="grid gap-related">
               {Array.from({ length: 3 }, (_, index) => (
@@ -64,14 +65,14 @@ export function CallReceiptSkeleton() {
       </section>
 
       <section
-        className="grid min-h-[4.5rem] gap-related border-t border-border pt-section"
+        className="arc-market arc-call-recovery"
         aria-hidden="true"
       >
         <Skeleton className="h-7 w-40" />
         <Skeleton className="h-10 w-36" />
       </section>
 
-      <section className="border-t border-border pt-related" aria-hidden="true">
+      <section className="arc-call-disclosure" aria-hidden="true">
         <Skeleton className="min-h-touch h-touch w-44" />
       </section>
     </div>

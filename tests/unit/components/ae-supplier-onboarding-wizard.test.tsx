@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
-    <a href={to} {...props}>
+  Link: ({ to, hash, children, ...props }: { to: string; hash?: string; children: ReactNode }) => (
+    <a href={`${to}${hash === undefined ? '' : `#${hash}`}`} {...props}>
       {children}
     </a>
   ),
@@ -20,9 +20,6 @@ vi.mock('@/lib/ui/toast', () => ({
 import { AeSupplierOnboardingWizard } from '@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard'
 import { formatAbnDisplay } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
-
-const TACTILE =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 describe('AeSupplierOnboardingWizard (W-30)', () => {
   afterEach(() => {
@@ -44,12 +41,13 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     expect(screen.getByText('~2 mins')).toBeInTheDocument()
     expect(screen.getByText('~1 min')).toBeInTheDocument()
 
-    const shell = container.firstChild as HTMLElement
-    expect(shell.className).toMatch(/min-h-\[28rem\]/)
+    const nav = screen.getByRole('navigation', { name: /provider setup/i })
+    expect(within(nav).getByRole('button', { name: /1\. provider identity/i })).toHaveAttribute('aria-current', 'step')
+    expect(within(nav).getByRole('button', { name: /2\. first tool/i })).toBeDisabled()
 
     const liveSlot = container.querySelector('[aria-live="polite"]')
     expect(liveSlot).toBeInTheDocument()
-    expect(liveSlot?.className).toMatch(/min-h-\[3rem\]/)
+    expect(liveSlot).toBeEmptyDOMElement()
   })
 
   it('T2: Step 1 validates brand name, website origin, and Australian ABN format', async () => {
@@ -67,7 +65,8 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     const abnInput = screen.getByLabelText(/australian business number/i)
     const continueBtn = screen.getByRole('button', { name: /continue to add tool/i })
 
-    expect(continueBtn.className).toContain(TACTILE)
+    expect((continueBtn as HTMLButtonElement).type).toBe('submit')
+    expect((continueBtn as HTMLButtonElement).disabled).toBe(false)
 
     // Invalid ABN — Rule 4 triplet
     fireEvent.change(nameInput, { target: { value: 'Acme AI Systems' } })
@@ -144,7 +143,9 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
 
     const nav = screen.getByRole('navigation', { name: /provider setup/i })
     const profileTab = within(nav).getByRole('button', { name: /1\. provider identity/i })
-    expect(profileTab.className).toContain(TACTILE)
+    expect(profileTab).toBeEnabled()
+    expect(profileTab).toHaveAccessibleName(/completed/i)
+    expect(within(nav).getByRole('button', { name: /2\. first tool/i })).toHaveAttribute('aria-current', 'step')
     fireEvent.click(profileTab)
 
     expect(screen.getByLabelText(/provider or brand name/i)).toBeInTheDocument()
@@ -160,7 +161,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
 
     const importLink = screen.getByRole('link', { name: /^Add Tool$/i })
     expect(importLink).toHaveAttribute('href', '/owner/operations/new')
-    expect(importLink.className).toContain(TACTILE)
+    expect(screen.getByRole('link', { name: 'Manage Provider identity' })).toHaveAttribute('href', '/owner/operations#provider-identity')
   })
 })
 

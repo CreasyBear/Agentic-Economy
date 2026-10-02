@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import Button from '@/components/arc/button/button'
 import type { ToolObjectView } from './object-family.contracts'
 import { ToolFacts } from './ToolFacts'
+import './ProviderCatalogueComposition.css'
 
 export type ToolListingCardProps = Readonly<{
   view: ToolObjectView
@@ -16,24 +16,24 @@ export type ToolListingCardProps = Readonly<{
 
 export function ToolListingCard({ view, onSave, saved, onCompare, comparing, compareDisabled, fromMarket }: ToolListingCardProps) {
   return (
-    <Card className="relative min-w-0 overflow-hidden focus-within:ring-2 focus-within:ring-ring" discoverLift>
-      <CardHeader className="min-w-0">
-        <CardTitle className="min-w-0"><h3 className="min-w-0 wrap-anywhere text-base">{view.href === undefined
+    <article className="arc-provider-card">
+      <header>
+        <h3>{view.href === undefined
           ? view.title
-          : <Link to={view.href} {...(fromMarket ? { state: { fromMarket: true as const } } : {})} className="after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-offset-2">{view.title}</Link>}</h3></CardTitle>
-        {view.identity === undefined ? null : <p className="min-w-0 wrap-anywhere text-xs text-muted-foreground">{view.identity.kind === 'verified_provider' ? 'Provider' : view.identity.kind === 'publisher' ? 'Publisher' : 'Directory Host'}: {view.identity.name}</p>}
-      </CardHeader>
-      <CardContent className="grid min-w-0 gap-related">
-        {view.outcome === undefined ? null : <p className="min-w-0 wrap-anywhere text-sm text-muted-foreground">{view.outcome}</p>}
+          : <Link to={view.href} {...(fromMarket ? { state: { fromMarket: true as const } } : {})}>{view.title}</Link>}</h3>
+        {view.identity === undefined ? null : <p className="arc-provider-meta">{view.identity.kind === 'verified_provider' ? 'Provider' : view.identity.kind === 'publisher' ? 'Publisher' : 'Directory Host'}: {view.identity.name}</p>}
+      </header>
+      <div className="arc-provider-card-body">
+        {view.outcome === undefined ? null : <p>{view.outcome}</p>}
         <ToolFacts view={view} compact />
-        <p className="min-w-0 wrap-anywhere text-xs text-muted-foreground">Source: {view.listing.identity.title.provenance.replaceAll('_', ' ')}</p>
-      </CardContent>
+        <p className="arc-provider-meta">Source: {view.listing.identity.title.provenance.replaceAll('_', ' ')}</p>
+      </div>
       {onSave === undefined && onCompare === undefined ? null : (
-        <CardFooter className="relative z-10 flex-wrap gap-2">
-          {onSave === undefined ? null : <Button type="button" variant="ghost" className="min-h-touch h-auto min-w-0 max-w-full whitespace-normal text-center" aria-pressed={saved === true} onClick={onSave}>{saved ? 'Saved' : 'Save'}</Button>}
-          {onCompare === undefined ? null : <Button type="button" variant="ghost" className="min-h-touch h-auto min-w-0 max-w-full whitespace-normal text-center" aria-label={`${comparing ? 'Remove' : 'Add'} ${view.title} ${comparing ? 'from' : 'to'} comparison`} disabled={compareDisabled === true} aria-pressed={comparing === true} onClick={onCompare}>{comparing ? 'Comparing' : 'Compare'}</Button>}
-        </CardFooter>
+        <footer className="arc-provider-actions">
+          {onSave === undefined ? null : <Button type="button" variant="ghost" size="md" labelLayout="wrap" aria-pressed={saved === true} onClick={onSave}>{saved ? 'Saved' : 'Save'}</Button>}
+          {onCompare === undefined ? null : <Button type="button" variant="ghost" size="md" labelLayout="wrap" aria-label={`${comparing ? 'Remove' : 'Add'} ${view.title} ${comparing ? 'from' : 'to'} comparison`} disabled={compareDisabled === true} aria-pressed={comparing === true} onClick={onCompare}>{comparing ? 'Comparing' : 'Compare'}</Button>}
+        </footer>
       )}
-    </Card>
+    </article>
   )
 }

@@ -1,0 +1,17 @@
+/* Arc AI chat composition around AE's controlled transcript and session. */
+.arc-chat { color: var(--foreground); font-family: var(--font-body); }
+.arc-chat aside[aria-label="Conversation history"] { background: var(--surface); }
+.arc-chat-transcript, .arc-chat-empty-column { width: 100%; min-width: 0; max-width: 768px; margin-inline: auto; padding-inline: var(--space-6); }
+.arc-chat-transcript { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-8); padding-block: var(--space-6); }
+.arc-chat [aria-label="You"] [data-slot="bubble-content"] { border-color: var(--border); border-radius: var(--radius-panel) var(--radius-panel) var(--radius-control) var(--radius-panel); background: var(--surface); padding: var(--space-4) var(--space-5); }
+.arc-chat [aria-label="Answer"] { line-height: 1.75; }
+.arc-chat [aria-label="Answer actions"] { gap: var(--space-2); }
+.arc-chat [aria-label="Answer actions"] button { min-height: 44px; min-width: 44px; padding: 10px; }
+.arc-chat [aria-label="Answer"] h1, .arc-chat [aria-label="Answer"] h2, .arc-chat [aria-label="Answer"] h3 { font-weight: 500; letter-spacing: -.025em; }
+.arc-chat a { overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .arc-chat [aria-label="You"] [data-slot="bubble-content"] { padding: var(--space-3) var(--space-4); }
+}
+@media (max-width: 559px) { .arc-chat-transcript, .arc-chat-empty-column { padding-inline: var(--space-4); } }
+
+.arc-chat-filters button[aria-pressed="true"] { background: var(--control-on); border-color: var(--control-on); color: var(--control-glyph); }

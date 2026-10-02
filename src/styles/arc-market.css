@@ -1,0 +1,91 @@
+/*
+ * Arc market brand bridge. Activated by .arc-market on a migrated block and
+ * its portal content. Theme preference remains owned by the existing .dark
+ * class on html; importing this file changes no unscoped product surface.
+ */
+@import "../components/arc/foundation.css";
+
+.arc-market,
+.dark .arc-market {
+  --market-editorial-foreground: #e8e4da;
+  --market-editorial-background: #141414;
+  --market-editorial-border: #595854;
+  --market-editorial-overlay: color-mix(in srgb, var(--market-editorial-background) 84%, transparent);
+  --background: var(--ae-bg);
+  --surface: var(--ae-surface);
+  --surface-raised: var(--ae-surface-raised);
+  --surface-muted: var(--ae-surface-sunken);
+  --foreground: var(--ae-fg);
+  --text-secondary: var(--ae-muted-fg);
+  --text-muted: var(--ae-muted-fg);
+  --border: var(--ae-border);
+  --border-subtle: color-mix(in srgb, var(--ae-border) 55%, var(--ae-surface));
+  --border-strong: var(--ae-border-strong);
+  --accent: var(--ae-ring);
+  --accent-strong: var(--ae-ring);
+  --accent-subtle: #e1e7de;
+  --accent-foreground: #e8e4da;
+  --focus-ring: var(--ae-ring);
+  --control-on: #24543d;
+  --control-fill: var(--control-on);
+  --control-glyph: #ffffff;
+  --control-track: var(--ae-surface-sunken);
+  --control-track-hover: var(--ae-border);
+  --control-thumb: #ffffff;
+  --control-thumb-on: #ffffff;
+  --control-on-subtle: var(--accent-subtle);
+  --success: var(--ae-success-foreground);
+  --warning: var(--ae-warning-foreground);
+  --danger: var(--ae-danger-foreground);
+  --font-display: var(--ae-font-display);
+  --font-body: var(--ae-font-sans);
+  --control-height-sm: 2.75rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3.125rem;
+  --shadow-resting: var(--shadow-low);
+  --shadow-raised: var(--ae-shadow-overlay);
+  --shadow-floating: var(--shadow-med);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+.dark .arc-market {
+  --accent-subtle: #253b2f;
+  --accent-foreground: #141414;
+  --control-on: #b7e7cc;
+  --control-glyph: #141414;
+  --control-track: #383838;
+  --control-track-hover: #454545;
+  --control-thumb-on: #141414;
+  --success: #93efd0;
+  --warning: #ffcb62;
+  --shadow-floating: var(--shadow-high);
+}
+
+/* Arc's upstream reset suppresses focus globally. AE keeps keyboard position
+ * visible in both themes, including block-owned dialogs and sheets. */
+.arc-market:focus-visible,
+.arc-market :focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-market {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-standard: 0ms;
+    --duration-considered: 0ms;
+    --duration-spring: 0ms;
+  }
+
+  .arc-market,
+  .arc-market *,
+  .arc-market *::before,
+  .arc-market *::after {
+    animation: none !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -17,6 +17,7 @@ import type {
   AgentActivityView,
   AgentUsageSummary,
 } from '@/modules/agent-access/agent-operator-view-model'
+import './AgentConnectionRecordsComposition.css'
 
 export type AeAgentCallHistoryTableProps = Readonly<{
   activity: readonly AgentActivityView[]
@@ -55,10 +56,10 @@ export function AeAgentCallHistoryTable({
         header: ({ column }) => <AeOperatorSortableHeader label="Tool / Task" column={column} />,
         cell: ({ row }) => (
           <div className="flex flex-col gap-0.5">
-            <span className="font-medium text-foreground text-xs">
+            <span className="font-medium text-foreground text-sm">
               {row.original.toolLabel}
             </span>
-            <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[200px]">
+            <span className="font-mono text-sm text-muted-foreground aeAgentCallReference">
               {row.original.toolRef}
             </span>
           </div>
@@ -69,7 +70,7 @@ export function AeAgentCallHistoryTable({
         accessorFn: (item) => item.providerRef,
         header: ({ column }) => <AeOperatorSortableHeader label="Provider" column={column} />,
         cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {row.original.providerRef}
           </span>
         ),
@@ -81,7 +82,7 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => {
           const units = row.original.audAmountUnits
           return (
-            <span className="font-mono text-xs tabular-nums text-foreground">
+            <span className="font-mono text-sm tabular-nums text-foreground">
               {units === undefined
                 ? '—'
                 : formatDisplayAmount({ currency: 'AUD', exponent: 6, units })}
@@ -96,7 +97,7 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => {
           const status = projectCallSummaryPurchaseStatus(row.original)
           return (
-            <Badge variant={purchaseStatusBadgeVariant(status.kind)} className="text-[11px]">
+            <Badge variant={purchaseStatusBadgeVariant(status.kind)}>
               {status.label}
             </Badge>
           )
@@ -109,7 +110,7 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => (
           <time
             dateTime={new Date(row.original.createdAt).toISOString()}
-            className="font-mono text-[11px] tabular-nums text-muted-foreground"
+            className="font-mono text-sm tabular-nums text-muted-foreground"
           >
             {formatUtcTimestamp(row.original.createdAt)} UTC
           </time>
@@ -122,11 +123,11 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => (
           <a
             href={`/calls/${encodeURIComponent(row.original.callRef)}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-mono"
+            className="aeAgentCallReceipt inline-flex items-center gap-1 text-sm text-primary hover:underline font-mono"
             aria-label={`View call receipt ${row.original.callRef}`}
           >
             <span>Receipt</span>
-            <ArrowUpRightIcon className="size-3" />
+            <ArrowUpRightIcon className="size-3" aria-hidden="true" />
           </a>
         ),
       },
@@ -135,24 +136,29 @@ export function AeAgentCallHistoryTable({
   )
 
   return (
-    <div className="grid gap-3 pt-2">
+    <div className="arc-market aeAgentCallHistory">
+      {/* Requires complete amount coverage and an exact settled amount; ensures
+          recorded zero stays zero and absent/partial amounts never imply zero.
+          On violation show the existing Agent amount-coverage refusal. */}
       {showStats && usage && (
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded border bg-background/50 p-2.5">
-            <span className="text-muted-foreground block text-[11px]">Calls this month</span>
-            <span className="font-mono text-sm font-semibold text-foreground">
+        <div className="aeAgentCallMetrics">
+          <div className="aeAgentCallMetric">
+            <span className="aeAgentCallMetricLabel">Calls this month</span>
+            <span className="font-mono aeAgentCallMetricValue">
               {usage.callCount}
             </span>
           </div>
-          <div className="rounded border bg-background/50 p-2.5">
-            <span className="text-muted-foreground block text-[11px]">Settled spend</span>
-            <span className="font-mono text-sm font-semibold text-foreground">
-              {usage.settledSpend ? formatDisplayAmount(usage.settledSpend) : 'A$0.00'}
+          <div className="aeAgentCallMetric">
+            <span className="aeAgentCallMetricLabel">Settled spend</span>
+            <span className="font-mono aeAgentCallMetricValue">
+              {usage.amountCoverage === 'complete' && usage.settledSpend !== undefined
+                ? formatDisplayAmount(usage.settledSpend)
+                : 'Amount coverage incomplete'}
             </span>
           </div>
-          <div className="rounded border bg-background/50 p-2.5">
-            <span className="text-muted-foreground block text-[11px]">Needs checking</span>
-            <span className="font-mono text-sm font-semibold text-foreground">
+          <div className="aeAgentCallMetric">
+            <span className="aeAgentCallMetricLabel">Needs checking</span>
+            <span className="font-mono aeAgentCallMetricValue">
               {usage.outcomeUnknownCallCount}
             </span>
           </div>

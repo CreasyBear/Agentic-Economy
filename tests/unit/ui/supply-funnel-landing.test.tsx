@@ -12,7 +12,7 @@ describe("supply landing", () => {
     expect(
       screen.getByRole("heading", { name: "Add a Tool." }),
     ).toBeDefined();
-    expect(screen.getByText("Providers")).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Before you sign in" })).toBeDefined();
     expect(
       screen
         .getByRole("link", { name: "Add Tool" })

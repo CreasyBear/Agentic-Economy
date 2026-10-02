@@ -1,19 +1,11 @@
 import { Link } from '@tanstack/react-router'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { ArrowUpRightIcon } from 'lucide-react'
+import { ComparisonTable, type ComparisonRow, type ComparisonSection } from '@/components/arc/market/ComparisonTable'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import { directoryProviderKey, directorySlugBase } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { MARKET_LINK_STATE } from './market-return-context'
-
-const comparisonFacts = [
-  { label: 'Category', value: (entry: X402DirectoryEntry) => entry.category ?? 'Not categorized' },
-  { label: 'Provider', value: (entry: X402DirectoryEntry) => entry.provider },
-  { label: 'Description', value: (entry: X402DirectoryEntry) => entry.description || 'Not published' },
-  { label: 'Input needed', value: (entry: X402DirectoryEntry) => entry.schemaSummary ?? 'Inspect input contract' },
-  { label: 'Returns', value: (entry: X402DirectoryEntry) => entry.outputSummary ?? 'Not published' },
-] as const
 
 export type DirectoryComparisonProps = Readonly<{
   entries: readonly X402DirectoryEntry[]
@@ -23,34 +15,41 @@ export type DirectoryComparisonProps = Readonly<{
 }>
 
 export function DirectoryComparison({ entries, open, onOpenChange, onCloseAutoFocus }: DirectoryComparisonProps) {
+  function fact(id: string, feature: string, value: (entry: X402DirectoryEntry) => string, retainWhenSame = false): ComparisonRow {
+    return { id, feature, values: Object.fromEntries(entries.map(entry => [entry.resource, value(entry)])), retainWhenSame }
+  }
+  const sections: readonly ComparisonSection[] = [
+    { id: 'contribution', title: 'The contribution', rows: [
+      fact('description', 'Description', entry => entry.description || 'Not published'),
+      fact('category', 'Category', entry => entry.category ?? 'Not categorized'),
+      fact('provider', 'Provider', entry => entry.provider, true),
+    ] },
+    { id: 'contract', title: 'What goes in. What comes back.', rows: [
+      fact('input', 'Input needed', entry => entry.schemaSummary ?? 'Inspect input contract'),
+      fact('output', 'Returns', entry => entry.outputSummary ?? 'Not published'),
+    ] },
+    { id: 'commercial', title: 'Price and access', rows: [
+      fact('access', 'Access', entry => toDirectoryToolCardModel(entry).accessLabel, true),
+      fact('price', 'Price', entry => toDirectoryToolCardModel(entry).priceLabel || 'Price unavailable', true),
+      fact('price-source', 'Price context', entry => toDirectoryToolCardModel(entry).priceContext, true),
+    ] },
+    { id: 'evidence', title: 'Source evidence', rows: [
+      fact('calls', 'Coinbase Bazaar reported calls · 30 days', entry => entry.activity?.calls30d === undefined ? 'Not reported' : entry.activity.calls30d.toLocaleString('en-AU'), true),
+      fact('source', 'Listing source', entry => entry.provenance === undefined ? 'Metadata provenance not stated' : `${entry.provenance.directory} · Provider-published metadata`, true),
+    ] },
+  ]
+  const columns = entries.map(entry => ({
+    id: entry.resource, name: entry.title, caption: entry.provider,
+    action: <Link to="/tools/$providerHost/$slug" params={{ providerHost: directoryProviderKey(entry.provider), slug: entry.slug ?? directorySlugBase(entry.resource) }} state={MARKET_LINK_STATE}>Inspect Tool<ArrowUpRightIcon aria-hidden="true" size={14} /></Link>,
+  }))
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="flex max-h-[85dvh] w-[calc(100%-2rem)] min-w-0 flex-col overflow-hidden sm:max-w-5xl" onCloseAutoFocus={onCloseAutoFocus}>
-      <DialogHeader className="pr-8">
+    <DialogContent className="arc-market arc-comparison-dialog flex max-h-[90dvh] w-[calc(100%-1.5rem)] min-w-0 flex-col overflow-hidden sm:max-w-6xl" onCloseAutoFocus={onCloseAutoFocus}>
+      <DialogHeader className="pr-10">
         <DialogTitle>Compare Tools</DialogTitle>
-        <DialogDescription>Compare Provider-listed prices and Coinbase Bazaar activity. Inspect each Tool before calling; a Quote confirms the buyer&apos;s AUD price.</DialogDescription>
+        <DialogDescription>Provider-listed prices and source activity. A Quote confirms the buyer&apos;s AUD price.</DialogDescription>
       </DialogHeader>
-      <div className="grid min-h-0 gap-4 overflow-y-auto sm:grid-cols-2">
-        {entries.map(entry => {
-          const model = toDirectoryToolCardModel(entry)
-          return <article key={entry.resource} className="min-w-0 rounded-card border border-border p-4">
-            <h3 className="break-words text-base font-medium">{entry.title}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">{entry.provider}</p>
-            <p className="mt-1 text-xs font-medium">{model.accessLabel}</p>
-            <p className="mt-3 text-sm font-medium tabular-nums">{model.priceLabel}</p>
-            <p className="text-xs text-muted-foreground">{model.priceContext}</p>
-            <dl className="mt-4 grid gap-3">
-              {comparisonFacts.map(fact => <div key={fact.label} className="min-w-0 border-t border-border pt-2">
-                <dt className="text-xs font-medium text-foreground">{fact.label}</dt>
-                <dd className="break-words text-sm text-muted-foreground">{fact.value(entry)}</dd>
-              </div>)}
-              {entry.activity?.calls30d === undefined ? null : <div className="min-w-0 border-t border-border pt-2">
-                <dt className="text-xs font-medium text-foreground">Coinbase Bazaar reported calls · 30 days</dt>
-                <dd className="text-sm tabular-nums text-muted-foreground">{entry.activity.calls30d.toLocaleString('en-AU')}</dd>
-              </div>}
-            </dl>
-            <Link to="/tools/$providerHost/$slug" params={{ providerHost: directoryProviderKey(entry.provider), slug: entry.slug ?? directorySlugBase(entry.resource) }} state={MARKET_LINK_STATE} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'mt-4 min-h-10')}>Inspect Tool</Link>
-          </article>
-        })}
+      <div className="min-h-0 overflow-y-auto overscroll-contain">
+        {entries.length < 2 ? <p role="status" className="py-6 text-sm">Fewer than two selected Tools are available. Close comparison and choose another Tool.</p> : <ComparisonTable columns={columns} sections={sections} />}
       </div>
     </DialogContent>
   </Dialog>

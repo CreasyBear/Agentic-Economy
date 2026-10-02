@@ -1,19 +1,30 @@
+import { useId, useState } from 'react'
+
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
+import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { DiscoveryRows } from './components/DiscoveryRows'
 import { DEVELOPER_DISCOVERY_UI_COPY } from './discovery.contracts'
 import type { DeveloperDiscoveryViewModel } from './discovery.contracts'
+import '../DeveloperReferenceComposition.css'
 
 export type AeDeveloperDiscoveryPageProps = Readonly<{
   model: DeveloperDiscoveryViewModel
 }>
 
 export function AeDeveloperDiscoveryPage({ model }: AeDeveloperDiscoveryPageProps) {
+  const outlineId = useId()
+  const [outlineOpen, setOutlineOpen] = useState(false)
+  const contents = [
+    { id: 'schema', title: DEVELOPER_DISCOVERY_UI_COPY.artifactsHeading },
+    { id: 'facts', title: DEVELOPER_DISCOVERY_UI_COPY.factsHeading },
+    { id: 'discovery-source', title: DEVELOPER_DISCOVERY_UI_COPY.sourceHeading },
+    { id: 'discovery-read-paths', title: DEVELOPER_DISCOVERY_UI_COPY.readPathsHeading },
+  ]
+
   return (
     <AePublicPage
       kind="document"
@@ -21,72 +32,68 @@ export function AeDeveloperDiscoveryPage({ model }: AeDeveloperDiscoveryPageProp
       title={model.copy.title}
       description={model.copy.description}
     >
-      <div className="ae-rail grid gap-page pb-page">
-        <AeCollectionRail
-          titleId="schema"
-          title={DEVELOPER_DISCOVERY_UI_COPY.artifactsHeading}
-          deck={DEVELOPER_DISCOVERY_UI_COPY.artifactsDescription}
-        >
-          <div className="grid gap-related">
-            {model.artifacts.map((artifact) => (
-              <section
-                key={artifact.kind}
-                id={artifact.kind}
-                aria-labelledby={`${artifact.kind}-title`}
-                className="grid gap-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="grid min-w-0 gap-1">
-                    <h3 id={`${artifact.kind}-title`} className="text-sm font-medium text-foreground">
-                      {artifact.label}
-                    </h3>
-                    <p className="break-all text-sm text-muted-foreground">{artifact.origin}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Badge variant={artifact.statusVariant}>{artifact.statusLabel}</Badge>
-                    <span className="text-sm text-muted-foreground">{artifact.checkedLabel}</span>
-                    <a
-                      href={artifact.href}
-                      aria-label={`${artifact.actionLabel}, ${artifact.label}`}
-                      className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-                    >
-                      {artifact.actionLabel}
-                    </a>
-                  </div>
-                </div>
-              </section>
-            ))}
+      <div className="arc-market arc-developer-reference">
+        <div className="arc-reference-reading">
+          <div className="arc-reference-outline">
+            <button type="button" className="arc-reference-outline-toggle" aria-expanded={outlineOpen} aria-controls={outlineId} onClick={() => setOutlineOpen((open) => !open)}>
+              Discovery contents
+            </button>
+            <div id={outlineId} className="arc-reference-outline-panel" data-open={outlineOpen}>
+              <nav aria-label="Discovery contents">
+                <p className="arc-reference-outline-title">On this page</p>
+                <ul>{contents.map((item) => <li key={item.id}><a href={`#${item.id}`} onClick={() => setOutlineOpen(false)}>{item.title}</a></li>)}</ul>
+              </nav>
+            </div>
           </div>
-        </AeCollectionRail>
-
-        <AeCollectionRail
-          titleId="facts"
-          title={DEVELOPER_DISCOVERY_UI_COPY.factsHeading}
-          deck={DEVELOPER_DISCOVERY_UI_COPY.factsDescription}
-        >
-          {model.publicFacts.length === 0 ? (
-            <AeEmptyState
-              title={DEVELOPER_DISCOVERY_UI_COPY.emptyFactsHeading}
-              description={DEVELOPER_DISCOVERY_UI_COPY.emptyFactsDescription}
-              titleAs="p"
-            />
-          ) : (
-            <DiscoveryRows rows={model.publicFacts} />
-          )}
-        </AeCollectionRail>
-
-        <AeCollectionRail title={DEVELOPER_DISCOVERY_UI_COPY.sourceHeading} deck={model.copy.readOnlyNotice}>
-          <div className="grid gap-related">
-            <AeFactList facts={model.summaryFacts} />
+          <div className="arc-reference-content">
+            <section className="arc-reference-region" aria-labelledby="schema">
+              <header>
+                <h2 id="schema" tabIndex={-1}>{DEVELOPER_DISCOVERY_UI_COPY.artifactsHeading}</h2>
+                <p>{DEVELOPER_DISCOVERY_UI_COPY.artifactsDescription}</p>
+              </header>
+              <div className="arc-reference-records">
+                {model.artifacts.map((artifact) => (
+                  <section key={artifact.kind} id={artifact.kind} aria-labelledby={`${artifact.kind}-title`} className="arc-reference-artifact">
+                    <div>
+                      <h3 id={`${artifact.kind}-title`}>{artifact.label}</h3>
+                      <p>{artifact.origin}</p>
+                    </div>
+                    <div className="arc-reference-artifact-status">
+                      <Badge variant={artifact.statusVariant}>{artifact.statusLabel}</Badge>
+                      <span>{artifact.checkedLabel}</span>
+                      <a href={artifact.href} aria-label={`${artifact.actionLabel}, ${artifact.label}`} className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>
+                        {artifact.actionLabel}
+                      </a>
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </section>
+            <section className="arc-reference-region" aria-labelledby="facts">
+              <header>
+                <h2 id="facts" tabIndex={-1}>{DEVELOPER_DISCOVERY_UI_COPY.factsHeading}</h2>
+                <p>{DEVELOPER_DISCOVERY_UI_COPY.factsDescription}</p>
+              </header>
+              {model.publicFacts.length === 0 ? (
+                <AeEmptyState title={DEVELOPER_DISCOVERY_UI_COPY.emptyFactsHeading} description={DEVELOPER_DISCOVERY_UI_COPY.emptyFactsDescription} titleAs="p" />
+              ) : <DiscoveryRows rows={model.publicFacts} />}
+            </section>
+            <section className="arc-reference-region" aria-labelledby="discovery-source">
+              <header>
+                <h2 id="discovery-source" tabIndex={-1}>{DEVELOPER_DISCOVERY_UI_COPY.sourceHeading}</h2>
+                <p>{model.copy.readOnlyNotice}</p>
+              </header>
+              <AeFactList facts={model.summaryFacts} />
+            </section>
+            <section className="arc-reference-region" aria-labelledby="discovery-read-paths">
+              <header>
+                <h2 id="discovery-read-paths" tabIndex={-1}>{DEVELOPER_DISCOVERY_UI_COPY.readPathsHeading}</h2>
+                <p>{DEVELOPER_DISCOVERY_UI_COPY.readPathsDescription}</p>
+              </header>
+              <DiscoveryRows rows={model.routeHealth} />
+            </section>
           </div>
-        </AeCollectionRail>
-
-        <AeCollectionRail
-          title={DEVELOPER_DISCOVERY_UI_COPY.readPathsHeading}
-          deck={DEVELOPER_DISCOVERY_UI_COPY.readPathsDescription}
-        >
-          <DiscoveryRows rows={model.routeHealth} />
-        </AeCollectionRail>
+        </div>
       </div>
     </AePublicPage>
   )

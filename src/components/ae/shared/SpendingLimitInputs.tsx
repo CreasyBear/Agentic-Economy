@@ -1,5 +1,4 @@
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import './SpendingInputsComposition.css'
 
 export type SpendingLimitInputsProps = Readonly<{
   presentation: 'editable' | 'sandbox-static'
@@ -30,23 +29,23 @@ export function SpendingLimitInputs({
   onDailyChange,
   onMonthlyChange,
 }: SpendingLimitInputsProps) {
-  const rootClass = className ?? 'grid min-h-[4.5rem] grid-cols-1 gap-3 sm:grid-cols-3'
+  const rootClass = `arc-market arc-spending-inputs ${className ?? 'arc-spending-inputs-grid'}`
 
   if (presentation === 'sandbox-static') {
     const display = sandboxDisplay ?? values
     return (
       <div className={rootClass}>
-        <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">{PER_CALL_LABEL}</span>
-          <span className="font-mono text-sm tabular-nums text-foreground">{display.perCall}</span>
+        <div className="arc-spending-input-field">
+          <span className="arc-spending-input-label">{PER_CALL_LABEL}</span>
+          <span className="arc-spending-input-value">{display.perCall}</span>
         </div>
-        <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">{DAILY_LABEL}</span>
-          <span className="font-mono text-sm tabular-nums text-foreground">{display.daily}</span>
+        <div className="arc-spending-input-field">
+          <span className="arc-spending-input-label">{DAILY_LABEL}</span>
+          <span className="arc-spending-input-value">{display.daily}</span>
         </div>
-        <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">{MONTHLY_LABEL}</span>
-          <span className="font-mono text-sm tabular-nums text-foreground">{display.monthly}</span>
+        <div className="arc-spending-input-field">
+          <span className="arc-spending-input-label">{MONTHLY_LABEL}</span>
+          <span className="arc-spending-input-value">{display.monthly}</span>
         </div>
       </div>
     )
@@ -54,11 +53,11 @@ export function SpendingLimitInputs({
 
   return (
     <div className={rootClass}>
-      <div className="grid gap-1">
-        <Label htmlFor={ids.perCall} className="text-xs">
+      <div className="arc-spending-input-field">
+        <label htmlFor={ids.perCall} className="arc-spending-input-label">
           {PER_CALL_LABEL}
-        </Label>
-        <Input
+        </label>
+        <input
           id={ids.perCall}
           type="text"
           inputMode="decimal"
@@ -66,15 +65,15 @@ export function SpendingLimitInputs({
           onChange={(e) => onPerCallChange(e.target.value)}
           disabled={disabled}
           {...(placeholders?.perCall !== undefined ? { placeholder: placeholders.perCall } : {})}
-          className="font-mono tabular-nums"
+          className="arc-spending-input-control"
         />
       </div>
 
-      <div className="grid gap-1">
-        <Label htmlFor={ids.daily} className="text-xs">
+      <div className="arc-spending-input-field">
+        <label htmlFor={ids.daily} className="arc-spending-input-label">
           {DAILY_LABEL}
-        </Label>
-        <Input
+        </label>
+        <input
           id={ids.daily}
           type="text"
           inputMode="decimal"
@@ -82,15 +81,15 @@ export function SpendingLimitInputs({
           onChange={(e) => onDailyChange(e.target.value)}
           disabled={disabled}
           {...(placeholders?.daily !== undefined ? { placeholder: placeholders.daily } : {})}
-          className="font-mono tabular-nums"
+          className="arc-spending-input-control"
         />
       </div>
 
-      <div className="grid gap-1">
-        <Label htmlFor={ids.monthly} className="text-xs">
+      <div className="arc-spending-input-field">
+        <label htmlFor={ids.monthly} className="arc-spending-input-label">
           {MONTHLY_LABEL}
-        </Label>
-        <Input
+        </label>
+        <input
           id={ids.monthly}
           type="text"
           inputMode="decimal"
@@ -98,7 +97,7 @@ export function SpendingLimitInputs({
           onChange={(e) => onMonthlyChange(e.target.value)}
           disabled={disabled}
           {...(placeholders?.monthly !== undefined ? { placeholder: placeholders.monthly } : {})}
-          className="font-mono tabular-nums"
+          className="arc-spending-input-control"
         />
       </div>
     </div>

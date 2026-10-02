@@ -6,6 +6,7 @@ import type { MarketToolSearchStatus, ToolSearchChoice } from '../tools-search-p
 import { toolSearchGroupHeading } from '../tools-search-page.contracts'
 
 import { ToolSearchRecentRow, ToolSearchResultRow } from './ToolSearchResultRow'
+import './CommandResultsComposition.css'
 
 export type ToolsSearchResultsGroupProps = Readonly<{
   isActive: boolean
@@ -34,7 +35,7 @@ export function ToolsSearchResultsGroup({
     <ToolSearchResultRow key={choice.item.toolRef} isActive={isActive} row={choice.item}
       onSelect={onSelectTool} onClearPendingIntent={onClearPendingIntent} />
   )
-  return <CommandGroup heading={toolSearchGroupHeading(trimmedQuery, recentCount, status)}>
+  return <CommandGroup className="arc-market arc-command-result-group" heading={toolSearchGroupHeading(trimmedQuery, recentCount, status)}>
     {choices.map(renderChoice)}
   </CommandGroup>
 }

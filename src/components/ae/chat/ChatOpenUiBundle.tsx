@@ -3,6 +3,7 @@ import { ToolCard } from '@/components/ae/chat/ToolCard'
 import type { BoundOpenUiNode } from '@/modules/chat/openui-bundle'
 import type { ToolCardProjection } from '@/modules/chat/tool-card'
 import type { SearchNextProps } from './presentation'
+import './TranscriptComposition.css'
 
 export type ChatOpenUiBundleProps = Readonly<{
   node: BoundOpenUiNode
@@ -26,7 +27,7 @@ export function ChatOpenUiBundle({ node, tools, onContinueSearch, onRepeatSearch
     }
     case 'stack':
       return (
-        <div className="grid gap-related">
+        <div className="arc-market arc-chat arc-openui-stack">
           {node.children.map((child, index) => (
             <ChatOpenUiBundle key={index} node={child} tools={tools}
               {...(onContinueSearch === undefined ? {} : { onContinueSearch })}

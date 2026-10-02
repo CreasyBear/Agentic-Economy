@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
 
 export function AddToolAction({
   variant = 'default',
@@ -9,7 +8,7 @@ export function AddToolAction({
   return (
     <Link
       to="/owner/operations/new"
-      className={cn(buttonVariants({ variant }), 'min-h-touch w-fit')}
+      className={['arc-market', buttonStyles.button, variant === 'outline' ? buttonStyles.secondary : buttonStyles.primary, buttonStyles.md, 'w-fit'].join(' ')}
     >
       Add Tool
     </Link>

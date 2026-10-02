@@ -1,11 +1,16 @@
-// Invariant: one search result has one trusted presentation; extracted unchanged from OptionsGrid.tsx.
-import { truncateText } from '@/modules/common/truncate-text'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+// Arc Pro product-listing TSX SHA-256: 45e258f3eb2a27dcf84d4cf1afc5b95cba17ac56f8888385c4524c706ecfd19c.
+// Arc Pro product-listing media/quick/info composition; existing OptionView remains authoritative.
+// Invariant: prices/attribution are projected facts, actions are controlled by the chat controller.
+import { Braces } from 'lucide-react'
+import { motion, useReducedMotion } from 'motion/react'
+import { Button } from '@/components/arc/button/button'
+import { motionTokens } from '@/components/arc/lib/motion-tokens'
 import { ToolPriceText } from '@/components/ae/market/AeToolPrice'
 import { chatToolPanel } from '@/lib/public/chat-ia'
 import { toolChoiceReadinessLabel } from '@/modules/chat/tool-card'
 import type { OptionView } from './generative.contracts'
+import '@/components/arc/market/ProductListing.css'
+import '@/components/arc/chat/Options.css'
 
 export type OptionCardProps = Readonly<{
   option: OptionView
@@ -24,41 +29,50 @@ export type OptionCardProps = Readonly<{
 
 export function OptionCard({ option, recommended, compared, selected, multipleOptions, selectionActions = true, onReview, onSelect, onCompare, openToolRef, panelId, readOnly = false }: OptionCardProps) {
   const location = `${option.host ?? ''}${option.resourcePath ?? ''}`
+  const reduced = Boolean(useReducedMotion())
   return (
-    <article className={`flex min-w-0 w-60 shrink-0 snap-start flex-col gap-2 rounded-card bg-muted p-3 transition-[background-color,box-shadow] duration-fast ease-standard motion-reduce:transition-none hover:bg-muted/70 sm:w-auto sm:gap-3 ${recommended ? 'ring-1 ring-ring' : ''}`}>
-      <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h4 className="min-w-0 break-words text-sm font-semibold sm:text-[0.9375rem]"><a href={option.href} className="break-words underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{option.name}</a></h4>
-          {recommended ? <Badge variant="secondary">{chatToolPanel.bestMatch}</Badge> : null}
+    <motion.article className="arc-market arc-chat arc-listing-card arc-chat-option" data-selected={selected || compared || undefined} data-recommended={recommended || undefined} layout={reduced ? false : 'position'} transition={reduced ? { duration: 0 } : motionTokens.spring.smooth}>
+      <div className="arc-listing-media">
+        <div className="arc-listing-media-top">
+          <span className="arc-chat-option-contract-icon" aria-hidden="true"><Braces size={18} strokeWidth={1.5} /></span>
+          {recommended ? <span className="arc-chat-option-recommendation">{chatToolPanel.bestMatch}</span> : null}
         </div>
-        {option.outcome ? <p className="mt-1 break-words text-xs leading-relaxed text-muted-foreground sm:text-[0.8125rem]">{option.outcome}</p> : null}
-        {location.length > 0 ? <p title={location} className="min-w-0 truncate text-xs text-muted-foreground">{truncateText(location, 120)}</p> : null}
+        <div className="arc-listing-preview">
+          <h4 className="arc-chat-option-name"><a href={option.href}>{option.name}</a></h4>
+          {option.outcome ? <p className="arc-chat-option-outcome">{option.outcome}</p> : null}
+          {location.length > 0 ? <p title={location} className="arc-chat-option-location">{location}</p> : null}
+          {option.networkLabel ? <p className="arc-listing-preview-label">{option.networkLabel}</p> : null}
+        </div>
+        {readOnly ? null : <div className="arc-listing-quick arc-chat-option-actions">
+          {option.quoteable ? (
+            <Button type="button" size="sm" disabled={onReview === undefined}
+              onClick={() => onReview?.(option.id)} aria-expanded={openToolRef === option.id}
+              {...(panelId === undefined || openToolRef !== option.id ? {} : { 'aria-controls': panelId })}>
+              {chatToolPanel.review}
+            </Button>
+          ) : null}
+          {selectionActions ? <>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onSelect?.(option.id)} disabled={!option.selectable || onSelect === undefined} aria-pressed={selected}>Select</Button>
+            {multipleOptions && option.selectable ? <Button type="button" size="sm" variant="ghost" onClick={() => onCompare?.(option.id)} disabled={onCompare === undefined} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button> : null}
+          </> : null}
+        </div>}
       </div>
-      <div className="mt-auto grid min-w-0 gap-1 text-xs sm:text-[0.8125rem]">
-        {option.price === 'Price to be confirmed' ? null : <p className="break-words tabular-nums"><ToolPriceText price={option.price}
-          {...(option.priceValidUntil === undefined ? {} : { validUntil: option.priceValidUntil })} /></p>}
-        {option.providerListedPrice ? <p className="min-w-0 truncate text-muted-foreground">Provider-listed price: {truncateText(option.providerListedPrice, 80)}</p> : null}
-        {option.networkLabel ? <p className="min-w-0 truncate text-muted-foreground">{truncateText(option.networkLabel, 48)}</p> : null}
-        {option.readiness === 'ready' ? <p className="flex items-center gap-1.5 text-muted-foreground">
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
+      <div className="arc-listing-info arc-chat-option-facts">
+        <div className="arc-chat-option-price"><p className="arc-listing-price"><ToolPriceText price={option.price}
+          {...(option.priceValidUntil === undefined ? {} : { validUntil: option.priceValidUntil })} /></p>
+          {option.facts?.Price?.source ? <p className="arc-chat-option-attribution">{option.facts.Price.source}</p> : null}
+          {option.providerListedPrice ? <p className="arc-listing-price-context" title={option.providerListedPrice}>Provider-listed price: {option.providerListedPrice}</p> : null}
+        </div>
+        {option.readiness === 'ready' ? <p className="arc-listing-access arc-chat-option-ready">
+          <span aria-hidden="true" />
           {toolChoiceReadinessLabel(option.readiness)}
-        </p> : <p className="min-w-0 truncate text-muted-foreground">{toolChoiceReadinessLabel(option.readiness)}</p>}
-        {option.usage ? <p className="break-words text-muted-foreground">{option.usage}</p> : null}
-        {option.seller ? <p className="break-words text-muted-foreground">{option.seller.kind === 'provider' ? 'Provider:' : 'Listed on'} {option.seller.name}</p> : null}
+        </p> : <p className="arc-listing-access">{toolChoiceReadinessLabel(option.readiness)}</p>}
+        {option.facts?.Readiness?.source ? <p className="arc-chat-option-attribution">{option.facts.Readiness.source}</p> : null}
+        {option.usage ? <p className="arc-listing-facts">{option.usage}</p> : null}
+        {option.facts?.Usage?.source ? <p className="arc-chat-option-attribution">{option.facts.Usage.source}</p> : null}
+        {option.seller ? <p className="arc-listing-facts">{option.seller.kind === 'provider' ? 'Provider:' : 'Listed on'} {option.seller.name}</p> : null}
+        {option.source ? <p className="arc-chat-option-attribution">{option.source}</p> : null}
       </div>
-      {readOnly ? null : <div className="flex min-w-0 flex-wrap gap-2">
-        {option.quoteable ? (
-          <Button type="button" size="sm" className="min-h-10" disabled={onReview === undefined}
-            onClick={() => onReview?.(option.id)} aria-expanded={openToolRef === option.id}
-            {...(panelId === undefined || openToolRef !== option.id ? {} : { 'aria-controls': panelId })}>
-            {chatToolPanel.review}
-          </Button>
-        ) : null}
-        {selectionActions ? <>
-          <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onSelect?.(option.id)} disabled={!option.selectable} aria-pressed={selected}>Select</Button>
-          {multipleOptions && option.selectable ? <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onCompare?.(option.id)} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button> : null}
-        </> : null}
-      </div>}
-    </article>
+    </motion.article>
   )
 }

@@ -1,3 +1,4 @@
+import './ProviderCatalogueComposition.css'
 import { ToolListingCard } from './ToolListingCard'
 import type { ToolObjectView } from './object-family.contracts'
 import type { ListingFact } from '@/modules/registry/public'
@@ -11,14 +12,20 @@ export type HostGroupingProps = Readonly<{
 export function HostGrouping({ hostname, listings, verifiedProvider }: HostGroupingProps) {
   if (hostname.kind !== 'present' || hostname.scope !== 'directory_resource') return null
   return (
-    <section aria-labelledby="host-grouping-heading" className="grid min-w-0 gap-related">
-      <h1 id="host-grouping-heading" className="break-all text-title-lg font-medium">{hostname.value}</h1>
-      <p className="text-sm text-muted-foreground">Directory Host grouping, not an accountable Business identity.</p>
-      <details className="text-xs text-muted-foreground"><summary className="min-h-touch cursor-pointer content-center">Technical source reference</summary><p className="break-all font-mono">{hostname.sourceRef}</p></details>
-      {verifiedProvider === undefined ? null : <a className="min-h-touch w-fit content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2" href={verifiedProvider.href}>Verified Provider: {verifiedProvider.name}</a>}
+    <section aria-labelledby="host-grouping-heading" className="arc-host-grouping">
+      <header className="arc-host-identity">
+        <div className="arc-provider-title">
+          <h1 id="host-grouping-heading">{hostname.value}</h1>
+          <p>Directory Host grouping, not an accountable Business identity.</p>
+        </div>
+        <div className="arc-provider-source">
+          <details><summary>Technical source reference</summary><p>{hostname.sourceRef}</p></details>
+          {verifiedProvider === undefined ? null : <a href={verifiedProvider.href}>Verified Provider: {verifiedProvider.name}</a>}
+        </div>
+      </header>
       <h2 className="text-title font-medium">Directory listings</h2>
       {listings.length === 0 ? <p className="text-sm text-muted-foreground">No sourced listings are available.</p> : (
-        <div className="grid min-w-0 gap-related sm:grid-cols-2">
+        <div className="arc-provider-gallery">
           {listings.map((view) => <ToolListingCard key={view.href} view={view} />)}
         </div>
       )}

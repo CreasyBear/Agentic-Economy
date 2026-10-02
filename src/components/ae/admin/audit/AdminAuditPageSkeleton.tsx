@@ -1,5 +1,5 @@
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { Skeleton } from '@/components/ui/skeleton'
+import '../AdminLoadingComposition.css'
 import { AUDIT_COPY } from './audit.contracts'
 
 export function AdminAuditPageSkeleton() {
@@ -16,10 +16,50 @@ export function AdminAuditPageSkeleton() {
       stickyHeader
       pending
     >
-      <div className="grid gap-section" aria-busy="true" aria-label={AUDIT_COPY.title}>
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-72 w-full" />
+      <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={AUDIT_COPY.title}>
+        <div aria-hidden="true">
+          <div className="arc-admin-loading-pane">
+            <span className="arc-admin-loading-line" data-size="title" />
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+          </div>
+        </div>
+        <div aria-hidden="true">
+          <div className="arc-admin-loading-pane">
+            <span className="arc-admin-loading-line" data-size="title" />
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+          </div>
+        </div>
+        <div aria-hidden="true">
+          <div className="arc-admin-loading-pane">
+            <span className="arc-admin-loading-line" data-size="title" />
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+            <div className="arc-admin-loading-row">
+              <span className="arc-admin-loading-line" />
+              <span className="arc-admin-loading-line" />
+            </div>
+          </div>
+        </div>
       </div>
     </AeOperatorPage>
   )

@@ -89,13 +89,16 @@ export function marketCompareParam(refs: readonly string[]): string | undefined 
 }
 
 /**
- * Keep `compare` on Market navigations unless the next search sets it.
- * `compare: undefined` clears the set.
+ * Keep comparison and display preference on Market navigation unless explicitly set.
+ * Undefined clears that value. Display preference never changes catalogue inputs.
  */
 export function carryMarketCompare<const T extends Record<string, unknown>>(
-  from: Readonly<{ compare?: string }>,
+  from: Readonly<{ compare?: string; layout?: 'table' | 'grid' }>,
   to: T,
 ): T {
+  if (!Object.hasOwn(to, 'layout') && from.layout !== undefined) {
+    to = { ...to, layout: from.layout }
+  }
   if (Object.hasOwn(to, 'compare')) {
     const compare = to.compare
     if (typeof compare !== 'string') {
@@ -189,7 +192,7 @@ function cataloguePage(value: unknown): number | undefined {
   return page
 }
 
-const MARKET_SEARCH_KEYS = ['providerCursor', 'view', 'compare', 'resource', 'page', ...directoryCatalogueSearchKeys] as const
+const MARKET_SEARCH_KEYS = ['providerCursor', 'view', 'layout', 'compare', 'resource', 'page', ...directoryCatalogueSearchKeys] as const
 
 export function validateMarketSearch(search: Record<string, unknown>): MarketSearch {
   const directory = catalogueSearchFromUrl(search)
@@ -202,6 +205,7 @@ export function validateMarketSearch(search: Record<string, unknown>): MarketSea
     ...directory,
     ...(providerCursor === undefined ? {} : { providerCursor }),
     ...(search.view === 'discover' || search.view === 'tools' || search.view === 'providers' || search.view === 'saved' ? { view: search.view } : {}),
+    ...(search.layout === 'table' || search.layout === 'grid' ? { layout: search.layout } : {}),
     ...(compareRefs === undefined ? {} : { compare: compareRefs.join(',') }),
     ...(typeof search.resource === 'string' && search.resource.length > 0 && search.resource.length <= 8_192 ? { resource: search.resource } : {}),
     ...(page === undefined ? {} : { page }),

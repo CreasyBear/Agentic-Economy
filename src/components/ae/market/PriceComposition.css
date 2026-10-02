@@ -1,0 +1,9 @@
+/* Arc Pro product-listing .price/.priceTag typography and spacing.
+ * Retrieved CSS SHA-256 c73c3ea16c34eb857e4aac3d066648b6be8816f9f54db1e5dcda7fc4118a1cfb.
+ * Price is the caller's already-formatted string; no amount is recalculated,
+ * currency inferred or price-validity state manufactured by this presenter. */
+:where(.arc-market.arc-tool-price) { display: grid; min-width: 0; max-width: 100%; align-content: start; gap: var(--space-1); margin: 0; color: var(--foreground); }
+.arc-market .arc-tool-price-label { color: var(--text-secondary); font-family: var(--font-body); font-size: var(--text-sm); font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.arc-market .arc-tool-price-value { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-lg); font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.arc-market.arc-tool-price[data-size="sm"] .arc-tool-price-value { font-size: var(--text-sm); }
+.arc-market.arc-tool-price[data-size="lg"] .arc-tool-price-value { font-size: var(--text-2xl); }

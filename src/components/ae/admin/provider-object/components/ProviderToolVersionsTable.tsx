@@ -9,6 +9,7 @@ import {
   type ProviderToolVersionsTableProps,
 } from '../provider-object.contracts'
 import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
+import '../../RecordWorkspaceComposition.css'
 
 
 const columns: ColumnDef<ProviderPublicationRow, unknown>[] = [
@@ -17,7 +18,7 @@ const columns: ColumnDef<ProviderPublicationRow, unknown>[] = [
     header: PROVIDER_OBJECT_COPY.columns.toolVersion,
     cell: ({ row }) => (
       <a
-        className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:underline"
+        className="arc-admin-record-link"
         href={`/admin/tools/${encodeURIComponent(row.original.ref)}`}
       >
         {row.original.ref}

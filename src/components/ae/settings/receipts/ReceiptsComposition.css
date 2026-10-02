@@ -1,0 +1,13 @@
+/* Arc Pro usage-billing invoice rows, retrieved 2026-10-01.
+ * CSS SHA-256 543cc56ac84be6b17f4dabaf411133d2ef69852db8a261fbd7816ab2c6ca31f9.
+ * Existing SettingsRow supplies the responsive label/action layout. No simulated
+ * download state, subscription plan or invoice eligibility is introduced.
+ */
+.arc-receipt-record { min-width: 0; }
+.arc-receipt-content { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.arc-receipt-summary, .arc-receipt-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.arc-receipt-summary [data-slot="badge"] { font-size: var(--text-sm); }
+.arc-receipt-amount { color: var(--foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-lg); font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.4; overflow-wrap: anywhere; }
+.arc-receipt-note { color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.arc-receipt-pagination { display: flex; justify-content: center; padding-top: var(--space-4); }
+@media (min-width: 640px) { .arc-receipt-content { align-items: flex-end; } .arc-receipt-content .arc-receipt-actions { justify-content: flex-end; } }

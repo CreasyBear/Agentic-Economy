@@ -1,11 +1,9 @@
 import { Link } from '@tanstack/react-router'
 
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { Button as ArcButton } from '@/components/arc/button/button'
+import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 
 import {
-  ACTIVITY_FILTER_CHIP_CLASS,
   type ActivityFilterBarProps,
   type ActivityDateRangeFilter,
   type ActivityStatusFilter,
@@ -26,47 +24,44 @@ export function ActivityFilterBar({
   filtersActive,
   onResetFilters,
 }: ActivityFilterBarProps) {
+  const handleStatusChange = (value: string) => {
+    const filter = STATUS_FILTERS.find((status) => status === value)
+    if (filter !== undefined) onStatusFilterChange(filter)
+  }
+
+  const handleDateChange = (value: string) => {
+    const filter = DATE_FILTERS.find((dateRange) => dateRange === value)
+    if (filter !== undefined) onDateRangeFilterChange(filter)
+  }
+
   return (
-    <div className="flex min-h-[3rem] flex-wrap items-center justify-between gap-3 gap-y-related border-b border-border pb-related">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="arc-market flex min-h-[3rem] min-w-0 max-w-full flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-4">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">Status:</span>
-          <div className="flex flex-wrap items-center gap-1">
-            {STATUS_FILTERS.map((s) => (
-              <Button
-                key={s}
-                type="button"
-                variant={statusFilter === s ? 'secondary' : 'ghost'}
-                size="sm"
-                className={cn('min-h-9 text-xs sm:min-h-8', ACTIVITY_FILTER_CHIP_CLASS)}
-                aria-pressed={statusFilter === s}
-                onClick={() => onStatusFilterChange(s)}
-              >
-                {statusChipLabel(s)}
-                {' '}
-                <span className="font-mono tabular-nums">{statusCounts[s]}</span>
-              </Button>
-            ))}
-          </div>
+          <SegmentedControl
+            options={STATUS_FILTERS.map((status) => ({
+              value: status,
+              label: statusChipLabel(status),
+              accessory: <span className="font-mono tabular-nums">{statusCounts[status]}</span>,
+            }))}
+            value={statusFilter}
+            onValueChange={handleStatusChange}
+            label="Call status"
+          />
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">Date:</span>
-          <div className="flex flex-wrap items-center gap-1">
-            {DATE_FILTERS.map((d) => (
-              <Button
-                key={d}
-                type="button"
-                variant={dateRangeFilter === d ? 'secondary' : 'ghost'}
-                size="sm"
-                className={cn('min-h-9 text-xs sm:min-h-8', ACTIVITY_FILTER_CHIP_CLASS)}
-                aria-pressed={dateRangeFilter === d}
-                onClick={() => onDateRangeFilterChange(d)}
-              >
-                {dateChipLabel(d)}
-              </Button>
-            ))}
-          </div>
+          <SegmentedControl
+            options={DATE_FILTERS.map((dateRange) => ({
+              value: dateRange,
+              label: dateChipLabel(dateRange),
+            }))}
+            value={dateRangeFilter}
+            onValueChange={handleDateChange}
+            label="Call date range"
+          />
         </div>
 
         {filteredAgentShortId ? (
@@ -77,7 +72,7 @@ export function ActivityFilterBar({
             <Link
               to="/activity"
               aria-label="Clear agent filter"
-              className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), `h-6 rounded-full px-1.5 text-xs ${ACTIVITY_FILTER_CHIP_CLASS}`)}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-control)] border border-border px-2 text-lg text-muted-foreground transition-colors hover:bg-muted"
             >
               ×
             </Link>
@@ -86,15 +81,15 @@ export function ActivityFilterBar({
       </div>
 
       {filtersActive ? (
-        <Button
+        <ArcButton
           type="button"
           variant="ghost"
-          size="sm"
-          className={cn('min-h-9 text-xs text-muted-foreground sm:min-h-8', ACTIVITY_FILTER_CHIP_CLASS)}
+          size="md"
+          className="text-muted-foreground"
           onClick={onResetFilters}
         >
           Reset filters
-        </Button>
+        </ArcButton>
       ) : null}
     </div>
   )

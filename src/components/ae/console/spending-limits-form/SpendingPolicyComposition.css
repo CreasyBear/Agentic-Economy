@@ -1,0 +1,137 @@
+/* Arc Pro wallet/settings panel geometry, retrieved 2026-10-01.
+ * Settings CSS SHA-256 e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Policy state, exact money and update controls remain caller-owned.
+ */
+.arc-market.arc-spending-policy {
+  box-sizing: border-box;
+  display: grid;
+  min-width: 0;
+  gap: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: var(--leading-body);
+}
+
+.arc-spending-policy > * {
+  min-width: 0;
+}
+
+.arc-spending-policy-header {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.arc-spending-policy-heading {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.arc-spending-policy-title {
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+}
+
+.arc-spending-policy-header-actions {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.arc-spending-policy-pause {
+  min-height: 44px;
+}
+
+.arc-spending-policy-form {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-5);
+}
+
+.arc-spending-policy-footer {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.arc-spending-policy-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.arc-spending-policy-failure {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.arc-spending-policy-failure .arc-spending-policy-hint {
+  flex: 1 1 18rem;
+}
+
+.arc-spending-policy-renewal {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.arc-spending-policy-diagnostic,
+.arc-spending-policy-pause-notice {
+  min-width: 0;
+}
+
+.arc-spending-policy-pause-notice .arc-spending-policy-hint {
+  color: inherit;
+}
+
+.arc-spending-policy-renew {
+  justify-self: start;
+  max-width: 100%;
+  text-decoration: none;
+}
+
+.arc-spending-policy [data-slot="badge"] {
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 479px) {
+  .arc-market.arc-spending-policy {
+    padding: var(--space-4);
+  }
+
+  .arc-spending-policy-header-actions {
+    width: 100%;
+  }
+
+  .arc-spending-policy-footer > button {
+    flex: 1 1 auto;
+  }
+}
+
+/* Real failure facts remain supplied by the policy controller. */
+.arc-market.arc-spending-policy-diagnostic { min-width: 0; padding: var(--space-4); border-radius: var(--radius-control); background: var(--surface); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
+.arc-market.arc-spending-policy-diagnostic [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; font-size: var(--text-sm); font-weight: 500; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
+.arc-market.arc-spending-policy-diagnostic .arc-spending-policy-diagnostic-body { min-width: 0; gap: var(--space-2); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }

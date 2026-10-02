@@ -61,6 +61,24 @@ describe('generative chat leaves', () => {
     fireEvent.click(screen.getByText(/Searched 12 tools/))
     expect(screen.getByText('Searched tools').closest('details')).toHaveAttribute('open')
   })
+  it('updates the real work rail without inventing execution, time, or approval events', () => {
+    const { rerender } = render(<WorkDisclosure view={{ summary: 'Finding Tools', steps: [{ id: 'search', label: 'Registry search', status: 'working' }] }} />)
+    fireEvent.click(screen.getByText('Finding Tools'))
+    expect(screen.getByRole('list', { name: 'Discovery work' })).toHaveTextContent('Registry searchWorking')
+    rerender(<WorkDisclosure view={{ summary: 'Found 2 Tools', steps: [{ id: 'search', label: 'Registry search', status: 'complete' }, { id: 'compare', label: 'Compare reported facts', status: 'attention' }] }} />)
+    const timeline = screen.getByRole('list', { name: 'Discovery work' })
+    expect(timeline).toHaveTextContent('Registry searchDone')
+    expect(timeline).toHaveTextContent('Compare reported factsNeeds attention')
+    expect(screen.queryByText('Working')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /approve|pause|restart|pull request/i })).not.toBeInTheDocument()
+    expect(timeline).not.toHaveTextContent(/seconds|tokens|tests passed/)
+    fireEvent.click(screen.getByText('Found 2 Tools'))
+    expect(screen.queryByRole('list', { name: 'Discovery work' })).not.toBeInTheDocument()
+  })
+  it('renders no run when no discovery work was reported', () => {
+    const { container } = render(<WorkDisclosure view={{ summary: 'No work', steps: [] }} />)
+    expect(container).toBeEmptyDOMElement()
+  })
   it('links numbered sources to exact Tool pages', () => {
     render(<SourcesInline view={{ sources: [{ toolRef: 'tool:fx', title: 'Currency exchange', href: '/tools/tool%3Afx' }] }} />)
     expect(screen.getByRole('link', { name: 'Source 1: Currency exchange' })).toHaveAttribute('href', '/tools/tool%3Afx')
@@ -110,6 +128,46 @@ describe('generative chat leaves', () => {
     expect(screen.queryByText('Everything')).not.toBeInTheDocument()
     expect(screen.getAllByText('Not provided').length).toBeGreaterThan(0)
     expect(screen.getAllByText('AE-observed').length).toBeGreaterThan(0)
+  })
+  it('preserves price/readiness and different attribution when filtering comparison facts', () => {
+    render(<ComparisonTable view={{ options, rows: [
+      { label: 'Price', cells: { 'tool:fx': { value: 'AUD 0.01 per Call', source: 'AE-observed' }, 'tool:geo': { value: 'AUD 0.01 per Call', source: 'AE-observed' } } },
+      { label: 'Readiness', cells: { 'tool:fx': { value: 'Unverified', source: 'Provider-reported' }, 'tool:geo': { value: 'Unverified', source: 'Provider-reported' } } },
+      { label: 'Usage', cells: { 'tool:fx': { value: '1,200 calls', source: 'AE-observed' }, 'tool:geo': { value: '1,200 calls', source: 'Directory-reported' } } },
+      { label: 'Same contract', cells: { 'tool:fx': { value: 'JSON' }, 'tool:geo': { value: 'JSON' } } },
+    ] }} />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Only differences' }))
+    expect(screen.getByRole('rowheader', { name: 'Price' })).toBeInTheDocument()
+    expect(screen.getByRole('rowheader', { name: 'Readiness' })).toBeInTheDocument()
+    expect(screen.getByRole('rowheader', { name: 'Usage' })).toBeInTheDocument()
+    expect(screen.getByText('Directory-reported')).toBeInTheDocument()
+    expect(screen.queryByRole('rowheader', { name: 'Same contract' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Inspect option' }).map(link => link.getAttribute('href'))).toEqual(options.map(option => option.href))
+  })
+  it('keeps external inspection, missing price and read-only results honest', () => {
+    const external = [{ ...options[1]!, selectable: true, providerListedPrice: '0.002000 USDC' }]
+    const onReview = vi.fn()
+    const { rerender } = render(<OptionsGrid view={{ options: external, comparedIds: [] }} onReview={onReview} />)
+    expect(screen.getByText('Price to be confirmed')).toBeInTheDocument()
+    expect(screen.getByText('Provider-listed price: 0.002000 USDC')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Review and run' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Select' })).toBeDisabled()
+    expect(onReview).not.toHaveBeenCalled()
+    rerender(<OptionsGrid view={{ options, comparedIds: ['tool:fx'], selectedId: 'tool:fx' }} readOnly />)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Currency exchange' })).toHaveAttribute('href', '/tools/tool%3Afx')
+  })
+  it('renders complete listing details for long values in read-only results', () => {
+    const host = `region-${'catalog-'.repeat(10)}.api.example`
+    const resourcePath = '/v2/resource/with/a/long/path/segment'
+    const networkLabel = 'Ethereum mainnet public registry network label for long display'
+    const providerListedPrice = '0.002000 USDC per request, plus a variable execution surcharge based on selected network'
+    render(<OptionsGrid view={{ options: [{ ...options[1]!, host, resourcePath, networkLabel, providerListedPrice }], comparedIds: [] }} readOnly />)
+    expect(screen.getByText(`${host}${resourcePath}`)).toBeInTheDocument()
+    expect(screen.getByText(networkLabel)).toBeInTheDocument()
+    expect(screen.getByText(`Provider-listed price: ${providerListedPrice}`)).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Place lookup' })).toHaveAttribute('href', '/tools/tool%3Ageo')
   })
   it('projects only observed facts from chat cards, not imagined prices, usage, sellers or readiness', () => {
     const card = { kind: 'choices', toolId: 'registry.tools.search', title: 'Search', state: 'complete', toolRefs: ['tool:fx'], count: 12, choices: [{ toolRef: 'tool:fx', title: 'Currency exchange' }] } as const

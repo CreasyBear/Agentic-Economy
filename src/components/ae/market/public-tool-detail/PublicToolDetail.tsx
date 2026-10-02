@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeToolInputDisclosure, AeToolTechnicalContract } from '@/components/ae/market/tool-detail/AeToolContractSections'
-import { ToolDetailFacts } from '@/components/ae/shared/ToolDetailFacts'
+import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
+import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { projectAdmittedListing } from '@/modules/registry/public'
@@ -44,19 +45,47 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
   const setupHref = `/agent-access?resumeTool=${encodeURIComponent(tool.toolRef)}`
   const alternativeHref = alternativeToolSearchHref(listing, `${tool.contract.capabilityId} ${tool.summary}`)
   const actionHref = !recipientUnverified && (routeable || tool.availability.posture === 'setup_required') ? setupHref : alternativeHref
-  const example = tool.contract.inputExamples?.[0]
+  const slides: DetailSlide[] = (tool.contract.inputExamples ?? []).map((example, index) => ({
+    id: `input-${index}-${example.label}`,
+    label: example.label ?? `Input example ${index + 1}`,
+    description: example.label === undefined ? 'Published input' : `Published input: ${example.label}`,
+    content: <pre><code>{JSON.stringify(example.input, null, 2)}</code></pre>,
+  }))
+  if (slides.length === 0) slides.push({
+    id: 'input-unpublished', label: 'Input example', description: 'No example input is published for this Tool.',
+    content: <div className="arc-pdp-empty"><p>Inspect the exact input JSON Schema under Technical before requesting a Quote.</p></div>,
+  })
+  slides.push({
+    id: 'output-contract', label: 'Output contract', description: 'Published schema. This is a contract, not an example result.',
+    content: <pre><code>{JSON.stringify(tool.contract.outputJsonSchema, null, 2)}</code></pre>,
+  })
   return <AePublicPage>
-    <article className="ae-rail grid min-w-0 gap-section pb-page pt-section">
-      <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground"><Link to="/market" className="min-h-touch content-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">Market</Link><span aria-hidden="true"> / </span>Tool</nav>
-      <AeToolInputDisclosure tool={tool} />
-      <ToolDetailFacts view={decisionView} hideTechnicalRefs primary={{ label: recipientUnverified ? 'Search callable alternatives' : routeable ? 'Set up to get a Quote' : tool.availability.posture === 'setup_required' ? 'Connect an Agent' : 'Search callable alternatives', onSelect: () => { window.location.assign(actionHref) } }} {...(recipientUnverified ? {} : { chatHref: `/t/new?q=${encodeURIComponent(`Find out how to use ${view.title} (${tool.toolRef}). Ask for required inputs and a fresh Quote before any Call.`)}` })} />
-      {listing.facts.price.kind === 'present' && listing.facts.price.value.kind !== 'quote_required' && listing.facts.price.value.currency === 'USDC' ? <p className="text-sm text-muted-foreground">Provider-listed source price: {listing.facts.price.value.kind === 'range' ? `${listing.facts.price.value.minimum}–${listing.facts.price.value.maximum}` : listing.facts.price.value.amount} USDC per Call. A fresh Quote confirms the buyer price.</p> : null}
-      <section aria-labelledby="example-heading" className="grid min-w-0 gap-related border-t border-border pt-section">
-        <h2 id="example-heading" className="text-title font-medium">Example</h2>
-        {example === undefined ? <p className="text-sm text-muted-foreground">No example input is published for this Tool.</p> : <div className="grid min-w-0 gap-intra"><p className="text-sm text-muted-foreground">Published input: {example.label}</p><pre className="max-w-full overflow-x-auto rounded-card bg-muted p-gutter text-xs"><code>{JSON.stringify(example.input, null, 2)}</code></pre></div>}
-        <p className="text-sm text-muted-foreground">No published output example. The output contract is under Technical.</p>
-      </section>
-      <details className="min-w-0 rounded-card border border-border"><summary className="min-h-touch cursor-pointer px-gutter py-related font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Technical · operation IDs, schemas and terms</summary><div className="min-w-0 border-t border-border p-gutter"><AeToolTechnicalContract tool={tool} /></div></details>
-    </article>
+    <div className="arc-pdp-page">
+      <ProductDetail
+        id={tool.toolRef}
+        title={decisionView.title}
+        {...(decisionView.outcome === undefined ? {} : { summary: decisionView.outcome })}
+        surfaceLabel="Admitted Tool"
+        breadcrumb={<><Link to="/market">Market</Link><span aria-hidden="true"> / </span><span aria-current="page">Tool</span></>}
+        {...(decisionView.price === undefined ? {} : { priceLabel: decisionView.price.label })}
+        facts={<>
+          <ToolFacts view={{ title: decisionView.title, listing, readiness: decisionView.readiness }} />
+          {view.identity === undefined ? null : <p>{view.identity.kind === 'verified_provider' ? 'Provider' : view.identity.kind === 'publisher' ? 'Publisher' : 'Directory Host'}: {view.identity.kind === 'publisher' ? <span>{view.identity.name}</span> : <a href={view.identity.href}>{view.identity.name}</a>}</p>}
+          {view.identity?.kind === 'publisher' && listing.identity.hostName.kind === 'present' && listing.hostPage.kind === 'present' ? <p>Directory Host: <a href={listing.hostPage.value}>{listing.identity.hostName.value}</a></p> : null}
+          <p className="arc-pdp-provenance">Title source: {listing.identity.title.provenance.replaceAll('_', ' ')}</p>
+          {view.price === undefined ? null : <p className="arc-pdp-provenance">Price source: {listing.facts.price.provenance.replaceAll('_', ' ')}</p>}
+          {decisionView.readiness.source === undefined ? null : <p className="arc-pdp-provenance">Readiness source: {listing.facts.readiness.provenance.replaceAll('_', ' ')}</p>}
+        </>}
+        context={<>
+          {listing.facts.price.kind === 'present' && listing.facts.price.value.kind !== 'quote_required' && listing.facts.price.value.currency === 'USDC' ? <p>Provider-listed source price: {listing.facts.price.value.kind === 'range' ? `${listing.facts.price.value.minimum}–${listing.facts.price.value.maximum}` : listing.facts.price.value.amount} USDC per Call. A fresh Quote confirms the buyer price.</p> : null}
+          <p>No published output example. The output contract is under Technical.</p>
+        </>}
+        disclosure={<AeToolInputDisclosure tool={tool} />}
+        primary={{ label: recipientUnverified ? 'Search callable alternatives' : routeable ? 'Set up to get a Quote' : tool.availability.posture === 'setup_required' ? 'Connect an Agent' : 'Search callable alternatives', onSelect: () => { window.location.assign(actionHref) } }}
+        {...(recipientUnverified ? {} : { chatHref: `/t/new?q=${encodeURIComponent(`Find out how to use ${view.title} (${tool.toolRef}). Ask for required inputs and a fresh Quote before any Call.`)}` })}
+        slides={slides}
+        sections={[{ id: 'technical', title: 'Technical · operation IDs, schemas and terms', content: <AeToolTechnicalContract tool={tool} /> }]}
+      />
+    </div>
   </AePublicPage>
 }

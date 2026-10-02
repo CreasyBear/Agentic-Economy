@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
+import './OverviewMetricsComposition.css'
 import {
   ADMIN_OVERVIEW_COPY,
   type AdminOverviewHeadline,
@@ -16,16 +17,16 @@ export function HeadlineStrip({ headline }: HeadlineStripProps) {
     [ADMIN_OVERVIEW_COPY.transactingWorkspaces, headline.transactingWorkspaces],
   ] as const
   return (
-    <AeSection title={ADMIN_OVERVIEW_COPY.metricsTitle}>
-      <div className="grid gap-related sm:grid-cols-2 xl:grid-cols-4">
+    <AeSection title={ADMIN_OVERVIEW_COPY.metricsTitle} className="arc-market arc-overview-metrics">
+      <div className="arc-overview-kpis">
         {cards.map(([label, value]) => (
           <Link
             key={label}
             to="/admin/metrics"
-            className="rounded-card border border-border bg-card p-related transition-colors hover:border-foreground/30"
+            className="arc-overview-kpi"
           >
-            <span className="block text-sm text-muted-foreground">{label}</span>
-            <strong className="mt-intra block text-xl font-semibold tabular-nums text-foreground">{value}</strong>
+            <span className="arc-overview-kpi-label">{label}</span>
+            <strong className="arc-overview-kpi-value">{value}</strong>
           </Link>
         ))}
       </div>

@@ -1,7 +1,6 @@
+import { Button } from '@/components/arc/button/button'
 import type { SpendingPresetSelectorProps } from '../spending-limits-form.contracts'
-
-const PRESET_CHIP_CLASS =
-  'inline-flex min-h-touch items-center rounded-full border border-border bg-container px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+import '../SpendingReadoutComposition.css'
 
 export function SpendingPresetSelector({
   presets,
@@ -10,25 +9,26 @@ export function SpendingPresetSelector({
   onSelectPreset,
 }: SpendingPresetSelectorProps) {
   return (
-    <div className="grid min-h-[2.75rem] gap-1.5">
-      <div className="flex flex-wrap gap-2">
+    <div className="arc-market arc-spending-presets">
+      <div className="arc-spending-preset-options">
         {presets.map((preset) => {
           const selected = selectedPresetId === preset.id
           return (
-            <button
+            <Button
               key={preset.id}
               type="button"
+              variant="secondary"
+              size="md"
               aria-pressed={selected}
               disabled={disabled}
               onClick={() => onSelectPreset(preset.id)}
-              className={`${PRESET_CHIP_CLASS}${selected ? ' border-foreground bg-muted' : ''}`}
             >
               {preset.label}
-            </button>
+            </Button>
           )
         })}
       </div>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="arc-spending-preset-hint">
         Presets keep per-call ≤ daily ≤ monthly.
       </p>
     </div>

@@ -9,7 +9,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteNotFound'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Badge } from '@/components/ui/badge'
 import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
@@ -28,6 +28,7 @@ import {
 import { providerTimestamp } from './provider-object.view-model'
 import { SourceAuthorityReviewPanel } from './SourceAuthorityReviewPanel'
 import { useAdminProviderObject } from './useAdminProviderObject'
+import '../RecordWorkspaceComposition.css'
 
 export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
@@ -81,7 +82,7 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
             </Badge>
           )}
           {canSuppress ? (
-            <Button type="button" variant="outline" className="min-h-touch" onClick={() => setSuppressionOpen(true)}>
+            <Button type="button" variant="secondary" size="md" className="arc-market" onClick={() => setSuppressionOpen(true)}>
               {suppressionIntent === 'suppress' ? PROVIDER_OBJECT_COPY.suppress : PROVIDER_OBJECT_COPY.liftSuppression}
             </Button>
           ) : null}
@@ -93,7 +94,7 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
         <span>{PROVIDER_OBJECT_COPY.referenceLabel}</span>
         <AeCopyReference label={PROVIDER_OBJECT_COPY.referenceLabel} value={view.slug} />
       </div>
-      <div className="grid gap-section pb-page">
+      <div className="arc-market arc-admin-record-workspace">
         <AeSection title={PROVIDER_OBJECT_COPY.detailsTitle}>
           <AeFactList facts={[
             { label: PROVIDER_OBJECT_COPY.trustTier, value: providerStatusLabel(view.trustTier) },

@@ -14,12 +14,12 @@ function ToolPanelFormSkeleton() {
   return <div role="status" className="grid min-w-0 gap-4">
     <div className="grid min-w-0 gap-2">
       <p className="min-h-4 break-words text-sm leading-4 text-muted-foreground">{chatToolPanel.loading}</p>
-      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-11 w-full" />
       <Skeleton className="h-3 w-2/5" />
     </div>
     <div className="grid min-w-0 gap-2">
       <Skeleton className="h-4 w-1/3" />
-      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-11 w-full" />
       <Skeleton className="h-3 w-1/2" />
     </div>
   </div>
@@ -40,7 +40,7 @@ export function ToolPanelForm({ view, idPrefix, onInputTextChange }: ToolPanelFo
   </FieldGroup>
 
   return (
-    <fieldset disabled={view.submission !== 'idle'} aria-busy={view.submission === 'submitting'} className="grid min-w-0 max-w-full gap-3">
+    <fieldset disabled={view.submission !== 'idle'} aria-busy={view.submission === 'submitting'} className="arc-tool-review-form grid min-w-0 max-w-full gap-3">
       <legend className="sr-only">{chatToolPanel.inputLegend}</legend>
       {view.phase === 'form' && view.schema !== undefined && view.formData !== undefined ? (
         <ToolInputFormBoundary fallback={jsonEditor}>

@@ -1,12 +1,12 @@
 // Invariant: the Run button exposes charge timing and explicit submission state, following truthful chat purchase disclosures.
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { ToolPriceText } from '@/components/ae/market/AeToolPrice'
 import { chatToolPanel } from '@/lib/public/chat-ia'
 import type { ToolPanelActionsProps } from '../tool-panel.contracts'
 
 export function ToolPanelActions({ view, statusId, onRun, onRunAgain }: ToolPanelActionsProps) {
   return (
-    <div aria-busy={view.submission === 'submitting'} className="grid min-w-0 gap-2">
+    <div aria-busy={view.submission === 'submitting'} className="arc-tool-review-actions">
       {view.incomplete === undefined ? null : <p id={statusId} role="status" className="break-words text-sm text-muted-foreground">{view.incomplete}</p>}
       {view.disabledReason === undefined ? null : <p role="status" className="break-words text-sm text-muted-foreground">{view.disabledReason}</p>}
       {view.runFailure === undefined ? null : <p role="status" className="break-words text-sm text-muted-foreground">
@@ -20,10 +20,10 @@ export function ToolPanelActions({ view, statusId, onRun, onRunAgain }: ToolPane
       {view.submission === 'outcome_unknown' ? null : view.submission === 'submitted' ? (
         <>
           <p role="status" className="break-words text-sm text-muted-foreground">{chatToolPanel.submitted}</p>
-          <Button type="button" className="min-h-touch w-full max-w-full" onClick={onRunAgain}>{chatToolPanel.runAgain}</Button>
+          <Button type="button" labelLayout="wrap" onClick={onRunAgain}>{chatToolPanel.runAgain}</Button>
         </>
       ) : (
-        <Button type="button" className="min-h-touch w-full max-w-full min-w-0 justify-center whitespace-normal text-center leading-snug"
+        <Button type="button" labelLayout="wrap"
           disabled={!view.canRun} aria-busy={view.submission === 'submitting'} onClick={onRun}>
           {view.submission === 'submitting' ? chatToolPanel.submitting : (
             <span className="min-w-0 break-words">

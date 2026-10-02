@@ -4,14 +4,12 @@ import { Download } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 import {
-  ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS,
   type ActivityLoaderResult,
   type AeActivityProps,
 } from './activity.contracts'
@@ -75,7 +73,7 @@ function AeActivityAvailable({
       description="Review Calls that need attention, then inspect recent outcomes and receipts."
       currentPath="/activity"
     >
-      <div className="grid gap-section">
+      <div className="arc-market grid min-w-0 gap-8">
         <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {activityStatus(vm)}
         </p>
@@ -102,9 +100,7 @@ function AeActivityAvailable({
             </span>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
-              className={`h-7 text-xs ${ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS}`}
+              variant="secondary"
               disabled={vm.exportDisabled}
               onClick={vm.exportCsv}
             >
@@ -113,9 +109,7 @@ function AeActivityAvailable({
             </Button>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
-              className={`h-7 text-xs ${ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS}`}
+              variant="secondary"
               disabled={vm.exportDisabled}
               onClick={vm.exportJson}
             >
@@ -128,7 +122,7 @@ function AeActivityAvailable({
           <AeEmptyState
             title="No Calls yet"
             description="Find a Tool and complete one Call. Its task, outcome, amount, and receipt will appear here."
-            action={<Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>Find Tools</Link>}
+            action={<Link to="/market" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>Find Tools</Link>}
           />
         ) : vm.showEmptyNoMatch ? (
           <AeEmptyState

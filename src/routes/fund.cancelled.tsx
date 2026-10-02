@@ -3,8 +3,7 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { fundingReturnCopy } from '@/components/ae/funding/funding-return.contracts'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
 
 export const Route = createFileRoute('/fund/cancelled')({
   head: () => ({ meta: [
@@ -21,11 +20,11 @@ export const Route = createFileRoute('/fund/cancelled')({
       title={fundingReturnCopy.cancelled.title}
       description={fundingReturnCopy.cancelled.description}
       action={(
-        <div className="flex flex-wrap gap-3">
-          <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
+        <div className="arc-market arc-recovery-action-row">
+          <Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
             {fundingReturnCopy.cancelled.openCreditAction}
           </Link>
-          <Link to="/agent-access" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+          <Link to="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
             {fundingReturnCopy.openAgentsAction}
           </Link>
         </div>

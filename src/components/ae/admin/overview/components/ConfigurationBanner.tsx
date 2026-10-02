@@ -3,6 +3,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import './OverviewMetricsComposition.css'
 import { ADMIN_OVERVIEW_COPY } from '../overview.contracts'
 
 export type ConfigurationBannerProps = Readonly<{ readiness: PaymentReadinessView | null }>
@@ -77,7 +78,7 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
     : expired ? FAILURE_REASONS.readiness_expired
       : readiness.code === null ? null : FAILURE_REASONS[readiness.code] ?? 'One or more required checks have failed.'
   return (
-    <AeSection title={ADMIN_OVERVIEW_COPY.configurationTitle} description={ADMIN_OVERVIEW_COPY.configurationDescription}>
+    <AeSection title={ADMIN_OVERVIEW_COPY.configurationTitle} description={ADMIN_OVERVIEW_COPY.configurationDescription} className="arc-market arc-overview-configuration">
       <div className="mb-related grid gap-intra">
         <p role="status" aria-label="Payment readiness status"><Badge variant={ready ? 'secondary' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
         <p className="text-sm">{readiness === null ? 'Environment: Not declared'
@@ -88,7 +89,7 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
           {' · '}Valid until: {expiresAt === null ? 'No valid evidence'
             : <time dateTime={timestampIso(expiresAt)}>{formatPerthTimestamp(expiresAt)}</time>}</p>
       </div>
-      <dl className="grid gap-related sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="integrations-list">
         {PAYMENT_READINESS_CHECK_KEYS.map(key => <ReadinessCheckRow key={key} name={key}
           check={readiness?.checks[key]} now={now} expired={expired} />)}
       </dl>
@@ -112,7 +113,7 @@ function ReadinessCheckRow({ name, check, now, expired }: Readonly<{
     else if (passed) reason = name === 'web_configuration'
       ? 'Clerk and Sentry configured; backend identity verified.' : 'Current evidence verified.'
   }
-  return <div className="rounded-card border border-border bg-card p-related">
+  return <div className="arc-overview-readiness-row">
     <dt className="text-sm text-muted-foreground">{CHECK_LABELS[name]}</dt>
     <dd className="mt-intra grid gap-intra"><span className="font-medium">{passed ? 'Passed' : 'Failed'}</span>
       <span className="text-xs text-muted-foreground">{reason}</span></dd>

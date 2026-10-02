@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { ComponentProps } from 'react'
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -10,18 +11,10 @@ import {
   EyeOffIcon,
 } from 'lucide-react'
 
+import { Button } from '@/components/arc/button/button'
+import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -37,6 +30,8 @@ import {
   type AgentAccessConfigSnippetId,
 } from '@/modules/agent-access/config-snippets'
 import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
+
+import './KeyRevealComposition.css'
 
 const MASKED_SECRET_DISPLAY = '••••••••••••••••'
 
@@ -121,8 +116,6 @@ export function AeKeyRevealDialog({
   const redactSnippet = (snippet: string) => snippet.replaceAll(reveal.secret, MASKED_SECRET_DISPLAY)
 
   const environmentLabel = reveal.environment === 'sandbox' ? 'Sandbox' : 'Production'
-  const environmentBadgeVariant = reveal.environment === 'sandbox' ? 'secondary' : 'warning'
-
   const handleCopySecret = async () => {
     try {
       await navigator.clipboard.writeText(reveal.secret)
@@ -138,19 +131,13 @@ export function AeKeyRevealDialog({
     }
   }
 
-  const handleOpenChange = (next: boolean) => {
+  const handleOpenChange: NonNullable<ComponentProps<typeof Drawer>['onOpenChange']> = (next, details) => {
     if (!next && !acknowledged) {
+      details.cancel()
       triggerDismissBlocked()
       return
     }
     onOpenChange(next)
-  }
-
-  const blockDismissInteraction = (event: Event) => {
-    if (!acknowledged) {
-      event.preventDefault()
-      triggerDismissBlocked()
-    }
   }
 
   const secretCopyStatusMessage = copiedSecret
@@ -202,53 +189,48 @@ export function AeKeyRevealDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
+    <Drawer open={open} onOpenChange={handleOpenChange}>
+      <DrawerContent
+        side="right"
+        title="Save your secret key"
+        description="Step 2 of 2 · Save & install"
         className={cn(
-          'flex max-h-[min(90dvh,calc(100dvh-2rem))] w-full flex-col overflow-hidden sm:max-w-[620px]',
+          'arc-key-reveal-drawer',
           dismissBlocked && 'ring-2 ring-warning-ring',
         )}
         data-slot="dialog-content"
-        onPointerDownOutside={blockDismissInteraction}
-        onEscapeKeyDown={blockDismissInteraction}
       >
-        <DialogHeader className="shrink-0">
-          <DialogTitle>Save your secret key</DialogTitle>
-          <DialogDescription>
-            Step 2 of 2 · Save & install
-          </DialogDescription>
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="text-sm text-muted-foreground">{reveal.displayName}</span>
-            <Badge variant={environmentBadgeVariant}>{environmentLabel}</Badge>
-          </div>
-        </DialogHeader>
+        <div className="arc-key-environment-row">
+          <span className="arc-key-display-name">{reveal.displayName}</span>
+          <span className="arc-key-environment" data-environment={reveal.environment}>
+            {environmentLabel}
+          </span>
+        </div>
 
-        <div data-ae-key-reveal-scroll className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain py-2">
-          <Alert className="border-warning-ring bg-warning-subtle text-warning-foreground">
-            <AlertTriangleIcon className="size-4" />
+        <div data-ae-key-reveal-scroll className="arc-key-reveal-scroll overflow-y-auto">
+          <Alert className="arc-key-warning">
+            <AlertTriangleIcon aria-hidden="true" />
             <AlertTitle>This secret will never be shown again.</AlertTitle>
             <AlertDescription>
               This secret will never be shown again. Store it securely.
             </AlertDescription>
           </Alert>
 
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Secret key</Label>
-            <div className="flex items-center gap-2">
-              <div
-                className="h-10 min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border bg-muted/40 px-3 flex items-center font-mono text-xs tabular-nums text-foreground"
-              >
+          <div className="arc-key-secret-group">
+            <Label className="arc-key-secret-label">Secret key</Label>
+            <div className="arc-key-secret-actions">
+              <div className="arc-key-secret-value">
                 {secretVisible ? (
-                  <code className="select-all">{reveal.secret}</code>
+                  <code className="arc-key-secret-revealed">{reveal.secret}</code>
                 ) : (
-                  <span className="tracking-wide" aria-hidden="true">{MASKED_SECRET_DISPLAY}</span>
+                  <span className="arc-key-secret-masked" aria-hidden="true">{MASKED_SECRET_DISPLAY}</span>
                 )}
               </div>
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
-                className="shrink-0 min-h-touch min-w-touch enabled:active:scale-[0.98] transition-transform duration-100 ease-out"
+                size="md"
+                className="arc-key-icon-button"
                 aria-label={secretVisible ? 'Hide secret' : 'Show secret'}
                 aria-pressed={secretVisible}
                 onClick={() => setSecretVisible((visible) => !visible)}
@@ -262,8 +244,8 @@ export function AeKeyRevealDialog({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
-                className="shrink-0 min-h-touch min-w-touch enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+                size="md"
+                className="arc-key-icon-button"
                 aria-label={copiedSecret ? 'Secret key copied' : 'Copy secret key'}
                 onClick={() => void handleCopySecret()}
               >
@@ -289,16 +271,16 @@ export function AeKeyRevealDialog({
               role="status"
               aria-live="polite"
               className={cn(
-                'min-h-4 text-xs',
-                copySecretFailed ? 'text-destructive' : 'text-muted-foreground',
+                'arc-key-status',
+                copySecretFailed && 'arc-key-status-error',
               )}
             >
               {secretCopyStatusMessage}
             </p>
           </div>
 
-          <div className="grid gap-2 pt-2">
-            <Label className="text-xs font-medium text-foreground">Quickstart configuration</Label>
+          <div className="arc-key-quickstart">
+            <Label className="arc-key-quickstart-label">Quickstart configuration</Label>
             <Tabs
               value={activeTab}
               onValueChange={(value) => {
@@ -306,41 +288,41 @@ export function AeKeyRevealDialog({
                 setDownloadStatus('')
                 setDownloadFailed(false)
               }}
-              className="w-full"
+              className="arc-key-tabs"
             >
-              <TabsList className="grid grid-cols-4 w-full">
+              <TabsList className="arc-key-tab-list">
                 <TabsTrigger
                   value="cursor"
-                  className="enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none"
+                  className="arc-key-tab"
                 >
                   Cursor
                 </TabsTrigger>
                 <TabsTrigger
                   value="claude"
-                  className="enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none"
+                  className="arc-key-tab"
                 >
                   Claude Code
                 </TabsTrigger>
                 <TabsTrigger
                   value="python"
-                  className="enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none"
+                  className="arc-key-tab"
                 >
                   Python
                 </TabsTrigger>
                 <TabsTrigger
                   value="curl"
-                  className="enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none"
+                  className="arc-key-tab"
                 >
                   cURL
                 </TabsTrigger>
               </TabsList>
 
-              <p className="min-h-8 pt-2 text-xs text-muted-foreground">
+              <p className="arc-key-tab-destination">
                 {AGENT_ACCESS_SNIPPET_DESTINATIONS[activeTab]}
               </p>
 
-              <div className="min-h-72 overflow-y-auto rounded-md">
-                <TabsContent value="cursor" className="mt-0">
+              <div className="arc-key-snippet-region min-h-72">
+                <TabsContent value="cursor" className="arc-key-tab-content">
                   <AeCopyCommand
                     label="Cursor configuration"
                     {...snippetCopyProps(snippets.cursor)}
@@ -350,7 +332,7 @@ export function AeKeyRevealDialog({
                   />
                 </TabsContent>
 
-                <TabsContent value="claude" className="mt-0">
+                <TabsContent value="claude" className="arc-key-tab-content">
                   <AeCopyCommand
                     label="Claude Code command"
                     {...snippetCopyProps(snippets.claude)}
@@ -359,7 +341,7 @@ export function AeKeyRevealDialog({
                   />
                 </TabsContent>
 
-                <TabsContent value="python" className="mt-0">
+                <TabsContent value="python" className="arc-key-tab-content">
                   <AeCopyCommand
                     label="Python snippet"
                     {...snippetCopyProps(snippets.python)}
@@ -369,7 +351,7 @@ export function AeKeyRevealDialog({
                   />
                 </TabsContent>
 
-                <TabsContent value="curl" className="mt-0">
+                <TabsContent value="curl" className="arc-key-tab-content">
                   <AeCopyCommand
                     label="cURL request"
                     {...snippetCopyProps(snippets.curl)}
@@ -379,12 +361,11 @@ export function AeKeyRevealDialog({
                 </TabsContent>
               </div>
 
-              <div className="flex min-h-10 items-center justify-between pt-1">
+              <div className="arc-key-download-row">
                 <Button
                   type="button"
                   variant="secondary"
-                  size="sm"
-                  className="gap-1.5 min-h-touch enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+                  size="md"
                   onClick={handleDownloadSnippet}
                 >
                   <DownloadIcon className="size-4" aria-hidden="true" />
@@ -396,8 +377,8 @@ export function AeKeyRevealDialog({
                 role="status"
                 aria-live="polite"
                 className={cn(
-                  'min-h-4 text-xs',
-                  downloadFailed ? 'text-destructive' : 'text-muted-foreground',
+                  'arc-key-status',
+                  downloadFailed && 'arc-key-status-error',
                 )}
               >
                 {downloadStatus}
@@ -408,45 +389,39 @@ export function AeKeyRevealDialog({
           <div
             role="status"
             aria-live="polite"
-            className="flex min-h-14 items-start gap-2.5 rounded-md border border-border bg-muted/30 px-3 py-2.5"
+            className="arc-key-connection-status"
           >
             {connectionStatus === 'waiting' ? (
               <>
-                <span className="relative flex size-2 mt-1.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-warning opacity-75 motion-reduce:animate-none" />
-                  <span className="relative inline-flex size-2 rounded-full bg-warning" />
-                </span>
-                <div className="grid gap-0.5">
-                  <p className="text-sm font-medium text-foreground">
+                <span className="arc-key-connection-dot arc-key-connection-dot-warning" />
+                <div className="arc-key-connection-copy">
+                  <p className="arc-key-connection-title">
                     Waiting for first Call from {reveal.displayName}...
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="arc-key-connection-description">
                     Run the cURL command above or launch your agent to complete verification.
                   </p>
                 </div>
               </>
             ) : (
               <>
-                <span className="relative flex size-2 mt-1.5">
-                  <span className="relative inline-flex size-2 rounded-full bg-success" />
-                </span>
-                <div className="grid gap-0.5">
-                  <p className="text-sm font-medium text-foreground">
+                <span className="arc-key-connection-dot arc-key-connection-dot-success" />
+                <div className="arc-key-connection-copy">
+                  <p className="arc-key-connection-title">
                     First request received from {reveal.displayName}.
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="arc-key-connection-description">
                     You can save the secret and close this dialog.
                   </p>
                 </div>
               </>
             )}
           </div>
-
         </div>
 
         <div
           className={cn(
-            'flex shrink-0 items-center gap-2 border-t pt-3',
+            'arc-key-ack-row',
             dismissBlocked && 'rounded-md ring-2 ring-warning-ring ring-offset-2 ring-offset-background',
           )}
         >
@@ -458,27 +433,29 @@ export function AeKeyRevealDialog({
           />
           <Label
             htmlFor="agent-access-key-saved"
-            className="cursor-pointer text-sm font-medium leading-none"
+            className="arc-key-ack-label"
           >
             I have saved my secret key securely
           </Label>
         </div>
         {dismissBlocked ? (
-          <p role="alert" className="shrink-0 text-xs text-warning-foreground">
+          <p role="alert" className="arc-key-dismiss-alert">
             Confirm you have saved the secret before closing.
           </p>
         ) : null}
 
-        <DialogFooter className="shrink-0">
+        <div className="arc-key-footer">
           <Button
             type="button"
+            variant="primary"
+            size="md"
             disabled={!acknowledged}
             onClick={() => onOpenChange(false)}
           >
             Done
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </DrawerContent>
+    </Drawer>
   )
 }

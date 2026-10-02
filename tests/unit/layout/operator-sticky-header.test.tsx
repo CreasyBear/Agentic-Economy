@@ -88,16 +88,16 @@ describe('AeOperatorPage stickyHeader', () => {
 })
 
 describe('AeRecordHeader sticky', () => {
-  it('applies sticky styling and data attribute when sticky is true', () => {
+  it('exposes the sticky contract while retaining the heading, description and actions', () => {
     const { container } = render(
-      <AeRecordHeader title="Record" description="Details." sticky />,
+      <AeRecordHeader title="Record" description="Details." sticky actions={<button type="button">Refresh record</button>} />,
     )
 
     const root = container.firstElementChild
     expect(root?.getAttribute('data-record-header-sticky')).toBe('true')
-    expect(root?.className).toContain('sticky')
-    expect(root?.className).toContain('top-(--header-height)')
-    expect(root?.className).toContain('backdrop-blur')
+    expect(screen.getByRole('heading', { level: 1, name: 'Record' })).toBeTruthy()
+    expect(document.getElementById(root?.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Details.')
+    expect(screen.getByRole('button', { name: 'Refresh record' })).toBeTruthy()
   })
 
   it('does not expose sticky marker when sticky is false', () => {
@@ -105,6 +105,5 @@ describe('AeRecordHeader sticky', () => {
 
     const root = container.firstElementChild
     expect(root?.getAttribute('data-record-header-sticky')).toBeNull()
-    expect(root?.className).not.toContain('top-(--header-height)')
   })
 })

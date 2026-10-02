@@ -1,6 +1,8 @@
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 
 import type { ConsentDecisionBarProps } from '../authorize-form.contracts'
+
+import './ConsentChoiceComposition.css'
 
 export function ConsentDecisionBar({
   approveButtonRef,
@@ -13,12 +15,12 @@ export function ConsentDecisionBar({
   onDeny,
 }: ConsentDecisionBarProps) {
   return (
-    <div className="flex shrink-0 flex-wrap gap-3 border-t border-border bg-muted/20 p-4 sm:px-5">
+    <div className="arc-market arc-consent-decision-bar">
       <Button
         ref={approveButtonRef}
         type="button"
         aria-describedby="consent-expiry"
-        variant={connectionTarget === 'replace_credential' && replacementMode === 'compromise' ? 'destructive' : 'default'}
+        variant={connectionTarget === 'replace_credential' && replacementMode === 'compromise' ? 'danger' : 'primary'}
         onClick={() => void onApprove()}
         disabled={pending || agentTargetsUnavailable}
       >

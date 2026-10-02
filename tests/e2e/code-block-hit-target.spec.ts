@@ -50,6 +50,14 @@ test('support keeps private contact and current records keyboard reachable', asy
   await support.focus()
   await expect(support).toBeFocused()
   await expect(page.getByRole('link', { name: 'Open Calls', exact: true })).toHaveAttribute('href', '/activity')
+  const currentTopic = page.getByRole('tab', { name: /^Current status/ })
+  await expect(async () => {
+    await currentTopic.focus()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('ArrowDown')
+    await expect(page.getByRole('tab', { name: /^Agent connection/ })).toBeFocused({ timeout: 1_000 })
+    await expect(page.getByRole('tab', { name: /^Agent connection/ })).toHaveAttribute('aria-selected', 'true', { timeout: 1_000 })
+  }).toPass()
   const diagnostics = page.getByRole('button', { name: 'Advanced connection diagnostics' })
   await diagnostics.focus()
   await expect(async () => {

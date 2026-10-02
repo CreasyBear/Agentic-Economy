@@ -1,0 +1,96 @@
+/* Arc Pro billing overview SHA-256 d983554f9cdd246f823a6dcce3a6ab6b14f531d42c6c190f0e6dffb3540224f7.
+ * Arc drawer.module.css SHA-256 aa27fdf0aa995285f0cf513fcf355b037018c2a1a72c63fac4909a40055a7dd2.
+ * Source-recorded earnings remain separate from Call settlement and transfer records. */
+.arc-market.arc-provider-earnings-drawer {
+  --drawer-size: min(90vw, 620px);
+  width: var(--drawer-size);
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.arc-market.arc-provider-earnings-drawer[data-side="right"] {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.arc-market.arc-provider-earnings-drawer .arc-provider-earnings-body {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  gap: var(--space-6);
+}
+
+.arc-market.arc-provider-earnings {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-6);
+}
+
+.arc-provider-earnings-disclaimer {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.arc-provider-earnings-records {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: 0;
+  background: var(--surface);
+  list-style: none;
+}
+
+.arc-provider-earnings-record + .arc-provider-earnings-record {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.arc-provider-earnings-record {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  padding: var(--space-6);
+}
+
+.arc-provider-earnings-record strong {
+  min-width: 0;
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.arc-provider-earnings-record span {
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.arc-provider-payout-records {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.arc-provider-payout-records h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 479px) {
+  .arc-provider-earnings-record {
+    padding: var(--space-4);
+  }
+}

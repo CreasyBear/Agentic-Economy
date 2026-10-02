@@ -1,0 +1,39 @@
+/* Arc metrics-dashboard/integrations workspace regions over AE's independent
+ * query/error boundaries. No totals, observed counts or access state are inferred.
+ * Metrics CSS SHA-256 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9.
+ * Integrations CSS SHA-256 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10. */
+.arc-market.arc-admin-overview {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-8);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.arc-market.arc-admin-overview > .arc-overview-configuration,
+.arc-market.arc-admin-overview > .arc-admin-overview-search,
+.arc-market.arc-admin-overview > .arc-overview-records {
+  grid-column: 1 / -1;
+}
+.arc-market .arc-admin-overview-region { min-width: 0; }
+.arc-market.arc-admin-overview-feedback {
+  min-width: 0;
+  align-content: start;
+}
+.arc-market.arc-admin-overview-feedback > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.arc-market.arc-admin-overview-feedback > a {
+  justify-self: start;
+  max-width: 100%;
+}
+@media (max-width: 859px) {
+  .arc-market.arc-admin-overview { grid-template-columns: minmax(0, 1fr); }
+}

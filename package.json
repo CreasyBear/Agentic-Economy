@@ -112,6 +112,7 @@
     "es-toolkit": "^1.50.0",
     "http-message-sig": "0.2.0",
     "lucide-react": "^1.21.0",
+    "motion": "13.5.0",
     "nanoid": "^5.1.16",
     "oauth4webapi": "3.8.7",
     "openapi-fetch": "0.17.0",

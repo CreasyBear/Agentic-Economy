@@ -8,6 +8,7 @@
 @layer reset, theme, base, clerk, components, utilities;
 
 @import "./base.css" layer(base);
+@import "./arc-market.css";
 @import "tw-animate-css";
 
 @import "tailwindcss/theme.css" layer(theme);
@@ -432,34 +433,6 @@
   }
 }
 
-/* Chat reads as a conversation first; structure appears inside the answer. */
-.ae-chat-prose {
-  max-width: 68ch;
-  color: color-mix(in srgb, var(--foreground) 90%, transparent);
-  font-size: 1rem;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-.ae-chat-prose > :first-child { margin-block-start: 0; }
-.ae-chat-prose > :last-child { margin-block-end: 0; }
-.ae-chat-prose :where(p, ul, ol, pre, table, blockquote) { margin-block: 0.75rem; }
-.ae-chat-prose :where(h1, h2, h3, h4) { margin-block: 1.5rem 0.5rem; font-size: 1rem; font-weight: 600; line-height: 1.5; text-wrap: balance; }
-.ae-chat-prose > p:first-of-type { font-weight: 500; }
-.ae-chat-prose :where(strong, th) { color: var(--foreground); font-weight: 600; }
-.ae-chat-prose :where(ul, ol) { padding-inline-start: 1.4em; }
-.ae-chat-prose ul { list-style: disc; }
-.ae-chat-prose ol { list-style: decimal; }
-.ae-chat-prose li { padding-inline-start: 0.25em; }
-.ae-chat-prose li + li { margin-block-start: 0.35rem; }
-.ae-chat-prose li > :where(p, ul, ol) { margin-block: 0.3rem; }
-.ae-chat-prose a { color: var(--ae-brand-strong); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 0.2em; }
-.ae-chat-prose a:hover { text-decoration-color: currentColor; }
-.ae-chat-prose a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.ae-chat-prose :not(pre) > code { padding: 0.1em 0.35em; border-radius: var(--radius-sm); background: var(--muted); font-size: 0.88em; }
-.ae-chat-prose pre { overflow-x: auto; padding: 1rem; border-radius: var(--radius-lg); background: var(--muted); font-size: 0.875em; }
-.ae-chat-prose table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; scrollbar-width: thin; }
-.ae-chat-prose :where(th, td) { min-width: 8rem; padding: 0.55rem 0.75rem; text-align: start; overflow-wrap: normal; word-break: normal; border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
-.ae-chat-prose th { background: var(--muted); }
 .ae-chat-transcript-grid > [data-slot="message-scroller-item"] { grid-column: 1 / -1; min-width: 0; }
 @media (max-width: 39.999rem) {
   .ae-chat-transcript-grid > [data-slot="message-scroller-item"]:has(> article[aria-label="You"]) { grid-column: 3 / -1; }
@@ -469,15 +442,8 @@
   .ae-chat-transcript-grid > [data-slot="message-scroller-item"] { grid-column: 3 / span 8; width: 100%; max-width: 45rem; justify-self: center; }
 }
 @media (max-width: 40rem) {
-  .ae-chat-prose { font-size: 0.9375rem; line-height: 1.55; }
-  .ae-chat-prose :where(h1, h2, h3, h4) { font-size: 0.9375rem; }
-  .ae-chat-prose :where(th, td):first-child { position: sticky; left: 0; z-index: 1; background: var(--background); }
-  .ae-chat-prose th:first-child { background: var(--muted); }
   body:has(#main-content[aria-label="Chat"]) { --ae-mobile-nav-height: 2.75rem; }
-  body:has(#main-content[aria-label="Chat"]) .ae-owner-mobile-nav a { gap: 0; font-size: 0.6875rem; }
-  body:has(#main-content[aria-label="Chat"]) .ae-owner-mobile-nav svg { width: 1rem; height: 1rem; }
 }
-.ae-chat-prose blockquote { padding-inline-start: 1rem; border-inline-start: 2px solid var(--border); color: var(--muted-foreground); }
 
 @media (prefers-reduced-motion: no-preference) {
   .ae-chat-turn { animation: ae-chat-enter var(--motion-duration-fast) var(--motion-ease-standard) both; }

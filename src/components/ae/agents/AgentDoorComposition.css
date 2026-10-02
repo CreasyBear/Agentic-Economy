@@ -1,0 +1,109 @@
+/* Adapted from licensed Arc HeroContent split geometry; source CSS SHA-256: 0fb963f57acb7e7f8104b8bbf69e52eb3460cd6379e646d1516fb4d15370017c. */
+/* AeAssistantInstallFunnel retains the canonical command and account-connection/Spending-policy fact. */
+.arc-market.arc-agent-door {
+  container: agent-door / inline-size;
+  box-sizing: border-box;
+  width: 100%;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.arc-market.arc-agent-door *,
+.arc-market.arc-agent-door *::before,
+.arc-market.arc-agent-door *::after {
+  box-sizing: border-box;
+}
+
+.arc-market .arc-agent-door-hero {
+  width: min(calc(100% - 32px), 1160px);
+  margin-inline: auto;
+  padding: var(--space-16) 0;
+}
+
+.arc-market .arc-agent-door-layout {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.arc-market .arc-agent-door-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-6);
+  justify-items: start;
+  text-align: left;
+}
+
+.arc-market .arc-agent-door-copy h1 {
+  max-width: 16ch;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(40px, 4.8cqi, 64px);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: var(--tracking-display);
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-agent-door-copy p {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-agent-door-copy a {
+  justify-self: start;
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-agent-door-setup {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-6);
+  background: var(--surface);
+  scroll-margin-top: var(--anchor-scroll-margin, 128px);
+}
+
+.arc-market.arc-agent-door :where(a, .arc-agent-door-setup):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+@container agent-door (max-width: 800px) {
+  .arc-market .arc-agent-door-hero {
+    padding-block: var(--space-10);
+  }
+
+  .arc-market .arc-agent-door-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+}
+
+@container agent-door (max-width: 520px) {
+  .arc-market .arc-agent-door-hero {
+    width: min(calc(100% - 32px), 1160px);
+  }
+
+  .arc-market .arc-agent-door-copy h1 {
+    font-size: var(--text-3xl);
+  }
+
+  .arc-market .arc-agent-door-setup {
+    padding: var(--space-4);
+  }
+
+  .arc-market .arc-agent-door-copy a {
+    width: 100%;
+  }
+}

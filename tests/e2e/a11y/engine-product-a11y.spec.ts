@@ -9,7 +9,7 @@ test.describe('market product accessibility', () => {
     await skip.press('Enter')
     await expect(page.locator('#main-content')).toBeFocused()
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    const search = page.getByRole('searchbox', { name: 'Ask about any tool or service' })
+    const search = page.getByRole('searchbox', { name: 'Search Tools' })
     await expect(search).toBeVisible()
     await page.keyboard.press('Tab')
     await expect(search).toBeFocused()

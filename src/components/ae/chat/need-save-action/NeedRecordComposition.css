@@ -1,0 +1,65 @@
+/* Arc settings-page.module.css source SHA-256: e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc. Adapted selectors: .rows > * + * and .row. */
+/* Arc agent-run.module.css source SHA-256: 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032. Adapted selector: .root typography. */
+
+.arc-market.arc-need-record.arc-need-record-root {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-need-record .arc-need-record-status {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+/* Continuous settings row: the raw reference occupies the flexible text column and actions use their own wrapping group. */
+.arc-market.arc-need-record .arc-need-record-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  padding: 14px 0;
+}
+
+.arc-market.arc-need-record .arc-need-record-reference {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-need-record .arc-need-record-reference-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: inherit;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.arc-market.arc-need-record .arc-need-record-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 560px) {
+  .arc-market.arc-need-record .arc-need-record-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .arc-market.arc-need-record .arc-need-record-actions {
+    justify-content: flex-start;
+  }
+}

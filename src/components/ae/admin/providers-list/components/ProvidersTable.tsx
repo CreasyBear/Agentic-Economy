@@ -3,7 +3,8 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import '../../RecordWorkspaceComposition.css'
 import {
   PROVIDERS_LIST_COPY,
   type AdminProviderRowModel,
@@ -16,7 +17,7 @@ const columns: ColumnDef<AdminProviderRowModel, unknown>[] = [
     header: PROVIDERS_LIST_COPY.columns.provider,
     cell: ({ row }) => (
       <a
-        className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:underline"
+        className="arc-admin-record-link"
         href={row.original.href}
       >
         {row.original.slug}
@@ -53,7 +54,7 @@ export function ProvidersTable({ rows, filtered, paginationStatus, onLoadMore }:
         emptyMessage={filtered ? PROVIDERS_LIST_COPY.noMatches : PROVIDERS_LIST_COPY.noRows}
       />
       {paginationStatus === 'CanLoadMore' ? (
-        <Button type="button" variant="outline" className="justify-self-start" onClick={onLoadMore}>
+        <Button type="button" variant="secondary" size="md" className="justify-self-start" onClick={onLoadMore}>
           {PROVIDERS_LIST_COPY.loadMore}
         </Button>
       ) : null}

@@ -5,12 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import '../../setup/jsdom-platform'
 
-import { TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOwnerCredit } from '@/components/ae/console/owner-credit/AeOwnerCredit'
 import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
+import { AeAgentDirectoryTable } from '@/components/ae/console/AeAgentDirectoryTable'
+import { AeAgentCallHistoryTable } from '@/components/ae/console/AeAgentCallHistoryTable'
 import { toast } from '@/lib/ui/toast'
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
-import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
+import type { AgentCredentialSource, AgentDirectoryProjection, AgentUsageSummary } from '@/modules/agent-access/agent-operator-view-model'
 import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
@@ -133,6 +134,43 @@ afterEach(() => {
 })
 
 describe('assistant access owner continuation anchors', () => {
+  it.each([
+    ['complete', '0', 'A$0.00'],
+    ['complete', '1500000', 'A$1.50'],
+    ['complete', undefined, 'Amount coverage incomplete'],
+    ['incomplete', '1500000', 'Amount coverage incomplete'],
+    ['incomplete', undefined, 'Amount coverage incomplete'],
+  ] as const)('shows an Agent spend total only for complete supplied amounts (%s, %s)', (amountCoverage, units, expected) => {
+    const usage: AgentUsageSummary = {
+      periodStartAt: 0, periodEndAt: 1000, callCount: 1, completedCallCount: 1, outcomeUnknownCallCount: 0,
+      amountCoverage, updatedAt: 1000,
+      ...(units === undefined ? {} : { settledSpend: { currency: 'AUD', exponent: 6, units } }),
+    }
+    render(<AeAgentCallHistoryTable activity={[]} usage={usage} showStats />)
+    const metric = screen.getByText('Settled spend').parentElement
+    expect(metric?.textContent).toBe(`Settled spend${expected}`)
+  })
+
+  it('changes the local Agent status scope with Arc controls while preserving row destinations', () => {
+    const connected = directory.items[0]
+    if (connected === undefined) throw new Error('expected projected Agent')
+    const expired = { ...connected, principalRef: FOREIGN_PRINCIPAL_ID, displayName: 'Expired assistant', status: 'expired' as const }
+    const onOpenAgent = vi.fn()
+    render(<AeAgentDirectoryTable directoryItems={[connected, expired]} loading={false} onOpenAgent={onOpenAgent} getAgentHref={(ref) => `/agent-access?caller=${ref}`} />)
+    const scopes = screen.getByRole('group', { name: 'Filter by status' })
+    const all = within(scopes).getByRole('button', { name: 'All statuses' })
+    const expiredScope = within(scopes).getByRole('button', { name: 'Expired' })
+    fireEvent.click(expiredScope)
+    expect(expiredScope.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('link', { name: /^Open Route assistant/u })).toBeNull()
+    expect(screen.getByRole('link', { name: /^Open Expired assistant/u }).getAttribute('href')).toBe(`/agent-access?caller=${FOREIGN_PRINCIPAL_ID}`)
+    fireEvent.keyDown(expiredScope, { key: 'Home' })
+    expect(all.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('link', { name: /^Open Route assistant/u }).getAttribute('href')).toBe(`/agent-access?caller=${PRINCIPAL_ID}`)
+    expect(document.activeElement).toBe(all)
+    expect(onOpenAgent).not.toHaveBeenCalled()
+  })
+
   it('shows a factual connection receipt and disconnects only that binding', async () => {
     const onDisconnectConnection = vi.fn()
     render(
@@ -423,7 +461,7 @@ describe('assistant access owner continuation anchors', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('uses a plain confirmation with financial disclosure and tactile confirm', () => {
+  it('keeps financial disclosure beside an explicit confirmation action', () => {
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
@@ -435,7 +473,8 @@ describe('assistant access owner continuation anchors', () => {
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
     const trigger = within(dialog).getByRole('button', { name: 'Remove agent everywhere' })
-    expect(trigger.className).toContain('enabled:active:scale-[0.98]')
+    expect((trigger as HTMLButtonElement).type).toBe('button')
+    expect((trigger as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(trigger)
 
     const confirmation = screen.getByRole('alertdialog', { name: 'Remove Route assistant everywhere?' })
@@ -444,7 +483,8 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     const confirm = within(confirmation).getByRole('button', { name: 'Remove agent' })
-    expect(confirm.className).toContain(TACTILE.split(' ')[0])
+    expect((confirm as HTMLButtonElement).type).toBe('button')
+    expect((confirm as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('W-28: successful agent disconnect toasts and closes dialog', async () => {

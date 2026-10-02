@@ -11,10 +11,12 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({
     children,
     to,
+    reloadDocument,
   }: {
     children: ReactNode
     to: string
-  }) => <a href={to}>{children}</a>,
+    reloadDocument?: boolean
+  }) => <a href={to} data-reload-document={reloadDocument ? 'true' : undefined}>{children}</a>,
 }))
 
 afterEach(cleanup)
@@ -58,9 +60,10 @@ describe('AePublicPage', () => {
 
     const footer = screen.getByRole('contentinfo')
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
-    expect(
-      within(footer).getAllByRole('button').map((button) => button.textContent),
-    ).toEqual(['Resources links', 'Help links', 'Legal links', 'Machines links'])
+    const navigation = within(footer).getByRole('navigation', { name: 'Footer' })
+    expect(['Resources', 'Help', 'Legal', 'Machines'].map(name =>
+      within(navigation).getByRole('region', { name }).querySelector('h2')?.textContent,
+    )).toEqual(['Resources', 'Help', 'Legal', 'Machines'])
     for (const [label, href] of [
       ['API reference', '/developers/api'],
       ['Support', '/support'],
@@ -73,11 +76,32 @@ describe('AePublicPage', () => {
       ['.well-known/ucp', '/.well-known/ucp'],
       ['glossary.md', '/glossary.md'],
     ] as const) {
-      expect(
-        within(footer).getAllByRole('link', { name: label })
-          .every((link) => link.getAttribute('href') === href),
-      ).toBe(true)
+      const link = within(navigation).getByRole('link', { name: label })
+      expect(link.getAttribute('href')).toBe(href)
+      expect(link.getAttribute('data-reload-document')).toBe(
+        ['llms.txt', 'SKILL.md', '.well-known/ucp', 'glossary.md'].includes(label) ? 'true' : null,
+      )
     }
+  })
+
+  it('keeps public business identity and social destinations without invented status or signup controls', () => {
+    render(<AePublicPage><h1>About</h1></AePublicPage>)
+    const footer = within(screen.getByRole('contentinfo'))
+    expect(footer.getByRole('link', { name: 'ABN 98 700 838 115' }).getAttribute('href')).toBe('https://abr.business.gov.au/ABN/View?abn=98700838115')
+    const socials = within(footer.getByRole('navigation', { name: 'Follow Agentic Economy' }))
+    expect(socials.getByRole('link', { name: 'LinkedIn' }).getAttribute('href')).toBe('https://www.linkedin.com/company/aecon-ai/')
+    expect(socials.getByRole('link', { name: 'X' }).getAttribute('href')).toBe('https://x.com/Aeconai')
+    expect(socials.getByRole('link', { name: 'Facebook' }).getAttribute('href')).toBe('https://www.facebook.com/profile.php?id=61594070258261')
+    expect(footer.queryByRole('textbox')).toBeNull()
+    expect(footer.queryByText('All systems normal')).toBeNull()
+  })
+
+  it('omits only the optional closer while keeping the footer navigation', () => {
+    const view = render(<AePublicPage><h1>About</h1></AePublicPage>)
+    expect(screen.getByRole('region', { name: 'Take control of your Agentic future' })).toBeTruthy()
+    view.rerender(<AePublicPage hideFooterCloser><h1>About</h1></AePublicPage>)
+    expect(screen.queryByRole('region', { name: 'Take control of your Agentic future' })).toBeNull()
+    expect(within(screen.getByRole('contentinfo')).getByRole('navigation', { name: 'Footer' })).toBeTruthy()
   })
 
   it('promotes a workspace to the outer shell instead of nesting it in a document page', () => {

@@ -1,0 +1,188 @@
+/* Arc Pro settings-page field and group geometry SHA-256:
+ * e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
+ * Arc agent-run action and wrapped-content geometry SHA-256:
+ * 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032.
+ * Adapted layout tokens only; request state and recovery remain in the source components. */
+.arc-market.arc-correction-page {
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  max-width: var(--ae-rail);
+  min-width: 0;
+  gap: var(--space-8);
+  margin-inline: auto;
+  padding-inline: var(--ae-gutter);
+  padding-bottom: var(--space-8);
+}
+
+.arc-market.arc-correction-preparing { min-width: 0; width: 100%; max-width: 720px; color: var(--text-secondary); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
+
+.arc-market.arc-correction-form {
+  display: grid;
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
+  gap: var(--space-6);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-body);
+}
+
+.arc-market .arc-correction-fields {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: var(--space-6);
+}
+
+.arc-market .arc-correction-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-2);
+}
+
+.arc-market.arc-correction-form [data-slot="field-label"],
+.arc-market.arc-correction-form [data-slot="field-description"],
+.arc-market.arc-correction-form [data-slot="field-error"] {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-correction-form [data-slot="field-label"] {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.arc-market.arc-correction-form [data-slot="field-description"] {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.arc-market.arc-correction-form [data-slot="field-error"] {
+  color: var(--danger);
+}
+
+.arc-market .arc-correction-input,
+.arc-market .arc-correction-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 10px var(--space-3);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-correction-input {
+  min-height: 44px;
+}
+
+.arc-market .arc-correction-textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.arc-market .arc-correction-input:focus-visible,
+.arc-market .arc-correction-textarea:focus-visible,
+.arc-market .arc-correction-support-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.arc-market .arc-correction-input[aria-invalid="true"],
+.arc-market .arc-correction-textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.arc-market.arc-correction-form [data-slot="alert"],
+.arc-market.arc-correction-form [data-slot="alert-description"],
+.arc-market.arc-correction-form [data-slot="alert-description"] > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-correction-form [data-slot="alert-title"] {
+  display: block;
+  overflow: visible;
+  -webkit-box-orient: initial;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  text-overflow: clip;
+  white-space: normal;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.arc-market.arc-correction-form [data-slot="alert-description"] {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.arc-market .arc-correction-support-link {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: var(--radius-control);
+}
+
+.arc-market.arc-correction-popup {
+  box-sizing: border-box;
+  max-width: min(calc(100vw - 24px), 420px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-1);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-floating);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.arc-market.arc-correction-popup [data-slot="select-item"] {
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-correction-submit {
+  min-height: 44px;
+  max-width: 100%;
+  justify-self: start;
+}
+
+@media (max-width: 479px) {
+  .arc-market .arc-correction-submit {
+    width: 100%;
+    justify-self: stretch;
+  }
+}
+
+@media (min-width: 768px) {
+  .arc-market.arc-correction-page {
+    padding-inline: var(--ae-gutter-lg);
+  }
+}

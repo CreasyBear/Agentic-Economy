@@ -1,7 +1,6 @@
-import { Card } from '@/components/ui/card'
+import { ReceiptText, ShieldCheck, Wallet, Workflow } from 'lucide-react'
 
-import { AeSiteSection } from './AeSiteSection'
-import { AeSiteEyebrow, AeSiteHeading } from './AeSiteType'
+import './AboutFeaturesComposition.css'
 
 export type AeSiteFeatureGridProps = Readonly<{
   label: string
@@ -12,29 +11,41 @@ export type AeSiteFeatureGridProps = Readonly<{
   }>[]
 }>
 
-/** Port of aecon.ai's Dusk features-4 bordered two-column card grid. */
+const featureIcons = [ShieldCheck, ReceiptText, Wallet, Workflow] as const
+
+/** Responsive, text-led feature cards for the About page. */
 export function AeSiteFeatureGrid({ label, title, items }: AeSiteFeatureGridProps) {
   return (
-    <AeSiteSection
-      labelledBy="about-features"
-      rhythm="section"
-      className="border-y bg-card/40"
-      enter
-    >
-      <div className="mx-auto max-w-7xl px-6">
-        <AeSiteEyebrow>{label}</AeSiteEyebrow>
-        <AeSiteHeading as="h2" size="md" id="about-features" className="max-w-3xl">
-          {title}
-        </AeSiteHeading>
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {items.map((item) => (
-            <Card key={item.title} className="p-6 md:p-8">
-              <AeSiteHeading as="h3" size="sm">{item.title}</AeSiteHeading>
-              <p className="mt-3 max-w-lg text-muted-foreground">{item.description}</p>
-            </Card>
-          ))}
-        </div>
+    <section className="arc-market arc-about-features" aria-labelledby="about-features">
+      <div className="arc-about-features-inner">
+        <header className="arc-about-feature-header">
+          <h2 id="about-features" className="arc-about-feature-title">
+            {title}
+          </h2>
+          <p className="arc-about-feature-label">{label}</p>
+        </header>
+        <ul className="arc-about-feature-grid">
+          {items.map((item, index) => {
+            const Icon = featureIcons[index % 4] ?? ShieldCheck
+            const size = index === 0 ? 'wide' : index === 1 ? 'regular' : 'half'
+
+            return (
+              <li key={item.title} className="arc-about-feature" data-size={size}>
+                <Icon
+                  aria-hidden="true"
+                  className="arc-about-feature-icon"
+                  size={28}
+                  strokeWidth={1.5}
+                />
+                <div className="arc-about-feature-copy">
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       </div>
-    </AeSiteSection>
+    </section>
   )
 }

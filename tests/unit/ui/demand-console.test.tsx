@@ -439,7 +439,7 @@ describe('owner credit target', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
     await waitFor(() => expect(onCreateStatement).toHaveBeenCalledOnce())
-    expect(screen.getByRole('status').textContent).toContain('Statement generation started.')
+    expect((await screen.findByText('Statement generation started. Its status remains visible below.')).getAttribute('role')).toBe('status')
 
     fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('money-document:statement:one'))

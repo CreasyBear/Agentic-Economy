@@ -1,0 +1,7 @@
+/* Live controls in Arc metrics-dashboard's authored range/actions region. */
+.arc-metrics-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); min-width: 0; }
+.arc-metrics-ranges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.arc-metrics-ranges button { min-height: 44px; }
+.arc-metrics-ranges button[aria-pressed="true"] { background: var(--control-on); color: var(--control-glyph); border-color: var(--control-on); }
+.arc-metrics-export { display: inline-flex; min-height: 44px; max-width: 100%; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px var(--space-4); background: var(--surface); color: var(--foreground); font-size: var(--text-sm); font-weight: 500; text-decoration: none; }
+@media (hover: hover) and (pointer: fine) { .arc-metrics-export:hover { background: var(--surface-muted); } }

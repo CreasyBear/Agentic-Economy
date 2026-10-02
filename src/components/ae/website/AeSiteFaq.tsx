@@ -7,12 +7,10 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 
-import { AeSiteSection } from './AeSiteSection'
-import { AeSiteHeading } from './AeSiteType'
-
 import type { AeSiteFaqProps } from './faq.contracts'
+import './FaqComposition.css'
 
-/** Port of aecon.ai's Dusk FAQ 1 two-column accordion. */
+/** Arc FAQ composition over the existing accessible accordion engine. */
 export function AeSiteFaq({
   labelledBy,
   questions,
@@ -21,50 +19,46 @@ export function AeSiteFaq({
   statusLinkLabel,
 }: AeSiteFaqProps) {
   return (
-    <AeSiteSection labelledBy={labelledBy} rhythm="section">
-      <div className="mx-auto w-full max-w-7xl">
-        <div className="grid gap-6 md:grid-cols-2 md:gap-6">
-          <div>
-            {title === undefined ? null : (
-              <AeSiteHeading
-                as="h2"
-                size="md"
-                id={labelledBy}
-                className="max-w-sm"
+    <section className="arc-market arc-site-faq" aria-labelledby={title === undefined ? undefined : labelledBy}>
+      <div className="arc-site-faq-grid">
+        <header>
+          {title === undefined ? null : (
+            <h2
+              id={labelledBy}
+              className="arc-site-faq-heading"
+            >
+              {title}
+            </h2>
+          )}
+        </header>
+        <div className="arc-site-faq-questions">
+          <Accordion type="single" collapsible className="arc-site-faq-list">
+            {questions.map((item) => (
+              <AccordionItem
+                key={item.question}
+                value={item.question}
+                className="arc-site-faq-item"
               >
-                {title}
-              </AeSiteHeading>
-            )}
-          </div>
-          <div>
-            <Accordion type="single" collapsible className="w-full">
-              {questions.map((item) => (
-                <AccordionItem
-                  key={item.question}
-                  value={item.question}
-                  className="border-dashed"
-                >
-                  <AccordionTrigger className="cursor-pointer text-base hover:no-underline">
-                    {item.question}
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <p className="text-base text-muted-foreground">{item.answer}</p>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+                <AccordionTrigger className="arc-site-faq-trigger">
+                  {item.question}
+                </AccordionTrigger>
+                <AccordionContent>
+                  <p className="arc-site-faq-answer">{item.answer}</p>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
 
-            {statusLinkLabel === undefined ? null : (
-              <p className="mt-6 text-muted-foreground">
-                {statusLinkLead === undefined ? null : <>{statusLinkLead}{' '}</>}
-                <Link to="/status" className="font-medium text-primary hover:underline">
-                  {statusLinkLabel}
-                </Link>
-              </p>
-            )}
-          </div>
+          {statusLinkLabel === undefined ? null : (
+            <p className="arc-site-faq-status">
+              {statusLinkLead === undefined ? null : <>{statusLinkLead}{' '}</>}
+              <Link to="/status">
+                {statusLinkLabel}
+              </Link>
+            </p>
+          )}
         </div>
       </div>
-    </AeSiteSection>
+    </section>
   )
 }

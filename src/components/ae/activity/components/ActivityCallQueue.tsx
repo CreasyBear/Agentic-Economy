@@ -1,11 +1,9 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
-import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
@@ -13,12 +11,13 @@ import {
 import { Badge } from '@/components/ui/badge'
 
 import type { ActivityBadgeView, ActivityCallQueueProps, ActivityCallRowView } from '../activity.contracts'
+import './ActivityQueueComposition.css'
 
 function ActivityBadge({ badge }: Readonly<{ badge: ActivityBadgeView }>) {
   return (
     <Badge
       variant={badge.variant}
-      className={badge.warning ? 'border-warning/50 text-warning' : undefined}
+      className={`arc-activity-badge${badge.warning ? ' border-warning/50 text-warning' : ''}`}
     >
       {badge.label}
     </Badge>
@@ -32,6 +31,7 @@ export function ActivityCallQueue({
   emptyMessage,
   attention = false,
 }: ActivityCallQueueProps) {
+  const headingId = useId()
   const columns = useMemo<ColumnDef<ActivityCallRowView, unknown>[]>(
     () => [
       {
@@ -40,7 +40,7 @@ export function ActivityCallQueue({
         header: ({ column }) => <AeOperatorSortableHeader label="Call" column={column} />,
         cell: ({ row }) => (
           <span
-            className="font-mono text-xs text-muted-foreground truncate max-w-[120px] block"
+            className="arc-activity-reference"
             title={row.original.callRef}
           >
             {row.original.callRef}
@@ -52,7 +52,7 @@ export function ActivityCallQueue({
         accessorFn: (item) => item.agentTitle,
         header: ({ column }) => <AeOperatorSortableHeader label="Caller Agent" column={column} />,
         cell: ({ row }) => (
-          <span className="font-mono text-xs text-muted-foreground truncate max-w-[120px] block" title={row.original.agentTitle}>
+          <span className="arc-activity-reference" title={row.original.agentTitle}>
             {row.original.agentShortId}
           </span>
         ),
@@ -72,7 +72,7 @@ export function ActivityCallQueue({
         accessorFn: (item) => item.durationLabel,
         header: ({ column }) => <AeOperatorSortableHeader label="Time to outcome" column={column} />,
         cell: ({ row }) => (
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          <span className="arc-activity-number">
             {row.original.durationLabel}
           </span>
         ),
@@ -82,7 +82,7 @@ export function ActivityCallQueue({
         accessorFn: (item) => item.amountLabel,
         header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
         cell: ({ row }) => (
-          <span className="font-mono text-sm tabular-nums">
+          <span className="arc-activity-number arc-activity-amount">
             {row.original.amountLabel}
           </span>
         ),
@@ -100,7 +100,7 @@ export function ActivityCallQueue({
         cell: ({ row }) => (
           <div className="grid gap-1">
             <ActivityBadge badge={row.original.purchaseBadge} />
-            <div className="text-xs text-muted-foreground">
+            <div className="arc-activity-detail">
               Payment: {row.original.paymentStateLabel}
             </div>
           </div>
@@ -111,7 +111,7 @@ export function ActivityCallQueue({
         accessorKey: 'whenLabel',
         header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
         cell: ({ row }) => (
-          <time className="font-mono text-xs tabular-nums text-muted-foreground">
+          <time className="arc-activity-number">
             {row.original.whenLabel}
           </time>
         ),
@@ -121,7 +121,11 @@ export function ActivityCallQueue({
   )
 
   return (
-    <AeSection title={title} description={description}>
+    <section className="arc-market arc-activity-queue" aria-labelledby={headingId} data-attention={attention || undefined}>
+      <header className="arc-activity-queue-header">
+        <h2 id={headingId}>{title}</h2>
+        <p>{description}</p>
+      </header>
       {rows.length === 0 ? (
         <AeTableEmptyState
           title={attention ? 'No Calls need attention' : 'No Calls in history'}
@@ -143,16 +147,16 @@ export function ActivityCallQueue({
             getAccessibleLabel: (item) => item.receiptAccessibleLabel,
           }}
           compactContent={(
-            <div className="grid min-w-0 gap-related">
+            <div className="arc-activity-mobile-records">
               {rows.map((row) => (
-                <Card key={row.callRef} className="min-w-0">
-                  <CardHeader className="min-w-0">
-                    <CardTitle><h3 className="break-words text-base">{row.toolLabel}</h3></CardTitle>
+                <article key={row.callRef} className="arc-activity-record">
+                  <header className="arc-activity-record-header">
+                    <h3>{row.toolLabel}</h3>
                     <ActivityBadge badge={row.purchaseBadge} />
-                  </CardHeader>
-                  <CardContent className="min-w-0">
+                  </header>
+                  <div className="arc-activity-record-facts">
                     <AeFactList density="compact" facts={[
-                      { label: 'Call reference', value: <span className="break-all font-mono text-xs">{row.callRef}</span> },
+                      { label: 'Call reference', value: <span className="arc-activity-reference">{row.callRef}</span> },
                       { label: 'Caller Agent', value: row.agentTitle ?? 'Not available' },
                       { label: 'Time to outcome', value: row.durationLabel },
                       { label: 'Amount', value: <span className="font-mono tabular-nums">{row.amountLabel}</span> },
@@ -161,16 +165,16 @@ export function ActivityCallQueue({
                       { label: 'Payment', value: row.paymentStateLabel },
                       { label: 'When', value: row.whenLabel },
                     ]} />
-                  </CardContent>
-                  <CardFooter>
-                    <a href={row.receiptHref} className={buttonVariants({ variant: 'outline', className: 'min-h-touch focus-visible:outline-2 focus-visible:outline-offset-2' })}>{attention ? 'Review Call' : 'View receipt'} <span className="sr-only">for {row.toolLabel}</span></a>
-                  </CardFooter>
-                </Card>
+                  </div>
+                  <footer>
+                    <a href={row.receiptHref} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>{attention ? 'Review Call' : 'View receipt'} <span className="sr-only">for {row.toolLabel}</span></a>
+                  </footer>
+                </article>
               ))}
             </div>
           )}
         />
       )}
-    </AeSection>
+    </section>
   )
 }

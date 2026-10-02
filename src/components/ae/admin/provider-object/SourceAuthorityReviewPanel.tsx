@@ -5,11 +5,12 @@ import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import { SOURCE_AUTHORITY_REVIEW_COPY } from '@/components/ae/admin/actions/actions.contracts'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
 import { canAdminRolePerformAction } from '@/modules/security/public'
 
 import type { SourceAuthorityReviewPanelProps } from './source-authority-review.contracts'
+import '../RecordWorkspaceComposition.css'
 
 export function SourceAuthorityReviewPanel({ review }: SourceAuthorityReviewPanelProps) {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
@@ -25,36 +26,37 @@ export function SourceAuthorityReviewPanel({ review }: SourceAuthorityReviewPane
 
   return (
     <AeSection
+      className="arc-market arc-admin-source-review"
       title={SOURCE_AUTHORITY_REVIEW_COPY.title}
       description={SOURCE_AUTHORITY_REVIEW_COPY.description}
     >
-      <div className="grid gap-4">
-        <dl className="grid gap-2 text-sm">
-          <div className="grid gap-1">
-            <dt className="font-medium text-foreground">{SOURCE_AUTHORITY_REVIEW_COPY.source}</dt>
-            <dd className="break-all text-muted-foreground">
+      <div className="arc-market arc-admin-evidence-action">
+        <dl className="arc-admin-source-facts">
+          <div className="arc-admin-source-fact">
+            <dt>{SOURCE_AUTHORITY_REVIEW_COPY.source}</dt>
+            <dd>
               {review.sourceKind.replace('_', ' ')} · {review.sourceUrl}
             </dd>
           </div>
-          <div className="grid gap-1">
-            <dt className="font-medium text-foreground">{SOURCE_AUTHORITY_REVIEW_COPY.digest}</dt>
-            <dd><code className="break-all text-xs text-muted-foreground">{review.expectedSourceDigest}</code></dd>
+          <div className="arc-admin-source-fact">
+            <dt>{SOURCE_AUTHORITY_REVIEW_COPY.digest}</dt>
+            <dd><code>{review.expectedSourceDigest}</code></dd>
           </div>
-          <div className="grid gap-1">
-            <dt className="font-medium text-foreground">{SOURCE_AUTHORITY_REVIEW_COPY.publication}</dt>
-            <dd><code className="break-all text-xs text-muted-foreground">{review.publicationRef}</code></dd>
+          <div className="arc-admin-source-fact">
+            <dt>{SOURCE_AUTHORITY_REVIEW_COPY.publication}</dt>
+            <dd><code>{review.publicationRef}</code></dd>
           </div>
-          <div className="grid gap-1">
-            <dt className="font-medium text-foreground">{SOURCE_AUTHORITY_REVIEW_COPY.revision}</dt>
-            <dd><code className="text-xs text-muted-foreground">{review.expectedRevision}</code></dd>
+          <div className="arc-admin-source-fact">
+            <dt>{SOURCE_AUTHORITY_REVIEW_COPY.revision}</dt>
+            <dd><code>{review.expectedRevision}</code></dd>
           </div>
-          <div className="grid gap-1">
-            <dt className="font-medium text-foreground">{SOURCE_AUTHORITY_REVIEW_COPY.toolReference}</dt>
-            <dd><code className="break-all text-xs text-muted-foreground">{review.operationRef}</code></dd>
+          <div className="arc-admin-source-fact">
+            <dt>{SOURCE_AUTHORITY_REVIEW_COPY.toolReference}</dt>
+            <dd><code>{review.operationRef}</code></dd>
           </div>
         </dl>
         {canVerify ? (
-          <Button type="button" variant="outline" className="min-h-touch" onClick={() => setOpen(true)}>
+          <Button type="button" variant="secondary" size="md" className="arc-market arc-admin-source-action" onClick={() => setOpen(true)}>
             {SOURCE_AUTHORITY_REVIEW_COPY.open}
           </Button>
         ) : null}

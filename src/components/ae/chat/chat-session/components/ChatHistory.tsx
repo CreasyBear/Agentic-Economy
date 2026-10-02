@@ -1,16 +1,18 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/sidebar-history.tsx and components/chat/sidebar-history-item.tsx, Apache-2.0.
-import { MoreHorizontalIcon, PenSquareIcon, PencilIcon, SearchIcon, Trash2Icon } from 'lucide-react'
-import { useState } from 'react'
+import { LoaderCircleIcon, MoreHorizontalIcon, PenSquareIcon } from 'lucide-react'
+import { useId, useState } from 'react'
+import { LayoutGroup, motion, useReducedMotion } from 'motion/react'
 
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import { motionTokens } from '@/components/arc/lib/motion-tokens'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { chatDeleteConversation, chatHistory } from '@/lib/public/chat-ia'
 
 import type { ChatHistoryProps, ChatHistoryThread } from '../chat-session.contracts'
+import '@/components/arc/chat/ChatNavigation.css'
 
 const day = 24 * 60 * 60 * 1000
 const groups = ['Today', 'Yesterday', 'Previous 7 days', 'Previous 30 days', 'Older'] as const
@@ -48,62 +50,62 @@ export function ChatHistory({
 }: ChatHistoryProps) {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const id = useId()
+  const reduced = Boolean(useReducedMotion())
   const grouped = groupThreadsByDate(threads)
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 px-2 pt-3 pb-4">
-      <div className="px-1">
-        <Button type="button" variant="outline" className="h-9 w-full justify-start gap-2 border-border bg-transparent text-[13px] text-foreground hover:bg-muted/50" onClick={onNewChat}>
-          <PenSquareIcon className="size-4" aria-hidden="true" />
-          <span className="font-medium">{chatHistory.newChat}</span>
+    <div className="arc-market arc-chat arc-chat-history">
+      <div className="arc-chat-history-top">
+        <Button type="button" labelLayout="start" className="arc-chat-history-new" onClick={onNewChat}>
+          <PenSquareIcon size={17} strokeWidth={1.75} aria-hidden="true" />
+          <span>{chatHistory.newChat}</span>
         </Button>
       </div>
-      <Field className="px-1">
+      <Field className="arc-chat-history-search">
         <FieldLabel htmlFor={`${idPrefix}-history-search`} className="sr-only">{chatHistory.searchLabel}</FieldLabel>
-        <InputGroup>
-          <InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon>
-          <InputGroupInput id={`${idPrefix}-history-search`} value={search} onChange={event => onSearch(event.target.value)} type="search" placeholder="Search chats" aria-label={chatHistory.searchLabel} />
-        </InputGroup>
+        <input id={`${idPrefix}-history-search`} value={search} onChange={event => onSearch(event.target.value)} type="search" placeholder="Search chats" aria-label={chatHistory.searchLabel} />
       </Field>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-label={chatHistory.sheetTitle}>
+      <nav className="arc-chat-history-list" aria-label={chatHistory.sheetTitle}>
         {historyPending && threads.length === 0 ? (
-          <div className="flex flex-col gap-1 px-1" aria-busy="true" aria-label={chatHistory.sheetTitle}>
-            {[44, 32, 28, 64, 52].map(width => <div key={width} className="flex h-8 items-center rounded-lg px-2"><Skeleton className="h-3" style={{ width: `${width}%` }} /></div>)}
+          <div className="arc-chat-history-loading" aria-busy="true" aria-label={chatHistory.sheetTitle}>
+            {[44, 32, 28, 64, 52].map(width => <div key={width}><Skeleton className="h-3" style={{ width: `${width}%` }} /></div>)}
           </div>
         ) : threads.length === 0 ? (
-          <p className="px-2 py-2 text-[13px] text-muted-foreground">{search ? chatHistory.empty : 'Your chats will appear here.'}</p>
+          <p className="arc-chat-history-empty">{search ? chatHistory.empty : 'Your chats will appear here.'}</p>
         ) : (
-          <div className="flex flex-col gap-4" role="list">
+          <LayoutGroup id={id}><div className="arc-chat-history-groups" role="list">
             {groups.map((label, index) => grouped[index]!.length > 0 ? (
-              <div key={label} role="listitem">
-                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
+              <div key={label} role="listitem" className="arc-chat-history-group">
+                <p className="arc-chat-history-heading">{label}</p>
                 {grouped[index]!.map(thread => (
-                  <div key={thread.threadId} className="group relative flex min-h-8 items-center rounded-md transition-colors duration-150 hover:bg-muted/50 max-md:min-h-touch data-[active=true]:bg-muted" data-active={thread.threadId === activeThreadId}>
+                  <div key={thread.threadId} className="arc-chat-history-row" data-active={thread.threadId === activeThreadId}>
                     {renaming === thread.threadId ? (
-                      <InlineEditField value={thread.title} label={chatHistory.renameLabel} saveLabel={chatHistory.save} cancelLabel={chatHistory.cancel}
+                      <div className="arc-chat-history-edit"><InlineEditField value={thread.title} label={chatHistory.renameLabel} saveLabel={chatHistory.save} cancelLabel={chatHistory.cancel}
                         errorMessage="Could not rename the conversation. Try again." editing onEditEnd={() => setRenaming(null)}
-                        onSave={title => onRename(thread.threadId, title)} />
+                        onSave={title => onRename(thread.threadId, title)} /></div>
                     ) : confirmDelete === thread.threadId ? (
-                      <div className="flex min-w-0 flex-col gap-2 p-2 text-[13px]">
-                        <span className="truncate">{chatDeleteConversation(thread.title)}</span>
-                        <div className="flex gap-2">
-                          <Button type="button" size="sm" variant="destructive" disabled={busy || thread.busy} onClick={() => void onDelete(thread.threadId).then(deleted => { if (deleted) setConfirmDelete(null) })}>{chatHistory.deleteAction}</Button>
+                      <div className="arc-chat-history-confirm">
+                        <span>{chatDeleteConversation(thread.title)}</span>
+                        <div className="arc-chat-history-confirm-actions">
+                          <Button type="button" size="sm" variant="danger" disabled={busy || thread.busy} onClick={() => void onDelete(thread.threadId).then(deleted => { if (deleted) setConfirmDelete(null) })}>{chatHistory.deleteAction}</Button>
                           <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmDelete(null)}>{chatHistory.cancel}</Button>
                         </div>
                       </div>
                     ) : (
                       <>
                         <button type="button" aria-current={thread.threadId === activeThreadId ? 'page' : undefined} onClick={() => onOpen(thread.threadId)}
-                          className="flex h-8 min-w-0 flex-1 items-center rounded-md px-2 text-left text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-md:min-h-touch data-[active=true]:font-medium data-[active=true]:text-foreground"
+                          className="arc-chat-history-button" title={thread.title}
                           data-active={thread.threadId === activeThreadId}>
-                          <span className="truncate">{thread.title}</span>
-                          {thread.busy ? <span className="sr-only"> {chatHistory.responding}</span> : null}
+                          {thread.threadId === activeThreadId ? <motion.span className="arc-chat-history-highlight" layoutId="active" transition={reduced ? { duration: 0 } : motionTokens.spring.morph} aria-hidden="true" /> : null}
+                          <span className="arc-chat-history-title">{thread.title}</span>
+                          {thread.busy ? <><LoaderCircleIcon size={14} className="arc-chat-history-busy" aria-hidden="true" /><span className="sr-only"> {chatHistory.responding}</span></> : null}
                         </button>
                         <DropdownMenu>
-                          <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground opacity-100 focus-visible:outline-2 focus-visible:outline-ring md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100" aria-label={`More options for ${thread.title}`}><MoreHorizontalIcon className="size-4" aria-hidden="true" /></Button>} />
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setRenaming(thread.threadId)}><PencilIcon aria-hidden="true" />Rename</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setConfirmDelete(thread.threadId)} className="text-destructive"><Trash2Icon aria-hidden="true" />Delete</DropdownMenuItem>
+                          <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="sm" className="arc-chat-nav-icon arc-chat-history-more" aria-label={`More options for ${thread.title}`}><MoreHorizontalIcon size={17} aria-hidden="true" /></Button>} />
+                          <DropdownMenuContent align="end" className="arc-market arc-chat arc-chat-history-menu">
+                            <DropdownMenuItem onClick={() => setRenaming(thread.threadId)}>Rename</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setConfirmDelete(thread.threadId)}>Delete</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </>
@@ -112,14 +114,14 @@ export function ChatHistory({
                 ))}
               </div>
             ) : null)}
-          </div>
+          </div></LayoutGroup>
         )}
         {hasMore && onLoadMore ? (
-          <Button type="button" variant="ghost" className="mt-2 w-full text-[13px] text-muted-foreground" disabled={loadingMore} onClick={onLoadMore}>
+          <Button type="button" variant="ghost" className="arc-chat-history-load" disabled={loadingMore} aria-busy={loadingMore} onClick={onLoadMore}>
             {loadingMore ? 'Loading…' : 'Load more chats'}
           </Button>
         ) : null}
-      </div>
+      </nav>
     </div>
   )
 }

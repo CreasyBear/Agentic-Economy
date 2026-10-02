@@ -1,11 +1,11 @@
 import { Component, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { attemptViteStaleChunkReload } from '@/lib/observability/stale-chunk-reload'
-import { cn } from '@/lib/utils'
+import '../layout/RouteRecoveryComposition.css'
 
 type AeRenderErrorBoundaryProps = Readonly<{
   children: ReactNode
@@ -44,16 +44,16 @@ export class AeRenderErrorBoundary extends Component<AeRenderErrorBoundaryProps,
  */
 function AeObservabilityErrorFallback() {
   return (
-    <div className="grid min-h-64 place-content-center py-page">
-      <Alert variant="destructive" className="max-w-md">
+    <div className="arc-market arc-render-recovery">
+      <Alert variant="destructive" className="arc-recovery-alert">
         <AlertTitle>This page could not be loaded</AlertTitle>
         <AlertDescription>
-          <span>Nothing was charged.</span>
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="button" variant="default" className="min-h-touch" onClick={() => window.location.reload()}>
+          <p>Try again or browse Tools.</p>
+          <div className="arc-recovery-action-row">
+            <Button type="button" size="md" onClick={() => window.location.reload()}>
               Try again
             </Button>
-            <a href="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Browse Tools</a>
+            <a href="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Browse Tools</a>
           </div>
         </AlertDescription>
       </Alert>

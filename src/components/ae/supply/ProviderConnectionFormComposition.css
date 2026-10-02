@@ -1,0 +1,16 @@
+/* Arc Pro integrations settings/field/action composition.
+ * integrations.module.css SHA-256 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10.
+ * Exact endpoint, inspected lane and payee proof remain controller-owned;
+ * presenting a lane never establishes connection authority or Tool readiness. */
+.arc-provider-connection-form-region { display: grid; min-width: 0; gap: var(--space-4); }
+.arc-provider-connection-form { display: grid; min-width: 0; gap: var(--space-6); }
+.arc-provider-connection-field { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-provider-connection-method { width: min(100%, 240px); }
+.arc-provider-connection-input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-3); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-sm); }
+.arc-provider-connection-input[aria-invalid="true"] { border-color: var(--danger); }
+.arc-provider-connection-input:disabled { color: var(--text-muted); }
+.arc-provider-connection-input[readonly] { background: var(--surface-muted); }
+.arc-provider-payment-lane { display: grid; min-width: 0; gap: var(--space-2); text-align: left; font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.arc-provider-connection-form-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
+.arc-provider-connection-refresh { justify-self: start; }
+@media (max-width: 479px) { .arc-provider-connection-form-actions > button { width: 100%; } }

@@ -1,8 +1,7 @@
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button } from '@/components/arc/button/button'
 
 import type { HttpCredentialFormProps } from '../connection-handoff.contracts'
+import '../ConnectionHandoffComposition.css'
 
 export function HttpCredentialForm({
   sourceOriginLabel,
@@ -15,15 +14,16 @@ export function HttpCredentialForm({
   onCancel,
 }: HttpCredentialFormProps) {
   return (
-    <form className="grid max-w-xl gap-5" onSubmit={(event) => void onSubmit(event)}>
-      <div className="grid gap-2">
-        <p className="text-sm text-muted-foreground">
+    <form className="arc-market arc-connection-handoff" onSubmit={(event) => void onSubmit(event)}>
+      <div className="arc-connection-handoff-copy">
+        <p>
           Enter the credential for {sourceOriginLabel}. Agentic Economy stores it in the Provider connection and will not show it again.
         </p>
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor="provider-connection-credential">{credentialLabel}</Label>
-        <Input
+      <div className="arc-connection-handoff-field">
+        <label htmlFor="provider-connection-credential">{credentialLabel}</label>
+        <input
+          className="arc-connection-handoff-input"
           id="provider-connection-credential"
           type="password"
           value={credential}
@@ -37,16 +37,16 @@ export function HttpCredentialForm({
           onChange={(event) => onCredentialChange(event.target.value)}
         />
         {error === undefined ? null : (
-          <p id="provider-connection-error" className="text-sm text-destructive" role="alert">
+          <p id="provider-connection-error" className="arc-connection-handoff-error" role="alert">
             {error}
           </p>
         )}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={busy}>
+      <div className="arc-connection-handoff-actions">
+        <Button type="submit" variant="primary" size="md" disabled={busy}>
           {busy ? 'Connecting…' : 'Connect Provider'}
         </Button>
-        <Button type="button" variant="secondary" disabled={busy} onClick={() => void onCancel()}>
+        <Button type="button" variant="secondary" size="md" disabled={busy} onClick={() => void onCancel()}>
           Cancel
         </Button>
       </div>

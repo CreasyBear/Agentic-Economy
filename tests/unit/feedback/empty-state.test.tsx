@@ -2,15 +2,16 @@
  * @vitest-environment jsdom
  */
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { SearchIcon } from 'lucide-react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   AeEmptyState,
-  TACTILE,
 } from '@/components/ae/feedback/AeEmptyState'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
+
+afterEach(cleanup)
 
 const toastSuccess = vi.hoisted(() => vi.fn())
 
@@ -36,16 +37,18 @@ describe('AeEmptyState (W-42)', () => {
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
-  it('reserves illustration and action wells and renders default inbox illustration', () => {
+  it('shows a decorative Arc inbox drawing and no invented actions', () => {
     const { container } = render(
       <AeEmptyState title="Nothing here" description="Add your first item." />,
     )
 
-    expect(container.querySelector('.size-16')).toBeInTheDocument()
-    expect(container.querySelector('.min-h-touch')).toBeInTheDocument()
+    const illustration = container.querySelector('svg')
+    expect(illustration?.closest('[aria-hidden="true"]')).not.toBeNull()
+    expect(illustration?.querySelectorAll('path').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('renders tactile recipe chips and fires action feedback toast on select', () => {
+  it('invokes a recipe and announces its feedback exactly once', () => {
     const onSelect = vi.fn()
     render(
       <AeEmptyState
@@ -57,12 +60,10 @@ describe('AeEmptyState (W-42)', () => {
     )
 
     const recipe = screen.getByRole('button', { name: 'Retry search' })
-    for (const token of TACTILE.split(/\s+/u)) {
-      expect(recipe.className).toContain(token)
-    }
 
     fireEvent.click(recipe)
     expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(toastSuccess).toHaveBeenCalledOnce()
     expect(toastSuccess).toHaveBeenCalledWith('Template applied')
   })
 
@@ -82,12 +83,16 @@ describe('AeEmptyState (W-42)', () => {
 })
 
 describe('AeTableEmptyState (W-42)', () => {
-  it('uses a table-scoped well without nesting page min-height', () => {
-    const { container } = render(
-      <AeTableEmptyState title="No rows" description="Try another filter." />,
+  it('keeps the table empty message and supplied recovery action in one status region', () => {
+    const onClear = vi.fn()
+    render(
+      <AeTableEmptyState title="No rows" description="Try another filter."
+        action={<button type="button" onClick={onClear}>Clear filter</button>} />,
     )
-
-    expect(container.querySelector('.min-h-\\[14rem\\]')).toBeInTheDocument()
-    expect(container.querySelector('.min-h-64')).toBeNull()
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status').textContent).toContain('Try another filter.')
+    expect(screen.getByRole('heading', { name: 'No rows' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }))
+    expect(onClear).toHaveBeenCalledOnce()
   })
 })

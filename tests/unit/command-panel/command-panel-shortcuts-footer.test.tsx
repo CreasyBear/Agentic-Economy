@@ -67,10 +67,7 @@ describe('AeCommandPanel keyboard shortcuts footer', () => {
     expect(chipTexts).toContain('esc')
     expect(chipTexts).toContain('/')
 
-    for (const kbd of chips) {
-      expect(kbd.className).toContain('font-mono')
-      expect(kbd.className).toContain('text-[10px]')
-    }
+    expect(chips.length).toBe(4)
 
     expect(screen.getByText('Navigate')).toBeTruthy()
     expect(screen.getByText('Select')).toBeTruthy()

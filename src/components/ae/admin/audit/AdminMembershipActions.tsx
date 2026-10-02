@@ -5,11 +5,10 @@ import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import { ADMIN_AUDIT_ACTION_COPY } from '@/components/ae/admin/actions/actions.contracts'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button } from '@/components/arc/button/button'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
 import { canAdminRolePerformAction, type AdminRole } from '@/modules/security/public'
+import './AccessDecisionsComposition.css'
 
 export function AdminMembershipActions() {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
@@ -32,22 +31,22 @@ export function AdminMembershipActions() {
     <>
       <AeSection title={ADMIN_AUDIT_ACTION_COPY.membershipTitle} description={ADMIN_AUDIT_ACTION_COPY.membershipDescription}>
         <form
-          className="grid gap-related rounded-lg border border-border p-gutter md:grid-cols-2"
+          className="arc-market arc-admin-membership"
           onSubmit={(event) => {
             event.preventDefault()
             if (userId !== '' && tokenIdentifier !== '') setAction('grant_admin_membership')
           }}
         >
-          <div className="grid gap-intra">
-            <Label htmlFor="admin-membership-user-id">{ADMIN_AUDIT_ACTION_COPY.targetClerkUserId}</Label>
-            <Input id="admin-membership-user-id" name="targetClerkUserId" value={targetClerkUserId} onChange={(event) => setTargetClerkUserId(event.target.value)} autoComplete="off" spellCheck={false} required />
+          <div className="arc-admin-membership-field">
+            <label htmlFor="admin-membership-user-id">{ADMIN_AUDIT_ACTION_COPY.targetClerkUserId}</label>
+            <input id="admin-membership-user-id" name="targetClerkUserId" value={targetClerkUserId} onChange={(event) => setTargetClerkUserId(event.target.value)} autoComplete="off" spellCheck={false} required />
           </div>
-          <div className="grid gap-intra">
-            <Label htmlFor="admin-membership-token-id">{ADMIN_AUDIT_ACTION_COPY.targetTokenIdentifier}</Label>
-            <Input id="admin-membership-token-id" name="targetTokenIdentifier" value={targetTokenIdentifier} onChange={(event) => setTargetTokenIdentifier(event.target.value)} autoComplete="off" spellCheck={false} />
+          <div className="arc-admin-membership-field">
+            <label htmlFor="admin-membership-token-id">{ADMIN_AUDIT_ACTION_COPY.targetTokenIdentifier}</label>
+            <input id="admin-membership-token-id" name="targetTokenIdentifier" value={targetTokenIdentifier} onChange={(event) => setTargetTokenIdentifier(event.target.value)} autoComplete="off" spellCheck={false} />
           </div>
-          <div className="grid gap-intra">
-            <Label htmlFor="admin-membership-role">{ADMIN_AUDIT_ACTION_COPY.role}</Label>
+          <div className="arc-admin-membership-field">
+            <label htmlFor="admin-membership-role">{ADMIN_AUDIT_ACTION_COPY.role}</label>
             <select
               id="admin-membership-role"
               name="role"
@@ -56,16 +55,15 @@ export function AdminMembershipActions() {
                 const value = event.target.value
                 if (value === 'owner_admin' || value === 'support' || value === 'reviewer') setRole(value)
               }}
-              className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
             >
               <option value="owner_admin">{ADMIN_AUDIT_ACTION_COPY.roleLabels.owner_admin}</option>
               <option value="support">{ADMIN_AUDIT_ACTION_COPY.roleLabels.support}</option>
               <option value="reviewer">{ADMIN_AUDIT_ACTION_COPY.roleLabels.reviewer}</option>
             </select>
           </div>
-          <div className="flex flex-wrap items-end gap-intra">
-            <Button type="submit" disabled={userId === '' || tokenIdentifier === ''}>{ADMIN_AUDIT_ACTION_COPY.grant}</Button>
-            <Button type="button" variant="outline" disabled={userId === ''} onClick={() => setAction('revoke_admin_membership')}>{ADMIN_AUDIT_ACTION_COPY.revoke}</Button>
+          <div className="arc-admin-membership-actions">
+            <Button type="submit" variant="primary" size="md" disabled={userId === '' || tokenIdentifier === ''}>{ADMIN_AUDIT_ACTION_COPY.grant}</Button>
+            <Button type="button" variant="danger" size="md" disabled={userId === ''} onClick={() => setAction('revoke_admin_membership')}>{ADMIN_AUDIT_ACTION_COPY.revoke}</Button>
           </div>
         </form>
       </AeSection>

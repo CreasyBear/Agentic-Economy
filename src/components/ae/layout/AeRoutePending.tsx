@@ -2,10 +2,10 @@ import { useLocation } from '@tanstack/react-router'
 
 import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
 import { AePageSkeleton } from '@/components/ae/layout/AePageState'
-import { Skeleton } from '@/components/ui/skeleton'
 import { operatorRoleForPath } from '@/lib/operator/roles'
 
 import type { OperatorRouteSkeletonPreset } from './route-states.contracts'
+import './RouteLoadingComposition.css'
 
 export function RoutePending({
   title = 'Loading page',
@@ -35,28 +35,28 @@ export function inferOperatorSkeletonPreset(pathname: string): OperatorRouteSkel
 
 function TableSkeleton() {
   return (
-    <div className="grid gap-related">
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-10 w-full rounded-md" />
+    <div className="arc-loading-stack" aria-hidden="true">
+      <span className="arc-loading-line arc-loading-heading" />
+      <span className="arc-loading-line arc-loading-field" />
       <div
         data-testid="skeleton-table"
-        className="min-h-[14rem] overflow-hidden rounded-card border border-border bg-card/40"
+        className="arc-loading-table"
       >
-        <div className="grid grid-cols-4 gap-gutter border-b border-border p-4">
+        <div className="arc-loading-table-row">
           {Array.from({ length: 4 }, (_, index) => (
-            <Skeleton key={`header-${index}`} className="h-4 w-full" />
+            <span key={`header-${index}`} className="arc-loading-line" />
           ))}
         </div>
         {Array.from({ length: 5 }, (_, rowIndex) => (
           <div
             key={rowIndex}
             data-testid="skeleton-table-row"
-            className="grid grid-cols-4 gap-gutter border-b border-border p-4 last:border-b-0"
+            className="arc-loading-table-row"
           >
             {Array.from({ length: 4 }, (_, colIndex) => (
-              <Skeleton
+              <span
                 key={`${rowIndex}-${colIndex}`}
-                className="h-touch w-full"
+                className="arc-loading-line arc-loading-field"
                 data-testid="skeleton-table-cell"
               />
             ))}
@@ -69,26 +69,26 @@ function TableSkeleton() {
 
 function OverviewCardsSkeleton() {
   return (
-    <div className="grid gap-related">
-      <div className="grid gap-intra">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-4 w-60" />
+    <div className="arc-loading-stack" aria-hidden="true">
+      <div className="arc-loading-intro">
+        <span className="arc-loading-line arc-loading-heading" />
+        <span className="arc-loading-line" />
       </div>
-      <div className="grid grid-cols-1 gap-gutter sm:grid-cols-2 lg:grid-cols-3">
+      <div className="arc-loading-metrics">
         {Array.from({ length: 3 }, (_, index) => (
           <div
             key={index}
             data-testid="skeleton-metric-card"
-            className="h-32 rounded-xl border border-border bg-card/60 p-4"
+            className="arc-loading-metric"
           >
-            <Skeleton className="mb-3 h-4 w-24" />
-            <Skeleton className="h-8 w-20" />
+            <span className="arc-loading-line arc-loading-label" />
+            <span className="arc-loading-line arc-loading-value" />
           </div>
         ))}
       </div>
       <div
         data-testid="skeleton-overview-primary"
-        className="h-64 rounded-xl border border-border bg-card/40"
+        className="arc-loading-well"
       />
     </div>
   )
@@ -96,22 +96,22 @@ function OverviewCardsSkeleton() {
 
 function SplitConsoleSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-gutter lg:grid-cols-[20rem_minmax(0,1fr)]">
+    <div className="arc-loading-split" aria-hidden="true">
       <div
         data-testid="skeleton-split-rail"
-        className="h-96 rounded-xl border border-border p-4"
+        className="arc-loading-pane"
       >
-        <Skeleton className="mb-3 h-4 w-32" />
-        <Skeleton className="h-touch w-full" />
-        <Skeleton className="mt-intra h-touch w-full" />
+        <span className="arc-loading-line arc-loading-label" />
+        <span className="arc-loading-line arc-loading-field" />
+        <span className="arc-loading-line arc-loading-field" />
       </div>
       <div
         data-testid="skeleton-split-panel"
-        className="h-96 rounded-xl border border-border p-6"
+        className="arc-loading-pane"
       >
-        <Skeleton className="mb-4 h-8 w-48" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="mt-intra h-touch w-full" />
+        <span className="arc-loading-line arc-loading-heading" />
+        <div className="arc-loading-well" />
+        <span className="arc-loading-line arc-loading-field" />
       </div>
     </div>
   )
@@ -119,24 +119,24 @@ function SplitConsoleSkeleton() {
 
 function FormRecordSkeleton() {
   return (
-    <div className="grid max-w-2xl gap-section">
+    <div className="arc-loading-form" aria-hidden="true">
       {Array.from({ length: 4 }, (_, index) => (
-        <div key={index} data-testid="skeleton-form-field" className="grid gap-intra">
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-10 w-full rounded-md" />
+        <div key={index} data-testid="skeleton-form-field" className="arc-loading-intro">
+          <span className="arc-loading-line arc-loading-label" />
+          <span className="arc-loading-line arc-loading-field" />
         </div>
       ))}
-      <Skeleton data-testid="skeleton-form-action" className="h-10 w-32 rounded-md" />
+      <span data-testid="skeleton-form-action" className="arc-loading-line arc-loading-action" />
     </div>
   )
 }
 
 function DefaultSkeleton() {
   return (
-    <div data-testid="skeleton-default-body" className="grid gap-related">
-      <Skeleton className="h-10 w-full" />
+    <div data-testid="skeleton-default-body" className="arc-loading-rows" aria-hidden="true">
+      <div className="arc-loading-record"><span className="arc-loading-line arc-loading-heading" /></div>
       {Array.from({ length: 6 }, (_, index) => (
-        <Skeleton key={index} className="h-touch w-full" />
+        <div key={index} className="arc-loading-record"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /></div>
       ))}
     </div>
   )
@@ -151,7 +151,7 @@ export function OperatorRoutePending({
 
   const body = (
     <div
-      className="grid gap-related"
+      className="arc-market arc-route-loading"
       aria-busy="true"
       aria-label="Loading workspace"
       data-skeleton-preset={resolvedPreset}

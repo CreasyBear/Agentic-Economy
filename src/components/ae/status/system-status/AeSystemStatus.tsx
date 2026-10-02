@@ -1,7 +1,8 @@
 import { RefreshCwIcon } from 'lucide-react'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
+import '../StatusComposition.css'
 
 import { StatusCheckList } from './components/StatusCheckList'
 import { StatusPageFooter } from './components/StatusPageFooter'
@@ -24,7 +25,7 @@ export function AeSystemStatus({ loaded }: AeSystemStatusProps) {
       actions={
         <Button
           type="button"
-          className="min-h-touch"
+          size="md"
           disabled={model.isChecking}
           aria-busy={model.isChecking}
           onClick={model.onRefresh}
@@ -33,9 +34,9 @@ export function AeSystemStatus({ loaded }: AeSystemStatusProps) {
         </Button>
       }
     >
-      <div className="ae-rail pb-page">
+      <div className="arc-market arc-system-status ae-rail">
         <StatusCheckList checks={model.checks} isChecking={model.isChecking} />
-        <p className="mt-intra text-sm text-muted-foreground">{model.lastUpdated}</p>
+        <p className="arc-system-status-updated">{model.lastUpdated}</p>
         {model.recovery !== undefined ? <StatusRecoveryPanel recovery={model.recovery} /> : null}
         <StatusPageFooter statusAnnouncement={model.statusAnnouncement} />
       </div>

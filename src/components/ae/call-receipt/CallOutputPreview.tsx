@@ -1,4 +1,5 @@
 import type { JsonValue } from '@/modules/capability-contract/public'
+import './ReceiptComposition.css'
 
 const previewItems = 8
 const previewTextLength = 1_000
@@ -10,38 +11,36 @@ export function CallOutputPreview({ value, depth = 0 }: Readonly<{ value: JsonVa
   }
 
   const count = Array.isArray(value) ? value.length : Object.keys(value).length
-  if (count === 0) return <code className="text-sm">{Array.isArray(value) ? '[]' : '{}'}</code>
+  if (count === 0) return <code className="arc-market arc-call-json-empty">{Array.isArray(value) ? '[]' : '{}'}</code>
   if (depth >= 2) {
     const noun = Array.isArray(value) ? 'item' : 'field'
-    return <p className="text-sm text-muted-foreground">{count} {noun}{count === 1 ? '' : 's'} — view full JSON below.</p>
+    return <p className="arc-market arc-call-context">{count} {noun}{count === 1 ? '' : 's'} — view full JSON below.</p>
   }
   if (Array.isArray(value)) {
     return (
-      <div className="grid min-w-0 gap-related">
-        <ol className="grid list-decimal gap-related pl-gutter text-sm marker:text-muted-foreground">
+      <div className="arc-market arc-call-json-preview">
+        <ol className="arc-call-json-array">
           {value.slice(0, previewItems).map((item, index) => (
             // Immutable recorded output has no child state or reordering; duplicate values remain separate entries.
             // eslint-disable-next-line react-doctor/no-array-index-as-key
-            <li key={index} className="min-w-0 pl-intra"><CallOutputPreview value={item} depth={depth + 1} /></li>
+            <li key={index}><CallOutputPreview value={item} depth={depth + 1} /></li>
           ))}
         </ol>
-        {count > previewItems ? <p className="text-xs text-muted-foreground">{count - previewItems} more items. View full JSON below.</p> : null}
+        {count > previewItems ? <p className="arc-call-context">{count - previewItems} more items. View full JSON below.</p> : null}
       </div>
     )
   }
   return (
-    <div className="grid min-w-0 gap-related">
-      <dl className="grid gap-related">
+    <div className="arc-market arc-call-json-preview">
+      <dl className="arc-call-json-object">
         {Object.entries(value).slice(0, previewItems).map(([label, item]) => (
-          <div key={label} className={item !== null && typeof item === 'object'
-            ? 'grid min-w-0 gap-related border-b border-border pb-related last:border-0'
-            : 'grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-related'}>
-            <dt title={label.slice(0, previewTextLength)} className="break-words text-sm font-medium text-muted-foreground">{fieldLabel(label.slice(0, previewTextLength))}{label.length > previewTextLength ? '…' : ''}</dt>
-            <dd className="min-w-0"><CallOutputPreview value={item} depth={depth + 1} /></dd>
+          <div key={label} className="arc-call-json-field" data-complex={item !== null && typeof item === 'object' ? '' : undefined}>
+            <dt title={label.slice(0, previewTextLength)}>{fieldLabel(label.slice(0, previewTextLength))}{label.length > previewTextLength ? '…' : ''}</dt>
+            <dd><CallOutputPreview value={item} depth={depth + 1} /></dd>
           </div>
         ))}
       </dl>
-      {count > previewItems ? <p className="text-xs text-muted-foreground">{count - previewItems} more fields. View full JSON below.</p> : null}
+      {count > previewItems ? <p className="arc-call-context">{count - previewItems} more fields. View full JSON below.</p> : null}
     </div>
   )
 }
@@ -54,9 +53,9 @@ function fieldLabel(value: string): string {
 function CallOutputScalar({ value }: Readonly<{ value: string | number | boolean | null }>) {
   const text = typeof value === 'string' ? value : JSON.stringify(value)
   return (
-    <div className="min-w-0 whitespace-pre-wrap break-words text-sm text-foreground">
-      {text === '' ? <span className="text-muted-foreground">Empty text</span> : text.slice(0, previewTextLength)}
-      {text.length > previewTextLength ? <p className="mt-intra text-xs text-muted-foreground">Text shortened. View full JSON below.</p> : null}
+    <div className="arc-market arc-call-json-scalar">
+      {text === '' ? <span className="arc-call-context">Empty text</span> : text.slice(0, previewTextLength)}
+      {text.length > previewTextLength ? <p className="arc-call-context">Text shortened. View full JSON below.</p> : null}
     </div>
   )
 }

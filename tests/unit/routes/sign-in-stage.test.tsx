@@ -65,12 +65,12 @@ describe('sign-in site stage', () => {
 
     expect(screen.getByRole('heading', { name: 'Sign in to connect an Agent' })).toBeTruthy()
     expect(screen.getByText(/return to the Agent connection you started/)).toBeTruthy()
-    expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/sign-in')
+    expect(screen.getByText('/sign-in').tagName).toBe('CODE')
     expect(screen.getByText('clerk-sign-in')).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-auth-clerk-well"]')).toBeTruthy()
   })
 
-  it('passes a zero-CLS Clerk fallback skeleton to SignIn', () => {
+  it('passes hidden loading placeholders to SignIn', () => {
     const Component = routeState.SignIn
     if (Component === undefined || Component === null) throw new Error('Sign-in route was not captured.')
     render(<Component />)
@@ -78,7 +78,8 @@ describe('sign-in site stage', () => {
     expect(routeState.signInProps?.fallback).toBeTruthy()
     const { container } = render(<>{routeState.signInProps?.fallback as ReactNode}</>)
     expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')).toBeTruthy()
-    expect(container.querySelectorAll('.min-h-touch').length).toBeGreaterThanOrEqual(4)
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
+    expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')?.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('names the preserved destination and uses Market only when that is the return', () => {
@@ -157,10 +158,11 @@ describe('sign-in site stage', () => {
     expect(document.activeElement).toBe(document.body)
   })
 
-  it('exports a sign-in fallback skeleton with reserved height', () => {
+  it('exports hidden sign-in loading placeholders without actions', () => {
     const { container } = render(<SignInClerkFallback />)
     const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
-    expect(fallback?.className).toContain('min-h-96')
-    expect(fallback?.className).toContain('gap-related')
+    expect(fallback?.getAttribute('aria-hidden')).toBe('true')
+    expect(fallback?.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })

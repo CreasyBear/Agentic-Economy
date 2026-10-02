@@ -1,5 +1,12 @@
 'use client'
 
+/* Arc sortable-data-table authored table, sort tint, mobile fold and FLIP row composition.
+ * Upstream TSX SHA-256 6115bc78d39abb4a3494e94f31259c93535b53fd5ebd1936c4cda2a95bb17241.
+ * Requires stable caller rows/IDs and controlled selection/sort/filter contracts.
+ * Ensures native table semantics and unchanged TanStack/RovingFocus callbacks.
+ * Invariant: filtered-empty recovery never changes sorting, row identity or authority.
+ * On violation: existing loading, empty and non-selectable states remain explicit. */
+
 import {
   flexRender,
   getCoreRowModel,
@@ -19,19 +26,14 @@ import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { Button } from '@/components/arc/button/button'
+import { motion, useReducedMotion } from 'motion/react'
+import { motionTokens } from '@/components/arc/motion-tokens'
+import './RecordTable.css'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+
 
 export type AeRecordTableSelection<TData> = Readonly<{
   state: RowSelectionState
@@ -134,6 +136,7 @@ export function AeRecordTable<TData>({
   rowActionFocus,
   compactContent,
 }: AeRecordTableProps<TData>) {
+  const reduced = useReducedMotion() === true
   const [internalSorting, setInternalSorting] = useState<SortingState>([])
   const [internalGlobalFilter, setInternalGlobalFilter] = useState('')
   const tableRootRef = useRef<HTMLDivElement>(null)
@@ -251,7 +254,7 @@ export function AeRecordTable<TData>({
     <div
       ref={tableRootRef}
       {...(showSkeleton ? { 'aria-busy': true } : {})}
-      className="grid"
+      className="arc-market arc-record-root"
     >
       {showFilter || action !== undefined ? (
         <AeViewBar
@@ -280,16 +283,18 @@ export function AeRecordTable<TData>({
               style: { maxHeight },
             })}
       >
-        <Table>
+        <div data-slot="table-container" className="arc-record-wrapper"><table role="table" className="arc-record-table" data-selectable={selection === undefined ? undefined : true}>
           <caption className="sr-only">{caption}</caption>
-          <TableHeader>
+          <thead role="rowgroup">
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
+              <tr role="row" key={headerGroup.id} className="hover:bg-transparent">
                 {headerGroup.headers.map((header) => (
-                  <TableHead
+                  <th role="columnheader"
                     key={header.id}
                     scope="col"
-                    className="sticky top-0 z-10 bg-container px-3 py-2.5"
+                    className={header.column.id === '__ae_selection' ? 'arc-record-select-cell' : undefined}
+                    data-sorted={header.column.getIsSorted() || undefined}
+                    data-sortable={header.column.getCanSort() || undefined}
                     aria-sort={
                       !header.column.getCanSort()
                         ? undefined
@@ -303,11 +308,11 @@ export function AeRecordTable<TData>({
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
+                  </th>
                 ))}
-              </TableRow>
+              </tr>
             ))}
-          </TableHeader>
+          </thead>
           <RecordTableBody
             roving={rowAction !== undefined}
             {...(visibleRows[0] === undefined ? {} : { defaultTabStopId: visibleRows[0].id })}
@@ -322,23 +327,23 @@ export function AeRecordTable<TData>({
           >
             {showSkeleton ? (
               Array.from({ length: 5 }, (_, index) => (
-                <TableRow key={`skeleton-${String(index)}`} className="hover:bg-transparent">
+                <tr role="row" key={`skeleton-${String(index)}`} className="hover:bg-transparent">
                   {leafColumns.map((column) => (
-                    <TableCell key={`${column.id}-skeleton`}>
+                    <td role="cell" key={`${column.id}-skeleton`}>
                       <span className="block h-4 w-24 max-w-full animate-pulse rounded-sm bg-muted" />
-                    </TableCell>
+                    </td>
                   ))}
-                </TableRow>
+                </tr>
               ))
             ) : rowCount === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={leafColumns.length} className="h-24 text-muted-foreground">
+              <tr role="row" className="hover:bg-transparent">
+                <td role="cell" colSpan={leafColumns.length} className="arc-record-empty">
                   <div className="flex flex-wrap items-center gap-related">
                     <span>{emptyMessage}</span>
                     {hasActiveFilter ? (
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         onClick={() => updateGlobalFilter('')}
                       >
@@ -346,13 +351,15 @@ export function AeRecordTable<TData>({
                       </Button>
                     ) : null}
                   </div>
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ) : (
               table.getRowModel().rows.map((row) => (
                 <RecordTableRow
                   key={row.id}
                   row={row}
+                  reduced={reduced}
+                  order={visibleRowKey}
                   {...(selectedRowClassName === undefined
                     ? {}
                     : { selectedRowClassName })}
@@ -360,13 +367,13 @@ export function AeRecordTable<TData>({
               ))
             )}
           </RecordTableBody>
-        </Table>
+        </table></div>
       </div>
       {selection === undefined || selection.showStatus === false ? null : (
         <p
           role="status"
           aria-live="polite"
-          className="py-intra font-mono text-xs tabular-nums text-muted-foreground"
+          className="arc-record-footer"
         >
           {selectedVisibleCount.toLocaleString()} of{' '}
           {selectableVisibleRows.length.toLocaleString()} selected
@@ -379,21 +386,34 @@ export function AeRecordTable<TData>({
 function RecordTableRow<TData>({
   row,
   selectedRowClassName,
+  reduced,
+  order,
 }: {
   row: Row<TData>
+  reduced: boolean
+  order: string
   selectedRowClassName?: string
 }) {
   return (
-    <TableRow
+    <motion.tr role="row"
+      layout={reduced ? false : 'position'}
+      layoutDependency={order}
+      transition={reduced ? { duration: 0 } : motionTokens.spring.smooth}
       data-state={row.getIsSelected() ? 'selected' : undefined}
       className={`has-[:focus-visible]:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring${row.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
     >
-      {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id} className="whitespace-normal align-middle">
+      {row.getVisibleCells().map((cell, index, cells) => (
+        <td role="cell" key={cell.id}
+          className={cell.column.id === '__ae_selection' ? 'arc-record-select-cell' : undefined}
+          data-primary={index === (cells[0]?.column.id === '__ae_selection' ? 1 : 0) || undefined}
+          data-sorted={cell.column.getIsSorted() || undefined}
+          data-label={typeof cell.column.columnDef.header === 'string' ? cell.column.columnDef.header : cell.column.id}
+          data-column={cell.column.id}
+        >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </TableCell>
+        </td>
       ))}
-    </TableRow>
+    </motion.tr>
   )
 }
 
@@ -412,10 +432,7 @@ function RecordTableAction<TData>({
         to={action.getHref(row.original)}
         aria-label={accessibleLabel}
         data-ae-row-action-id={row.id}
-        className={cn(
-          buttonVariants({ variant: 'ghost', size: 'sm' }),
-          'min-h-touch sm:min-h-8',
-        )}
+        className="arc-record-action"
       >
         {label}
       </Link>
@@ -424,7 +441,7 @@ function RecordTableAction<TData>({
         type="button"
         variant="ghost"
         size="sm"
-        className="min-h-touch sm:min-h-8"
+        className="arc-record-action"
         aria-label={accessibleLabel}
         data-ae-row-action-id={row.id}
         onClick={() => action.onOpen(row.original)}
@@ -475,7 +492,7 @@ function RecordTableBody({
   defaultTabStopId?: string
   onCurrentTabStopChange?: (target: EventTarget | null) => void
 }) {
-  const body = <TableBody>{children}</TableBody>
+  const body = <tbody role="rowgroup">{children}</tbody>
   return roving ? (
     <RovingFocusGroup.Root
       render={body}
@@ -536,7 +553,7 @@ export function AeOperatorSortableHeader({
       variant="ghost"
       size="sm"
       className={cn(
-        '-ms-2 h-9 min-h-9 gap-1.5 px-3',
+        'arc-record-sort',
         sorted ? 'text-foreground' : 'text-muted-foreground',
       )}
       onClick={() => column.toggleSorting(sorted === 'asc')}

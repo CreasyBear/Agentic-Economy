@@ -8,8 +8,7 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
 
 type AeCapabilityListProps = {
@@ -24,9 +23,9 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
         accessorFn: (item) => item.name,
         header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
         cell: ({ row }) => (
-          <div className="grid min-w-[12rem] gap-0.5">
+          <div className="grid min-w-0 gap-2">
             <span className="font-medium">{row.original.name}</span>
-            <span className="line-clamp-2 text-xs text-muted-foreground">{row.original.summary}</span>
+            <span className="break-words text-sm text-muted-foreground">{row.original.summary}</span>
           </div>
         ),
       },
@@ -56,7 +55,7 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
         action={
           <a
             href="/owner/operations/new"
-            className={cn(buttonVariants(), 'min-h-touch')}
+            className={['arc-market', buttonStyles.button, buttonStyles.primary, buttonStyles.md].join(' ')}
           >
             Add Tool
           </a>

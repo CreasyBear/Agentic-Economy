@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react'
 
+import { Button } from '@/components/arc/button/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/lib/ui/toast'
@@ -22,12 +20,7 @@ import type { AccountFundingPort } from '@/modules/money/account-funding.contrac
 import {
   useAccountFunding,
 } from './use-account-funding'
-
-const DENOMINATION_CHIP_CLASS =
-  'inline-flex min-h-touch items-center rounded-full border px-3 py-1.5 font-mono text-xs font-medium tabular-nums enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
-const QUOTE_SHELL_CLASS =
-  'grid min-h-[13.5rem] gap-3 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm'
+import './FundingComposition.css'
 
 export type AeAccountFundingPanelProps = Readonly<{
   port?: AccountFundingPort
@@ -93,7 +86,7 @@ export function AeAccountFundingPanel({
   const taxOnServiceFeeBps = constraints?.kind === 'available' ? constraints.taxOnServiceFeeBps : 1000
 
   return (
-    <div className="grid gap-3">
+    <div className="arc-market arc-funding-review">
       {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
         <Alert>
           <AlertTitle>Account funding is unavailable</AlertTitle>
@@ -125,9 +118,9 @@ export function AeAccountFundingPanel({
           </AlertDescription>
         </Alert>
       ) : null}
-      {checking ? <p className="text-sm text-muted-foreground" role="status">Checking payment status…</p> : null}
+      {checking ? <p className="arc-funding-detail" role="status">Checking payment status…</p> : null}
       {paymentStatus === 'pending' && session?.evidence.checkoutStatus !== 'expired' ? (
-        <p className="text-sm text-muted-foreground" role="status">
+        <p className="arc-funding-detail" role="status">
           {checkoutResumable
             ? 'Secure checkout is ready. Continue this payment, or refresh its status if checkout was already completed.'
             : 'Payment is still processing. A$0.00 has been added until this payment is confirmed.'}
@@ -150,30 +143,29 @@ export function AeAccountFundingPanel({
         </Alert>
       ) : null}
       {constraintsLoading && port !== undefined ? (
-        <div className="grid gap-2" aria-busy="true" aria-label="Loading funding amounts">
-          <div className="flex flex-wrap gap-2">
-            <Skeleton className="h-8 w-[4.5rem] rounded-full" />
-            <Skeleton className="h-8 w-[4.5rem] rounded-full" />
-            <Skeleton className="h-8 w-[4.5rem] rounded-full" />
+        <div className="arc-funding-loading" aria-busy="true" aria-label="Loading funding amounts">
+          <div className="arc-funding-loading-options">
+            <Skeleton className="arc-funding-skeleton-chip" />
+            <Skeleton className="arc-funding-skeleton-chip" />
+            <Skeleton className="arc-funding-skeleton-chip" />
           </div>
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="min-h-[13.5rem] w-full rounded-lg" />
+          <Skeleton className="arc-funding-skeleton-input" />
+          <Skeleton className="arc-funding-skeleton-summary" />
         </div>
       ) : null}
       {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
-        <div className="grid gap-2">
+        <div className="arc-funding-form">
           {suggestedPrincipalUnits.length > 0 ? (
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-medium">Choose a credit amount</legend>
-              <div className="flex flex-wrap gap-2">
+            <fieldset className="arc-funding-amount-options">
+              <legend>Choose a credit amount</legend>
+              <div className="arc-funding-denominations">
                 {suggestedPrincipalUnits.map((units) => {
                   const selected = selectedPrincipalUnits === units
                   return (
                     <Button
                       key={units.toString()}
                       type="button"
-                      size="sm"
-                      variant="ghost"
+                      variant="secondary"
                       aria-pressed={selected}
                       disabled={pending || checking}
                       onClick={() => {
@@ -183,11 +175,7 @@ export function AeAccountFundingPanel({
                           valid: true,
                         })
                       }}
-                      className={
-                        selected
-                          ? `${DENOMINATION_CHIP_CLASS} border-foreground bg-muted hover:bg-muted`
-                          : `${DENOMINATION_CHIP_CLASS} border-border bg-container hover:bg-muted/60`
-                      }
+                      className="arc-funding-denomination font-mono tabular-nums"
                     >
                       +{formatAudUnits(units)}
                     </Button>
@@ -196,10 +184,11 @@ export function AeAccountFundingPanel({
               </div>
             </fieldset>
           ) : null}
-          <div className="grid gap-1.5">
-            <Label htmlFor="account-funding-amount">Other amount (AUD)</Label>
-            <Input
+          <div className="arc-funding-custom-amount">
+            <label htmlFor="account-funding-amount">Other amount (AUD)</label>
+            <input
               id="account-funding-amount"
+              className="arc-funding-input"
               inputMode="decimal"
               autoComplete="off"
               value={amountText}
@@ -209,47 +198,55 @@ export function AeAccountFundingPanel({
               placeholder="10.00"
               aria-invalid={amountInvalid}
               aria-describedby={amountInvalid ? 'account-funding-amount-help account-funding-amount-error' : 'account-funding-amount-help'}
-              className="font-mono tabular-nums"
             />
-            <p id="account-funding-amount-help" className="text-xs text-muted-foreground">
+            <p id="account-funding-amount-help" className="arc-funding-help">
               Add {formatAudAmountString(constraints.minimumPrincipalUnits)} to {formatAudAmountString(constraints.maximumPrincipalUnits)} in {formatAudAmountString(constraints.incrementUnits)} increments.
             </p>
-            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">{amountErrorMessage ?? 'Enter an amount within the displayed limits and increments.'}</p> : null}
-            <div className={QUOTE_SHELL_CLASS} role="group" aria-label="Funding quote and payment">
+            {amountInvalid ? <p id="account-funding-amount-error" className="arc-funding-error" role="alert">{amountErrorMessage ?? 'Enter an amount within the displayed limits and increments.'}</p> : null}
+            <div className="arc-funding-summary" role="group" aria-label="Funding quote and payment">
               {preview === undefined ? (
                 <>
-                  <p className="m-0 text-muted-foreground">
+                  <p className="arc-funding-summary-message">
                     Enter or choose an amount to see credit, fee, GST, and total.
                   </p>
-                  <div className="mt-auto border-t border-border/70 pt-3">
-                    <Button type="button" disabled className="min-h-touch w-full sm:w-auto">
+                  <div className="arc-funding-summary-action">
+                    <Button type="button" disabled className="arc-funding-pay">
                       Choose an amount to continue
                     </Button>
                   </div>
                 </>
               ) : (
                 <>
-                  <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
-                    <dt className="text-muted-foreground">Credit added</dt>
-                    <dd className="font-mono tabular-nums">{formatAudUnits(preview.principalUnits)}</dd>
-                    <dt className="text-muted-foreground">Platform fee</dt>
-                    <dd className="font-mono tabular-nums">{formatAudUnits(preview.serviceFeeUnits)}</dd>
-                    <dt className="text-muted-foreground">{formatAustralianGstPercentLabel(taxOnServiceFeeBps)}</dt>
-                    <dd className="font-mono tabular-nums">{formatAudUnits(preview.taxUnits)}</dd>
-                    <dt className="font-medium">Total payable</dt>
-                    <dd className="font-mono font-medium tabular-nums">{formatAudUnits(preview.totalUnits)}</dd>
+                  <dl className="arc-funding-lines" aria-label="Funding quote">
+                    <div className="arc-funding-line">
+                      <dt>Credit added</dt>
+                      <dd>{formatAudUnits(preview.principalUnits)}</dd>
+                    </div>
+                    <div className="arc-funding-line">
+                      <dt>Platform fee</dt>
+                      <dd>{formatAudUnits(preview.serviceFeeUnits)}</dd>
+                    </div>
+                    <div className="arc-funding-line">
+                      <dt>{formatAustralianGstPercentLabel(taxOnServiceFeeBps)}</dt>
+                      <dd>{formatAudUnits(preview.taxUnits)}</dd>
+                    </div>
+                    <div className="arc-funding-line arc-funding-total">
+                      <dt>Total payable</dt>
+                      <dd>{formatAudUnits(preview.totalUnits)}</dd>
+                    </div>
                   </dl>
-                  <p className="m-0 text-xs text-muted-foreground">
+                  <p className="arc-funding-detail">
                     {formatAudGstNote(preview.taxUnits, taxOnServiceFeeBps)}
                   </p>
-                  <p className="m-0 text-muted-foreground">
+                  <p className="arc-funding-detail">
                     Your Account receives the full {formatAudUnits(preview.principalUnits)} after payment is confirmed.
                   </p>
-                  <div className="border-t border-border/70 pt-3">
+                  <div className="arc-funding-summary-action">
                     <Button
+                      type="button"
                       disabled={pending || checking || quoteRefreshRequired}
                       onClick={() => void beginTopUp()}
-                      className="min-h-touch"
+                      className="arc-funding-pay"
                     >
                       {pending ? <Spinner data-icon="inline-start" /> : null}
                       {pending
@@ -263,18 +260,18 @@ export function AeAccountFundingPanel({
           </div>
         </div>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="arc-funding-recovery-actions">
         {checkoutResumable ? (
-          <Button type="button" variant="secondary" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
+          <Button type="button" variant="secondary" disabled={checking || pending} onClick={resumeCheckout} className="arc-funding-action">
             Continue secure payment
           </Button>
         ) : canStartAnotherPayment(paymentStatus, session) ? (
-          <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
+          <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="arc-funding-action">
             Add more credit
           </Button>
         ) : null}
         {recovery !== undefined && paymentStatus !== 'succeeded' && paymentStatus !== 'failed' ? (
-          <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">
+          <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="arc-funding-action">
             {checking ? <Spinner data-icon="inline-start" /> : null}
             {checking ? 'Checking payment…' : 'Refresh payment status'}
           </Button>

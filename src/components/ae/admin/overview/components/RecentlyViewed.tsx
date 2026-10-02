@@ -6,20 +6,27 @@ import {
   ADMIN_OVERVIEW_COPY,
   type AdminOverviewRecentRow,
 } from '../overview.contracts'
+import './OverviewRecordsComposition.css'
 
 export type RecentlyViewedProps = Readonly<{ rows: readonly AdminOverviewRecentRow[] }>
 
 export function RecentlyViewed({ rows }: RecentlyViewedProps) {
   return (
-    <AeSection title={ADMIN_OVERVIEW_COPY.recentlyViewedTitle} description={ADMIN_OVERVIEW_COPY.recentlyViewedDescription}>
+    <AeSection
+      title={ADMIN_OVERVIEW_COPY.recentlyViewedTitle}
+      description={ADMIN_OVERVIEW_COPY.recentlyViewedDescription}
+      className="arc-market arc-overview-records"
+    >
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{ADMIN_OVERVIEW_COPY.noRecentlyViewed}</p>
+        <p className="arc-overview-record-status">{ADMIN_OVERVIEW_COPY.noRecentlyViewed}</p>
       ) : (
-        <ul className="divide-y divide-border rounded-card border border-border">
+        <ul className="arc-overview-record-list">
           {rows.map((row) => (
-            <li key={`${row.kind}:${row.ref}`} className="flex flex-wrap items-center justify-between gap-related p-related">
-              <Link to={row.href} className="font-medium text-foreground underline-offset-4 hover:underline">{row.label}</Link>
-              <AeCopyReference label={row.label} value={row.ref} />
+            <li key={`${row.kind}:${row.ref}`} className="arc-overview-record-row">
+              <Link to={row.href} className="arc-overview-record-link">{row.label}</Link>
+              <div className="arc-overview-record-reference">
+                <AeCopyReference label={row.label} value={row.ref} />
+              </div>
             </li>
           ))}
         </ul>

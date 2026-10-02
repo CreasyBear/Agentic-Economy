@@ -1,0 +1,118 @@
+/* Continuous queue and recent-record rows adapted from Arc integrations-list.
+ * Source SHA-256: 1192a41ba0825c7c06378e9acc0dd7fc1741cb1503daae80df49cbdd33eb6f10
+ */
+.arc-market.arc-overview-records {
+  min-width: 0;
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+}
+
+.arc-market .arc-overview-record-body {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.arc-market .arc-overview-record-status {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-overview-record-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border-block: 1px solid var(--border);
+  padding: 0;
+  list-style: none;
+}
+
+.arc-market .arc-overview-record-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: 14px var(--space-5);
+  background: var(--surface);
+}
+
+.arc-market .arc-overview-record-row + .arc-overview-record-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .arc-market .arc-overview-record-row:hover {
+    background: var(--surface-muted);
+  }
+}
+
+.arc-market .arc-overview-record-copy {
+  min-width: 0;
+}
+
+.arc-market .arc-overview-record-link {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  align-items: center;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+  text-underline-offset: 4px;
+}
+
+.arc-market .arc-overview-record-link:hover {
+  text-decoration: underline;
+}
+
+.arc-market .arc-overview-record-detail {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-overview-record-reference {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-self: end;
+  justify-content: flex-end;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-overview-record-reference > * {
+  max-width: 100%;
+}
+
+.arc-market .arc-overview-record-action {
+  max-width: 100%;
+  justify-self: start;
+}
+
+@media (max-width: 520px) {
+  .arc-market .arc-overview-record-row {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .arc-market .arc-overview-record-reference {
+    justify-self: start;
+    justify-content: flex-start;
+  }
+}

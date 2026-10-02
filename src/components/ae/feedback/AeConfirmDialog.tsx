@@ -1,19 +1,11 @@
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+/* Arc dialog panel/header/body composition over the existing Base UI alert
+ * primitive. Requires caller-owned decision facts and outcomes; ensures the
+ * same duplicate guard, pending dismissal guard and connected focus return. */
+import { AlertDialog } from "@base-ui/react/alert-dialog";
+import { Button } from "@/components/arc/button/button";
 import type { Rule4Diagnostic } from "@/lib/ui/diagnostic";
-import { cn } from "@/lib/utils";
 import { useRef, type ReactNode, type RefObject } from "react";
-
-export const TACTILE =
-  "enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100";
+import "./ConfirmComposition.css";
 
 export type AeConfirmDialogProps = {
   open: boolean;
@@ -75,12 +67,15 @@ export function AeConfirmDialog({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent
+    <AlertDialog.Root open={open} onOpenChange={handleOpenChange}>
+      <AlertDialog.Portal>
+      <AlertDialog.Backdrop className="arc-market arc-confirm-backdrop" />
+      <AlertDialog.Popup
+        className="arc-market arc-confirm-dialog"
+        data-slot="alert-dialog-content"
         {...(returnFocusRef !== undefined || returnFocusFallbackRefs.length > 0
           ? {
-              onCloseAutoFocus: (event) => {
-                event.preventDefault();
+              finalFocus: () => {
                 const targets = [returnFocusRef, ...returnFocusFallbackRefs];
                 const target = targets
                   .map((ref) => ref?.current)
@@ -90,20 +85,22 @@ export function AeConfirmDialog({
                     && element !== document.body
                     && !(element instanceof HTMLButtonElement && element.disabled));
                 target?.focus();
+                return false;
               },
             }
           : {})}
       >
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+        <header className="arc-confirm-header">
+          <AlertDialog.Title className="arc-confirm-title">{title}</AlertDialog.Title>
+          <AlertDialog.Description className="arc-confirm-description">{description}</AlertDialog.Description>
+        </header>
           {extendedBody ? (
-            <>
+            <div className="arc-confirm-body">
               {children !== undefined ? (
-                <div className="grid gap-2">{children}</div>
+                <div className="arc-confirm-context">{children}</div>
               ) : null}
               {financialImpact !== undefined ? (
-                <div className="rounded-md border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                <div className="arc-confirm-impact">
                   {financialImpact}
                 </div>
               ) : null}
@@ -122,19 +119,18 @@ export function AeConfirmDialog({
                   </div>
                 </div>
               ) : null}
-            </>
+            </div>
           ) : null}
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel type="button" disabled={pending} className={TACTILE}>
+        <footer className="arc-confirm-actions">
+          <AlertDialog.Close type="button" disabled={pending} render={<Button variant="secondary" />}>
             {cancelLabel}
-          </AlertDialogCancel>
+          </AlertDialog.Close>
           {showConfirm ? (
             <Button
               type="button"
-              variant={confirmVariant}
+              variant={confirmVariant === "destructive" ? "danger" : "primary"}
               disabled={pending}
-              className={cn("min-w-[11rem]", TACTILE)}
+              aria-busy={pending || undefined}
               onClick={() => {
                 void handleConfirm();
               }}
@@ -142,8 +138,9 @@ export function AeConfirmDialog({
               {pending ? "Working…" : confirmLabel}
             </Button>
           ) : null}
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </footer>
+      </AlertDialog.Popup>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   );
 }

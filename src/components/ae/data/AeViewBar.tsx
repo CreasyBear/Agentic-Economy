@@ -1,9 +1,8 @@
 import { useId, type ReactNode } from 'react'
 import { SearchIcon } from 'lucide-react'
 
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import '../operator/RecordTable.css'
 
 type AeViewBarProps = {
   filterValue?: string
@@ -30,32 +29,32 @@ export function AeViewBar({
   return (
     <div
       className={cn(
-        'flex min-h-touch flex-wrap items-center gap-related border-b border-border py-intra',
+        'arc-market arc-record-viewbar',
         className,
       )}
     >
       {showFilter ? (
-        <div className="relative min-w-0 flex-1">
-          <Label htmlFor={filterId} className="sr-only">
+        <div className="arc-record-search">
+          <label htmlFor={filterId} className="sr-only">
             {filterPlaceholder}
-          </Label>
+          </label>
           <SearchIcon
             aria-hidden="true"
             className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           />
-          <Input
+          <input
             id={filterId}
             value={filterValue ?? ''}
             onChange={(event) => onFilterChange(event.currentTarget.value)}
             placeholder={filterPlaceholder}
-            className="min-h-touch max-w-sm ps-9"
+            className="arc-record-search-input"
           />
         </div>
       ) : (
         <div className="min-w-0 flex-1" />
       )}
       {count === undefined ? null : (
-        <p className="font-mono text-xs tabular-nums text-muted-foreground">
+        <p className="arc-record-count">
           {count.toLocaleString()} {countLabel}
         </p>
       )}

@@ -77,6 +77,16 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
     expect(screen.queryByText(/monthly spending limit reached/i)).not.toBeInTheDocument()
   })
 
+  it('withholds zero-spend claims and utilization while monthly spend is unavailable', () => {
+    render(<AeMonthlySpendCeilingCard settings={{ enabled: true, ceilingUnits: CEILING_UNITS, revision: 1 }}
+      monthSpend={{ kind: 'unavailable' }} onSave={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Monthly cap; monthly spend is unavailable.')
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.queryByText(/spent of/u)).toBeNull()
+    expect(screen.getByText('Monthly spend data is unavailable.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit limit' })).toBeEnabled()
+  })
+
   it('U3: 90% utilization (critical) shows Approaching monthly limit (90%)', () => {
     const onSave = vi.fn()
     render(

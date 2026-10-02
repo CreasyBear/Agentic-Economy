@@ -2,11 +2,11 @@
 
 import { AlertCircleIcon, CheckIcon, ShieldAlertIcon } from 'lucide-react'
 
-import { buttonVariants } from '@/components/ui/button-variants'
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
+import { Button } from '@/components/arc/button/button'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type {
   AgentSpendingLimitsReadResult,
@@ -15,13 +15,13 @@ import type {
 import type { ExactAmount } from '@/modules/money/public'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 
-import { cn } from '@/lib/utils'
 import { SpendingLimitsReadout } from './components/SpendingLimitsReadout'
 import { SpendingMonthlyQuotaGauge } from './components/SpendingMonthlyQuotaGauge'
 import { SpendingPauseToggle } from './components/SpendingPauseToggle'
 import { SpendingPolicyDiagnosticSlot } from './components/SpendingPolicyDiagnosticSlot'
 import { SpendingPresetSelector } from './components/SpendingPresetSelector'
 import { useAgentSpendingLimits } from './useAgentSpendingLimits'
+import './SpendingPolicyComposition.css'
 
 export type AeAgentSpendingLimitsFormProps = Readonly<{
   detail: AgentDetail
@@ -48,10 +48,10 @@ export function AeAgentSpendingLimitsForm({
   const { view, policy, loading } = hook
 
   return (
-    <div className="grid min-h-[24.5rem] gap-4 rounded-md border bg-muted/20 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">Spending policy</span>
+    <div className="arc-market arc-spending-policy">
+      <div className="arc-spending-policy-header">
+        <div className="arc-spending-policy-heading">
+          <span className="arc-spending-policy-title">Spending policy</span>
           {loading ? (
             <Badge variant="outline">Refreshing</Badge>
           ) : policy.kind === 'known' && view.isPaused ? (
@@ -68,7 +68,7 @@ export function AeAgentSpendingLimitsForm({
             <Badge variant="outline">{policy.kind === 'expired' ? getStatusPresentation('expired').label : policy.kind === 'unset' ? 'Unset' : getStatusPresentation('unavailable').label}</Badge>
           )}
         </div>
-        <div className="flex min-h-touch items-center gap-2">
+        <div className="arc-spending-policy-header-actions">
           {view.showHeaderActions ? (
             <>
               <SpendingPauseToggle
@@ -77,43 +77,41 @@ export function AeAgentSpendingLimitsForm({
                 disabled={view.pending}
                 onTogglePause={hook.handleTogglePause}
               />
-              <Button type="button" variant="outline" size="sm" onClick={hook.handleStartEdit} className="min-h-touch">
+              <Button type="button" variant="secondary" size="md" onClick={hook.handleStartEdit}>
                 Edit limits
               </Button>
             </>
-          ) : (
-            <span className="invisible min-h-touch min-w-[12rem]" aria-hidden />
-          )}
+          ) : null}
         </div>
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground" role="status">Refreshing spending policy…</p>
+        <p className="arc-spending-policy-hint" role="status">Refreshing spending policy…</p>
       ) : policy.kind === 'unavailable' ? (
-        <div className="flex flex-wrap items-center gap-3 text-sm" role="status">
-          <span>Spending policy unavailable. Limits cannot be edited until the current authority is verified.</span>
-          <Button type="button" variant="outline" size="sm" onClick={onReadSpendingLimits === undefined ? () => window.location.reload() : hook.handleRefresh} className="min-h-touch">Refresh</Button>
+        <div className="arc-spending-policy-failure" role="status">
+          <span className="arc-spending-policy-hint">Spending policy unavailable. Limits cannot be edited until the current authority is verified.</span>
+          <Button type="button" variant="secondary" size="md" onClick={onReadSpendingLimits === undefined ? () => window.location.reload() : hook.handleRefresh}>Refresh</Button>
         </div>
       ) : policy.kind === 'expired' ? (
-        <div className="grid gap-2 text-sm" role="status">
-          <span>Agent authority expired. Renew the connection to set new spending limits.</span>
-          <a href="/agent-access" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-fit min-h-touch')}>Renew connection</a>
+        <div className="arc-spending-policy-renewal" role="status">
+          <span className="arc-spending-policy-hint">Agent authority expired. Renew the connection to set new spending limits.</span>
+          <a href="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-spending-policy-renew`}>Renew connection</a>
         </div>
       ) : policy.kind === 'unset' ? (
-        <p className="text-sm text-muted-foreground">No spending policy set.</p>
+        <p className="arc-spending-policy-hint">No spending policy set.</p>
       ) : null}
-      <div className="min-h-[4.75rem] rounded-md" aria-live="polite">
+      <div className="arc-spending-policy-diagnostic" aria-live="polite">
         {view.showDiagnostic && view.diagnostic !== null ? (
           <SpendingPolicyDiagnosticSlot diagnostic={view.diagnostic} />
         ) : null}
       </div>
       {policy.kind === 'known' && !loading ? (
         <>
-          <div className="min-h-[2.75rem]">
+          <div className="arc-spending-policy-pause-notice">
             {view.isPaused ? (
               <Alert className="border-warning-ring bg-warning-subtle py-2 text-warning-foreground">
                 <AlertCircleIcon className="size-4" />
-                <AlertDescription className="text-xs">
+                <AlertDescription className="arc-spending-policy-hint">
                   This agent is paused. New paid Calls will be refused. In-flight Calls are not cancelled.
                   {' '}
                   A$0.00 new spend authorized until you resume.
@@ -123,7 +121,7 @@ export function AeAgentSpendingLimitsForm({
           </div>
 
           {view.editing ? (
-            <form onSubmit={hook.handleSave} className="grid gap-3">
+            <form onSubmit={hook.handleSave} className="arc-spending-policy-form">
               <SpendingLimitInputs
                 presentation="editable"
                 ids={{ perCall: 'per-call-spend', daily: 'daily-spend', monthly: 'monthly-spend' }}
@@ -140,11 +138,11 @@ export function AeAgentSpendingLimitsForm({
                 disabled={view.pending}
                 onSelectPreset={hook.applyPreset}
               />
-              <div className="flex min-h-touch items-center justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" disabled={view.pending} onClick={hook.handleCancelEdit} className="min-h-touch">
+              <div className="arc-spending-policy-footer">
+                <Button type="button" variant="secondary" size="md" disabled={view.pending} onClick={hook.handleCancelEdit}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" disabled={view.pending} className="min-h-touch">
+                <Button type="submit" variant="primary" size="md" disabled={view.pending}>
                   {view.pending ? 'Saving...' : 'Save Limits'}
                 </Button>
               </div>
@@ -153,8 +151,6 @@ export function AeAgentSpendingLimitsForm({
             <>
               <SpendingLimitsReadout {...view.readout} />
               <SpendingMonthlyQuotaGauge {...view.quota} />
-              <div className="min-h-[2.75rem]" aria-hidden />
-              <div className="min-h-touch" aria-hidden />
             </>
           )}
         </>

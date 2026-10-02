@@ -126,4 +126,33 @@ describe('admin object page routes', () => {
     expect(screen.getByRole('link', { name: 'Back to Search' }).getAttribute('href')).toBe('/admin/search')
     expect(runtime.query).not.toHaveBeenCalled()
   })
+
+  it('keeps the exact related Quote references and destinations beside its recorded facts', () => {
+    const consumedCallRef = `operation-invocation:v1:${'c'.repeat(64)}`
+    renderRoute(quoteCase.path, quoteCase.param, quoteCase.ref, {
+      ...quoteCase.view,
+      toolRef,
+      workspaceRef: accountRef,
+      agentRef: principalRef,
+      consumedCallRef,
+    })
+    expect(screen.getByRole('link', { name: 'Tool version' }).getAttribute('href')).toBe(`/admin/tools/${toolRef}`)
+    expect(screen.getByRole('link', { name: 'Workspace' }).getAttribute('href')).toBe(`/admin/workspaces/${accountRef}`)
+    expect(screen.getByRole('link', { name: 'Agent' }).getAttribute('href')).toBe(`/admin/agents/${principalRef}`)
+    expect(screen.getByRole('link', { name: 'Consumed Call' }).getAttribute('href')).toBe(`/admin/calls/${consumedCallRef}`)
+    expect(screen.getAllByText(consumedCallRef)).toHaveLength(2)
+    expect(screen.getByText(toolRef)).toBeTruthy()
+    expect(screen.getByText(accountRef)).toBeTruthy()
+    expect(screen.getByText(principalRef)).toBeTruthy()
+  })
+
+  it('withholds object facts and actions while showing a named busy loading region', () => {
+    renderRoute(quoteCase.path, quoteCase.param, quoteCase.ref, undefined)
+    const loading = screen.getByLabelText('Loading admin object')
+    expect(loading.getAttribute('aria-busy')).toBe('true')
+    expect(loading.querySelector('[aria-hidden="true"]')).toBeTruthy()
+    expect(screen.queryByText(quoteRef)).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
 })

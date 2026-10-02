@@ -1,120 +1,50 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AeSiteSection } from '@/components/ae/website/AeSiteSection'
 import { AeSiteEyebrow, AeSiteHeading } from '@/components/ae/website/AeSiteType'
 
+afterEach(cleanup)
+
 describe('AePageHeader', () => {
-  it('uses a discover eyebrow without a marker for public page intros', () => {
-    render(
-      <AePageHeader
-        eyebrow="Catalog"
-        title="The tool catalog"
-        description="Compare exact Operations on price and readiness."
-      />,
-    )
-
-    const eyebrow = screen.getByText('Catalog')
-    expect(eyebrow.className).toContain('mb-3')
-    expect(eyebrow.className).toContain('block')
-    expect(eyebrow.className).toContain('font-eyebrow')
-    expect(eyebrow.className).toContain('tracking-eyebrow')
-
+  it('names its region with one title and retains the factual context and description', () => {
+    render(<AePageHeader eyebrow="Catalog" title="The tool catalog"
+      description="Compare exact Operations on price and readiness." />)
     const heading = screen.getByRole('heading', { level: 1, name: 'The tool catalog' })
-    expect(heading.classList.contains('font-display')).toBe(false)
-    expect(heading.classList.contains('font-extralight')).toBe(true)
-    expect(heading.classList.contains('text-4xl')).toBe(true)
-    expect(heading.className).toContain('tracking-[-0.035em]')
-    expect(screen.getByText('Compare exact Operations on price and readiness.')).toBeTruthy()
+    const region = screen.getByRole('region', { name: 'The tool catalog' })
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(region.getAttribute('aria-labelledby')).toBe(heading.id)
+    expect(document.getElementById(region.getAttribute('aria-describedby')! as string)?.textContent)
+      .toBe('Compare exact Operations on price and readiness.')
+    expect(screen.getByText('Catalog')).toBeTruthy()
   })
 
-  it('uses the stronger interface face for compact workspaces', () => {
-    render(
-      <AePageHeader
-        variant="workspace"
-        eyebrow="Market"
-        title="Operation terminal"
-        description="Compare price, evidence, and readiness."
-      />,
-    )
-
-    const headerSection = screen
-      .getByRole('heading', { level: 1, name: 'Operation terminal' })
-      .closest('section')
-    expect(headerSection?.getAttribute('data-header-profile')).toBe('workspace')
-
-    const heading = screen.getByRole('heading', { level: 1, name: 'Operation terminal' })
-    expect(heading.classList.contains('font-sans')).toBe(true)
-    expect(heading.classList.contains('font-medium')).toBe(true)
-    expect(heading.classList.contains('font-bold')).toBe(false)
-    expect(heading.classList.contains('font-display')).toBe(false)
+  it.each([
+    ['workspace', 'workspace'], ['page', 'editorial'], ['market', 'market'],
+  ] as const)('preserves the %s layout profile', (variant, profile) => {
+    render(<AePageHeader variant={variant} title="Tool catalog" description="One bounded result." />)
+    expect(screen.getByRole('region', { name: 'Tool catalog' }).getAttribute('data-header-profile')).toBe(profile)
   })
 
-  it('exposes the editorial header profile for public page intros (default variant)', () => {
-    render(
-      <AePageHeader
-        title="About Agentic Economy"
-        description="The commercial boundary for just-in-time service procurement."
-      />,
-    )
-
-    const heading = screen.getByRole('heading', { level: 1, name: 'About Agentic Economy' })
-    const section = heading.closest('section')
-    expect(section?.getAttribute('data-header-profile')).toBe('editorial')
-    expect(section?.className).toMatch(/py-16/)
-    expect(section?.className).toMatch(/md:py-24/)
-    expect(heading.classList.contains('font-display')).toBe(false)
-    expect(heading.classList.contains('font-extralight')).toBe(true)
-    expect(heading.classList.contains('text-4xl')).toBe(true)
-    expect(heading.className).toContain('md:text-5xl')
-    expect(heading.className).toContain('lg:text-6xl')
+  it('retains live counts and invokes the supplied action', () => {
+    const onAction = vi.fn()
+    render(<AePageHeader variant="market" title="Tool catalog" description="Compare Operations."
+      meta="2,412 matching Operations" actions={<button type="button" onClick={onAction}>Compare</button>} />)
+    expect(screen.getByRole('status').textContent).toBe('2,412 matching Operations')
+    expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite')
+    fireEvent.click(screen.getByRole('button', { name: 'Compare' }))
+    expect(onAction).toHaveBeenCalledOnce()
   })
 
-  it('exposes the editorial header profile when variant is page', () => {
-    render(
-      <AePageHeader
-        variant="page"
-        title="Editorial page"
-        description="Expansive display typography."
-      />,
-    )
-
-    const section = screen
-      .getByRole('heading', { level: 1, name: 'Editorial page' })
-      .closest('section')
-    expect(section?.getAttribute('data-header-profile')).toBe('editorial')
-  })
-
-  it('keeps the market profile while using the public type and rhythm canon', () => {
-    render(
-      <AePageHeader
-        variant="market"
-        title="Tool catalog"
-        description="Compare Operations on price and readiness."
-        meta="2,412 matching Operations"
-      />,
-    )
-
-    const heading = screen.getByRole('heading', { level: 1, name: 'Tool catalog' })
-    const section = heading.closest('section')
-    expect(section?.getAttribute('data-header-profile')).toBe('market')
-    expect(section?.className).toMatch(/py-16/)
-    expect(section?.className).toMatch(/md:py-24/)
-
-    expect(heading.classList.contains('font-display')).toBe(false)
-    expect(heading.classList.contains('font-extralight')).toBe(true)
-    expect(heading.classList.contains('text-4xl')).toBe(true)
-
-    const status = screen.getByRole('status')
-    expect(status.textContent).toBe('2,412 matching Operations')
-    expect(status.classList.contains('font-mono')).toBe(true)
-    expect(status.classList.contains('tabular-nums')).toBe(true)
-    expect(status.classList.contains('text-xs')).toBe(true)
-    expect(status.classList.contains('text-muted-foreground')).toBe(true)
+  it('focuses the committed title when requested, including a new title on the same instance', () => {
+    const view = render(<AePageHeader focusTitle title="Privacy" description="Privacy details." />)
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Privacy' }))
+    view.rerender(<AePageHeader focusTitle title="Terms" description="Terms details." />)
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Terms' }))
   })
 })
 

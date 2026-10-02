@@ -1,5 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 
+import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { ADMIN_METRICS_COPY, type AdminMetricDayRow } from '../metrics.contracts'
@@ -27,7 +28,7 @@ export type MetricsDayTableProps = Readonly<{ rows: readonly AdminMetricDayRow[]
 
 export function MetricsDayTable({ rows }: MetricsDayTableProps) {
   return (
-    <AeSection title={ADMIN_METRICS_COPY.dailyTitle}>
+    <AeSection className="arc-market arc-admin-record-table-region" title={ADMIN_METRICS_COPY.dailyTitle}>
       <AeRecordTable
         columns={columns}
         data={rows}

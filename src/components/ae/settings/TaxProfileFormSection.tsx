@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 
 import { TaxProfileForm } from '@/components/ae/settings/TaxProfileForm'
+import './TaxProfileComposition.css'
 import {
   toTaxProfileInitialData,
   type CustomerTaxFactsRead,
@@ -31,7 +32,13 @@ export function TaxProfileFormSection() {
   const saveIdempotencyRef = useRef(`idem:tax-profile:${crypto.randomUUID()}`)
 
   if (facts === undefined) {
-    return <SettingsPage title="Tax" description="Keep your Australian business and billing details current."><Skeleton className="min-h-[28rem] w-full" aria-busy="true" /></SettingsPage>
+    return <SettingsPage title="Tax" description="Keep your Australian business and billing details current.">
+      <div className="arc-market arc-tax-profile-loading" aria-busy="true">
+        {[0, 1, 2, 3].map(index => <div key={index} className="arc-tax-profile-placeholder" aria-hidden="true">
+          <Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-11 w-full max-w-96" />
+        </div>)}
+      </div>
+    </SettingsPage>
   }
 
   const handleSubmit = async (payload: TaxProfileSubmitPayload) => {

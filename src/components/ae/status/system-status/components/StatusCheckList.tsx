@@ -2,20 +2,21 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Badge } from '@/components/ui/badge'
 
 import type { StatusCheckListProps } from '../system-status.contracts'
+import '../../StatusComposition.css'
 
 export function StatusCheckList({ checks, isChecking }: StatusCheckListProps) {
   return (
-    <div className="overflow-hidden rounded-card border border-border bg-card">
-      <ul className="divide-y divide-border" aria-busy={isChecking}>
+    <div className="arc-market arc-system-checks">
+      <ul className="arc-system-check-list" aria-busy={isChecking} aria-label="System checks">
         {checks.map((check) => (
-          <li key={check.id} className="flex min-h-touch flex-wrap items-center gap-intra px-gutter py-intra">
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-foreground">{check.label}</p>
-              <p className="text-sm text-muted-foreground">{check.detail}</p>
-              <p className="text-xs text-muted-foreground">{check.checkedAtLabel}</p>
+          <li key={check.id} className="arc-system-check-row">
+            <div className="arc-system-check-content">
+              <p className="arc-system-check-label">{check.label}</p>
+              <p className="arc-system-check-detail">{check.detail}</p>
+              <p className="arc-system-check-time">{check.checkedAtLabel}</p>
               {check.requestRef !== undefined && (
-                <div className="mt-intra grid gap-1">
-                  <p className="text-xs font-medium text-muted-foreground">Request reference</p>
+                <div className="arc-system-check-ref">
+                  <p>Request reference</p>
                   <AeCopyReference label={`${check.label} request reference`} value={check.requestRef} />
                 </div>
               )}

@@ -2,7 +2,7 @@
 // MIT licence and upstream attribution: docs/licenses/spree-storefront.txt.
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Field, FieldGroup, FieldLabel, FieldDescription } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -16,12 +16,12 @@ export function DirectoryFilters({ search, onApply }: Props) {
   return <Sheet open={open} onOpenChange={setOpen}>
     <SheetTrigger
       render={
-        <Button variant="outline" className="min-h-touch rounded-full sm:min-h-10">
+        <Button type="button" variant="secondary" className="min-h-touch rounded-full sm:min-h-10">
           <SlidersHorizontal className="size-4" /> Filters{count > 0 ? ` (${count})` : ''}
         </Button>
       }
     />
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+      <SheetContent className="arc-market arc-market-filters flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <SheetHeader className="border-b p-6 pr-12">
           <SheetTitle>Filter Tools</SheetTitle>
           <SheetDescription>Search the directory by network, provider or maximum price per Call.</SheetDescription>
@@ -89,8 +89,8 @@ function FilterForm({ search, onApply }: Props) {
     {error === undefined ? null : <p id={`${id}-error`} role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
     </div>
     <div className="flex items-stretch gap-3 border-t p-6">
-      <Button type="button" variant="outline" className="min-h-touch flex-1" onClick={() => { setNetwork(''); setProvider(''); setPrice(''); setError(undefined); setInvalidField(undefined) }}>Clear filters</Button>
-      <Button type="submit" className="min-h-touch flex-1">Show results</Button>
+      <Button labelLayout="wrap" type="button" variant="secondary" className="min-h-touch flex-1" onClick={() => { setNetwork(''); setProvider(''); setPrice(''); setError(undefined); setInvalidField(undefined) }}>Clear filters</Button>
+      <Button labelLayout="wrap" type="submit" className="min-h-touch flex-1">Show results</Button>
     </div>
   </form>
 }

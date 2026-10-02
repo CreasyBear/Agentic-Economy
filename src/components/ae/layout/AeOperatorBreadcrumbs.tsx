@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
+import { Button } from '@/components/arc/button/button'
 
 import {
   Breadcrumb,
@@ -22,10 +23,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
-
-const BREADCRUMB_LINK_TACTILE =
-  'active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+import './AppFrameComposition.css'
+import './app-shell/WorkspaceNavigationComposition.css'
 
 export type OperatorBreadcrumbItem = {
   label: string
@@ -88,7 +87,7 @@ function BreadcrumbLabelText({ label }: BreadcrumbLabelProps) {
           <span className="inline-flex max-w-full cursor-default">{text}</span>
         }
       />
-      <TooltipContent className="text-xs max-w-xs break-all">{label}</TooltipContent>
+      <TooltipContent className="arc-market arc-breadcrumb-tooltip">{label}</TooltipContent>
     </Tooltip>
   )
 }
@@ -112,7 +111,6 @@ function renderBreadcrumbCrumb({ item, index, total }: RenderCrumbProps): ReactN
 
   return (
     <BreadcrumbLink
-      className={BREADCRUMB_LINK_TACTILE}
       render={
         <Link to={item.href}>
           <BreadcrumbLabelText label={item.label} />
@@ -153,7 +151,7 @@ export function AeOperatorBreadcrumbs({ items }: AeOperatorBreadcrumbsProps) {
 
   return (
     <TooltipProvider>
-      <Breadcrumb aria-label="Breadcrumb" className="min-w-0">
+      <Breadcrumb aria-label="Breadcrumb" className="arc-market arc-breadcrumbs">
         <BreadcrumbList className="min-h-touch items-center">
           {segments.map((segment, segmentIndex) => {
             const segmentKey =
@@ -173,23 +171,23 @@ export function AeOperatorBreadcrumbs({ items }: AeOperatorBreadcrumbsProps) {
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={
-                          <button
+                          <Button
                             type="button"
-                            className={cn(
-                              'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                              BREADCRUMB_LINK_TACTILE,
-                            )}
+                            variant="ghost"
+                            size="md"
+                            className="arc-market arc-workspace-menu-trigger"
                             aria-label="Show intermediate crumbs"
                           />
                         }
                       >
-                        <BreadcrumbEllipsis className="size-8" />
+                        <BreadcrumbEllipsis className="size-5" />
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="min-w-44">
+                      <DropdownMenuContent align="start" className="arc-market arc-workspace-menu">
                         {segment.hidden.map((hiddenItem) =>
                           hiddenItem.href ? (
                             <DropdownMenuItem
                               key={`${hiddenItem.href}:${hiddenItem.label}`}
+                              className="arc-breadcrumb-menu-item"
                               render={<Link to={hiddenItem.href} className="w-full" />}
                             >
                               {hiddenItem.label}
@@ -197,6 +195,7 @@ export function AeOperatorBreadcrumbs({ items }: AeOperatorBreadcrumbsProps) {
                           ) : (
                             <DropdownMenuItem
                               key={`crumb:${hiddenItem.label}`}
+                              className="arc-breadcrumb-menu-item"
                             >
                               {hiddenItem.label}
                             </DropdownMenuItem>

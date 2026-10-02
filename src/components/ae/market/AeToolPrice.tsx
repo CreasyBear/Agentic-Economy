@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import './PriceComposition.css'
 
 /**
  * The price figure that leads every buy decision. Same component on the
@@ -18,18 +19,11 @@ export function AeToolPrice({
   validUntil?: number;
 }) {
   return (
-    <p className={cn("grid min-w-0 content-start gap-0.5", className)}>
-      <span className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
+    <p className={cn("arc-market arc-tool-price", className)} data-size={size}>
+      <span className="arc-tool-price-label">
         {label}
       </span>
-      <span
-        className={cn(
-          "font-mono font-semibold tabular-nums text-foreground",
-          size === "sm" && "text-sm",
-          size === "md" && "text-lg",
-          size === "lg" && "text-2xl",
-        )}
-      >
+      <span className="arc-tool-price-value">
         {price}
       </span>
     </p>
@@ -39,4 +33,3 @@ export function AeToolPrice({
 export function ToolPriceText({ price }: { price: string; validUntil?: number }) {
   return <>{price}</>;
 }
-

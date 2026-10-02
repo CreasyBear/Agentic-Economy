@@ -1,14 +1,20 @@
 import { Link } from '@tanstack/react-router'
 
+import buttonStyles from '@/components/arc/button/button.module.css'
+
 import type { StatusPageFooterProps } from '../system-status.contracts'
+import '../../StatusComposition.css'
 
 export function StatusPageFooter({ statusAnnouncement }: StatusPageFooterProps) {
   return (
-    <div className="mt-related flex flex-wrap items-center justify-between gap-intra text-sm text-muted-foreground">
+    <div className="arc-market arc-system-status-footer">
       <p role="status" aria-live="polite" aria-atomic="true">
         {statusAnnouncement}
       </p>
-      <Link to="/support" className="min-h-touch content-center font-medium text-foreground underline underline-offset-4">
+      <Link
+        to="/support"
+        className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}
+      >
         Help
       </Link>
     </div>

@@ -2,6 +2,7 @@ import { WorkspaceClosePanel } from './components/WorkspaceClosePanel'
 import { WorkspaceTransferPanel } from './components/WorkspaceTransferPanel'
 import { useWorkspaceDangerZone } from './useWorkspaceDangerZone'
 import { WorkspaceDangerZoneSkeleton } from './WorkspaceDangerZoneSkeleton'
+import './WorkspaceDangerComposition.css'
 
 export function WorkspaceDangerZone() {
   const { loading, closePanel, transferPanel } = useWorkspaceDangerZone()
@@ -11,7 +12,7 @@ export function WorkspaceDangerZone() {
   }
 
   return (
-    <div className="grid gap-section">
+    <div className="arc-market arc-workspace-danger-workspace">
       <WorkspaceClosePanel {...closePanel} />
       <WorkspaceTransferPanel {...transferPanel} />
     </div>
