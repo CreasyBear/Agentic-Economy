@@ -1,3 +1,4 @@
+import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import { recordCallTerminal } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
@@ -236,6 +237,11 @@ async function denyPendingApproval(ctx: MutationCtx, row: PendingApprovalRow): P
 const APPROVAL_EXPIRY_PAGE_SIZE = 200
 
 export type ApprovalExpiryPage = Readonly<{ scanned: number; scheduled: number; blocked: number }>
+export const continueApprovalExpiryArgs = v.object({
+  afterCreatedAt: v.optional(v.number()),
+  continuation: v.optional(v.object({ cutoff: v.number(), cursor: v.string() })),
+})
+type ApprovalExpiryArgs = Infer<typeof continueApprovalExpiryArgs>
 
 function approvalIsExpired(createdAt: number, now: number): boolean {
   return now - createdAt >= AUTHORITY_REQUEST_TTL_MS
@@ -247,20 +253,31 @@ function approvalCanBeRefused(row: PendingApprovalRow): boolean {
 
 async function scheduleStaleApprovalPage(
   ctx: MutationCtx,
-  afterCreatedAt: number | undefined,
+  args: ApprovalExpiryArgs,
 ): Promise<ApprovalExpiryPage> {
-  const cutoff = Date.now() - AUTHORITY_REQUEST_TTL_MS
-  const rows = await ctx.db.query('capabilityCalls')
+  const cutoff = args.continuation?.cutoff ?? Date.now() - AUTHORITY_REQUEST_TTL_MS
+  const cursor = args.continuation?.cursor ?? null
+  const { afterCreatedAt } = args
+  if (!Number.isSafeInteger(cutoff) || cutoff < 0 || cutoff > Date.now() - AUTHORITY_REQUEST_TTL_MS
+    || (afterCreatedAt !== undefined && (!Number.isSafeInteger(afterCreatedAt) || afterCreatedAt < 0 || afterCreatedAt > cutoff))) {
+    throw new Error('approval_expiry_cutoff_invalid')
+  }
+  if (cursor !== null && cursor.trim().length === 0) throw new Error('approval_expiry_cursor_invalid')
+  const page = await ctx.db.query('capabilityCalls')
     .withIndex('by_state_and_result_kind_and_createdAt', (query) => {
       const stale = query.eq('state', 'pending').eq('result.kind', 'needs_authority')
+      // Queued legacy continuations replay the boundary timestamp; per-Call refusal is idempotent.
       return afterCreatedAt === undefined
         ? stale.lte('createdAt', cutoff)
-        : stale.gt('createdAt', afterCreatedAt).lte('createdAt', cutoff)
+        : stale.gte('createdAt', afterCreatedAt).lte('createdAt', cutoff)
     })
-    .take(APPROVAL_EXPIRY_PAGE_SIZE)
+    .paginate({ numItems: APPROVAL_EXPIRY_PAGE_SIZE, maximumRowsRead: APPROVAL_EXPIRY_PAGE_SIZE, cursor })
+  if (!page.isDone && (page.continueCursor.trim().length === 0 || page.continueCursor === cursor)) {
+    throw new Error('approval_expiry_cursor_invalid')
+  }
   let scheduled = 0
   let blocked = 0
-  for (const row of rows) {
+  for (const row of page.page) {
     if (!pendingApprovalRow(row)) continue
     if (!approvalCanBeRefused(row)) {
       blocked += 1
@@ -269,10 +286,10 @@ async function scheduleStaleApprovalPage(
     await ctx.scheduler.runAfter(0, internal.capabilityCalls.expireStaleApproval, { callRef: row.callRef })
     scheduled += 1
   }
-  const last = rows.at(-1)
-  if (rows.length === APPROVAL_EXPIRY_PAGE_SIZE && last !== undefined) {
+  if (!page.isDone) {
     await ctx.scheduler.runAfter(0, internal.capabilityCalls.continueApprovalExpiry, {
-      afterCreatedAt: last.createdAt,
+      ...(afterCreatedAt === undefined ? {} : { afterCreatedAt }),
+      continuation: { cutoff, cursor: page.continueCursor },
     })
   }
   if (blocked > 0) {
@@ -281,7 +298,7 @@ async function scheduleStaleApprovalPage(
       reason: 'invalid_response',
     })
   }
-  return { scanned: rows.length, scheduled, blocked }
+  return { scanned: page.page.length, scheduled, blocked }
 }
 
 export async function expireStalePendingApprovalsHandler(
@@ -290,14 +307,14 @@ export async function expireStalePendingApprovalsHandler(
 ): Promise<ApprovalExpiryPage> {
   const workload = parseWorkloadCronSnapshot(args.workload)
   await reconcileWorkloadCronSnapshot(ctx, 'expire stale pending approvals', workload)
-  return await scheduleStaleApprovalPage(ctx, undefined)
+  return await scheduleStaleApprovalPage(ctx, {})
 }
 
 export async function continueApprovalExpiryHandler(
   ctx: MutationCtx,
-  args: Readonly<{ afterCreatedAt: number }>,
+  args: ApprovalExpiryArgs,
 ): Promise<ApprovalExpiryPage> {
-  return await scheduleStaleApprovalPage(ctx, args.afterCreatedAt)
+  return await scheduleStaleApprovalPage(ctx, args)
 }
 
 export async function expireStaleApprovalHandler(

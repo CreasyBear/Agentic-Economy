@@ -8,7 +8,7 @@ import {
 } from './lib/capabilityExecution/callLifecycle/contracts'
 import { approvalDecisionResult } from './lib/capabilityExecution/callLifecycle/admissionApproval'
 import {
-  continueApprovalExpiryHandler, expireStaleApprovalHandler, expireStalePendingApprovalsHandler,
+  continueApprovalExpiryArgs, continueApprovalExpiryHandler, expireStaleApprovalHandler, expireStalePendingApprovalsHandler,
 } from './lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import { abandonArgs, abandonResult, reserveArgs, reserveResult } from './lib/capabilityExecution/callLifecycle/admissionReservation'
@@ -117,7 +117,7 @@ export const expireStalePendingApprovals = internalMutation({
   handler: expireStalePendingApprovalsHandler,
 })
 export const continueApprovalExpiry = internalMutation({
-  args: { afterCreatedAt: v.number() },
+  args: continueApprovalExpiryArgs,
   returns: approvalExpiryPageValue,
   handler: continueApprovalExpiryHandler,
 })

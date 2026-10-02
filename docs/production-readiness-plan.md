@@ -2651,3 +2651,74 @@ This is a local branch integration. No push, Actions run, Preview build, backend
 deployment or main merge occurs. The active Arc checkpoint and the full gate on
 the consolidated result remain required before merging to main; this baseline
 alone does not establish deployed UI or production/live-money readiness.
+
+### Stage 40 — drain approval expiry across timestamp ties
+
+The prior sweep used a timestamp-only continuation: after a 200-row page it
+selected `createdAt > last.createdAt`. Three executable regressions confirmed
+that this skips tied rows, including a clean approval behind 200 blocked rows.
+It also skips the boundary when resuming a previously queued continuation.
+
+**Requires:** an admitted initial sweep and a valid continuation whose cutoff
+and cursor stay paired. **Ensures:** bounded native index pages visit every
+eligible row at the fixed cutoff, including timestamp ties and rows beyond a
+blocked page. **Invariant:** expiry never grants authority or dispatches a Call;
+uncertain funds and already-authorised/claimed Calls stay untouched. Per-Call
+refusal rechecks current state and schedules a refund only on the first valid
+transition. **On violation:** malformed cutoff/cursor input aborts the mutation
+before scheduling or changing Calls. A failed page transaction rolls back its
+scheduled work; the admitted periodic sweep can retry from the beginning.
+
+The fix uses the existing Convex index and native opaque pagination, with a
+200-row read/page limit. It follows `isDone`, not page length, and carries one
+fixed cutoff through all continuations. Queued `afterCreatedAt` continuations
+remain accepted: their timestamp becomes an inclusive lower bound carried
+unchanged with subsequent cursors. The existing per-Call state transition makes
+that boundary replay safe. No table, index, public API, dependency or worker is
+added. The cursor and cutoff are one validated optional object, so a cursor
+cannot arrive without its original cutoff. This follows the installed Convex
+1.45.0 pagination contract and the repository's dispatch-recovery pattern; see
+[Convex pagination](https://docs.convex.dev/database/pagination).
+
+Idempotency analysis: scanning may schedule the same Call more than once, but
+`expireStaleApproval` reads and changes its state in one mutation. Concurrent
+attempts yield one refusal and one refund-reconciliation job. The page does not
+move funds; financial uncertainty keeps the Call pending for reconciliation.
+Invalid continuation material is a caller/programming error and fails the
+transaction. Blocked rows retain the existing operator diagnostic and do not
+prevent clean rows on later pages from progressing.
+
+All 58 approval tests pass, including the three red-before regressions, a clock
+advance between pages, invalid continuation with unchanged Calls/no jobs,
+concurrent expiry with one refund job, exact TTL, and existing refusal/replay
+and uncertain-funds behavior. The two sweep tests that used a hand-built
+database now use the existing `convex-test` harness; no pagination simulator was
+added. This proves local registered-function and scheduler behavior, not a
+hosted refund or production-money drill. The UI baseline remains merged; the
+active Arc checkpoint and full consolidated release gate are still outstanding.
+
+The isolated generator exposed a separate defect in the Stage 39 UI merge:
+`registry/public` re-exported the directory projector from a file that also
+created web queries. That made Clerk's server entry (`node:fs`/`node:path`)
+reachable from Convex's default runtime. The unchanged projection and its input
+types now live in `compact-directory-projection.ts`; the existing search file
+owns web transport and imports only those types. Both real consumers use the
+same projection. The existing Node-only dependency test now detects Clerk's
+server entry; it failed before the fix with 82 paths through that one barrel.
+
+**Complexity:** one 89-line pure projection file and a 41-line transport file
+replace the mixed 128-line file. The extra file removes hidden web-runtime
+requirements from both the public registry seam and Convex consumers. Metadata,
+price, freshness and readiness rules still have one implementation; transport
+changes affect only the query file. Keep this split. Duplicating projection in
+Convex or moving chat into the Node runtime would add behavior drift or a wider
+runtime change. The combined five-file regression run passes all 151 tests,
+covering expiry, workload admission, directory ranking/isolation and the expanded
+runtime dependency fence.
+
+Final validation: `npm run check` passes with zero dependency cycles and all
+import/runtime fences intact. `npm run verify:convex-generated:anonymous` passes
+for all seven generated files in its isolated local environment. No generated
+file changed. These are source-level and local-runtime proofs; the changes have
+not been pushed or deployed, and the full gate is still required on the combined
+Arc and money result before main.
