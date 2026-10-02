@@ -69,16 +69,19 @@ The 2 October inventory found two distinct failures:
 2. **Production binding gap:** the initial inventory had no
    `AE_DEPLOYMENT_ENVIRONMENT` declaration. Stage 43 sets it to `production`
    in Vercel Production and Convex `cautious-zebra-473`, and deploys the current
-   backend. The existing Formance binding remains `sandbox` at
-   `https://formance-alpha.aecon.ai`; production correctly refuses it. The
-   declaration does not establish production money readiness.
+   backend. Stage 48 deploys the historical-environment safeguards and binds
+   the clean `agentic-economy-production` ledger at
+   `https://formance-alpha.aecon.ai`. Native backend health and complete empty
+   ledger readback pass; this does not establish full money readiness.
 
 Stage 43 also enables Clerk authenticator/backup-code support, stores the
 production identity and authority settings in Infisical, aligns the Vercel
 authority bindings, and creates an isolated, unfunded CDP production project.
 Stage 46 creates its unfunded wallet and verifies the approved signing policies;
 temporary policy-management access is now removed and native readback still
-verifies the wallet and policies. Runtime custody binding remains pending.
+verifies the wallet and policies. Stage 48 binds those credentials and all four
+approved custody limits to Convex and Vercel Production. Signing remains disabled
+and the wallet unfunded.
 Stage 47 separates signed Clerk callback admission from incomplete money setup;
 the provider-native production example now returns HTTP 200 accepted/ignored
 through the actual Svix verifier and Convex assertion. This does not prove a real
@@ -99,18 +102,24 @@ Ledger 2.4.14, creates the clean production ledger and verifies an actual local
 restore of the final source archive, including original-command replay. The
 operator, worker, external tunnel and reconciliation timer are healthy. A new
 production-only Cloudflare Access credential replaced sandbox access and is
-verified in the production vault and existing AWS secret. Application runtime
-binding remains pending.
+verified in the production vault and existing AWS secret. Stage 48 binds it to
+the production application and verifies native ledger health through Convex.
 Sandbox retirement and the actual cloud restore rehearsal remain pending.
 No second permanent AWS stack is approved.
 
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
-Joel selected the existing AWS self-hosted Formance route; the production ledger
-is provisioned but not yet bound to the application.
+Joel selected the existing AWS self-hosted Formance route. The production ledger
+is provisioned, bound and verified empty. Backend `cautious-zebra-473` and Vercel
+`dpl_CTN25Xqh7BJvfh6GkucTM9Fy57fr` run merged revision
+`d02063d598d257b8e1d3c5b22d6ae139aa1163b5`; release and health return HTTP 200.
+Readiness still returns HTTP 503 with custody disabled and the remaining money
+prerequisites incomplete.
 [#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) tracks the remaining
-foundation setup. Complete the production Formance binding, custody, RPC, screening, alert and
-backup/restore prerequisites, bind one coherent production environment, and
-deploy matching web/backend source. Then [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
+foundation setup. Complete custody enablement/funding, two compatible RPCs,
+screening, commercial policy, treasury, identity and backup/restore acceptance.
+Infura's native Base checks pass; Alchemy's compatible-plan setup and the bounded
+cloud restore remain pending operator actions. Owner sign-in is currently blocked
+by Brave before reaching the production application. Then [#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
 proves the authorized real Calls and failure drills before
 [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288) permits launch.
 

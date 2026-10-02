@@ -3298,5 +3298,44 @@ Before deployment, a fresh production Convex export retained snapshot
 `1790929159865364434`: 76,424,295 bytes, 435 entries and valid CRC, SHA-256
 `75de136e000ac8a65355bdd776dc39af72832b7d3ed7845bac57d35fbc01dc3c`.
 Native production Formance health passes, with zero transactions, zero accounts
-and four schemas matching its clean baseline. Backend deployment and runtime
-binding remain the next acceptance boundary; this stage has moved no live money.
+and four schemas matching its clean baseline.
+
+PR [#298](https://github.com/CreasyBear/Agentic-Economy/pull/298) merged as
+`d02063d598d257b8e1d3c5b22d6ae139aa1163b5`. The native Convex dry run validated
+the existing data and the single index replacement. That exact merged source
+then deployed to `cautious-zebra-473` before any financial binding changed.
+Both historical sandbox funding commands returned non-retryable
+`environment_mismatch` from the deployed worker read, with no worker running.
+
+Nineteen production Formance and CDP values were applied from the owning
+Infisical production folder. Convex's native multi-variable update was atomic,
+and exact named readback matched all 19 source values. Vercel's 19 entries are
+uniquely scoped to Production; sensitive values remain unreadable after writing.
+The two previously absent per-payee/new-payee limits were added. Custody remains
+`false`, with approved ceilings of US$0.50/signature, US$10/day,
+US$2/payee/day and US$0.50/new payee. Previous values are retained privately for
+recovery; the temporary credential-transfer file was removed.
+
+Vercel redeployment `dpl_CTN25Xqh7BJvfh6GkucTM9Fy57fr` is READY at the same
+merged revision, assigned to `app.aecon.ai`. At 09:16 UTC, release and health
+returned HTTP 200. Native backend Formance health reports Ledger 2.4.14 and
+schema 1.6.0. A complete snapshot through the deployed production binding still
+matches the empty baseline: zero transactions, zero accounts and four schemas.
+The two funding records retain their complete pre-cutover digest and continue
+to refuse with `environment_mismatch`. No live money moved.
+
+Readiness remains `not_ready`: Formance and the reference rate pass; custody is
+disabled, and RPC, treasury, screening and commercial-policy prerequisites are
+incomplete. The web manifest therefore refuses readiness with HTTP 503. This is
+not acceptance of a real paid Call or permission to launch. Infura passed the
+seven native Base RPC compatibility checks; Alchemy's free plan refused both
+2,000-block log queries, so a compatible second provider remains pending. The
+Alchemy card/terms and US$1 monthly cap handoff, the proposed bounded US$2 cloud
+restore rehearsal and the TRM product/tenant decision await the operator.
+
+Owner MFA enrollment and real bound-user revocation remain unverified. A fresh
+owner sign-in attempt in Brave was blocked by the browser before reaching the
+application; direct native HTTP release/health checks still pass. Local native
+ledger tests and the accepted provider-native Clerk fixture do not replace the
+remaining owner, cloud-restore, development paid-Call, 20 reconciled mainnet Call
+or failure-drill acceptance.
