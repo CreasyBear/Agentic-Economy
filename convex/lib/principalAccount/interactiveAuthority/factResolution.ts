@@ -28,6 +28,7 @@ import {
   type AuthorityMutationSource,
 } from './shared'
 import type { InteractiveAuthorityFacts } from './contracts'
+import { readCurrentClerkSessionCreation } from './clerk'
 
 export async function resolveInteractiveAuthorityContext(
   source: AuthorityMutationSource,
@@ -169,6 +170,9 @@ export async function resolveInteractiveAuthorityFactsForToken(
   }
   if (principal.kind !== 'human') {
     throw new InteractiveAuthorityError('principal_kind_invalid')
+  }
+  if (identity !== undefined) {
+    await readCurrentClerkSessionCreation(db, identity, canonicalPrincipalRef)
   }
 
   const activeAccountResolution = await resolveActiveAccountRefForPrincipal(db, canonicalPrincipalRef, identity)

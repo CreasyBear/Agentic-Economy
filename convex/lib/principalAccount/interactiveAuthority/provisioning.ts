@@ -19,6 +19,7 @@ import {
   OWNER_DISPLAY_NAME_MAX_LENGTH,
 } from './constants'
 import { InteractiveAuthorityError } from './errors'
+import { readCurrentClerkSessionCreation } from './clerk'
 
 function interactiveOwnerDigest(kind: string, tokenIdentifier: string): string {
   return canonicalDigest({ kind, tokenIdentifier }).slice('sha256:'.length, 'sha256:'.length + 32)
@@ -55,8 +56,9 @@ export type OwnerIdentityProvisioningRefs = Readonly<{
  * presentation otherwise. Identity rows are never duplicated or re-keyed;
  * only the credential generation rotates when the verified window no longer
  * matches the current credential (token refresh) or the current generation
- * expired. Revoked, drifted, or ambiguous credentials fail closed so the
- * authority chain reports the precise reason.
+ * expired. A revoked generation requires a signed creation observation for
+ * this verified session after revocation. Drifted or ambiguous credentials
+ * fail closed; a token refresh alone cannot undo revocation.
  */
 export async function ensureOwnerIdentityForAuthenticatedIdentity(
   ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
@@ -100,12 +102,14 @@ export async function ensureOwnerIdentityForAuthenticatedIdentity(
     logProvisionRefusal('binding_not_current', { lifecycle: binding.lifecycle, providerState: binding.providerState })
     return null
   }
+  const sessionCreation = await readCurrentClerkSessionCreation(ctx.db, identity, binding.principalRef)
   return await ensureCurrentOwnerCredentialGeneration(
     ctx,
     binding,
     tokenIdentifier,
     expiresAt,
     verifiedTokenExpirySeconds !== undefined,
+    sessionCreation,
   )
 }
 
@@ -115,6 +119,7 @@ async function ensureCurrentOwnerCredentialGeneration(
   tokenIdentifier: string,
   expiresAt: number,
   hasVerifiedTokenWindow: boolean,
+  sessionCreation: Doc<'auditEvents'> | null,
 ): Promise<OwnerIdentityProvisioningRefs | null> {
   const active = await credentialsForOwnerGeneration(ctx, binding, 'active')
   if (active.length > 1) {
@@ -141,7 +146,7 @@ async function ensureCurrentOwnerCredentialGeneration(
         activeCount: active.length,
       })
       return null
-    } else if (binding.lifecycle !== 'active' || !hasVerifiedTokenWindow) {
+    } else if (revokedCredentials.length !== 1 || sessionCreation === null) {
       logProvisionRefusal('credential_generation_revoked_present', {
         generation: binding.credentialGeneration,
         activeCount: active.length,
@@ -149,7 +154,14 @@ async function ensureCurrentOwnerCredentialGeneration(
       return null
     } else {
       const [latestRevoked] = revokedCredentials
-      if (latestRevoked === undefined) {
+      if (latestRevoked === undefined
+        || latestRevoked.type !== 'provider_token'
+        || latestRevoked.principalRef !== binding.principalRef
+        || latestRevoked.revokedAt === undefined
+        || sessionCreation.observedAt === undefined
+        || !Number.isSafeInteger(sessionCreation.observedAt)
+        || sessionCreation.observedAt <= latestRevoked.revokedAt
+        || sessionCreation.observedAt > Date.now()) {
         logProvisionRefusal('credential_generation_revoked_present', {
           generation: binding.credentialGeneration,
           activeCount: active.length,
