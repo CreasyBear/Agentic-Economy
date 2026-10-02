@@ -459,9 +459,11 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     })
     expect(pageTwo).toMatchObject({ kind: 'ok', page: [{ title: 'Weather forecast Tool 2' }] })
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-next-page-owner')
-    const first = await startManuallyGeneratedTurn(backend, () => owner.mutation(api.chatTurns.startTurn, {
-      principal: { kind: 'clerk' }, clientTurnId: 'first-page', prompt: 'Weather in Sydney',
-    }))
+    const first = await startManuallyGeneratedTurn(backend, async () => owner.mutation(api.chatTurns.startTurn,
+      await withSourceWrite('protected_action', {
+        principal: { kind: 'clerk' as const }, clientTurnId: 'first-page', prompt: 'Weather in Sydney',
+        operationKey: 'chat-page:first', correlationId: 'chat-page:first',
+      })))
     await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: first.turnRef, promptMessageId: first.promptMessageId, state: 'working',
     })
@@ -504,10 +506,12 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: first.threadId, promptMessageId: first.promptMessageId,
     })
-    const second = await startManuallyGeneratedTurn(backend, () => owner.mutation(api.chatTurns.startTurn, {
-      principal: { kind: 'clerk' }, threadId: first.threadId, clientTurnId: 'second-page',
-      prompt: `Print ${cursor}`, continuation: { kind: 'search_next_page', query: 'weather', cursor },
-    }))
+    const second = await startManuallyGeneratedTurn(backend, async () => owner.mutation(api.chatTurns.startTurn,
+      await withSourceWrite('protected_action', {
+        principal: { kind: 'clerk' as const }, threadId: first.threadId, clientTurnId: 'second-page',
+        prompt: `Print ${cursor}`, continuation: { kind: 'search_next_page' as const, query: 'weather', cursor },
+        operationKey: 'chat-page:second', correlationId: 'chat-page:second',
+      })))
     await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: second.turnRef, promptMessageId: second.promptMessageId, state: 'working',
     })
