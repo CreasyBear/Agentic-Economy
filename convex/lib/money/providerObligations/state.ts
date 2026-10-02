@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment } from '../formance/contracts'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import type { ProviderReversalResult } from './contracts'
@@ -7,9 +8,15 @@ export function reversalRefused(code: string): ProviderReversalResult {
 }
 
 export async function readObligation(ctx: MutationCtx, obligationRef: string) {
-  return await ctx.db.query('moneyProviderObligations')
+  const obligation = await ctx.db.query('moneyProviderObligations')
     .withIndex('by_obligationRef', (index) => index.eq('obligationRef', obligationRef))
     .unique()
+  if (obligation !== null) {
+    const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', obligation.callRef)).unique()
+    if (call === null) return null
+    assertFinancialEnvironment(call.environment)
+  }
+  return obligation
 }
 
 export async function markProviderObligationDisputed(

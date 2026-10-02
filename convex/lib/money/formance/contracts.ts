@@ -1,9 +1,23 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
+import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
+import { env } from '../../../_generated/server'
 
 import { accountHistoryResultValue, managedCallBookingArgs } from '../../../moneyLedgerValues'
 import { accountCreditBalanceValue, eligiblePromotionalGrantValue, spendingPeriodAdjustmentValue } from '../../../../src/modules/money/public'
 
 export { accountHistoryResultValue, managedCallBookingArgs, spendingPeriodAdjustmentValue }
+
+export const financialEnvironmentValue = v.union(v.literal('sandbox'), v.literal('production'))
+export type FinancialEnvironment = PaymentEnvironment
+
+/** Persisted origin must agree with both current destinations before financial effects. */
+export function financialEnvironmentMatches(environment: FinancialEnvironment): boolean {
+  return environment === deploymentPaymentEnvironment(env) && environment === env.AE_FORMANCE_ENVIRONMENT
+}
+
+export function assertFinancialEnvironment(environment: FinancialEnvironment): void {
+  if (!financialEnvironmentMatches(environment)) throw new ConvexError({ code: 'environment_mismatch' })
+}
 
 export const setupRequired = v.object({ kind: v.literal('setup_required'), code: v.string() })
 export const unavailable = v.object({ kind: v.literal('unavailable'), code: v.string() })

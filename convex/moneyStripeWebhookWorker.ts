@@ -46,22 +46,23 @@ export const process = internalAction({
       return { kind: 'reconciliation_required', code: 'stripe_webhook_inbox_not_processable' }
     }
 
+    const event = work.event
+    if (event.kind === 'account') return { kind: 'accepted', status: 'ignored' }
+    // Persisted origin is checked before configuration/readback so old queued
+    // work terminates deterministically even while the new provider is unready.
+    const durable = event.kind === 'refund'
+      ? await ctx.runQuery(internal.moneyAccountFunding.readWebhookRefundCommandForWorker, { paymentId: event.paymentId })
+      : await ctx.runQuery(internal.moneyAccountFunding.readWebhookCommandForWorker, {
+          commandRef: event.commandRef, externalRef: event.sessionId,
+        })
+    if (durable.kind === 'refused') return retryOrReconcile(durable)
     const config = readStripeMoneyReadbackProviderConfig(globalThis.process.env)
     if (isMoneyRefusal(config)) return retryOrReconcile(config)
     const providerContext = resolveStripeMoneyProviderContext({ config })
     if (isMoneyRefusal(providerContext)) return retryOrReconcile(providerContext)
     const provider = createStripeMoneyProvider({ config, client: providerContext.client })
-    const event = work.event
-
-    if (event.kind === 'account') {
-      return { kind: 'accepted', status: 'ignored' }
-    }
 
     if (event.kind === 'refund') {
-      const durable = await ctx.runQuery(internal.moneyAccountFunding.readWebhookRefundCommandForWorker, {
-        paymentId: event.paymentId,
-      })
-      if (isMoneyRefusal(durable)) return retryOrReconcile(durable)
       const refundReadback = await readStripeFundingRefund(
         providerContext.client,
         config,
@@ -77,11 +78,6 @@ export const process = internalAction({
       return result.kind === 'refused' ? retryOrReconcile(result) : result
     }
 
-    const durable = await ctx.runQuery(internal.moneyAccountFunding.readWebhookCommandForWorker, {
-      commandRef: event.commandRef,
-      externalRef: event.sessionId,
-    })
-    if (durable.kind === 'refused') return retryOrReconcile(durable)
     const command = durable.command
     const payment = await provider.readCreditPayment({
       commandRef: command.commandRef,

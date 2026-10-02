@@ -5,7 +5,7 @@ import { internalAction } from './_generated/server'
 import {
   accountHistoryResultValue, buyerAdjustmentArgs,
   capacitySyncArgs, displayBalanceArgs, displayBalanceResult, finalizeManagedCallArgs,
-  fundingBookingArgs, healthResult, installationResult,
+  fundingBookingArgs, financialEnvironmentValue, healthResult, installationResult,
   managedCallBookingArgs, managedCallSettlementReadResult, managedCallReservationReadResult, managedCallReleaseReadResult, moneyResult, periodSpendResult,
   readAccountHistoryArgs, readPeriodSpendArgs, readStatementPageArgs,
   releaseExpiredUnusedCallArgs, releaseManagedCallArgs, reverseProviderSettlementArgs,
@@ -39,19 +39,19 @@ export const readStatementPage = internalAction({
   args: readStatementPageArgs, returns: statementPageResult, handler: readStatementPageHandler,
 })
 export const bookBuyerAdjustment = internalAction({
-  args: buyerAdjustmentArgs, returns: moneyResult, handler: bookBuyerAdjustmentHandler,
+  args: { ...buyerAdjustmentArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: bookBuyerAdjustmentHandler,
 })
 export const bookFundingSettlement = internalAction({
-  args: fundingBookingArgs, returns: moneyResult, handler: bookFundingSettlementHandler,
+  args: { ...fundingBookingArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: bookFundingSettlementHandler,
 })
 export const bookFundingReversal = internalAction({
-  args: fundingBookingArgs, returns: moneyResult, handler: bookFundingReversalHandler,
+  args: { ...fundingBookingArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: bookFundingReversalHandler,
 })
 export const syncCapacity = internalAction({
-  args: capacitySyncArgs, returns: moneyResult, handler: syncCapacityHandler,
+  args: { ...capacitySyncArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: syncCapacityHandler,
 })
 export const adjustSpendingPeriod = internalAction({
-  args: spendingPeriodAdjustmentValue, returns: moneyResult, handler: adjustSpendingPeriodHandler,
+  args: spendingPeriodAdjustmentValue.extend({ expectedEnvironment: financialEnvironmentValue }), returns: moneyResult, handler: adjustSpendingPeriodHandler,
 })
 export const readSpendingPeriod = internalAction({
   args: spendingPeriodArgs, returns: spendingPeriodResult, handler: readSpendingPeriodHandler,
@@ -60,7 +60,7 @@ export const readDisplayBalance = internalAction({
   args: displayBalanceArgs, returns: displayBalanceResult, handler: readDisplayBalanceHandler,
 })
 export const reserveManagedCall = internalAction({
-  args: managedCallBookingArgs, returns: moneyResult, handler: reserveManagedCallHandler,
+  args: { ...managedCallBookingArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: reserveManagedCallHandler,
 })
 export const readManagedCallSettlement = internalAction({
   args: managedCallBookingArgs, returns: managedCallSettlementReadResult, handler: readManagedCallSettlementHandler,
@@ -72,26 +72,26 @@ export const readManagedCallRelease = internalAction({
   args: managedCallBookingArgs, returns: managedCallReleaseReadResult, handler: readManagedCallReleaseHandler,
 })
 export const releaseManagedCall = internalAction({
-  args: releaseManagedCallArgs, returns: moneyResult, handler: releaseManagedCallHandler,
+  args: { ...releaseManagedCallArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: releaseManagedCallHandler,
 })
 export const releaseExpiredUnusedCall = internalAction({
-  args: releaseExpiredUnusedCallArgs, returns: moneyResult, handler: releaseExpiredUnusedCallHandler,
+  args: { ...releaseExpiredUnusedCallArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: releaseExpiredUnusedCallHandler,
 })
 export const settleManagedCall = internalAction({
-  args: finalizeManagedCallArgs, returns: moneyResult, handler: settleManagedCallHandler,
+  args: { ...finalizeManagedCallArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: settleManagedCallHandler,
 })
 export const remedyPaidCall = internalAction({
-  args: finalizeManagedCallArgs, returns: moneyResult, handler: remedyPaidCallHandler,
+  args: { ...finalizeManagedCallArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: remedyPaidCallHandler,
 })
 export const reverseProviderSettlement = internalAction({
-  args: reverseProviderSettlementArgs, returns: moneyResult, handler: reverseProviderSettlementHandler,
+  args: { ...reverseProviderSettlementArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: reverseProviderSettlementHandler,
 })
 
 export const grantPromotionalCredit = internalAction({
-  args: promotionalCreditArgs, returns: moneyResult, handler: grantPromotionalCreditHandler,
+  args: { ...promotionalCreditArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: grantPromotionalCreditHandler,
 })
 export const expirePromotionalCredit = internalAction({
-  args: promotionalCreditArgs, returns: moneyResult, handler: expirePromotionalCreditHandler,
+  args: { ...promotionalCreditArgs, expectedEnvironment: financialEnvironmentValue }, returns: moneyResult, handler: expirePromotionalCreditHandler,
 })
 
 export const readCreditBalance = internalAction({
@@ -99,6 +99,6 @@ export const readCreditBalance = internalAction({
 })
 
 export const refundSettledSale = internalAction({
-  args: { booking: v.object(managedCallBookingArgs), originalSettlementRefs: v.array(v.string()), reportDigest: v.string() },
+  args: { expectedEnvironment: financialEnvironmentValue, booking: v.object(managedCallBookingArgs), originalSettlementRefs: v.array(v.string()), reportDigest: v.string() },
   returns: moneyResult, handler: refundSettledSaleHandler,
 })

@@ -138,7 +138,7 @@ function fixture(mode: Mode = 'settled', options: { nativePaid?: boolean; chainP
     financialState: mode === 'paid-error' || mode === 'released' ? 'released' : mode,
     createdAt: NOW - 10_000, updatedAt: NOW - 1_000, reservationRefs: [reserveCommand.commandRef],
     settlementRefs: nativePaid ? [paidCommand.commandRef] : [], releaseRefs: mode === 'released' ? [releaseCommand.commandRef] : [], evidenceHash: evidence,
-  }, native: { kind: 'available', booking: b }, joinIssues: [], obligation: {
+  }, native: { kind: 'available', expectedEnvironment: 'sandbox', booking: b }, joinIssues: [], obligation: {
     obligationRef: `obligation:${b.callRef}`, callRef: b.callRef, toolRef: b.toolRef, providerRef: b.providerRef,
     buyerAccountRef: b.accountRef, providerAmountUnits: PAYMENT, state: nativePaid ? 'settled' : mode === 'released' ? 'released' : 'accrued',
     ...(nativePaid ? { settlementTransactionRef: paidCommand.commandRef, settledAt: NOW - 1_000 } : {}),

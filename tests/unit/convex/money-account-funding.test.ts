@@ -194,14 +194,18 @@ describe('Account AUD funding through Formance', () => {
   })
 
   it.each([
-    ['missing', undefined],
-    ['invalid', 'preview'],
-    ['opposite', 'production'],
-  ] as const)('refuses owner and agent funding for %s deployment declaration before commands', async (name, declaration) => {
+    ['missing', undefined, 'sandbox'],
+    ['invalid', 'preview', 'sandbox'],
+    ['opposite', 'production', 'sandbox'],
+    ['missing-ledger', 'development', undefined],
+    ['opposite-ledger', 'development', 'production'],
+  ] as const)('refuses owner and agent funding for %s environment declaration before commands', async (name, declaration, ledger) => {
     if (reserveAgentHandoff === undefined) throw new Error('Agent funding handoff function missing')
     const { backend, fixture } = await publishedOwnerFixture(`funding-${name}-environment-fence`)
     const agent = await fundingBuyerAgent(backend, fixture.owner, `user_funding-${name}-environment-fence`)
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', ledger)
+    const bindingsBefore = await backend.run(async ctx => ctx.db.query('moneyLegalCustomerBindings').collect())
     await expect(ownerReserve(fixture, `account-funding:${name}-environment-fence`))
       .resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
     await expect(backend.mutation(reserveAgentHandoff, await withSourceWrite('billing', {
@@ -213,6 +217,7 @@ describe('Account AUD funding through Formance', () => {
       correlationId: `funding-agent-${name}`,
     }))).resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
     await expect(backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())).resolves.toEqual([])
+    expect(await backend.run(async ctx => ctx.db.query('moneyLegalCustomerBindings').collect())).toEqual(bindingsBefore)
   })
 
   it('refuses a changed funding policy before creating a funding command', async () => {
@@ -294,6 +299,22 @@ describe('Account AUD funding through Formance', () => {
       creditAmount: { currency: 'AUD', exponent: 6, units: '5000000' },
     } })
     expect(JSON.stringify(publicRead)).not.toMatch(/account|owner|checkoutUrl|serviceFee|tax|credential|commandRef/u)
+    const beforeCutover = await backend.run(async ctx => ({
+      commands: await ctx.db.query('moneyFundingCommands').collect(),
+      principals: await ctx.db.query('agentAccessPrincipals').collect(),
+      grants: await ctx.db.query('agentAccessGrants').collect(),
+    }))
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
+    await expect(backend.mutation(bindAgentHandoff, await withSourceWrite('billing', {
+      commandRef: reserved.command.commandRef, evidence, agentPrincipal: first,
+      operationKey: 'moneyAccountFunding:bindAgentHandoff', correlationId: 'funding-agent-cutover-bind',
+    }))).rejects.toThrow('environment_mismatch')
+    expect(await backend.run(async ctx => ({
+      commands: await ctx.db.query('moneyFundingCommands').collect(),
+      principals: await ctx.db.query('agentAccessPrincipals').collect(),
+      grants: await ctx.db.query('agentAccessGrants').collect(),
+    }))).toEqual(beforeCutover)
   })
 
   it('AM-09 maps async_payment_failed on a bound handoff to public failed with no documents', async () => {

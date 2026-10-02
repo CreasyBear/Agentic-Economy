@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment, financialEnvironmentValue, type FinancialEnvironment } from '../formance/contracts'
 import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../../_generated/server'
@@ -6,10 +7,10 @@ import { stableStringify, type StableHashValue } from '../../../../src/modules/c
 import { enqueueDocumentRender } from './workpool'
 
 const readStatementFinalizationRef = makeFunctionReference<'query', { documentRef: string }, {
-  documentRef: string; accountRef: string; residualUnits: string; policyDigest: string; snapshotDigest: string
+  documentRef: string; accountRef: string; residualUnits: string; policyDigest: string; snapshotDigest: string; expectedEnvironment: FinancialEnvironment
 } | null>('moneyDocuments:readStatementFinalization')
 const bookBuyerAdjustmentRef = makeFunctionReference<'action', {
-  documentRef: string; accountRef: string; residualUnits: string; policyDigest: string; snapshotDigest: string
+  documentRef: string; accountRef: string; residualUnits: string; policyDigest: string; snapshotDigest: string; expectedEnvironment: FinancialEnvironment
 }, { kind: 'completed'; transactionRefs: string[]; replayed: boolean }
   | { kind: 'refused'; code: string; retryable: false }
   | { kind: 'unavailable'; code: string; submissionProvenAbsent: true }
@@ -21,6 +22,7 @@ const queueStatementRenderRef = makeFunctionReference<'mutation', {
 export const readStatementFinalizationArgs = v.object({ documentRef: v.string() })
 export const readStatementFinalizationResult = v.union(v.null(), v.object({
     documentRef: v.string(),
+    expectedEnvironment: financialEnvironmentValue,
     accountRef: v.string(),
     residualUnits: v.string(),
     policyDigest: v.string(),
@@ -34,6 +36,7 @@ export const readStatementFinalizationHandler = async (ctx: QueryCtx, args: Infe
       || (row.kind !== 'statement' && row.kind !== 'daily_close')) return null
     return {
       documentRef: row.documentRef,
+      expectedEnvironment: row.environment,
       accountRef: row.accountRef,
       residualUnits: row.residualUnits,
       policyDigest: row.policyDigest,
@@ -50,6 +53,7 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
     if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close')) {
       return { kind: 'refused' as const }
     }
+    assertFinancialEnvironment(row.environment)
     if (row.state === 'rendering' || row.state === 'awaiting_signature' || row.state === 'issued') {
       return { kind: 'replayed' as const }
     }
@@ -95,6 +99,7 @@ export const finalizeStatementResult = v.object({ kind: v.literal('advanced') })
 export const finalizeStatementHandler = async (ctx: ActionCtx, args: Infer<typeof finalizeStatementArgs>) => {
     const input = await ctx.runQuery(readStatementFinalizationRef, args)
     if (input === null) return { kind: 'advanced' as const }
+    assertFinancialEnvironment(input.expectedEnvironment)
     let adjustmentTransactionRefs: string[] = []
     if (input.residualUnits !== '0') {
       const result = await ctx.runAction(bookBuyerAdjustmentRef, input)

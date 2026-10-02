@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches } from '../formance/contracts'
 import type { Infer } from 'convex/values'
 import { recordFundingTerminal } from '@/lib/observability/journey'
 
@@ -27,6 +28,7 @@ export async function markOutcomeUnknownHandler(
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef))
     .unique()
+  if (command !== null && !financialEnvironmentMatches(command.environment)) return refused('environment_mismatch')
   if (command === null
     || command.accountRef !== actor.canonicalAccountRef
     || command.idempotencyKey !== args.idempotencyKey) return refused('funding_pending', true)

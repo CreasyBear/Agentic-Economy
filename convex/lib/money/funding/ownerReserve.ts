@@ -1,7 +1,6 @@
-import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
+import { financialEnvironmentMatches } from '../formance/contracts'
 
 import type { MutationCtx } from '../../../_generated/server'
-import { env } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
@@ -33,8 +32,7 @@ export async function reserveHandler(
   ctx: MutationCtx,
   args: ReserveFundingArgs,
 ): Promise<FundingResult> {
-  const deploymentEnvironment = deploymentPaymentEnvironment(env)
-  if (deploymentEnvironment === undefined || deploymentEnvironment !== args.environment) {
+  if (!financialEnvironmentMatches(args.environment)) {
     return refused('environment_mismatch')
   }
   const sourceWrite = await requireSourceWrite(ctx, args, 'billing')

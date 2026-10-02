@@ -1,3 +1,4 @@
+import { assertFinancialEnvironment, type FinancialEnvironment } from '../formance/contracts'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { canonicalDigest, isCanonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '../../../../src/modules/common/freshness'
@@ -202,8 +203,9 @@ export async function prepareAgentSpendingPeriods(
  * retaining the pending fence. A newer policy cannot replace an uncertain command. */
 export async function acknowledgeAgentSpendingPeriod(
   ctx: MutationCtx,
-  input: Readonly<{ command: SpendingPeriodAdjustment; transactionRefs: string[] }>,
+  input: Readonly<{ expectedEnvironment: FinancialEnvironment; command: SpendingPeriodAdjustment; transactionRefs: string[] }>,
 ): Promise<{ kind: 'applied' | 'replayed' | 'conflict' }> {
+  assertFinancialEnvironment(input.expectedEnvironment)
   const command = input.command
   const zeroDelta = command.previousLimitUnits === command.targetLimitUnits
   if (zeroDelta ? input.transactionRefs.length !== 0 : (input.transactionRefs.length !== 1

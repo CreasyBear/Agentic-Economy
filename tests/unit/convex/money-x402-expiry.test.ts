@@ -179,7 +179,7 @@ function actionContext() {
     switch (getFunctionName(ref as never)) {
       case 'capabilityCalls:readOwnerRecovery': return call
       case 'moneyX402PaymentAttempts:readX402PaymentAttempt': return payment
-      case 'moneyManagedCall:readBooking': return { kind: 'available', booking: { providerAmountUnits: '1000', buyerAmountUnits: '1408' } }
+      case 'moneyManagedCall:readBooking': return { kind: 'available', expectedEnvironment: 'sandbox', booking: { providerAmountUnits: '1000', buyerAmountUnits: '1408' } }
       default: throw new Error(getFunctionName(ref as never))
     }
   })
@@ -205,7 +205,7 @@ describe('expired unused authorization recovery action', () => {
     expect(getFunctionName(ctx.runAction.mock.calls[0]![0] as never)).toBe('moneyFormance:releaseExpiredUnusedCall')
     expect(ctx.runAction.mock.calls[0]?.[1]).toMatchObject({ externalEvidenceDigest: evidenceDigest })
     expect(getFunctionName(ctx.runMutation.mock.calls[0]![0] as never)).toBe('moneyX402Expiry:schedule')
-    expect(ctx.runMutation.mock.invocationCallOrder[0]).toBeLessThan(ctx.runQuery.mock.invocationCallOrder[0]!)
+    expect(ctx.runQuery.mock.invocationCallOrder[0]).toBeLessThan(ctx.runMutation.mock.invocationCallOrder[0]!)
     expect(ctx.runMutation.mock.invocationCallOrder[0]).toBeLessThan(rpc.read.mock.invocationCallOrder[0]!)
     expect(ctx.runMutation.mock.invocationCallOrder[0]).toBeLessThan(ctx.runAction.mock.invocationCallOrder[0]!)
   })
@@ -275,7 +275,7 @@ describe('expired unused authorization recovery action', () => {
   it('returns the completed recovery on terminal replay without arming another payment check', async () => {
     const ctx = actionContext()
     ctx.runMutation.mockResolvedValueOnce(false)
-    ctx.runQuery.mockResolvedValueOnce({ ...call, state: 'refused',
+    ctx.runQuery.mockResolvedValue({ ...call, state: 'refused',
       result: { kind: 'refused', receipt: { refundState: 'released' } } })
     expect(await handler(ctx as unknown as ActionCtx, { callRef })).toEqual({ kind: 'completed' })
     expect(rpc.read).not.toHaveBeenCalled()

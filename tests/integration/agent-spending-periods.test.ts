@@ -52,13 +52,13 @@ describe('Agent spending period control contracts', () => {
     expect(retries).toEqual([first, first])
     expect(await t.run((ctx) => spendingPeriodsAreCurrent(ctx, { ...input, spendingPeriods: first.spendingPeriods }))).toBe(false)
     for (const command of first.commands) {
-      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, {
+      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox',
         command, transactionRefs: [`ae-p4:${'a'.repeat(64)}:unrelated`],
       }))).toEqual({ kind: 'conflict' })
       expect(await t.run((ctx) => spendingPeriodsAreCurrent(ctx, { ...input, spendingPeriods: first.spendingPeriods }))).toBe(false)
       const result = { command, transactionRefs: completedRef(command) }
-      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, result))).toEqual({ kind: 'applied' })
-      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, result))).toEqual({ kind: 'replayed' })
+      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { ...result, expectedEnvironment: 'sandbox' }))).toEqual({ kind: 'applied' })
+      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { ...result, expectedEnvironment: 'sandbox' }))).toEqual({ kind: 'replayed' })
     }
     expect(await t.run((ctx) => spendingPeriodsAreCurrent(ctx, { ...input, spendingPeriods: first.spendingPeriods }))).toBe(true)
     expect(await t.run((ctx) => ctx.db.query('agentSpendingPeriods').collect())).toHaveLength(2)
@@ -71,14 +71,14 @@ describe('Agent spending period control contracts', () => {
     const changed = { ...input, dailyLimitUnits: '50', monthlyLimitUnits: '50', authorityDigest: canonicalDigest({ authority: 2 }) }
     // A lost acknowledgement and newer policy must not rewrite already submitted material.
     expect(await t.run((ctx) => prepareAgentSpendingPeriods(ctx, changed))).toEqual(first)
-    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command, transactionRefs: completedRef(command) }))
+    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command, transactionRefs: completedRef(command) }))
     const second = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, changed))
     if (second.kind !== 'prepared') throw new Error('expected adjustment')
     expect(second.commands.map((command) => [command.revision, command.previousLimitUnits, command.targetLimitUnits]))
       .toEqual([[2, '100', '50'], [2, '200', '50']])
     expect(await t.run((ctx) => spendingPeriodsAreCurrent(ctx, { ...input, spendingPeriods: first.spendingPeriods }))).toBe(false)
     const command = second.commands[0]!
-    expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, {
+    expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox',
       command: { ...command, previousLimitUnits: '0' }, transactionRefs: completedRef(command),
     }))).toEqual({ kind: 'conflict' })
     expect((await t.run((ctx) => prepareAgentSpendingPeriods(ctx, changed)))).toEqual(second)
@@ -88,7 +88,7 @@ describe('Agent spending period control contracts', () => {
     const t = backend()
     const first = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, input))
     if (first.kind !== 'prepared') throw new Error('expected periods')
-    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command, transactionRefs: completedRef(command) }))
+    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command, transactionRefs: completedRef(command) }))
     const id = await t.run((ctx) => ctx.db.insert('capabilityCalls', callRow({ formanceFinancialState: 'reservation_pending' })))
     const changed = { ...input, monthlyLimitUnits: '150' }
     expect(await t.run((ctx) => prepareAgentSpendingPeriods(ctx, changed))).toEqual({ kind: 'refused', reason: 'spending_period_reservation_recovery_pending' })
@@ -113,7 +113,7 @@ describe('Agent spending period control contracts', () => {
     const t = backend()
     const first = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, input))
     if (first.kind !== 'prepared') throw new Error('expected periods')
-    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command, transactionRefs: completedRef(command) }))
+    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command, transactionRefs: completedRef(command) }))
     const tomorrow = { ...input, now: Date.UTC(2026, 8, 15) }
     expect(await t.run((ctx) => spendingPeriodsAreCurrent(ctx, { ...tomorrow, spendingPeriods: first.spendingPeriods }))).toBe(false)
     const next = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, tomorrow))
@@ -127,7 +127,7 @@ describe('Agent spending period control contracts', () => {
     const t = backend()
     const first = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, input))
     if (first.kind !== 'prepared') throw new Error('expected periods')
-    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command, transactionRefs: completedRef(command) }))
+    for (const command of first.commands) await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command, transactionRefs: completedRef(command) }))
     const id = await t.run((ctx) => ctx.db.insert('capabilityCalls', callRow({ formanceFinancialState: 'outcome_unknown' })))
     const next = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, { ...input, now: Date.UTC(2026, 8, 15) }))
     if (next.kind !== 'prepared') throw new Error('expected next day')
@@ -142,8 +142,8 @@ describe('Agent spending period control contracts', () => {
     const prepared = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, zero))
     if (prepared.kind !== 'prepared') throw new Error('expected zero configuration')
     for (const command of prepared.commands) {
-      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command, transactionRefs: [] }))).toEqual({ kind: 'applied' })
-      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command, transactionRefs: [] }))).toEqual({ kind: 'replayed' })
+      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command, transactionRefs: [] }))).toEqual({ kind: 'applied' })
+      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command, transactionRefs: [] }))).toEqual({ kind: 'replayed' })
     }
     expect(await t.run((ctx) => spendingPeriodsAreCurrent(ctx, { ...zero, spendingPeriods: prepared.spendingPeriods }))).toBe(true)
   })
@@ -159,7 +159,7 @@ describe('Agent spending period control contracts', () => {
     for (const command of first.commands) {
       const result = await adjustFormanceSpendingPeriod(context, command)
       if (result.kind !== 'completed') throw new Error(`initial_effect:${JSON.stringify(result)}`)
-      await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command, transactionRefs: [...result.transactionRefs] }))
+      await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command, transactionRefs: [...result.transactionRefs] }))
     }
     const lowered = { ...input, dailyLimitUnits: '50', monthlyLimitUnits: '50' }
     const pending = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, lowered))
@@ -176,7 +176,7 @@ describe('Agent spending period control contracts', () => {
       if (result.kind !== 'completed') throw new Error(`recovery_effect:${JSON.stringify(result)}`)
       if (saved.periodKind === command.periodKind) expect(result).toMatchObject({ replayed: true,
         transactionRefs: appliedWithoutAcknowledgement.kind === 'completed' ? appliedWithoutAcknowledgement.transactionRefs : [] })
-      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command: saved, transactionRefs: [...result.transactionRefs] })))
+      expect(await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command: saved, transactionRefs: [...result.transactionRefs] })))
         .toEqual({ kind: 'applied' })
     }
     const next = await t.run((ctx) => prepareAgentSpendingPeriods(ctx, raised))
@@ -185,7 +185,7 @@ describe('Agent spending period control contracts', () => {
     for (const saved of next.commands) {
       const result = await adjustFormanceSpendingPeriod(context, saved)
       if (result.kind !== 'completed') throw new Error(`latest_effect:${JSON.stringify(result)}`)
-      await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { command: saved, transactionRefs: [...result.transactionRefs] }))
+      await t.run((ctx) => acknowledgeAgentSpendingPeriod(ctx, { expectedEnvironment: 'sandbox', command: saved, transactionRefs: [...result.transactionRefs] }))
       expect(await readFormanceSpendingPeriod(context, saved)).toMatchObject({ kind: 'available', units: saved.targetLimitUnits })
     }
     expect(await t.run((ctx) => spendingPeriodsAreCurrent(ctx, { ...raised, spendingPeriods: next.spendingPeriods }))).toBe(true)

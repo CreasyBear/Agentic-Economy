@@ -1,5 +1,6 @@
 "use node"
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { financialEnvironmentMatches } from './lib/money/formance/contracts'
 import { v } from 'convex/values'
 import { Agent } from 'undici'
 import { internal } from './_generated/api'
@@ -13,8 +14,11 @@ import type { FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money
 /** Exact expired-unused nonce recovery. No signing, Provider call, or replacement purchase. */
 export const recover = internalAction({
   args: { callRef: v.string(), attempt: v.optional(v.number()) },
-  returns: v.object({ kind: v.union(v.literal('completed'), v.literal('pending'), v.literal('not_eligible')) }),
-  handler: async (ctx, args): Promise<{ kind: 'completed' | 'pending' | 'not_eligible' }> => {
+  returns: v.union(v.object({ kind: v.union(v.literal('completed'), v.literal('pending'), v.literal('not_eligible')) }),
+    v.object({ kind: v.literal('refused'), code: v.literal('environment_mismatch') })),
+  handler: async (ctx, args): Promise<{ kind: 'completed' | 'pending' | 'not_eligible' } | { kind: 'refused'; code: 'environment_mismatch' }> => {
+    const source = await ctx.runQuery(internal.capabilityCalls.readOwnerRecovery, { callRef: args.callRef })
+    if (source !== null && !financialEnvironmentMatches(source.environment)) return { kind: 'refused', code: 'environment_mismatch' }
     // Arm the successor before RPC or ledger work. An action crash cannot skip
     // the recovery of a financial effect that this attempt is about to perform.
     const armed = await ctx.runMutation(internal.moneyX402Expiry.schedule, { callRef: args.callRef,
@@ -70,7 +74,8 @@ export const recover = internalAction({
       })
       if (claimed === null) return retry()
       const money: MoneyFormanceResult = await ctx.runAction(internal.moneyFormance.releaseExpiredUnusedCall, {
-        booking: material.booking, externalEvidenceDigest: claimed.evidenceDigest,
+        expectedEnvironment: material.expectedEnvironment,
+      booking: material.booking, externalEvidenceDigest: claimed.evidenceDigest,
       })
       if (money.kind !== 'completed') return retry()
       const result = await ctx.runMutation(internal.moneyX402Expiry.finish, {

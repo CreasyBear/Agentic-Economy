@@ -1,12 +1,15 @@
+import { assertCallEnvironment, callEnvironmentMatches } from './callIdentity'
 import { v, type Infer } from 'convex/values'
 import type { WorkId } from '@convex-dev/workpool'
 import { internal } from '../../../_generated/api'
+import { env } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { marketDispatchWorkpool } from '../../../marketDispatchWorkpool'
 import { reconcileWorkloadCronSnapshot } from '../../platform/workloadCron/admission'
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from '../../platform/workloadCron/context'
 import { callReconciliationValue } from '@/modules/capability-execution/convex'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { cancelBeforeClaimHandler } from './dispatchCancellation'
 import { claimDispatchHandler } from './dispatchClaim'
 import { finalizeDispatchHandler } from './dispatchFinalize'
@@ -192,6 +195,7 @@ export async function initializeReconciliationIfAbsent(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (q) => q.eq('callRef', callRef))
     .unique()
+  if (row !== null) assertCallEnvironment(row)
   if (row === null || row.state !== 'reconciliation_required' || row.reconciliation !== undefined) return
   const nextAttemptAt = isFiniteNonNegative(now) ? now : Date.now()
   await ctx.db.patch(row._id, { reconciliation: automaticReconciliationAt(nextAttemptAt), updatedAt: nextAttemptAt })
@@ -286,6 +290,7 @@ export async function reconcileFinishedDispatchesHandler(
   let waiting = 0
   let unbound = 0
   for (const row of page.page) {
+    if (!callEnvironmentMatches(row)) continue
     if (row.workId === undefined) { unbound++; continue }
     const status = await marketDispatchWorkpool.status(ctx, row.workId as WorkId)
     if (status.state !== 'finished') { waiting++; continue }
@@ -315,16 +320,20 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
   if (!isFiniteNonNegative(args.now)) return []
   const limit = boundedCandidateLimit(args.limit)
   if (limit === 0) return []
+  const environment = deploymentPaymentEnvironment(env)
+  if (environment === undefined) return []
 
-  // Partition by automatic disposition and reason before limiting: old manual
-  // cases must never hide due work. Each fixed partition remains bounded, then
-  // the merged candidates share one total output limit. Refund candidates
+  // Partition by environment, automatic disposition and reason before limiting:
+  // foreign history and old manual cases must never hide due work. Each fixed
+  // partition remains bounded, then the merged candidates share one total
+  // output limit. Refund candidates
   // carry an explicit flag so the worker cannot widen them into ordinary
   // execution-authority recovery.
   const [reconciliationPages, refusedRefundRows, cancelledRefundRows] = await Promise.all([
     Promise.all([...RECONCILIATION_REASONS].map((reason) => ctx.db.query('capabilityCalls')
-      .withIndex('by_state_and_reconciliation_disposition_reason_nextAttemptAt', (q) => (
-        q.eq('state', 'reconciliation_required')
+      .withIndex('by_environment_state_reconciliation_disposition_reason_due', (q) => (
+        q.eq('environment', environment)
+          .eq('state', 'reconciliation_required')
           .eq('reconciliation.disposition', 'automatic')
           .eq('reconciliation.reason', reason)
           .gte('reconciliation.nextAttemptAt', 0)
@@ -333,8 +342,9 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
       .order('asc')
       .take(limit))),
     ctx.db.query('capabilityCalls')
-      .withIndex('by_state_and_reconciliation_disposition_reason_nextAttemptAt', (q) => (
-        q.eq('state', 'refused')
+      .withIndex('by_environment_state_reconciliation_disposition_reason_due', (q) => (
+        q.eq('environment', environment)
+          .eq('state', 'refused')
           .eq('reconciliation.disposition', 'automatic')
           .eq('reconciliation.reason', 'refund_pending')
           .gte('reconciliation.nextAttemptAt', 0)
@@ -343,8 +353,9 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
       .order('asc')
       .take(limit),
     ctx.db.query('capabilityCalls')
-      .withIndex('by_state_and_reconciliation_disposition_reason_nextAttemptAt', (q) => (
-        q.eq('state', 'cancelled')
+      .withIndex('by_environment_state_reconciliation_disposition_reason_due', (q) => (
+        q.eq('environment', environment)
+          .eq('state', 'cancelled')
           .eq('reconciliation.disposition', 'automatic')
           .eq('reconciliation.reason', 'refund_pending')
           .gte('reconciliation.nextAttemptAt', 0)
@@ -354,7 +365,7 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
       .take(limit),
   ])
   const rows = [...reconciliationPages.flat(), ...refusedRefundRows, ...cancelledRefundRows]
-    .filter((row) => hasClaimableReconciliation(row, args.now))
+    .filter((row) => callEnvironmentMatches(row) && hasClaimableReconciliation(row, args.now))
     .sort((left, right) => {
       const leftDue = left.reconciliation?.nextAttemptAt ?? Number.POSITIVE_INFINITY
       const rightDue = right.reconciliation?.nextAttemptAt ?? Number.POSITIVE_INFINITY
@@ -388,6 +399,7 @@ export async function claimAutomaticReconciliationCandidateHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (q) => q.eq('callRef', args.callRef))
     .unique()
+  if (row !== null) assertCallEnvironment(row)
   if (!hasClaimableReconciliation(row, args.now)) return { kind: 'not_claimed' }
   const reconciliation = row.reconciliation
   await ctx.db.patch(row._id, {
@@ -417,6 +429,7 @@ export async function finishAutomaticReconciliationHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (q) => q.eq('callRef', args.callRef))
     .unique()
+  if (row !== null) assertCallEnvironment(row)
   if (row === null) return { kind: 'refused', code: 'not_found' }
   const reconciliation = row.reconciliation
   if (!hasCurrentAutomaticLease(row, reconciliation, args.leaseOwner, args.now)) {

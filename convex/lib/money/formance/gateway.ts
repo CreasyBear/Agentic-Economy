@@ -1,5 +1,7 @@
 "use node"
 
+import { financialEnvironmentMatches, type FinancialEnvironment } from './contracts'
+
 import {
   createFormanceContext,
   installPackage4FormanceSchema,
@@ -57,7 +59,10 @@ export {
   type FormanceSpendingPeriodAdjustment,
 } from '../../../../src/modules/money/formance-workflows'
 
-export function configuredContext() {
+export function configuredContext(expectedEnvironment?: FinancialEnvironment) {
+  if (expectedEnvironment !== undefined && !financialEnvironmentMatches(expectedEnvironment)) {
+    return { kind: 'setup_required' as const, code: 'environment_mismatch' }
+  }
   const result = readFormanceConfiguration()
   return result.kind === 'setup_required'
     ? result

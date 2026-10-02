@@ -1233,13 +1233,13 @@ describe('capability Call Workpool lifecycle', () => {
       principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, toolRef: published.toolRef,
     })
     if (pending.kind !== 'prepared' || pending.commands.length !== 2) throw new Error('policy_pending_delta_missing')
-    const submitted = await backend.action(internal.moneyFormance.adjustSpendingPeriod, pending.commands[0]!)
+    const submitted = await backend.action(internal.moneyFormance.adjustSpendingPeriod, { ...pending.commands[0]!, expectedEnvironment: 'sandbox' })
     expect(submitted).toMatchObject({ kind: 'completed', replayed: false })
     expect(await update(3, '36000', 'latest', true)).toMatchObject({ kind: 'completed', generation: 4 })
     const latest = await quote('latest-after-lost-ack')
     expect(latest).toMatchObject({ kind: 'committed' })
     await expectAgentPeriodBalances(formance, original.booking, '24000')
-    expect(await backend.action(internal.moneyFormance.adjustSpendingPeriod, pending.commands[0]!))
+    expect(await backend.action(internal.moneyFormance.adjustSpendingPeriod, { ...pending.commands[0]!, expectedEnvironment: 'sandbox' }))
       .toMatchObject({ kind: 'completed', replayed: true,
         transactionRefs: submitted.kind === 'completed' ? submitted.transactionRefs : [] })
     expect(await update(1, '12000', 'lower')).toMatchObject({ kind: 'replayed', generation: 2 })
@@ -1721,6 +1721,7 @@ describe('capability Call Workpool lifecycle', () => {
     const material = await backend.query(internal.moneyManagedCall.readBooking, { callRef: revoked.callRef })
     if (material.kind !== 'available') throw new Error('buyer_refund_booking_missing')
     const ledgerRelease = await backend.action(internal.moneyFormance.releaseManagedCall, {
+      expectedEnvironment: 'sandbox',
       booking: material.booking, externalEvidenceDigest: material.booking.quoteDigest, submissionProvenAbsent: true,
     })
     expect(ledgerRelease).toMatchObject({ kind: 'completed', replayed: false })

@@ -14,7 +14,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     // Tests run in an explicitly isolated money world; production cases opt in.
-    env: { AE_DEPLOYMENT_ENVIRONMENT: 'development' },
+    env: { AE_DEPLOYMENT_ENVIRONMENT: 'development', AE_FORMANCE_ENVIRONMENT: 'sandbox' },
     include: [
       'tests/**/*.test.ts',
       'tests/**/*.test.tsx',

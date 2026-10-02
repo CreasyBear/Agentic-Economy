@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { financialEnvironmentValue } from '../formance/contracts'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
@@ -77,6 +78,7 @@ export function bookingFromRows(
   const periodAware = quote.spendingPeriods !== undefined
   if (tool === undefined
     || !validStoredSpendingPeriods(quote.spendingPeriods)
+    || call.environment !== quote.environment
     || call.quoteRef !== quote.quoteRef
     || call.ownerId !== quote.accountRef
     || call.principalId !== quote.principalId
@@ -133,6 +135,7 @@ export function bookingFromRows(
 export const readBookingArgs = v.object({ callRef: v.string() })
 export const readBookingResult = v.union(v.object({
     kind: v.literal('available'),
+    expectedEnvironment: financialEnvironmentValue,
     booking: bookingValue,
     financialState: v.optional(v.union(
       v.literal('reservation_pending'),
@@ -187,6 +190,7 @@ export const readBookingHandler = async (ctx: QueryCtx, args: Infer<typeof readB
     }
     return {
       kind: 'available' as const,
+      expectedEnvironment: call.environment,
       booking,
       ...(call.state === 'reconciliation_required'
         && call.reconciliation?.disposition === 'manual_review'

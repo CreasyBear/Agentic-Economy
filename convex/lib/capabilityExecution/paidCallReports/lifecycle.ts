@@ -1,3 +1,4 @@
+import { financialEnvironmentMatches, financialEnvironmentValue } from '../../money/formance/contracts'
 import { v } from 'convex/values'
 import { env, type ActionCtx, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import { api, internal } from '../../../_generated/api'
@@ -14,13 +15,13 @@ import { bindWorkloadCronActionContext } from '../../platform/workloadCron/conse
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue, type WorkloadCronSnapshot } from '../../platform/workloadCron/context'
 import { callArgs } from './admission'
 
-const workValue = v.object({ booking: managedCallBookingValue, originalSettlementRefs: v.array(v.string()), reportDigest: v.string() })
+const workValue = v.object({ expectedEnvironment: financialEnvironmentValue, booking: managedCallBookingValue, originalSettlementRefs: v.array(v.string()), reportDigest: v.string() })
 export const claimResult = v.union(v.null(), workValue)
 export async function claimHandler(ctx: MutationCtx, args: { callRef: string }) {
   const row = await ctx.db.query('paidCallReports').withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
-  if (row?.state !== 'pending' || row.environment !== deploymentPaymentEnvironment(env)) return null
+  if (row?.state !== 'pending' || !financialEnvironmentMatches(row.environment)) return null
   await ctx.db.patch(row._id, { nextWorkAt: Date.now() + 60_000, updatedAt: Date.now() })
-  return { booking: row.booking, originalSettlementRefs: row.originalSettlementRefs, reportDigest: row.reportDigest }
+  return { expectedEnvironment: row.environment, booking: row.booking, originalSettlementRefs: row.originalSettlementRefs, reportDigest: row.reportDigest }
 }
 
 export const finishArgs = v.object({ callRef: v.string(), reportDigest: v.string(), transactionRefs: v.array(v.string()) })
@@ -29,11 +30,11 @@ export const finishArgs = v.object({ callRef: v.string(), reportDigest: v.string
  * settlement/resolution evidence, and retry cannot restore promo counters twice. */
 export async function finishHandler(ctx: MutationCtx, args: { callRef: string; reportDigest: string; transactionRefs: string[] }): Promise<boolean> {
   const report = await ctx.db.query('paidCallReports').withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
-  if (report === null || report.environment !== deploymentPaymentEnvironment(env) || report.reportDigest !== args.reportDigest
+  if (report === null || !financialEnvironmentMatches(report.environment) || report.reportDigest !== args.reportDigest
     || JSON.stringify(settledSaleRefundReferences(report.booking)) !== JSON.stringify(args.transactionRefs)) return false
   if (report.state === 'posted') return JSON.stringify(report.transactionRefs) === JSON.stringify(args.transactionRefs)
   const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
-  if (call?.state !== 'completed' || call.result?.kind !== 'completed' || call.quoteRef === undefined
+  if (call?.state !== 'completed' || call.environment !== report.environment || call.result?.kind !== 'completed' || call.quoteRef === undefined
     || call.formanceFinancialState !== 'settled' || call.ownerId !== report.accountRef
     || call.result.receipt?.commercialModel !== 'account_aud' || call.result.receipt.state !== 'settled'
     || JSON.stringify(call.formanceSettlementRefs) !== JSON.stringify(report.originalSettlementRefs)) return false

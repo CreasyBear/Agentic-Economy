@@ -1,5 +1,5 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkId } from '@convex-dev/workpool'
 import { components, internal } from '../../../convex/_generated/api'
 import { AUTHORITY_REQUEST_TTL_MS } from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
@@ -18,6 +18,8 @@ import {
 } from '../../helpers/interactive-authority-seed'
 
 
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 async function insertPendingApprovalCall(
   backend: InteractiveAuthorityBackend,
@@ -577,6 +579,8 @@ describe('approval notification deliveries', () => {
   })
 
   it('atomically enqueues the approval when the reserved Call records its pending result', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
     const backend = await createNotificationBackend()
     await seedAuthority(backend)
     const callRef = 'operation-invocation:v1:notification-record'
