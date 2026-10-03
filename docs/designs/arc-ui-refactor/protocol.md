@@ -4,11 +4,25 @@
 
 ## Progress counter
 
+### Chat block replacement, 2026-10-03
+
+Before this batch, the header/history retained Vercel presenters and the composer retained AE markup under Arc class names. The retrieved Arc AI Chat and AI Composer block regions now own their presentation; preserve the existing session, read-only shared transcript, streaming scroller and authority controllers. The native engine is an explicit integration gap in Arc's sample transport, not a reason to retain the old chrome.
+
+**Requires:** current typed records, supplied exact thread IDs/titles/prompts, native route/portal targets, enabled callbacks and caller-owned busy/authority states. **Ensures:** history grouping/order, search, async rename/delete outcomes, pagination, saved draft, IME and Shift-Enter behavior, send/stop, sharing, credit disclosure and private-thread admission survive. **Invariant:** presentation cannot grant spending authority, generate replies, infer Call outcomes, retry uncertain Calls or turn a shared chat into an editable conversation. **On violation:** preserve the existing recovery projection and omit unavailable actions; failed rename/delete keeps the current edit/confirmation open. No demo data, timers, sample model switcher or attachment capability ships.
+
+Source-only cognitive-load findings: new chat and the draft are the primary actions; date-grouped history is a recognition list with destructive actions behind the existing menu and explicit confirmation. The draft, exact share link and recovery references remain visible so users need not recall them. Arc's compact rows and suggestion grid replace authored navigation/card geometry. Touch size and visual acceptance require rendered measurement later; no rendered claim is made.
+
+State-flow decision: draft, messages, history results, sharing and authority flow down from existing controllers; events flow up through the same callbacks. Only history edit/confirmation and rail/Drawer disclosure remain local. No second Arc transport, message cache, retry state or source of truth is added.
+
+Complexity: controlled AI Chat and AI Composer source regions add two TSX/CSS pairs in exchange for deleting AE chrome/composer markup and duplicate styles across existing callers. Reusing the full sample engines would duplicate state and violate authority/privacy; keep the existing engines and scoped source extraction. Coordinator owns live bindings, observable parity tests, census and release; the cold Luna worker owns exactly the prescribed two AI Chat files. Money/backend surfaces remain reserved for the production worker.
+
+The second cold Luna assignment owns exactly the new Agent Run timeline TSX/CSS and its existing thin caller. Port actual summary/timeline/rail rows over observed steps. Requires stable supplied IDs and phase labels; ensures exact order/summary with keyboard disclosure; invariant no demo clock, simulated progress, step-detail affordance without data, approval or retry; on violation empty steps render nothing. Native Working/Done/attention labels and the current phase precedence survive. Two source files replace the old authored timeline/CSS; no new engine or dependency. Coordinator verifies this conclusion against the emitted source and removes the obsolete stylesheet only after the import is gone.
+
 ### Block replacement acceptance, 2026-10-03
 
 Joel clarified that this work must replace AE-authored presentation with installed Arc blocks wherever a block fits. The earlier percentage counts source/parity decisions, not complete block replacements. An `arc_block` name, primitive import, matching stylesheet or source hash does not establish a block migration.
 
-**Current pilot progress: 7 / 7 primary page regions replaced in source; integrated release checks in progress.** The seven audited surfaces are Metrics, Agent keys, Provider integrations, Team management, Add Tool, Provider object and the operator navigation frame. This is a sampled block-depth audit, not a new claim of whole-app acceptance. Rendered acceptance remains deferred.
+**Current pilot progress: 7 / 7 primary page regions replaced and shipped in PR308; source gate passed.** The seven audited surfaces are Metrics, Agent keys, Provider integrations, Team management, Add Tool, Provider object and the operator navigation frame. This is a sampled block-depth audit, not a new claim of whole-app acceptance. Rendered acceptance remains deferred.
 
 | Surface | Installed block and actual replacement | Preserved native boundary | State |
 | --- | --- | --- | --- |
@@ -38,23 +52,27 @@ Joel clarified that this work must replace AE-authored presentation with install
 
 **Complexity decision:** three installed presentation blocks replace duplicated AE row/form/CSS ownership and one application-local dashboard. Their inputs absorb UI composition, search/disclosure and state presentation; existing controllers retain all transport/authority behavior. The alternative of preserving AE markup with Arc class names caused this audit and is rejected. No library, service, schema, commercial rule or new state framework is introduced. Pure presentation slots are limited to genuine native/guarded controls, not a whole AE-authored page disguised inside an Arc wrapper.
 
-**Historical source decisions recorded: 388 / 461 (84%).** This counter records source/parity decisions, not actual block replacement. Deleted presenters leave the census and installed Arc presenters enter it. **Block-depth decisions assessed: 30 / 461; 431 remain unassessed.** Those remaining decisions need the new acceptance rule even if their earlier source status was reviewed. Rendered acceptance remains deferred.
+**Block-depth decisions assessed: 48 / 465 (10%); 417 remain unassessed.** A decision can be a complete block, a bounded adaptation, a controller seam or a justified native retention. This is not a claim that 48 pages are fully migrated. Historical source/parity decisions cover 392 / 465 (84%); styling and primitive reviews do not establish actual block replacement. Rendered acceptance remains deferred.
 
-| Area | Historical source decisions recorded | Remaining, including deferred |
+| Area | Block-depth decisions assessed | Remaining |
 | --- | ---: | ---: |
-| Account and settings | 30 / 31 | 1 |
-| Agents | 45 / 45 | 0 |
-| Chat | 44 / 44 | 0 |
-| Market | 34 / 53 | 19 |
-| Money and activity | 21 / 22 | 1 |
-| Operator | 55 / 60 | 5 |
-| Provider | 50 / 50 | 0 |
-| Public and support | 42 / 43 | 1 |
-| Shared frames and primitives | 67 / 113 | 46 |
+| Account and settings | 3 / 31 | 28 |
+| Agents | 0 / 45 | 45 |
+| Chat | 17 / 48 | 31 |
+| Market | 0 / 53 | 53 |
+| Money and activity | 0 / 22 | 22 |
+| Operator | 8 / 60 | 52 |
+| Provider | 4 / 50 | 46 |
+| Public and support | 0 / 43 | 43 |
+| Shared frames and primitives | 16 / 113 | 97 |
 
 **Route bindings: 36 / 65 reviewed; 29 remain.** Business companions are tracked separately and are not extra pages to redesign. Counters come from the existing source inventory. Its new adoption-depth column prevents historical styling or primitive reviews from being mistaken for whole-block acceptance.
 
-**Current batch evidence:** Metrics/keys/team focused cases passed (51 cases in nine files); connections and authority-snapshot revoke/readback passed (17 cases in two files); Arc form/header plus existing Add Tool/handoff cases passed (28 cases in four files). Provider records passed four focused cases; app-shell/rail checks passed fifteen cases, including collapse labels, conservative entitlements, exact native destinations, authentication transition without remount, compact Drawer Escape/selection and focus return. The refreshed census contains 840 sources and 501 action sites (454 reviewing, 40 inventoried, seven retained), with zero unresolved action imports. Integrated `npm run check` passes with zero cycles. Full `npm run gate` passes on Node22/npm11.5.1 with `AE_DEPLOYMENT_ENVIRONMENT=development` and `AE_FORMANCE_ENVIRONMENT=sandbox`. The initial undeclared-environment attempt correctly refused before execution. The combined PR307 main baseline passes client/server build integrity, clean web/Convex types, 8,111 unit cases (one existing skip), integration/types/import/standards/SEO checks, sixteen browser journeys (sixteen environment-gated skips), eighteen accessibility journeys and reproducible CLI packaging. Six previous header/menu assertions were adapted to the actual Arc composition without changing their route/role/keyboard/heading guarantees. An additional real-router compact-navigation case passes and verifies destination-main focus after closing the Drawer. Logs: `/tmp/aecon-arc-analytics-gate-final.log` and `/tmp/aecon-arc-routed-navigation-focus.log`. Rendered owner visual acceptance remains deferred. React Doctor checked all 37 changed React files: score improved 84→92 after replacing width/height layout animation with static sizing, using lazy motion features and stable fact keys; no errors remain. Seven complexity warnings retain necessary explicit state/permission branches rather than add wrapper files. Three prop-change warnings are deliberate lifetime cleanup: remove/close missing-record inspection and close navigation when the frame is disabled; focused tests prove current-record readback, close/focus and stable routed state. No rules were disabled or ignored. No rendered acceptance or performance measurements are claimed. Previous release evidence and limitations remain dated below.
+**Current chat batch evidence:** 100 focused cases in ten files pass over the combined PR309 main baseline. They establish current draft/focus identity through authentication, IME/Shift Enter and Unicode admission, native form submission guards, real send/stop, history order/search/clear/focus, failed asynchronous rename/delete retention, shared read-only privacy, current sharing callbacks and disclosure/prose order. Combined `npm run check` passes with zero cycles. The current census has 849 sources and 506 action sites (453 reviewing, 46 inventoried, seven retained), with zero unresolved action imports. The other worker's 74 incoming commercial files have zero overlap with this batch. Full `npm run gate` passes on Node22/npm11.5.1 with the declared development/sandbox environment: client/server build integrity, clean web/Convex types, 8,161 unit cases (one existing skip), 2,814 integration cases (61 skips and three todo cases), type/import/standards/SEO checks, sixteen browser journeys (sixteen environment-gated skips), eighteen accessibility journeys and reproducible CLI packaging. Logs: `/tmp/aecon-arc-chat-gate-final.log`, `/tmp/aecon-arc-chat-check-release.log` and `/tmp/aecon-arc-chat-parity-complete.log`. Rendered owner acceptance remains deferred.
+
+React Doctor inspected all nineteen changed/new React files and reported three complexity warnings in existing native transcript/composer/header state branches, plus one layout-animation diagnostic in the retrieved Agent Run disclosure. The disclosure uses the existing smooth spring, exact supplied rows and a zero-duration reduced-motion branch; expanding/collapsing content is the information, which is Arc's explicit size-animation exception. Retain it, document the diagnostic and make no measured performance claim. The pinned staged advisory hook additionally reports seven unchanged native-controller warnings (large transcript, a bounded four-choice map/filter, cursor state, shared-page reset effects and the prompt-focus callback). Its baseline comparison against `origin/main` confirms zero new warnings and the same sole disclosure-height diagnostic. The cursor/reset effects synchronize a live opaque paginated source; no controller refactor is needed for this presentation batch. No rules are suppressed. Source review confirms there is no second chat engine, fictional progress or approval/retry action. The redundant native Drawer viewport cap was removed; its `min(90vw, 26rem)` width already bounds it below the viewport. Source CSS review restored Arc’s `container-type: inline-size` on the main column so suggestion and dock queries have their intended container. Checklist sweeps pass. The first full-gate unit run exposed three production-fixture conflicts caused by the temporary copied `.env.local`; removing only that managed-worktree copy restores all 62 admission cases without changing tests or production validation. The primary environment is retained.
+
+**Previous PR308 batch evidence:** Metrics/keys/team focused cases passed (51 cases in nine files); connections and authority-snapshot revoke/readback passed (17 cases in two files); Arc form/header plus existing Add Tool/handoff cases passed (28 cases in four files). Provider records passed four focused cases; app-shell/rail checks passed fifteen cases, including collapse labels, conservative entitlements, exact native destinations, authentication transition without remount, compact Drawer Escape/selection and focus return. The refreshed census contains 840 sources and 501 action sites (454 reviewing, 40 inventoried, seven retained), with zero unresolved action imports. Integrated `npm run check` passes with zero cycles. Full `npm run gate` passes on Node22/npm11.5.1 with `AE_DEPLOYMENT_ENVIRONMENT=development` and `AE_FORMANCE_ENVIRONMENT=sandbox`. The initial undeclared-environment attempt correctly refused before execution. The combined PR307 main baseline passes client/server build integrity, clean web/Convex types, 8,111 unit cases (one existing skip), integration/types/import/standards/SEO checks, sixteen browser journeys (sixteen environment-gated skips), eighteen accessibility journeys and reproducible CLI packaging. Six previous header/menu assertions were adapted to the actual Arc composition without changing their route/role/keyboard/heading guarantees. An additional real-router compact-navigation case passes and verifies destination-main focus after closing the Drawer. Logs: `/tmp/aecon-arc-analytics-gate-final.log` and `/tmp/aecon-arc-routed-navigation-focus.log`. Rendered owner visual acceptance remains deferred. React Doctor checked all 37 changed React files: score improved 84→92 after replacing width/height layout animation with static sizing, using lazy motion features and stable fact keys; no errors remain. Seven complexity warnings retain necessary explicit state/permission branches rather than add wrapper files. Three prop-change warnings are deliberate lifetime cleanup: remove/close missing-record inspection and close navigation when the frame is disabled; focused tests prove current-record readback, close/focus and stable routed state. No rules were disabled or ignored. No rendered acceptance or performance measurements are claimed. Previous release evidence and limitations remain dated below.
 
 **First implementation wave:** Tool market discovery/search, comparison and both Tool-detail surfaces. Joel selected this group and directed a creative, block-first refactor using Arc Pro and subagents.
 
@@ -126,19 +144,16 @@ The [source inventory](source-inventory.csv) contains every non-test `.tsx`, `.t
 
 | Census | Count | Meaning |
 | --- | ---: | --- |
-| Current source files | 812 | 749 component-area files and 63 TSX routes; reconciled after each stable broad batch |
-| Current visual/route files | 510 | 447 presenters plus 63 routes/layouts/redirects |
-| Current source companions | 302 | Hooks, contracts, styles and presentation helpers; context, not an instruction to rewrite business logic |
-| Active page surfaces | 55 | Market 4, buyer/account 20, Provider 6, operator 12, public/support/docs 10, chat 3 |
-| Route containers / redirects | 3 / 5 | Review shared containers once; redirects are not separate page redesigns |
-| Connected table implementations | 21 | 17 consumers of `AeRecordTable`, plus four directly connected domain tables |
-| Other table records | 4 | Three shared layers, including the new actual Arc table source; `DirectoryProvidersIndex` has no source runtime caller found |
-| Shared Button occurrences | 308 | 298 Arc and 10 legacy JSX sites across 141 import files |
-| Button-style sites | 133 | 14 legacy calls and 119 native Arc button-style links |
-| Other action sites | 35 | 32 native buttons and three deliberately retained dormant site buttons; no site icon buttons |
-| Current sources reviewing | 471 | 257 inventoried, one deferred and 83 retained; current-revision visual acceptance remains incomplete |
+| Current source files | 849 | 784 component-area files and 65 TSX route bindings |
+| Presenters and routes | 530 | 465 presenters plus 57 page, three layout and five redirect source bindings |
+| Source companions | 319 | Hooks, contracts, styles and presentation helpers; context, not extra page redesigns |
+| Block-depth decisions assessed | 48 / 465 | Includes complete blocks, bounded adaptations, controller seams and native retention |
+| Shared Button sites | 327 | 298 Arc and 29 legacy JSX source sites |
+| Button-style sites | 135 | 14 legacy calls and 121 native Arc button-style links |
+| Other action sites | 44 | 41 native buttons and three deliberately retained dormant site buttons |
+| Current source status | 503 reviewing | 266 inventoried, one deferred and 79 retained; current visual acceptance is incomplete |
 
-The action census scans 468 non-test AE/Arc/route TSX files; upstream `ui` and `ai-elements` implementation files are inventoried separately. Source occurrence counts are not runtime control counts: a row action rendered in a loop counts once. Import-file counts are not occurrence counts.
+The action census scans 489 non-test AE/Arc/route TSX files; upstream `ui` and `ai-elements` implementation files are inventoried separately. Source occurrence counts are not runtime control counts: a row action rendered in a loop counts once. Census/action totals include PR309's incoming commercial changes without claiming their block-depth acceptance.
 
 Areas and candidate batches in the CSV are routing hints. Trace callers before assigning ownership: a shared component can serve several groups, and an apparent old page can still export a live subcomponent. All rows start `inventoried`; census coverage is not proof of reachability, parity or migration.
 

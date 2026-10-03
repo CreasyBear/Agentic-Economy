@@ -1,14 +1,5 @@
-/* Arc Pro ai-chat CSS SHA-256 9bb51b56ad4ba212ce43ffd3374e2f73f2311cf215a644ff30a78421c5709eeb.
- * The authored header/empty/thread geometry adapts to AE's existing chat scroll owner. */
-.arc-shared-header { display: flex; flex: none; min-height: 64px; padding: var(--space-2) var(--space-6); border-bottom: 1px solid var(--border); }
-.arc-shared-bar { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-4); font-family: var(--font-body); }
-.arc-shared-lock { width: 20px; height: 20px; flex: none; color: var(--text-secondary); }
-.arc-shared-title-group { display: grid; min-width: 0; flex: 1; gap: var(--space-1); }
-.arc-shared-title { min-width: 0; margin: 0; color: var(--foreground); font-size: var(--text-base); font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
-.arc-shared-description { min-width: 0; margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
-.arc-shared-read-only { flex: none; padding: 6px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--text-secondary); font-size: var(--text-sm); white-space: nowrap; }
+/* Native shared-page loading, read-only pagination and empty-state placement. */
 .arc-shared-column { width: 100%; max-width: 768px; min-width: 0; margin-inline: auto; gap: var(--space-6); padding: var(--space-6); }
 .arc-shared-thread { display: flex; min-height: 0; min-width: 0; flex: 1; flex-direction: column; }
 .arc-shared-empty { display: grid; min-height: 0; min-width: 0; flex: 1; align-content: center; padding: var(--space-6); overflow-y: auto; }
-@media (max-width: 639px) { .arc-shared-header { padding-inline: var(--space-4); } .arc-shared-bar { gap: var(--space-2); } .arc-shared-read-only { padding-inline: var(--space-2); font-size: var(--text-xs); } }
 @media (max-width: 559px) { .arc-shared-column { padding-inline: var(--space-4); } }

@@ -59,3 +59,13 @@ it('passes the exact existing suggested prompt and never submits the surrounding
   expect(pick.mock.calls).toEqual(chatSuggestions.map(suggestion => [suggestion.prompt]))
   expect(submit).not.toHaveBeenCalled()
 })
+
+it('guards native form submission independently of the disabled send button', () => {
+  const current = props()
+  const view = render(<ChatComposer {...current} />)
+  for (const state of [{ disabled: true }, { busy: true }, { prompt: '  ' }, { prompt: '😀'.repeat(2_001) }]) {
+    view.rerender(<ChatComposer {...current} {...state} />)
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Message' }).closest('form')!)
+  }
+  expect(current.onSubmit).not.toHaveBeenCalled()
+})

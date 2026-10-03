@@ -2,11 +2,12 @@
 import { ErrorBoundary } from '@sentry/react'
 import { useEffect, useRef, useState } from 'react'
 import '@/components/arc/chat/ChatComposition.css'
-import { Bubble, BubbleContent } from '@/components/ui/bubble'
+import { ArcAiChatMessage } from '@/components/arc/blocks/ai-chat/ai-chat-message'
+import messageStyles from '@/components/arc/blocks/ai-chat/ai-chat-message.module.css'
+import { ArcAiChatEmptyStage } from '@/components/arc/blocks/ai-chat/ai-chat'
 import { Button } from '@/components/arc/button/button'
 import { ArrowDownIcon } from 'lucide-react'
 import { Marker, MarkerContent } from '@/components/ui/marker'
-import { Message, MessageContent } from '@/components/ui/message'
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -69,7 +70,7 @@ type ChatTranscriptProps = ChatTranscriptViewProps & Readonly<{
   onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: RunIntent) => void
 }>
 
-const TRANSCRIPT_COLUMN = 'arc-chat-transcript'
+const TRANSCRIPT_COLUMN = messageStyles.transcript
 const PANEL_EXIT_DURATION_MS = 150
 
 export function ChatTranscript({
@@ -222,13 +223,7 @@ export function ChatTranscript({
   }
   if (turns.length === 0) {
     return (
-      <div className="relative min-h-0 w-full flex-1 bg-background">
-        <div className="arc-chat-empty-column absolute inset-x-0 top-[38.2%] mx-auto -translate-y-1/2">
-          <div className="min-w-0">
-            <ChatGreeting />
-          </div>
-        </div>
-      </div>
+      <ArcAiChatEmptyStage><ChatGreeting /></ArcAiChatEmptyStage>
     )
   }
 
@@ -296,14 +291,9 @@ export function ChatTranscript({
               })
               return (
               <MessageScrollerItem key={turn.id} messageId={turn.id} scrollAnchor={turn.role === 'user'} className="min-w-0">
-                <article aria-label={turn.role === 'user' ? 'You' : 'Assistant'} className="group/message w-full">
-                  <Message align={turn.role === 'user' ? 'end' : 'start'}>
-                    <MessageContent>
+                <ArcAiChatMessage role={turn.role} text={turn.text}>
                       {view === null ? (
-                        <div className="grid justify-items-end gap-2">
-                          <Bubble variant="muted" align="end" className="max-w-[80%]">
-                            <BubbleContent className="rounded-2xl rounded-br-lg border border-border/30 bg-secondary px-3.5 py-2 text-base leading-relaxed whitespace-pre-wrap break-words">{turn.text}</BubbleContent>
-                          </Bubble>
+                        <>
                           {readOnly || failure === undefined ? null : (
                             <RecoveryNotice reason={failure.reason} className="w-full max-w-prose"
                               {...(turn.text.length > 0 && parseRunRequest(turn.text) === null && onEditQuestion !== undefined
@@ -311,7 +301,7 @@ export function ChatTranscript({
                               {...(failure.callRefs === undefined ? {} : { callRefs: failure.callRefs })}
                               {...(onNewChat === undefined ? {} : { onNewChat })} />
                           )}
-                        </div>
+                        </>
                       ) : (
                         <div className="grid w-full min-w-0 gap-3">
                           {writing ? <AnswerBlock view={{ markdown: prose, streaming: true }} /> : null}
@@ -430,9 +420,7 @@ export function ChatTranscript({
                             onEditQuestion={() => { if (previousPrompt) onEditQuestion?.(previousPrompt) }} />}
                         </div>
                       )}
-                    </MessageContent>
-                  </Message>
-                </article>
+                </ArcAiChatMessage>
                 {handoffAfter === index + 1 ? (
                   <div className="mt-related">
                     <Marker variant="separator" role="status">

@@ -1,0 +1,12 @@
+/* Native session/recovery feedback outside the installed Arc composer. */
+.arc-chat-feedback { display: flex; align-items: start; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+.arc-chat-feedback-main { flex: 1; min-width: 0; }
+.arc-chat-feedback :where(p) { margin: 0; }
+.arc-chat-error { display: grid; justify-items: start; gap: var(--space-2); width: 100%; min-width: 0; }
+.arc-chat-error-message { color: var(--danger); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.arc-chat-support-reference { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; color: var(--text-secondary); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.arc-chat-recovery-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: var(--space-2) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); color: var(--foreground); font-size: var(--text-sm); text-decoration: none; }
+.arc-chat-browser-count, .arc-chat-character-count { color: var(--text-secondary); font-size: var(--text-xs); line-height: var(--leading-body); font-variant-numeric: tabular-nums; }
+.arc-chat-character-count { flex: none; }
+
+@media (max-width: 560px) { .arc-chat-feedback[data-quiet] { display: none; } }

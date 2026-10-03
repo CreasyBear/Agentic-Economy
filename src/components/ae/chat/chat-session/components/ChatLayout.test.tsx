@@ -55,6 +55,21 @@ function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel
 }
 
 describe('ChatLayout', () => {
+  it('keeps the same drafted field and focus when authenticated history becomes available', () => {
+    const model = buildModel()
+    const view = render(<ChatLayout model={{ ...model, composer: { ...model.composer, prompt: 'Keep this draft' } }} />)
+    const field = screen.getByRole('textbox', { name: chatComposer.promptLabel })
+    field.focus()
+    view.rerender(<ChatLayout model={{ ...model, showHistoryRail: true,
+      header: { ...model.header, authenticated: true },
+      createHistoryPanel: () => <p>Saved threads</p>,
+      composer: { ...model.composer, prompt: 'Keep this draft' },
+    }} />)
+    expect(screen.getByRole('textbox', { name: chatComposer.promptLabel })).toBe(field)
+    expect((field as HTMLTextAreaElement).value).toBe('Keep this draft')
+    expect(document.activeElement).toBe(field)
+  })
+
   it('shows safe recovery actions while preserving the drafted message', () => {
     const model = buildModel()
     const retry = vi.fn()
@@ -201,7 +216,7 @@ describe('ChatLayout', () => {
     render(<ChatLayout model={buildModel({
       transcript: { messages, onSuggest, onRefine, onCompareRequest, onCopyAnswer, onEditQuestion },
     })} />)
-    expect(document.querySelector('details')?.open).toBe(false)
+    expect(screen.queryByRole('list', { name: 'Discovery work' })).toBeNull()
     expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('Here are two weather APIs')
     expect(screen.getByRole('region', { name: 'Options' }).textContent).toContain('Sydney Weather')
     expect(screen.queryByText('Search tools', { selector: 'h3' })).toBeNull()

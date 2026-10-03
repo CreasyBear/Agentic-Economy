@@ -1,8 +1,7 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/shell.tsx and components/chat/app-sidebar.tsx, Apache-2.0.
 import { ErrorBoundary } from '@sentry/react'
 import { useEffect, useState } from 'react'
-import { PlusIcon } from 'lucide-react'
-import { Button } from '@/components/arc/button/button'
+import { ArcAiChatDock, ArcAiChatFrame } from '@/components/arc/blocks/ai-chat/ai-chat'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import '@/components/arc/chat/ChatComposition.css'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
@@ -58,17 +57,11 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
     )
   }
   return (
-    <div className="arc-market arc-chat arc-chat-workspace">
-      {model.showHistoryRail ? (
-        <aside aria-label="Conversation history" className="arc-chat-sidebar" data-expanded={historyOpen}>
-          {historyOpen
-            ? <ErrorBoundary key={`${model.header.threadId}:${historyVersion}`}
-                fallback={<RecoveryNotice className="arc-chat-sidebar-recovery" reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} />}>
-                {model.createHistoryPanel('rail')}
-              </ErrorBoundary>
-            : <Button type="button" variant="ghost" size="sm" className="arc-chat-sidebar-new" aria-label="New chat" onClick={model.header.onNewChat}><PlusIcon aria-hidden="true" /></Button>}
-        </aside>
-      ) : null}
+    <ArcAiChatFrame sidebarOpen={historyOpen} onNewChat={model.header.onNewChat}
+      sidebar={model.showHistoryRail ? historyOpen ? <ErrorBoundary key={String(model.header.threadId) + ':' + historyVersion}
+        fallback={<RecoveryNotice reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} className="arc-chat-sidebar-recovery" />}>
+        {model.createHistoryPanel('rail')}
+      </ErrorBoundary> : <></> : null}>
       <AeChatPage
         header={
           <ErrorBoundary key={model.header.threadId} fallback={<ChatHeader {...fallbackHeader}
@@ -104,18 +97,14 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
             enableSpendingBusy={enableSpendingBusy}
             {...(onAddCredit === undefined ? {} : { onAddCredit })}
             {...(onEnableSpending === undefined ? {} : { onEnableSpending })} />
-          <div className="arc-chat-composer-dock">
-            <div className="arc-chat-composer-page">
-              <div className="arc-chat-composer-slot">
+          <ArcAiChatDock>
                 {empty && model.transcript.onStarter ? (
                   <div className="arc-chat-starters"><ChatSuggestedActions onPick={model.transcript.onStarter} /></div>
                 ) : null}
                 <ChatComposer {...model.composer} />
-              </div>
-            </div>
-          </div>
+          </ArcAiChatDock>
         </div>
       </AeChatPage>
-    </div>
+    </ArcAiChatFrame>
   )
 }
