@@ -70,6 +70,7 @@ export const filterArgs = {
   minUsdPrice: v.optional(v.number()), minPayers30d: v.optional(v.number()), maxPayers30d: v.optional(v.number()),
   priceBand: v.optional(v.string()), adoptionBand: v.optional(v.string()),
   curatedOnly: v.optional(v.boolean()), tags: v.optional(v.array(v.string())), bundleSlugs: v.optional(v.array(v.string())),
+  reviewedProvidersOnly: v.optional(v.boolean()),
   hasInputFields: v.optional(v.boolean()), hasOutputFields: v.optional(v.boolean()),
   hasInputSchema: v.optional(v.boolean()), hasOutputSchema: v.optional(v.boolean()), hasOutputExample: v.optional(v.boolean()),
   maxUsdPrice: v.optional(v.number()), sort: v.optional(v.union(v.literal('relevance'), v.literal('adoption'), v.literal('popular'), v.literal('active'), v.literal('repeat'), v.literal('price_asc'))),

@@ -12,7 +12,7 @@ import {
   readOwnerProviderObligationsServer,
   readOwnerMoneyDocumentsServer,
   readOwnerMoneyReconciliationServer,
-  renderOwnerMoneyDocumentServer,
+  readOwnerMoneyDocumentUrlServer,
   signOwnerDailyCloseServer,
   type MoneyDocumentView,
   type MoneyProviderObligationView,
@@ -39,7 +39,7 @@ export function useOwnerCredit(): AeOwnerCreditProps {
   const createStatement = useServerFn(createOwnerStatementServer)
   const createDailyClose = useServerFn(createOwnerDailyCloseServer)
   const signDailyClose = useServerFn(signOwnerDailyCloseServer)
-  const renderDocument = useServerFn(renderOwnerMoneyDocumentServer)
+  const readDocumentUrl = useServerFn(readOwnerMoneyDocumentUrlServer)
   const accountFundingPort = useMemo<AccountFundingPort>(() => ({
     begin: (data) => beginAccountFunding({ data }),
     read: (data) => readAccountFunding({ data }),
@@ -168,8 +168,8 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     unavailable,
     onCreateStatement: async () => {
       const now = new Date()
-      const periodStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
-      const periodEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+      const periodStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)
+      const periodEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
       const result = await createStatement({ data: { periodStart, periodEnd } })
       if (result.kind === 'refused') throw new Error(result.code)
       await loadAdministration()
@@ -187,8 +187,8 @@ export function useOwnerCredit(): AeOwnerCreditProps {
       if (result.kind === 'refused') throw new Error(result.code)
       await loadAdministration()
     },
-    onOpenDocument: async (documentRef: string) => {
-      const url = await renderDocument({ data: { documentRef } })
+    onOpenDocument: async (documentRef: string, format: 'html' | 'csv' = 'html') => {
+      const url = await readDocumentUrl({ data: { documentRef, format } })
       if (url === null) throw new Error('money_document_url_unavailable')
       window.open(url, '_blank', 'noopener,noreferrer')
     },

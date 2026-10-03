@@ -6,7 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import { agentAccessPolicyDigest, agentAccessPolicySchema } from '@/modules/agent-access/policy'
 import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/convex'
-import { x402SpendPolicyFromEnvironment, x402SpendReservationRef, X402_SPEND_HISTORY_LIMIT, X402_SPEND_WINDOW_MS } from '@/modules/money/x402-spend-admission'
+import { ALPHA_X402_PAYEE_SCREENING_POLICY, ALPHA_X402_PAYEE_SCREENING_REASON, x402SpendPolicyFromEnvironment, x402SpendReservationRef, X402_SPEND_HISTORY_LIMIT, X402_SPEND_WINDOW_MS } from '@/modules/money/x402-spend-admission'
 import schema from '../../../convex/schema'
 import { internal } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
@@ -126,7 +126,54 @@ function clear(row: Payment): RecordScreeningAndReserveSigningArgs {
 const admit = (backend: Backend, args: RecordScreeningAndReserveSigningArgs) => backend.mutation(internal.moneyX402PaymentAttempts.recordScreeningAndReserveSigning, args)
 const rows = (backend: Backend) => backend.run(async ctx => ({ checks: await ctx.db.query('moneyX402PayeeScreeningChecks').collect(), reservations: await ctx.db.query('moneyX402SpendReservations').collect() }))
 
+function notScreened(row: Payment): RecordScreeningAndReserveSigningArgs {
+  const screened = clear(row)
+  return { ...screened, screening: {
+    provider: 'none', outcome: 'not_screened', policyRef: ALPHA_X402_PAYEE_SCREENING_POLICY,
+    network: screened.screening.network, normalizedPayTo: screened.screening.normalizedPayTo,
+    paymentUnsignedMaterialDigest: screened.screening.paymentUnsignedMaterialDigest,
+    typedDataDigest: screened.screening.typedDataDigest,
+    startedAt: screened.screening.startedAt, checkedAt: screened.screening.checkedAt,
+    reason: ALPHA_X402_PAYEE_SCREENING_REASON,
+  } }
+}
+
 describe('atomic managed x402 screening and exposure admission', () => {
+  it('admits an explicitly deferred alpha decision only under current policy, while recording not screened', async () => {
+    const backend = await fixture()
+    const first = payment('alpha-policy'); await seed(backend, first)
+    expect(await admit(backend, notScreened(first))).toMatchObject({ kind: 'refused', code: 'screening_not_clear' })
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'unknown')
+    expect(await admit(backend, notScreened(first))).toMatchObject({ kind: 'refused', code: 'screening_not_clear' })
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', ALPHA_X402_PAYEE_SCREENING_POLICY)
+    const wrong = notScreened(first)
+    wrong.screening.normalizedPayTo = PAYER
+    expect(await admit(backend, wrong)).toMatchObject({ kind: 'refused', code: 'screening_identity_invalid' })
+    expect(await admit(backend, clear(first))).toMatchObject({ kind: 'refused', code: 'screening_not_clear' })
+    expect(await admit(backend, notScreened(first))).toMatchObject({ kind: 'admitted' })
+    const durable = await rows(backend)
+    expect(durable.reservations).toHaveLength(1)
+    expect(durable.checks).toHaveLength(5)
+    expect(durable.checks[4]).toMatchObject({ admission: 'admitted', decision: {
+      provider: 'none', outcome: 'not_screened', policyRef: ALPHA_X402_PAYEE_SCREENING_POLICY,
+    } })
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', undefined)
+    const second = payment('alpha-policy-after-switch'); await seed(backend, second)
+    expect(await admit(backend, notScreened(second))).toMatchObject({ kind: 'refused', code: 'screening_not_clear' })
+    expect((await rows(backend)).reservations).toHaveLength(1)
+  })
+
+  it('keeps the atomic platform cap when concurrent alpha decisions are not screened', async () => {
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', ALPHA_X402_PAYEE_SCREENING_POLICY)
+    const backend = await fixture()
+    const first = payment('alpha-cap-first')
+    const second = payment('alpha-cap-second', '60', `0x${'b'.repeat(40)}`)
+    await seed(backend, first); await seed(backend, second)
+    const outcomes = await Promise.all([admit(backend, notScreened(first)), admit(backend, notScreened(second))])
+    expect(outcomes.filter(outcome => outcome.kind === 'admitted')).toHaveLength(1)
+    expect(outcomes.filter(outcome => outcome.kind === 'refused')).toMatchObject([{ code: 'spend_platform_cap_exceeded' }])
+    expect((await rows(backend)).reservations).toHaveLength(1)
+  })
   it.each([
     ['platform', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'spend_platform_cap_exceeded'],
     ['payee', 'AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', 'spend_payee_cap_exceeded'],

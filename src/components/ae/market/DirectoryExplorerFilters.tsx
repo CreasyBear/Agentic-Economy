@@ -26,7 +26,7 @@ export type DirectoryExplorerFiltersProps = Readonly<{
 const priceBandLabels = { lt_0_01: 'Under 0.01 Provider-listed USDC', '0_01_to_0_03': '0.01–<0.03 Provider-listed USDC', '0_03_to_0_10': '0.03–<0.10 Provider-listed USDC', '0_10_to_1': '0.10–<1 Provider-listed USDC', '1_to_10': '1–<10 Provider-listed USDC', '10_plus': '10+ Provider-listed USDC', unknown: 'Price not comparable' }
 const adoptionBandLabels = { missing: 'Payers not reported', '0': '0 paying addresses', '1': '1 paying address', '2_4': '2–4 paying addresses', '5_9': '5–9 paying addresses', '10_49': '10–49 paying addresses', '50_plus': '50+ paying addresses' }
 const advancedFilterKeys = ['network', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
-const explorerFilterKeys = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
+const explorerFilterKeys = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'reviewedProvidersOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 
 const discoverFacetPill = 'rounded-full border border-transparent transition-[background-color,border-color,color] duration-fast ease-standard active:scale-100'
 const discoverFacetSelected = cn(discoverFacetPill, 'border-border/70 bg-card')
@@ -179,6 +179,10 @@ function FilterBody({ search, overview, onChange, onReset, showHeading = true, s
   return <div className="flex flex-col gap-6">
     {showQuery ? <DirectoryQueryFilter search={search} onChange={onChange} {...(jevRecipient === undefined ? {} : { jevRecipient })} /> : null}
     {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-medium">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
+    <div className="flex flex-col gap-2">
+      <Label className="min-h-touch gap-2 text-sm"><Checkbox checked={search.reviewedProvidersOnly === true} onCheckedChange={checked => onChange({ reviewedProvidersOnly: checked === true ? true : undefined })} />Reviewed providers</Label>
+      <p className="text-xs leading-relaxed text-muted-foreground">An initial shortlist reviewed against public operator and service evidence. Turn off to browse all providers.</p>
+    </div>
     {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider" allLabel="All providers" values={facets.providers} selected={search.provider} onChange={provider => onChange({ provider })} searchable /></>}
     <Facets label="Provider-listed price · USDC" allLabel="Any Provider-listed price" showCount={false} values={DIRECTORY_PRICE_BANDS.map(key => ({ key, label: priceBandLabels[key], count: 0 }))} selected={search.priceBand} onChange={value => {
       const priceBand = value === undefined ? undefined : DIRECTORY_PRICE_BANDS.find((band): band is DirectoryPriceBand => band === value)

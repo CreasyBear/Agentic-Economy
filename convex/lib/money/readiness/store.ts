@@ -6,6 +6,7 @@ import { readTreasuryPaymentReadinessCheck } from '../treasury/health'
 import { backendPaymentReadinessDigest, failedPaymentReadinessChecks, PAYMENT_READINESS_CHECK_KEYS,
   PAYMENT_READINESS_MAX_PROBE_AGE_MS, validPaymentReadinessSnapshot,
   type PaymentReadinessSnapshot, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import { alphaX402PayeeScreeningEnabled } from '@/modules/money/x402-spend-admission'
 
 export const publishPaymentReadinessResultValue = v.union(
   v.object({ kind: v.literal('published'), replayed: v.boolean() }),
@@ -32,6 +33,9 @@ export async function publishPaymentReadiness(
   if (deploymentPaymentEnvironment(env) !== snapshot.environment) return { kind: 'refused', code: 'readiness_environment_mismatch' }
   if (!validPaymentReadinessSnapshot(snapshot, now)) return { kind: 'refused', code: 'readiness_snapshot_invalid' }
   if (snapshot.configurationDigest !== backendPaymentReadinessDigest(env)) return { kind: 'refused', code: 'readiness_configuration_changed' }
+  if (alphaX402PayeeScreeningEnabled(env) !== (snapshot.checks.sanctions.kind === 'deferred')) {
+    return { kind: 'refused', code: 'readiness_snapshot_invalid' }
+  }
   if (now - snapshot.startedAt > PAYMENT_READINESS_MAX_PROBE_AGE_MS || now >= snapshot.expiresAt) {
     return { kind: 'refused', code: 'readiness_snapshot_stale' }
   }
@@ -67,6 +71,9 @@ export async function readPaymentReadiness(
   void _id; void _creationTime
   if (!validPaymentReadinessSnapshot(evidence, now)) return unavailable('readiness_snapshot_invalid')
   if (evidence.configurationDigest !== backendPaymentReadinessDigest(env)) return unavailable('readiness_configuration_changed')
+  if (alphaX402PayeeScreeningEnabled(env) !== (evidence.checks.sanctions.kind === 'deferred')) {
+    return unavailable('readiness_snapshot_invalid')
+  }
   if (now >= evidence.expiresAt) return { ...unavailable('readiness_expired'),
     checkedAt: evidence.completedAt, expiresAt: evidence.expiresAt }
   const firstFailure = PAYMENT_READINESS_CHECK_KEYS.map(key => evidence.checks[key])

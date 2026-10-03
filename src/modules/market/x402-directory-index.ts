@@ -4,6 +4,8 @@ import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { x402DirectoryFilterSchema, type DirectoryChoice, type X402DirectoryEntry, type X402DirectoryFilters } from './x402-directory'
 
+export { REVIEWED_DIRECTORY_PROVIDER_HOSTS } from './reviewed-directory-providers'
+
 export const DIRECTORY_PRICE_BANDS = ['lt_0_01', '0_01_to_0_03', '0_03_to_0_10', '0_10_to_1', '1_to_10', '10_plus', 'unknown'] as const
 export const DIRECTORY_ADOPTION_BANDS = ['missing', '0', '1', '2_4', '5_9', '10_49', '50_plus'] as const
 export const DIRECTORY_RECENCY_BANDS = ['unknown', 'fresh', 'recent', 'stale'] as const
@@ -25,6 +27,7 @@ export const x402DirectoryIndexInputSchema = x402DirectoryFilterSchema.extend({
   maxPayers30d: z.number().int().nonnegative().safe().optional(),
   minPayers30d: z.number().int().nonnegative().safe().optional(),
   curatedOnly: z.boolean().optional(),
+  reviewedProvidersOnly: z.boolean().optional(),
   tags: z.array(z.string().trim().min(1).max(48)).min(1).max(5).optional(),
   bundleSlugs: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u).max(64)).min(1).max(5).optional(),
   hasInputFields: z.boolean().optional(),

@@ -25,7 +25,7 @@ const clerkIdentity = vi.hoisted(() => ({ userId: 'user_owner' }))
 const creditReads = vi.hoisted(() => ({
   balance: vi.fn(), history: vi.fn(), constraints: vi.fn(), begin: vi.fn(), funding: vi.fn(),
   documents: vi.fn(), reconciliation: vi.fn(), obligations: vi.fn(),
-  statement: vi.fn(), dailyClose: vi.fn(), sign: vi.fn(), render: vi.fn(), capture: vi.fn(),
+  statement: vi.fn(), dailyClose: vi.fn(), sign: vi.fn(), render: vi.fn(), documentUrl: vi.fn(), capture: vi.fn(),
 }))
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tanstack/react-start')>(),
@@ -46,6 +46,7 @@ vi.mock('@/lib/server/money-documents.functions', () => ({
   createOwnerDailyCloseServer: creditReads.dailyClose,
   signOwnerDailyCloseServer: creditReads.sign,
   renderOwnerMoneyDocumentServer: creditReads.render,
+  readOwnerMoneyDocumentUrlServer: creditReads.documentUrl,
 }))
 vi.mock('@/lib/observability/capture-client-exception', () => ({ captureClientExceptionOnClient: creditReads.capture }))
 vi.mock('@clerk/tanstack-react-start', () => ({
@@ -297,6 +298,55 @@ describe('owner credit administration reads', () => {
     expect(screen.queryByText('Documents unavailable')).toBeNull()
     expect(screen.getByRole('group', { name: 'Accounting records' }).getAttribute('aria-busy')).toBe('false')
   })
+
+  it('requests the previous completed UTC month so repeated statement creation has a stable closed interval', async () => {
+    creditReads.statement.mockReset().mockResolvedValue({ kind: 'created', documentRef: 'statement:previous' })
+    const now = new Date()
+    render(<Accounting />)
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Accounting records' }).getAttribute('aria-busy')).toBe('false'))
+    fireEvent.click(screen.getByRole('button', { name: 'Create previous month’s statement' }))
+    await waitFor(() => expect(creditReads.statement).toHaveBeenCalledWith({ data: {
+      periodStart: Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+      periodEnd: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    } }))
+  })
+
+  it('reviews prepared close HTML and CSV through read-only URLs without issuing or signing the record', async () => {
+    creditReads.documents.mockResolvedValue({ ...emptyPage, page: [{ ...document, kind: 'daily_close', state: 'awaiting_signature' }] })
+    creditReads.documentUrl.mockReset().mockResolvedValue('https://storage.example/close')
+    creditReads.render.mockReset(); creditReads.sign.mockReset()
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<Accounting />)
+    await screen.findByRole('button', { name: 'Review close' })
+    expect(screen.queryByText('Issued')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Sign close' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Review close' }))
+    await waitFor(() => expect(creditReads.documentUrl).toHaveBeenCalledWith({ data: { documentRef: document.documentRef, format: 'html' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review CSV' }))
+    await waitFor(() => expect(creditReads.documentUrl).toHaveBeenCalledWith({ data: { documentRef: document.documentRef, format: 'csv' } }))
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(creditReads.render).not.toHaveBeenCalled()
+    expect(creditReads.sign).not.toHaveBeenCalled()
+    expect(screen.queryByText('Issued')).toBeNull()
+    open.mockRestore()
+  })
+
+  it('offers neither review nor signature when an awaiting close has no prepared files', async () => {
+    render(<CreditAccountingPanel documents={[{ ...document, kind: 'daily_close', state: 'awaiting_signature', rendered: false }]}
+      onOpenDocument={vi.fn()} onSignDailyClose={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Review close' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Review CSV' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Sign close' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Preparing…' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('explains a blocked rounding adjustment without claiming a payment or signature', () => {
+    render(<CreditAccountingPanel documents={[{ ...document, kind: 'daily_close', state: 'failed', rendered: false,
+      failureCode: 'statement_adjustment_requires_approved_policy' }]} onOpenDocument={vi.fn()} onSignDailyClose={vi.fn()} />)
+    expect(screen.getByText(/No ledger adjustment was made\./u).getAttribute('role')).toBe('status')
+    expect(screen.queryByRole('button', { name: 'Sign close' })).toBeNull()
+    expect(screen.queryByText('Issued')).toBeNull()
+  })
 })
 
 describe('promotional credit presentation', () => {
@@ -437,7 +487,7 @@ describe('owner credit target', () => {
     expect(screen.getByText('projection checksum mismatch')).toBeTruthy()
     expect(screen.getByText('reconciliation:one')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create previous month’s statement' }))
     await waitFor(() => expect(onCreateStatement).toHaveBeenCalledOnce())
     expect((await screen.findByText('Statement generation started. Its status remains visible below.')).getAttribute('role')).toBe('status')
 
@@ -479,11 +529,11 @@ describe('owner credit target', () => {
     const openButtons = screen.getAllByRole('button', { name: 'Open document' })
     fireEvent.click(openButtons[0]!)
 
-    expect(screen.getByRole('button', { name: 'Create current statement' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Create previous month’s statement' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByRole('button', { name: 'Open document' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByText('Opening Statement…')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create previous month’s statement' }))
     expect(await screen.findByText('Statement creation could not be confirmed. Refresh documents before trying again.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open document' }))

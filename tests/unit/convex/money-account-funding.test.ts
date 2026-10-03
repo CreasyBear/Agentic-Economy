@@ -973,7 +973,14 @@ describe('Account AUD funding through Formance', () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'formance-daily-close')
     const documentRef = 'money-document:daily_close:test'
-    const renderInputDigest = `sha256:${'7'.repeat(64)}`
+    const renderInput = {
+      format: 'test-money-document-render-input:v1',
+      documentRef,
+      accountRef: fixture.canonicalAccountRef,
+      kind: 'daily_close',
+      environment: 'sandbox',
+    }
+    const renderInputDigest = canonicalDigest(renderInput)
     await backend.run(async (ctx) => {
       await ctx.db.insert('moneyDocuments', {
         documentRef,
@@ -985,7 +992,7 @@ describe('Account AUD funding through Formance', () => {
         policyRefs: ['commercial-policy:sandbox'],
         policyDigest: `sha256:${'8'.repeat(64)}`,
         templateVersion: 'ae.money-document:html:v1',
-        renderInputJson: '{}',
+        renderInputJson: JSON.stringify(renderInput),
         renderInputDigest,
         state: 'awaiting_signature',
         environment: 'sandbox',

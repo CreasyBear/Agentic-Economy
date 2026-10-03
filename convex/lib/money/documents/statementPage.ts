@@ -4,6 +4,7 @@ import type { ActionCtx, MutationCtx, QueryCtx } from '../../../_generated/serve
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { roundAudStatementTotal } from '../../../../src/modules/money/public'
 import { enqueueStatementPage, enqueueStatementFinalization } from './workpool'
+import { assertFinancialEnvironment, financialEnvironmentValue, type FinancialEnvironment } from '../formance/contracts'
 
 type StatementPage = Readonly<{
   documentRef: string
@@ -16,6 +17,7 @@ type StatementPage = Readonly<{
 }>
 
 type StatementReadRequest = Readonly<{
+  expectedEnvironment: FinancialEnvironment
   documentRef: string
   accountRef: string
   periodStartAt: number
@@ -37,6 +39,7 @@ const applyStatementPageRef = makeFunctionReference<'mutation', StatementPage, {
 
 export const readStatementPageArgs = v.object({ documentRef: v.string() })
 export const readStatementPageResult = v.union(v.null(), v.object({
+    expectedEnvironment: financialEnvironmentValue,
     documentRef: v.string(),
     accountRef: v.string(),
     periodStartAt: v.number(),
@@ -52,6 +55,7 @@ export const readStatementPageHandler = async (ctx: QueryCtx, args: Infer<typeof
       || row.periodStart === undefined || row.periodEnd === undefined
       || row.snapshotCutoffAt === undefined) return null
     return {
+      expectedEnvironment: row.environment,
       documentRef: row.documentRef,
       accountRef: row.accountRef,
       periodStartAt: row.periodStart,
@@ -76,6 +80,7 @@ export const applyStatementPageHandler = async (ctx: MutationCtx, args: Infer<ty
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
     if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close')) return { kind: 'refused' as const }
+    assertFinancialEnvironment(row.environment)
     if (row.state !== 'building') return { kind: 'replayed' as const }
     const currentCursor = row.nextCursor ?? null
     if (currentCursor !== args.expectedCursor) {
@@ -149,9 +154,10 @@ export const applyStatementPageHandler = async (ctx: MutationCtx, args: Infer<ty
 
 export const runStatementPageArgs = v.object({ documentRef: v.string() })
 export const runStatementPageResult = v.object({ kind: v.union(v.literal('advanced'), v.literal('unavailable')) })
-export const runStatementPageHandler = async (ctx: ActionCtx, args: Infer<typeof runStatementPageArgs>) => {
+export const runStatementPageHandler = async (ctx: ActionCtx, args: Infer<typeof runStatementPageArgs>): Promise<{ kind: 'advanced' | 'unavailable' }> => {
     const request = await ctx.runQuery(readStatementPageRef, args)
     if (request === null) return { kind: 'unavailable' as const }
+    assertFinancialEnvironment(request.expectedEnvironment)
     const read = await ctx.runAction(readFormanceStatementPageRef, {
       accountRef: request.accountRef,
       periodStartAt: request.periodStartAt,
@@ -180,4 +186,3 @@ export const runStatementPageHandler = async (ctx: ActionCtx, args: Infer<typeof
     const result = await ctx.runMutation(applyStatementPageRef, page)
     return { kind: result.kind === 'refused' ? 'unavailable' as const : 'advanced' as const }
   }
-

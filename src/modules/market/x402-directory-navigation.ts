@@ -2,12 +2,12 @@
 export const directoryCatalogueSearchKeys = [
   'query', 'alternativeTo', 'offset', 'directoryCategory', 'indexCursor', 'sort',
   'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'priceBand', 'adoptionBand', 'minPayers30d', 'maxPayers30d',
-  'curatedOnly', 'tags', 'bundleSlugs', 'hasInputFields', 'hasOutputFields',
+  'curatedOnly', 'reviewedProvidersOnly', 'tags', 'bundleSlugs', 'hasInputFields', 'hasOutputFields',
   'hasInputSchema', 'hasOutputSchema', 'hasOutputExample',
 ] as const
 
 export const directoryBooleanSearchKeys = [
-  'curatedOnly', 'hasInputFields', 'hasOutputFields', 'hasInputSchema',
+  'curatedOnly', 'reviewedProvidersOnly', 'hasInputFields', 'hasOutputFields', 'hasInputSchema',
   'hasOutputSchema', 'hasOutputExample',
 ] as const
 
