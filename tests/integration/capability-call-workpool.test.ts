@@ -2018,6 +2018,7 @@ describe('capability Call Workpool lifecycle', () => {
 
   it('executes once, replays without another effect, and refuses a revoked grant before claim', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_X402_CUSTODY_MAX_ATOMIC', '10000')
     const signingSecretSentinel = 'call-workpool-signing-secret-sentinel-32-bytes'
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', signingSecretSentinel)
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
