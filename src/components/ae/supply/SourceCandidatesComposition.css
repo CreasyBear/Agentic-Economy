@@ -1,75 +1,19 @@
-/* Arc radio-cards and Pro agent-run review frame, retrieved 2026-10-01.
- * Radio CSS SHA-256 8f3f80726ef946b0665ae033de3eefa3013678c8f59bac57882be15fa03543ba.
+/* Candidate facts inside the actual Arc RadioCards control.
+ * Arc Pro agent-run review frame, retrieved 2026-10-01.
  * Run CSS SHA-256 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032.
- * Retains Base UI selection and supplied source assessment state.
  */
-.arc-market.arc-source-candidates {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
-}
-
-.arc-market .arc-source-candidate {
-  display: grid;
-  min-width: 0;
-  min-height: 44px;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--space-3);
-  padding: var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
-  background: var(--surface);
-  color: var(--foreground);
-  cursor: pointer;
-}
-
-.arc-market .arc-source-candidate:has([data-checked]) {
-  border-color: var(--control-on);
-  background: var(--surface-muted);
-}
-
-.arc-market .arc-source-candidate[data-disabled] {
-  background: var(--surface-muted);
-  cursor: not-allowed;
-}
-
-.arc-market .arc-source-candidate:has(.arc-source-candidate-radio:focus-visible) {
-  outline: 2px solid var(--control-on);
-  outline-offset: 3px;
-}
-
-.arc-market .arc-source-candidate-radio {
-  flex: none;
-  margin-top: 2px;
-}
-
-.arc-market .arc-source-candidate-radio:focus-visible {
-  border-color: var(--control-on);
-  box-shadow: none;
-}
-
 .arc-market .arc-source-candidate-copy {
   display: grid;
   min-width: 0;
   gap: var(--space-2);
 }
 
-.arc-market .arc-source-candidate-title,
 .arc-market .arc-source-candidate-description,
 .arc-market .arc-source-candidate-payment,
 .arc-market .arc-source-candidate-refusal {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-}
-
-.arc-market .arc-source-candidate-title {
-  color: var(--foreground);
-  font-size: var(--text-base);
-  font-weight: 500;
-  line-height: 1.4;
 }
 
 .arc-market .arc-source-candidate-description {
@@ -128,10 +72,4 @@
 .arc-market .arc-source-description-suggest {
   justify-self: start;
   margin-inline-end: auto;
-}
-
-@media (min-width: 800px) {
-  .arc-market.arc-source-candidates {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }

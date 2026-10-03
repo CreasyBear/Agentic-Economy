@@ -55,10 +55,6 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
     id: 'input-unpublished', label: 'Input example', description: 'No example input is published for this Tool.',
     content: <div className="arc-pdp-empty"><p>Inspect the exact input JSON Schema under Technical before requesting a Quote.</p></div>,
   })
-  slides.push({
-    id: 'output-contract', label: 'Output contract', description: 'Published schema. This is a contract, not an example result.',
-    content: <pre><code>{JSON.stringify(tool.contract.outputJsonSchema, null, 2)}</code></pre>,
-  })
   return <AePublicPage>
     <div className="arc-pdp-page">
       <ProductDetail
