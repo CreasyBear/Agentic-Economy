@@ -35,8 +35,8 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
   const businessId = catalog?.businessId ?? provider?.businessId
   const publicPath = catalog?.slug ?? provider?.slug
 
-  return <SettingsPage title="Business profile" description="Manage your workspace identity and the provider profile buyers see."
-    action={<Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>View Tools</Link>}>
+  return <SettingsPage title="Business profile" description="Manage the workspace name your team sees."
+    action={provider ? <Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>View Tools</Link> : undefined}>
     <SettingsGroup title="Workspace" description="The name used for your team and receipts; distinct from your public provider name.">
       <SettingsRow label="Workspace name" description="The name members see when working in this workspace.">
         {workspace === undefined ? <Skeleton className="h-10 w-64 max-w-full" aria-busy="true" />
@@ -47,7 +47,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
               clerkOrgId={workspace.clerkOrgId} canEdit={workspace.callerIsOwner} />}
       </SettingsRow>
     </SettingsGroup>
-    <SettingsGroup title="Public provider profile" description="The name and details buyers see on your provider listing and Tools.">
+    {identity.kind !== 'not_applicable' && <SettingsGroup title="Public provider profile" description="The name and details buyers see on your provider listing and Tools.">
       {provider && publicName && businessId ? <>
         <SettingsRow label="Public provider name" description="Changing this name updates the listing and current Tools, not the workspace name.">
           <ProviderNameEditor businessId={businessId} currentName={publicName} onRename={async (input) => {
@@ -70,10 +70,10 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
             {catalog.disposition}
           </SettingsRow>
         </> : null}
-      </> : <SettingsEmptyState title={identity.kind === 'not_applicable' ? 'No public provider profile yet' : 'Provider profile unavailable'}
-        description={identity.kind === 'not_applicable' ? 'Set up your public provider profile when you are ready to list Tools.' : 'Try again in a moment; your workspace details remain available.'}
+      </> : <SettingsEmptyState title="Provider profile unavailable"
+        description="Try again in a moment; your workspace details remain available."
         action={<Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Open Tools</Link>} />}
-    </SettingsGroup>
+    </SettingsGroup>}
     <SettingsDangerZone description="Closing a workspace or transferring ownership affects every member and Tool.">
       <WorkspaceDangerZone />
     </SettingsDangerZone>

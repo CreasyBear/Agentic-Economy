@@ -1,9 +1,14 @@
-import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Outlet, createFileRoute, redirect, useLocation } from '@tanstack/react-router'
 import { SettingsShell } from '@/components/ae/settings/settings-shell/SettingsShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/settings')({
   ...operatorRouteOptions,
+  beforeLoad: ({ location }) => {
+    if (location.pathname.replace(/\/$/u, '') === '/owner/settings') {
+      throw redirect({ to: '/owner/settings/workspace', replace: true })
+    }
+  },
   head: () => ({
     meta: [
       { title: 'Settings | Agentic Economy' },

@@ -25,17 +25,21 @@ type SettingsPageProps = Readonly<{
   currentHref: string
   renderNavigationLink: (item: SettingsNavigationItem, props: NavigationLinkProps) => ReactNode
   children: ReactNode
+  /** Routed panes own their heading; the frame can retain only its geometry. */
+  showHeader?: boolean
+  navigationMenu?: ReactNode
 }>
 
-export function SettingsPage({ title, description, navigation, currentHref, renderNavigationLink, children }: SettingsPageProps) {
+export function SettingsPage({ title, description, navigation, currentHref, renderNavigationLink, children, showHeader = true, navigationMenu }: SettingsPageProps) {
   const titleId = useId()
   const navGroup = useId()
   const reduce = useReducedMotion() ?? false
-  return <section className={styles.root} aria-labelledby={titleId}>
-    <header className={styles.pageHead}>
+  return <section className={styles.root} aria-labelledby={showHeader ? titleId : undefined} aria-label={showHeader ? undefined : title}>
+    {showHeader && <header className={styles.pageHead}>
       <h1 id={titleId}>{title}</h1>
       <p>{description}</p>
-    </header>
+    </header>}
+    {navigationMenu}
     <div className={styles.settings} data-navigation={navigation.length === 0 ? 'none' : undefined}>
       {navigation.length > 0 ? <aside className={styles.sidebar}>
         <LayoutGroup id={navGroup}>
@@ -70,12 +74,14 @@ type PaneProps = Readonly<{
   action?: ReactNode
   children: ReactNode
   headingRef?: Ref<HTMLHeadingElement>
+  headingLevel?: 1 | 2
 }>
 
-export function SettingsPagePane({ title, description, action, children, headingRef }: PaneProps) {
+export function SettingsPagePane({ title, description, action, children, headingRef, headingLevel = 2 }: PaneProps) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h2'
   return <div className={styles.pane}>
     <header className={styles.paneHead}>
-      <div><h2 ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1}>{title}</h2><p>{description}</p></div>
+      <div><Heading ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1}>{title}</Heading><p>{description}</p></div>
       {action && <div className={styles.actions}>{action}</div>}
     </header>
     {children}
@@ -91,9 +97,10 @@ export function SettingsPageGroup({ title, description, children, headingLevel =
   </section>
 }
 
-export function SettingsPageRow({ label, description, children }: Readonly<{ label: string; description?: string; children: ReactNode }>) {
+export function SettingsPageRow({ label, description, children, headingLevel = 4 }: Readonly<{ label: string; description?: string; children: ReactNode; headingLevel?: 3 | 4 }>) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h4'
   return <div className={styles.row}>
-    <div className={styles.rowText}><h4>{label}</h4>{description && <p>{description}</p>}</div>
+    <div className={styles.rowText}><Heading>{label}</Heading>{description && <p>{description}</p>}</div>
     <div className={styles.rowAction}>{children}</div>
   </div>
 }

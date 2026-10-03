@@ -10,8 +10,8 @@ const recoveryChecks: ReadonlyArray<{
 }> = [
   {
     title: 'Review and revoke sessions',
-    description: 'Open Profile to revoke unfamiliar devices and review factors and recovery methods.',
-    href: '/owner/settings/account',
+    description: 'Open Security to revoke unfamiliar devices and review factors and recovery methods.',
+    href: '/owner/settings/account/security',
   },
   {
     title: 'Rotate or disconnect Agents',
@@ -21,6 +21,7 @@ const recoveryChecks: ReadonlyArray<{
   {
     title: 'Revoke or reauthorize Provider connections',
     description: 'Review wallet-control authority and its generation separately from Tool readiness.',
+    href: '/owner/settings/integrations',
   },
   {
     title: 'Retain evidence and contact support',
