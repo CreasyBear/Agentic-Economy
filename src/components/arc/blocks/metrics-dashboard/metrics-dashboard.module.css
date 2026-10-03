@@ -155,6 +155,13 @@
   font-size: var(--text-sm);
 }
 
+.panelDetails {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
 .seriesControls {
   display: flex;
   min-width: 0;

@@ -46,6 +46,20 @@ describe('commercial policy input and review', () => {
     const firstReview = screen.getByRole('region', { name: 'Commercial policy terms' }).textContent
     expect(firstReview).toContain('production')
     expect(firstReview).toContain('Perth time')
+    const expectCompleteApprovalTables = () => {
+      expect(screen.getByRole('table', { name: 'Policy change details' })).toBeTruthy()
+      expect(screen.getByRole('table', { name: 'Business policy terms' })).toBeTruthy()
+      if (family === 'operations' || family === 'treasury_custody') expect(screen.getByRole('table', { name: 'Technical requirements' })).toBeTruthy()
+      if (family === 'accounting_client_money') expect(screen.getByRole('table', { name: 'Business policy terms' }).textContent).toContain('AUD 4999.999999')
+      if (family === 'operations') expect(screen.getByRole('table', { name: 'Technical requirements' }).textContent).toContain(PACKAGE4_FORMANCE_REQUIREMENTS.sdkArtifactDigest)
+      if (family === 'treasury_custody') {
+        expect(screen.getByRole('table', { name: 'Business policy terms' }).textContent).toContain('USDC 10.000001')
+        const technicalTerms = screen.getByRole('table', { name: 'Technical requirements' }).textContent
+        expect(technicalTerms).toContain(PACKAGE4_FORMANCE_REQUIREMENTS.maximumSdkIntegerUnits)
+        expect(technicalTerms).toContain(PACKAGE4_FORMANCE_REQUIREMENTS.architectureReviewCumulativeUnits)
+      }
+    }
+    expectCompleteApprovalTables()
     if (family === 'accounting_client_money') { expect(firstReview).toContain('AUD 4999.999999'); expect(built.input.control).toMatchObject({ minimumFundingPrincipalUnits: '5010000', legalCustomerMaximumAccessibleUnits: '4999999999' }) }
     if (family === 'tax') expect(built.input.control).toMatchObject({ serviceFeeTaxBps: 1025 })
     if (family === 'operations') { expect(firstReview).toContain('5.25%'); expect(firstReview).toContain(PACKAGE4_FORMANCE_REQUIREMENTS.sdkArtifactDigest) }
@@ -55,6 +69,7 @@ describe('commercial policy input and review', () => {
     const second = render(<PendingApprovalsActions {...props} />)
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect(screen.getByRole('region', { name: 'Commercial policy terms' }).textContent).toBe(firstReview)
+    expectCompleteApprovalTables()
     second.rerender(<PendingApprovalsActions {...props} proposals={[]} now={101} />)
     expect(screen.getByRole('region', { name: 'Commercial policy terms' }).textContent).toBe(firstReview)
     fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
