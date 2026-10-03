@@ -1,9 +1,7 @@
-import type { ColumnDef } from '@tanstack/react-table'
+import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import '../../RecordWorkspaceComposition.css'
-import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
   PROVIDER_OBJECT_COPY,
   type ProviderAdmissionCaseRow,
@@ -12,40 +10,47 @@ import {
 import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
 import { providerTimestamp } from '../provider-object.view-model'
 
-const columns: ColumnDef<ProviderAdmissionCaseRow, unknown>[] = [
+const columns: DataColumn<ProviderAdmissionCaseRow>[] = [
   {
-    accessorKey: 'caseRef',
-    header: PROVIDER_OBJECT_COPY.columns.admissionCase,
-    cell: ({ row }) => (
-      <AeCopyReference label={PROVIDER_OBJECT_COPY.columns.admissionCase} value={row.original.caseRef} />
+    key: 'caseRef',
+    width: 240,
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.admissionCase,
+    render: (_value, row) => (
+      <AeCopyReference label={PROVIDER_OBJECT_COPY.columns.admissionCase} value={row.caseRef} />
     ),
   },
   {
-    accessorKey: 'state',
-    header: PROVIDER_OBJECT_COPY.columns.state,
-    cell: ({ row }) => providerStatusLabel(row.original.state),
+    key: 'state',
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.state,
+    render: (_value, row) => providerStatusLabel(row.state),
   },
   {
-    accessorKey: 'updatedAt',
-    header: PROVIDER_OBJECT_COPY.columns.updated,
-    cell: ({ row }) => {
-      const updatedAt = providerTimestamp(row.original.updatedAt)
-      return <time dateTime={updatedAt.iso}>{updatedAt.label}</time>
+    key: 'updatedAt',
+    width: 180,
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.updated,
+    render: (_value, row) => {
+      const updatedAt = providerTimestamp(row.updatedAt)
+      return <time dateTime={updatedAt.iso} style={{ whiteSpace: 'nowrap' }}>{updatedAt.label}</time>
     },
   },
 ]
 
 export function ProviderAdmissionCasesTable({ rows }: ProviderAdmissionCasesTableProps) {
   return (
-    <AeSection className="arc-market arc-admin-record-table-region" title={PROVIDER_OBJECT_COPY.admissionCasesTitle}>
-      <AeRecordTable
+    <section className="arc-market arc-admin-record-table-region" aria-label={PROVIDER_OBJECT_COPY.admissionCasesTitle}>
+      <h2 className="arc-admin-record-table-heading">{PROVIDER_OBJECT_COPY.admissionCasesTitle}</h2>
+      <SortableDataTable
         columns={columns}
-        data={rows}
-        getRowId={(row) => row.caseRef}
-        hideFilter
+        rows={[...rows]}
+        rowKey="caseRef"
+        animateRows={false}
         caption={PROVIDER_OBJECT_COPY.admissionCasesTitle}
+        ariaLabel={PROVIDER_OBJECT_COPY.admissionCasesTitle}
         emptyMessage={PROVIDER_OBJECT_COPY.noAdmissionCases}
       />
-    </AeSection>
+    </section>
   )
 }

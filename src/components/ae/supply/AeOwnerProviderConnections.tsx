@@ -35,7 +35,6 @@ export function AeOwnerProviderConnections({
         title="Provider connections"
         description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Select the connection as a Tool's access authority."
       >
-        <SettingsGroup title="Connections" description="Inspect authority and health for each endpoint. Tool readiness is checked separately.">
         <AeProviderConnectionList
           connections={connections}
           {...(vm.programmaticFocusId === undefined ? {} : { programmaticFocusId: vm.programmaticFocusId })}
@@ -58,7 +57,6 @@ export function AeOwnerProviderConnections({
           onRevokeOpenChange={vm.closeRevokeDialog}
           onConfirmRevoke={() => void vm.confirmRevoke()}
         />
-        </SettingsGroup>
         <SettingsGroup title="Connect an endpoint" description="Inspect the live payment lane and prove control of its payee before connecting.">
         <AeProviderConnectionForm
           canConnect={vm.canConnect}

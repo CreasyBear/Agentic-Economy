@@ -1,0 +1,6 @@
+.region { display: grid; gap: var(--space-4); min-width: 0; color: var(--foreground); font-family: var(--font-body); }
+.header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); min-width: 0; }
+.header > div { min-width: 0; }
+.header h2 { margin: 0; font-size: var(--text-base); font-weight: 500; }
+.header p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
+.day { white-space: nowrap; font-variant-numeric: tabular-nums; }

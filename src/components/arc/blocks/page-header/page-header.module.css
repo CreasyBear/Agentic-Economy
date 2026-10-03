@@ -1,0 +1,48 @@
+/* Adapted from Arc registry block `page-header`.
+ * Source TSX SHA-256: cd923838a88769d0282418e0f4fbfb58b0619156ce37e8e0949f0d34b484487c
+ * Source CSS SHA-256: c35b9522cc9efbc06797c16e8cb7c97f7767f363faa05297754e1f9c8916ca48
+ * Retains only the authored record-header, breadcrumb, title, detail and action geometry. */
+.root { --page-pad: 28px; box-sizing: border-box; width: 100%; min-width: 0; container: page-header / inline-size; border-bottom: 1px solid var(--border); padding-top: 16px; background: var(--surface); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); letter-spacing: var(--tracking-body); line-height: var(--leading-body); }
+.root :where(h1, p, ol) { margin: 0; }
+.bar { display: grid; min-height: 44px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding-inline: var(--page-pad); }
+.lead { min-width: 0; }
+
+.breadcrumbs { min-width: 0; }
+.breadcrumbs ol { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0; list-style: none; }
+.breadcrumbs li { display: inline-flex; min-width: 0; max-width: 100%; flex: 0 1 auto; align-items: center; gap: 6px; color: var(--text-muted); overflow-wrap: anywhere; }
+.separator { flex: none; color: var(--border-strong); }
+.crumb { display: inline-flex; min-height: 44px; align-items: center; border-radius: 8px; padding: 4px 2px; color: var(--text-muted); text-decoration: none; transition: color var(--duration-fast) var(--ease-standard); }
+.currentLink { color: var(--text-secondary); }
+.crumbText { min-width: 0; color: var(--text-muted); overflow-wrap: anywhere; }
+.current { display: block; min-width: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+.actions { display: flex; min-width: 0; min-height: 44px; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.actions > :global(button), .actions > :global(a), .actions > :global([role="button"]) { min-height: max(44px, var(--control-height-sm)); }
+
+.introInner { display: grid; min-width: 0; justify-items: start; gap: 10px; padding: 18px var(--page-pad) 20px; }
+.title { min-width: 0; max-width: 100%; font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 500; letter-spacing: var(--tracking-display); line-height: var(--leading-display); overflow-wrap: anywhere; }
+.details { display: grid; min-width: 0; max-width: 100%; justify-items: start; gap: 14px; }
+.description { max-width: 60ch; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
+.detail { display: flex; min-width: 0; max-width: 100%; flex-wrap: wrap; align-items: center; gap: 8px 18px; color: var(--text-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.detail :global(strong) { color: var(--text-secondary); font-weight: 500; }
+
+@container page-header (max-width: 719px) {
+  .bar, .introInner { --page-pad: 20px; }
+  .bar { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+  .actions { justify-content: flex-start; }
+}
+
+@container page-header (max-width: 559px) {
+  .bar, .introInner { --page-pad: 18px; }
+  .title { font-size: var(--text-2xl); }
+  .introInner { padding-top: 16px; }
+  .details { gap: 10px; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .crumb:hover { color: var(--foreground); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crumb { transition: none; }
+}

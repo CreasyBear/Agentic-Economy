@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { MetricsDashboard } from '@/components/ae/admin/metrics/MetricsDashboard'
+import { MetricsDashboard } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
 import type { AdminMetricCallPoint } from '@/components/ae/admin/metrics/metrics.contracts'
 
 const cards = [{ label: 'Settled Call value', value: 'A$9,007,199,254,740,993.01', delta: 'No prior comparison' }]
@@ -15,8 +15,8 @@ const dailyCalls: readonly AdminMetricCallPoint[] = [
 ]
 afterEach(cleanup)
 
-function dashboard(points = dailyCalls) {
-  return <MetricsDashboard cards={cards} ratios={ratios} dailyCalls={points} controls={<a href="/api/admin/metrics-export?range=last_7">Export CSV</a>} />
+function dashboard(points = dailyCalls, coverageDescription?: string) {
+  return <MetricsDashboard cards={cards} ratios={ratios} dailyCalls={points} {...(coverageDescription === undefined ? {} : { coverageDescription, withheldMetricLabels: ['Settled Call value', 'Settled Calls', 'Success rate', 'Transacting Workspaces'] })} controls={<a href="/api/admin/metrics-export?range=last_7">Export CSV</a>} />
 }
 
 describe('Arc metrics dashboard', () => {
@@ -31,6 +31,7 @@ describe('Arc metrics dashboard', () => {
     fireEvent.keyDown(chart, { key: 'ArrowRight' })
     expect(within(screen.getByRole('status')).getByText('2,000')).toBeInTheDocument()
     fireEvent.keyDown(chart, { key: 'End' })
+    fireEvent.keyDown(chart, { key: 'ArrowRight' })
     expect(within(screen.getByRole('status')).getByText('2026-10-03')).toBeInTheDocument()
     expect(within(screen.getByRole('status')).getByText('3,000')).toBeInTheDocument()
     expect(dailyCalls[0]?.day).toBe('2026-10-03')
@@ -61,8 +62,72 @@ describe('Arc metrics dashboard', () => {
     expect(screen.queryByRole('img')).toBeNull()
     view.rerender(dashboard([{ day: '2026-10-01', attemptedCalls: 0, completedCalls: 0, uncertainCalls: 0 }]))
     const chart = screen.getByRole('img')
-    for (const path of chart.querySelectorAll('path')) expect(path.getAttribute('d')).not.toMatch(/NaN|Infinity/u)
+    expect(chart.querySelectorAll('circle')).toHaveLength(1)
+    const observation = chart.querySelector('circle')
+    expect(observation?.getAttribute('cx')).toBe('300')
+    expect(observation?.getAttribute('cy')).toBe('180')
+    expect(chart.querySelectorAll('path')).toHaveLength(0)
     fireEvent.keyDown(chart, { key: 'Home' })
     expect(within(screen.getByRole('status')).getByText('0')).toBeInTheDocument()
+  })
+
+  it('keeps the complete dashboard visible while withholding every range total and ratio', () => {
+    const description = '1 of 7 days have completed snapshots. Range totals are withheld.'
+    render(dashboard([{ day: '2026-10-02', attemptedCalls: 0, completedCalls: 0, uncertainCalls: 0 }], description))
+
+    expect(screen.getByRole('heading', { name: 'Headline metrics' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(description)
+    expect(screen.getAllByRole('article')).toHaveLength(4)
+    for (const label of ['Settled Call value', 'Settled Calls', 'Success rate', 'Transacting Workspaces']) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+    }
+    expect(screen.getAllByText('Not available')).toHaveLength(4)
+    expect(screen.getAllByText('Range totals withheld')).toHaveLength(4)
+    expect(screen.queryByText(cards[0]!.value)).toBeNull()
+    expect(screen.queryByText('81.2%')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Ratios' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Export CSV' })).toBeInTheDocument()
+    expect(screen.getByRole('img')).toHaveAccessibleDescription('Showing 1 recorded daily snapshot. Missing days are not plotted.')
+    fireEvent.keyDown(screen.getByRole('img'), { key: 'Home' })
+    const inspection = screen.getByText('2026-10-02').closest('[role="status"]')
+    expect(inspection).toHaveTextContent('2026-10-02')
+    expect(inspection).toHaveTextContent('0')
+  })
+
+  it('plots sparse snapshots as discrete observations without connecting or inventing calendar gaps', () => {
+    const sparse = [dailyCalls[0]!, dailyCalls[1]!]
+    render(dashboard(sparse))
+    const chart = screen.getByRole('img')
+    expect(chart).toHaveAccessibleDescription('Showing 2 recorded daily snapshots. Missing days are not plotted.')
+    expect(chart.querySelectorAll('circle')).toHaveLength(2)
+    expect(chart.querySelectorAll('path')).toHaveLength(0)
+    fireEvent.keyDown(chart, { key: 'Home' })
+    expect(screen.getByRole('status')).toHaveTextContent('2026-10-01')
+    expect(screen.getByRole('status')).toHaveTextContent('1,000')
+    fireEvent.keyDown(chart, { key: 'ArrowRight' })
+    expect(screen.getByRole('status')).toHaveTextContent('2026-10-03')
+    expect(screen.getByRole('status')).toHaveTextContent('3,000')
+    expect(screen.queryByText('2026-10-02')).toBeNull()
+    expect(sparse[0]?.day).toBe('2026-10-03')
+  })
+
+  it('withholds range values with zero recorded snapshots and keeps the explicit empty state', () => {
+    render(dashboard([], '0 of 7 days have completed snapshots. Range totals are withheld.'))
+    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByText('Not available')).toHaveLength(4)
+    expect(screen.getByText('No daily Call snapshots recorded.')).toBeInTheDocument()
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Ratios' })).toBeNull()
+    expect(screen.queryByText(cards[0]!.value)).toBeNull()
+  })
+
+  it('uses whole Call counts on the axis when the maximum observed value is seven', () => {
+    render(dashboard([{ day: '2026-10-02', attemptedCalls: 7, completedCalls: 5, uncertainCalls: 1 }]))
+    const daily = within(screen.getByRole('region', { name: 'Daily Calls' }))
+    for (const tick of ['9', '6', '3', '0']) expect(daily.getByText(tick)).toBeInTheDocument()
+    expect(daily.queryByText('2.5')).toBeNull()
+    expect(daily.queryByText('7.5')).toBeNull()
+    fireEvent.keyDown(screen.getByRole('img'), { key: 'Home' })
+    expect(screen.getByRole('status')).toHaveTextContent('7')
   })
 })

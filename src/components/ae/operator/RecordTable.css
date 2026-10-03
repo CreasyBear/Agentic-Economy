@@ -11,7 +11,7 @@
 .arc-record-table th, .arc-record-table td { --cell-base: var(--surface); --cell-fill: var(--cell-base); background-color: var(--cell-fill); transition: background-color var(--duration-standard) var(--ease-standard), color var(--duration-standard) var(--ease-standard); }
 .arc-record-table th[data-sorted], .arc-record-table td[data-sorted] { --cell-base: var(--column-tint); }
 .arc-record-table th { height: 44px; padding: 0 var(--space-4); border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: var(--text-sm); font-weight: 500; text-align: left; white-space: nowrap; }
-.arc-record-table th[data-sortable] { padding: 0; }
+.arc-record-table th:has(.arc-record-sort) { padding: 0; }
 .arc-record-table th[data-sorted] { color: var(--foreground); }
 .arc-record-table td { height: 64px; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); color: var(--foreground); font-weight: 400; vertical-align: middle; overflow-wrap: anywhere; }
 .arc-record-table tbody tr:last-child td { border-bottom: 0; }
@@ -82,7 +82,7 @@
 .arc-record-table th { position: sticky; top: 0; z-index: 1; }
 .arc-record-table tbody tr:has(:focus-visible) td { --cell-fill: var(--surface-muted); }
 .arc-record-table :is(td,th) { text-transform: none; letter-spacing: var(--tracking-body); }
-.arc-record-table th[data-sortable] { padding-inline: 0; }
+.arc-record-table th:has(.arc-record-sort) { padding-inline: 0; }
 .arc-record-sort { justify-content: flex-start; min-height: 44px; width: 100%; padding-inline: var(--space-4); margin-inline: 0; font-weight: 500; }
 .arc-record-sort svg { flex: none; }
 .arc-record-action { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 44px; max-width: 100%; border: 0; border-radius: var(--radius-control); padding: 10px var(--space-4); background: transparent; color: var(--foreground); font: inherit; font-size: var(--text-sm); font-weight: 500; text-decoration: none; text-align: center; }

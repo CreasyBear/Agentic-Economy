@@ -1,0 +1,255 @@
+/*
+ * Adapted from https://uiarc.dev/components/blocks/multi-step-form
+ * Upstream multi-step-form.module.css SHA-256:
+ * de56dd3acda1dc8293462ee81da49e265b2af1458e9c0116ae24ff2ffd2c8617
+ * Keeps Arc progress, fieldset and summary presentation in a width-aware host.
+ */
+.form {
+  container: multi-step-form / inline-size;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  padding: var(--space-5);
+  background: var(--surface);
+  box-shadow: var(--shadow-resting);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+}
+
+.progress {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: calc(var(--space-5) * -1) calc(var(--space-5) * -1) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-4) var(--space-5);
+}
+
+.progressList {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.progressItem {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: var(--leading-body);
+  white-space: nowrap;
+  transition: color var(--duration-standard) var(--ease-standard);
+}
+
+/* Reserve the active label's 500 weight so progress does not shift between stages. */
+.progressLabel {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.progressLabel::after {
+  height: 0;
+  overflow: hidden;
+  content: attr(data-label);
+  font-weight: 500;
+  visibility: hidden;
+  user-select: none;
+  pointer-events: none;
+}
+
+.progressMarker {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--duration-standard) var(--ease-standard), background-color var(--duration-standard) var(--ease-standard), color var(--duration-standard) var(--ease-standard);
+}
+
+.markerGlyph {
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+}
+
+.progressItem.current {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.progressItem.current .progressMarker {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.progressItem.complete {
+  color: var(--text-secondary);
+}
+
+.progressItem.complete .progressMarker {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.progressCount {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.completedList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.completedItem {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 0 var(--space-2);
+}
+
+.completedCopy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.completedTitle {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.completedDetail {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.completedItem .editButton {
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+
+.feedback {
+  min-width: 0;
+  margin-block: 0 var(--space-4);
+}
+
+.viewport {
+  display: grid;
+  min-width: 0;
+}
+
+.step {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.step legend {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  color: var(--foreground);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.step legend + .content {
+  margin-top: var(--space-5);
+}
+
+.description {
+  margin: var(--space-2) 0 var(--space-5);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@container multi-step-form (max-width: 420px) {
+  .progress {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-4);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .progressList {
+    width: 100%;
+    gap: var(--space-3);
+  }
+
+  .progressCount {
+    order: -1;
+  }
+
+  .completedItem {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressItem,
+  .progressMarker {
+    transition-duration: 0ms;
+  }
+}

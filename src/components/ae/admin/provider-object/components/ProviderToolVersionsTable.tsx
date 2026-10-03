@@ -1,7 +1,5 @@
-import type { ColumnDef } from '@tanstack/react-table'
+import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 
-import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
 import {
   PROVIDER_OBJECT_COPY,
@@ -12,49 +10,56 @@ import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter
 import '../../RecordWorkspaceComposition.css'
 
 
-const columns: ColumnDef<ProviderPublicationRow, unknown>[] = [
+const columns: DataColumn<ProviderPublicationRow>[] = [
   {
-    accessorKey: 'ref',
-    header: PROVIDER_OBJECT_COPY.columns.toolVersion,
-    cell: ({ row }) => (
+    key: 'ref',
+    width: 240,
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.toolVersion,
+    render: (_value, row) => (
       <a
         className="arc-admin-record-link"
-        href={`/admin/tools/${encodeURIComponent(row.original.ref)}`}
+        href={`/admin/tools/${encodeURIComponent(row.ref)}`}
       >
-        {row.original.ref}
+        {row.ref}
       </a>
     ),
   },
   {
-    accessorKey: 'revision',
-    header: PROVIDER_OBJECT_COPY.columns.revision,
-    cell: ({ row }) => row.original.revision === null
+    key: 'revision',
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.revision,
+    render: (_value, row) => row.revision === null
       ? PROVIDER_OBJECT_COPY.columns.currentRevision
-      : String(row.original.revision),
+      : String(row.revision),
   },
   {
-    accessorKey: 'disposition',
-    header: PROVIDER_OBJECT_COPY.columns.disposition,
-    cell: ({ row }) => <Badge variant="outline">{providerStatusLabel(row.original.disposition)}</Badge>,
+    key: 'disposition',
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.disposition,
+    render: (_value, row) => <Badge variant="outline">{providerStatusLabel(row.disposition)}</Badge>,
   },
   {
-    accessorKey: 'sourceAuthorityState',
-    header: PROVIDER_OBJECT_COPY.columns.sourceAuthority,
-    cell: ({ row }) => providerStatusLabel(row.original.sourceAuthorityState),
+    key: 'sourceAuthorityState',
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.sourceAuthority,
+    render: (_value, row) => providerStatusLabel(row.sourceAuthorityState),
   },
 ]
 
 export function ProviderToolVersionsTable({ rows }: ProviderToolVersionsTableProps) {
   return (
-    <AeSection title={PROVIDER_OBJECT_COPY.toolVersionsTitle}>
-      <AeRecordTable
+    <section className="arc-market arc-admin-record-table-region" aria-label={PROVIDER_OBJECT_COPY.toolVersionsTitle}>
+      <h2 className="arc-admin-record-table-heading">{PROVIDER_OBJECT_COPY.toolVersionsTitle}</h2>
+      <SortableDataTable
         columns={columns}
-        data={rows}
-        getRowId={(row) => row.ref}
-        hideFilter
+        rows={[...rows]}
+        rowKey="ref"
+        animateRows={false}
         caption={PROVIDER_OBJECT_COPY.toolVersionsTitle}
+        ariaLabel={PROVIDER_OBJECT_COPY.toolVersionsTitle}
         emptyMessage={PROVIDER_OBJECT_COPY.noToolVersions}
       />
-    </AeSection>
+    </section>
   )
 }

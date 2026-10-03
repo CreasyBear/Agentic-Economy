@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -72,20 +72,26 @@ describe('owner x402 connection controls', () => {
     mocks.invalidate.mockResolvedValue(undefined)
   })
 
-  it('separates exact authority, connection health, credential custody, and Operation readiness', () => {
+  it('separates exact authority, connection health, credential custody, and Tool readiness', async () => {
     render(<AeOwnerProviderConnections businessId="business:one" connections={[connection]} />)
 
     expect(screen.getByText('POST https://seller.example/paid')).toBeTruthy()
     expect(screen.getByText('Sandbox')).toBeTruthy()
-    expect(screen.getByText(/Permission: route x402 payment to 0x1111/)).toBeTruthy()
-    expect(screen.getByText('Authority generation 4')).toBeTruthy()
-    expect(screen.getByText('No scheduled authority expiry')).toBeTruthy()
     expect(screen.getByText('Connection health not checked yet')).toBeTruthy()
-    expect(screen.getByText(/Credential rotation: not applicable/)).toBeTruthy()
-    expect(screen.getByText(/Tool readiness is checked per Tool/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Check connection' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
     expect(mocks.useReverification).toHaveBeenCalledWith(mocks.connect)
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect POST https://seller.example/paid' }))
+    const drawer = within(await screen.findByRole('dialog'))
+    expect(drawer.getByText(/Route x402 payment to 0x1111/)).toBeTruthy()
+    expect(drawer.getByText('Authority generation').nextElementSibling?.textContent).toBe('4')
+    expect(drawer.getByText('No scheduled authority expiry')).toBeTruthy()
+    expect(drawer.getByText('Connection health not checked yet')).toBeTruthy()
+    expect(drawer.getByText(/Not applicable. x402 stores no provider credential/)).toBeTruthy()
+    expect(drawer.getByText(/Tool readiness is checked per Tool/)).toBeTruthy()
+    expect(mocks.check).not.toHaveBeenCalled()
+    expect(mocks.connect).not.toHaveBeenCalled()
+    expect(mocks.revoke).not.toHaveBeenCalled()
   })
 
   it('starts reauthorization with the exact stored method and resource instead of one-click generation advance', () => {
@@ -144,6 +150,33 @@ describe('owner x402 connection controls', () => {
       }),
     }))
     expect(mocks.invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  it('revokes only the selected authority snapshot and keeps commands locked until readback after refusal', async () => {
+    const selected = { ...connection, connectionRef: 'connection:x402:two', authorityGeneration: 8,
+      authorityDigest: `sha256:${'b'.repeat(64)}`, grantedResources: ['https://second.example/paid'] }
+    let resolveRevoke!: (value: { kind: 'refused'; code: string }) => void
+    mocks.revoke.mockReturnValue(new Promise((resolve) => { resolveRevoke = resolve }))
+    render(<AeOwnerProviderConnections businessId="business:one" connections={[connection, selected]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[1]!)
+    const dialog = within(await screen.findByRole('alertdialog'))
+    expect(dialog.getByText(/Revoke access to https:\/\/second.example\/paid/)).toBeTruthy()
+    const confirm = dialog.getByRole('button', { name: 'Revoke provider connection' })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    await waitFor(() => expect(mocks.revoke).toHaveBeenCalledTimes(1))
+    expect(mocks.revoke).toHaveBeenCalledWith({ data: expect.objectContaining({
+      connectionRef: selected.connectionRef,
+      expectedAuthorityGeneration: selected.authorityGeneration,
+      expectedAuthorityDigest: selected.authorityDigest,
+    }) })
+    resolveRevoke({ kind: 'refused', code: 'source_unavailable' })
+    expect(await screen.findByRole('button', { name: 'Reload current connections' })).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    for (const button of screen.getAllByRole('button', { name: /^(Check connection|Reauthorize|Revoke)$/ })) {
+      expect((button as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(screen.getAllByRole('button', { name: /^Inspect (?:POST|GET) https:/ })).toHaveLength(2)
   })
 
   it.each([
