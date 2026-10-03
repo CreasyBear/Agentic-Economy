@@ -394,6 +394,11 @@ describe('Account AUD funding through Formance', () => {
     vi.useFakeTimers()
     const commandRef = 'account-funding:formance-one'
     const backend = convexTestWithWorkers()
+    // convex-test storage uses shared transaction state across action writes.
+    // Run this booking/render journey sequentially, as in the AM-10 fixtures.
+    await backend.run(async (ctx) => {
+      await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 })
+    })
     const fixture = await publishedBusinessOwner(backend, 'formance-account-funding')
     const reserved = await ownerReserve(fixture, commandRef, { inputDigest: sha256('a') })
     expect(reserved).toMatchObject({ kind: 'accepted', command: {

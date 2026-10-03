@@ -25,7 +25,12 @@ const fields: PolicyFields = {
 let view: PolicyPreparation | { kind: 'refused'; code: string }
 beforeEach(() => {
   view = prepare('commercial_perimeter')
-  mocks.query.mockImplementation(reference => getFunctionName(reference) === 'moneyCommercialPolicy:prepareChange' ? view : { kind: 'allowed', role: 'owner_admin' })
+  mocks.query.mockImplementation(reference => {
+    const name = getFunctionName(reference)
+    if (name === 'moneyCommercialPolicy:prepareChange') return view
+    if (name === 'moneyCommercialPolicy:readSummary') return undefined
+    return { kind: 'allowed', role: 'owner_admin' }
+  })
   mocks.execute.mockResolvedValue({ kind: 'completed', action: 'change_commercial_policy', code: 'commercial_policy_changed', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
 })
 afterEach(() => { cleanup(); vi.resetAllMocks() })
@@ -83,14 +88,14 @@ describe('commercial policy input and review', () => {
     const rendered = render(<CommercialPolicyActions environment="production" />)
     fireEvent.change(screen.getByLabelText('Policy family'), { target: { value: 'tax' } })
     fireEvent.click(screen.getByRole('button', { name: 'Prepare new policy' }))
-    expect(screen.getByLabelText<HTMLInputElement>('Tax on service fees (%)').value).toBe('')
-    inputValue('Tax on service fees (%)', '10.25')
+    expect(screen.getByLabelText<HTMLInputElement>('Tax on credit funding (%)').value).toBe('10')
+    inputValue('Tax on credit funding (%)', '10.25')
     inputValue('Tax invoice issuance', 'enabled')
     inputValue('Effective date and time', fields.effectiveAt)
     inputValue('Expiry date and time', fields.expiresAt)
     view = { ...prepare('tax'), current: { policyRef: 'policy:newer', lifecycle: 'active', revision: 2, effectiveAt: 1, expiresAt: 2, control: PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax, evidenceRef: 'evidence:new', approvedByPrincipalRef: 'owner:two', stateDigest: 'digest:new' } }
     rendered.rerender(<CommercialPolicyActions environment="production" />)
-    expect(screen.getByLabelText<HTMLInputElement>('Tax on service fees (%)').value).toBe('10.25')
+    expect(screen.getByLabelText<HTMLInputElement>('Tax on credit funding (%)').value).toBe('10.25')
     fireEvent.click(screen.getByRole('button', { name: 'Review policy' }))
     expect(screen.getByRole('region', { name: 'Commercial policy terms' }).textContent).toContain('10.25%')
     expect(screen.getByRole('region', { name: 'Commercial policy terms' }).textContent).toContain('Activate a new policy')
