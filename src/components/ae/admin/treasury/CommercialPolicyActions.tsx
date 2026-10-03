@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { COMMERCIAL_POLICY_FAMILIES, type CommercialPolicyEnvironment, type CommercialPolicyFamily } from '@/modules/money/public'
 import { createPrefixedRandomId } from '@/modules/common/random-id'
 import { buildPolicyInput, fieldsFromCurrent, POLICY_LABELS, proposedProductionPolicyFields, type PolicyFields, type PolicyInput, type PolicyPreparation } from './commercial-policy-form'
@@ -79,7 +80,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
         <p className="text-sm">Environment: {ready.environment}. {ready.requiresSecondApproval ? 'A different Admin owner must approve this change.' : 'An Admin owner can approve this change.'}</p>
         {ready.conflict ? <Alert role="alert" variant="destructive"><AlertDescription>Multiple active policies conflict. Changes are unavailable until the conflict is resolved.</AlertDescription></Alert> : null}
         {current === null ? <p>No approved policy is recorded for this family.</p> : <details><summary className="cursor-pointer">Recorded policy: {current.lifecycle}, revision {current.revision}</summary>
-          <div className="mt-3 grid gap-related"><p className="break-all text-sm">{current.policyRef}</p><p className="text-sm">Effective {new Date(current.effectiveAt).toLocaleString()} · expires {new Date(current.expiresAt).toLocaleString()}</p><CommercialPolicyControlReview control={current.control} /><p className="break-all text-sm">Evidence: {current.evidenceRef}</p><p className="break-all text-sm">Approved by: {current.approvedByPrincipalRef}</p></div>
+          <div className="mt-3 grid gap-related"><p className="break-all text-sm">{current.policyRef}</p><p className="text-sm">Effective {formatPerthTimestamp(current.effectiveAt)} · expires {formatPerthTimestamp(current.expiresAt)} Perth time</p><CommercialPolicyControlReview control={current.control} /><p className="break-all text-sm">Evidence: {current.evidenceRef}</p><p className="break-all text-sm">Approved by: {current.approvedByPrincipalRef}</p></div>
         </details>}
         {draft === null ? <div className="flex flex-wrap gap-intra"><Button type="button" disabled={ready.conflict || review !== null} onClick={() => beginEdit(current?.lifecycle === 'active')}>{current?.lifecycle === 'active' ? 'Replace active policy' : 'Prepare new policy'}</Button>{current?.lifecycle === 'active' ? <Button type="button" variant="outline" disabled={ready.conflict || review !== null} onClick={suspend}>Suspend active policy</Button> : null}</div> : null}
       </>}

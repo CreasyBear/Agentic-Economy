@@ -1,4 +1,5 @@
 import type { AdminCommandRequest } from '../actions/actions.contracts'
+import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { POLICY_LABELS, policyDecimal } from './commercial-policy-form'
 
 type Term = readonly [label: string, value: string]
@@ -25,14 +26,13 @@ export function CommercialPolicyControlReview({ control }: { control: ReviewCont
 }
 /** Both first-owner review and second approval render the exact command, without a live policy lookup. */
 export function CommercialPolicyReview({ input }: { input: ReviewInput }) {
-  const date = (value: number) => `${new Date(value).toLocaleString('en-AU', { timeZone: 'Australia/Perth' })} Perth time`
   return <section aria-label="Commercial policy terms" className="grid gap-related rounded-lg border border-border p-gutter">
     <h3 className="font-medium">{POLICY_LABELS[input.family]}</h3>
     <Terms terms={[
       ['Change', input.changeKind === 'activate' ? 'Activate a new policy' : input.changeKind === 'replace' ? 'Replace active policy' : 'Suspend active policy'],
       ['Environment', input.environment], ['Revision', String(input.revision)], ['Policy reference', input.policyRef],
       ...(input.expectedCurrentPolicyRef === undefined ? [] : [['Current policy reference', input.expectedCurrentPolicyRef] as const]),
-      ['Effective', date(input.effectiveAt)], ['Expires', date(input.expiresAt)],
+      ['Effective', `${formatPerthTimestamp(input.effectiveAt)} Perth time`], ['Expires', `${formatPerthTimestamp(input.expiresAt)} Perth time`],
     ]} />
     <CommercialPolicyControlReview control={input.control} />
     {input.control.family === 'treasury_custody' ? <p className="text-sm text-muted-foreground">The recorded minimum must not exceed the current custody maximum. A higher floor requires changing custody configuration before approval; later cap drift blocks production admission.</p> : null}
