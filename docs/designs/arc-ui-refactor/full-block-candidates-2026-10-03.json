@@ -1,0 +1,899 @@
+{
+  "sourceHead": "433b1ae4677f04d4bc1f8daf135ae218f4fb196a",
+  "scope": "source-fit audit, not behavioral/visual acceptance",
+  "method": "Nine cold gpt-6-luna max agents in three waves of three; exact source assignments and root review of shortlisted opportunities.",
+  "areaCounts": {
+    "account-and-settings": {
+      "no-suitable-block": 13,
+      "native-control-needed": 22,
+      "moderate-region": 5,
+      "already-real-block": 4
+    },
+    "agents": {
+      "native-control-needed": 25,
+      "no-suitable-block": 10,
+      "moderate-region": 9,
+      "easy-full-block": 1,
+      "already-real-block": 2
+    },
+    "chat": {
+      "no-suitable-block": 13,
+      "native-control-needed": 16,
+      "moderate-region": 2,
+      "already-real-block": 18,
+      "dormant": 1,
+      "easy-full-block": 1
+    },
+    "market": {
+      "native-control-needed": 18,
+      "dormant": 6,
+      "no-suitable-block": 22,
+      "already-real-block": 11
+    },
+    "money-and-activity": {
+      "no-suitable-block": 12,
+      "moderate-region": 4,
+      "native-control-needed": 11
+    },
+    "operator": {
+      "no-suitable-block": 53,
+      "easy-full-block": 5,
+      "already-real-block": 2,
+      "native-control-needed": 13
+    },
+    "provider": {
+      "no-suitable-block": 20,
+      "dormant": 4,
+      "native-control-needed": 23,
+      "moderate-region": 7,
+      "already-real-block": 2
+    },
+    "public-and-support": {
+      "no-suitable-block": 21,
+      "dormant": 13,
+      "native-control-needed": 20,
+      "moderate-region": 4,
+      "easy-full-block": 1
+    },
+    "shared": {
+      "no-suitable-block": 84,
+      "native-control-needed": 17,
+      "already-real-block": 13,
+      "moderate-region": 1,
+      "dormant": 1
+    }
+  },
+  "easyWorkUnits": [
+    {
+      "id": "chat-follow-ups",
+      "rank": 1,
+      "classification": "easy-full-block",
+      "block": "ai-chat",
+      "paths": [
+        "src/components/ae/chat/generative/FollowUps.tsx"
+      ],
+      "sourceCandidateIds": [
+        "ai-chat-follow-up-suggestions"
+      ],
+      "effort": "small",
+      "scope": "Replace the suggestions region with the installed controlled ArcAiChatSuggestions."
+    },
+    {
+      "id": "admin-record-headers",
+      "rank": 2,
+      "classification": "easy-full-block",
+      "block": "page-header",
+      "paths": [
+        "src/components/ae/admin/call-object/AdminCallObjectPage.tsx",
+        "src/components/ae/admin/object-pages/components/AgentObjectView.tsx",
+        "src/components/ae/admin/object-pages/components/QuoteObjectView.tsx",
+        "src/components/ae/admin/object-pages/components/ToolVersionObjectView.tsx",
+        "src/components/ae/admin/object-pages/components/WorkspaceObjectView.tsx"
+      ],
+      "sourceCandidateIds": [
+        "operator-record-header"
+      ],
+      "effort": "medium volume, low semantic risk",
+      "scope": "One five-caller unit reusing the installed controlled PageHeader."
+    },
+    {
+      "id": "shared-public-faq",
+      "rank": 3,
+      "classification": "easy-full-block",
+      "block": "faq-section",
+      "paths": [
+        "src/components/ae/website/AeSiteFaq.tsx"
+      ],
+      "callers": [
+        "src/components/ae/agents/AeAgentDoorPage.tsx",
+        "src/components/ae/supply/AeSupplyLanding.tsx",
+        "src/components/ae/support/help/AeSupportHelpPage.tsx"
+      ],
+      "sourceCandidateIds": [
+        "public-agent-door-hero-and-faq",
+        "shared-faq-section"
+      ],
+      "effort": "small controlled presentation adapter",
+      "scope": "Install actual FaqSection and replace shared FAQ hierarchy once. Preserve supplied heading IDs, closed/single/collapsible behavior, exact copy and Router status link; override demo description/contact."
+    },
+    {
+      "id": "agents-public-hero",
+      "rank": 4,
+      "classification": "easy-full-block",
+      "block": "hero-section",
+      "paths": [
+        "src/components/ae/agents/AeAgentDoorPage.tsx"
+      ],
+      "sourceCandidateIds": [
+        "public-agent-door-hero-and-faq"
+      ],
+      "effort": "small",
+      "scope": "Replace the hero region with HeroContent selected by actual title props. The native connection funnel remains as factual media."
+    },
+    {
+      "id": "providers-public-hero",
+      "rank": 5,
+      "classification": "easy-full-block",
+      "block": "hero-section",
+      "paths": [
+        "src/components/ae/supply/AeSupplyLanding.tsx"
+      ],
+      "sourceCandidateIds": [
+        "provider-landing-hero"
+      ],
+      "effort": "small",
+      "scope": "Replace the hero/requirements region, preserving real requirements and TanStack action-link semantics through a narrow controlled adapter."
+    }
+  ],
+  "candidates": [
+    {
+      "id": "public-agent-door-hero-and-faq",
+      "title": "Replace the /for-agents hero and FAQ presenters with Arc HeroSection and FaqSection",
+      "classification": "easy-full-block",
+      "blocks": [
+        "hero-section",
+        "faq-section"
+      ],
+      "paths": [
+        "src/components/ae/agents/AeAgentDoorPage.tsx"
+      ],
+      "liveRoutes": [
+        "/for-agents"
+      ],
+      "upstreamEvidence": [
+        "Arc upstream hero-section/hero-section.tsx:20-60",
+        "Arc upstream hero-section/hero-content.tsx:43-90",
+        "Arc upstream hero-section/hero-section.module.css:11-13",
+        "Arc upstream faq-section/faq-section.tsx:15-46,155-210",
+        "https://uiarc.dev/components/blocks/hero-section (docs: use for landing-page heroes, not page headers or signup-focused heroes)",
+        "https://uiarc.dev/components/blocks/faq-section (docs: use for real FAQs, not generic accordions or documentation pages)"
+      ],
+      "replacement": "Replace only AeAgentDoorPage\u2019s hand-authored hero and AeSiteFaq hierarchy. Map current title/description/CTA into HeroSection and keep the focusable #agent-setup section containing AeAssistantInstallFunnel as media. Map actual AGENT_PAGE questions and /status link into FaqSection.",
+      "preserve": [
+        "canonicalBaseUrl and install command/copy/live connection-check flow",
+        "the #agent-setup id, aria label, tabindex=-1 and native CTA anchor behavior",
+        "existing FAQ copy and /status destination; pass defaultValue=[] to keep answers closed initially",
+        "setup must not imply consent or authority"
+      ],
+      "effort": "Small: two presenter regions in one page file; keep the existing setup funnel unchanged as hero media. Arc block source is in the inspected cache but not yet installed in this repo.",
+      "risks": [
+        "FaqSection opens the first question by default if defaultValue is omitted.",
+        "Source fit is not visual parity; check anchor focus, responsive layout and motion after implementation."
+      ],
+      "confidence": "medium",
+      "priority": 8,
+      "area": "agents",
+      "rootReview": {
+        "decision": "accept-easy-source-fit",
+        "evidence": [
+          "src/components/ae/agents/AeAgentDoorPage.tsx:7",
+          "src/components/ae/website/AeSiteFaq.tsx:37",
+          "src/content/brand-copy.ts:57",
+          "Arc upstream hero-section/hero-section.tsx:20",
+          "Arc upstream hero-section/hero-content.tsx:60",
+          "Arc upstream faq-section/faq-section.tsx:155"
+        ],
+        "notes": "Actual title/description/action/media props select HeroContent with natural content height and bypass sample hero scenes. FAQ has actual items/defaultValue/value props. Set defaultValue=[] and retain single/collapsible behavior, override sample description/contact, preserve /status RouterLink semantics and #agent-setup focus anchor. Keep canonical command copy and connection-check engine in existing funnel. No runtime or visual verification performed. Deduplicate FAQ installation and AeSiteFaq migration as one three-caller shared work unit; keep the agents hero as its own region. Preserve actual supplied heading IDs through a narrow presentation prop if retaining the existing shared contract."
+      }
+    },
+    {
+      "id": "ai-chat-follow-up-suggestions",
+      "title": "Use the installed AI Chat suggestions region for follow-up prompts",
+      "classification": "easy-full-block",
+      "blocks": [
+        "ai-chat"
+      ],
+      "paths": [
+        "src/components/ae/chat/generative/FollowUps.tsx"
+      ],
+      "liveRoutes": [
+        "src/routes/t.$threadId.tsx",
+        "src/routes/t.new.tsx"
+      ],
+      "upstreamEvidence": [
+        "src/components/arc/blocks/ai-chat/ai-chat.tsx:221-256",
+        "Arc upstream ai-chat/ai-chat.tsx:872-878",
+        "https://uiarc.dev/components/blocks/ai-chat (When to use / When not to use)"
+      ],
+      "replacement": "Replace the AE list/button markup and duplicated layout CSS with ArcAiChatSuggestions; map each of the first three strings to its exact prompt and visible title, retaining the existing heading wrapper.",
+      "preserve": [
+        "empty suggestions omit the region",
+        "first-three order and exact prompt text",
+        "one callback that fills/focuses the draft without submitting",
+        "native button keyboard semantics and private-chat visibility"
+      ],
+      "effort": "small: adapt the first three strings to the controlled Arc suggestions prop, retain the heading, and remove FollowUpsComposition.css list/button rules.",
+      "risks": [
+        "Arc suggestions use the AI Chat title/label typography; confirm the one-line mapping keeps the prompt text clear."
+      ],
+      "confidence": "high",
+      "priority": 6,
+      "area": "chat",
+      "rootReview": {
+        "decision": "accept-easy-source-fit",
+        "evidence": [
+          "src/components/ae/chat/generative/FollowUps.tsx:6",
+          "src/components/arc/blocks/ai-chat/ai-chat.tsx:221",
+          "src/components/ae/chat/chat-session/components/ChatSuggestedActions.tsx:6"
+        ],
+        "notes": "Installed controlled region accepts exact prompt/title/label strings and invokes existing onPick with unchanged prompt. Preserve first-three ordering, empty omission, current heading and private-chat visibility. Map title to the complete supplied prompt and avoid invented secondary labels. Check CSS wrapping during future implementation. No new dependencies or state engine required."
+      }
+    },
+    {
+      "id": "chat-tool-comparison",
+      "title": "Replace the duplicated compare table with the Arc comparison matrix",
+      "classification": "moderate-region",
+      "blocks": [
+        "comparison-table"
+      ],
+      "paths": [
+        "src/components/ae/chat/ToolCard.tsx"
+      ],
+      "liveRoutes": [
+        "src/routes/s.$shareToken.tsx",
+        "src/routes/t.$threadId.tsx",
+        "src/routes/t.new.tsx"
+      ],
+      "upstreamEvidence": [
+        "src/components/arc/market/ComparisonTable.tsx:14-74 (adapted Arc source; SHA 52486e32ea02ff3a80c20e8010cb3405edf4aa92d5b66e05adcb6172334b0ce9)",
+        "https://uiarc.dev/components/blocks/comparison-table (When to use / When not to use)"
+      ],
+      "replacement": "In ToolCard.CompareTable, replace the handwritten facts table with the existing Arc comparison matrix, mapping each Tool to a column and Provider, price, readiness and other displayed facts to rows; keep the current listing cards if they remain the only validUntil presentation.",
+      "preserve": [
+        "exact projected Tool price and readiness labels",
+        "safe detailHref/inspectHref destinations",
+        "below-match indication and single-result behavior",
+        "all current Tool card outcome/refusal branches"
+      ],
+      "effort": "medium: map typed facts into columns/rows while preserving one-result presentation, price expiry information and inspect links.",
+      "risks": [
+        "The installed matrix supports one column mechanically; preserve truthful single-choice presentation and meaningful difference-filter visibility.",
+        "Current cards carry price validity that the simple facts table omits; preserve those facts when removing duplicated presentation.",
+        "This replaces only a comparison region, not the mixed ToolCard presenter."
+      ],
+      "confidence": "medium",
+      "priority": 4,
+      "area": "chat",
+      "rootReview": {
+        "decision": "accept-moderate-region-with-correction",
+        "evidence": [
+          "src/components/ae/chat/ToolCard.tsx:82",
+          "src/components/ae/chat/ToolCard.tsx:194",
+          "src/components/arc/market/ComparisonTable.tsx:30"
+        ],
+        "notes": "Correct worker claim: local controlled matrix checks absence of anchor, not a minimum of two columns, so one-column rendering is mechanically supported. Preserve truthful single-choice presentation and difference-filter visibility; no need to invent a strict two-Tool API constraint. Mapping and removal of duplicated cards/table still need explicit price validity, below-match, link and readiness preservation."
+      }
+    },
+    {
+      "id": "call-receipt-stage-timeline",
+      "title": "Adapt the controlled ArcAgentRunTimeline for recorded Call stages",
+      "classification": "moderate-region",
+      "blocks": [
+        "agent-run"
+      ],
+      "paths": [
+        "src/components/ae/call-receipt/CallReceiptTimeline.tsx"
+      ],
+      "liveRoutes": [
+        "/_operator/calls/$callRef",
+        "/_operator/admin/calls/$callRef"
+      ],
+      "upstreamEvidence": [
+        "src/components/arc/blocks/agent-run/agent-run.tsx:11-45",
+        "src/components/arc/blocks/agent-run/agent-run.tsx:54-135",
+        "src/components/arc/chat/AgentRun.tsx:7-17",
+        "https://uiarc.dev/components/blocks/agent-run (When not to use: static events use Timeline)"
+      ],
+      "replacement": "Replace the AE-authored CallReceiptTimeline section header, ordered list, and state-icon map with the existing ArcAgentRunTimeline hierarchy. Add controlled per-stage detail and explicit current/pending phases, and keep the receipt stages visible when their containing Technical details disclosure is open.",
+      "preserve": [
+        "All six canonical stage IDs, labels, and order",
+        "Recorded complete/current/pending/attention distinctions and every stage detail",
+        "No fabricated stage timestamps, live-run spinner, or inferred completion",
+        "Buyer and admin use of the shared presenter"
+      ],
+      "effort": "medium: extend the shared ArcAgentRunTimeline step type/rendering and CSS for current, pending, and stage detail, add a caller-controlled expanded default, then map the unchanged CallReceiptStageView into the block",
+      "risks": [
+        "A collapsed default would hide receipt facts behind a second disclosure; preserve the current visible stage list when Technical details is open",
+        "A working phase cannot stand for pending or current without making an unsupported live-execution claim"
+      ],
+      "confidence": "medium",
+      "priority": 5,
+      "area": "money-and-activity",
+      "rootReview": {
+        "decision": "accept-moderate-adaptation",
+        "evidence": [
+          "src/components/ae/call-receipt/CallReceiptTimeline.tsx:8",
+          "src/components/arc/blocks/agent-run/agent-run.tsx:11",
+          "src/components/arc/blocks/agent-run/agent-run.tsx:33",
+          "src/components/arc/blocks/agent-run/agent-run.tsx:87"
+        ],
+        "notes": "Existing controlled Arc timeline has working/complete/attention and a collapsed disclosure; native receipt also requires current/pending, aria-current, visible per-stage details and no extra collapsed layer. Preserve recorded status facts rather than mapping pending/current to live working. Native model/engine remain; block API/CSS need bounded extension."
+      }
+    },
+    {
+      "id": "operator-record-header",
+      "title": "Use the controlled Arc PageHeader across admin record details",
+      "classification": "easy-full-block",
+      "blocks": [
+        "page-header"
+      ],
+      "paths": [
+        "src/components/ae/admin/call-object/AdminCallObjectPage.tsx",
+        "src/components/ae/admin/object-pages/components/AgentObjectView.tsx",
+        "src/components/ae/admin/object-pages/components/QuoteObjectView.tsx",
+        "src/components/ae/admin/object-pages/components/ToolVersionObjectView.tsx",
+        "src/components/ae/admin/object-pages/components/WorkspaceObjectView.tsx"
+      ],
+      "liveRoutes": [
+        "src/routes/_operator/admin.calls.$callRef.tsx",
+        "src/routes/_operator/admin.agents.$principalRef.tsx",
+        "src/routes/_operator/admin.quotes.$quoteRef.tsx",
+        "src/routes/_operator/admin.tools.$toolRef.tsx",
+        "src/routes/_operator/admin.workspaces.$accountRef.tsx"
+      ],
+      "upstreamEvidence": [
+        "https://uiarc.dev/components/blocks/page-header (record-page use; docs note upstream sample data and no props)",
+        "Arc upstream page-header/page-header.tsx:223 (upstream no-props sample block)",
+        "src/components/arc/blocks/page-header/page-header.tsx:8 (existing typed controlled adapter)",
+        "src/components/ae/admin/provider-object/AdminProviderObjectPage.tsx:77 (live precedent)"
+      ],
+      "replacement": "Move each page title, description, breadcrumbs, status and copyable reference into the existing PageHeader region; remove per-view header assembly while retaining AeOperatorPage shell and record body.",
+      "preserve": [
+        "Exact ref and status projections",
+        "Router link behavior and page focus/currentPath",
+        "Call authority, opaque references and all body records",
+        "Existing pending, refused and not-found paths"
+      ],
+      "effort": "medium \u2014 five presenter call sites reuse the existing adapter; no state, API or data changes.",
+      "risks": [
+        "The upstream no-props block contains project sample data; use only the existing typed adapter, never its demo default.",
+        "Preserve the single h1 through AeOperatorPage contentOwnsHeading when moving the header into content."
+      ],
+      "confidence": "medium",
+      "priority": 7,
+      "area": "operator",
+      "rootReview": {
+        "decision": "accept-easy-shared-region",
+        "evidence": [
+          "src/components/ae/admin/call-object/AdminCallObjectPage.tsx:47",
+          "src/components/ae/admin/object-pages/components/AgentObjectView.tsx:18",
+          "src/components/ae/admin/object-pages/components/QuoteObjectView.tsx:22",
+          "src/components/ae/admin/object-pages/components/ToolVersionObjectView.tsx:22",
+          "src/components/ae/admin/object-pages/components/WorkspaceObjectView.tsx:31",
+          "src/components/arc/blocks/page-header/page-header.tsx:14",
+          "src/components/ae/admin/provider-object/AdminProviderObjectPage.tsx:77"
+        ],
+        "notes": "Five actual found-record call sites have directly compatible titles/descriptions/crumbs/status/reference nodes. Existing controlled PageHeader and live provider precedent make the composition reusable. Keep AeOperatorPage currentPath/sticky chrome and use contentOwnsHeading to prevent duplicate h1. Retain current exact ref/link/copy/status nodes and untouched found/refused/pending bodies. Group as one five-caller unit; medium volume, low semantic risk, not five whole-page replacements."
+      }
+    },
+    {
+      "id": "provider-landing-hero",
+      "title": "Replace the public Provider landing hero region with HeroSection",
+      "classification": "easy-full-block",
+      "blocks": [
+        "hero-section"
+      ],
+      "paths": [
+        "src/components/ae/supply/AeSupplyLanding.tsx"
+      ],
+      "liveRoutes": [
+        "/for-providers"
+      ],
+      "upstreamEvidence": [
+        "Arc upstream hero-section/hero-section.tsx:20-60",
+        "Arc upstream hero-section/hero-content.tsx:29-90",
+        "https://uiarc.dev/components/blocks/hero-section (When not to use: page-header is for in-app titles; hero-signup is for email capture.)"
+      ],
+      "replacement": "Replace only AeSupplyLanding's custom hero/requirements hierarchy with HeroSection variant=split, title/description/primaryAction props and the existing requirements aside in its media slot. Keep the later recovery, source-fit explanation, ordered steps, public proof and FAQ regions as they are.",
+      "preserve": [
+        "Add Tool retains /owner/operations/new, native link semantics and TanStack client navigation through a controlled action-link adapter.",
+        "All three pre-sign-in source/payment/payee requirements and the private-key warning stay visible in the media slot.",
+        "Source error/retry and suppression of proof data remain owned by the existing presenter and route."
+      ],
+      "effort": "small: replace one hero region, import HeroSection and remove only unused hero layout selectors",
+      "risks": [
+        "Custom title selects the natural-height HeroContent path; responsive visual fit remains unverified.",
+        "HeroAction renders a native anchor. Preserve TanStack navigation through a narrow render-link adapter."
+      ],
+      "confidence": "medium",
+      "priority": 8,
+      "area": "provider",
+      "rootReview": {
+        "decision": "accept-easy-region-with-link-adapter",
+        "evidence": [
+          "src/components/ae/supply/AeSupplyLanding.tsx:50",
+          "Arc upstream hero-section/hero-section.tsx:59",
+          "Arc upstream hero-section/hero-section.module.css:11",
+          "Arc upstream hero-section/hero-content.module.css:1"
+        ],
+        "notes": "Correct worker claim: custom title selects HeroContent, whose own-content layout has natural height; 100svh applies to sample full-screen variants, not this path. Preserve actual TanStack Add Tool link via a narrow action-link render slot/adapter rather than accepting changed client navigation. Keep the three requirements/private-key warning as supplied media, source recovery/proof branches outside hero. This is a full hero region replacement, not the whole SupplyLanding page."
+      }
+    },
+    {
+      "id": "shared-faq-section",
+      "title": "Replace the shared FAQ presenter with Arc FAQ section",
+      "classification": "easy-full-block",
+      "blocks": [
+        "faq-section"
+      ],
+      "paths": [
+        "src/components/ae/website/AeSiteFaq.tsx"
+      ],
+      "liveRoutes": [
+        "/for-agents",
+        "/for-providers",
+        "/support"
+      ],
+      "upstreamEvidence": [
+        "https://uiarc.dev/components/blocks/faq-section",
+        "Arc upstream faq-section/faq-section.tsx:13-47",
+        "Arc upstream faq-section/faq-section.tsx:155-208"
+      ],
+      "replacement": "Replace the custom section/header/Accordion markup with FaqSection variant=\"accordion\" and existing question data; add only a narrow titleId seam, defaultValue=[], multiple=false, description=\"\", contact=null, and keep optional /status as the existing TanStack Link.",
+      "preserve": [
+        "Exact question and answer copy",
+        "One-open-at-a-time, initially closed behavior",
+        "Existing supplied heading IDs and optional /status route link",
+        "No sample contact action or invented support transport"
+      ],
+      "effort": "small: replace one shared presenter, map its existing fields and preserve the optional native route link in its wrapper",
+      "risks": [
+        "Arc FAQ owns accordion keyboard/motion behavior, so observable behavior should be checked after implementation.",
+        "Source-only audit; no visual or behavior tests run."
+      ],
+      "confidence": "high",
+      "priority": 10,
+      "area": "public-and-support",
+      "rootReview": {
+        "decision": "accept-easy-shared-region",
+        "evidence": [
+          "src/components/ae/website/AeSiteFaq.tsx:14",
+          "src/components/ae/website/AeSiteFaq.tsx:37",
+          "src/components/ae/agents/AeAgentDoorPage.tsx:32",
+          "src/components/ae/supply/AeSupplyLanding.tsx:149",
+          "src/components/ae/support/help/AeSupportHelpPage.tsx:110",
+          "Arc upstream faq-section/faq-section.tsx:155"
+        ],
+        "notes": "Three actual callers pass real headings and plain-text questions. Replace the shared FAQ hierarchy once; defaultValue=[] preserves initially closed single/collapsible behavior. Suppress demo description/contact, preserve heading IDs with a narrow presentation prop and retain the agents status RouterLink. These changes are bounded presentation adapters; no new state engine or package dependency is required. This overlaps the Agents hero-plus-FAQ recommendation and must be counted once."
+      }
+    },
+    {
+      "id": "public-footer-region",
+      "title": "Use Arc SiteFooter for the shared public footer data region",
+      "classification": "moderate-region",
+      "blocks": [
+        "site-footer"
+      ],
+      "paths": [
+        "src/components/ae/website/AeSiteFooter.tsx"
+      ],
+      "liveRoutes": [
+        "/about",
+        "/developers/api",
+        "/developers/discovery",
+        "/for-agents",
+        "/for-providers",
+        "/privacy",
+        "/status",
+        "/support",
+        "/terms",
+        "/trust"
+      ],
+      "upstreamEvidence": [
+        "https://uiarc.dev/components/blocks/site-footer",
+        "Arc upstream site-footer/site-footer.tsx:14-55",
+        "Arc upstream site-footer/site-footer.tsx:153-212"
+      ],
+      "replacement": "Replace the footer columns and bottom hierarchy with SiteFooter using real brand/tagline/columns/social/legal data, newsletter=null and status=null. Add narrow render-link and exact copyright seams; map ABN through legal data and retain the separate closer.",
+      "preserve": [
+        "Exact destination URLs and labels",
+        "reloadDocument behavior for machine-readable files",
+        "Dual light/dark AE marks, social destinations, copyright and ABN",
+        "No newsletter or inferred status label"
+      ],
+      "effort": "medium: controlled link rendering and copyright text props preserve existing behavior while retiring native columns/bottom hierarchy.",
+      "risks": [
+        "Native anchors already reload machine-readable files. The mismatch is losing TanStack client navigation on the other internal destinations; preserve both policies with a render-link seam.",
+        "Visible brand AECON differs from canonical copyright Agentic Economy; the stock brand-name copyright would change copy without an exact copyright slot.",
+        "Preserve existing social same-tab behavior, brand-link label, dual marks and closer visibility; do not add a newsletter or inferred status.",
+        "No runtime or visual parity verification was performed."
+      ],
+      "confidence": "medium",
+      "priority": 5,
+      "area": "public-and-support",
+      "rootReview": {
+        "decision": "accept-moderate-with-legal-and-link-adapters",
+        "evidence": [
+          "src/components/ae/website/AeSiteFooter.tsx:84",
+          "src/components/ae/website/AeSiteFooter.contracts.ts:1",
+          "src/content/brand-copy.ts:159",
+          "Arc upstream site-footer/site-footer.tsx:65",
+          "Arc upstream site-footer/site-footer.tsx:178"
+        ],
+        "notes": "Source supports real brand/tagline/columns/social/legal data and newsletter=null/status=null. A render-link seam must preserve the policy: normal internal links use TanStack client navigation and four machine-readable files use reloadDocument. Native anchors already reload the machine files; their actual mismatch is replacing client navigation everywhere. Do not combine onNavigate with href and double-navigate. Brand text is AECON but canonical copyright is \u00a9 year Agentic Economy; add an exact copyright slot rather than changing either name. ABN fits the actual legal-link data prop and need not remain a hand-authored bottom region. Preserve existing social same-tab behavior, marks, accessible brand link and closer visibility. Moderate, not drop-in."
+      }
+    },
+    {
+      "id": "shared-page-header-port",
+      "title": "Use the installed PageHeader block for shared document/workspace headers",
+      "classification": "moderate-region",
+      "blocks": [
+        "page-header"
+      ],
+      "paths": [
+        "src/components/ae/layout/AePageHeader.tsx"
+      ],
+      "liveRoutes": [
+        "src/routes/privacy.remove-business.tsx",
+        "src/routes/developers.api.tsx",
+        "src/routes/developers.discovery.tsx",
+        "src/routes/support.tsx",
+        "src/routes/status.tsx"
+      ],
+      "upstreamEvidence": [
+        "src/components/arc/blocks/page-header/page-header.tsx:14",
+        "Arc upstream page-header/page-header.tsx:223",
+        "https://uiarc.dev/components/blocks/page-header"
+      ],
+      "replacement": "Replace AePageHeader\u2019s authored section/title/description/trailing DOM with the installed PageHeader region; map actions and detail, extending narrow slots for eyebrow, polite metadata and focusTitle while removing duplicate header markup.",
+      "preserve": [
+        "title and description associations",
+        "caller action nodes",
+        "metadata polite status announcement",
+        "focusTitle behavior",
+        "page/market/workspace variants and route-state status/alert wrapper"
+      ],
+      "effort": "medium: extend the installed block\u2019s controlled props, port the shared presenter, and retire only duplicated AePageHeader structure/styles still unused by AeRecordHeader.",
+      "risks": [
+        "Installed PageHeader currently places actions/breadcrumbs in a different row and lacks the eyebrow/meta/focusTitle API; layout parity remains unverified."
+      ],
+      "confidence": "medium",
+      "priority": 6,
+      "area": "shared",
+      "rootReview": {
+        "decision": "accept-moderate-shared-adapter",
+        "evidence": [
+          "src/components/ae/layout/AePageHeader.tsx:6",
+          "src/components/ae/layout/AePageHeader.tsx:40",
+          "src/components/arc/blocks/page-header/page-header.tsx:14"
+        ],
+        "notes": "Native shared header still owns a separate section/title/trailing DOM despite Arc naming. Existing controlled PageHeader renders the actual block hierarchy, but cannot yet preserve title/description IDs, focusTitle, context, polite live metadata and the three layout profiles. Extend only those controlled presentation slots, preserve status/alert wrappers in their callers, then remove duplicate markup. A moderate shared adapter, not a drop-in replacement or permission to remove focus behavior."
+      }
+    }
+  ],
+  "rejectedMappings": {
+    "account-and-settings": [
+      {
+        "block": "login-centered",
+        "reason": "Arc\u2019s `LoginCentered` props expose its own passkey/email-code/SSO flow and `onSignIn`, with no caller-rendered Clerk slot. Sign-in and sign-up use the actual Clerk `<SignIn>` / `<SignUp>` components with route-safe redirect props. Upstream docs: https://uiarc.dev/components/blocks/login-centered."
+      },
+      {
+        "block": "signup-form",
+        "reason": "This is an email/password/provider signup engine with name/password-strength/opt-in/completion fields, not a render shell for Clerk. Its callbacks can connect a custom auth API, but the current presenter needs Clerk\u2019s provider-managed auth flow and precise redirect behavior. Upstream docs: https://uiarc.dev/components/blocks/signup-form."
+      },
+      {
+        "block": "security-settings",
+        "reason": "The source/doc describes personal 2FA, password and active-session management. It cannot replace independent security event history, compromise review or bootstrap authority. It is already narrowly adapted around live Clerk content on the Account security route. Upstream docs: https://uiarc.dev/components/blocks/security-settings."
+      },
+      {
+        "block": "notification-center",
+        "reason": "Its actual hierarchy is an unread notification inbox with expandable/read/dismiss items and keeps its own notification copy after mount; it is not preference settings. Current switches apply a typed preference patch with expectedRevision. Upstream source: Arc upstream notification-center/notification-center.tsx:108."
+      },
+      {
+        "block": "roles-permissions",
+        "reason": "This block edits a permission matrix with simulated inline role/group/grant state; current TeamRolesPage assigns workspace roles to people. Its own docs say to use team-members to assign roles to people. Upstream source: Arc upstream roles-permissions/roles-permissions.tsx:32."
+      },
+      {
+        "block": "settings-command",
+        "reason": "This block owns a single scrolling form, draft baseline, unsaved-change bar and one save callback. Upstream docs say use settings-page for short paged profile forms and avoid settings-command for a single form. Current routes separate Clerk/account, tax, spend, key issuance, receipts and authority-sensitive actions, each with distinct persistence/results. Upstream source: Arc upstream settings-command/settings-command.tsx:289."
+      },
+      {
+        "block": "changelog-feed",
+        "reason": "The source/docs target release notes grouped by month, with release-type filters and subscribe behavior. Security-history rows carry observed/recorded time, source, actor/target and correlation references under cursor paging; this is not a release feed. Upstream docs: https://uiarc.dev/components/blocks/changelog-feed."
+      },
+      {
+        "block": "release-readiness",
+        "reason": "The source/docs use local user-toggleable checks to unlock a release action. Compromise review and decommission fences are authoritative external conditions; turning them into local checkboxes could imply recovery or close eligibility that the source has not confirmed. Upstream docs: https://uiarc.dev/components/blocks/release-readiness."
+      },
+      {
+        "block": "cancel-flow",
+        "reason": "The source/docs implement subscription cancellation with retention offers, discount/pause states and sample prices. Workspace close and ownership transfer use owner-only authority, decommission fences, typed name/successor and separate confirmation; the commercial action is different. Upstream docs: https://uiarc.dev/components/blocks/cancel-flow."
+      },
+      {
+        "block": "multi-step-form",
+        "reason": "This generic wizard supplies Back/Continue/progress/success state; it does not replace privacy-correction validation/receipt semantics, tax validation, or bootstrap operation/readback/idempotency. Adapting its structure would be a deliberate flow redesign, not a direct presenter replacement. Upstream docs: https://uiarc.dev/components/multi-step-form."
+      },
+      {
+        "block": "sortable-data-table",
+        "reason": "This is a component rather than a full block. AeRecordTable is already an Arc-derived sortable table adaptation; the security table adds AE evidence renderers and a separate cursor-paging/retry region. Replacing only the table component is at most a moderate region migration and risks filter/focus contracts."
+      }
+    ],
+    "agents": [
+      {
+        "block": "agent-run",
+        "reason": "Sample run/execution state cannot replace consent, granted Tool scope, authority or purchase resolution."
+      },
+      {
+        "block": "integrations",
+        "reason": "The source is Provider-connection oriented with a nested drawer; Agent connection receipts and direct-key paths have distinct semantics."
+      },
+      {
+        "block": "security-settings",
+        "reason": "Does not match one-time key reveal/cleanup or AE authorization state."
+      },
+      {
+        "block": "api-keys",
+        "reason": "An issued-key list does not preserve one-time secret reveal semantics."
+      },
+      {
+        "block": "sortable-data-table",
+        "reason": "At most a row shell; does not replace AE filter/cursor/revisioned actions, provenance, exact-money coverage or uncertainty behavior."
+      },
+      {
+        "block": "radio-cards",
+        "reason": "Can render options only; authority decisions stay controlled by AE consent/wizard contracts."
+      },
+      {
+        "block": "billing-overview",
+        "reason": "Fits the existing balance/funding child region only; cannot replace the tabbed credit/ledger/accounting page or payment contract."
+      }
+    ],
+    "chat": [
+      {
+        "block": "product-listing",
+        "reason": "Its source requires retail filter/sort/quick-add behavior and lacks Tool Review/Select/Compare slots; this response contains a small relevance-ranked Tool set, not a storefront catalogue."
+      },
+      {
+        "block": "agent-run",
+        "reason": "Its diff approval and run timeline demo states cannot stand in for Quote/Call authority, Clerk reverification, or AE approval/refusal callbacks."
+      },
+      {
+        "block": "multi-step-form",
+        "reason": "The Tool review submits one schema-defined input object and keeps a JSON fallback; a guided wizard changes the external form contract."
+      },
+      {
+        "block": "wallet-card and checkout-summary",
+        "reason": "Add-credit is prepaid funding with exact balance, payment-confirmation and resume state, not a wallet action or buyer purchase checkout."
+      }
+    ],
+    "market": [
+      {
+        "block": "product-listing",
+        "reason": "Upstream is a Pro shop with local price/color/size/stock filters, sorting and quick-add/cart state; its own guidance rejects huge faceted server-search catalogs. The live AE route already retains adapted media/quick-action/card structure while keeping server search, cursor and save/compare handlers outside it."
+      },
+      {
+        "block": "product-detail",
+        "reason": "Upstream expects finish/size variants, reviews, shipping and add-to-cart/restock behavior. The live AE adapter already retains the gallery/decision/detail hierarchy while its facts, Quote/Call readiness, source distinction and exact action remain AE-owned."
+      },
+      {
+        "block": "comparison-table",
+        "reason": "Upstream has one highlighted product and one CTA. DirectoryComparison needs independent inspect links for each Tool and source-aware unpublished values; its current Arc-derived table already preserves that custom contract."
+      },
+      {
+        "block": "command-palette",
+        "reason": "The upstream block owns local query filtering and selection; it cannot directly retain AE\u2019s server async search, controlled selection guards, IME handling, saved-need state and cursor continuation."
+      },
+      {
+        "block": "market-terminal",
+        "reason": "This is a tradable-instrument terminal with candlesticks, OHLC, watchlists and orders. Tool marketplace records are service supply, not financial assets."
+      }
+    ],
+    "money-and-activity": [
+      {
+        "block": "sortable-data-table",
+        "reason": "A moderate table-region fit for ActivityCallQueue, not a full-block replacement. Its current source has no per-column comparator prop, while AE amount sorting explicitly uses BigInt; it also does not own the surrounding queue hierarchy."
+      },
+      {
+        "block": "metrics-dashboard",
+        "reason": "The activity route supplies period totals and paged rows, not the dailyCall series required by the adapted block. It cannot replace ActivityMonthlySummary without adding daily source data or drawing an empty/fabricated chart."
+      },
+      {
+        "block": "timeline",
+        "reason": "Arc Timeline requires actual event timestamps, groups newest-first by day, and represents activity events; CallReceiptStageView has ordered status facts without per-stage times and can contain non-monotonic complete/attention states."
+      },
+      {
+        "block": "stepper",
+        "reason": "Stepper's current index implies prior steps are complete and later steps are not started; recorded receipt stages can have attention or completion across otherwise pending stages, so one index would misstate status."
+      },
+      {
+        "block": "agent-run upstream full block",
+        "reason": "The upstream whole AgentRun is a live scripted workflow with approval, retry, and result behavior. Only the installed controlled ArcAgentRunTimeline subregion is a moderate candidate for the static receipt stage list."
+      },
+      {
+        "block": "usage-billing",
+        "reason": "The block is a usage/plan/forecast/alerts/invoice dashboard. These Calls and prepaid credit records do not establish subscription plans, projections, alert rules, or invoice state."
+      },
+      {
+        "block": "billing-overview",
+        "reason": "The adapted BillingOverview balance/funding block is already live under Credit. Its BillingHistory region wraps AE AccountHistory; counting that wrapper as a new replacement would overstate Arc adoption."
+      },
+      {
+        "block": "wallet-card",
+        "reason": "The sample wallet card presents send/deposit/swap/buy actions and local balances/history, while AE credit is server-authoritative prepaid funding with separate purchased/promotional balances and a secure checkout."
+      },
+      {
+        "block": "checkout-summary",
+        "reason": "The block presents a checkout with promo, tax, and pay controls; Call receipts are post-purchase records and must not acquire new payment actions or inferred purchase semantics."
+      }
+    ],
+    "operator": [
+      {
+        "block": "kpi-drilldown",
+        "reason": "Marketplace metrics returns only the selected 7/30/90-day window and no breakdown data; the block needs two periods and breakdowns."
+      },
+      {
+        "block": "release-readiness",
+        "reason": "AE readiness is read-only verified evidence with expiry, not a local checklist or launch action."
+      },
+      {
+        "block": "integrations",
+        "reason": "Provider records and connections are not a simulated third-party OAuth directory with connect/disconnect actions."
+      },
+      {
+        "block": "agent-run",
+        "reason": "AE Calls and admin commands have commercial authority, payment uncertainty and receipt semantics; agent-run sample approval is not a substitute."
+      },
+      {
+        "block": "metrics-dashboard",
+        "reason": "The exact adapted block is already in AdminMetricsPage; its generated analytics/source data must not be used for overview or treasury."
+      },
+      {
+        "block": "market-terminal",
+        "reason": "Treasury balance, reconciliation and payment controls are not a trading venue or candlestick series."
+      }
+    ],
+    "provider": [
+      {
+        "block": "product-listing",
+        "reason": "Actual source is a storefront with price/color/size/stock filters, photo cards and quick-add cart state; neither Provider Tool proof nor owner inventory has retail variants or purchase actions. Verified upstream source and When-not-to-use."
+      },
+      {
+        "block": "sortable-data-table",
+        "reason": "Useful only as a table component region, not a full block; its documented API has no controlled global filter or caller-provided row continuation, and current inventory also needs compact cards and cursor paging."
+      },
+      {
+        "block": "feature-bento",
+        "reason": "The six-cell block renders interactive sample product UI; replacing it with current four ordered supply steps would require custom visuals and change sequence, so it is not a direct fit. Verified upstream source."
+      },
+      {
+        "block": "billing-overview",
+        "reason": "Its described plan picker, usage, invoices and card surface would invent subscription/billing UI around Call obligations and recorded transfers."
+      },
+      {
+        "block": "agent-run",
+        "reason": "Its live run, tool-call and approval-diff states do not represent source checks, provider lifecycle, readiness or offboarding."
+      },
+      {
+        "block": "checkout-summary",
+        "reason": "Its promo, discount, tax and pay states are checkout behavior; the price revision modal computes and publishes a new Tool revision."
+      }
+    ],
+    "public-and-support": [
+      {
+        "block": "docs-sidebar",
+        "reason": "Pro source is a fixed Halden demo with sample APIs, authors, versions and local navigation state; it has no dynamic document-content API."
+      },
+      {
+        "block": "metrics-dashboard",
+        "reason": "The current status route contains health probes, not traffic KPIs or charts; this block would invent metrics."
+      },
+      {
+        "block": "integrations",
+        "reason": "Its Connect/Connected controls describe OAuth app connections, not observed website, API and catalogue health."
+      },
+      {
+        "block": "contact-section",
+        "reason": "It introduces a validated form and completion state; no support-thread or contact submission transport exists."
+      },
+      {
+        "block": "support-conversation",
+        "reason": "It is a message-thread UI; support currently exposes mailto, public issues and safe Call references only."
+      },
+      {
+        "block": "feature-bento",
+        "reason": "Its six cells use miniature product UIs; the About presenter has four literal responsibility statements."
+      },
+      {
+        "block": "cta-section",
+        "reason": "AeSiteCtaBand description is rich content with clickable ABN and email links; the block accepts a string."
+      },
+      {
+        "block": "code-block",
+        "reason": "It can replace only the JSON preformatted frame; it cannot replace the async confirmation dialog and its explicit-copy guard."
+      },
+      {
+        "block": "site-header",
+        "reason": "AeSiteNav is an auth-gated primary-nav fragment; SiteHeader adds an unrelated marketing header and mobile menu state."
+      },
+      {
+        "block": "sign-in",
+        "reason": "Arc sample sign-in is not Clerk identity authority; current panel preserves Clerk content and focus semantics."
+      }
+    ],
+    "shared": [
+      {
+        "block": "workspace-sidebar",
+        "reason": "Its actual source owns sample workspaces, favorites, search and inline project creation; docs say use sidebar-rail when a full app shell needs a mobile sheet. AE route navigation is already supplied to SidebarRail."
+      },
+      {
+        "block": "empty-states",
+        "reason": "Its source exports a no-props four-scene gallery with fictional search/offline/inbox/404 copy and simulated actions; docs recommend extracting a scene or using the empty-state component for a simple caller-owned state."
+      }
+    ]
+  },
+  "limitations": {
+    "account-and-settings": [
+      "Source-only mapping review as assigned: no visual/computer use, runtime parity checks or tests were performed.",
+      "No outstanding easy-full-block replacement was supported by the inspected catalog/source. The nearest whole-block matches are already live: settings-page, api-keys, team-members and usage-billing invoice history."
+    ],
+    "agents": [
+      "Source-only: no visual checks, tests, runtime checks, installation, or implementation were performed.",
+      "Route imports confirm reachability, not rendering under every conditional state.",
+      "Only the public /for-agents hero/FAQ pair met the full-block replacement bar; tables and owner-credit compositions remain region-level."
+    ],
+    "chat": [
+      "Source-only fit audit; no visual parity, behavior tests, or runtime verification performed.",
+      "The compare-matrix candidate needs a one-Tool fallback and explicit preservation of price validity."
+    ],
+    "market": [
+      "Source-fit only; no visual, runtime or behavior parity checks were performed.",
+      "Upstream source/docs were inspected from the supplied 2026-10-01 caches for the strongest product-listing, product-detail, comparison-table and command-palette mappings.",
+      "Route reachability was cross-checked against direct callers; the supplied reachability inventory is static import evidence, not conditional render proof."
+    ],
+    "money-and-activity": [
+      "No easy-full-block presenter replacement was verified for this family. The only ranked recommendation is a moderate shared timeline-region adaptation.",
+      "ActivityCallQueue remains a moderate table-region possibility, not a whole block recommendation; its exact BigInt sort behavior needs a supported comparator or a rigorously order-preserving adapter before adoption.",
+      "This is source-fit analysis only. No visual, parity, runtime, or behavioral checks were performed."
+    ],
+    "operator": [
+      "Source-fit audit only; no visual, keyboard or runtime parity checks were run.",
+      "MetricsDashboard and PageHeader source in this checkout are controlled Arc adaptations; their upstream defaults contain sample state."
+    ],
+    "provider": [
+      "Source-only audit; no browser, visual, test, install or runtime verification was performed.",
+      "ProviderIdentityForm and the three test-playground files have no production source caller; direct rg tracing found only the active alternative/control parents listed in evidence.",
+      "The only new easy full-block fit is the static public hero. Integrations and MultiStepForm are already complete full-block ports in the live provider flow."
+    ],
+    "public-and-support": [
+      "Audit was source-only; no visual inspection, tests, browser runtime, installation, or behavior parity checks were run.",
+      "The existing FAQ contract includes an optional /status TanStack link; the recommendation keeps it in the wrapper because FaqSection contact renders native links.",
+      "Public routes list omits application and API endpoints not directly using the assigned presenters; all assigned paths were covered once."
+    ],
+    "shared": [
+      "Source-only fit assessment; no runtime, visual, keyboard/focus parity checks or tests were run.",
+      "Static imports establish candidate caller chains, not conditional rendering on every route; operator/provider state machines were not correctness-audited."
+    ]
+  },
+  "verification": {
+    "sourceFiles": 849,
+    "auditedFiles": 530,
+    "uniquePresenters": 465,
+    "routeBindings": 65,
+    "easyWorkUnits": 5,
+    "checkCommand": "NODE_VERSION=22 \"$HOME/.nvm/nvm-exec\" npm run check",
+    "checkResult": "passed",
+    "uiBehaviorVerified": false,
+    "visualVerified": false,
+    "productionSourceChanged": false
+  }
+}

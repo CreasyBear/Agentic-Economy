@@ -1,6 +1,9 @@
+import { Link } from '@tanstack/react-router'
+
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
@@ -22,19 +25,33 @@ export function QuoteObjectView({ view }: QuoteObjectViewProps) {
       operatorRole="admin"
       currentPath={`/admin/quotes/${view.ref}`}
       title={copy.title}
-      description={copy.description}
+      description=""
+      contentOwnsHeading
       breadcrumbs={[
         { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
         { label: copy.section, href: '/admin/search?kind=quote' },
         { label: view.ref },
       ]}
-      actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
       stickyHeader
     >
-      <div className="arc-market arc-admin-object-reference">
-        <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
-        <AeCopyReference label={ADMIN_OBJECT_PAGE_COPY.referenceLabel} value={view.ref} />
-      </div>
+      <PageHeader
+        title={copy.title}
+        description={copy.description}
+        breadcrumbs={[
+          { id: 'admin', label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb,
+            renderLink: ({ children, ...linkProps }) => <Link to="/admin" {...linkProps}>{children}</Link> },
+          { id: 'section', label: copy.section,
+            renderLink: ({ children, ...linkProps }) => <Link to="/admin/search" search={{ kind: 'quote' }} {...linkProps}>{children}</Link> },
+          { id: 'record', label: view.ref },
+        ]}
+        actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
+        detail={(
+          <div className="arc-market arc-admin-object-reference">
+            <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
+            <AeCopyReference label={ADMIN_OBJECT_PAGE_COPY.referenceLabel} value={view.ref} />
+          </div>
+        )}
+      />
       <div className="arc-market arc-admin-object-layout">
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.detailsTitle}>
           <AeFactList facts={[

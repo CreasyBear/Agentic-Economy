@@ -54,7 +54,7 @@ describe('Provider Tool directory', () => {
     ])
   })
 
-  it('orders compact rows as Tool, lifecycle, blocker, and one continuation', () => {
+  it('keeps Tool, lifecycle, blocker, and one continuation in a single Arc row', () => {
     const offering = {
       ...toOwnerOfferingSummary(projectionFixture()),
       lifecycleLabel: 'Published',
@@ -65,13 +65,15 @@ describe('Provider Tool directory', () => {
 
     renderAt(<AeOwnerOfferingsList offerings={[offering]} />, '/owner/operations')
 
-    const compactList = screen.getByTestId('provider-workspace-compact-list')
-    const row = within(compactList).getByRole('listitem')
-    expect(within(row).getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
+    const table = screen.getByRole('table', { name: 'Tools' })
+    const row = within(table).getByRole('row', { name: /Blockchain data query/ })
+    expect(within(row).getByText('Blockchain data query')).toBeTruthy()
+    expect(screen.getAllByText('Blockchain data query')).toHaveLength(1)
     expect(within(row).getByText('Published')).toBeTruthy()
     expect(within(row).getByText('Available')).toBeTruthy()
     expect(within(row).getByText('Reconnect the provider')).toBeTruthy()
     const continuation = within(row).getByRole('link', { name: 'Manage connection for Blockchain data query' })
+    expect(screen.getAllByRole('link', { name: 'Manage connection for Blockchain data query' })).toHaveLength(1)
     expect(continuation.getAttribute('href')).toBe('/owner/operations#supplier-connections')
     continuation.focus()
     expect(document.activeElement).toBe(continuation)

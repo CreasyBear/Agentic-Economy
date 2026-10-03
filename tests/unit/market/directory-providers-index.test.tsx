@@ -16,8 +16,10 @@ it('shows complete indexed Provider counts and links to exact storefronts and se
     { key: 'example.com', label: 'Example', count: 142, leadCalls: 5900, leadPayers: 87, leadPrice: '0.001', leadTitle: 'Search', leadSlug: 'search' },
     { key: 'other.example.com', label: 'Other', count: 1 },
   ], isDone: false, continueCursor: 'cursor:+/=' }} />)
-  expect(screen.getByRole('columnheader', { name: 'Calls' })).toBeTruthy()
-  expect(screen.getByRole('columnheader', { name: 'Tools' })).toBeTruthy()
+  const table = screen.getByRole('table', { name: 'Providers' })
+  expect([...table.querySelectorAll('thead th')].map(header => header.textContent?.trim())).toEqual(['Provider', 'Price', 'Calls', 'Payers', 'Tools'])
+  expect(table.querySelector('caption')?.textContent).toBe('Indexed Providers. Tool counts cover the whole host. Price, calls and payers describe the busiest Tool over 30 days, reported by Coinbase Bazaar.')
+  expect([...table.querySelectorAll('tbody tr')].map(row => row.querySelector('a[aria-label^="View Tools from"]')?.textContent)).toEqual(['example.com', 'other.example.com'])
   expect(screen.getByText('142').getAttribute('title')).toBe('142 Tools in the indexed catalogue')
   expect(screen.getByText('1').getAttribute('title')).toBe('1 Tool in the indexed catalogue')
   expect(screen.getByText('5,900')).toBeTruthy()
@@ -26,6 +28,9 @@ it('shows complete indexed Provider counts and links to exact storefronts and se
   expect(buyerPrice?.textContent).toBe('US$0.001')
   expect(buyerPrice?.textContent).not.toContain('USDC')
   expect(sourcePrice?.textContent).toMatch(/Provider.*0\.001 USDC/)
+  expect(buyerPrice?.parentElement?.getAttribute('title')).toBe('Provider lists 0.001 USDC per Call')
+  expect(screen.getByText('5,900').getAttribute('title')).toBe('Busiest Tool on this host, last 30 days. Coinbase Bazaar.')
+  expect(screen.getByText('87').getAttribute('title')).toBe('Busiest Tool on this host, last 30 days. Coinbase Bazaar.')
   const store = new URL(screen.getByRole('link', { name: 'View Tools from example.com' }).getAttribute('href')!, 'https://aecon.ai')
   expect(Object.fromEntries(store.searchParams)).toEqual({ view: 'tools', provider: 'example.com' })
   const lead = screen.getByRole('link', { name: 'Search' }).getAttribute('href')
@@ -33,6 +38,14 @@ it('shows complete indexed Provider counts and links to exact storefronts and se
   const next = new URL(screen.getByRole('link', { name: 'Next Providers' }).getAttribute('href')!, 'https://aecon.ai')
   expect(Object.fromEntries(next.searchParams)).toEqual({ view: 'providers', providerCursor: 'cursor:+/=' })
   expect(screen.queryByText(/verified|rating/i)).toBeNull()
+})
+it('keeps busiest Tool columns out when the page has no reported activity', () => {
+  render(<DirectoryProvidersIndex result={{ kind: 'ok', coverage, page: [
+    { key: 'quiet.example.com', label: 'Quiet', count: 4 },
+  ], isDone: true, continueCursor: '' }} />)
+  const table = screen.getByRole('table', { name: 'Providers' })
+  expect([...table.querySelectorAll('thead th')].map(header => header.textContent?.trim())).toEqual(['Provider', 'Tools'])
+  expect(screen.getByText('Open a host to see the Tools they list. Counts cover the whole indexed catalogue.')).toBeTruthy()
 })
 it('keeps an empty intermediate page traversable and hides next on the final page', () => {
   const { rerender } = render(<DirectoryProvidersIndex result={{ kind: 'ok', coverage, page: [], isDone: false, continueCursor: 'next' }} />)

@@ -7,8 +7,10 @@ import { Button } from '@/components/arc/button/button'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { ProductListing } from '@/components/arc/market/ProductListing'
+import { ComparisonTable as ArcComparisonTable } from '@/components/arc/market/ComparisonTable'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import {
   chatBelowMatch,
   chatBrowseMarket,
@@ -80,36 +82,72 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
 }
 
 function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
-  return (
-    <>
-      <div className="arc-tool-compare-cards">
-        <ChoiceList choices={choices} />
-      </div>
-      <div className="arc-tool-compare-scroller">
-        <table className="arc-tool-compare-table" aria-label="Tool comparison">
-          <thead>
-            <tr>
-              <th scope="col">Tool</th><th scope="col">Provider</th>
-              <th scope="col">Price</th><th scope="col">Readiness</th>
-            </tr>
-          </thead>
-          <tbody>
-            {choices.map((choice) => (
-              <tr key={choice.toolRef}>
-                <td>
-                  <a href={choice.detailHref ?? inspectHref(choice.toolRef)}>{choice.title}</a>
-                  {choice.belowMatch === true ? <p>{chatBelowMatch}</p> : null}
-                </td>
-                <td>{choice.provider ?? ''}</td>
-                <td data-numeric>{choice.price ?? ''}</td>
-                <td>{choice.readiness === undefined ? '' : toolChoiceReadinessLabel(choice.readiness)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+  const valuesFor = (valueFor: (choice: ToolChoiceRow) => string) => Object.fromEntries(
+    choices.map((choice) => [choice.toolRef, valueFor(choice)] as const),
   )
+  const columns = choices.map((choice) => ({
+    id: choice.toolRef,
+    name: choice.title,
+    caption: choice.provider ?? '',
+    action: <a href={choice.detailHref ?? inspectHref(choice.toolRef)} className={secondaryLink}>{choice.title}</a>,
+  }))
+  const rows = [
+    { id: 'provider', feature: 'Provider', values: valuesFor((choice) => choice.provider ?? 'Not published') },
+    { id: 'price', feature: 'Price', values: valuesFor((choice) => choice.price ?? 'Not published'), retainWhenSame: true },
+    {
+      id: 'readiness',
+      feature: 'Readiness',
+      values: valuesFor((choice) => choice.readiness === undefined ? 'Not published' : toolChoiceReadinessLabel(choice.readiness)),
+      retainWhenSame: true,
+    },
+    {
+      id: 'access',
+      feature: 'Access',
+      values: valuesFor((choice) => choice.access === undefined
+        ? 'Not published'
+        : choice.access === 'external_listing' ? 'External listing · not callable through AE' : choice.access),
+      retainWhenSame: true,
+    },
+    ...(choices.some((choice) => choice.belowMatch === true)
+      ? [{
+        id: 'match',
+        feature: 'Match',
+        values: valuesFor((choice) => choice.belowMatch === true ? chatBelowMatch : 'Not supplied'),
+        retainWhenSame: true,
+      }]
+      : []),
+    ...(choices.some((choice) => choice.sourcePrice !== undefined)
+      ? [{ id: 'sourcePrice', feature: 'Source price', values: valuesFor((choice) => choice.sourcePrice ?? 'Not published'), retainWhenSame: true }]
+      : []),
+    ...(choices.some((choice) => choice.priceValidUntil !== undefined)
+      ? [{ id: 'priceValidUntil', feature: 'Price valid until', values: valuesFor((choice) => choice.priceValidUntil === undefined
+        ? 'Not published' : `${formatUtcTimestamp(choice.priceValidUntil)} UTC`), retainWhenSame: true }]
+      : []),
+    ...(choices.some((choice) => choice.networkLabel !== undefined)
+      ? [{ id: 'networkLabel', feature: 'Network', values: valuesFor((choice) => choice.networkLabel ?? 'Not published') }]
+      : []),
+    ...(choices.some((choice) => choice.resourcePath !== undefined)
+      ? [{ id: 'resourcePath', feature: 'Resource path', values: valuesFor((choice) => choice.resourcePath ?? 'Not published') }]
+      : []),
+    ...(choices.some((choice) => choice.host !== undefined)
+      ? [{ id: 'host', feature: 'Host', values: valuesFor((choice) => choice.host ?? 'Not published') }]
+      : []),
+    ...(choices.some((choice) => choice.callable !== undefined)
+      ? [{
+        id: 'callable',
+        feature: 'Callable',
+        values: valuesFor((choice) => choice.callable === undefined
+          ? 'Not published' : choice.callable ? 'Callable through AE' : 'Not callable through AE'),
+        retainWhenSame: true,
+      }]
+      : []),
+  ]
+  return <ArcComparisonTable
+    title="Tool comparison"
+    description="Compare the supplied Tool facts. Inspect a Tool for its full contract."
+    columns={columns}
+    sections={[{ id: 'published', title: 'Tool facts', rows }]}
+  />
 }
 
 function ChoiceList({ choices }: { choices: readonly ToolChoiceRow[] }) {

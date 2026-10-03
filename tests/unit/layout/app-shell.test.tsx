@@ -118,30 +118,31 @@ describe('AeAppShell', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 
-  it('exposes canonical workspace destinations in the Arc rail when signed in', () => {
+  it('keeps workspace destinations in the gear dropdown when signed in', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     renderAppShell()
 
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
-    expect(screen.getByRole('navigation', { name: 'App navigation' })).toBeTruthy()
-    const menu = screen.getByRole('navigation', { name: 'App navigation' })
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
+    expect(screen.queryByRole('menu')).toBeNull()
+    const menu = openWorkspaceMenu()
     expect(Array.from(menu.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
       'Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Earnings', 'Tools', 'Settings', 'Support', 'Status',
     ])
-    const settings = within(menu).getByRole('link', { name: 'Settings' })
+    const settings = within(menu).getByRole('menuitem', { name: 'Settings' })
     expect(settings.getAttribute('href')).toBe('/owner/settings')
     expect(settings.getAttribute('aria-current')).toBeNull()
-    expect(within(menu).getByRole('link', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
+    expect(within(menu).getByRole('menuitem', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getAllByLabelText('Workspace: Workspace').length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
 
-  it('marks Settings as the active rail destination on settings pages', () => {
+  it('marks Settings as the active dropdown destination on settings pages', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     renderAppShell('/owner/settings')
-    const settings = within(screen.getByRole('navigation', { name: 'App navigation' })).getByRole('link', { name: 'Settings' })
+    const settings = within(openWorkspaceMenu()).getByRole('menuitem', { name: 'Settings' })
     expect(settings.getAttribute('href')).toBe('/owner/settings')
     expect(settings.getAttribute('aria-current')).toBe('page')
   })
@@ -152,25 +153,25 @@ describe('AeAppShell', () => {
     entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
     renderAppShell('/owner/operations')
 
-    const menu = screen.getByRole('navigation', { name: 'App navigation' })
+    const menu = openWorkspaceMenu()
     expect(within(menu).getAllByText('Admin')).toHaveLength(1)
     expect(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'].map(label =>
-      within(menu).getByRole('link', { name: label }).textContent
+      within(menu).getByRole('menuitem', { name: label }).textContent
     )).toEqual(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'])
-    expect(screen.queryByRole('navigation', { name: 'Owner primary navigation' })).toBeNull()
+    expect(screen.getByRole('navigation', { name: 'Owner primary navigation' })).toBeTruthy()
   })
 
-  it('keeps Admin destinations in the Arc rail for an entitled session', () => {
+  it('keeps Admin destinations in the gear dropdown for an entitled session', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
     renderAppShell('/admin/metrics')
 
     expect(screen.queryByRole('navigation', { name: 'Admin primary navigation' })).toBeNull()
-    const menu = screen.getByRole('navigation', { name: 'App navigation' })
+    const menu = openWorkspaceMenu()
     expect(within(menu).getAllByText('Admin')).toHaveLength(1)
-    expect(within(menu).getByRole('link', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
-    expect(within(menu).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
+    expect(within(menu).getByRole('menuitem', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
+    expect(within(menu).getByRole('menuitem', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
   })
 
   it('keeps Developer navigation alongside one Admin group for an entitled developer path', () => {
@@ -195,7 +196,7 @@ describe('AeAppShell', () => {
     entitlement.result = result
     renderAppShell(pathname)
     expect(screen.queryByRole('navigation', { name: 'Admin primary navigation' })).toBeNull()
-    expect(within(screen.getByRole('navigation', { name: 'App navigation' })).queryByText('Admin')).toBeNull()
+    expect(within(openWorkspaceMenu()).queryByText('Admin')).toBeNull()
   })
 
   it('does not expose Admin while Convex authentication is unresolved', () => {
@@ -204,7 +205,7 @@ describe('AeAppShell', () => {
     entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
     renderAppShell('/market')
 
-    expect(within(screen.getByRole('navigation', { name: 'App navigation' })).queryByText('Admin')).toBeNull()
+    expect(within(openWorkspaceMenu()).queryByText('Admin')).toBeNull()
   })
 
   it('keeps a public routed page and its Arc navigation usable when the operator subscription fails', () => {
@@ -215,11 +216,16 @@ describe('AeAppShell', () => {
     renderAppShell('/market')
 
     expect(screen.getByText('Page content')).toBeTruthy()
-    const menu = screen.getByRole('navigation', { name: 'App navigation' })
-    expect(within(menu).getByRole('link', { name: 'Market' })).toBeTruthy()
+    const menu = openWorkspaceMenu()
+    expect(within(menu).getByRole('menuitem', { name: 'Market' })).toBeTruthy()
     expect(within(menu).queryByText('Admin')).toBeNull()
   })
 })
+
+function openWorkspaceMenu() {
+  fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+  return screen.getByRole('menu')
+}
 
 function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void {
   const rootRoute = createRootRoute()

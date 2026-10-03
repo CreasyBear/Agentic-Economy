@@ -175,6 +175,24 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+.arc-market .arc-admin-model-request-ident,
+.arc-market .arc-admin-model-request-secondary {
+  display: block;
+  min-width: 0;
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arc-market .arc-admin-model-request-ident {
+  font-size: var(--text-sm);
+  line-height: 18px;
+}
+.arc-market .arc-admin-model-request-secondary {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 14px;
+}
 @media (max-width: 859px) {
   .arc-market.arc-admin-object-layout { grid-template-columns: minmax(0, 1fr); }
   .arc-market.arc-admin-object-layout > .arc-section:first-child {

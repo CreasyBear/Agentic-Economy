@@ -156,6 +156,49 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     expect(open).toHaveBeenCalledExactlyOnceWith(second)
   })
 
+  it('keeps long Agent identity and connection text available while labelling every row cell', () => {
+    const displayName = 'Research assistant for detailed long-running customer evidence analysis'
+    const principalRef = `prn_${'agent_reference_'.repeat(5)}`
+    const connectorDisplayNames = ['Connection from a very long named harness environment']
+    const item = { ...baseItem, principalRef, displayName, connectorDisplayNames }
+    const onOpenAgent = vi.fn()
+    render(
+      <AeAgentDirectoryTable
+        directoryItems={[item]}
+        loading={false}
+        onRenameAgent={vi.fn(async () => true)}
+        onOpenAgent={onOpenAgent}
+      />,
+    )
+
+    const table = screen.getByRole('table', { name: 'Agents' })
+    const row = within(table).getAllByRole('row')[1]
+    if (row === undefined) throw new Error('expected Agent row')
+    const identity = row.querySelector('.arc-agent-directory-identity')
+    const reference = row.querySelector('.arc-agent-directory-reference')
+    const connection = row.querySelector('[data-column="connection"] > span')
+
+    expect(identity).toHaveAttribute('title', displayName)
+    expect(reference).toHaveAttribute('title', principalRef)
+    expect(connection).toHaveAttribute('title', connectorDisplayNames.join(', '))
+    fireEvent.click(within(row).getByRole('button', {
+      name: `View ${displayName} (Sandbox · ${principalRef})`,
+    }))
+    expect(onOpenAgent).toHaveBeenCalledExactlyOnceWith(item)
+    expect(within(row).getAllByRole('cell').map((cell) => cell.getAttribute('data-label'))).toEqual([
+      'Agent',
+      'Connection',
+      'Authority',
+      'Calls this UTC month',
+      'Charges / UTC month limit',
+      'Last used',
+      'Status',
+      'View',
+    ])
+    expect(row.querySelector('[data-column="monthlyCalls"]')).toHaveAttribute('data-numeric')
+    expect(row.querySelector('[data-column="monthlySpend"]')).toHaveAttribute('data-numeric')
+  })
+
   it('T8: renders last used as relative time with datetime attribute and timestamp title', () => {
     vi.spyOn(Date, 'now').mockReturnValue(fixedNow)
 
@@ -200,6 +243,21 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     expect(screen.getByText('Direct key')).toBeInTheDocument()
     expect(screen.queryByText('Legacy credential')).not.toBeInTheDocument()
     expect(screen.queryByText(/predates durable client connections/)).not.toBeInTheDocument()
+    expect(screen.getByRole('table').querySelector('[data-column="connection"] > span')).toHaveAttribute('title', 'Direct key')
+  })
+
+  it('retains the unavailable connection copy in the full hover title', () => {
+    render(
+      <AeAgentDirectoryTable
+        directoryItems={[{ ...baseItem, connectionsAvailable: false }]}
+        loading={false}
+        onOpenAgent={vi.fn()}
+      />,
+    )
+
+    const connection = screen.getByRole('table').querySelector('[data-column="connection"] > span')
+    expect(connection).toHaveTextContent('Connection details unavailable')
+    expect(connection).toHaveAttribute('title', 'Connection details unavailable')
   })
 
   it('shows expired authority as history instead of current spend permission', () => {

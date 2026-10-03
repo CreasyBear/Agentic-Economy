@@ -1,9 +1,10 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Badge } from '@/components/ui/badge'
-import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
+import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteNotFound'
+import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
 import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { AdminCallActivity } from './components/AdminCallActivity'
 import { AdminCallEvidence } from './components/AdminCallEvidence'
@@ -47,26 +48,44 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
     <AeOperatorPage
       operatorRole="admin"
       title={ADMIN_CALL_OBJECT_COPY.title}
-      description={ADMIN_CALL_OBJECT_COPY.description}
+      description=""
+      contentOwnsHeading
       currentPath={`/admin/calls/${encodeURIComponent(view.ref)}`}
       stickyHeader
-      actions={(
-        <Badge variant={aeStatusToneVariants[model.status.tone]}>
-          {model.status.compactLabel}
-        </Badge>
-      )}
-      secondaryBar={(
-        <AeOperatorBreadcrumbs items={[
-          { label: ADMIN_CALL_OBJECT_COPY.adminBreadcrumb, href: '/admin' },
-          { label: ADMIN_CALL_OBJECT_COPY.callsBreadcrumb, href: '/admin/search' },
-          { label: view.ref },
-        ]} />
-      )}
+      breadcrumbs={[
+        { label: ADMIN_CALL_OBJECT_COPY.adminBreadcrumb, href: '/admin' },
+        { label: ADMIN_CALL_OBJECT_COPY.callsBreadcrumb, href: '/admin/search' },
+        { label: view.ref },
+      ]}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
-        <span>{ADMIN_CALL_OBJECT_COPY.referenceLabel}</span>
-        <AeCopyReference label={ADMIN_CALL_OBJECT_COPY.referenceLabel} value={view.ref} />
-      </div>
+      <PageHeader
+        title={ADMIN_CALL_OBJECT_COPY.title}
+        description={ADMIN_CALL_OBJECT_COPY.description}
+        breadcrumbs={[
+          {
+            id: 'admin',
+            label: ADMIN_CALL_OBJECT_COPY.adminBreadcrumb,
+            renderLink: ({ children, ...linkProps }) => <Link to="/admin" {...linkProps}>{children}</Link>,
+          },
+          {
+            id: 'section',
+            label: ADMIN_CALL_OBJECT_COPY.callsBreadcrumb,
+            renderLink: ({ children, ...linkProps }) => <Link to="/admin/search" {...linkProps}>{children}</Link>,
+          },
+          { id: 'record', label: view.ref },
+        ]}
+        actions={(
+          <Badge variant={aeStatusToneVariants[model.status.tone]}>
+            {model.status.compactLabel}
+          </Badge>
+        )}
+        detail={(
+          <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
+            <span>{ADMIN_CALL_OBJECT_COPY.referenceLabel}</span>
+            <AeCopyReference label={ADMIN_CALL_OBJECT_COPY.referenceLabel} value={view.ref} />
+          </div>
+        )}
+      />
       <div className="arc-market arc-admin-call-layout">
         <AdminCallEvidence model={model} />
         <AdminCallReferences refs={model.relatedRefs} />

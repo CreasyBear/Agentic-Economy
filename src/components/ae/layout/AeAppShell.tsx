@@ -1,10 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 
-import { Link } from '@tanstack/react-router'
-import { SidebarRail } from '@/components/arc/blocks/sidebar-rail/sidebar-rail'
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
-import { OperatorWorkspaceMenu } from './app-shell/OperatorWorkspaceMenu'
-
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { KeyboardShortcutsDialog } from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
@@ -35,14 +30,13 @@ export function AeAppShell({ children }: { children: ReactNode }) {
   const shell = useAppShellState()
   usePublicDocumentFocus(shell.pathname)
   const chatFrame = shell.pathname.startsWith('/t/') || shell.pathname.startsWith('/s/')
-  const railEnabled = shell.isSignedIn && shell.hidePublicFooter && !chatFrame && !shell.isMinimalShell
   const contentClassName = cn(
     'flex min-h-0 flex-1 flex-col',
     chatFrame ? 'overflow-hidden' : null,
     shell.hidePublicFooter ? '[&_footer]:hidden' : null,
   )
 
-  const header = (navigationTrigger?: ReactNode) => (
+  const header = () => (
     <AeAppHeader
       signedIn={shell.isSignedIn}
       operatorRole={shell.operatorRole}
@@ -52,7 +46,6 @@ export function AeAppShell({ children }: { children: ReactNode }) {
       elevated={shell.elevated}
       hydrated={shell.hydrated}
       chatFrame={chatFrame}
-      {...(navigationTrigger === undefined ? {} : { navigationTrigger })}
     />
   )
 
@@ -84,22 +77,14 @@ export function AeAppShell({ children }: { children: ReactNode }) {
               className={cn(
                 'flex min-h-0 w-full flex-1 flex-col',
                 chatFrame ? 'overflow-hidden' : 'min-h-svh',
-                shell.isSignedIn && !railEnabled
+                shell.isSignedIn
                   ? 'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0'
                   : null,
               )}
             >
-              <SidebarRail
-                enabled={railEnabled}
-                header={header}
-                brand={<Link to="/" aria-label="Agentic Economy home"><img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.light} /></Link>}
-                navigation={(collapsed, onNavigate) => (
-                  <OperatorWorkspaceMenu operatorRole={shell.operatorRole} rail={{ collapsed, onNavigate }} />
-                )}
-              >
-                <div className={contentClassName}>{children}</div>
-                {shell.isSignedIn && !railEnabled ? <AeOwnerMobileNavigation currentPath={shell.pathname} /> : null}
-              </SidebarRail>
+              {header()}
+              <div className={contentClassName}>{children}</div>
+              {shell.isSignedIn ? <AeOwnerMobileNavigation currentPath={shell.pathname} /> : null}
             </div>
           </OperatorChromeProvider>
         )}

@@ -45,36 +45,6 @@
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
-.arc-market .arc-call-stage-list {
-  display: grid;
-  min-width: 0;
-  gap: 0;
-  margin: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
-  padding: 0;
-  background: var(--surface);
-  list-style: none;
-}
-.arc-market .arc-call-stage {
-  display: grid;
-  min-width: 0;
-  align-content: start;
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--border-subtle);
-  padding: var(--space-5) var(--space-6);
-}
-.arc-market .arc-call-stage:last-child { border-bottom: 0; }
-.arc-market .arc-call-stage[aria-current="step"] { background: var(--surface-muted); }
-.arc-market .arc-call-stage-name {
-  display: flex;
-  min-width: 0;
-  align-items: start;
-  gap: var(--space-2);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.arc-market .arc-call-stage-name svg { flex: none; margin-top: 3px; }
 .arc-market.arc-call-recovery { border-top: 1px solid var(--border); padding-top: var(--space-6); }
 .arc-market .arc-call-actions {
   display: flex;
@@ -242,6 +212,5 @@
 @media (max-width: 479px) {
   .arc-market.arc-call-issue,
   .arc-market.arc-call-barrier,
-  .arc-market .arc-call-stage,
   .arc-market .arc-call-money-group { padding: var(--space-4); }
 }

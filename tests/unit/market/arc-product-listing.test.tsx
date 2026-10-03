@@ -78,14 +78,27 @@ it('uses source observations for sparse previews and states missing contracts wi
 })
 
 it('preserves exact row identity, current price context and controlled remove actions', () => {
-  const pricedEntry: X402DirectoryEntry = { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.004 USDC', decimalAmount: '0.004', symbol: 'USDC' }] }
+  const pricedEntry: X402DirectoryEntry = { ...entry, activity: { calls30d: 1234, payers30d: 7 }, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.004 USDC', decimalAmount: '0.004', symbol: 'USDC' }] }
+  const rowModel = toDirectoryToolCardModel(pricedEntry)
   const item: SavedDirectoryTool = { entry: pricedEntry, search: { query: 'company', provider: 'provider.example.com' } }
   const save = vi.fn(), compare = vi.fn()
   render(wrap(<DirectoryToolList items={[item]} onSave={save} isSaved={() => true} onCompare={compare} isComparing={() => true} compareDisabled={() => false} />))
   const row = within(screen.getByRole('table', { name: 'Tools' })).getAllByRole('row')[1]!
-  expect(within(row).getByText('US$0.004')).toBeTruthy()
-  expect(within(row).getByText('Provider lists 0.004 USDC per Call')).toBeTruthy()
-  expect(within(row).getByRole('link', { name: 'Company lookup' }).getAttribute('href')).toBe('/tools/provider.example.com/company-lookup')
+  expect(within(row).getByText(rowModel.priceLabel)).toBeTruthy()
+  expect(within(row).getByText(rowModel.priceContext).getAttribute('title')).toBe(rowModel.priceContext)
+  expect(within(row).getByText(rowModel.accessLabel)).toBeTruthy()
+  expect(within(row).getByText(rowModel.callsLabel!)).toBeTruthy()
+  expect(rowModel.glance).toBeDefined()
+  expect(rowModel.factsLine).toBeDefined()
+  expect(within(row).queryByText(rowModel.glance!)).toBeNull()
+  expect(within(row).queryByText(rowModel.factsLine!)).toBeNull()
+  const titleLink = within(row).getByRole('link', { name: rowModel.title })
+  expect(titleLink.getAttribute('href')).toBe('/tools/provider.example.com/company-lookup')
+  expect(titleLink.getAttribute('title')).toBe(rowModel.title)
+  expect(within(row).getByText(rowModel.providerLine).getAttribute('title')).toBe(rowModel.providerLine)
+  expect(within(row).getByRole('link', { name: 'Inspect Tool' }).getAttribute('href')).toBe('/tools/provider.example.com/company-lookup')
+  expect(within(row).getByRole('button', { name: 'Unsave Company lookup' }).getAttribute('aria-pressed')).toBe('true')
+  expect(within(row).getByRole('button', { name: 'Remove Company lookup from comparison' }).getAttribute('aria-pressed')).toBe('true')
   fireEvent.click(within(row).getByRole('button', { name: 'Unsave Company lookup' }))
   fireEvent.click(within(row).getByRole('button', { name: 'Remove Company lookup from comparison' }))
   expect(save).toHaveBeenCalledWith(item)

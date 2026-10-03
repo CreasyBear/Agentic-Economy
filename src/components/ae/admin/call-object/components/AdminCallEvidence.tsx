@@ -2,11 +2,70 @@ import { CallMoneyFacts } from '@/components/ae/call-receipt/CallMoneyFacts'
 import { CallReceiptTimeline } from '@/components/ae/call-receipt/CallReceiptTimeline'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 import type { ChatModelCostSummary } from '@/modules/chat/model-cost'
 import type { AdminCallObjectViewModel } from '../call-object.contracts'
 import { ADMIN_CALL_OBJECT_COPY } from '../call-object.contracts'
 import '../../RecordWorkspaceComposition.css'
+
+type AnswerModelRequest = ChatModelCostSummary['requests'][number]
+
+const answerModelRequestColumns: DataColumn<AnswerModelRequest>[] = [
+  {
+    key: 'requestRef',
+    label: 'Request',
+    sortable: true,
+    sortValue: (request) => request.providerGenerationId ?? request.requestRef,
+    render: (_value, request) => {
+      const identity = request.providerGenerationId ?? request.requestRef
+      const sourceAndPurpose = `${request.source === 'jev' ? 'Jev' : 'OpenRouter'} · ${request.purpose.replaceAll('_', ' ')}`
+      return <>
+        <span className="arc-admin-model-request-ident" title={sourceAndPurpose}>{sourceAndPurpose}</span>
+        <span className="arc-admin-model-request-secondary" title={identity}>{identity}</span>
+      </>
+    },
+  },
+  {
+    key: 'model',
+    label: 'Model',
+    sortable: true,
+    sortValue: (request) => request.model ?? request.requestedModel,
+    render: (_value, request) => {
+      const model = request.model ?? request.requestedModel
+      return <>
+        <span className="arc-admin-model-request-ident" title={model}>{model}</span>
+        <span className="arc-admin-model-request-secondary" title={request.model === undefined ? 'Requested model' : 'Reported model'}>{request.model === undefined ? 'Requested model' : 'Reported model'}</span>
+      </>
+    },
+  },
+  {
+    key: 'tokens',
+    label: 'Tokens in / out',
+    sortable: false,
+    numeric: true,
+    render: (_value, request) => `${request.inputTokens ?? 'Unknown'} / ${request.outputTokens ?? 'Unknown'}`,
+  },
+  {
+    key: 'accounting',
+    label: 'USD cost',
+    sortable: false,
+    numeric: true,
+    render: (_value, request) => {
+      const accounting = request.accounting
+      if (accounting.status === 'priced') {
+        return <>
+          <span>{accounting.amountUsd}</span>
+          <span className="arc-admin-model-request-secondary" title={accounting.source === 'inline' ? 'Response usage' : 'Generation metadata'}>{accounting.source === 'inline' ? 'Response usage' : 'Generation metadata'}</span>
+        </>
+      }
+      if (accounting.status === 'pending') return 'Pending'
+      return <>
+        <span>Unknown</span>
+        <span className="arc-admin-model-request-secondary" title={accounting.reason.replaceAll('_', ' ')}>{accounting.reason.replaceAll('_', ' ')}</span>
+      </>
+    },
+  },
+]
 
 export type AdminCallEvidenceProps = Readonly<{
   model: AdminCallObjectViewModel
@@ -36,28 +95,15 @@ export function AdminCallEvidence({ model }: AdminCallEvidenceProps) {
           <p className="mt-intra break-all text-xs text-muted-foreground">Answer: {model.view.answerModelCost.cost.turnRef}</p>
           <details className="mt-related">
             <summary className="min-h-touch cursor-pointer content-center text-sm font-medium">Request details</summary>
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Request</TableHead><TableHead>Model</TableHead><TableHead>Tokens in / out</TableHead><TableHead>USD cost</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>{model.view.answerModelCost.cost.requests.map(request => (
-                <TableRow key={request.requestRef}>
-                  <TableCell className="max-w-64 whitespace-normal break-all">
-                    <span className="block">{request.source === 'jev' ? 'Jev' : 'OpenRouter'} · {request.purpose.replaceAll('_', ' ')}</span>
-                    <span className="text-xs text-muted-foreground">{request.providerGenerationId ?? request.requestRef}</span>
-                  </TableCell>
-                  <TableCell className="whitespace-normal break-all">{request.model ?? request.requestedModel}
-                    <span className="block text-xs text-muted-foreground">{request.model === undefined ? 'Requested model' : 'Reported model'}</span>
-                  </TableCell>
-                  <TableCell>{request.inputTokens ?? 'Unknown'} / {request.outputTokens ?? 'Unknown'}</TableCell>
-                  <TableCell>{request.accounting.status === 'priced'
-                    ? <>{request.accounting.amountUsd}<span className="block text-xs text-muted-foreground">{request.accounting.source === 'inline' ? 'Response usage' : 'Generation metadata'}</span></>
-                    : <>{request.accounting.status === 'pending' ? 'Pending' : 'Unknown'}{request.accounting.status === 'unpriced'
-                      ? <span className="block text-xs text-muted-foreground">{request.accounting.reason.replaceAll('_', ' ')}</span> : null}</>}
-                  </TableCell>
-                </TableRow>
-              ))}</TableBody>
-            </Table>
+            <SortableDataTable
+              rows={[...model.view.answerModelCost.cost.requests]}
+              columns={answerModelRequestColumns}
+              rowKey="requestRef"
+              animateRows={false}
+              ariaLabel="Answer model requests"
+              caption="Answer model requests"
+              emptyMessage="No model requests recorded for this answer."
+            />
           </details>
           <details className="mt-related">
             <summary className="min-h-touch cursor-pointer content-center text-sm font-medium">Related Calls ({model.view.answerModelCost.callRefs.length}{model.view.answerModelCost.callsTruncated ? '+' : ''})</summary>

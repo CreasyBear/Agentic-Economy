@@ -4,6 +4,87 @@
 
 ## Progress counter
 
+### Compact documents and stable navigation, 2026-10-03
+
+**3 / 3 urgent correction units source-integrated; 27 / 27 across the three current branch milestones.** This counts bounded implementation units. The broad refactor and rendered acceptance remain open.
+
+| Unit | Result | Preserved boundary |
+| --- | --- | --- |
+| Accounting documents | Actual Arc `SortableDataTable`, `SearchField` and `Drawer` replace the tall document fact-grid list. Five columns show identity, exact amount, recorded time, status and actions; full references and policy evidence move to current-record details | Exact BigInt sorting, captured signing digest, existing open/CSV/sign guards, duplicate-request exclusion, literal async feedback and refreshed source state |
+| Market tab transitions | Immediate requested-tab selection, one local loading panel, stable header/search frame and no catalogue panel slide, fade or height measurement | Router-owned loader/race handling, committed source records, existing search/filter/pagination engines and retained-source recovery; late old pagination cannot publish an old-view URL over a requested tab |
+| Settings navigation | Restore the signed-in gear dropdown and remove the persistent global rail and settings inner sidebar | Existing native destinations, role/entitlement guards, active location, mobile navigation, content focus and keyboard behavior |
+
+**Requires:** authoritative records, stable references, native routes and caller-owned actions. **Ensures:** compact recognition rows, truthful current details, preserved document actions and usable navigation while data loads. **Invariant:** no fabricated signature state, money, authority or catalogue; the router and existing command engines retain ownership. **On violation:** missing inspected records close, failed actions remain explicit, unavailable source retains the previous catalogue with recovery, and obsolete pagination cannot replace a newer tab request.
+
+Cognitive and complexity decisions: externalize full document evidence into the existing Arc Drawer, keep money/time on one line and ellipsize references, and remove movement of the entire catalogue. Keep the existing Base UI native-link gear menu with an actual Arc button trigger: Arc's stock command-item dropdown would replace native route semantics and require an absent dependency. Add a bounded `animateContent` port to the actual Arc Tabs; other callers retain their default behavior. Memoize document columns/data and resolve focus to the current row trigger after refreshed records replace old DOM nodes. Two private row-action/detail components in the same file separate presentation from its single action controller. Lost inspection clears before commit; an effect records only the committed identifier for the modal engine's later focus restoration. No new library, cache, renderer, transport or payment state machine is introduced.
+
+Combined focused verification passed **11 files / 196 tests**, including exact amounts beyond Number precision, filter/clear, duplicate and failed actions, refreshed/removed inspection, focus after asynchronous actions, native menu destinations, stable search drafts, rapid tab changes and late pagination. The final document-component refinement passed **54 / 54 tests**, including restoration without reopening a previously closed inspection. `npm run check` passed on the combined source on Node22/npm11.5.1; all 862 source fingerprints and 523 action sites reconcile. The full release gate remains required before merging; no manual browser or visual acceptance is claimed.
+
+The first full unit run identified three receipt assertions coupled to the former number-prefix markup. Route assertions now inspect all six ordered Arc stages and their recorded status text; cancelled/refused completion stages must remain Attention, while the summary has no completion claim and reuse/output stay unavailable. The affected receipt/document run passed **3 files / 91 tests**, and `npm run check` passed. The document identity receives the same 22rem content bound as Arc's truncation slot so long references cannot set its intrinsic width. The full gate uses explicit local declarations `AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox` and a separate browser port 3046.
+
+React Doctor's changed-scope scan retains its **84 baseline score**. The remaining stock FAQ/search-hint intrinsic reveal warnings require rendered performance evidence; source matches alone do not establish a defect. No rule is suppressed. An unused SiteFooter preview and its demo layout observer/morph were removed after verifying that no caller used it; the real footer and its landmarks remain covered.
+
+Production coordination: main PR311, PR312 and PR313 are integrated. PR313's exact treasury-finality source `ee6942dd7b61f4086b39a1b9d8ea3eadff55a871` matches merged main `42f55c4b8553e1a2a04b10e38d09ba545d74e4cc`, with zero overlap across the twelve incoming paths and the dirty UI batch. Its owner reported successful native cash-reconciliation acceptance and released the production slot before this UI release. This UI correction does not enable payment signing or change treasury logic.
+
+Next source slice: compact credit transactions, Reconciliation and Provider obligations with complete current-record details; remaining record-header/inline-edit seams and audited full-block opportunities. These remaining credit regions are not claimed as converted by the document correction.
+
+### Full Arc block regions and record details, 2026-10-03
+
+**14 / 14 work units source-integrated; 24 / 24 across the two current branch milestones.** These are bounded implementation units, not an app-completion percentage. Visual acceptance and the long-running broad refactor remain open.
+
+| Units | Actual Arc source now owns | Preserved boundary |
+| ---: | --- | --- |
+| 5 | Agent, Quote, Tool version, Workspace and Call record `PageHeader` regions | Native typed section-query links, current record breadcrumb, single h1, reference/status and all existing body facts/controllers |
+| 1 | Shared `FaqSection` across Agents, Providers and Support | Exact questions/answers, caller heading IDs, keyboard/single-open behavior and optional native status continuation |
+| 2 | Agent and Provider `HeroContent` split regions | Exact public copy, native setup/owner operation actions, focusable real connection funnel and supplied requirements |
+| 1 | Public `SiteFooter` navigation | Exact brand/legal/social identity, named regions/navigation, all native RouterLink destinations and `reloadDocument`; optional existing media closer stays a separate region |
+| 3 | Compact Agent call/Agent directory projections and security evidence `Drawer` | Exact money/unknown sorting, status/authority, encoded receipt URLs, revisioned rename failure behavior, current-record inspection, disclosure privacy and pagination/retry |
+| 1 | Shared `AePageHeader` delegates its inner hierarchy to actual `PageHeader` | Unique region/title/description IDs, requested title focus on updates, live metadata, context, action callbacks and layout-profile metadata |
+| 1 | Recorded Call progress uses actual vertical `Stepper` | Independent supplied stage IDs/order/labels/details/states, including reserved-current/submitted-complete; no inferred sequential completion, fake clock or retry |
+
+**Requires:** authoritative supplied view models, stable record/stage IDs, native destinations and caller-owned callbacks. **Ensures:** content/navigation/disclosure parity, a complete current evidence view, compact recognition rows and literal unknown/pending facts. **Invariant:** no payment, authority, source, pagination or command engine is replaced by sample block state. **On violation:** missing observations remain explicit, unavailable actions stay absent, rejected rename remains editable, a removed inspected record closes, and hidden actor/target evidence cannot match a retained filter.
+
+The cognitive review moves complete evidence into Arc Drawer and keeps scan cells to title/reference, source, date, exact money/status and the native detail exit. Arc table-small actions use a scoped 32px desktop token, returning to 44px at narrow/coarse-pointer widths; 44px row targets retain intrinsic growth. The existing inline-edit engine remains because Arc's stock optimistic/blur engine treats a resolved false result as success and closes on rejection; migrating it requires preserving the current refusal/retry contract first.
+
+Complexity keep/remove decision: add small semantic/native-link/status ports to actual installed Arc source and remove duplicate AE header/hero/FAQ/footer/stage markup and geometry. Reuse the settled controllers, Base UI modal engine and native links; no dependency or transport is added. Actual HeroContent's stock CopyButton dependency is installed, but current connection command copying still uses its existing consent/clipboard boundary. Call progress follows Arc's documented Stepper fit; AgentRun's scripted coding/approval demo and Timeline's recency sorting cannot represent these fixed independent observations.
+
+Observable verification: integrated existing region suites passed **55 files / 387 tests**. After the last Stepper caption/strict-type refinement, the final FAQ/header/footer/receipt port run passed **4 files / 20 tests**, including the added unresolved-explicit-state case. `npm run check` passed lint, zero cycles, application/Convex types and the import/standards fences on Node22/npm11.5.1. Expanded verification restored two original footer landmarks and updated recovery assertions to demand one supplied record after removal of duplicate desktop/mobile markup. `npm run build` passed the client/server build and syntax verification for 462 server modules. The current source/action census includes all newly installed sources and explicit adaptation/retention reasons; source fingerprints are reconciled. No rendered sizing, contrast, perceived-speed, five-width or browser acceptance is claimed. Full gate remains required before merging to main.
+
+New installed provenance: FAQ TSX `5af43fde71647c95a0e9e4538345ea9ad4324dd5f76afb6622b64b4fb63c1565`, CSS `3346449f678590ac4a0457594f5a99cffad7c15587cd0d1ea16f390f7e67da9f`; HeroContent TSX `bc1b5672c25bc4ae6c1785c3b98206ee38d275d9775f277bac4e1742d3e9abf5`, CSS `0fb963f57acb7e7f8104b8bbf69e52eb3460cd6379e646d1516fb4d15370017c`; Stepper TSX `62a86a10f72ef20ca8f28e04dad460099e2aed65084187c99d780f4bdd9b53f2`, CSS `d495e43e23d4866dd9cced3b336b134a0a80072ebfc833129a63306bafcb54dc`. Other installed dependency/footer hashes and bounded ports are recorded with their source. These are copied, adapted Arc implementations, not unchanged stock APIs.
+
+Next source slice at this milestone: compact credit transactions with complete current-record Drawer details; remaining record-header and inline-edit seams; remaining full-block opportunities in the audited queue. Subsequent main integrations and the current production slot are recorded in the latest milestone above.
+
+### Compact Arc table foundation, 2026-10-03
+
+**10 / 10 work units source-integrated.** This is one implementation milestone, not whole-app or visual acceptance. The broader Arc goal remains active. The completed full-block audit covers 530 source presenters/route bindings; its [baseline report](full-block-opportunities-2026-10-03.md) is distinct from this implementation counter.
+
+| Unit | Actual Arc presentation | Source result |
+| --- | --- | --- |
+| Shared table renderer | Installed `SortableDataTable` owns all table/head/body/mobile-fold markup; existing TanStack and roving-focus engines remain | Duplicate AE table renderer removed; controlled sorting, guarded selection, filter, loading/refresh and native detail actions preserved |
+| Record search | Installed `SearchField` | Controlled search, clear/refocus and retained sort/selection verified |
+| Daily metrics | `SortableDataTable`, `SegmentedControl`, `Drawer` | Five focused views; exact integer/date sorting; complete current snapshot details and removal/refresh behavior verified; full CSV unchanged |
+| Chat suggestions | Installed `ArcAiChatSuggestions` from AI Chat | Existing first-three prompts, order, draft callback and empty omission preserved |
+| Tool market rows | Installed `SortableDataTable` | Compact identity and exact price/context/access/activity; existing detail links, server ordering and Save/Compare callbacks retained |
+| Provider index | Installed `SortableDataTable` | Native table removed; scoped activity, unknown values, row order and URLs preserved. Index remains dormant at audit baseline; this is not a live-route claim |
+| Call activity | Shared actual Arc table fold | Duplicate mobile cards removed; eight facts, exact BigInt comparator and receipt exit remain once |
+| Chat Tool comparison | Installed Arc `ComparisonTable` block | Duplicate table/cards removed; one-choice and multiple-choice facts, safe detail URLs and critical equal price/access/readiness facts survive differences-only mode |
+| Answer model requests | Installed `SortableDataTable` | Model-cost disclosure retains exact cost/provenance, source order before sorting and stable request identities; only identity/model columns sort |
+| Owner inventory | Shared actual Arc table | Duplicate mobile renderer and separate sort/focus projection removed; cross-field matching, supplied facts, controlled state and native continuation remain |
+
+**Requires:** supplied typed records and stable IDs, exact sort inputs, caller-owned matching and enabled callbacks. **Ensures:** only supplied records are sorted/filtered, exact count/amount values remain intact, and detail targets resolve to the same record. **Invariant:** no source mutation, inferred money, changed authority, synthetic Call recovery or second selection/state engine. **On violation:** existing unknown, empty, first-load and retained-refresh states remain explicit; clearing a filter preserves sorting/selection and native focus restoration.
+
+The installed Arc source receives bounded controlled ports for header/cell renderers, manual sorting, guarded selection styling, the existing roving body, empty/loading content and scroll height. `sortValue` separates exact values from formatted display; direct Arc sorting preserves ties and keeps empty values last. Existing TanStack comparators remain authoritative for their callers. No new library, dependency, table framework or renderer is added. Arc's native table, sort glyph, keyboard navigation, mobile fold and reduced-motion behavior remain; paged records disable row FLIP/width measurement. This is an adapted copy of actual Arc source, not a claim of unchanged stock props.
+
+Source cognitive review keeps scan rows short and facts externalized: the actual Arc table CSS targets 44px desktop rows with intrinsic growth, 12px insets, sticky headers and right-aligned tabular numbers. Coarse-pointer controls retain 44px targets. Tool names/providers/summaries ellipsize with full text titles and existing detail exits; metric facts have a complete Drawer. Money, status and actionable controls remain readable. Removing the owner mobile projection exposed that its cross-field matcher never reached desktop global search. A typed `globalFilterFn` now delegates the same existing matcher to TanStack; summary, protocol, price, Calls and reference search pass across the single projection. The separate mobile matcher and focus effect are deleted.
+
+Complexity keep/remove decision: retain the existing typed state engines and add small controlled ports to the installed Arc renderer; remove duplicate AE table hierarchy/CSS and mobile projections. Replacing the engines with the sample selection state would lose eligibility, exact money comparators and native continuation behavior. A DataGrid is rejected for these read-only records; Arc documents SortableDataTable as the appropriate surface. The Base UI guarded selection checkbox remains because the separately installable Arc checkbox requires an absent dependency; native row action links now use the actual Arc button stylesheet.
+
+Verification: the combined existing UI suites passed **146 files / 1,320 tests**; a final focused renderer/search/inventory run passed **4 files / 30 tests** after the last control/type refinements. `npm run check` passed lint, zero dependency cycles, application/Convex types and 76 import/standards assertions on Node 22/npm 11.5.1. `npm run build` passed the client/server build and syntax verification for 462 server modules. Tests establish supplied data/URL/callback parity, exact large signed integer ordering, native keyboard/selection behavior, clear/filter/focus restoration, retained error/refresh records, and explicit missing facts. Source grep finds no native table/head/body or duplicate `compactContent` markup under `src/components/ae`. The current source/action inventories reconcile changed fingerprints and exact imported action sites; the original full-block audit retains its historical baseline.
+
+Rendered density, five-width layout, contrast, perceived speed and end-to-end browser acceptance remain deferred as Joel requested. No benchmark or whole-app completion claim is made. The full release gate remains required before merging. This branch has no changed path in common with the alpha operations worker's current source batch; its Convex/Vercel release slot remains reserved while it finishes. No deployment is part of this milestone.
+
+Next source work: five admin record PageHeader regions; shared FAQ and public heroes; compact security/credit details; shared PageHeader consolidation; recorded receipt stages; public footer. Existing account/payment/authority controllers remain the native boundary for those ports.
+
 ### Chat block replacement, 2026-10-03
 
 Before this batch, the header/history retained Vercel presenters and the composer retained AE markup under Arc class names. The retrieved Arc AI Chat and AI Composer block regions now own their presentation; preserve the existing session, read-only shared transcript, streaming scroller and authority controllers. The native engine is an explicit integration gap in Arc's sample transport, not a reason to retain the old chrome.
@@ -144,16 +225,16 @@ The [source inventory](source-inventory.csv) contains every non-test `.tsx`, `.t
 
 | Census | Count | Meaning |
 | --- | ---: | --- |
-| Current source files | 849 | 784 component-area files and 65 TSX route bindings |
-| Presenters and routes | 530 | 465 presenters plus 57 page, three layout and five redirect source bindings |
-| Source companions | 319 | Hooks, contracts, styles and presentation helpers; context, not extra page redesigns |
-| Block-depth decisions assessed | 48 / 465 | Includes complete blocks, bounded adaptations, controller seams and native retention |
-| Shared Button sites | 327 | 298 Arc and 29 legacy JSX source sites |
-| Button-style sites | 135 | 14 legacy calls and 121 native Arc button-style links |
-| Other action sites | 44 | 41 native buttons and three deliberately retained dormant site buttons |
-| Current source status | 503 reviewing | 266 inventoried, one deferred and 79 retained; current visual acceptance is incomplete |
+| Current source files | 862 | 797 component-area files and 65 TSX route bindings |
+| Presenters and routes | 535 | 470 presenter/library source files plus 57 page, three layout and five redirect bindings |
+| Source companions | 327 | Hooks, contracts, styles and presentation helpers; context, not extra page redesigns |
+| Historical full-block audit | 530 / 530 | Presenter/route baseline assessed; newly installed library capabilities are recorded with this batch |
+| Shared Button sites | 331 | 302 Arc and 29 legacy JSX source sites |
+| Button-style sites | 138 | 14 legacy calls and 124 native Arc button-style links |
+| Other action sites | 54 | 51 native source buttons and three retained dormant site buttons; includes optional installed Arc capabilities |
+| Current source status | 518 reviewing | 265 inventoried, one deferred and 78 retained; current visual acceptance is incomplete |
 
-The action census scans 489 non-test AE/Arc/route TSX files; upstream `ui` and `ai-elements` implementation files are inventoried separately. Source occurrence counts are not runtime control counts: a row action rendered in a loop counts once. Census/action totals include PR309's incoming commercial changes without claiming their block-depth acceptance.
+The action census scans 494 non-test AE/Arc/route TSX files; upstream `ui` and `ai-elements` implementation files are inventoried separately. Source occurrence counts are not runtime control counts: a row action rendered in a loop counts once. Census/action totals include PR309's incoming commercial changes without claiming their block-depth acceptance.
 
 Areas and candidate batches in the CSV are routing hints. Trace callers before assigning ownership: a shared component can serve several groups, and an apparent old page can still export a live subcomponent. All rows start `inventoried`; census coverage is not proof of reachability, parity or migration.
 

@@ -44,7 +44,7 @@ export function SettingsShell({ pathname, children }: SettingsShellProps) {
       <ArcSettingsPage
         title="Settings"
         description="Manage your account, workspace and preferences."
-        navigation={[{ items: [{ label: 'Overview', href: '/owner/settings' }] }, ...settingsSidebarNavigation]}
+        navigation={[]}
         currentHref={pathname.replace(/\/$/u, '')}
         renderNavigationLink={(item, props) => <Link to={item.href} activeOptions={{ exact: true }} {...props} />}
       >

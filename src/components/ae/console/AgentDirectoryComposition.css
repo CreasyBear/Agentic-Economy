@@ -6,16 +6,24 @@
 .arc-market.arc-agent-directory-section { min-width: 0; gap: var(--space-4); }
 .arc-market .arc-agent-directory-actions { display: flex; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .arc-market.arc-agent-directory { min-width: 0; }
-.arc-market .arc-agent-directory-cell { display: grid; min-width: 0; gap: var(--space-1); }
-.arc-market .arc-agent-directory-cell .truncate { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
-.arc-market .arc-agent-directory-reference { display: block; min-width: 0; max-width: 40ch; color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
-.arc-market .arc-agent-directory-note { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
+.arc-market.arc-agent-directory .arc-record-table td { font-size: 14px; line-height: 18px; }
+.arc-market .arc-agent-directory-cell { display: grid; min-width: 0; gap: 2px; }
+.arc-market .arc-agent-directory-identity { max-width: 24rem; gap: 2px; }
+.arc-market .arc-agent-directory-identity-primary { display: flex; min-width: 0; max-width: 24rem; align-items: center; gap: var(--space-2); font-size: 14px; line-height: 18px; }
+.arc-market .arc-agent-directory-identity-primary > :first-child { min-width: 0; flex: 1 1 auto; }
+.arc-market .arc-agent-directory-identity-primary .truncate { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arc-market .arc-agent-directory-identity-primary .arc-agent-directory-state { flex: none; }
+.arc-market .arc-agent-directory-identity-primary button[aria-label] { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
+.arc-market .arc-agent-directory-reference { display: block; min-width: 0; max-width: 24rem; overflow: hidden; color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; line-height: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.arc-market .arc-agent-directory-note { color: var(--text-secondary); font-size: 12px; line-height: 14px; white-space: normal; overflow-wrap: anywhere; }
 .arc-market .arc-agent-directory-state { justify-self: start; width: fit-content; font-size: var(--text-sm); font-weight: 500; }
-.arc-market .arc-agent-directory-money { display: block; min-width: 0; color: var(--foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); font-variant-numeric: tabular-nums; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
-.arc-market .arc-agent-directory-utilization { display: grid; min-width: 140px; gap: var(--space-2); }
-.arc-market .arc-agent-directory-date { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: normal; }
+.arc-market .arc-agent-directory-money { display: block; min-width: 0; color: var(--foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-variant-numeric: tabular-nums; line-height: 18px; white-space: normal; overflow-wrap: anywhere; }
+.arc-market .arc-agent-directory-utilization { display: grid; min-width: 140px; gap: 2px; }
+.arc-market .arc-agent-directory-connection { display: block; min-width: 0; max-width: 20rem; max-width: min(20rem, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arc-market .arc-agent-directory-date { font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-variant-numeric: tabular-nums; line-height: 18px; white-space: normal; }
 .arc-market .arc-agent-console-recovery [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; font-size: var(--text-sm); line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
 .arc-market .arc-agent-console-recovery [data-slot="alert-description"] { display: grid; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
 .arc-market .arc-agent-console-recovery p { margin: 0; }
 .arc-market .arc-agent-console-recovery button { justify-self: start; }
 @media (max-width: 559px) { .arc-market .arc-agent-directory-actions { justify-content: flex-start; } }
+@media (max-width: 620px), (pointer: coarse), (hover: none) { .arc-market .arc-agent-directory-identity-primary button[aria-label] { width: 44px; min-width: 44px; height: 44px; min-height: 44px; } }

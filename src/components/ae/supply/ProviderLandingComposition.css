@@ -17,7 +17,6 @@
   letter-spacing: var(--tracking-body);
 }
 
-.arc-market .arc-provider-hero,
 .arc-market .arc-provider-error,
 .arc-market .arc-provider-fit,
 .arc-market .arc-provider-steps,
@@ -26,7 +25,6 @@
   min-width: 0;
 }
 
-.arc-market .arc-provider-hero-inner,
 .arc-market .arc-provider-error-inner,
 .arc-market .arc-provider-fit-inner,
 .arc-market .arc-provider-steps-inner,
@@ -40,52 +38,10 @@
   padding-inline: var(--space-4);
 }
 
-.arc-market .arc-provider-hero-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-10);
-  padding-block: var(--space-16);
-}
 
-.arc-market .arc-provider-hero-copy {
-  display: grid;
-  min-width: 0;
-  justify-items: start;
-  gap: var(--space-5);
-  text-align: left;
-}
 
-.arc-market .arc-provider-hero-title {
-  max-width: 16ch;
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(2.25rem, 1.3rem + 4.4cqi, 4.5rem);
-  font-weight: 500;
-  letter-spacing: var(--tracking-display);
-  line-height: var(--leading-display);
-  text-wrap: balance;
-  overflow-wrap: anywhere;
-}
 
-.arc-market .arc-provider-hero-description {
-  max-width: 35rem;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-lg);
-  line-height: 1.5;
-  text-wrap: pretty;
-  overflow-wrap: anywhere;
-}
 
-.arc-market .arc-provider-hero-actions {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
 
 .arc-market .arc-provider-action {
   box-sizing: border-box;
@@ -329,17 +285,6 @@
   padding-block: 0;
 }
 
-@container provider-landing (max-width: 559px) {
-  .arc-market .arc-provider-hero-inner {
-    gap: var(--space-8);
-    padding-block: var(--space-12);
-  }
-
-  .arc-market .arc-provider-hero-description {
-    font-size: var(--text-base);
-  }
-}
-
 @container provider-landing (min-width: 560px) {
   .arc-market .arc-provider-steps-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -347,12 +292,6 @@
 }
 
 @container provider-landing (min-width: 900px) {
-  .arc-market .arc-provider-hero-inner {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-    gap: var(--space-12);
-    padding-block: var(--space-24);
-    padding-inline: var(--space-10);
-  }
 
   .arc-market .arc-provider-fit-inner {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);

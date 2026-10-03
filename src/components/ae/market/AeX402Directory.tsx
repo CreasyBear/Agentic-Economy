@@ -47,7 +47,7 @@ import { searchMarketToolsServer } from '@/modules/market/market-tool-search.fun
 import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 
 
-type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: MarketReturnSearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<MarketReturnSearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; jevRecipient?: string; chatRecipient?: string }>
+type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: MarketReturnSearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<MarketReturnSearch['view']>; pendingView?: NonNullable<MarketReturnSearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; jevRecipient?: string; chatRecipient?: string }>
 
 function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined): IndexedPaginationState {
   return indexed && catalogue?.kind === 'ok'
@@ -220,7 +220,7 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, compareEntries, search, workspace = false, activeView, home, catalogue, overview, jevRecipient }: AeX402DirectoryProps) {
+function DirectoryMarketplace({ page, compareEntries, search, workspace = false, activeView, pendingView, home, catalogue, overview, jevRecipient }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const marketPath = useMarketPath()
   const [compareOpen, setCompareOpen] = useState(false)
@@ -234,6 +234,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const { isLoaded: authLoaded, isSignedIn } = useAuth()
   const [needSave, setNeedSave] = useState<MarketNeedSaveState>()
   const view = activeView ?? search.view ?? (home === undefined ? 'tools' : 'discover')
+  const displayView = pendingView ?? view
   const { query, offset, network, provider, maxUsdPrice } = search
   const canonicalSearchEnabled = marketUsesCanonicalSearch(search) && (view === 'tools' || view === 'providers')
   const canonicalSearch = useCanonicalMarketSearch(search, canonicalSearchEnabled)
@@ -253,7 +254,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const visiblePageStatus = view === 'providers' ? providerPages.status : loadMore.status
   const visiblePageDone = view === 'providers' ? providerPages.isDone : loadMore.isDone
   useEffect(() => {
-    if (!indexed || (view !== 'tools' && view !== 'providers')) return
+    if (pendingView !== undefined || !indexed || (view !== 'tools' && view !== 'providers')) return
     if (visiblePageStatus === 'loading' || visiblePageNumber < 1 || visiblePageNumber === urlPage) return
     if (visiblePageNumber < urlPage && !visiblePageDone) return
     const signature = `${view}:${visiblePageNumber}`
@@ -265,7 +266,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       resetScroll: false,
       search: carryMarketCompare(search, { ...filters, view, ...(visiblePageNumber > 1 ? { page: visiblePageNumber } : {}) }),
     })
-  }, [filterValues, indexed, marketPath, navigate, search, urlPage, view, visiblePageDone, visiblePageNumber, visiblePageStatus])
+  }, [filterValues, indexed, marketPath, navigate, pendingView, search, urlPage, view, visiblePageDone, visiblePageNumber, visiblePageStatus])
   const comparisonPool = useMemo(() => [
     ...loadMore.items,
     ...(page.kind === 'ok' ? page.items : []),
@@ -478,7 +479,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       </DirectoryHero>
       {queryError === undefined ? null : <p id="market-search-error" role="alert" className="text-sm text-destructive">{queryError}</p>}
       <p id="market-search-recipient" className="arc-market-search-hint">{search.reviewedProvidersOnly === true ? 'Search matches published listings from reviewed providers.' : jevRecipient === undefined || search.alternativeTo !== undefined ? 'Search assesses Market Tool listings and published candidate descriptions.' : `Search query and candidate Tool text go to ${jevRecipient}.`}</p>
-      <Tabs value={view} onValueChange={value => {
+      <Tabs value={displayView} animateContent={false} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
           void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, value === 'saved' || value === 'discover' ? { view: value } : {
             ...indexedSearch(), view: value,
@@ -493,10 +494,11 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             <TabsTrigger value="saved" className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-related justify-end">
-            {count === undefined || view === 'saved' ? null : <p className="text-xs text-muted-foreground" role="status" aria-live="polite">{count}</p>}
+            {count === undefined || pendingView !== undefined || displayView === 'saved' ? null : <p className="text-xs text-muted-foreground" role="status" aria-live="polite">{count}</p>}
             {view === 'saved' || view === 'discover' || indexed ? null : <DirectoryFilters search={search} onApply={applyFilters} />}
           </div>
         </div>
+        {pendingView === undefined ? <>
         {saved.status === 'failed' ? <div role="alert" className="flex flex-wrap items-center gap-3 py-3"><p className="text-sm text-destructive">{saved.saveError ?? 'Saved Tools could not be loaded. Save status is unknown.'}</p><Button type="button" variant="secondary" onClick={saved.refresh}>Try again</Button></div> : saved.saveError === undefined ? null : <p role="alert" className="py-3 text-sm text-destructive">{saved.saveError}</p>}
         <TabsContent value="discover" className="pt-7">
           {home === undefined ? <AeEmptyState title="Explore Tools" description="Browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>See all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} saveUnknown={authLoaded && isSignedIn && saved.status === 'failed'} onCompare={toggleComparison}
@@ -606,6 +608,9 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         </div>
         </TabsContent>
         })}
+        </> : <TabsContent key={`pending-${pendingView}`} value={pendingView} className="pt-5" aria-busy="true">
+          <p role="status" className="py-8 text-sm text-muted-foreground">Loading {pendingView === 'discover' ? 'Collections' : pendingView === 'tools' ? 'Tools' : pendingView === 'providers' ? 'Providers' : 'saved Tools'}…</p>
+        </TabsContent>}
       </Tabs>
       <DirectoryComparison entries={comparisonEntries} open={compareOpen} onOpenChange={setCompareOpen} onCloseAutoFocus={event => {
         event.preventDefault()

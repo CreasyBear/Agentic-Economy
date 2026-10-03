@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpRightIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
@@ -53,13 +54,14 @@ export function AeAgentCallHistoryTable({
       {
         id: 'task',
         accessorFn: (item) => item.toolLabel,
+        meta: { label: 'Tool / Task' },
         header: ({ column }) => <AeOperatorSortableHeader label="Tool / Task" column={column} />,
         cell: ({ row }) => (
-          <div className="flex flex-col gap-0.5">
-            <span className="font-medium text-foreground text-sm">
+          <div className="aeAgentCallIdentity">
+            <span className="aeAgentCallIdentityName font-medium text-foreground" title={row.original.toolLabel}>
               {row.original.toolLabel}
             </span>
-            <span className="font-mono text-sm text-muted-foreground aeAgentCallReference">
+            <span className="font-mono text-muted-foreground aeAgentCallReference" title={row.original.toolRef}>
               {row.original.toolRef}
             </span>
           </div>
@@ -68,15 +70,17 @@ export function AeAgentCallHistoryTable({
       {
         id: 'provider',
         accessorFn: (item) => item.providerRef,
+        meta: { label: 'Provider' },
         header: ({ column }) => <AeOperatorSortableHeader label="Provider" column={column} />,
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground aeAgentCallProvider" title={row.original.providerRef}>
             {row.original.providerRef}
           </span>
         ),
       },
       {
         id: 'amount',
+        meta: { label: 'Amount', numeric: true },
         accessorFn: (item) => item.paymentState === 'released'
           || (item.paymentState === 'not_applicable' && item.state === 'refused' && item.deliveryState === 'not_delivered') ? '0'
           : item.paymentState === 'settled' && item.audAmountUnits !== undefined
@@ -101,6 +105,7 @@ export function AeAgentCallHistoryTable({
       {
         id: 'status',
         accessorFn: (item) => projectCallSummaryPurchaseStatus(item).label,
+        meta: { label: 'Status' },
         header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
         cell: ({ row }) => {
           const status = projectCallSummaryPurchaseStatus(row.original)
@@ -114,6 +119,7 @@ export function AeAgentCallHistoryTable({
       {
         id: 'when',
         accessorKey: 'createdAt',
+        meta: { label: 'When' },
         header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
         cell: ({ row }) => (
           <time
@@ -127,11 +133,13 @@ export function AeAgentCallHistoryTable({
       {
         id: 'receipt',
         accessorKey: 'callRef',
+        enableSorting: false,
+        meta: { label: 'Receipt' },
         header: () => null,
         cell: ({ row }) => (
           <a
             href={`/calls/${encodeURIComponent(row.original.callRef)}`}
-            className="aeAgentCallReceipt inline-flex items-center gap-1 text-sm text-primary hover:underline font-mono"
+            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm}`}
             aria-label={`View call receipt ${row.original.callRef}`}
           >
             <span>Receipt</span>

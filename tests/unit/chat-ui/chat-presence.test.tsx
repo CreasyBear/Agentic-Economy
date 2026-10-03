@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -250,8 +250,7 @@ describe('ChatTranscript first-page gate', () => {
     expect(screen.queryByRole('button', { name: 'Singapore' })).toBeNull()
   })
 
-  it('keeps openui prose without exposing empty search cards and compares Tools in a table', () => {
-    const toolRef = `operation:v1:${'a'.repeat(64)}`
+  it('keeps openui prose without exposing empty search cards', () => {
     render(<ChatTranscript messages={[{
       id: 'assistant-1',
       role: 'assistant',
@@ -275,31 +274,66 @@ describe('ChatTranscript first-page gate', () => {
     expect(screen.getByText('Two lookups match the request.')).toBeTruthy()
     expect(document.querySelectorAll('[data-tool-card="registry.tools.search"]')).toHaveLength(0)
     expect(screen.queryByText('```openui')).toBeNull()
+  })
 
-    cleanup()
+  it('renders one Tool through the comparison block with missing facts explicit', () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
     render(<ToolCard projection={{
       toolId: 'registry.tools.compare',
       title: 'Compare tools',
       kind: 'choices',
       state: 'complete',
-      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'ready' }],
+      choices: [{ toolRef, title: 'Lookup A' }],
       toolRefs: [toolRef],
     }} />)
-    expect(screen.getByRole('table')).toBeTruthy()
+    const comparison = screen.getByRole('table', { name: 'Tool comparison' })
+    expect(screen.getAllByRole('table')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Lookup A' }).getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
+    for (const fact of ['Provider', 'Price', 'Readiness']) {
+      const rowHeader = within(comparison).getByRole('rowheader', { name: fact })
+      const row = rowHeader.closest<HTMLElement>('[role="row"]')
+      if (row === null) throw new Error(`Missing comparison row for ${fact}`)
+      expect(within(row).getByText('Not published', { exact: true })).toBeTruthy()
+    }
+    expect(within(comparison).queryByRole('rowheader', { name: 'Match' })).toBeNull()
+  })
 
-    cleanup()
+  it('compares Tools in an Arc table and keeps critical facts in differences-only', () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
     render(<ToolCard projection={{
       toolId: 'registry.tools.search',
       title: 'Compare tools',
       kind: 'choices',
       state: 'complete',
       surface: 'compare',
-      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'ready', belowMatch: true }],
-      toolRefs: [toolRef],
+      choices: [
+        { toolRef, detailHref: '/tools/lookup-a?source=chat', title: 'Lookup A', provider: 'Acme', price: 'A$1.25', sourcePrice: '0.01 USDC', priceValidUntil: Date.UTC(2030, 0, 2, 3, 4), readiness: 'ready', access: 'external_listing', belowMatch: true },
+        { toolRef: `${toolRef}:b`, title: 'Lookup B', provider: 'Acme', price: 'A$1.25', sourcePrice: '0.01 USDC', priceValidUntil: Date.UTC(2030, 0, 2, 3, 4), readiness: 'ready', access: 'external_listing', belowMatch: true },
+      ],
+      toolRefs: [toolRef, `${toolRef}:b`],
     }} />)
-    expect(screen.getByRole('table')).toBeTruthy()
-    expect(screen.getByText('Below a match')).toBeTruthy()
+    const comparison = screen.getByRole('table', { name: 'Tool comparison' })
+    expect(screen.getByRole('link', { name: 'Lookup A' }).getAttribute('href')).toBe('/tools/lookup-a?source=chat')
+    expect(screen.getByRole('link', { name: 'Lookup B' }).getAttribute('href')).toBe(`/tools/${encodeURIComponent(`${toolRef}:b`)}`)
+    const expectFactForBothTools = (label: string, value: string) => {
+      const rowHeader = within(comparison).getByRole('rowheader', { name: label })
+      const row = rowHeader.closest<HTMLElement>('[role="row"]')
+      if (row === null) throw new Error(`Missing comparison row for ${label}`)
+      expect(within(row).getAllByText(value, { exact: true })).toHaveLength(2)
+    }
+    expectFactForBothTools('Price', 'A$1.25')
+    expectFactForBothTools('Source price', '0.01 USDC')
+    expectFactForBothTools('Price valid until', 'Jan 2, 2030, 3:04 AM UTC')
+    expectFactForBothTools('Readiness', 'Ready to use')
+    expectFactForBothTools('Access', 'External listing · not callable through AE')
+    expectFactForBothTools('Match', 'Below a match')
+    fireEvent.click(screen.getByRole('switch', { name: 'Only differences' }))
+    expectFactForBothTools('Price', 'A$1.25')
+    expectFactForBothTools('Source price', '0.01 USDC')
+    expectFactForBothTools('Price valid until', 'Jan 2, 2030, 3:04 AM UTC')
+    expectFactForBothTools('Readiness', 'Ready to use')
+    expectFactForBothTools('Access', 'External listing · not callable through AE')
+    expectFactForBothTools('Match', 'Below a match')
     expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeTruthy()
   })
   it('keeps the conversation visible when its approval query fails', () => {

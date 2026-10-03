@@ -1,4 +1,3 @@
-import type { RefObject } from 'react'
 import type { OnChangeFn, SortingState } from '@tanstack/react-table'
 
 import type { OwnerOfferingSummary } from '@/components/ae/offerings/provider-workspace-projection'
@@ -10,10 +9,6 @@ export const OWNER_OFFERINGS_COPY = {
 } as const
 
 export type OwnerOfferingsState = Readonly<{
-  compactRootRef: RefObject<HTMLUListElement | null>
-  hasLifecyclePresentation: boolean
-  trimmedFilter: string
-  compactOfferings: readonly OwnerOfferingSummary[]
   filterEmptyMessage: string | undefined
 }>
 

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, useRouterState } from '@tanstack/react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -99,6 +99,97 @@ describe('native x402 catalogue', () => {
     }
     expect(screen.getByRole('link', { name: 'Next page' }).getAttribute('href')).toContain('offset=40')
     expect(screen.getByRole('link', { name: 'Previous page' }).getAttribute('href')).toContain('offset=0')
+  })
+  it('switches market views rapidly with one current panel and no catalogue panel measurement', async () => {
+    const { router } = show({ view: 'tools' })
+    const observedTargets: Element[] = []
+    const observe = vi.spyOn(ResizeObserver.prototype, 'observe').mockImplementation(target => { observedTargets.push(target) })
+    let panelRectCalls = 0
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+    const getBoundingClientRect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute('role') === 'tabpanel') panelRectCalls += 1
+      return originalGetBoundingClientRect.call(this)
+    })
+    try {
+      const cases = [
+        { view: 'providers', label: 'Providers', check: () => expect(screen.getByRole('button', { name: 'View Tools from example.com' })).toBeTruthy() },
+        { view: 'discover', label: 'Collections', check: () => expect(screen.getByRole('heading', { name: 'Explore Tools' })).toBeTruthy() },
+        { view: 'tools', label: 'Tools', check: () => expect(screen.getByRole('table', { name: 'Tools' })).toBeTruthy() },
+      ] as const
+
+      for (const item of cases) {
+        fireEvent.click(screen.getByRole('tab', { name: item.label }))
+        await waitFor(() => expect(router.state.location.search.view).toBe(item.view))
+
+        const panels = screen.getAllByRole('tabpanel')
+        expect(panels).toHaveLength(1)
+        expect(panels[0]!.getAttribute('data-state')).toBe('active')
+        expect(screen.getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')).toHaveLength(1)
+        expect(screen.getByRole('tab', { name: item.label }).getAttribute('aria-selected')).toBe('true')
+        item.check()
+      }
+
+      expect(observedTargets.some(target => target.getAttribute('role') === 'tabpanel')).toBe(false)
+      expect(panelRectCalls).toBe(0)
+    } finally {
+      getBoundingClientRect.mockRestore()
+      observe.mockRestore()
+    }
+  })
+  it('keeps BaseUI manual keyboard activation and replaces rapid pending views with their loaded data', async () => {
+    const { rerender, router } = show({ view: 'discover' }, entries, { pendingView: 'tools' })
+    const renderRoute = (search: Props['search'], pendingView?: Props['pendingView']) => rerender(
+      <RouterContextProvider router={router}><Directory
+        page={{ kind: 'ok', items: entries, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
+        compareEntries={[]} search={search} {...(pendingView === undefined ? {} : { pendingView })} /></RouterContextProvider>,
+    )
+
+    expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    expect(screen.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('status').textContent).toBe('Loading Tools…')
+    expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
+    expect(screen.queryByText('14,455 Tools')).toBeNull()
+    expect(searchMarketToolsServer).not.toHaveBeenCalled()
+    expect(readX402DirectoryCatalogueServer).not.toHaveBeenCalled()
+
+    renderRoute({ view: 'discover' }, 'providers')
+    expect(screen.getByRole('tab', { name: 'Providers' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    expect(screen.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('status').textContent).toBe('Loading Providers…')
+    expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'View Tools from example.com' })).toBeNull()
+    expect(searchMarketToolsServer).not.toHaveBeenCalled()
+    expect(readX402DirectoryCatalogueServer).not.toHaveBeenCalled()
+
+    renderRoute({ view: 'discover' }, 'discover')
+    expect(screen.getByRole('tab', { name: 'Collections' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    expect(screen.getByRole('status').textContent).toBe('Loading Collections…')
+    expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
+
+    renderRoute({ view: 'discover' }, 'saved')
+    expect(screen.getByRole('tab', { name: /Saved/ }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    expect(screen.getByRole('status').textContent).toBe('Loading saved Tools…')
+    expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
+
+    renderRoute({ view: 'discover' }, 'providers')
+    await router.navigate({ to: '/market', search: { view: 'providers' } })
+    renderRoute({ view: 'providers' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'View Tools from example.com' })).toBeTruthy())
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    expect(screen.getByRole('tabpanel').getAttribute('aria-busy')).not.toBe('true')
+    expect(screen.queryByRole('status', { name: 'Loading Providers…' })).toBeNull()
+
+    const providersTab = screen.getByRole('tab', { name: 'Providers' })
+    providersTab.focus()
+    fireEvent.keyDown(providersTab, { key: 'ArrowRight' })
+    const savedTab = screen.getByRole('tab', { name: /Saved/ })
+    expect(savedTab.getAttribute('tabindex')).toBe('0')
+    expect(providersTab.getAttribute('aria-selected')).toBe('true')
+    expect(router.state.location.search.view).toBe('providers')
   })
   it('opens the selected Tool at the one canonical Tool detail surface, tagging the navigation so Back can use browser history', async () => {
     const search = { network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.005 }
@@ -537,6 +628,29 @@ describe('indexed x402 catalogue controls', () => {
     })
     await waitFor(() => expect(screen.queryByRole('link', { name: 'Tool 2' })).toBeNull())
     expect(screen.getByRole('link', { name: 'Tool 4' })).toBeTruthy()
+  })
+  it('does not publish an old catalogue page into the URL while another tab is pending', async () => {
+    let resolveContinuation: (value: unknown) => void = () => undefined
+    readX402DirectoryCatalogueServer.mockImplementation(() => new Promise(resolve => { resolveContinuation = resolve }))
+    const { router, rerender } = show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledTimes(1)
+
+    rerender(<RouterContextProvider router={router}><Directory
+      page={indexedPage} compareEntries={[]} search={{ view: 'tools' }} pendingView="providers" catalogue={indexedCatalogue} overview={overview} /></RouterContextProvider>)
+    expect(screen.getByRole('status').textContent).toBe('Loading Providers…')
+
+    await act(async () => {
+      resolveContinuation({
+        kind: 'ok', source: 'index', coverage, searchMethod: 'native_index',
+        page: { ...indexedPage, items: entries.slice(2, 4) }, indexCursor: 'generation-1:page-3', isDone: true,
+      })
+    })
+    expect(screen.getByRole('status').textContent).toBe('Loading Providers…')
+    expect(router.state.location.search).toMatchObject({ view: 'tools' })
+    expect(router.state.location.search).not.toHaveProperty('page')
+    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledTimes(1)
   })
   it('changes category through its control while preserving filters, without ever adding a cursor', async () => {
     searchMarketToolsServer.mockResolvedValue({ ...searchMeta, kind: 'scoped', results: [], reason: 'More pages remain.' })

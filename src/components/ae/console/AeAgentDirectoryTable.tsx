@@ -62,21 +62,24 @@ export function AeAgentDirectoryTable({
       {
         id: 'agent',
         accessorFn: (item) => item.displayName,
+        meta: { label: 'Agent' },
         header: ({ column }) => <AeOperatorSortableHeader label="Agent" column={column} />,
         cell: ({ row }) => (
-          <div className="arc-agent-directory-cell">
-            <InlineEditField
-              value={row.original.displayName}
-              label={`Rename ${row.original.displayName} (${environmentLabel(row.original.environment)} · ${row.original.principalRef})`}
-              readOnly={onRenameAgent === undefined}
-              errorMessage="Could not rename this Agent. Current saved name has been restored."
-              onSave={async (displayName) => onRenameAgent?.(
-                row.original.principalRef,
-                row.original.principalRevision,
-                displayName,
-              ) ?? false}
-            />
-            <Badge variant="outline" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
+          <div className="arc-agent-directory-cell arc-agent-directory-identity" title={row.original.displayName}>
+            <div className="arc-agent-directory-identity-primary">
+              <InlineEditField
+                value={row.original.displayName}
+                label={`Rename ${row.original.displayName} (${environmentLabel(row.original.environment)} · ${row.original.principalRef})`}
+                readOnly={onRenameAgent === undefined}
+                errorMessage="Could not rename this Agent. Current saved name has been restored."
+                onSave={async (displayName) => onRenameAgent?.(
+                  row.original.principalRef,
+                  row.original.principalRevision,
+                  displayName,
+                ) ?? false}
+              />
+              <Badge variant="outline" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
+            </div>
             <span className="arc-agent-directory-reference" title={row.original.principalRef}>
               {row.original.principalRef}
             </span>
@@ -86,16 +89,21 @@ export function AeAgentDirectoryTable({
       {
         id: 'connection',
         accessorFn: (item) => item.connectionsAvailable === false ? '' : item.connectorDisplayNames.join(', '),
+        meta: { label: 'Connection' },
         header: ({ column }) => <AeOperatorSortableHeader label="Connection" column={column} />,
-        cell: ({ row }) => row.original.connectionsAvailable === false
-          ? 'Connection details unavailable'
-          : row.original.connectionCount === 0
-            ? 'Direct key'
-            : row.original.connectorDisplayNames.join(', '),
+        cell: ({ row }) => {
+          const connectionText = row.original.connectionsAvailable === false
+            ? 'Connection details unavailable'
+            : row.original.connectionCount === 0
+              ? 'Direct key'
+              : row.original.connectorDisplayNames.join(', ')
+          return <span className="arc-agent-directory-connection" title={connectionText}>{connectionText}</span>
+        },
       },
       {
         id: 'authority',
         accessorFn: (item) => authorityCellText(item),
+        meta: { label: 'Authority' },
         header: ({ column }) => <AeOperatorSortableHeader label="Authority" column={column} />,
         cell: ({ row }) => {
           const current = currentAuthorityLabel(row.original.status, row.original.authorityMode)
@@ -111,6 +119,7 @@ export function AeAgentDirectoryTable({
       {
         id: 'monthlyCalls',
         accessorFn: (item) => item.usage?.callCount,
+        meta: { label: 'Calls this UTC month', numeric: true },
         sortUndefined: 'last',
         header: ({ column }) => <AeOperatorSortableHeader label="Calls this UTC month" column={column} />,
         cell: ({ row }) => row.original.usage === undefined ? 'Usage unavailable' : (
@@ -123,6 +132,7 @@ export function AeAgentDirectoryTable({
       {
         id: 'monthlySpend',
         accessorFn: (item) => item.monthlySpendCoverage === 'complete' ? item.monthlySettledSpend?.units : undefined,
+        meta: { label: 'Charges / UTC month limit', numeric: true },
         sortUndefined: 'last',
         sortingFn: (left, right) => {
           const a = BigInt(left.getValue<string | undefined>('monthlySpend') ?? '0')
@@ -153,6 +163,7 @@ export function AeAgentDirectoryTable({
       {
         id: 'lastUsed',
         accessorFn: (item) => item.lastSeenAt ?? 0,
+        meta: { label: 'Last used' },
         header: ({ column }) => <AeOperatorSortableHeader label="Last used" column={column} />,
         cell: ({ row }) => {
           const lastSeenAt = row.original.lastSeenAt
@@ -171,6 +182,7 @@ export function AeAgentDirectoryTable({
       {
         id: 'status',
         accessorFn: (item) => agentStatusLabel(item.status),
+        meta: { label: 'Status' },
         header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
         cell: ({ row }) => {
           const status = agentStatusLabel(row.original.status)

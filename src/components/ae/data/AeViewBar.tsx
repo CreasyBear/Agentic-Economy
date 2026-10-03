@@ -1,6 +1,6 @@
-import { useId, type ReactNode } from 'react'
-import { SearchIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 
+import { SearchField } from '@/components/arc/search-field/search-field'
 import { cn } from '@/lib/utils'
 import '../operator/RecordTable.css'
 
@@ -23,7 +23,6 @@ export function AeViewBar({
   action,
   className,
 }: AeViewBarProps) {
-  const filterId = useId()
   const showFilter = onFilterChange !== undefined
 
   return (
@@ -35,19 +34,11 @@ export function AeViewBar({
     >
       {showFilter ? (
         <div className="arc-record-search">
-          <label htmlFor={filterId} className="sr-only">
-            {filterPlaceholder}
-          </label>
-          <SearchIcon
-            aria-hidden="true"
-            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            id={filterId}
-            value={filterValue ?? ''}
-            onChange={(event) => onFilterChange(event.currentTarget.value)}
+          <SearchField
+            label={filterPlaceholder}
             placeholder={filterPlaceholder}
-            className="arc-record-search-input"
+            value={filterValue ?? ''}
+            onValueChange={onFilterChange}
           />
         </div>
       ) : (

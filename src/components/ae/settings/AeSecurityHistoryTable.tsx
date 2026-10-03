@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/arc/button/button'
+import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import type { AccountSecurityHistoryItem } from '@/modules/security/account-security'
 import './SecurityHistoryComposition.css'
@@ -27,12 +29,30 @@ export function AeSecurityHistoryTable({
   onLoadMore(): void
   showActorAndTarget?: boolean
 }>) {
-  const columns = useMemo(() => historyColumns(showActorAndTarget), [showActorAndTarget])
+  const [selectedEventRef, setSelectedEventRef] = useState<string | null>(null)
+  const selectedEvent = selectedEventRef === null
+    ? undefined
+    : rows.find((row) => row.eventRef === selectedEventRef)
+  const tableView = useMemo(
+    () => ({ rows: [...rows], showActorAndTarget }),
+    [rows, showActorAndTarget],
+  )
+  const columns = useMemo(
+    () => historyColumns(tableView.showActorAndTarget, (eventRef) => setSelectedEventRef(eventRef)),
+    [setSelectedEventRef, tableView.showActorAndTarget],
+  )
+
+  useEffect(() => {
+    if (selectedEventRef !== null && !rows.some((row) => row.eventRef === selectedEventRef)) {
+      setSelectedEventRef(null)
+    }
+  }, [rows, selectedEventRef])
+
   return (
     <div className="arc-market arc-security-history">
       <AeRecordTable
         columns={columns}
-        data={rows}
+        data={tableView.rows}
         getRowId={(row) => row.eventRef}
         caption={caption}
         countLabel="events"
@@ -40,6 +60,54 @@ export function AeSecurityHistoryTable({
         emptyMessage={emptyMessage}
         maxHeight="32rem"
       />
+      <Drawer
+        open={selectedEvent !== undefined}
+        onOpenChange={(open) => { if (!open) setSelectedEventRef(null) }}
+      >
+        {selectedEvent === undefined ? null : (
+          <DrawerContent
+            title="Security event"
+            description={`${eventLabel(selectedEvent.eventType)} · ${humanize(selectedEvent.outcome)}`}
+          >
+            <AeFactList
+              className="arc-security-drawer-facts"
+              facts={[
+                {
+                  label: 'Event reference',
+                  value: <AeCopyReference label="Event reference" value={selectedEvent.eventRef} />,
+                },
+                { label: 'Source', value: sourceLabel(selectedEvent.sourceSystem) },
+                {
+                  label: 'Observed time',
+                  value: selectedEvent.observedAt === undefined
+                    ? 'Observed time unavailable'
+                    : `${formatUtcTimestamp(selectedEvent.observedAt)} UTC`,
+                },
+                {
+                  label: 'Recorded time',
+                  value: `${formatUtcTimestamp(selectedEvent.recordedAt)} UTC`,
+                },
+                ...(showActorAndTarget
+                  ? [
+                      {
+                        label: `Actor · ${actorLabel(selectedEvent.actorKind)}`,
+                        value: <AeCopyReference label="Actor reference" value={selectedEvent.actorRef} />,
+                      },
+                      {
+                        label: `Target · ${targetLabel(selectedEvent.targetType)}`,
+                        value: <AeCopyReference label="Target reference" value={selectedEvent.targetRef} />,
+                      },
+                    ]
+                  : []),
+                {
+                  label: 'Correlation reference',
+                  value: <AeCopyReference label="Correlation reference" value={selectedEvent.correlationRef} />,
+                },
+              ]}
+            />
+          </DrawerContent>
+        )}
+      </Drawer>
       <div className="arc-security-pagination-status" role="status" aria-live="polite">
         {loadFailed ? (
           <div className="grid gap-1 text-sm text-muted-foreground">
@@ -73,14 +141,17 @@ export function AeSecurityHistoryTable({
   )
 }
 
-function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityHistoryItem, unknown>[] {
+function historyColumns(
+  showActorAndTarget: boolean,
+  onSelectEvent: (eventRef: string) => void,
+): ColumnDef<AccountSecurityHistoryItem, unknown>[] {
   return [
     {
       id: 'activity',
       header: 'Activity',
       accessorFn: (row) => `${row.eventType} ${row.outcome}`,
       cell: ({ row }) => (
-        <span className="arc-security-activity">
+        <span className="arc-security-activity" title={eventLabel(row.original.eventType)}>
           <span className="arc-security-activity-name">{eventLabel(row.original.eventType)}</span>
           <span className="arc-security-outcome">{humanize(row.original.outcome)}</span>
         </span>
@@ -106,25 +177,24 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       id: 'evidence',
       header: 'Evidence',
       enableSorting: false,
+      accessorFn: (row) => [
+        row.eventRef,
+        row.correlationRef,
+        ...(showActorAndTarget
+          ? [row.actorKind, row.actorRef, row.targetType, row.targetRef]
+          : []),
+      ].join(' '),
       cell: ({ row }) => (
-        <dl className="arc-security-evidence">
-          {showActorAndTarget ? (
-            <>
-              <div className="grid gap-1">
-                <dt>Actor · {actorLabel(row.original.actorKind)}</dt>
-                <dd><AeCopyReference label="Actor reference" value={row.original.actorRef} /></dd>
-              </div>
-              <div className="grid gap-1">
-                <dt>Target · {targetLabel(row.original.targetType)}</dt>
-                <dd><AeCopyReference label="Target reference" value={row.original.targetRef} /></dd>
-              </div>
-            </>
-          ) : null}
-          <div className="grid gap-1">
-            <dt>Correlation reference</dt>
-            <dd><AeCopyReference label="Reference" value={row.original.correlationRef} /></dd>
-          </div>
-        </dl>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="arc-security-evidence-trigger"
+          aria-label={`View details for security event ${row.original.eventRef}`}
+          onClick={() => onSelectEvent(row.original.eventRef)}
+        >
+          View details
+        </Button>
       ),
     },
   ]
