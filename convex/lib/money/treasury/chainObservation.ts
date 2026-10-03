@@ -9,7 +9,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { configuredX402RpcUrls } from '@/modules/capability-execution/call-runtime'
 import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/convex'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
-import type { TreasuryChainCheckpoint, TreasuryChainObservation, TreasuryTransfer } from '@/modules/money/treasury'
+import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS, type TreasuryChainCheckpoint, type TreasuryChainObservation, type TreasuryTransfer } from '@/modules/money/treasury'
 export type { TreasuryChainCheckpoint, TreasuryChainObservation, TreasuryTransfer } from '@/modules/money/treasury'
 
 const HASH = /^0x[0-9a-fA-F]{64}$/u
@@ -195,7 +195,7 @@ function parseBlock(value: unknown, now: number, requireFresh = true): Block | u
     || typeof value.timestamp !== 'string' || !QUANTITY.test(value.timestamp)) return undefined
   const timestamp = Number(BigInt(value.timestamp) * 1_000n)
   if (!Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > now + 30_000
-    || (requireFresh && now - timestamp > 60 * 60_000)) return undefined
+    || (requireFresh && now - timestamp >= TREASURY_FINALIZED_BLOCK_MAX_AGE_MS)) return undefined
   return { number: BigInt(value.number), hash: value.hash.toLowerCase(), timestamp }
 }
 

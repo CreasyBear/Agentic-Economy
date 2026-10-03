@@ -152,7 +152,7 @@ describe('payment readiness evidence publication and admission view', () => {
     const evidence = snapshot({ checks: passedChecks(NOW + 60_000) })
     await backend.mutation(publish, { snapshot: evidence })
     vi.mocked(Date.now).mockReturnValue(NOW + 1)
-    await seedTreasuryReadinessFacts(backend, { observation: 'preserve', chainBlockTimestamp: NOW + 1 - 20 * 60_000 + 1000 })
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve', chainBlockTimestamp: NOW + 1 - 60 * 60_000 + 1000 })
     const before = await storedRows(backend)
     expect(await view(backend, NOW + 1)).toEqual({ kind: 'ready', environment: 'production',
       checkedAt: evidence.completedAt, expiresAt: NOW + 1001, code: null,
