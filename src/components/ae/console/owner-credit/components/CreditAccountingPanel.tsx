@@ -26,6 +26,7 @@ import type {
 } from '@/modules/money/account-documents.view-model'
 
 import type { AeOwnerCreditProps } from '../owner-credit.contracts'
+import { CreditProviderObligationRecords, CreditReconciliationRecords } from './CreditAdministrationTables'
 import './CreditRecordsComposition.css'
 
 export type CreditAccountingPanelProps = Pick<
@@ -42,6 +43,8 @@ export type CreditAccountingPanelProps = Pick<
 >
 
 const EMPTY_DOCUMENTS: NonNullable<AeOwnerCreditProps['documents']> = []
+const EMPTY_RECONCILIATION_CASES: NonNullable<AeOwnerCreditProps['reconciliationCases']> = []
+const EMPTY_PROVIDER_OBLIGATIONS: NonNullable<AeOwnerCreditProps['providerObligations']> = []
 type DocumentActionStates = Readonly<Partial<Record<DocumentActionKey, DocumentActionStatus>>>
 type RunDocumentAction = (action: DocumentAction, operation: () => Promise<void>) => void
 
@@ -216,8 +219,8 @@ function CreditDocumentDetails({ document, documentActions, onOpenDocument, onSi
 
 export function CreditAccountingPanel({
   documents = EMPTY_DOCUMENTS,
-  reconciliationCases = [],
-  providerObligations = [],
+  reconciliationCases = EMPTY_RECONCILIATION_CASES,
+  providerObligations = EMPTY_PROVIDER_OBLIGATIONS,
   administrationLoading = false,
   onCreateStatement,
   onCreateDailyClose,
@@ -429,65 +432,16 @@ export function CreditAccountingPanel({
           />
         )}
       </Drawer>
-      <AeSection
-        title="Reconciliation"
-        description="Processor, treasury, settlement, or document differences remain scope-limited cases until an owner closes them with evidence."
-      >
-        {unavailable.reconciliation ? (
-          <CreditSectionEmptyState title="Reconciliation unavailable" description="No reconciliation state is being inferred." />
-        ) : reconciliationCases.length === 0 ? administrationLoading ? null : (
-          <CreditSectionEmptyState
-            title="No reconciliation differences"
-            description="New paid Calls remain blocked only when their affected Account is locked for a proven mismatch."
-          />
-        ) : (
-          <ul className="arc-credit-record-list" aria-label="Reconciliation cases">
-            {reconciliationCases.map((item) => (
-              <li key={item.caseRef} className="arc-credit-record-row">
-                <AeFactList
-                  className="arc-credit-record-facts"
-                  facts={[
-                    { label: 'Difference', value: item.kind.replaceAll('_', ' ') },
-                    { label: 'Status', value: item.status },
-                    { label: 'Owner', value: item.ownerPrincipalRef ?? 'Unassigned' },
-                    { label: 'Affected scope', value: item.scopeType === undefined ? 'Legacy Account case' : `${item.scopeType.replaceAll('_', ' ')} · ${item.scopeRef ?? 'Unknown'}` },
-                    { label: 'Reason', value: item.reasonCode.replaceAll('_', ' ') },
-                    { label: 'Reference', value: item.caseRef, mono: true },
-                  ]}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </AeSection>
-      <AeSection
-        title="Provider obligations"
-        description="Managed x402 obligations retain distinct buyer AUD and Provider USDC evidence. They are never eligible for a second payout."
-      >
-        {unavailable.obligations ? (
-          <CreditSectionEmptyState title="Provider obligations unavailable" description="No obligation state is being inferred." />
-        ) : providerObligations.length === 0 ? administrationLoading ? null : (
-          <CreditSectionEmptyState title="No Provider obligations" description="A managed x402 Call creates one attributable upstream obligation." />
-        ) : (
-          <ul className="arc-credit-record-list" aria-label="Provider obligations">
-            {providerObligations.map((obligation) => (
-              <li key={obligation.obligationRef} className="arc-credit-record-row">
-                <AeFactList
-                  className="arc-credit-record-facts"
-                  facts={[
-                    { label: 'Provider', value: obligation.providerRef },
-                    { label: 'Buyer amount', value: formatCreditAmount({ currency: 'AUD', exponent: 6, units: obligation.buyerAmountUnits }), mono: true },
-                    { label: 'Provider amount', value: formatCreditAmount({ currency: 'USDC', exponent: 6, units: obligation.providerAmountUnits }), mono: true },
-                    { label: 'State', value: obligation.state },
-                    { label: 'Payout', value: 'Ineligible — settled by x402' },
-                    { label: 'Reference', value: obligation.obligationRef, mono: true },
-                  ]}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </AeSection>
+      <CreditReconciliationRecords
+        rows={reconciliationCases}
+        loading={administrationLoading}
+        unavailable={unavailable.reconciliation === true}
+      />
+      <CreditProviderObligationRecords
+        rows={providerObligations}
+        loading={administrationLoading}
+        unavailable={unavailable.obligations === true}
+      />
     </div>
   )
 }
