@@ -1,14 +1,14 @@
 import { useQuery } from 'convex/react'
+import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteNotFound'
-import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
 import { Badge } from '@/components/ui/badge'
 import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
@@ -64,43 +64,60 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
     <AeOperatorPage
       operatorRole="admin"
       title={`${PROVIDER_OBJECT_COPY.title} ${view.slug}`}
-      description={PROVIDER_OBJECT_COPY.description}
+      description=""
+      contentOwnsHeading
       currentPath={`/admin/providers/${view.slug}`}
       breadcrumbs={[
         { label: PROVIDER_OBJECT_COPY.breadcrumbs.admin, href: '/admin' },
         { label: PROVIDER_OBJECT_COPY.breadcrumbs.providers, href: '/admin/providers' },
         { label: view.slug },
       ]}
-      actions={(
-        <>
-          <Badge variant={status === null ? 'outline' : aeStatusToneVariants[status.tone]}>
-            {status === null ? providerStatusLabel(view.publicStatus) : status.label}
-          </Badge>
-          {suppressedAt === null ? null : (
-            <Badge variant="outline">
-              {PROVIDER_OBJECT_COPY.suppressedSince} <time dateTime={suppressedAt.iso}>{suppressedAt.label}</time>
-            </Badge>
-          )}
-          {canSuppress ? (
-            <Button type="button" variant="secondary" size="md" className="arc-market" onClick={() => setSuppressionOpen(true)}>
-              {suppressionIntent === 'suppress' ? PROVIDER_OBJECT_COPY.suppress : PROVIDER_OBJECT_COPY.liftSuppression}
-            </Button>
-          ) : null}
-        </>
-      )}
       stickyHeader
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
-        <span>{PROVIDER_OBJECT_COPY.referenceLabel}</span>
-        <AeCopyReference label={PROVIDER_OBJECT_COPY.referenceLabel} value={view.slug} />
-      </div>
+      <PageHeader
+        title={`${PROVIDER_OBJECT_COPY.title} ${view.slug}`}
+        description={PROVIDER_OBJECT_COPY.description}
+        breadcrumbs={[
+          { id: 'admin', label: PROVIDER_OBJECT_COPY.breadcrumbs.admin,
+            renderLink: ({ children, ...linkProps }) => <Link to="/admin" {...linkProps}>{children}</Link> },
+          { id: 'providers', label: PROVIDER_OBJECT_COPY.breadcrumbs.providers,
+            renderLink: ({ children, ...linkProps }) => <Link to="/admin/providers" {...linkProps}>{children}</Link> },
+          { id: view.slug, label: view.slug },
+        ]}
+        actions={(
+          <>
+            <Badge variant={status === null ? 'outline' : aeStatusToneVariants[status.tone]}>
+              {status === null ? providerStatusLabel(view.publicStatus) : status.label}
+            </Badge>
+            {suppressedAt === null ? null : (
+              <Badge variant="outline">
+                {PROVIDER_OBJECT_COPY.suppressedSince} <time dateTime={suppressedAt.iso}>{suppressedAt.label}</time>
+              </Badge>
+            )}
+            {canSuppress ? (
+              <Button type="button" variant="secondary" size="md" className="arc-market" onClick={() => setSuppressionOpen(true)}>
+                {suppressionIntent === 'suppress' ? PROVIDER_OBJECT_COPY.suppress : PROVIDER_OBJECT_COPY.liftSuppression}
+              </Button>
+            ) : null}
+          </>
+        )}
+        detail={(
+          <>
+            <AeCopyReference label={PROVIDER_OBJECT_COPY.referenceLabel} value={view.slug} />
+            <dl className="arc-admin-source-facts" aria-label={PROVIDER_OBJECT_COPY.detailsTitle}>
+              <div className="arc-admin-source-fact">
+                <dt>{PROVIDER_OBJECT_COPY.trustTier}</dt>
+                <dd>{providerStatusLabel(view.trustTier)}</dd>
+              </div>
+              <div className="arc-admin-source-fact">
+                <dt>{PROVIDER_OBJECT_COPY.payout}</dt>
+                <dd>{providerPayoutLabel(view.payout)}</dd>
+              </div>
+            </dl>
+          </>
+        )}
+      />
       <div className="arc-market arc-admin-record-workspace">
-        <AeSection title={PROVIDER_OBJECT_COPY.detailsTitle}>
-          <AeFactList facts={[
-            { label: PROVIDER_OBJECT_COPY.trustTier, value: providerStatusLabel(view.trustTier) },
-            { label: PROVIDER_OBJECT_COPY.payout, value: providerPayoutLabel(view.payout) },
-          ]} />
-        </AeSection>
         <ProviderToolVersionsTable rows={view.publications} />
         <ProviderConnectionsTable rows={view.connections} />
         <ProviderAdmissionCasesTable rows={view.admissionCases} />

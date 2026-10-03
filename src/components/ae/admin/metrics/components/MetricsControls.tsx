@@ -1,4 +1,5 @@
-import { Button } from '@/components/arc/button/button'
+import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import './MetricsControls.css'
 import type { MarketplaceMetricsRange } from '@/lib/operator/admin-console/metrics.contracts'
 import { ADMIN_METRICS_COPY, ADMIN_METRICS_RANGES } from '../metrics.contracts'
@@ -11,23 +12,19 @@ export type MetricsControlsProps = Readonly<{
 export function MetricsControls({ range, onRangeChange }: MetricsControlsProps) {
   return (
     <div className="arc-market arc-metrics-controls">
-      <div className="arc-metrics-ranges" role="group" aria-label={ADMIN_METRICS_COPY.rangeLabel}>
-        {ADMIN_METRICS_RANGES.map((option) => (
-          <Button
-            key={option.value}
-            type="button"
-            variant="secondary"
-            aria-pressed={range === option.value}
-            onClick={() => onRangeChange(option.value)}
-          >
-            {option.label}
-          </Button>
-        ))}
-      </div>
+      <SegmentedControl
+        label={ADMIN_METRICS_COPY.rangeLabel}
+        options={[...ADMIN_METRICS_RANGES]}
+        value={range}
+        onValueChange={(value) => {
+          const option = ADMIN_METRICS_RANGES.find((item) => item.value === value)
+          if (option) onRangeChange(option.value)
+        }}
+      />
       <a
         href={`/api/admin/metrics-export?range=${range}`}
         download
-        className="arc-metrics-export"
+        className={`arc-metrics-export ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
       >
         {ADMIN_METRICS_COPY.exportCsv}
       </a>

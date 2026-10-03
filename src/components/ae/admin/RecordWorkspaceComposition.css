@@ -162,6 +162,13 @@
   padding-top: 0;
 }
 .arc-market.arc-admin-record-table-region { min-width: 0; }
+.arc-market .arc-admin-record-table-heading {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: 1.4;
+}
 .arc-market.arc-admin-record-table-region :where(code, time, [data-slot="badge"]) {
   min-width: 0;
   font-size: var(--text-sm);

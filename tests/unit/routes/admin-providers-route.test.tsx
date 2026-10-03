@@ -54,8 +54,8 @@ vi.mock('convex/react', () => ({
 }))
 vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
-  AeOperatorPage: ({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) => (
-    <main><h1>{title}</h1>{actions}{children}</main>
+  AeOperatorPage: ({ title, children, actions, contentOwnsHeading }: { title: string; children: ReactNode; actions?: ReactNode; contentOwnsHeading?: boolean }) => (
+    <main>{contentOwnsHeading ? null : <h1>{title}</h1>}{actions}{children}</main>
   ),
 }))
 vi.mock('@/components/ae/layout/AeRouteNotFound', () => ({
@@ -128,7 +128,7 @@ describe('admin Provider routes', () => {
 
     renderRoute('/_operator/admin/providers/$slug')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Provider provider-one' })).toBeTruthy()
+    expect(screen.getAllByRole('heading', { level: 1 }).map(node => node.textContent)).toEqual(['Provider provider-one'])
     expect(screen.getByRole('button', { name: 'Copy Reference' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Suppress' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close dispute' })).toBeTruthy()
