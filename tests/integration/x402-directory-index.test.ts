@@ -194,6 +194,84 @@ describe('complete external directory index', () => {
     expect(await backend.query(internal.x402DirectoryIndex.selectedSource, { resource: source(1).resource, network: 'base', maxUsdPrice: 1 })).toEqual({ kind: 'unavailable', reason: 'resource_filters_mismatch' })
     expect(await backend.query(api.x402DirectoryIndex.browse, { query: 'research', sort: 'popular', paginationOpts: { numItems: 20, cursor: null } })).toEqual({ kind: 'unavailable', reason: 'query_sort_unsupported' })
   })
+  it('returns reviewed hosts across browse and keyword pages without changing default listings or Tool admission', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-reviewed-providers'
+    await seedRefresh(backend, generation)
+    const items = Array.from({ length: 33 }, (_, index) => {
+      const provider = index < 13 ? 'api.exa.ai' : index === 13 ? 'api.exa.ai.lookalike.test' : 'unreviewed.test'
+      const item = source(index, { provider, activity: { payers30d: 2, calls30d: index < 13 ? 1 : 1000 }, ...(index >= 13 ? { curated: true as const } : {}) })
+      const resource = `https://${provider}/tools/${index}`
+      const raw = { resource, type: 'http', description: `Research tool ${index}` }
+      return { ...item, resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: { ...item.entry, resource } }
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 33, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 33, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    const first = await backend.query(api.x402DirectoryIndex.browse, { sort: 'popular', reviewedProvidersOnly: true, paginationOpts: { cursor: null, numItems: 12 } })
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') throw new Error('Reviewed directory unavailable')
+    expect(first.page).toHaveLength(12)
+    expect(first.page.every(row => row.entry.provider === 'api.exa.ai' && row.choice?.access !== 'ae_callable')).toBe(true)
+    expect(first.isDone).toBe(false)
+    const next = await backend.query(api.x402DirectoryIndex.browse, { sort: 'popular', reviewedProvidersOnly: true, paginationOpts: { cursor: first.continueCursor, numItems: 12 } })
+    expect(next).toMatchObject({ kind: 'ok', isDone: true, page: [{ entry: { provider: 'api.exa.ai' } }] })
+    expect(await backend.query(api.x402DirectoryIndex.browse, { reviewedProvidersOnly: true, provider: 'unreviewed.test', paginationOpts: { cursor: null, numItems: 12 } }))
+      .toMatchObject({ kind: 'ok', isDone: true, page: [] })
+    const all = await backend.query(api.x402DirectoryIndex.browse, { sort: 'popular', paginationOpts: { cursor: null, numItems: 12 } })
+    expect(all.kind === 'ok' && all.page.some(row => row.entry.provider === 'unreviewed.test')).toBe(true)
+    const keyword = await backend.query(api.x402DirectoryIndex.browse, { query: 'research', reviewedProvidersOnly: true, paginationOpts: { cursor: null, numItems: 12 } })
+    expect(keyword).toMatchObject({ kind: 'ok', searchMethod: 'native_full_text', isDone: false })
+    if (keyword.kind !== 'ok') throw new Error('Reviewed keyword search unavailable')
+    expect(keyword.page).toHaveLength(12)
+    expect(keyword.page.every(row => row.entry.provider === 'api.exa.ai')).toBe(true)
+    expect(await backend.query(api.x402DirectoryIndex.browse, { query: 'research', reviewedProvidersOnly: true, paginationOpts: { cursor: keyword.continueCursor, numItems: 12 } }))
+      .toMatchObject({ kind: 'ok', isDone: true, page: [{ entry: { provider: 'api.exa.ai' } }] })
+  })
+  it('rejects claimed provider names and broken source bindings while traversing empty reviewed pages to later valid results', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-reviewed-source-binding'
+    await seedRefresh(backend, generation)
+    const items = Array.from({ length: 30 }, (_, index) => {
+      const resource = index === 13 || index >= 22 ? `https://unreviewed.test/claimed-exa/${index}`
+        : index === 14 ? 'https://api.exa.ai.lookalike.test/search'
+        : index === 15 ? 'ftp://api.exa.ai/search'
+        : `https://api.exa.ai/tools/${index}`
+      const item = source(index, { provider: 'api.exa.ai' })
+      const raw = { resource, type: 'http', description: `Research tool ${index}` }
+      return { ...item, resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: { ...item.entry, resource } }
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: items.length, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: items.length, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    await backend.run(async ctx => {
+      for (const index of [0, 16, 17, 18, 19, 20, 21]) {
+        const rows = await ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', items[index]!.resource)).collect()
+        const row = rows[0]!
+        if (index === 0 || index === 16) for (const variant of rows) await ctx.db.patch(variant._id, { source: index === 0 ? 'coinbase' : 'provider' })
+        if (index === 17) await ctx.db.patch(row.entryId, { source: 'provider' })
+        if (index === 18) await ctx.db.patch(row.entryId, { endpointUrl: 'https://unreviewed.test/current' })
+        if (index === 19) await ctx.db.patch(row.entryId, { generation: 'superseded-generation' })
+        if (index === 20) await ctx.db.delete(row.entryId)
+        if (index === 21) for (const variant of rows) await ctx.db.patch(variant._id, { resource: 'provider-route:claimed-exa' })
+      }
+    })
+    for (const filters of [{ sort: 'popular' as const }, { query: 'research' }]) {
+      let cursor: string | null = null
+      const resources: string[] = []
+      for (let pageNumber = 0; pageNumber < 5; pageNumber += 1) {
+        const result: Infer<typeof pageValue> = await backend.query(api.x402DirectoryIndex.browse, { ...filters, reviewedProvidersOnly: true, paginationOpts: { cursor, numItems: 12 } })
+        if (result.kind !== 'ok') throw new Error('Reviewed search unavailable')
+        if (filters.sort === 'popular' && pageNumber === 0) {
+          expect(result.page).toEqual([])
+          expect(result.isDone).toBe(false)
+        }
+        resources.push(...result.page.map(row => row.entry.resource))
+        if (result.isDone) break
+        expect(result.continueCursor).not.toBe(cursor)
+        cursor = result.continueCursor
+      }
+      expect(resources.sort()).toEqual(items.slice(0, 13).map(item => item.resource).sort())
+    }
+  })
   it('aggregates complete adoption and exact-price distributions and preserves exact explorer drilldowns', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-analytics'

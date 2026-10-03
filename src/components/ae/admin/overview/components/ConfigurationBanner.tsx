@@ -3,6 +3,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
 import './OverviewMetricsComposition.css'
 import { ADMIN_OVERVIEW_COPY } from '../overview.contracts'
 
@@ -14,7 +15,7 @@ const CHECK_LABELS: Readonly<Record<typeof PAYMENT_READINESS_CHECK_KEYS[number],
   cdp_custody: 'CDP custody',
   base_rpc: 'Base RPC providers',
   reference_rate: 'USDC/AUD reference rate',
-  sanctions: 'Sanctions screening',
+  sanctions: 'Payee screening policy',
   commercial_policy: 'Commercial approvals',
   treasury: 'Treasury reconciliation',
 }
@@ -72,7 +73,9 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
     && readiness.checkedAt !== null && readiness.checkedAt <= now
     && PAYMENT_READINESS_CHECK_KEYS.every(key => {
       const check = readiness.checks[key]
-      return check.kind === 'passed' && check.validUntil > now
+      return (check.kind === 'passed' || (key === 'sanctions' && check.kind === 'deferred'
+        && check.policyRef === ALPHA_X402_PAYEE_SCREENING_POLICY))
+        && check.validUntil > now
     })
   const summary = readiness === null ? 'The deployment money environment is missing or invalid.'
     : expired ? FAILURE_REASONS.readiness_expired
@@ -81,6 +84,8 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
     <AeSection title={ADMIN_OVERVIEW_COPY.configurationTitle} description={ADMIN_OVERVIEW_COPY.configurationDescription} className="arc-market arc-overview-configuration">
       <div className="mb-related grid gap-intra">
         <p role="status" aria-label="Payment readiness status"><Badge variant={ready ? 'secondary' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
+        {ready && readiness?.checks.sanctions.kind === 'deferred'
+          ? <p className="text-sm">Payee screening deferred under the alpha policy; payees are not screened.</p> : null}
         <p className="text-sm">{readiness === null ? 'Environment: Not declared'
           : readiness.environment === 'production' ? 'Environment: Production · Base' : 'Environment: Sandbox · Base Sepolia'}</p>
         {summary === null ? null : <p className="text-sm text-muted-foreground">{summary}</p>}
@@ -106,16 +111,19 @@ function ReadinessCheckRow({ name, check, now, expired }: Readonly<{
   expired: boolean
 }>) {
   const passed = check?.kind === 'passed' && !expired && check.validUntil > now
+  const deferred = name === 'sanctions' && check?.kind === 'deferred'
+    && check.policyRef === ALPHA_X402_PAYEE_SCREENING_POLICY && !expired && check.validUntil > now
   let reason = FAILURE_REASONS.readiness_expired
   if (!expired) {
     if (check === undefined) reason = 'No readiness evidence is available.'
     else if (check.kind === 'failed') reason = FAILURE_REASONS[check.code] ?? CHECK_FAILURES[name]
+    else if (deferred) reason = 'Payees are not screened under the approved alpha policy.'
     else if (passed) reason = name === 'web_configuration'
       ? 'Clerk and Sentry configured; backend identity verified.' : 'Current evidence verified.'
   }
   return <div className="arc-overview-readiness-row">
     <dt className="text-sm text-muted-foreground">{CHECK_LABELS[name]}</dt>
-    <dd className="mt-intra grid gap-intra"><span className="font-medium">{passed ? 'Passed' : 'Failed'}</span>
+    <dd className="mt-intra grid gap-intra"><span className="font-medium">{deferred ? 'Deferred' : passed ? 'Passed' : 'Failed'}</span>
       <span className="text-xs text-muted-foreground">{reason}</span></dd>
   </div>
 }

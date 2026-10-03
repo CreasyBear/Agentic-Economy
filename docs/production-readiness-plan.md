@@ -3783,3 +3783,136 @@ behaviour; a fixture invoice is not evidence of a production financial event.
 The combined release gate and hosted acceptance must be recorded before this
 stage is treated as deployed. Real paid Calls, licensed screening, operational
 attestations and current production restore evidence remain separate acceptance.
+
+## Stage 57 — Alpha policy decision and operational proof
+
+On 3 October Joel approved the business policy terms and asked to prove the
+operational controls. He explicitly deferred TRM for alpha, retained availability
+of the full x402 directory, and requested a reviewed initial shortlist of
+50–100 credible Providers across useful segments. The shortlist aids selection;
+it is not sanctions clearance, payment authority or an admission restriction.
+The existing spending ceilings and financial integrity controls remain binding.
+
+**Shortlist contract.** Requires a dated operator review with official evidence
+linking each exact catalogue hostname to that operator. Ensures the optional
+`reviewedProvidersOnly` filter narrows the native server query by exact hostname
+and source before pagination, then validates each endpoint against its current
+Coinbase record before returning it. It survives navigation and keyword search;
+rejected records may shorten a page but never invalidate its continuation cursor.
+Invariant: all-provider access, source
+curation, Tool admission and payment authority retain their separate meanings.
+Unreviewed, lookalike or aggregator-hosted endpoints do not inherit an upstream
+brand's review. Missing review means exclusion only when the filter is selected.
+The static list and one optional filter cost one maintained data file and one
+selection; they avoid a new registry, trust score or approval workflow. Keep
+that bounded structure for the initial alpha review.
+
+The completed review includes 50 distinct operators across 51 exact hosts,
+covering 530 eligible listings in the observed catalogue generation. Official
+operator documentation, domain ownership and public implementation evidence
+support the selection. Smaller independent and protocol projects have narrower
+evidence than established businesses; the review does not claim paid delivery,
+service quality, wallet ownership, KYB or sanctions clearance. Gateways count as
+their own operator and do not confer a review on upstream brands.
+
+The source-only cognitive-load audit adds one choice to the existing four
+filter groups (search, Provider, price and advanced details/category). Its
+state remains visible in the filter count and URL; no hostname recall is
+required. Keep the reviewed selection beside Provider choices, explain its
+limited public-evidence basis, and leave advanced source-curation controls in
+their existing group. Hosted verification still needs to establish salience
+and actual interaction behavior.
+
+Native approval review exposed a separate composition defect: the shared
+Select portal sat below the Arc drawer, so mouse clicks did not select a reason
+although keyboard selection worked. The fix reuses Arc Select's existing menu
+layer. Chromium tests with the actual components and compiled styles reproduce
+the old blocked hit target and verify pointer and keyboard selection inside the
+drawer and in an ordinary select at 375 and 1,440 pixels. The checked-in Treasury
+regression additionally requires its authenticated test instance; local fixture
+proof is not reported as hosted acceptance. Authority and submission controls
+remain the existing command workflow.
+
+**Screening contract.** Requires an exact, trusted deployment selection of
+`alpha_not_screened_v1`, current Call authority, exact signing material and all
+four custody caps. Ensures an explicit `not_screened` decision and one atomic
+exposure reservation before signing. Invariant: no provider `clear` result is
+invented; the Convex transaction independently checks the current policy and
+preserves freshness, replay, concurrent-limit and recovery guarantees. Missing,
+unknown or changed policy refuses signing. Readiness distinguishes an explicitly
+deferred check from a passed screen and invalidates evidence on policy changes.
+The additive decision variants use existing records; no screening table, service
+or general policy framework is introduced.
+
+**First-close contract.** Requires the authenticated Account owner, exact
+deployment and ledger environment, and a completed reporting period. Ensures a
+stable, Account-scoped document that freezes its source and policy-admission
+context. A report prepared before approvals records `not_admitted`, never fake
+approved policy references. It must not post a rounding adjustment without
+admission. Nonzero unapproved residual, failed source reads or invalid environment
+leave no issued/signed report and no financial effect. Duplicate creation,
+rendering and signing retain the existing immutable identities. An owner can
+review the complete canonical HTML/CSV before the separate signature action.
+This Account report does not claim platform-wide treasury reconciliation.
+
+The existing close producer otherwise creates a bootstrap cycle: operations
+approval claims a signed close, while creation requires all six approvals. Keep
+a tagged admission context in the existing frozen render JSON and guard the
+financial adjustment boundary; this small addition removes that cycle without
+approving payments or creating another document lifecycle. Use completed periods
+so statement requests do not ask the ledger for future transactions.
+
+**Recovery contract.** Production is the read-only backup source. Restore only
+into a newly identified, isolated target without live financial credentials or
+external writers. Compare every exported table/component and file against the
+exact retained source archive, then establish scheduler/recovery behavior
+separately. A successful export or matching file count is not a restore pass.
+Record the actual target, cutoff, duration, discrepancies and cleanup. Existing
+production endpoints, source data and unrelated shared work remain intact.
+
+Operational attestations are recorded only after their underlying evidence
+exists. Alpha's business approval does not by itself prove a restore, legal hold,
+alert receipt or human-signed close. The existing alpha scope still uses
+promotional credit and the company's funded float; Stripe card funding remains
+on the beta track.
+
+### Native recovery evidence — 3 October 2026
+
+The fresh production Convex export from `cautious-zebra-473` includes file
+storage and has snapshot timestamp `1790999210159849424` and SHA-256
+`78deed0607b63bc80faf13ff368a38d273a45b3c9646b91e5053035495f0402c`.
+Native import into the newly created Sydney preview `useful-goldfinch-691`
+completes with 232,223 application/component documents. Before import, the
+target has no tables or environment variables. Provider readback afterward
+shows code never deployed, no deploy keys and automatic deletion selected for
+3 October at 15:51 Perth time. Production remains the read-only source.
+
+Re-export and complete comparison finish at 04:02:40 UTC. All 234 table and
+component inventories, 232,423 rows including table metadata, 435 archive
+members and four storage files match in identities, canonical values, schemas
+and file checksums. The restored archive SHA-256 is
+`3f6fb0115c14cc23bdf4937767c9b88e394968337289eaf57d79495cce99581b`.
+The first comparison correctly refuses the 296 MB catalogue member under its
+128 MiB default limit; the successful run uses the existing comparator's
+explicit 384 MiB member limit, 600-second total timeout and 60-second command
+timeout. No records are sampled, dropped or ignored to obtain the match.
+
+This proves restoration of the saved records and files. It does not establish
+code/configuration restoration, scheduler recovery or cross-system recovery
+after the snapshot. The financial census contains no production Calls,
+x402 attempts, spend reservations or active workpool/workflow work; the two
+funding commands and issued documents are historical sandbox records. A
+pending sandbox command and failed webhook inbox records remain historical
+reconciliation evidence, not newly recovered production work. The previously
+completed RDS drill remains separately scoped to its recorded ledger/cutoff.
+
+The operational retention review finds no implemented legal-hold process or
+seven-year archive: RDS/backup copies retain seven days; the audit S3 bucket
+expires current objects after 365 days and older versions after 30. A private
+Terraform proposal now specifies one separate financial-evidence bucket with
+2,557-day governance retention, version-specific legal holds and scoped audit
+events. A private copy passes OpenTofu 1.12.6 formatting and validation with the
+existing pinned AWS provider 6.57.1; no backend is initialized and no cloud plan
+or apply is run. No new archive infrastructure or retention attestation is active.
+Joel's required confirmation for new persistent storage is pending; business
+approval alone is not recorded as proof of that control.

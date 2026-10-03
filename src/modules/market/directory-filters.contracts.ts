@@ -15,6 +15,7 @@ export type DirectoryExplorerFilterValues = Readonly<
     | 'priceBand'
     | 'adoptionBand'
     | 'curatedOnly'
+    | 'reviewedProvidersOnly'
     | 'hasInputFields'
     | 'hasOutputExample'
     | 'hasInputSchema'

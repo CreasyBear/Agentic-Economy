@@ -75,6 +75,15 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); vi.resetAllMocks() })
 
 describe('payment readiness read-only refresh', () => {
+  it('publishes an explicit deferred check only for the approved alpha setting', async () => {
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'alpha_not_screened_v1')
+    const f = actionFixture()
+    expect(await refreshPaymentReadiness(f.ctx)).toEqual({ kind: 'published', replayed: false })
+    expect(f.snapshot().checks.sanctions).toEqual({ kind: 'deferred', policyRef: 'alpha_not_screened_v1', validUntil: NOW + 600_000 })
+    expect(validPaymentReadinessSnapshot(f.snapshot(), NOW)).toBe(true)
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'unknown')
+    expect(readX402PayeeScreeningReadiness()).toEqual({ kind: 'unavailable', code: 'trm_tenant_contract_unavailable' })
+  })
   it('publishes exactly eight sealed checks retaining each source expiry and real unsupported sanctions', async () => {
     const f = actionFixture()
     expect(await refreshPaymentReadiness(f.ctx)).toEqual({ kind: 'published', replayed: false })

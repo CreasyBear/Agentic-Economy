@@ -45,7 +45,7 @@ const attachRenderedFileRef = makeFunctionReference<'mutation', {
 }, AttachResult>('moneyDocuments:attachRenderedFile')
 
 const DISPLAY_FIELDS = [
-  'kind', 'currency', 'exponent', 'periodStart', 'periodEnd', 'snapshotCutoffAt',
+  'accountRef', 'environment', 'kind', 'currency', 'exponent', 'periodStart', 'periodEnd', 'snapshotCutoffAt',
   'exactCallUnits', 'roundedCallUnits', 'residualUnits', 'sourceCount', 'amountUnits',
   'principalUnits', 'serviceFeeUnits', 'taxUnits', 'totalUnits', 'direction',
   'reasonCode', 'transactionRef', 'occurredAt', 'policyDigest',
@@ -58,7 +58,7 @@ function titleForKind(kind: string): string {
     case 'funding_receipt': return 'Funding receipt'
     case 'service_fee_document': return 'Service fee document'
     case 'statement': return 'Account statement'
-    case 'daily_close': return 'Signed daily close'
+    case 'daily_close': return 'Account daily close'
     case 'adjustment': return 'Adjustment document'
     case 'tax_invoice': return 'Tax invoice'
     default: return 'Financial document'
@@ -77,6 +77,14 @@ function displayRows(document: RenderDocument): { title: string; rows: DisplayRo
     throw new Error('money_document_render_input_invalid')
   }
   const rows: DisplayRow[] = [['Reference', document.documentRef], ['Template', document.templateVersion]]
+  if (parsed.kind === 'statement' || parsed.kind === 'daily_close') {
+    rows.push(['Scope', 'Account settled Tool purchases: non-reverted sale and GST postings in the stated UTC period, as recorded at the snapshot cutoff. Funding, refunds, treasury and chain reconciliation are outside this report.'])
+    if (parsed.kind === 'daily_close') rows.push(['Signature', 'Review these frozen bytes before signing. The owner signature and evidence digest are recorded separately in the Account document record.'])
+    if (isRecord(parsed.policyAdmission) && parsed.policyAdmission.kind === 'not_admitted') {
+      rows.push(['Commercial approval at capture', 'Not admitted. This report grants no payment or adjustment authority.'])
+      if (typeof parsed.policyAdmission.refusalCode === 'string') rows.push(['Approval check', parsed.policyAdmission.refusalCode])
+    }
+  }
   for (const field of DISPLAY_FIELDS) {
     const value = parsed[field]
     if (typeof value === 'string' || typeof value === 'number') rows.push([humanLabel(field), String(value)])
@@ -104,7 +112,9 @@ function renderHtml(document: RenderDocument, title: string, rows: DisplayRow[])
     ),
     createElement('body', null,
       createElement('h1', null, title),
-      createElement('p', { className: 'meta' }, 'Issued by Agentic Economy from immutable commercial evidence.'),
+      createElement('p', { className: 'meta' }, title === 'Account daily close'
+        ? 'Prepared by Agentic Economy from immutable Account settlement evidence.'
+        : 'Issued by Agentic Economy from immutable commercial evidence.'),
       createElement('table', null, createElement('tbody', null, tableRows)),
       createElement('p', { className: 'meta' }, `Content digest source: ${document.renderInputDigest}`),
     ),

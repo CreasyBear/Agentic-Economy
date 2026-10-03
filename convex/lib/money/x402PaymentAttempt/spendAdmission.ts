@@ -5,10 +5,11 @@ import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment, x4
 import { canonicalDigest, isCanonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { isRecord } from '../../../../src/modules/common/is-record'
 import {
+  ALPHA_X402_PAYEE_SCREENING_POLICY, alphaX402PayeeScreeningEnabled,
   isPositiveX402AtomicUnits, x402PayeeScreeningDecisionValue, x402SpendAdmissionResultValue,
   x402SpendPolicyFromEnvironment, x402SpendReservationRef, X402_SCREENING_FRESHNESS_MS,
   X402_SPEND_HISTORY_LIMIT, X402_SPEND_WINDOW_MS,
-  type X402SpendAdmissionRefusalCode, type X402SpendAdmissionResult, type X402SpendPolicy,
+  type X402PayeeScreeningDecision, type X402SpendAdmissionRefusalCode, type X402SpendAdmissionResult, type X402SpendPolicy,
 } from '../../../../src/modules/money/x402-spend-admission'
 import type { Doc } from '../../../_generated/dataModel'
 import { env, type MutationCtx } from '../../../_generated/server'
@@ -110,12 +111,18 @@ function screeningRefusal(
     || screening.paymentUnsignedMaterialDigest !== row.paymentUnsignedMaterialDigest
     || screening.typedDataDigest !== expected.typedDataDigest
     || screening.reason.trim().length === 0 || screening.reason.length > 512
-    || (screening.providerReference !== undefined && (screening.providerReference.length === 0 || screening.providerReference.length > 256))
-    || (screening.evidenceDigest !== undefined && !isCanonicalDigest(screening.evidenceDigest))) return 'screening_identity_invalid'
+    || (screening.provider === 'trm-wallet-screening'
+      && ((screening.providerReference !== undefined && (screening.providerReference.length === 0 || screening.providerReference.length > 256))
+        || (screening.evidenceDigest !== undefined && !isCanonicalDigest(screening.evidenceDigest))))) return 'screening_identity_invalid'
   if (!Number.isSafeInteger(screening.startedAt) || !Number.isSafeInteger(screening.checkedAt)
     || screening.startedAt < 0 || screening.startedAt > screening.checkedAt
     || screening.checkedAt > now || now - screening.startedAt > X402_SCREENING_FRESHNESS_MS) return 'screening_stale'
-  return screening.outcome === 'clear' ? undefined : 'screening_not_clear'
+  if (screening.provider === 'none') {
+    return alphaX402PayeeScreeningEnabled(env)
+      && screening.policyRef === ALPHA_X402_PAYEE_SCREENING_POLICY ? undefined : 'screening_not_clear'
+  }
+  return screening.outcome === 'clear' && !alphaX402PayeeScreeningEnabled(env)
+    ? undefined : 'screening_not_clear'
 }
 
 function potentialLegacyExposure(row: AttemptRow): boolean {
@@ -233,7 +240,8 @@ async function exposureRefusal(
 
 /**
  * Requires: current managed unsigned identity, admitted USDC6 lane, complete
- * trusted limits and a fresh, single-use clear for this exact signing material.
+ * trusted limits and a fresh, single-use screening or explicit alpha-policy
+ * decision for this exact signing material.
  * Ensures: audit + one exposure commit atomically before returning admitted.
  * Invariant: liability survives time, rotation and retry; cap reads and insert
  * share one serializable Convex transaction. No external call occurs here.
@@ -278,15 +286,20 @@ export async function recordScreeningAndReserveSigningHandler(
       else code = await exposureRefusal(ctx, row, trusted.policy, existing, now)
     }
   }
-  // Persist only bounded, non-secret provider evidence, including on refusal.
-  const decision = {
-    ...args.screening,
+  // Persist only bounded, non-secret provider or policy evidence, including on refusal.
+  const boundedIdentity = {
     network: args.screening.network.slice(0, 128), normalizedPayTo: args.screening.normalizedPayTo.slice(0, 128),
     paymentUnsignedMaterialDigest: args.screening.paymentUnsignedMaterialDigest.slice(0, 128),
-    typedDataDigest: args.screening.typedDataDigest.slice(0, 128), reason: args.screening.reason.slice(0, 512),
-    ...(args.screening.providerReference === undefined ? {} : { providerReference: args.screening.providerReference.slice(0, 256) }),
-    ...(args.screening.evidenceDigest === undefined ? {} : { evidenceDigest: args.screening.evidenceDigest.slice(0, 128) }),
+    typedDataDigest: args.screening.typedDataDigest.slice(0, 128),
   }
+  const decision: X402PayeeScreeningDecision = args.screening.provider === 'none'
+    ? { ...args.screening, ...boundedIdentity }
+    : {
+      ...args.screening,
+      ...boundedIdentity, reason: args.screening.reason.slice(0, 512),
+      ...(args.screening.providerReference === undefined ? {} : { providerReference: args.screening.providerReference.slice(0, 256) }),
+      ...(args.screening.evidenceDigest === undefined ? {} : { evidenceDigest: args.screening.evidenceDigest.slice(0, 128) }),
+    }
   await ctx.db.insert('moneyX402PayeeScreeningChecks', {
     screeningCheckRef, screeningInvocationRef: args.screeningInvocationRef.slice(0, 256),
     custodyRef: args.custodyRef.slice(0, 128), authorizationDigest: args.authorizationDigest.slice(0, 128),

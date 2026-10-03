@@ -1,6 +1,7 @@
 import { v, type Infer } from 'convex/values'
 import { canonicalDigest } from '../common/canonical-digest'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from './internal/commercial-policy'
+import { ALPHA_X402_PAYEE_SCREENING_POLICY } from './x402-spend-admission'
 
 export const PAYMENT_READINESS_MAX_PROBE_AGE_MS = 60_000
 export const PAYMENT_READINESS_MAX_VALIDITY_MS = 10 * 60_000
@@ -13,6 +14,7 @@ export const paymentReadinessEnvironmentValue = v.union(v.literal('sandbox'), v.
 export const paymentReadinessCheckValue = v.union(
   v.object({ kind: v.literal('passed'), validUntil: v.number() }),
   v.object({ kind: v.literal('failed'), code: v.string() }),
+  v.object({ kind: v.literal('deferred'), policyRef: v.literal(ALPHA_X402_PAYEE_SCREENING_POLICY), validUntil: v.number() }),
 )
 export const paymentReadinessChecksValue = v.object({
   web_configuration: paymentReadinessCheckValue, formance: paymentReadinessCheckValue,
@@ -47,6 +49,7 @@ const BACKEND_CONFIGURATION_NAMES = [
   'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST',
   'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC',
   'AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', 'AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON',
+  'AE_X402_PAYEE_SCREENING_POLICY',
   'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN', 'AE_CONVEX_SERVER_FUNCTION_TOKEN',
   'AE_ROUTE_CALL_SIGNING_SECRET', 'AE_ROUTE_CALL_SIGNING_KEY_ID',
 ] as const
@@ -75,7 +78,7 @@ export function sealPaymentReadinessSnapshot(
 export function paymentReadinessExpiresAt(startedAt: number, checks: PaymentReadinessChecks): number {
   return PAYMENT_READINESS_CHECK_KEYS.reduce((expiresAt, key) => {
     const check = checks[key]
-    return check.kind === 'passed' ? Math.min(expiresAt, check.validUntil) : expiresAt
+    return check.kind === 'passed' || check.kind === 'deferred' ? Math.min(expiresAt, check.validUntil) : expiresAt
   }, startedAt + PAYMENT_READINESS_MAX_VALIDITY_MS)
 }
 
@@ -94,8 +97,10 @@ export function validPaymentReadinessSnapshot(snapshot: PaymentReadinessSnapshot
     || Object.keys(snapshot.checks).length !== PAYMENT_READINESS_CHECK_KEYS.length) return false
   for (const key of PAYMENT_READINESS_CHECK_KEYS) {
     const check = snapshot.checks[key]
-    if (check === undefined || (check.kind === 'passed'
+    if (check === undefined || (check.kind === 'passed' || check.kind === 'deferred'
       ? !clock(check.validUntil) || check.validUntil <= snapshot.completedAt
+        || (check.kind === 'deferred' && (key !== 'sanctions'
+          || check.policyRef !== ALPHA_X402_PAYEE_SCREENING_POLICY))
       : check.kind !== 'failed' || !CODE.test(check.code))) return false
   }
   if (snapshot.expiresAt !== paymentReadinessExpiresAt(snapshot.startedAt, snapshot.checks)) return false

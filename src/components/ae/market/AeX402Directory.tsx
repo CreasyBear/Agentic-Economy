@@ -27,7 +27,7 @@ import { DirectoryProviderHeader } from './DirectoryProviderHeader'
 import type { X402DirectoryCatalogue, X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { readX402DirectoryCatalogueServer } from '@/modules/market/x402-directory-index.functions'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
-import { carryMarketCompare, marketCompareParam, parseMarketCompareRefs, marketHasBrowseOnlyFilters, marketToolSearchInput, toggleMarketCompareRef, type MarketCompareEntry, type MarketToolSearchState } from '@/modules/market/market-route-data'
+import { carryMarketCompare, marketCompareParam, parseMarketCompareRefs, marketHasBrowseOnlyFilters, marketToolSearchInput, marketUsesCanonicalSearch, toggleMarketCompareRef, type MarketCompareEntry, type MarketToolSearchState } from '@/modules/market/market-route-data'
 import { directoryDate } from './directory-presentation'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { DirectoryComparison } from './DirectoryComparison'
@@ -144,9 +144,9 @@ function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) 
     })
     return () => { cancelled = true }
   }, [enabled, key, query, input])
-  const current = state.query === key ? state.pages[state.index] : undefined
+  const current = enabled && state.query === key ? state.pages[state.index] : undefined
   async function nextPage(cursor: string, query: string) {
-    if (state.status === 'loading' || query !== input.query) return
+    if (!enabled || state.status === 'loading' || query !== input.query) return
     if (state.index + 1 < state.pages.length) {
       setState(previous => previous.query === key ? { ...previous, index: previous.index + 1, status: 'idle' } : previous)
       return
@@ -167,7 +167,7 @@ function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) 
     }
   }
   async function retry() {
-    if (state.status === 'loading') return
+    if (!enabled || state.status === 'loading') return
     setState({ query: key, pages: [], index: 0, status: 'loading' })
     try {
       const result = await searchMarketToolsServer({ data: input })
@@ -235,7 +235,8 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const [needSave, setNeedSave] = useState<MarketNeedSaveState>()
   const view = activeView ?? search.view ?? (home === undefined ? 'tools' : 'discover')
   const { query, offset, network, provider, maxUsdPrice } = search
-  const canonicalSearch = useCanonicalMarketSearch(search, search.alternativeTo === undefined && (view === 'tools' || view === 'providers'))
+  const canonicalSearchEnabled = marketUsesCanonicalSearch(search) && (view === 'tools' || view === 'providers')
+  const canonicalSearch = useCanonicalMarketSearch(search, canonicalSearchEnabled)
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
   const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
@@ -476,7 +477,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         }}><MessageSquareIcon aria-hidden="true" />Ask an Agent</Link>
       </DirectoryHero>
       {queryError === undefined ? null : <p id="market-search-error" role="alert" className="text-sm text-destructive">{queryError}</p>}
-      <p id="market-search-recipient" className="arc-market-search-hint">{jevRecipient === undefined || search.alternativeTo !== undefined ? 'Search assesses Market Tool listings and published candidate descriptions.' : `Search query and candidate Tool text go to ${jevRecipient}.`}</p>
+      <p id="market-search-recipient" className="arc-market-search-hint">{search.reviewedProvidersOnly === true ? 'Search matches published listings from reviewed providers.' : jevRecipient === undefined || search.alternativeTo !== undefined ? 'Search assesses Market Tool listings and published candidate descriptions.' : `Search query and candidate Tool text go to ${jevRecipient}.`}</p>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
           void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, value === 'saved' || value === 'discover' ? { view: value } : {
@@ -521,7 +522,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         // `tabItems`; the `[]` fallback here only satisfies the type.)
         const activePages = tab === 'providers' ? providerPages : loadMore
         const tabItems: readonly X402DirectoryEntry[] = (tab === 'tools' || tab === 'providers') && indexed ? activePages.items : page.kind === 'ok' ? page.items : []
-        const railDeck = search.alternativeTo !== undefined ? 'Currently callable AE Tools other than the selected Tool' : search.query !== undefined ? 'AE-admitted Tools and Coinbase Bazaar listings' : [
+        const railDeck = search.alternativeTo !== undefined ? 'Currently callable AE Tools other than the selected Tool' : search.query !== undefined ? search.reviewedProvidersOnly === true ? 'Published listings from reviewed providers' : 'AE-admitted Tools and Coinbase Bazaar listings' : [
           page.kind === 'ok' && tabItems.length > 0
             ? tab === 'providers'
               ? `${new Set(tabItems.map(entry => entry.provider)).size.toLocaleString()} Providers on this page`
@@ -540,7 +541,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
               if (!DIRECTORY_SORT_OPTIONS.some(option => option.value === value)) return
               go({ ...indexedSearch(), view: tab, sort: value })
             }} /> : null}
-            {search.query === undefined || search.alternativeTo !== undefined ? <SegmentedControl label="Result layout" options={[{ value: 'table', label: 'Table' }, { value: 'grid', label: 'Grid' }]} value={layout} onValueChange={value => {
+            {!canonicalSearchEnabled ? <SegmentedControl label="Result layout" options={[{ value: 'table', label: 'Table' }, { value: 'grid', label: 'Grid' }]} value={layout} onValueChange={value => {
               if (value !== 'table' && value !== 'grid') return
               void navigate({ to: marketPath, resetScroll: false, search: current => ({ ...current, layout: value }) })
             }} /> : null}
@@ -570,7 +571,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             className="mb-5"
           />
           {search.query === undefined && (search.network !== undefined || search.maxUsdPrice !== undefined) ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="secondary">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="secondary">Provider-listed price: up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
-          {search.query !== undefined && search.alternativeTo === undefined ? canonicalResults() : page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
+          {canonicalSearchEnabled ? canonicalResults() : page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
             action={<Link to={marketPath} reloadDocument search={carryMarketCompare(search, search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab })} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
             {search.alternativeTo !== undefined && catalogue?.kind === 'ok' ? <p role="status" className="mb-4 text-sm text-muted-foreground">{activePages.isDone ? 'Current callable alternatives assessed.' : 'Callable alternatives assessed on this page; more results remain to check.'}</p> : null}

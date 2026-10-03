@@ -778,6 +778,18 @@ describe('production aggregate payment readiness', () => {
   afterEach(() => { setPublicSourceTransportForTests(undefined); vi.restoreAllMocks(); vi.unstubAllEnvs() })
   const request = () => new Request('https://ae.example/api/ready')
   const readyFetch = () => vi.fn(async () => new Response(null, { status: 200 }))
+  it('accepts deferred payee screening only when web policy matches backend evidence', async () => {
+    const view = readyPaymentView()
+    paymentView = { ...view, checks: { ...view.checks, sanctions: {
+      kind: 'deferred', policyRef: 'alpha_not_screened_v1', validUntil: view.expiresAt!,
+    } } }
+    const env = productionReadinessEnvironment()
+    expect((await handleReadyRequest(request(), { env, fetch: readyFetch(), nodeMajor: 22 })).status).toBe(503)
+    env.AE_X402_PAYEE_SCREENING_POLICY = 'alpha_not_screened_v1'
+    expect((await handleReadyRequest(request(), { env, fetch: readyFetch(), nodeMajor: 22 })).status).toBe(200)
+    env.AE_X402_PAYEE_SCREENING_POLICY = 'unknown'
+    expect((await handleReadyRequest(request(), { env, fetch: readyFetch(), nodeMajor: 22 })).status).toBe(503)
+  })
   it.each(['missing', 'provider_failed', 'expired', 'incomplete', 'wrong_world', 'future_clock', 'invalid_clock'] as const)(
     'returns generic503 for %s evidence and preserves HEAD status without detailed checks', async defect => {
       const view = readyPaymentView()

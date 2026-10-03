@@ -5,7 +5,7 @@ import { paginationOptsValidator } from 'convex/server'
 import { filter } from 'convex-helpers/server/filter'
 import { v, type Infer } from 'convex/values'
 import Decimal from 'decimal.js'
-import { directoryNetwork, directoryIndexRangesValid, x402DirectoryIndexInputSchema, type X402DirectoryIndexInput } from '@/modules/market/x402-directory-index'
+import { directoryNetwork, directoryIndexRangesValid, x402DirectoryIndexInputSchema, REVIEWED_DIRECTORY_PROVIDER_HOSTS, type X402DirectoryIndexInput } from '@/modules/market/x402-directory-index'
 import type { Doc } from '../../../_generated/dataModel'
 import { env, type QueryCtx } from '../../../_generated/server'
 import { filterArgs, pageValue } from './contracts'
@@ -97,12 +97,25 @@ function matchesRemainingConstraints(row: SearchRow, input: X402DirectoryIndexIn
   if (input.minPayers30d !== undefined && payersOrder < input.minPayers30d) return false
   if (input.maxPayers30d !== undefined && (payersOrder < 0 || payersOrder > input.maxPayers30d)) return false
   if (input.curatedOnly === true && row.curated !== true) return false
+  if (input.reviewedProvidersOnly === true && !REVIEWED_DIRECTORY_PROVIDER_HOSTS.includes(row.provider)) return false
   if (input.priceBand !== undefined && row.priceBand !== input.priceBand) return false
   if (input.adoptionBand !== undefined && row.adoptionBand !== input.adoptionBand) return false
   if (input.tags !== undefined && !input.tags.some(tag => row.tags?.includes(tag))) return false
   if (input.bundleSlugs !== undefined && !input.bundleSlugs.some(slug => row.bundleSlugs?.includes(slug))) return false
   for (const key of ['hasInputFields', 'hasOutputFields', 'hasInputSchema', 'hasOutputSchema', 'hasOutputExample'] as const) if (input[key] !== undefined && Boolean(row[key]) !== input[key]) return false
   return true
+}
+
+/** A reviewed business label is insufficient: require its exact endpoint and current Coinbase source binding. */
+async function matchesReviewedProvider(ctx: QueryCtx, row: SearchRow): Promise<boolean> {
+  if (row.source === 'provider') return false
+  let endpoint: URL
+  try { endpoint = new URL(row.resource) } catch { return false }
+  if (!['https:', 'http:'].includes(endpoint.protocol) || endpoint.hostname !== row.provider
+    || !REVIEWED_DIRECTORY_PROVIDER_HOSTS.includes(endpoint.hostname)) return false
+  const source = await ctx.db.get(row.entryId)
+  return source !== null && source.source === 'coinbase' && source.generation === row.generation
+    && source.endpointUrl === row.resource && source.provider.toLowerCase() === endpoint.hostname
 }
 
 /** Keyword search is Convex full text; semantic discovery is a separate upstream operation. */
@@ -128,16 +141,22 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
       ...(input.minPayers30d === undefined ? [] : [q.gte(q.field('payersOrder'), input.minPayers30d)]),
       ...(input.maxPayers30d === undefined ? [] : [q.gte(q.field('payersOrder'), 0), q.lte(q.field('payersOrder'), input.maxPayers30d)]),
       ...(input.curatedOnly === true ? [q.eq(q.field('curated'), true)] : []),
+      ...(input.reviewedProvidersOnly === true ? [
+        q.neq(q.field('source'), 'provider'),
+        q.or(...REVIEWED_DIRECTORY_PROVIDER_HOSTS.map(provider => q.eq(q.field('provider'), provider))),
+      ] : []),
       ...(input.priceBand === undefined ? [] : [q.eq(q.field('priceBand'), input.priceBand)]),
       ...(input.adoptionBand === undefined ? [] : [q.eq(q.field('adoptionBand'), input.adoptionBand)]),
       ...(input.maxUsdPrice === undefined ? [] : [q.gte(q.field('minimumUsdPriceOrder'), 0), q.lte(q.field('minimumUsdPriceOrder'), input.maxUsdPrice)]),
     ))
     // Rich source documents have a separate bounded budget from slim search rows.
     // A shorter native page still preserves its cursor and complete traversal.
+    // Async endpoint/source validation runs on that native page and may leave it empty.
     const now = Date.now()
     const choiceFor = choiceForDirectoryPage(ctx, now)
     const page = await filter(source, async row => {
       if (!matchesRemainingConstraints(row, parsed.data)) return false
+      if (input.reviewedProvidersOnly === true && !await matchesReviewedProvider(ctx, row)) return false
       if (alternativeTo === undefined) return true
       const choice = await choiceFor(row)
       return choice.access === 'ae_callable' && choice.toolRef !== alternativeTo && row.sourceRouteRef !== alternativeTo

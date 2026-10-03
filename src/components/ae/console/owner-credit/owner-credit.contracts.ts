@@ -21,7 +21,7 @@ export type AeOwnerCreditProps = Readonly<{
   onCreateStatement?: () => Promise<void>
   onCreateDailyClose?: () => Promise<void>
   onSignDailyClose?: (documentRef: string, expectedRenderInputDigest: string) => Promise<void>
-  onOpenDocument?: (documentRef: string) => Promise<void>
+  onOpenDocument?: (documentRef: string, format?: 'html' | 'csv') => Promise<void>
   unavailable?: Readonly<{
     balance?: boolean
     history?: boolean

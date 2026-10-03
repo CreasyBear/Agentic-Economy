@@ -64,6 +64,15 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('admin overview route', () => {
+  it('shows alpha payee screening as deferred while preserving payment readiness', () => {
+    const readiness = passingReadiness(Date.now() + 60_000)
+    readiness.checks.sanctions = { kind: 'deferred', policyRef: 'alpha_not_screened_v1', validUntil: readiness.expiresAt! }
+    mocks.overview = { paymentReadiness: readiness }
+    render(<AdminOverviewPage />)
+    expect(within(screen.getByRole('status', { name: 'Payment readiness status' })).getByText('Ready')).toBeTruthy()
+    expect(screen.getByText('Payee screening deferred under the alpha policy; payees are not screened.')).toBeTruthy()
+    expect(within(screen.getByText('Payee screening policy').closest('div')!).getByText('Deferred')).toBeTruthy()
+  })
   it('links each observed partition to its own queue rather than the default partition', () => {
     mocks.exceptions = [
       { kind: 'removal_dispute', partition: 'opened', observed: 0, complete: true, unavailable: false },
@@ -139,7 +148,7 @@ describe('admin overview route', () => {
     render(<AdminOverviewPage />)
     expect(screen.getAllByText('Passed')).toHaveLength(7)
     expect(screen.getAllByText('Failed')).toHaveLength(1)
-    expect(within(screen.getByText('Sanctions screening').closest('div')!).getByText(
+    expect(within(screen.getByText('Payee screening policy').closest('div')!).getByText(
       'The verified TRM Wallet Screening tenant contract is not connected.')).toBeTruthy()
     expect(screen.queryByText('trm_tenant_contract_unavailable')).toBeNull()
     expect(screen.queryByText('Clerk MFA claim')).toBeNull()

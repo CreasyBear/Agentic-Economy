@@ -25,7 +25,7 @@ const admitted = { kind: 'admitted', reservationRef: 'reservation:one', screenin
 const context = () => ({ runMutation: vi.fn().mockResolvedValue(admitted) })
 
 beforeEach(() => { provider.screen.mockReset().mockResolvedValue(clear) })
-afterEach(() => { vi.restoreAllMocks() })
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs() })
 
 describe('managed signing orchestration', () => {
   it('screens the signed recipient and typed data afresh on every invocation, then requires committed admission', async () => {
@@ -72,5 +72,15 @@ describe('managed signing orchestration', () => {
     const actual = await vi.importActual<typeof import('@/modules/money/x402-payee-screening.server')>('@/modules/money/x402-payee-screening.server')
     expect(await actual.screenX402Payee(request)).toMatchObject({ ...request,
       outcome: 'unavailable', reason: 'trm_tenant_contract_unavailable' })
+  })
+
+  it('records explicit alpha deferral without claiming a provider clear', async () => {
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'alpha_not_screened_v1')
+    const actual = await vi.importActual<typeof import('@/modules/money/x402-payee-screening.server')>('@/modules/money/x402-payee-screening.server')
+    expect(actual.readX402PayeeScreeningReadiness()).toEqual({ kind: 'deferred', policyRef: 'alpha_not_screened_v1' })
+    expect(await actual.screenX402Payee(request)).toMatchObject({ ...request,
+      provider: 'none', outcome: 'not_screened', policyRef: 'alpha_not_screened_v1', reason: 'trm_deferred_until_beta' })
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'unknown')
+    expect(actual.readX402PayeeScreeningReadiness()).toEqual({ kind: 'unavailable', code: 'trm_tenant_contract_unavailable' })
   })
 })

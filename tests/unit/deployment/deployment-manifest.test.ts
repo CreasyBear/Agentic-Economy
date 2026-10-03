@@ -74,6 +74,13 @@ function productionEnvironment(): Record<string, string> {
 }
 
 describe('deployment manifest validator', () => {
+  it('declares the exact optional alpha screening policy and rejects unknown modes', () => {
+    expect(validateDeploymentManifest({ ...productionEnvironment(), AE_X402_PAYEE_SCREENING_POLICY: 'alpha_not_screened_v1' }).ok).toBe(true)
+    expect(DEPLOYMENT_MANIFEST.configuration.optional).toContain('AE_X402_PAYEE_SCREENING_POLICY')
+    const invalid = validateDeploymentManifest({ ...productionEnvironment(), AE_X402_PAYEE_SCREENING_POLICY: 'unknown' })
+    expect(invalid.findings).toContainEqual({ kind: 'malformed', code: 'x402_payee_screening_policy_invalid',
+      names: ['AE_X402_PAYEE_SCREENING_POLICY'], scope: 'x402-payment' })
+  })
   it.each([undefined, 'true', 'false'])('accepts the optional discovery rollback setting %s', value => {
     expect(validateDeploymentManifest({ ...productionEnvironment(), AE_JEV_DISCOVERY_ENABLED: value }).ok).toBe(true)
     expect(DEPLOYMENT_MANIFEST.configuration.optional).toContain('AE_JEV_DISCOVERY_ENABLED')

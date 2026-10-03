@@ -153,6 +153,7 @@ const conditional: readonly RequirementGroup[] = [
   },
 ]
 const optionalNames = Object.freeze([
+  'AE_X402_PAYEE_SCREENING_POLICY',
   'OPENROUTER_API_KEY', 'AE_LLM_MODEL', 'AE_CHAT_PROXY_SECRET',
   'AE_JEV_DISCOVERY_ENABLED',
   'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
@@ -313,6 +314,10 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) validatePackage5Rollout(environment, add)
   if (production) validateProductionSentryConfiguration(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
+  const screeningPolicy = present(environment, 'AE_X402_PAYEE_SCREENING_POLICY')
+  if (screeningPolicy !== undefined && screeningPolicy !== 'alpha_not_screened_v1') {
+    add('malformed', 'x402_payee_screening_policy_invalid', ['AE_X402_PAYEE_SCREENING_POLICY'], 'x402-payment')
+  }
   validateX402Custody(environment, add, production)
   validateX402RpcUrls(environment, add, production)
 

@@ -1,13 +1,16 @@
 import { assertFinancialEnvironment, financialEnvironmentValue, type FinancialEnvironment } from '../formance/contracts'
 import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
+import { z } from 'zod'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../../_generated/server'
+import type { Doc } from '../../../_generated/dataModel'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+import { isRecord } from '../../../../src/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '../../../../src/modules/common/stable-hash'
 import { enqueueDocumentRender } from './workpool'
 
 const readStatementFinalizationRef = makeFunctionReference<'query', { documentRef: string }, {
-  documentRef: string; accountRef: string; residualUnits: string; policyDigest: string; snapshotDigest: string; expectedEnvironment: FinancialEnvironment
+  documentRef: string; accountRef: string; residualUnits: string; policyDigest: string; snapshotDigest: string; expectedEnvironment: FinancialEnvironment; adjustmentAllowed: boolean
 } | null>('moneyDocuments:readStatementFinalization')
 const bookBuyerAdjustmentRef = makeFunctionReference<'action', {
   documentRef: string; accountRef: string; residualUnits: string; policyDigest: string; snapshotDigest: string; expectedEnvironment: FinancialEnvironment
@@ -19,6 +22,35 @@ const queueStatementRenderRef = makeFunctionReference<'mutation', {
   documentRef: string; adjustmentTransactionRefs: string[]
 }, { kind: 'advanced' | 'replayed' | 'refused' }>('moneyDocuments:queueStatementRender')
 
+const unapprovedPolicyContext = z.strictObject({
+  format: z.literal('ae.money-statement-policy-context:v1'),
+  kind: z.literal('not_admitted'),
+  environment: z.enum(['sandbox', 'production']),
+  observedAt: z.number().int().nonnegative(),
+  refusalCode: z.string().min(1),
+  family: z.string().min(1).optional(),
+  missingFamilies: z.array(z.string().min(1)).optional(),
+})
+
+function readUnapprovedPolicyContext(row: Doc<'moneyDocuments'>) {
+  if (row.policyRefs.length > 0) return undefined
+  const input: unknown = JSON.parse(row.renderInputJson)
+  const context = unapprovedPolicyContext.parse(isRecord(input) ? input.policyAdmission : undefined)
+  if (canonicalDigest(input) !== row.renderInputDigest || canonicalDigest(context) !== row.policyDigest
+    || context.environment !== row.environment || context.observedAt !== row.snapshotCutoffAt) {
+    throw new Error('statement_policy_context_invalid')
+  }
+  return {
+    format: context.format,
+    kind: context.kind,
+    environment: context.environment,
+    observedAt: context.observedAt,
+    refusalCode: context.refusalCode,
+    ...(context.family === undefined ? {} : { family: context.family }),
+    ...(context.missingFamilies === undefined ? {} : { missingFamilies: context.missingFamilies }),
+  } as const
+}
+
 export const readStatementFinalizationArgs = v.object({ documentRef: v.string() })
 export const readStatementFinalizationResult = v.union(v.null(), v.object({
     documentRef: v.string(),
@@ -27,6 +59,7 @@ export const readStatementFinalizationResult = v.union(v.null(), v.object({
     residualUnits: v.string(),
     policyDigest: v.string(),
     snapshotDigest: v.string(),
+    adjustmentAllowed: v.boolean(),
   }))
 export const readStatementFinalizationHandler = async (ctx: QueryCtx, args: Infer<typeof readStatementFinalizationArgs>) => {
     const row = await ctx.db.query('moneyDocuments')
@@ -34,7 +67,9 @@ export const readStatementFinalizationHandler = async (ctx: QueryCtx, args: Infe
       .unique()
     if (row === null || row.state !== 'adjusting'
       || (row.kind !== 'statement' && row.kind !== 'daily_close')) return null
+    const policyAdmission = readUnapprovedPolicyContext(row)
     return {
+      adjustmentAllowed: policyAdmission === undefined,
       documentRef: row.documentRef,
       expectedEnvironment: row.environment,
       accountRef: row.accountRef,
@@ -57,8 +92,13 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
     if (row.state === 'rendering' || row.state === 'awaiting_signature' || row.state === 'issued') {
       return { kind: 'replayed' as const }
     }
-    if (row.state !== 'adjusting'
-      || args.adjustmentTransactionRefs.length > 1
+    if (row.state !== 'adjusting') return { kind: 'refused' as const }
+    const policyAdmission = readUnapprovedPolicyContext(row)
+    if (policyAdmission !== undefined && row.residualUnits !== '0') {
+      await ctx.db.patch(row._id, { state: 'failed', failureCode: 'statement_adjustment_requires_approved_policy' })
+      return { kind: 'refused' as const }
+    }
+    if (args.adjustmentTransactionRefs.length > 1
       || (row.residualUnits === '0') !== (args.adjustmentTransactionRefs.length === 0)
       || row.periodStart === undefined
       || row.periodEnd === undefined
@@ -69,6 +109,7 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
       documentRef: row.documentRef,
       accountRef: row.accountRef,
       kind: row.kind,
+      environment: row.environment,
       currency: 'AUD',
       exponent: 6,
       periodStart: row.periodStart,
@@ -82,6 +123,7 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
       snapshotDigest: row.snapshotDigest,
       policyRefs: row.policyRefs,
       policyDigest: row.policyDigest,
+      ...(policyAdmission === undefined ? {} : { policyAdmission }),
     } as const satisfies StableHashValue
     const workId = await enqueueDocumentRender(ctx, row.documentRef)
     await ctx.db.patch(row._id, {
@@ -96,13 +138,20 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
 
 export const finalizeStatementArgs = v.object({ documentRef: v.string() })
 export const finalizeStatementResult = v.object({ kind: v.literal('advanced') })
-export const finalizeStatementHandler = async (ctx: ActionCtx, args: Infer<typeof finalizeStatementArgs>) => {
+export const finalizeStatementHandler = async (ctx: ActionCtx, args: Infer<typeof finalizeStatementArgs>): Promise<{ kind: 'advanced' }> => {
     const input = await ctx.runQuery(readStatementFinalizationRef, args)
     if (input === null) return { kind: 'advanced' as const }
     assertFinancialEnvironment(input.expectedEnvironment)
+    const { adjustmentAllowed, ...bookingInput } = input
+    if (!adjustmentAllowed && input.residualUnits !== '0') {
+      // Persist a specific refusal without a ledger call or a retry that could
+      // borrow later approval. The frozen report remains visible to its owner.
+      await ctx.runMutation(queueStatementRenderRef, { documentRef: input.documentRef, adjustmentTransactionRefs: [] })
+      return { kind: 'advanced' as const }
+    }
     let adjustmentTransactionRefs: string[] = []
     if (input.residualUnits !== '0') {
-      const result = await ctx.runAction(bookBuyerAdjustmentRef, input)
+      const result = await ctx.runAction(bookBuyerAdjustmentRef, bookingInput)
       if (result.kind !== 'completed') {
         throw new Error(result.kind === 'outcome_unknown' ? 'document_adjustment_outcome_unknown' : result.code)
       }
@@ -115,4 +164,3 @@ export const finalizeStatementHandler = async (ctx: ActionCtx, args: Infer<typeo
     if (queued.kind === 'refused') throw new Error('money_document_finalize_conflict')
     return { kind: 'advanced' as const }
   }
-

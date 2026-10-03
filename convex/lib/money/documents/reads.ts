@@ -8,6 +8,7 @@ import { isRecord } from '../../../../src/modules/common/is-record'
 import { parseTaxDocumentSnapshot } from '../../../../src/modules/money/public'
 import { deploymentPaymentEnvironment } from '../../../../src/lib/deployment/environment'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
+import { financialEnvironmentMatches } from '../formance/contracts'
 
 const documentKind = v.union(
   v.literal('funding_receipt'),
@@ -188,8 +189,20 @@ export const readOwnerDocumentUrlHandler = async (ctx: QueryCtx, args: Infer<typ
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || row.accountRef !== actor.canonicalAccountRef
-      || row.state !== 'issued' || row.fileId === undefined) return null
+    if (row === null || row.accountRef !== actor.canonicalAccountRef || row.fileId === undefined) return null
+    if (row.state === 'awaiting_signature' && row.kind === 'daily_close') {
+      if (!financialEnvironmentMatches(row.environment) || row.csvFileId === undefined
+        || row.fileDigest === undefined || row.csvFileDigest === undefined) return null
+      try {
+        const input: unknown = JSON.parse(row.renderInputJson)
+        if (!isRecord(input) || input.documentRef !== row.documentRef || input.accountRef !== row.accountRef
+          || input.kind !== 'daily_close' || canonicalDigest(input) !== row.renderInputDigest) return null
+      } catch (cause) {
+        return degradeBackend(cause, null, { site: 'readOwnerDocumentUrl', reason: 'invalid_response' })
+      }
+      const files = await Promise.all([ctx.db.system.get('_storage', row.fileId), ctx.db.system.get('_storage', row.csvFileId)])
+      if (files.some(file => file === null)) return null
+    } else if (row.state !== 'issued') return null
     const readiness = await taxDocumentReadiness(ctx, row)
     if (readiness === 'invalid' || readiness === 'awaiting_original') return null
     const fileId = args.format === 'csv' ? row.csvFileId : row.fileId

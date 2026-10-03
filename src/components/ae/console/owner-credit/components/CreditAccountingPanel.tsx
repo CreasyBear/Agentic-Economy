@@ -98,7 +98,7 @@ export function CreditAccountingPanel({
                 disabled={createStatementStatus === 'pending'}
                 onClick={() => runDocumentAction({ kind: 'create_statement' }, onCreateStatement)}
               >
-                {createStatementStatus === 'pending' ? 'Creating statement…' : 'Create current statement'}
+                {createStatementStatus === 'pending' ? 'Creating statement…' : 'Create previous month’s statement'}
               </ArcButton>
               {onCreateDailyClose === undefined ? null : (
                 <ArcButton
@@ -114,7 +114,7 @@ export function CreditAccountingPanel({
             <div className="arc-credit-document-notices">
               <DocumentActionNotice
                 status={createStatementStatus}
-                pending="Creating the current statement…"
+                pending="Creating the previous completed month’s statement…"
                 succeeded="Statement generation started. Its status remains visible below."
                 failed="Statement creation could not be confirmed. Refresh documents before trying again."
               />
@@ -139,38 +139,45 @@ export function CreditAccountingPanel({
             {documents.map((document) => {
               const signStatus = documentActions[documentActionKey({ kind: 'sign', documentRef: document.documentRef })]
               const openStatus = documentActions[documentActionKey({ kind: 'open', documentRef: document.documentRef })]
+              const csvStatus = documentActions[documentActionKey({ kind: 'open_csv', documentRef: document.documentRef })]
+              const reviewReady = document.kind === 'daily_close' && document.state === 'awaiting_signature' && document.rendered
               const label = documentKindLabel(document.kind)
               return (
                 <li key={document.documentRef} className="arc-credit-document-row">
                   <AeFactList facts={documentFacts(document)} className="arc-credit-document-facts" />
                   <div className="arc-credit-document-action-stack">
+                    {reviewReady ? <p className="text-sm text-muted-foreground">Review the Account settlement report before signing. It does not reconcile platform treasury.</p> : null}
+                    {document.failureCode === 'statement_adjustment_requires_approved_policy' ? (
+                      <p className="text-sm text-muted-foreground" role="status">The captured totals need a rounding adjustment, but commercial approval was not valid at capture. No ledger adjustment was made.</p>
+                    ) : null}
                     <div className="arc-credit-document-actions">
-                      {document.kind === 'daily_close' && document.state === 'awaiting_signature' && onSignDailyClose !== undefined ? (
-                        <ArcButton
-                          type="button"
-                          variant="primary"
-                          disabled={signStatus === 'pending'}
-                          onClick={() => runDocumentAction(
-                            { kind: 'sign', documentRef: document.documentRef },
-                            () => onSignDailyClose(document.documentRef, document.renderInputDigest),
-                          )}
-                        >
-                          {signStatus === 'pending' ? 'Signing close…' : 'Sign close'}
-                        </ArcButton>
-                      ) : null}
                       {onOpenDocument === undefined ? null : (
                         <ArcButton
                           type="button"
                           variant="secondary"
-                          disabled={document.state !== 'issued' || openStatus === 'pending'}
+                          disabled={(!reviewReady && document.state !== 'issued') || openStatus === 'pending'}
                           onClick={() => runDocumentAction(
                             { kind: 'open', documentRef: document.documentRef },
                             () => onOpenDocument(document.documentRef),
                           )}
                         >
-                          {openStatus === 'pending' ? 'Opening…' : document.state === 'issued' ? 'Open document' : 'Preparing…'}
+                          {openStatus === 'pending' ? 'Opening…' : reviewReady ? 'Review close' : document.state === 'issued' ? 'Open document' : 'Preparing…'}
                         </ArcButton>
                       )}
+                      {reviewReady && onOpenDocument !== undefined ? (
+                        <ArcButton type="button" variant="secondary" disabled={csvStatus === 'pending'}
+                          onClick={() => runDocumentAction({ kind: 'open_csv', documentRef: document.documentRef },
+                            () => onOpenDocument(document.documentRef, 'csv'))}>
+                          {csvStatus === 'pending' ? 'Opening CSV…' : 'Review CSV'}
+                        </ArcButton>
+                      ) : null}
+                      {reviewReady && onSignDailyClose !== undefined ? (
+                        <ArcButton type="button" variant="primary" disabled={signStatus === 'pending'}
+                          onClick={() => runDocumentAction({ kind: 'sign', documentRef: document.documentRef },
+                            () => onSignDailyClose(document.documentRef, document.renderInputDigest))}>
+                          {signStatus === 'pending' ? 'Signing close…' : 'Sign close'}
+                        </ArcButton>
+                      ) : null}
                     </div>
                     <div className="arc-credit-document-notices">
                       <DocumentActionNotice
@@ -185,6 +192,9 @@ export function CreditAccountingPanel({
                         succeeded={`${label} link prepared. If no tab opened, try opening it again.`}
                         failed={`${label} could not be opened. This record remains available.`}
                       />
+                      <DocumentActionNotice status={csvStatus} pending="Opening close CSV…"
+                        succeeded="Close CSV link prepared. Review it before signing."
+                        failed="Close CSV could not be opened. This record remains available." />
                     </div>
                   </div>
                 </li>
