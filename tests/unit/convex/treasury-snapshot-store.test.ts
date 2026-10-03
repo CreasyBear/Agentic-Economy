@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../../convex/_generated/api'
+import { treasuryAlerts } from '../../../convex/lib/money/treasury/snapshot'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/convex'
 import { sealTreasurySnapshot, TREASURY_SNAPSHOT_MAX_AGE_MS, type TreasurySnapshot } from '@/modules/money/treasury-report'
@@ -114,6 +115,22 @@ describe('registered treasury snapshot publication and control behavior', () => 
     expect((await stored(backend)).launch).toEqual(paused)
     expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
       .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_configuration_unavailable' } })
+  })
+
+  it.each([32 * 60_000, 60 * 60_000 - 1_000, 60 * 60_000])('uses the original finalized-block deadline for readiness and alerts at age %i', async age => {
+    const backend = convexTestWithMarketComponents()
+    await seedObservation(backend)
+    const base = report()
+    if (base.chain.kind !== 'available') throw new Error('fixture_chain_missing')
+    const snapshot = reseal(base, { chain: { ...base.chain, blockTimestamp: NOW - age } })
+    await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })
+    const source = await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW })
+    expect(source.treasury).toEqual(age < 60 * 60_000
+      ? { kind: 'passed', validUntil: Math.min(NOW + 10 * 60_000, NOW - age + 60 * 60_000) }
+      : { kind: 'failed', code: 'treasury_reconciliation_required' })
+    const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    if (context.kind !== 'available') throw new Error('fixture_snapshot_context_missing')
+    expect(treasuryAlerts(snapshot, context).some(alert => alert.code === 'reconciliation_stale')).toBe(age >= 60 * 60_000)
   })
 
   it('readiness preserves the original FX and wallet evidence expiry', async () => {

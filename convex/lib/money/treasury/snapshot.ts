@@ -4,7 +4,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sealTreasurySnapshot, type TreasurySnapshot } from '@/modules/money/treasury-report'
 import { X402_SPEND_WINDOW_MS } from '@/modules/money/x402-spend-admission'
-import type { TreasuryBatch } from '@/modules/money/treasury'
+import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS, type TreasuryBatch } from '@/modules/money/treasury'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { configuredContext, readFormanceTreasuryAudit, readFormanceTreasurySnapshot,
@@ -166,7 +166,7 @@ export function treasuryAlerts(snapshot: Omit<TreasurySnapshot, 'snapshotRef' | 
   if (snapshot.inFlight.kind === 'available' && snapshot.inFlight.overdueCount > 0) add('reservation_overdue', 'warning', snapshot.inFlight.calls.map(row => row.callRef))
   if (Object.values(snapshot.checks).some(check => check.kind === 'unavailable')) add('reconciliation_unavailable', 'warning')
   if (snapshot.chain.kind !== 'available' || snapshot.snapshotAt - snapshot.chain.observedAt >= 20 * 60_000
-    || snapshot.snapshotAt - snapshot.chain.blockTimestamp >= 20 * 60_000) add('reconciliation_stale', 'warning')
+    || snapshot.snapshotAt - snapshot.chain.blockTimestamp >= TREASURY_FINALIZED_BLOCK_MAX_AGE_MS) add('reconciliation_stale', 'warning')
   if (snapshot.spending.kind === 'available'
     && (BigInt(snapshot.spending.settledUnits) + BigInt(snapshot.spending.liabilityUnits)) * 100n >= BigInt(snapshot.spending.maximumUnits) * 80n) {
     add('daily_limit_80_percent', 'warning')

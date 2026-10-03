@@ -6,7 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
 import { verifyExactEvmX402Settlement, type X402EvmReceipt } from '@/modules/capability-supply/server'
-import { TREASURY_DRIFT_TOLERANCE_UNITS, TREASURY_RESERVATION_AGE_LIMIT_MS,
+import { TREASURY_DRIFT_TOLERANCE_UNITS, TREASURY_RESERVATION_AGE_LIMIT_MS, TREASURY_FINALIZED_BLOCK_MAX_AGE_MS,
   type TreasuryBatch, type TreasuryIdentity, type TreasuryProgress, type TreasuryTransfer } from '@/modules/money/treasury'
 import type { TreasuryCheck, TreasurySnapshot } from '@/modules/money/treasury-report'
 import { matchTreasuryBatch, matchTreasuryCallCash, matchTreasuryProviderSettlement,
@@ -128,7 +128,7 @@ export async function auditTreasuryCash(input: CashAuditInput, readReceipt?: Rec
       : settlement.check.kind === 'unavailable' || settlement.check.kind === 'mismatch' ? unavailable('treasury_payment_attribution_required')
         : !history.latest.observation.caughtUp ? attention('treasury_chain_catching_up', [history.latest.batchRef])
           : input.snapshotAt - history.latest.observation.observedAt >= 20 * 60_000
-            || input.snapshotAt - history.latest.observation.blockTimestamp >= 20 * 60_000 ? unavailable('treasury_chain_observation_stale')
+            || input.snapshotAt - history.latest.observation.blockTimestamp >= TREASURY_FINALIZED_BLOCK_MAX_AGE_MS ? unavailable('treasury_chain_observation_stale')
             : absolute(difference) > BigInt(TREASURY_DRIFT_TOLERANCE_UNITS)
               ? mismatch('treasury_cash_difference', cashRows.length, expected, chain, [history.latest.batchRef])
               : { kind: 'matched', checkedCount: cashRows.length, expectedUnits: expected.toString(), observedUnits: chain.toString(), differenceUnits: difference.toString() }

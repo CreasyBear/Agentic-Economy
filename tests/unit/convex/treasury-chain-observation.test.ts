@@ -118,6 +118,13 @@ describe('treasury finalized chain evidence', () => {
     if (result.kind !== 'observed') throw new Error(result.code)
     expect(result.transfers).toHaveLength(3)
   })
+  it.each([32 * 60, 60 * 60 - 1, 60 * 60])('bounds finalized-block age separately from read freshness at %i seconds', async age => {
+    const { result } = await read({ override: (_target, method, _params, normal) => method === 'eth_getBlockByNumber'
+      ? { ...(normal as Record<string, JsonValue>), timestamp: `0x${(now / 1000 - age).toString(16)}` } : normal })
+    expect(result.kind).toBe(age < 60 * 60 ? 'observed' : 'unavailable')
+    if (result.kind === 'observed') expect(result).toMatchObject({ observedAt: now, blockTimestamp: now - age * 1000 })
+  })
+
   it('opens an empty wallet without fabricating historical transfers', async () => {
     const external = fixture({ balance: 0n })
     const result = await readTreasuryChainObservation({ environment: 'production', address, now }, { rpc: external.rpc, targets })

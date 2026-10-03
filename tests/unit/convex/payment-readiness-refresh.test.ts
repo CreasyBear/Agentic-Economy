@@ -94,7 +94,7 @@ describe('payment readiness read-only refresh', () => {
     expect(snapshot).toMatchObject({ environment: 'sandbox', startedAt: NOW, completedAt: NOW, expiresAt: NOW + 20_000,
       configurationDigest: backendPaymentReadinessDigest(process.env), checks: {
         reference_rate: f.sources.reference_rate, commercial_policy: f.sources.commercial_policy, treasury: f.sources.treasury,
-        base_rpc: { kind: 'passed', validUntil: NOW + 580_000 },
+        base_rpc: { kind: 'passed', validUntil: NOW + 600_000 },
         cdp_custody: { kind: 'passed', validUntil: NOW + 600_000 },
         sanctions: { kind: 'failed', code: 'trm_tenant_contract_unavailable' },
       } })
@@ -190,6 +190,15 @@ describe('payment readiness read-only refresh', () => {
     expect(io.cdp).not.toHaveBeenCalled()
     expect(io.ledger).not.toHaveBeenCalled()
     expect(io.chain).not.toHaveBeenCalled()
+  })
+
+  it.each([32 * 60_000, 60 * 60_000 - 1_000, 60 * 60_000])('keeps source and finalized-block expiry independent at block age %i', async age => {
+    io.chain.mockResolvedValue({ kind: 'observed', blockTimestamp: NOW - age })
+    const f = actionFixture()
+    await refreshPaymentReadiness(f.ctx)
+    expect(f.snapshot().checks.base_rpc).toEqual(age < 60 * 60_000
+      ? { kind: 'passed', validUntil: Math.min(NOW + 10 * 60_000, NOW - age + 60 * 60_000) }
+      : { kind: 'failed', code: 'readiness_source_expired' })
   })
 
   it('probes the configured chain while custody is disabled and preserves the signing refusal', async () => {

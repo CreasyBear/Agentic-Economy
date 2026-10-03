@@ -3,6 +3,7 @@
 import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import { isRecord } from '@/modules/common/is-record'
+import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS } from '@/modules/money/treasury'
 import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import { cdpX402TreasuryConfigurationFromEnvironment, readCdpX402CustodyReadiness } from '@/modules/capability-supply/server'
 import { createFormanceContext, readFormanceConfiguration, readFormanceHealth } from '../formance/gateway'
@@ -52,7 +53,7 @@ export async function refreshPaymentReadiness(ctx: ActionCtx): Promise<RefreshRe
     web_configuration: web,
     formance,
     cdp_custody: cdp.kind === 'ready' ? { kind: 'passed', validUntil: expiresAt } : failed(cdp.code),
-    base_rpc: chain?.kind === 'observed' ? { kind: 'passed', validUntil: Math.min(expiresAt, chain.blockTimestamp + VALID_FOR_MS) }
+    base_rpc: chain?.kind === 'observed' ? { kind: 'passed', validUntil: Math.min(expiresAt, chain.blockTimestamp + TREASURY_FINALIZED_BLOCK_MAX_AGE_MS) }
       : failed(chain?.code ?? 'treasury_chain_configuration_invalid'),
     sanctions: screening.kind === 'deferred'
       ? { kind: 'deferred', policyRef: screening.policyRef, validUntil: expiresAt }

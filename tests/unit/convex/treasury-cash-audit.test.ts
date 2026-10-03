@@ -187,6 +187,23 @@ describe('independent treasury cash reconciliation behavior', () => {
     expect(reader).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { blockAge: 32 * 60_000, readAge: 2_000, expected: 'matched' },
+    { blockAge: 60 * 60_000 - 1, readAge: 2_000, expected: 'matched' },
+    { blockAge: 60 * 60_000, readAge: 2_000, expected: 'unavailable' },
+    { blockAge: 32 * 60_000, readAge: 20 * 60_000, expected: 'unavailable' },
+  ])('checks finalized-block age $blockAge and observation age $readAge independently', async ({ blockAge, readAge, expected }) => {
+    const opening = batch(undefined, '0')
+    opening.observation.blockTimestamp = NOW - blockAge
+    opening.observation.observedAt = NOW - readAge
+    const result = await auditTreasuryCash({ identity, snapshotAt: NOW,
+      progress: { kind: 'ready', identity, checkpoint: opening.observation.checkpoint,
+        blockTimestamp: opening.observation.blockTimestamp, bufferUnits: '0' },
+      batches: [opening], calls: [], attempts: [], reservations: [], transactions: [], ledger: ledger('0', '0', '0') })
+    expect(result.cash).toMatchObject(expected === 'matched' ? { kind: 'matched', differenceUnits: '0' }
+      : { kind: 'unavailable', code: 'treasury_chain_observation_stale' })
+  })
+
   it.each(['settled', 'paid-error'] as const)('matches exact Provider cash for %s, independently of buyer release', async mode => {
     const f = fixture(mode)
     const result = await auditTreasuryCash(f.input, f.reader)
