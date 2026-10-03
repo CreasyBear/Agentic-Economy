@@ -1,13 +1,21 @@
 import type {
-  SettingsDangerZoneProps, SettingsEmptyStateProps,
+  SettingsDangerZoneProps, SettingsEmptyStateProps, SettingsGroupProps, SettingsPageProps, SettingsRowProps,
 } from '../settings-section.contracts'
+import { SettingsPageGroup, SettingsPagePane, SettingsPageRow } from '@/components/arc/blocks/settings-page/settings-page'
 import '../SettingsComposition.css'
 
-export {
-  SettingsPagePane as SettingsPage,
-  SettingsPageGroup as SettingsGroup,
-  SettingsPageRow as SettingsRow,
-} from '@/components/arc/blocks/settings-page/settings-page'
+/** Every caller is a routed settings page; its pane owns the sole page heading. */
+export function SettingsPage(props: SettingsPageProps) {
+  return <SettingsPagePane {...props} headingLevel={1} />
+}
+
+export function SettingsGroup(props: SettingsGroupProps) {
+  return <SettingsPageGroup {...props} headingLevel={2} />
+}
+
+export function SettingsRow(props: SettingsRowProps) {
+  return <SettingsPageRow {...props} headingLevel={3} />
+}
 
 export function SettingsEmptyState({ title, description, action }: SettingsEmptyStateProps) {
   return <div className="arc-market ae-settings-empty-state">
@@ -19,7 +27,7 @@ export function SettingsEmptyState({ title, description, action }: SettingsEmpty
 export function SettingsDangerZone({ children, description }: SettingsDangerZoneProps) {
   return <section className="arc-market ae-settings-danger-zone">
     <header className="ae-settings-danger-header">
-      <h3>Danger zone</h3>
+      <h2>Danger zone</h2>
       {description && <p>{description}</p>}
     </header>
     <div className="ae-settings-danger-rows">{children}</div>

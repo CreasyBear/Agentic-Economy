@@ -1,16 +1,9 @@
-/* AE settings overview and product-specific empty/danger states.
+/* AE routed settings navigation and product-specific empty/danger states.
  * The licensed SettingsPage block owns the routed frame, panes, groups and rows.
  */
-.ae-settings-back { display: none; }
-.ae-settings-index { display: grid; min-width: 0; gap: 24px; }
-.ae-settings-index-links { margin: 12px 0 0; padding: 0; list-style: none; border-block: 1px solid var(--border-subtle); }
-.ae-settings-index-links > li + li { border-top: 1px solid var(--border-subtle); }
-.ae-settings-index-link { display: flex; min-width: 0; min-height: 44px; align-items: center; justify-content: space-between; gap: 16px; border-radius: var(--radius-control); padding: 8px 12px; color: var(--foreground); font-size: var(--text-sm); line-height: var(--leading-body); text-decoration: none; transition: background-color var(--duration-fast) var(--ease-standard); -webkit-tap-highlight-color: transparent; }
-.ae-settings-index-link > span { min-width: 0; overflow-wrap: anywhere; }
-.ae-settings-index-link > svg { width: 16px; height: 16px; flex: none; color: var(--text-muted); }
-@media (hover: hover) and (pointer: fine) { .ae-settings-index-link:hover { background: var(--surface-muted); } }
-.ae-settings-index-link:focus-visible, .ae-settings-back:focus-visible { background: var(--surface-muted); color: var(--foreground); outline: none; }
-.ae-settings-empty-copy > h3, .ae-settings-danger-header > h3 { margin: 0; font-size: var(--text-sm); font-weight: 500; line-height: 1.4; }
+.ae-settings-toolbar { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); color: var(--text-secondary); font-size: var(--text-sm); }
+.ae-settings-toolbar > button { max-width: 100%; }
+.ae-settings-empty-copy > h3, .ae-settings-danger-header > h2 { margin: 0; font-size: var(--text-sm); font-weight: 500; line-height: 1.4; }
 .ae-settings-empty-copy > p, .ae-settings-danger-header > p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); }
 .ae-settings-empty-state {
   display: flex;
@@ -59,7 +52,7 @@
   gap: var(--space-1);
 }
 
-.ae-settings-danger-header > h3 {
+.ae-settings-danger-header > h2 {
   color: var(--danger);
 }
 

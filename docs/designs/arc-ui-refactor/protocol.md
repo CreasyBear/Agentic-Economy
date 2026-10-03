@@ -4,6 +4,52 @@
 
 ## Progress counter
 
+### Settings route composition, 2026-10-03
+
+**12 / 12 settings destinations reviewed; 1 / 1 settings-family composition correction source-integrated. 28 / 28 bounded implementation units across four branch milestones.** These are implementation units, not a whole-app percentage. The broader route composition review and rendered acceptance remain open.
+
+Audience: people managing their Account and workspace. Job: change the relevant setting with minimal navigation. Primary action: the live page's existing save, invite, issue, download or inspection action. Data: existing workspace, Clerk, credential, connection, spending, receipt, tax, preference and security projections. Surface: authenticated product settings.
+
+The generic Settings directory and nested Settings heading were extraneous navigation: 11 visible links duplicated a menu before users reached a real setting. `/owner/settings` now replaces itself with Business profile. The real workspace name is available to buyer accounts without promoting an absent Provider profile. A closed section menu exposes 12 native destinations in five task groups: Workspace; Agents & Tools; Spending, billing & tax; Account preferences; Privacy & security. The last group contains Privacy, Sign-in security and Security activity. There is no Overview item or persistent settings sidebar. The global gear menu remains intact.
+
+| Destination | Region owner and user job | Existing states retained |
+| --- | --- | --- |
+| Business profile | Arc SettingsPage pane/group/row; real workspace identity first, actual Provider profile when applicable, offboarding at bottom | Workspace loading/read-only owner guard; explicit Provider unavailable state; existing rename revisions and guarded offboarding |
+| Team & roles | Arc TeamMembers invitation and searchable roster | Arc skeleton, empty roster, invite availability reason, existing async failure/success |
+| Agent keys | Arc ApiKeys directory plus existing issue/reveal/revoke controllers | Authoritative initial directory, refresh lock, guarded one-time reveal, dirty-draft exit and uncertain revoke recovery |
+| Provider connections | Arc Integrations directory/search/Drawer plus native inspection/payee-proof forms | Available/not-applicable/conflict/unavailable, missing hash target, exact authority and guarded commands |
+| Spending defaults | Arc pane/group/row around the existing monthly cap controller | Loading, authoritative limit, revision-protected save and failure |
+| Receipts & invoices | Arc UsageBillingInvoices history and actual record rows | Loading/empty/continuation, issued/rendering/retryable/refused documents, exact export/open/generate actions |
+| Tax | Arc pane/group/row with existing tax fields | Loading, native validation, revision/idempotency-protected save, retained dirty-navigation guard |
+| Profile | Arc pane with live Clerk profile content | Clerk routing, existing identity/session controls and native errors |
+| Notifications | Arc group/row with existing automatic preference updates | Disabled while loading/pending, existing success/error diagnostics; no second save bar |
+| Privacy | Arc pane/group/row and one native data download | Exact protected endpoint/download, included-data and JSON metadata; this is one action, not a duplicate |
+| Sign-in security | Arc SecuritySettings frame with live Clerk security controls | Nested/trailing-slash security paths remain Security; no sample MFA, password or session engine |
+| Security activity | Arc record table first, recovery checklist next, conditional Admin setup last | Current history/continuation/retry and independent recovery; existing bootstrap eligibility/MFA remain unchanged |
+
+**Requires:** inherited operator authorization, current route path, committed live content and existing caller-owned commands. **Ensures:** a real default form, one AE-owned h1, h2 setting groups and h3 field labels, all 12 exact destinations, specific security deep-link recognition and committed-heading focus. **Invariant:** presentation/navigation cannot save settings, grant authority, issue/revoke credentials, change money, enable payments or fabricate status. **On violation:** native loading/error/permission/retry states remain; stale headings cannot receive route focus, and a menu opened before focus settles keeps keyboard focus. Direct recovery links open Security, Agent keys or Provider connections and do not revoke anything.
+
+Source-only cognitive-load assessment: options remain recognizable in a labeled menu; no claim that 12 scanable links require remembering 12 items. Five job groups replace Account-first security clutter and the misleading Developers/Integrations grouping. The useful page appears without the extra directory decision. Gestalt source checks retain one Arc container, pane alignment, 24px region spacing and shared row geometry; removed the nested generic heading, directory dividers and hidden return link. Rendered salience, five-width geometry, themes and contrast remain deferred.
+
+Complexity decision: existing Arc block adds optional header/menu and heading-level ports; the existing settings facade supplies consistent h1/h2/h3 for its real callers. This replaces per-route heading edits or an extra context/state engine. The compact menu reuses the existing Base UI native-link engine and Arc Button; stock Arc DropdownMenu is a Radix command list and would change link semantics/add a dependency. Keep this controlled presentation boundary; no new files in production, dependencies, transport, schema or payment logic.
+
+Arc Pro page composition and live settings-page/settings-command/dropdown documentation were reviewed. A combined SettingsCommand save/search engine would duplicate distinct Clerk, automatic notification, tax and spending controllers; existing adapted blocks own their regions. All callbacks and record data remain real. Privacy's metadata row and Provider connection proof fields earn their place; the duplicate Security activity header action and Profile/Security local tabs were removed.
+
+Verification: `npm run check` passed; 143 focused tests in 17 files passed (settings, native menu keyboard/focus, default replacement/history, account deep routes, workspace/provider state, inherited shell). Arc checklist source sweeps and state/heading review completed; rendered layout/theme acceptance is deferred by Joel. Full release gate passed: 8,274 unit tests, 2,855 integration tests, 31 SEO proofs, 16 browser journeys and 18 accessibility checks; 18 authenticated/environment browser cases remain gated and were not run. `npm run build` passed, including syntax validation for 461 server modules. Changed-scope React Doctor is 93/100 with one workspace composition maintainability warning, no reported errors. Source inventory: 862 current fingerprints reconciled, 523 action sites (303 Arc Button, 123 Arc-styled native links, 51 native buttons, 29 legacy Button, 14 buttonVariants, 3 dormant AeSiteButton); no unresolved action imports.
+
+The next route-composition pass examines region order, repeated facts and the live user action as well as block imports. Settings coverage above is complete at the destination level; the following other families are source samples, not exhaustive route/state acceptance. The earlier full-block census remains the source-file replacement map.
+
+| Family | Current presentation evidence | Next composition decision |
+| --- | --- | --- |
+| Credit | Documents and Account history already use `AeRecordTable` / actual Arc SortableDataTable. `CreditAccountingPanel` still renders Reconciliation and Provider obligations as six-fact grids | First priority: separate compact Arc tables and current-record details for these two distinct record types. Preserve exact amounts, money meanings and existing guards. Account history has an independent transaction disclosure inside a cell; assess its row growth before replacing it, rather than treating native disclosure alone as a defect |
+| Tool market and detail | Actual ProductListing, SortableDataTable and ProductDetail regions. `PublicToolDetail` repeats the output contract in its gallery and Technical section; `DirectoryToolPage` similarly repeats the input schema | Give published examples and exact contracts distinct locations. They are explicitly labeled contracts today, not fabricated examples. Correct the admitted Tool's location copy when choosing one contract home. Price is already passed only to ProductDetail, not to its ToolFacts child; the suggested duplicate-price finding was rejected after checking props |
+| Activity | Arc records and existing period summaries; `AeActivity` shows scope/date above the filters and `ActivityMonthlySummary` repeats both | Give the selected scope/date one clear owner while retaining the summary's full-period coverage and incomplete-total explanation |
+| Call status and receipt | Recorded Arc stages, caller-owned recovery and real outcome facts. `CallStatusFoundView` repeats `statusDetail` in its page description and `CallSummarySection` when no separate issue description is present | Keep one primary outcome explanation. Preserve issue-specific recovery, delivery/payment/Purchase distinctions, exact evidence and uncertain-state commands |
+| Provider operations | Arc records and native guarded operation controls. `AeOwnerToolDetailPage` supplies the Tool name in the page title; `AeProviderToolDetail` repeats it as a Tool fact | Evaluate that identity repetition alongside the next full record-header composition; keep source health, publication, delivery and Qualified Use separate |
+| Chat | `ChatLayout`, Header, History, Transcript and Composer bind actual Arc AiChatFrame/Dock, Header, History, Message/EmptyStage and AiComposer | Review region order and state composition over those live presenters; the existing AE session/authority engine is not missing Arc presentation and must not be replaced with demo transport |
+| Admin, support and public pages | Sampled record pages use actual Arc PageHeader and SortableDataTable; FAQ and public hero regions use installed Arc blocks | Continue individual route/state composition review. Existing source adoption does not certify useful ordering, compactness or rendered acceptance |
+
+
 ### Compact documents and stable navigation, 2026-10-03
 
 **3 / 3 urgent correction units source-integrated; 27 / 27 across the three current branch milestones.** This counts bounded implementation units. The broad refactor and rendered acceptance remain open.

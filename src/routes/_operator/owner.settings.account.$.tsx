@@ -1,9 +1,9 @@
 import { UserProfile } from '@clerk/tanstack-react-start'
-import { Link, createFileRoute, redirect, useLocation } from '@tanstack/react-router'
+import { createFileRoute, redirect, useLocation } from '@tanstack/react-router'
 
 import { clerkEmbeddedProfileAppearance } from '@/components/ae/website/clerk-appearance'
 import { SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { SecuritySettings, SecuritySettingsNavigation } from '@/components/arc/blocks/security-settings/security-settings'
+import { SecuritySettings } from '@/components/arc/blocks/security-settings/security-settings'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/settings/account/$')({
@@ -23,12 +23,8 @@ export const Route = createFileRoute('/_operator/owner/settings/account/$')({
 })
 
 function OwnerAccountRoute() {
-  const security = useLocation().pathname === '/owner/settings/account/security'
-  const navigation = <SecuritySettingsNavigation
-    activePage={security ? 'security' : 'profile'}
-    profile={<Link to="/owner/settings/account/$" params={{ _splat: '' }} activeOptions={{ exact: true }} aria-current={security ? undefined : 'page'}>Profile</Link>}
-    security={<Link to="/owner/settings/account/$" params={{ _splat: 'security' }} activeOptions={{ exact: true }} aria-current={security ? 'page' : undefined}>Security</Link>}
-  />
+  const pathname = useLocation().pathname.replace(/\/$/u, '')
+  const security = pathname === '/owner/settings/account/security' || pathname.startsWith('/owner/settings/account/security/')
   const profile = (
     <UserProfile
       routing="path"
@@ -53,9 +49,8 @@ function OwnerAccountRoute() {
       <UserProfile.Page label="apiKeys" />
     </UserProfile>
   )
-  if (security) return <SecuritySettings navigation={navigation} content={profile} />
+  if (security) return <SecuritySettings content={profile} />
   return <SettingsPage title="Profile" description="Manage your identity and email.">
-    {navigation}
     <div className="min-w-0 max-w-full overflow-x-auto">{profile}</div>
   </SettingsPage>
 }

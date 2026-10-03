@@ -44,7 +44,7 @@ describe('account security history', () => {
     expect(screen.getByText(/Resetting MFA alone does not revoke existing sessions/u)).toBeTruthy()
     expect(screen.getByText(/Opening this checklist does not revoke access/u)).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Review' }).map((link) => link.getAttribute('href')))
-      .toEqual(['/owner/settings/account', '/owner/settings/agent-keys'])
+      .toEqual(['/owner/settings/account/security', '/owner/settings/agent-keys', '/owner/settings/integrations'])
     expect(screen.getByText(/Review wallet-control authority and its generation separately from Tool readiness\./u))
       .toBeTruthy()
     expect(screen.getByRole('link', { name: 'Contact support' }).getAttribute('href'))

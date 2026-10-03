@@ -22,7 +22,7 @@
   padding-bottom: var(--space-4);
 }
 
-.header h2 {
+.header h1 {
   margin: 0;
   font-family: var(--font-body);
   font-size: var(--text-base);

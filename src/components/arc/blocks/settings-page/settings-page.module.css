@@ -28,7 +28,7 @@
 .scroller { min-width: 0; padding: 24px 32px 32px; }
 .pane { display: grid; min-width: 0; gap: 24px; }
 .paneHead { display: flex; min-width: 0; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.paneHead h2 { margin: 0; font-family: var(--font-body); font-size: var(--text-lg); font-weight: 500; letter-spacing: -.01em; line-height: 1.4; outline: none; overflow-wrap: anywhere; }
+.paneHead :is(h1, h2) { margin: 0; font-family: var(--font-body); font-size: var(--text-lg); font-weight: 500; letter-spacing: -.01em; line-height: 1.4; outline: none; overflow-wrap: anywhere; }
 .paneHead p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; line-height: var(--leading-body); }
 .actions { display: flex; min-width: 0; max-width: 100%; flex-wrap: wrap; align-items: center; gap: 8px; }
 .group { min-width: 0; }
@@ -40,7 +40,7 @@
 .rows > * + * { border-top: 1px solid var(--border-subtle); }
 .row { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 24px; padding: 14px 0; }
 .rowText { min-width: 0; }
-.rowText h4 { margin: 0; font-size: 13px; font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
+.rowText :is(h3, h4) { margin: 0; font-size: 13px; font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
 .rowText p { margin: 2px 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: var(--leading-body); }
 .rowAction { min-width: 0; color: var(--foreground); font-size: 13px; text-align: right; }
 @container (max-width: 719px) {

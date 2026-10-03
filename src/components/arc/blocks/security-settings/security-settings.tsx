@@ -23,7 +23,7 @@ export function SecuritySettings({ content, navigation }: SecuritySettingsProps)
   const id = useId()
   return <section className={`arc-market ${styles.block}`} aria-labelledby={`${id}-title`}>
     <header className={styles.header}>
-      <h2 id={`${id}-title`}>Security</h2>
+      <h1 id={`${id}-title`}>Security</h1>
       <p>Manage your sign-in security.</p>
     </header>
     {navigation}
