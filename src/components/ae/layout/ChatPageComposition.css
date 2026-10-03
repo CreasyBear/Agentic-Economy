@@ -1,29 +1,15 @@
-/* Arc Pro ai-chat .main/.thread/.page/.sidebar/.sidebarInner geometry.
- * CSS SHA-256 9bb51b56ad4ba212ce43ffd3374e2f73f2311cf215a644ff30a78421c5709eeb.
- * AE keeps its existing main focus target, scroll owner, history controls,
- * consent/funding callbacks and shared-thread omission of the composer. */
-.arc-market.arc-chat-page { display: flex; min-height: 0; min-width: 0; flex: 1; flex-direction: column; overflow: hidden; background: var(--background); }
-.arc-market .arc-chat-page-main, .arc-market .arc-chat-page-content { display: flex; min-height: 0; min-width: 0; flex: 1; flex-direction: column; }
-.arc-market .arc-chat-page-content { overflow: hidden; }
-.arc-market.arc-chat-workspace { display: flex; min-height: 0; min-width: 0; flex: 1; overflow: hidden; background: var(--background); }
-.arc-market .arc-chat-sidebar { display: flex; min-height: 0; min-width: 0; height: 100%; width: 264px; flex: none; flex-direction: column; border-inline-end: 1px solid var(--border-subtle); background: color-mix(in oklch, var(--surface-muted) 55%, var(--surface)); color: var(--foreground); }
-.arc-market .arc-chat-sidebar[data-expanded="false"] { width: 52px; }
-.arc-market .arc-chat-sidebar-new { width: 44px; height: 44px; min-width: 44px; margin: var(--space-1); padding: 0; }
-.arc-market .arc-chat-sidebar-recovery { margin: var(--space-3); }
-.arc-market .arc-chat-live-main { position: relative; display: flex; min-height: 0; min-width: 0; flex: 1; flex-direction: column; overflow: hidden; }
-.arc-market .arc-chat-offline { padding: var(--space-3) var(--space-4) 0; }
-.arc-market .arc-chat-composer-dock { position: sticky; z-index: 10; inset-block-end: 0; width: 100%; flex: none; background: var(--background); padding-block-end: max(var(--space-4), env(safe-area-inset-bottom)); }
-.arc-market .arc-chat-composer-page { width: 100%; min-width: 0; max-width: 768px; margin-inline: auto; padding-inline: var(--space-6); }
-.arc-market .arc-chat-composer-slot { min-width: 0; }
-.arc-market .arc-chat-starters { margin-block-end: var(--space-3); }
-.arc-market .arc-chat-private { display: grid; width: 100%; min-width: 0; max-width: 60ch; gap: var(--space-4); margin-inline: auto; padding: var(--space-16) var(--space-6); color: var(--foreground); }
-.arc-market .arc-chat-private h1 { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 400; line-height: var(--leading-display); letter-spacing: var(--tracking-display); text-wrap: balance; }
-.arc-market .arc-chat-private p { margin: 0; color: var(--text-secondary); font-size: var(--text-base); line-height: 1.55; }
-.arc-market .arc-chat-private a { justify-self: start; }
-.arc-market .arc-chat-skeleton-header { display: flex; min-height: 56px; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-6); border-block-end: 1px solid var(--border-subtle); }
-.arc-market .arc-chat-skeleton-title { display: grid; min-width: 0; flex: 1; gap: var(--space-2); }
-.arc-market .arc-chat-skeleton-dock { padding: var(--space-3) var(--space-6) max(var(--space-4), env(safe-area-inset-bottom)); background: var(--background); }
-.arc-market .arc-chat-skeleton-dock > div { width: 100%; max-width: 720px; margin-inline: auto; }
-.arc-market .arc-chat-skeleton-content { display: grid; min-height: 0; min-width: 0; flex: 1; align-content: start; gap: var(--space-4); width: 100%; max-width: 768px; margin-inline: auto; padding: var(--space-6); }
-@media (max-width: 767px) { .arc-market .arc-chat-sidebar { display: none; } }
-@media (max-width: 559px) { .arc-market .arc-chat-composer-page { padding-inline: var(--space-4); } .arc-market .arc-chat-skeleton-header, .arc-market .arc-chat-skeleton-content, .arc-market .arc-chat-skeleton-dock { padding-inline: var(--space-4); } }
+/* Native offline/private admission states and loading placeholders. */
+.arc-chat-sidebar-recovery { margin: var(--space-3); }
+.arc-chat-live-main { position: relative; display: flex; min-height: 0; min-width: 0; flex: 1; flex-direction: column; overflow: hidden; }
+.arc-chat-offline { padding: var(--space-3) var(--space-4) 0; }
+.arc-chat-starters { margin-block-end: var(--space-3); }
+.arc-chat-private { display: grid; width: 100%; min-width: 0; max-width: 60ch; gap: var(--space-4); margin-inline: auto; padding: var(--space-16) var(--space-6); color: var(--foreground); }
+.arc-chat-private h1 { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 400; line-height: var(--leading-display); letter-spacing: var(--tracking-display); text-wrap: balance; }
+.arc-chat-private p { margin: 0; color: var(--text-secondary); font-size: var(--text-base); line-height: 1.55; }
+.arc-chat-private a { justify-self: start; }
+.arc-chat-skeleton-header { display: flex; min-height: 56px; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-6); border-block-end: 1px solid var(--border-subtle); }
+.arc-chat-skeleton-title { display: grid; min-width: 0; flex: 1; gap: var(--space-2); }
+.arc-chat-skeleton-dock { padding: var(--space-3) var(--space-6) max(var(--space-4), env(safe-area-inset-bottom)); background: var(--background); }
+.arc-chat-skeleton-dock > div { width: 100%; max-width: 720px; margin-inline: auto; }
+.arc-chat-skeleton-content { display: grid; min-height: 0; min-width: 0; flex: 1; align-content: start; gap: var(--space-4); width: 100%; max-width: 768px; margin-inline: auto; padding: var(--space-6); }
+@media (max-width: 559px) { .arc-chat-skeleton-header, .arc-chat-skeleton-content, .arc-chat-skeleton-dock { padding-inline: var(--space-4); } }

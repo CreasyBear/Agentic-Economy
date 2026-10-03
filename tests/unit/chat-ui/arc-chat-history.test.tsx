@@ -32,6 +32,14 @@ it('keeps cached private history usable during refresh and sends exact navigatio
   expect(screen.getByRole('button', { name: 'Weather procurement' })).toBeInTheDocument()
 })
 
+it('clears the supplied search through Arc and returns focus to the field', () => {
+  const onSearch = vi.fn()
+  render(<ChatHistory {...buildProps({ search: 'Sydney', onSearch })} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+  expect(onSearch).toHaveBeenCalledExactlyOnceWith('')
+  expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: chatHistory.searchLabel }))
+})
+
 it('keeps a rejected rename open with its committed title and permits an exact retry', async () => {
   const onRename = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
   render(<ChatHistory {...buildProps({ onRename })} />)

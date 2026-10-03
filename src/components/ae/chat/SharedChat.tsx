@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom'
 import { api } from '../../../../convex/_generated/api'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { ArcAiChatHeader } from '@/components/arc/blocks/ai-chat/ai-chat'
 import { Button } from '@/components/arc/button/button'
 import './SharedChatComposition.css'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -62,16 +63,9 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
   const messages = [...olderMessages, ...baseMessages]
   const slot = useChatHeaderSlot()
   const title = initial?.title ?? chatShared.fallbackTitle
-  const sharedBar = (
-    <div className="arc-market arc-chat arc-shared-bar">
-      <LockKeyholeIcon aria-hidden="true" className="arc-shared-lock" />
-      <div className="arc-shared-title-group">
-        <h1 className="arc-shared-title" title={title}>{title}</h1>
-        <p className={slot === null ? 'arc-shared-description' : 'sr-only'}>{chatShared.detail}</p>
-      </div>
-      <span className="arc-shared-read-only">{chatShared.badge}</span>
-    </div>
-  )
+  const sharedBar = <ArcAiChatHeader title={title} description={chatShared.detail}
+    leading={<LockKeyholeIcon aria-hidden="true" size={18} />} actions={null}
+    notice={<span>{chatShared.badge}</span>} />
 
   async function onLoadMore() {
     if (continueCursor === undefined || loadingMore) return

@@ -57,9 +57,9 @@ describe('generative chat leaves', () => {
   it('keeps real work collapsed until expanded', () => {
     render(<WorkDisclosure view={{ summary: 'Searched 12 tools · compared 2', steps: [{ id: 'search', label: 'Searched tools', status: 'complete' }] }} />)
     expect(screen.getByText(/Searched 12 tools/)).toBeInTheDocument()
-    expect(screen.getByText('Searched tools').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByRole('button', { name: /Searched 12 tools/ })).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(screen.getByText(/Searched 12 tools/))
-    expect(screen.getByText('Searched tools').closest('details')).toHaveAttribute('open')
+    expect(screen.getByRole('button', { name: /Searched 12 tools/ })).toHaveAttribute('aria-expanded', 'true')
   })
   it('updates the real work rail without inventing execution, time, or approval events', () => {
     const { rerender } = render(<WorkDisclosure view={{ summary: 'Finding Tools', steps: [{ id: 'search', label: 'Registry search', status: 'working' }] }} />)

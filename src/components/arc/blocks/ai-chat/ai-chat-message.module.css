@@ -1,0 +1,12 @@
+/* Retrieved upstream source SHA-256: 9a9faf3d3088b21e2a5fbc1f7124bbd930917381332d4dfbc04248e382e4b05f */
+/* Actual AI Chat messageItem/user/bubble/bubbleText/assistant/answer regions. */
+.messageItem { display: flex; min-width: 0; width: 100%; flex-direction: column; }
+.messageItem[data-role="user"] { align-items: flex-end; }
+.user { display: grid; max-width: min(85%, 540px); min-width: 0; justify-items: end; gap: 6px; }
+.bubble { position: relative; max-width: 100%; min-width: 0; padding: 10px 16px; overflow: hidden; border-radius: 20px; background: color-mix(in oklch, var(--accent) 11%, var(--surface)); color: var(--foreground); font-size: var(--text-base); }
+.bubbleText { margin: 0; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.assistant { display: grid; width: 100%; min-width: 0; gap: 6px; }
+.answer { display: grid; min-width: 0; gap: 12px; }
+
+.transcript { display: grid; width: 100%; min-width: 0; max-width: 768px; align-content: start; gap: 28px; margin: 0 auto; padding: 8px 24px 32px; }
+@media (max-width: 559px) { .transcript { padding-inline: 16px; } }

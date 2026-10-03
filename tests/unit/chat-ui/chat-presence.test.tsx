@@ -118,8 +118,11 @@ describe('ChatHistory first-load gate', () => {
         .map((createdAt, index) => ({ threadId: `thread-${index}`, title: `Chat ${index}`, createdAt, busy: false }))}
       onSearch={() => undefined} onOpen={() => undefined} onRename={async () => true}
       onDelete={async () => true} onNewChat={() => undefined} />)
-    expect(screen.getAllByRole('listitem').map(section => section.textContent))
-      .toEqual(['TodayChat 0', 'YesterdayChat 1', 'Previous 7 daysChat 2', 'Previous 30 daysChat 3', 'OlderChat 4'])
+    expect(screen.getAllByRole('listitem').map(row => row.querySelector('button')?.textContent))
+      .toEqual(['Chat 0', 'Chat 1', 'Chat 2', 'Chat 3', 'Chat 4'])
+    for (const [index, label] of ['Today', 'Yesterday', 'Previous 7 days', 'Previous 30 days', 'Older'].entries()) {
+      expect(screen.getByText(label).parentElement?.querySelector('ul')?.textContent).toBe('Chat ' + index)
+    }
   })
 })
 
@@ -180,7 +183,7 @@ describe('ChatTranscript first-page gate', () => {
       }]}
     />)
 
-    expect(document.querySelector('article[aria-label="Assistant"] details:not([open]) > summary')).not.toBeNull()
+    expect(document.querySelector('article[aria-label="Assistant"] button[aria-expanded="false"]')).not.toBeNull()
     expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeNull()
     expect(screen.queryByText('Thinking…')).toBeNull()
   })
@@ -207,7 +210,7 @@ describe('ChatTranscript first-page gate', () => {
 
     const answer = screen.getByRole('region', { name: 'Answer' })
     const before = screen.getByText('Before the search.')
-    const tool = document.querySelector('article[aria-label="Assistant"] details > summary')
+    const tool = document.querySelector('article[aria-label="Assistant"] button[aria-expanded]')
     const after = screen.getByText('After the search.')
     if (tool === null) throw new Error('Work disclosure missing')
     expect(answer.contains(before)).toBe(true)

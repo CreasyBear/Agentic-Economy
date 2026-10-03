@@ -1,0 +1,5 @@
+/* Native async rename/confirmed deletion controls in Arc history rows. */
+.arc-chat-history-edit { width: 100%; min-width: 0; padding: 8px 10px; }
+.arc-chat-history-confirm { display: grid; width: 100%; min-width: 0; gap: 8px; padding: 10px; color: var(--foreground); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.arc-chat-history-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.arc-chat-history-loading-row { padding: 12px 10px; }
