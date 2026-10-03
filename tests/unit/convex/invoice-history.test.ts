@@ -39,7 +39,7 @@ type OwnerInvoiceHistoryRow = Readonly<{
   hasPaymentReceipt: boolean
   taxInvoice: Readonly<
     | { kind: 'issued'; documentRef: string }
-    | { kind: 'withheld'; reason: 'customer_tax_facts_missing' | 'policy_disabled' }
+    | { kind: 'withheld'; reason: string }
   >
 }>
 
@@ -361,7 +361,7 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
     ])
   })
 
-  it('H4: listOwnerInvoiceHistory includes issued tax invoice documentRef when tax_invoice exists', async () => {
+  it('H4: listOwnerInvoiceHistory refuses an issued label without a valid snapshot and canonical files', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     const appliedTransactionRef = 'formance:tx:h4:issued'
@@ -374,17 +374,17 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
       paymentId: 'pi_h4_issued',
       appliedTransactionRef,
     })
-    const documentRef = await insertIssuedTaxInvoice(backend, appliedTransactionRef)
+    await insertIssuedTaxInvoice(backend, appliedTransactionRef)
 
     const result = await listOwnerInvoiceHistory(backend)
 
     expect(result.page[0]?.taxInvoice).toEqual({
-      kind: 'issued',
-      documentRef,
+      kind: 'withheld',
+      reason: 'document_integrity_failed',
     })
   })
 
-  it('H5: listOwnerInvoiceHistory withholds tax invoice when customer tax facts are missing', async () => {
+  it('H5: current approval cannot replace missing historical payment evidence', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await enableSandboxTaxInvoicePolicy(backend)
@@ -402,11 +402,11 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
 
     expect(result.page[0]?.taxInvoice).toEqual({
       kind: 'withheld',
-      reason: 'customer_tax_facts_missing',
+      reason: 'source_event_unconfirmed',
     })
   })
 
-  it('H6: listOwnerInvoiceHistory withholds tax invoice when commercial policy disables issuance', async () => {
+  it('H6: buyer tax facts cannot replace missing historical payment evidence', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedCustomerTaxFacts(backend)
@@ -424,7 +424,7 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
 
     expect(result.page[0]?.taxInvoice).toEqual({
       kind: 'withheld',
-      reason: 'policy_disabled',
+      reason: 'source_event_unconfirmed',
     })
   })
 

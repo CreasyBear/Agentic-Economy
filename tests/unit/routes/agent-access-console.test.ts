@@ -53,6 +53,7 @@ describe('owner Agent projection', () => {
     const credentials: readonly AgentCredentialSource[] = []
     const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
     expect(directory.items).toHaveLength(1)
+    expect(directory.items[0]?.usage).toEqual(owner.usage)
     expect(directory.details[0]).toMatchObject({ activity: [call], usage: owner.usage, dataState: 'source', activityTruncated: true })
     expect(directory.details[0]?.credentials).toEqual(expect.arrayContaining([expect.objectContaining({ credentialRef: 'credential:key:one' })]))
     expect(directory.details[0]).not.toHaveProperty('account')

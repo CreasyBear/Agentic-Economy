@@ -26,10 +26,14 @@ export const callValue = v.object({
 
 export const MAX_USAGE_ROWS = 10_000
 
-export function validUsagePeriod(periodStartAt: number, periodEndAt: number): boolean {
+export function validCallHistoryPeriod(periodStartAt: number, periodEndAt: number): boolean {
   return Number.isSafeInteger(periodStartAt)
     && Number.isSafeInteger(periodEndAt)
     && periodStartAt >= 0
     && periodEndAt > periodStartAt
+}
+
+export function validUsagePeriod(periodStartAt: number, periodEndAt: number): boolean {
+  return validCallHistoryPeriod(periodStartAt, periodEndAt)
     && periodEndAt - periodStartAt <= 366 * 24 * 60 * 60 * 1_000
 }

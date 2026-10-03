@@ -750,7 +750,9 @@ describe('direct Quote handlers', () => {
       const tax = await ctx.db.query('moneyCommercialPolicies')
         .withIndex('by_policyRef', q => q.eq('policyRef', `commercial-policy:quote:${suffix}:tax:1`)).unique()
       if (tax === null) throw new Error('tax_policy_missing')
-      await ctx.db.patch(tax._id, { control: { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax, callTaxBps: 1000 } })
+      // Drift a production-valid control so the prepared snapshot, rather than
+      // the commercial policy gate, is the reason the Quote is refused.
+      await ctx.db.patch(tax._id, { control: { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax, serviceFeeTaxBps: 900 } })
     })
     expect(await backend.mutation(internal.capabilityQuotes.issueQuote, {
       operationKey: `test:quote:policy-drift:${suffix}`, correlationId: `test:quote:policy-drift:${suffix}`,

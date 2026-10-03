@@ -10,6 +10,7 @@ import type { Id } from './_generated/dataModel'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
+import { formatAbnDisplay, formatExactAmount, parseTaxDocumentSnapshot, type TaxDocumentSnapshot } from '../src/modules/money/public'
 
 type RenderDocument = Readonly<{
   documentRef: string
@@ -120,6 +121,110 @@ function renderCsv(rows: DisplayRow[]): string {
   return ['field,value', ...rows.map(([label, value]) => `${safeCsvCell(label)},${safeCsvCell(value)}`)].join('\r\n') + '\r\n'
 }
 
+function invoiceAud(units: string): string {
+  const formatted = formatExactAmount({ currency: 'AUD', exponent: 2, units: (BigInt(units) / 10_000n).toString() })
+  if (formatted === undefined) throw new Error('tax_invoice_amount_invalid')
+  return `A$${formatted}`
+}
+
+const invoiceDate = (value: number) => new Date(value).toISOString().slice(0, 10)
+
+function taxDocumentRows(snapshot: TaxDocumentSnapshot): DisplayRow[] {
+  const rows: DisplayRow[] = [
+    ['Document', snapshot.kind === 'tax_invoice' ? 'Tax invoice' : 'Adjustment note'],
+    ['Document number', snapshot.documentNumber], ['Date issued (UTC)', invoiceDate(snapshot.issuedAt)],
+    ['Seller', snapshot.seller.legalName], ['Seller ABN', formatAbnDisplay(snapshot.seller.abn)],
+  ]
+  if (snapshot.customer.kind === 'identified') {
+    if (snapshot.customer.legalName !== null) rows.push(['Customer', snapshot.customer.legalName])
+    if (snapshot.customer.abn !== null) rows.push(['Customer ABN', formatAbnDisplay(snapshot.customer.abn)])
+    if (snapshot.customer.addressLines.length > 0) rows.push(['Customer address', snapshot.customer.addressLines.join(', ')])
+  }
+  rows.push(['Currency', 'AUD'], ['Supply', snapshot.supply.description], ['Quantity', '1'],
+    ['Account credit (excluding GST)', invoiceAud(snapshot.supply.principalUnits)],
+    ['Service fee (excluding GST)', invoiceAud(snapshot.supply.serviceFeeUnits)],
+    ['Subtotal (excluding GST)', invoiceAud(snapshot.supply.netUnits)], ['GST rate', '10%'],
+    ['GST', invoiceAud(snapshot.supply.gstUnits)], ['Total (including GST)', invoiceAud(snapshot.supply.totalUnits)],
+    ['Date paid (UTC)', invoiceDate(snapshot.source.occurredAt)], ['Funding reference', snapshot.source.commandRef])
+  if (snapshot.kind === 'adjustment') rows.push(
+    ['Original invoice', snapshot.original.documentNumber], ['Original invoice date (UTC)', invoiceDate(snapshot.original.issuedAt)],
+    ['Adjustment reason', snapshot.refund.reason], ['Effect', 'Credit to customer; decrease in price and GST'],
+    ['Price decrease (including GST)', invoiceAud(snapshot.supply.totalUnits)],
+    ['GST decrease', invoiceAud(snapshot.supply.gstUnits)], ['Price after full refund', 'A$0.00'],
+    ['Date refunded (UTC)', invoiceDate(snapshot.refund.occurredAt)], ['Refund reference', snapshot.refund.refundRef],
+  )
+  return rows
+}
+
+function renderTaxHtml(snapshot: TaxDocumentSnapshot): string {
+  const h = createElement
+  const adjustment = snapshot.kind === 'adjustment'
+  const title = adjustment ? 'Adjustment note' : 'Tax invoice'
+  const amount = (units: string) => `${adjustment ? '−' : ''}${invoiceAud(units)}`
+  const customer = snapshot.customer
+  const markup = renderToStaticMarkup(h('html', { lang: 'en-AU' },
+    h('head', null, h('meta', { charSet: 'utf-8' }), h('meta', { name: 'viewport', content: 'width=device-width,initial-scale=1' }),
+      h('title', null, `${title} ${snapshot.documentNumber}`),
+      h('style', null, 'body{font:15px/1.5 system-ui,sans-serif;color:#171717;max-width:900px;margin:48px auto;padding:0 24px}header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #171717;padding-bottom:24px}h1{font-size:30px;line-height:1.2;margin:0 0 12px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#555;margin:0 0 8px}p{margin:4px 0}.muted{color:#666;font-size:13px}.number{overflow-wrap:anywhere;max-width:410px}.parties{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin:32px 0}.items-scroll{max-width:100%;overflow-x:auto;margin:24px 0}.items-scroll:focus-visible{outline:2px solid #171717;outline-offset:4px}.scroll-hint{display:none}.items{border-collapse:collapse;width:100%}.items th,.items td{padding:12px 8px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}.items .amount{text-align:right;white-space:nowrap}.totals{margin-left:auto;max-width:340px}.total span:last-child{white-space:nowrap}.total{display:flex;justify-content:space-between;gap:24px;padding:6px 0}.grand{font-size:20px;font-weight:700;border-top:2px solid #171717;margin-top:8px;padding-top:12px}.evidence{border-top:1px solid #ddd;margin-top:32px;padding-top:16px;overflow-wrap:anywhere}@media screen and (max-width:620px){header{display:block}.parties{grid-template-columns:1fr}.items{font-size:13px;min-width:620px}.items th,.items td{padding:10px 8px}.items th:nth-child(2),.items td:nth-child(2){white-space:nowrap}.scroll-hint{display:block}.items-scroll{margin-top:8px}}@media print{body{max-width:none;margin:0;padding:0;font-size:11pt}.print-help,.scroll-hint{display:none}.items-scroll{overflow:visible}.items tr,.parties,.totals{break-inside:avoid}a{color:inherit;text-decoration:none}@page{size:A4;margin:18mm}}'),
+    ),
+    h('body', null,
+      h('header', null,
+        h('div', null, h('h1', null, title), h('p', { className: 'number' }, snapshot.documentNumber),
+          h('p', { className: 'muted' }, `Date issued: ${invoiceDate(snapshot.issuedAt)} (UTC)`)),
+        h('div', null, h('strong', null, 'Agentic Economy'), h('p', { className: 'muted' }, adjustment ? 'Full refund' : 'Payment received')),
+      ),
+      h('section', { className: 'parties' },
+        h('div', null, h('h2', null, 'From'), h('p', null, snapshot.seller.legalName), h('p', null, `ABN ${formatAbnDisplay(snapshot.seller.abn)}`)),
+        h('div', null, h('h2', null, 'Bill to'), customer.kind === 'identified'
+          ? h('div', null, customer.legalName === null ? null : h('p', null, customer.legalName),
+            customer.abn === null ? null : h('p', null, `ABN ${formatAbnDisplay(customer.abn)}`),
+            ...customer.addressLines.map((line, index) => h('p', { key: index }, line)))
+          : h('p', { className: 'muted' }, 'Account customer — identity not recorded on this invoice')),
+      ),
+      adjustment ? h('section', null, h('p', null, `Original invoice: ${snapshot.original.documentNumber}`),
+        h('p', { className: 'muted' }, `Issued ${invoiceDate(snapshot.original.issuedAt)} (UTC). ${snapshot.refund.reason}.`)) : null,
+      h('p', { className: 'scroll-hint muted', id: 'items-scroll-help' }, 'Scroll the item table horizontally to see every amount.'),
+      h('div', { className: 'items-scroll', role: 'region', tabIndex: 0, 'aria-label': 'Invoice item amounts', 'aria-describedby': 'items-scroll-help' },
+      h('table', { className: 'items' },
+        h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Description'), h('th', { scope: 'col' }, 'Qty'),
+          h('th', { scope: 'col', className: 'amount' }, 'Excl. GST'), h('th', { scope: 'col', className: 'amount' }, 'GST'), h('th', { scope: 'col', className: 'amount' }, 'Total AUD'))),
+        h('tbody', null, h('tr', null,
+          h('td', null, snapshot.supply.description,
+            h('p', { className: 'muted' }, `Account credit ${invoiceAud(snapshot.supply.principalUnits)} + service fee ${invoiceAud(snapshot.supply.serviceFeeUnits)}, excluding GST.`)),
+          h('td', null, '1'), h('td', { className: 'amount' }, amount(snapshot.supply.netUnits)),
+          h('td', { className: 'amount' }, `${amount(snapshot.supply.gstUnits)} (10%)`), h('td', { className: 'amount' }, amount(snapshot.supply.totalUnits)))),
+      )),
+      h('section', { className: 'totals' },
+        h('div', { className: 'total' }, h('span', null, 'Subtotal'), h('span', null, amount(snapshot.supply.netUnits))),
+        h('div', { className: 'total' }, h('span', null, 'GST'), h('span', null, amount(snapshot.supply.gstUnits))),
+        h('div', { className: 'total grand' }, h('span', null, adjustment ? 'Total credit' : 'Total paid'), h('span', null, amount(snapshot.supply.totalUnits))),
+        adjustment ? h('p', { className: 'muted' }, 'Price and GST reduced in full. Price after refund: A$0.00.') : null,
+      ),
+      h('section', { className: 'evidence muted' },
+        h('p', null, `Payment recorded ${invoiceDate(snapshot.source.occurredAt)} (UTC).`),
+        adjustment ? h('p', null, `Refund recorded ${invoiceDate(snapshot.refund.occurredAt)} (UTC). Reference: ${snapshot.refund.refundRef}`) : null,
+        h('p', null, `Funding reference: ${snapshot.source.commandRef}`),
+        h('p', null, 'GST is recorded on this top-up. Subsequent use of this credit is reported separately.'),
+        h('p', { className: 'print-help' }, 'Use your browser’s Print command to print or save a PDF copy.'),
+      ),
+    ),
+  ))
+  return `<!doctype html>${markup}`
+}
+
+function renderContents(document: RenderDocument): { html: string; csv: string } {
+  const input: unknown = JSON.parse(document.renderInputJson)
+  if (isRecord(input) && input.format === 'ae.tax-document:v1') {
+    const snapshot = parseTaxDocumentSnapshot(input)
+    if (snapshot === undefined || snapshot.documentRef !== document.documentRef
+      || canonicalDigest(snapshot) !== document.renderInputDigest) throw new Error('tax_invoice_snapshot_invalid')
+    return { html: renderTaxHtml(snapshot), csv: renderCsv(taxDocumentRows(snapshot)) }
+  }
+  if (isRecord(input) && input.kind === 'tax_invoice') throw new Error('tax_invoice_snapshot_unsupported')
+  const { title, rows } = displayRows(document)
+  return { html: renderHtml(document, title, rows), csv: renderCsv(rows) }
+}
+
 /** Requires IDs proven unattached by this attempt. Cleanup failure must never
  * turn a confirmed canonical attachment into a failed render. */
 async function deleteUnattachedFiles(ctx: ActionCtx, fileIds: readonly Id<'_storage'>[]): Promise<void> {
@@ -141,9 +246,7 @@ async function renderAndAttach(
     return { kind: 'available' as const, fileId: document.fileId }
   }
   if (document.state !== 'rendering') throw new Error('money_document_attachment_incomplete')
-  const { title, rows } = displayRows(document)
-  const html = renderHtml(document, title, rows)
-  const csv = renderCsv(rows)
+  const { html, csv } = renderContents(document)
   const fileDigest = canonicalDigest(html)
   const csvFileDigest = canonicalDigest(csv)
   let fileId: Id<'_storage'> | undefined

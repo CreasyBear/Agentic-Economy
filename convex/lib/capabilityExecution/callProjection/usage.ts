@@ -2,6 +2,7 @@ import { v, type ObjectType } from 'convex/values'
 import type { QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { MAX_USAGE_ROWS, validUsagePeriod } from './contracts'
+import { settledChargeSummary } from './ownerAgentReadback'
 
 const dimensionKind = v.union(
   v.literal('account'),
@@ -21,6 +22,8 @@ const usageResult = v.union(
     callCountUnits: v.string(),
     completedCountUnits: v.string(),
     outcomeUnknownCountUnits: v.string(),
+    settledSpendUnits: v.optional(v.string()),
+    amountCoverage: v.union(v.literal('complete'), v.literal('incomplete')),
     updatedAt: v.number(),
     source: v.literal('convex_call_evidence'),
   }),
@@ -112,6 +115,7 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
     callCountUnits: BigInt(rows.length).toString(),
     completedCountUnits: completed.toString(),
     outcomeUnknownCountUnits: outcomeUnknown.toString(),
+    ...settledChargeSummary(rows),
     updatedAt,
     source: 'convex_call_evidence' as const,
   }

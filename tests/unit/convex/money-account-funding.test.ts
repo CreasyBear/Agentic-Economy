@@ -28,6 +28,7 @@ import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-
 import { CUSTOMER_REQUEST_READ_ONLY_SCOPE, MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { ConvexFixtureBackend } from '../../helpers/convex-fixtures'
 import { evaluateCommercialPolicyGate } from '@/modules/money/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const reserve = anyApi.moneyAccountFunding?.reserve
 const bind = anyApi.moneyAccountFunding?.bind
@@ -441,8 +442,34 @@ describe('Account AUD funding through Formance', () => {
     )).resolves.toEqual({
       kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef,
     })
-    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
-    await backend.finishInProgressScheduledFunctions()
+    const queued = await fundingRows(backend, commandRef)
+    expectFundingDocumentsForTransaction(queued.documents, formanceTransactionRef)
+    expect(new Set(queued.documents.map(document => document.workId)).size).toBe(2)
+    for (const document of queued.documents) {
+      expect(document.state).toBe('rendering')
+      if (document.workId === undefined) throw new Error('funding_document_work_missing')
+      const workId = document.workId
+      await expect(backend.run(ctx => ctx.runQuery(components.workpool.lib.status, { id: workId })))
+        .resolves.toEqual({ state: 'pending', previousAttempts: 0 })
+    }
+    // convex-test's blob hashing yields while unrelated Workpool transactions
+    // close its shared storage transaction. Await real first renders before
+    // advancing timers, then prove scheduled delivery replays their actual files.
+    for (const document of queued.documents) {
+      await backend.action(internal.moneyDocumentRender.renderQueuedDocument, { documentRef: document.documentRef })
+    }
+    const rendered = await fundingRows(backend, commandRef)
+    // Await each timer boundary's actions before advancing to a later recovery
+    // deadline; a 1ms finishAllScheduledFunctions pump can stop with future work.
+    for (let turn = 0; turn < 100 && vi.getTimerCount() > 0; turn += 1) {
+      await vi.advanceTimersToNextTimerAsync()
+      await backend.finishInProgressScheduledFunctions()
+    }
+    expect(vi.getTimerCount()).toBe(0)
+    const scheduled = await backend.run(ctx => ctx.db.system.query('_scheduled_functions').collect())
+    expect(scheduled).toEqual(expect.arrayContaining([expect.objectContaining({
+      name: 'moneyDocuments:issueFundingTaxInvoice', state: { kind: 'success' },
+    })]))
     const rows = await fundingRows(backend, commandRef)
     expect(rows).toMatchObject({
       command: { state: 'succeeded', appliedTransactionRef: formanceTransactionRef },
@@ -455,11 +482,22 @@ describe('Account AUD funding through Formance', () => {
     expect(rows.documents).toHaveLength(2)
     for (const document of rows.documents) {
       expect(document.state).toBe('issued')
-      if (document.fileId === undefined) throw new Error('funding_document_file_missing')
-      const fileId = document.fileId
-      const html = await backend.run(async (ctx) => (await ctx.storage.get(fileId))?.text())
+      expect(document).toEqual(rendered.documents.find(first => first.documentRef === document.documentRef))
+      if (document.fileId === undefined || document.csvFileId === undefined || document.workId === undefined) {
+        throw new Error('funding_document_file_or_work_missing')
+      }
+      const { fileId, csvFileId, workId } = document
+      await expect(backend.run(ctx => ctx.runQuery(components.workpool.lib.status, { id: workId })))
+        .resolves.toEqual({ state: 'finished' })
+      const [html, csv] = await backend.run(async ctx => await Promise.all([fileId, csvFileId]
+        .map(async id => (await ctx.storage.get(id))?.text() ?? null)))
+      if (html === null || html === undefined || csv === null || csv === undefined) throw new Error('funding_document_bytes_missing')
+      expect(canonicalDigest(html)).toBe(document.fileDigest)
+      expect(canonicalDigest(csv)).toBe(document.csvFileDigest)
       expect(html).toContain(`<td>${document.amountUnits}</td>`)
       expect(html).toContain(formanceTransactionRef)
+      expect(csv).toContain(document.amountUnits)
+      expect(csv).toContain(formanceTransactionRef)
     }
   })
 

@@ -69,7 +69,8 @@ export function ActivityCallQueue({
       },
       {
         id: 'duration',
-        accessorFn: (item) => item.durationLabel,
+        accessorFn: (item) => item.latencyMs,
+        sortUndefined: 'last',
         header: ({ column }) => <AeOperatorSortableHeader label="Time to outcome" column={column} />,
         cell: ({ row }) => (
           <span className="arc-activity-number">
@@ -79,7 +80,13 @@ export function ActivityCallQueue({
       },
       {
         id: 'amount',
-        accessorFn: (item) => item.amountLabel,
+        accessorFn: (item) => item.amountUnits,
+        sortUndefined: 'last',
+        sortingFn: (left, right) => {
+          const a = BigInt(left.original.amountUnits ?? '0')
+          const b = BigInt(right.original.amountUnits ?? '0')
+          return a < b ? -1 : a > b ? 1 : 0
+        },
         header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
         cell: ({ row }) => (
           <span className="arc-activity-number arc-activity-amount">
@@ -90,7 +97,7 @@ export function ActivityCallQueue({
       {
         id: 'status',
         accessorFn: (item) => item.stateBadge.label,
-        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+        header: ({ column }) => <AeOperatorSortableHeader label="Call status" column={column} />,
         cell: ({ row }) => <ActivityBadge badge={row.original.stateBadge} />,
       },
       {
@@ -108,10 +115,10 @@ export function ActivityCallQueue({
       },
       {
         id: 'when',
-        accessorKey: 'whenLabel',
+        accessorKey: 'createdAt',
         header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
         cell: ({ row }) => (
-          <time className="arc-activity-number">
+          <time className="arc-activity-number" dateTime={new Date(row.original.createdAt).toISOString()}>
             {row.original.whenLabel}
           </time>
         ),

@@ -46,7 +46,13 @@ export const readOwnerAgentReadbackResult = ownerAgentReadback
 
 type ProjectedPaymentState = 'settled' | 'released' | 'unknown' | 'not_applicable'
 
-function settledChargeSummary(rows: readonly Readonly<{
+/** Requires recorded Call, delivery and payment facts. Ensures an exact sum only
+ * when every charge is known: releases and terminal no-delivery refusals count zero.
+ * Invariant: absent account receipts on completed or uncertain Calls never prove zero.
+ * On missing or contradictory evidence preserve incomplete coverage and omit the sum. */
+export function settledChargeSummary(rows: readonly Readonly<{
+  state: 'completed' | 'refused' | 'outcome_unknown'
+  deliveryState: 'delivered' | 'not_delivered' | 'unknown'
   paymentState: ProjectedPaymentState
   audAmountUnits?: string
 }>[]): Readonly<{
@@ -57,6 +63,7 @@ function settledChargeSummary(rows: readonly Readonly<{
   let amountCoverage: 'complete' | 'incomplete' = 'complete'
   for (const row of rows) {
     if (row.paymentState === 'released') continue
+    if (row.paymentState === 'not_applicable' && row.state === 'refused' && row.deliveryState === 'not_delivered') continue
     if (row.paymentState !== 'settled') {
       amountCoverage = 'incomplete'
       continue
@@ -79,6 +86,7 @@ function projectOwnerAgentUsage(
   periodEndAt: number,
   rows: readonly Readonly<{
     state: 'completed' | 'refused' | 'outcome_unknown'
+    deliveryState: 'delivered' | 'not_delivered' | 'unknown'
     paymentState: ProjectedPaymentState
     audAmountUnits?: string
     updatedAt: number

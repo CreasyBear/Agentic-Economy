@@ -489,6 +489,7 @@ import type * as lib_money_documents_signing from "../lib/money/documents/signin
 import type * as lib_money_documents_statement from "../lib/money/documents/statement.js";
 import type * as lib_money_documents_statementFinalization from "../lib/money/documents/statementFinalization.js";
 import type * as lib_money_documents_statementPage from "../lib/money/documents/statementPage.js";
+import type * as lib_money_documents_taxInvoices from "../lib/money/documents/taxInvoices.js";
 import type * as lib_money_documents_workpool from "../lib/money/documents/workpool.js";
 import type * as lib_money_earnings_providerEarnings from "../lib/money/earnings/providerEarnings.js";
 import type * as lib_money_formance_contracts from "../lib/money/formance/contracts.js";
@@ -1222,6 +1223,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/documents/statement": typeof lib_money_documents_statement;
   "lib/money/documents/statementFinalization": typeof lib_money_documents_statementFinalization;
   "lib/money/documents/statementPage": typeof lib_money_documents_statementPage;
+  "lib/money/documents/taxInvoices": typeof lib_money_documents_taxInvoices;
   "lib/money/documents/workpool": typeof lib_money_documents_workpool;
   "lib/money/earnings/providerEarnings": typeof lib_money_earnings_providerEarnings;
   "lib/money/formance/contracts": typeof lib_money_formance_contracts;

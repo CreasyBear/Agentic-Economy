@@ -5,7 +5,9 @@ import {
   COMMERCIAL_POLICY_REFUSAL_REASONS,
   commercialPolicyRefusalReasonSchema,
   evaluateCommercialPolicyGate,
+  productionTreasuryBufferSupported,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  validProductionCommercialPolicyControl,
   type CommercialPolicyApproval,
   type CommercialPolicyGateResult,
   type CommercialPolicyRefusalReason,
@@ -40,6 +42,26 @@ function completeProductionApprovals(): CommercialPolicyApproval[] {
 }
 
 describe('commercial policy launch gate', () => {
+  it('supports only implemented production Call tax and buyer margin terms', () => {
+    expect(validProductionCommercialPolicyControl(PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax)).toBe(true)
+    const withoutCallTax = { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax }
+    delete withoutCallTax.callTaxBps
+    expect(validProductionCommercialPolicyControl(withoutCallTax)).toBe(false)
+    expect(validProductionCommercialPolicyControl({ ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax, callTaxBps: 100 })).toBe(false)
+    expect(validProductionCommercialPolicyControl(PRODUCTION_COMMERCIAL_POLICY_CONTROLS.operations)).toBe(true)
+    expect(validProductionCommercialPolicyControl({ ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.operations, buyerPricingMarginBps: 100 })).toBe(false)
+  })
+
+  it('bounds a declared production buffer by the canonical existing custody cap', () => {
+    const control = { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, minimumBufferUnits: '500000' }
+    expect(productionTreasuryBufferSupported(control, '500000')).toBe(true)
+    expect(productionTreasuryBufferSupported(control, '600000')).toBe(true)
+    expect(productionTreasuryBufferSupported(control, '499999')).toBe(false)
+    expect(productionTreasuryBufferSupported(control, undefined)).toBe(false)
+    expect(productionTreasuryBufferSupported(control, 'not-an-amount')).toBe(false)
+    expect(productionTreasuryBufferSupported(control, '000500000')).toBe(false)
+  })
+
   it('admits sandbox only through the explicit deterministic fixture', () => {
     expect(evaluateCommercialPolicyGate({
       environment: 'sandbox',

@@ -51,6 +51,27 @@ export function receiptExportRow(row: AeInvoiceHistoryRow): InvoiceExportRow {
     netAud,
     status: receiptDisplay(row).status,
     taxInvoice: row.taxInvoice?.kind === 'issued' ? 'issued'
-      : row.taxInvoice?.kind === 'withheld' ? `withheld:${row.taxInvoice.reason}` : 'unavailable',
+      : row.taxInvoice?.kind === 'withheld' ? `withheld:${row.taxInvoice.reason}` : row.taxInvoice?.kind ?? 'unavailable',
+  }
+}
+
+
+export function taxDocumentStatusMessage(reason: string): string {
+  switch (reason) {
+    case 'policy_disabled': return 'Tax invoice approval is pending. Contact support.'
+    case 'tax_policy_expired':
+    case 'tax_policy_not_effective':
+    case 'tax_policy_conflict': return 'Tax invoice approval needs review. Contact support.'
+    case 'customer_tax_facts_missing': return 'Recipient name or ABN is required for payments of A$1,000 or more.'
+    case 'customer_abn_invalid':
+    case 'customer_identity_mismatch': return 'Your tax details need review before an invoice can be issued.'
+    case 'original_invoice_not_issued': return 'Adjustment note will be available when the original invoice is issued.'
+    case 'source_event_unconfirmed':
+    case 'refund_event_unconfirmed': return 'Payment evidence is incomplete. Contact support to reconcile this payment.'
+    case 'original_policy_unavailable':
+    case 'original_tax_treatment_unsupported':
+    case 'original_tax_facts_invalid':
+    case 'seller_registration_not_effective': return 'Original tax evidence needs review. Contact support; the recorded payment has not changed.'
+    default: return 'Document unavailable. Contact support to review this payment.'
   }
 }

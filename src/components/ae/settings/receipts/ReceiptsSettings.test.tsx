@@ -26,7 +26,7 @@ const topUp: AeInvoiceHistoryRow = {
   status: 'succeeded',
   appliedTransactionRef: 'transaction:paid',
   hasPaymentReceipt: true,
-  taxInvoice: { kind: 'issued', documentRef: 'money-document:tax:paid' },
+  taxInvoice: { kind: 'issued', documentRef: 'money-document:tax:paid', documentNumber: 'AE-EXAMPLE', issuedAt: 1_800_000_000_000 },
 }
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
@@ -47,14 +47,14 @@ it('renders real top-up receipt actions and exports invoice rows without linking
   expect(screen.getByText('Paid')).toBeInTheDocument()
   const historyRow = screen.getByRole('row', { name: /Account top-up/u })
   expect(within(historyRow).getByText('A$5.78')).toBeInTheDocument()
-  expect(within(historyRow).getByRole('button', { name: 'Tax invoice' })).toBeInTheDocument()
+  expect(within(historyRow).getByRole('button', { name: 'Open / print invoice' })).toBeInTheDocument()
   expect(within(historyRow).getByRole('button', { name: 'Stripe receipt' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Trust centre (opens in a new tab)' }))
     .toHaveAttribute('href', '/trust#receipts')
   expect(container.querySelector('a[href^="/calls/"]')).toBeNull()
 
-  fireEvent.click(screen.getByRole('button', { name: 'Tax invoice' }))
-  expect(onDownloadTaxInvoice).toHaveBeenCalledWith(topUp)
+  fireEvent.click(screen.getByRole('button', { name: 'Open / print invoice' }))
+  expect(onDownloadTaxInvoice).toHaveBeenCalledWith(topUp, { document: 'invoice', format: 'html' })
   await waitFor(() => expect(screen.getByRole('button', { name: 'Stripe receipt' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
   expect(invoiceExport.downloadCsv).toHaveBeenCalledOnce()
@@ -86,8 +86,8 @@ it('distinguishes reversed funding and withheld invoices without exposing unavai
   />)
 
   expect(screen.getByText('Reversed')).toBeInTheDocument()
-  expect(screen.getByText('Tax invoices are disabled for this environment.')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Tax invoice' })).not.toBeInTheDocument()
+  expect(screen.getByText('Tax invoice approval is pending. Contact support.')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Open / print invoice' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Stripe receipt' })).not.toBeInTheDocument()
 })
 
@@ -107,4 +107,29 @@ it('offers older receipts even when the first bounded page has only unsettled co
     invoiceHistoryHasMore {...callbacks} />)
   expect(screen.getByText('Account top-up')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Export shown CSV' })).toBeInTheDocument()
+})
+
+
+it('exposes explicit generation and retry, then the issued invoice and linked refund note formats', async () => {
+  const onGenerateTaxInvoice = vi.fn(async () => {})
+  const onDownloadTaxInvoice = vi.fn(async () => {})
+  const callbacks = { onGenerateTaxInvoice, onDownloadTaxInvoice, onViewStripeReceipt: vi.fn(async () => {}) }
+  const row: AeInvoiceHistoryRow = { ...topUp, taxInvoice: { kind: 'ready' } }
+  const view = render(<ReceiptsSettings invoiceHistoryRows={[row]} invoiceHistoryLoading={false} {...callbacks} />)
+  expect(screen.queryByRole('button', { name: 'Open / print invoice' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Generate invoice' }))
+  await waitFor(() => expect(onGenerateTaxInvoice).toHaveBeenCalledWith(row))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Generate invoice' })).toBeEnabled())
+  view.rerender(<ReceiptsSettings invoiceHistoryRows={[{ ...row, taxInvoice: { kind: 'rendering', documentRef: 'doc:test', documentNumber: 'AE-TEST' } }]}
+    invoiceHistoryLoading={false} {...callbacks} />)
+  expect(screen.getByText('Generating tax invoice…')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Generate invoice' })).not.toBeInTheDocument()
+  const refunded: AeInvoiceHistoryRow = { ...topUp, status: 'reversed', adjustmentNote: {
+    kind: 'issued', documentRef: 'doc:refund', documentNumber: 'AE-CN-TEST', issuedAt: topUp.createdAt,
+  } }
+  view.rerender(<ReceiptsSettings invoiceHistoryRows={[refunded]} invoiceHistoryLoading={false} {...callbacks} />)
+  expect(screen.getByText(/Tax invoice AE-EXAMPLE/u)).toBeInTheDocument()
+  expect(screen.getByText(/Adjustment note AE-CN-TEST/u)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Adjustment CSV' }))
+  await waitFor(() => expect(onDownloadTaxInvoice).toHaveBeenCalledWith(refunded, { document: 'adjustment', format: 'csv' }))
 })

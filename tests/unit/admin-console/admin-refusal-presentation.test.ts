@@ -8,6 +8,7 @@ describe('admin refusal presentation', () => {
       'source_write_crypto_unavailable', 'stale_source_write_admission',
       'admin_invalid_reason', 'admin_missing_evidence', 'target_changed',
       'approval_digest_mismatch', 'proof_stale', 'idempotency_conflict',
+      'commercial_policy_deployment_profile_invalid',
     ] as const) {
       expect(ADMIN_REFUSAL_PRESENTATION[code].retry, code).toBe('new_key')
     }
@@ -18,5 +19,6 @@ describe('admin refusal presentation', () => {
       certainty: 'not_applied', retry: 'no',
     })
     expect(ADMIN_REFUSAL_PRESENTATION.approval_required.retry).toBe('no')
+    expect(ADMIN_REFUSAL_PRESENTATION.commercial_policy_deployment_profile_invalid.copy).toContain('custody maximum')
   })
 })

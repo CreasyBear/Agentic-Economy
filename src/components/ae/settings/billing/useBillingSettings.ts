@@ -5,11 +5,11 @@ import { useConvexAuth, useMutation, usePaginatedQuery, useQuery } from 'convex/
 import { api } from '../../../../../convex/_generated/api'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { readOwnerSpendServer } from '@/lib/server/call-history.functions'
-import { renderOwnerMoneyDocumentServer } from '@/lib/server/money-documents.functions'
+import { readOwnerMoneyDocumentUrlServer } from '@/lib/server/money-documents.functions'
 import {
   readStripeReceiptUrlServer,
 } from '@/modules/money/money.functions'
-import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
+import type { AeInvoiceHistoryRow, InvoiceDownloadOptions } from '@/modules/money/invoice-history.view-model'
 
 function useBillingAuthenticated() {
   const { isAuthenticated, isLoading } = useConvexAuth()
@@ -23,7 +23,8 @@ export function useBillingReceipts() {
     authenticated ? {} : 'skip',
     { initialNumItems: 20 },
   )
-  const renderDocument = useServerFn(renderOwnerMoneyDocumentServer)
+  const readDocumentUrl = useServerFn(readOwnerMoneyDocumentUrlServer)
+  const issueTaxInvoice = useMutation(api.moneyDocuments.issueOwnerFundingTaxInvoice)
   const readStripeReceiptUrl = useServerFn(readStripeReceiptUrlServer)
   return {
     invoiceHistoryRows: invoiceHistoryRead.results as readonly AeInvoiceHistoryRow[],
@@ -31,10 +32,16 @@ export function useBillingReceipts() {
     invoiceHistoryHasMore: invoiceHistoryRead.status === 'CanLoadMore',
     invoiceHistoryLoadingMore: invoiceHistoryRead.status === 'LoadingMore',
     onLoadMore: () => invoiceHistoryRead.loadMore(20),
-    onDownloadTaxInvoice: async (row: AeInvoiceHistoryRow) => {
-      const documentRef = row.taxInvoice?.kind === 'issued' ? row.taxInvoice.documentRef : undefined
+    onGenerateTaxInvoice: async (row: AeInvoiceHistoryRow) => {
+      const result = await issueTaxInvoice({ commandRef: row.commandRef })
+      const status = result.taxInvoice.kind === 'issued' ? result.adjustmentNote ?? result.taxInvoice : result.taxInvoice
+      if (status.kind === 'withheld') throw new Error(status.reason)
+    },
+    onDownloadTaxInvoice: async (row: AeInvoiceHistoryRow, options?: InvoiceDownloadOptions) => {
+      const status = options?.document === 'adjustment' ? row.adjustmentNote : row.taxInvoice
+      const documentRef = status?.kind === 'issued' ? status.documentRef : undefined
       if (documentRef === undefined) return
-      const url = await renderDocument({ data: { documentRef } })
+      const url = await readDocumentUrl({ data: { documentRef, format: options?.format ?? 'html' } })
       if (url === null) throw new Error('money_document_url_unavailable')
       window.open(url, '_blank', 'noopener,noreferrer')
     },

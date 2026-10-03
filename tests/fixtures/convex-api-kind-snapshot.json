@@ -2508,6 +2508,18 @@
     "kind": "action"
   },
   {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "issueFundingTaxInvoice",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyDocuments",
+    "method": "issueOwnerFundingTaxInvoice",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "moneyDocuments",
     "method": "listOwnerDocuments",

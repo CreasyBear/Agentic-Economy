@@ -12,6 +12,7 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 import {
   type ActivityLoaderResult,
   type AeActivityProps,
+  type ActivityStatusFilter,
 } from './activity.contracts'
 import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
@@ -23,7 +24,7 @@ import { useAeActivity } from './useAeActivity'
 function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
   if (vm.pagination.status === 'loading') return 'Loading older Calls.'
   if (vm.pagination.status === 'failed') return 'Could not load older Calls. The Calls already shown are unchanged.'
-  if (vm.showEmptyNoCalls) return 'No Calls yet.'
+  if (vm.showEmptyNoCalls) return 'No Calls in this period.'
   if (vm.showEmptyNoMatch) return 'No Calls match these filters.'
   return `${vm.attentionRows.length} Calls need attention. ${vm.recentRows.length} recent Calls shown.`
 }
@@ -31,6 +32,7 @@ function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
 export function AeActivity({ result }: AeActivityProps) {
   const router = useRouter()
   const [retryPending, setRetryPending] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<ActivityStatusFilter>('all')
 
   if (result.kind === 'unavailable') {
     return (
@@ -49,20 +51,33 @@ export function AeActivity({ result }: AeActivityProps) {
 
   return (
     <AeActivityAvailable
-      key={`${canonicalDigest(result.calls)}:${result.filteredAgent ?? 'all'}`}
+      key={`${canonicalDigest(result.calls)}:${result.filteredAgent ?? 'all'}:${result.periodStartAt}:${result.periodEndAt}`}
       result={result}
+      statusFilter={statusFilter}
+      setStatusFilter={setStatusFilter}
     />
   )
 }
 
 function AeActivityAvailable({
   result,
-}: Readonly<{ result: Extract<ActivityLoaderResult, { kind: 'available' }> }>) {
+  statusFilter,
+  setStatusFilter,
+}: Readonly<{
+  result: Extract<ActivityLoaderResult, { kind: 'available' }>
+  statusFilter: ActivityStatusFilter
+  setStatusFilter: (filter: ActivityStatusFilter) => void
+}>) {
   const vm = useAeActivity({
     initial: result.calls,
     usage: result.usage,
     spend: result.spend,
     periodStart: result.periodStart,
+    periodStartAt: result.periodStartAt,
+    periodEndAt: result.periodEndAt,
+    dateRangeFilter: result.dateRangeFilter,
+    statusFilter,
+    setStatusFilter,
     ...(result.filteredAgent === undefined ? {} : { filteredAgent: result.filteredAgent }),
   })
 
@@ -77,6 +92,7 @@ function AeActivityAvailable({
         <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {activityStatus(vm)}
         </p>
+        <p className="text-sm text-muted-foreground">{vm.monthly.scopeLabel} · {vm.periodStart}</p>
         {vm.showFilterBar ? (
           <ActivityFilterBar
             statusFilter={vm.statusFilter}
@@ -87,12 +103,21 @@ function AeActivityAvailable({
             onDateRangeFilterChange={vm.setDateRangeFilter}
             dateChipLabel={vm.dateChipLabel}
             filteredAgentShortId={vm.filteredAgentShortId}
+            onClearAgent={vm.clearAgent}
+            datePending={vm.datePending}
             filtersActive={vm.filtersActive}
             onResetFilters={vm.resetFilters}
           />
         ) : null}
+        <ActivityMonthlySummary
+          periodStart={vm.periodStart}
+          monthly={vm.monthly}
+          retryPending={vm.summaryRetryPending}
+          onRetry={vm.retrySummaries}
+        />
         {vm.showFilterBar ? (
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Call usage export · not an invoice</span>
             <span className="min-w-[12rem] text-xs text-muted-foreground">
               <span className="font-mono tabular-nums">
                 {vm.exportPreviewLabel}
@@ -120,14 +145,14 @@ function AeActivityAvailable({
         ) : null}
         {vm.showEmptyNoCalls ? (
           <AeEmptyState
-            title="No Calls yet"
-            description="Find a Tool and complete one Call. Its task, outcome, amount, and receipt will appear here."
+            title="No Calls in this period"
+            description="No Calls were recorded for the selected Account or Agent and date range. Change the filters or find a Tool."
             action={<Link to="/market" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>Find Tools</Link>}
           />
         ) : vm.showEmptyNoMatch ? (
           <AeEmptyState
             title="No Calls match these filters"
-            description="Active filters are hiding matching Calls."
+            description={vm.pagination.cursor === undefined ? 'No Calls in this period have the selected status.' : 'No loaded Calls have the selected status. Load more to check the remaining history.'}
             action={
               <Button type="button" className="min-h-touch" onClick={vm.resetFilters}>
                 Reset filters
@@ -149,17 +174,10 @@ function AeActivityAvailable({
               rows={vm.recentRows}
               emptyMessage="No routine Calls in the loaded history."
             />
-            <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
           </>
         ) : null}
-        {!vm.showEmptyNoCalls ? (
-          <ActivityMonthlySummary
-            periodStart={vm.periodStart}
-            monthly={vm.monthly}
-            retryPending={vm.summaryRetryPending}
-            onRetry={vm.retrySummaries}
-          />
-        ) : null}
+        <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
+        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Status filters, sorting and exports apply to loaded rows. Pages contain up to 50 Calls.</p>
       </div>
     </AeOperatorPage>
   )

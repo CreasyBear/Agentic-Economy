@@ -15,7 +15,7 @@ import {
 
 describe('owner invoice history tax admission', () => {
   afterEach(() => { vi.unstubAllEnvs() })
-  it('reports an ungenerated invoice when persisted owner tax facts and production policy admit issuance', async () => {
+  it('refuses issuance without confirmed historical payment evidence even with buyer facts and current approval', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = await seededInteractiveAuthorityBackend()
     const now = Date.now()
@@ -102,7 +102,7 @@ describe('owner invoice history tax admission', () => {
     expect(history.page).toEqual([
       expect.objectContaining({
         commandRef,
-        taxInvoice: { kind: 'withheld', reason: 'tax_invoice_not_generated' },
+        taxInvoice: { kind: 'withheld', reason: 'source_event_unconfirmed' },
       }),
     ])
   })

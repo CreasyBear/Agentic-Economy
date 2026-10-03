@@ -2,13 +2,13 @@
  * Adapted from licensed Arc Pro metrics-dashboard.
  * Upstream TSX SHA-256: 1f39789beb44845ffaea58b92289d6b82b8cd160f82a0c99ca8bb5ff056e3730
  * Upstream CSS SHA-256: 8ec05757cd0175c27ce7debce50753f36a01840d8af1ce49c01e58da344f27b9
- * The four displayed facts stay sourced from ActivityMonthlySummaryView; this
+ * The displayed facts stay sourced from ActivityMonthlySummaryView; this
  * file adapts only their grouping and presentation, with no synthetic values.
  */
 
 .arc-market.arc-activity-monthly-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   min-width: 0;
   max-width: 100%;
   margin: 0;

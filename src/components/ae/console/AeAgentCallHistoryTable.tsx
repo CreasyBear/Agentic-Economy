@@ -77,15 +77,23 @@ export function AeAgentCallHistoryTable({
       },
       {
         id: 'amount',
-        accessorFn: (item) => item.audAmountUnits ?? '',
+        accessorFn: (item) => item.paymentState === 'released'
+          || (item.paymentState === 'not_applicable' && item.state === 'refused' && item.deliveryState === 'not_delivered') ? '0'
+          : item.paymentState === 'settled' && item.audAmountUnits !== undefined
+            && /^(?:0|[1-9]\d*)$/u.test(item.audAmountUnits) ? item.audAmountUnits : undefined,
+        sortUndefined: 'last',
+        sortingFn: (left, right) => {
+          const a = BigInt(left.getValue<string | undefined>('amount') ?? '0')
+          const b = BigInt(right.getValue<string | undefined>('amount') ?? '0')
+          return a < b ? -1 : a > b ? 1 : 0
+        },
         header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
         cell: ({ row }) => {
-          const units = row.original.audAmountUnits
+          const units = row.getValue<string | undefined>('amount')
           return (
             <span className="font-mono text-sm tabular-nums text-foreground">
-              {units === undefined
-                ? '—'
-                : formatDisplayAmount({ currency: 'AUD', exponent: 6, units })}
+              {units === undefined ? row.original.paymentState === 'settled' ? 'Amount unknown' : 'Not confirmed'
+                : row.original.paymentState === 'settled' ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units }) : 'No charge'}
             </span>
           )
         },
@@ -143,13 +151,13 @@ export function AeAgentCallHistoryTable({
       {showStats && usage && (
         <div className="aeAgentCallMetrics">
           <div className="aeAgentCallMetric">
-            <span className="aeAgentCallMetricLabel">Calls this month</span>
+            <span className="aeAgentCallMetricLabel">Calls this UTC month</span>
             <span className="font-mono aeAgentCallMetricValue">
               {usage.callCount}
             </span>
           </div>
           <div className="aeAgentCallMetric">
-            <span className="aeAgentCallMetricLabel">Settled spend</span>
+            <span className="aeAgentCallMetricLabel">Projected settled charges</span>
             <span className="font-mono aeAgentCallMetricValue">
               {usage.amountCoverage === 'complete' && usage.settledSpend !== undefined
                 ? formatDisplayAmount(usage.settledSpend)
@@ -157,7 +165,7 @@ export function AeAgentCallHistoryTable({
             </span>
           </div>
           <div className="aeAgentCallMetric">
-            <span className="aeAgentCallMetricLabel">Needs checking</span>
+            <span className="aeAgentCallMetricLabel">Outcome unknown</span>
             <span className="font-mono aeAgentCallMetricValue">
               {usage.outcomeUnknownCallCount}
             </span>

@@ -178,7 +178,7 @@ export type AdminActionRefusalCodes = {
   grant_admin_membership: 'principal_not_found' | 'membership_already_active'
   revoke_admin_membership: 'membership_not_found' | 'last_owner_admin'
   verify_capability_source_authority: 'publication_not_found' | 'source_authority_not_reviewable'
-  change_commercial_policy: 'policy_not_found' | 'proof_stale' | 'proof_replayed' | 'authority_mismatch'
+  change_commercial_policy: 'policy_not_found' | 'proof_stale' | 'proof_replayed' | 'authority_mismatch' | 'commercial_policy_deployment_profile_invalid'
   grant_promotional_credit: 'account_not_found' | 'promotional_credit_invalid' | 'environment_mismatch'
 }
 

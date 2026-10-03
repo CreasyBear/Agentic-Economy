@@ -65,7 +65,7 @@ function callStateStatusBadge(state: BuyerCallSummaryFacts['state']): ActivityBa
     case 'refused':
       return { variant: 'outline', label: 'Refused' }
     case 'outcome_unknown':
-      return { variant: 'outline', label: 'Needs attention', warning: true }
+      return { variant: 'outline', label: 'Outcome unknown', warning: true }
     default: {
       const _exhaustive: never = state
       return _exhaustive
@@ -102,7 +102,7 @@ function initialCallPaginationState(source: CallPage): CallPaginationState {
   }
 }
 
-function useCallPagination(initial: CallPage, principalRef?: string) {
+function useCallPagination(initial: CallPage, periodStartAt: number, periodEndAt: number, principalRef?: string) {
   const [state, setState] = useState(() => initialCallPaginationState(initial))
 
   async function loadNextPage() {
@@ -113,11 +113,11 @@ function useCallPagination(initial: CallPage, principalRef?: string) {
       ? { ...current, status: 'loading' }
       : current)
     try {
-      const next = await readOwnerCallsServer({ data: { cursor, ...(principalRef ? { principalRef } : {}) } })
+      const next = await readOwnerCallsServer({ data: { cursor, periodStartAt, periodEndAt, ...(principalRef ? { principalRef } : {}) } })
       setState((current) => current.source === source && current.cursor === cursor
         ? {
             source,
-            items: [...current.items, ...next.page],
+            items: [...new Map([...current.items, ...next.page].map((item) => [item.callRef, item])).values()],
             cursor: next.isDone ? undefined : next.continueCursor,
             status: 'idle',
           }
@@ -133,12 +133,16 @@ function useCallPagination(initial: CallPage, principalRef?: string) {
   return { state, loadNextPage }
 }
 
+function hasNoRecordedCharge(item: CallRow): boolean {
+  return item.paymentState === 'released'
+    || (item.paymentState === 'not_applicable' && item.state === 'refused' && item.deliveryState === 'not_delivered')
+}
+
 function buildActivityExportRows(items: readonly CallRow[]) {
   return items.map((item) => {
     const purchase = projectCallSummaryPurchaseStatus(item)
     const charged = item.paymentState === 'settled' && item.audAmountUnits !== undefined
-    const notCharged = item.paymentState === 'released'
-      || (item.paymentState === 'not_applicable' && purchase.kind !== 'uncertain')
+    const notCharged = hasNoRecordedCharge(item)
     const grossUnits = charged ? item.audAmountUnits : notCharged ? '0' : undefined
     if (grossUnits !== undefined && !/^(?:0|[1-9]\d*)$/u.test(grossUnits)) {
       throw new RangeError('Activity export requires valid booked AUD units')
@@ -147,13 +151,11 @@ function buildActivityExportRows(items: readonly CallRow[]) {
       date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
       callRef: item.callRef,
       toolName: item.toolLabel,
-      provider: 'Agentic Economy Seller',
+      provider: item.providerRef,
       agentName: item.principalRef ?? 'Unspecified Agent',
       costAud: grossUnits === undefined
         ? item.paymentState === 'settled' ? 'Amount unknown' : 'Not confirmed'
         : formatAudExportUnits(grossUnits),
-      gstAud: grossUnits === undefined ? '' : formatAudExportUnits('0'),
-      netAud: grossUnits === undefined ? '' : formatAudExportUnits(grossUnits),
       status: purchase.label,
     }
   })
@@ -175,8 +177,11 @@ function projectCallRow(item: CallRow, reviewMode: boolean): ActivityCallRowView
     agentShortId: item.principalRef ? item.principalRef.split(':').pop() ?? '—' : '—',
     agentTitle: item.principalRef,
     durationLabel: activityDuration(item.latencyMs),
-    amountLabel: item.paymentState === 'released'
-      || (item.paymentState === 'not_applicable' && purchase.kind !== 'uncertain') ? 'No charge'
+    latencyMs: Number.isFinite(item.latencyMs) && item.latencyMs > 0 ? item.latencyMs : undefined,
+    amountUnits: hasNoRecordedCharge(item) ? '0'
+      : item.paymentState === 'settled' && item.audAmountUnits !== undefined
+        && /^(?:0|[1-9]\d*)$/u.test(item.audAmountUnits) ? item.audAmountUnits : undefined,
+    amountLabel: hasNoRecordedCharge(item) ? 'No charge'
       : item.paymentState !== 'settled' ? 'Not confirmed' : item.audAmountUnits === undefined
         ? 'Amount unknown'
         : formatDisplayAmount({ currency: 'AUD', exponent: 6, units: item.audAmountUnits }),
@@ -185,6 +190,7 @@ function projectCallRow(item: CallRow, reviewMode: boolean): ActivityCallRowView
     purchaseLabel: purchase.label,
     paymentStateLabel: formatPaymentStateLabel(item.paymentState),
     whenLabel: `${formatUtcTimestamp(item.createdAt)} UTC`,
+    createdAt: item.createdAt,
     receiptHref: `/calls/${encodeURIComponent(item.callRef)}`,
     receiptAccessibleLabel: `${reviewMode ? 'Review' : 'View receipt for'} ${item.toolLabel}`,
   }
@@ -195,6 +201,11 @@ export type UseAeActivityInput = Readonly<{
   usage: Extract<ActivityLoaderResult, { kind: 'available' }>['usage']
   spend: Extract<ActivityLoaderResult, { kind: 'available' }>['spend']
   periodStart: string
+  periodStartAt: number
+  periodEndAt: number
+  dateRangeFilter: ActivityDateRangeFilter
+  statusFilter: ActivityStatusFilter
+  setStatusFilter: (filter: ActivityStatusFilter) => void
   filteredAgent?: string
 }>
 
@@ -203,24 +214,31 @@ export function useAeActivity({
   usage,
   spend,
   periodStart,
+  periodStartAt,
+  periodEndAt,
+  dateRangeFilter,
+  statusFilter,
+  setStatusFilter,
   filteredAgent,
 }: UseAeActivityInput) {
   const router = useRouter()
   const [summaryRetryPending, setSummaryRetryPending] = useState(false)
-  const { state: pagination, loadNextPage } = useCallPagination(initial, filteredAgent)
-  const [statusFilter, setStatusFilter] = useState<ActivityStatusFilter>('all')
-  const [dateRangeFilter, setDateRangeFilter] = useState<ActivityDateRangeFilter>('all')
-  const [nowMs] = useState(() => Date.now())
+  const { state: pagination, loadNextPage } = useCallPagination(initial, periodStartAt, periodEndAt, filteredAgent)
+  const [datePending, setDatePending] = useState(false)
+  const dateFilteredItems = pagination.items
 
-  const dateFilteredItems = useMemo(() => {
-    if (dateRangeFilter === 'all') return pagination.items
-    const cutoff = dateRangeFilter === 'today'
-      ? nowMs - 24 * 60 * 60 * 1000
-      : dateRangeFilter === '7d'
-        ? nowMs - 7 * 24 * 60 * 60 * 1000
-        : nowMs - 30 * 24 * 60 * 60 * 1000
-    return pagination.items.filter((item) => item.createdAt >= cutoff)
-  }, [pagination.items, dateRangeFilter, nowMs])
+  function navigateScope(range: ActivityDateRangeFilter, agent: string | undefined) {
+    if (datePending) return
+    setDatePending(true)
+    void Promise.resolve(router.navigate({ to: '/activity', search: { range, ...(agent === undefined ? {} : { agent }) } }))
+      .catch((cause) => {
+        captureClientExceptionOnClient(cause)
+        toast.error('Could not change the Call filters.', { description: 'The previous period is still shown. Try selecting the period again.' })
+      })
+      .finally(() => setDatePending(false))
+  }
+  const setDateRangeFilter = (range: ActivityDateRangeFilter) => navigateScope(range, filteredAgent)
+  const clearAgent = () => navigateScope(dateRangeFilter, undefined)
 
   const statusCounts = useMemo(() => ({
     all: dateFilteredItems.length,
@@ -235,24 +253,25 @@ export function useAeActivity({
   }, [dateFilteredItems, statusFilter])
 
   const filtersActive = statusFilter !== 'all'
-    || dateRangeFilter !== 'all'
+    || dateRangeFilter !== '30d'
     || filteredAgent !== undefined
 
   const statusChipLabel = (s: ActivityStatusFilter) => {
     if (s === 'all') return 'All'
     if (s === 'completed') return 'Completed'
     if (s === 'refused') return 'Refused'
-    return 'Needs attention'
+    return 'Outcome unknown'
   }
 
   const dateChipLabel = (d: ActivityDateRangeFilter) => {
     if (d === 'all') return 'All time'
-    if (d === 'today') return 'Today'
+    if (d === 'month') return 'This month (UTC)'
+    if (d === 'today') return 'Today (UTC)'
     if (d === '7d') return 'Last 7 days'
     return 'Last 30 days'
   }
 
-  const filteredAgentShortId = filteredAgent?.split(':').pop()
+  const filteredAgentShortId = filteredAgent
 
   const attentionItems = useMemo(
     () => filteredItems.filter((item) => projectCallSummaryPurchaseStatus(item).attention),
@@ -277,21 +296,33 @@ export function useAeActivity({
   })
 
   const monthly: ActivityMonthlySummaryView = {
-    unavailable: usage.kind !== 'available' || spend.kind !== 'available',
-    callCountLabel: usage.kind === 'available' ? usage.callCountUnits : '—',
-    completedLabel: usage.kind === 'available' ? usage.completedCountUnits : '—',
-    attentionLabel: usage.kind === 'available' ? usage.outcomeUnknownCountUnits : '—',
-    spendLabel: spend.kind === 'available'
-      ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: spend.spendUnits })
-      : '—',
+    windowTooLarge: (usage.kind === 'unavailable' && usage.code === 'usage_window_too_large')
+      || (spend.kind === 'unavailable' && spend.code === 'formance_spend_window_too_large'),
+    unavailable: usage.kind === 'unavailable' || (filteredAgent === undefined
+      && spend.kind !== 'available' && spend.kind !== 'empty'),
+    callCountLabel: usage.kind === 'available' ? usage.callCountUnits : usage.kind === 'empty' ? '0' : '—',
+    completedLabel: usage.kind === 'available' ? usage.completedCountUnits : usage.kind === 'empty' ? '0' : '—',
+    refusedLabel: usage.kind === 'available'
+      ? (BigInt(usage.callCountUnits) - BigInt(usage.completedCountUnits) - BigInt(usage.outcomeUnknownCountUnits)).toString()
+      : usage.kind === 'empty' ? '0' : '—',
+    attentionLabel: usage.kind === 'available' ? usage.outcomeUnknownCountUnits : usage.kind === 'empty' ? '0' : '—',
+    spendTitle: filteredAgent === undefined ? 'Gross settled charges' : 'Agent settled charges',
+    spendLabel: filteredAgent === undefined
+      ? spend.kind === 'available' ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: spend.spendUnits })
+        : spend.kind === 'empty' ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: '0' }) : '—'
+      : usage.kind === 'empty' ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: '0' })
+        : usage.kind === 'available' && usage.amountCoverage === 'complete' && usage.settledSpendUnits !== undefined
+          ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: usage.settledSpendUnits })
+          : usage.kind === 'available' ? 'Amount coverage incomplete' : '—',
+    scopeLabel: filteredAgent === undefined ? 'All Agents in this Account' : `Agent ${filteredAgent}`,
+    spendBasis: filteredAgent === undefined
+      ? 'Gross charges use ledger settlement dates in this period. Refunds are recorded separately and are not deducted here.'
+      : 'Agent charges use current Call payment records for Calls created in this period. They are not an account ledger balance or a refund total.',
   }
 
   function resetFilters() {
     setStatusFilter('all')
-    setDateRangeFilter('all')
-    if (filteredAgent !== undefined) {
-      void router.navigate({ to: '/activity' })
-    }
+    if (dateRangeFilter !== '30d' || filteredAgent !== undefined) navigateScope('30d', undefined)
   }
 
   function exportCsv() {
@@ -299,7 +330,7 @@ export function useAeActivity({
       const exportRows = buildActivityExportRows(filteredItems)
       const count = exportRows.length
       const csv = generateCallsCsv(exportRows)
-      downloadCsv(`activity-calls-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+      downloadCsv(`call-usage-${new Date().toISOString().slice(0, 10)}.csv`, csv)
       toast.success(formatExportSuccessToast(count, 'CSV'))
     } catch (cause) {
       void cause
@@ -311,8 +342,10 @@ export function useAeActivity({
     try {
       const exportRows = buildActivityExportRows(filteredItems)
       const count = exportRows.length
-      const document = toExportDocument('activity-calls', exportRows)
-      downloadJson(`activity-calls-${new Date().toISOString().slice(0, 10)}.json`, document)
+      const document = { ...toExportDocument('call-usage', exportRows), periodStartAt, periodEndAt,
+        coverage: pagination.cursor === undefined ? 'complete' : 'loaded_rows', statusFilter,
+        ...(filteredAgent === undefined ? {} : { principalRef: filteredAgent }) }
+      downloadJson(`call-usage-${new Date().toISOString().slice(0, 10)}.json`, document)
       toast.success(formatExportSuccessToast(count, 'JSON'))
     } catch (cause) {
       void cause
@@ -347,13 +380,15 @@ export function useAeActivity({
     statusChipLabel,
     dateChipLabel,
     filteredAgentShortId,
+    clearAgent,
+    datePending,
     filtersActive,
     resetFilters,
     exportPreviewLabel,
     exportDisabled: filteredItems.length === 0,
     exportCsv,
     exportJson,
-    showFilterBar: pagination.items.length > 0,
+    showFilterBar: true,
     showEmptyNoCalls: pagination.items.length === 0 && pagination.cursor === undefined,
     showEmptyNoMatch: filteredItems.length === 0 && !(pagination.items.length === 0 && pagination.cursor === undefined),
     showQueues: filteredItems.length > 0,

@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -93,5 +93,20 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
 
     expect(screen.getByText('15')).toBeInTheDocument() // Call count
     expect(screen.getByText('A$3.75')).toBeInTheDocument() // Settled spend
+  })
+
+  it('sorts exact charge units and keeps unconfirmed payment amounts unconfirmed', () => {
+    const first = sampleActivity[0]!
+    render(<AeAgentCallHistoryTable activity={[
+      { ...first, callRef: 'call:large', toolLabel: 'Larger', audAmountUnits: '9007199254740993' },
+      { ...first, callRef: 'call:small', toolLabel: 'Smaller', audAmountUnits: '9007199254740992' },
+      { ...first, callRef: 'call:unknown', toolLabel: 'Unknown', paymentState: 'unknown', audAmountUnits: '1' },
+    ]} />)
+    expect(screen.getByText('Not confirmed')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Amount/u }))
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    expect(rows[0]?.textContent).toContain('Smaller')
+    expect(rows[1]?.textContent).toContain('Larger')
+    expect(rows[2]?.textContent).toContain('Unknown')
   })
 })

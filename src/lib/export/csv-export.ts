@@ -5,8 +5,6 @@ export type ActivityExportRow = Readonly<{
   provider: string
   agentName: string
   costAud: string
-  gstAud: string
-  netAud: string
   status:
     | 'completed'
     | 'failed'
@@ -88,9 +86,7 @@ export const ACTIVITY_CSV_HEADERS: readonly string[] = [
   'Tool Name',
   'Provider',
   'Agent Name',
-  'Cost AUD',
-  'GST AUD',
-  'Net AUD',
+  'Recorded Charge AUD',
   'Status',
 ]
 
@@ -104,8 +100,6 @@ export function generateCallsCsv(rows: readonly ActivityExportRow[]): string {
       row.provider,
       row.agentName,
       row.costAud,
-      row.gstAud,
-      row.netAud,
       row.status,
     ])
   )

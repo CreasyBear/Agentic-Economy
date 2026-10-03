@@ -410,6 +410,7 @@ function projectAgentDetail(
     ...(usage?.settledSpend !== undefined ? { monthlySettledSpend: usage.settledSpend } : {}),
     ...(spendingPolicy.kind === 'known' ? { monthlyLimit: spendingPolicy.maximumMonthlySpend } : {}),
     ...(usage?.amountCoverage !== undefined ? { monthlySpendCoverage: usage.amountCoverage } : {}),
+    ...(usage === undefined ? {} : { usage }),
   }
   const dataState = ownerReadback === undefined
     ? ordered.length === 0 || allUnavailable

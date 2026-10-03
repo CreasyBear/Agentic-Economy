@@ -19,18 +19,25 @@ export {
   commercialPolicyRefusalReasonSchema,
   evaluateCommercialPolicyGate,
   PACKAGE4_FORMANCE_REQUIREMENTS,
+  productionTreasuryBufferSupported,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   validCommercialPolicyControl,
   validProductionCommercialPolicyControl,
 } from './internal/commercial-policy'
 export {
   admitTaxInvoiceIssuance,
+  AUSTRALIAN_INVOICE_SELLER,
   formatAbnDisplay,
   isValidAbn,
   normalizeAbn,
+  parseTaxDocumentSnapshot,
+  taxDocumentNumber,
+  taxDocumentSnapshotSchema,
 } from './internal/tax-invoice-control'
 export type {
   CustomerTaxFacts,
+  TaxDocumentSnapshot,
+  TaxInvoiceSnapshot,
   TaxInvoiceIssuanceAdmission,
   TaxInvoiceIssuanceWithheldReason,
 } from './internal/tax-invoice-control'

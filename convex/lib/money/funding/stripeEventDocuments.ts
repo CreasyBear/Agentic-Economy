@@ -3,6 +3,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import type { StableHashValue } from '../../../../src/modules/common/stable-hash'
 import { AUD_EXPONENT } from '../../../../src/modules/money/public'
 import { createAndQueueDocument } from '../documents/insert'
+import { scheduleFundingTaxInvoice } from '../documents/taxInvoices'
 
 export async function recordFundingDocuments(
   ctx: MutationCtx,
@@ -61,6 +62,7 @@ export async function recordFundingDocuments(
       }
     })
   }
+  await scheduleFundingTaxInvoice(ctx, command.commandRef, transactionRef)
 }
 
 export async function recordFundingReversalDocument(
@@ -103,4 +105,5 @@ export async function recordFundingReversalDocument(
       occurredAt,
     }
   })
+  await scheduleFundingTaxInvoice(ctx, command.commandRef, transactionRef)
 }

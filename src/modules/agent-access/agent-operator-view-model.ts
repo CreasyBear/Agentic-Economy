@@ -90,6 +90,7 @@ export type AgentDirectoryItem = Readonly<{
   monthlySettledSpend?: ExactAmount | undefined
   monthlyLimit?: ExactAmount | undefined
   monthlySpendCoverage?: 'complete' | 'incomplete' | undefined
+  usage?: AgentUsageSummary
 }>
 
 /**

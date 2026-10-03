@@ -1311,7 +1311,7 @@ describe('assistant access components', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: `View UI assistant (Sandbox · ${keyReadback.principalId})` }))
     fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
-    expect(screen.getByText('Calls this month').nextElementSibling?.textContent).toBe('0')
+    expect(screen.getByText('Calls this UTC month', { selector: 'dt' }).nextElementSibling?.textContent).toBe('0')
     expect(screen.getAllByText('A$0.00').length).toBeGreaterThan(0)
     expect(screen.getByText('No usage yet')).toBeTruthy()
     expect(screen.queryByText('Usage details are temporarily unavailable')).toBeNull()

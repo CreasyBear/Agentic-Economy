@@ -22,16 +22,16 @@ export function ActivityMonthlySummary({
   onRetry,
 }: ActivityMonthlySummaryProps) {
   return (
-    <AeSection title="This month" description={`Account-level Call and spend summary for ${periodStart}.`}>
+    <AeSection title="Period totals" description={`${monthly.scopeLabel}. ${periodStart}. Recorded Call counts cover the full period, including unloaded Calls and all statuses.`}>
       {monthly.unavailable ? (
         <Alert>
-          <AlertTitle>Some summaries are unavailable</AlertTitle>
+          <AlertTitle>{monthly.windowTooLarge ? 'Choose a shorter period for totals' : 'Some summaries are unavailable'}</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-3">
             <span>
-              Call history is still on this page. A$0.00 affected — your account balance is unchanged.
-              Check your connection and try refreshing summaries again.
+              {monthly.windowTooLarge ? 'The selected period is too large to confirm complete totals. Choose a shorter period; paginated history remains available.'
+                : 'Available Call history remains on this page. Missing totals are shown as unavailable. Try refreshing summaries or choose a shorter period.'}
             </span>
-            <Button
+            {!monthly.windowTooLarge ? <Button
               type="button"
               variant="secondary"
               disabled={retryPending}
@@ -39,16 +39,18 @@ export function ActivityMonthlySummary({
               onClick={onRetry}
             >
               {retryPending ? 'Refreshing…' : 'Refresh summaries'}
-            </Button>
+            </Button> : null}
           </AlertDescription>
         </Alert>
       ) : null}
       <dl className="arc-market arc-activity-monthly-summary">
         <ActivityMetric label="Calls" value={monthly.callCountLabel} />
         <ActivityMetric label="Completed" value={monthly.completedLabel} />
-        <ActivityMetric label="Needs attention" value={monthly.attentionLabel} />
-        <ActivityMetric label="Account spend" value={monthly.spendLabel} />
+        <ActivityMetric label="Refused" value={monthly.refusedLabel} />
+        <ActivityMetric label="Outcome unknown" value={monthly.attentionLabel} />
+        <ActivityMetric label={monthly.spendTitle} value={monthly.spendLabel} />
       </dl>
+      <p className="text-xs text-muted-foreground">{monthly.spendBasis} Call completion does not by itself confirm delivery or settlement.</p>
     </AeSection>
   )
 }

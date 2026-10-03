@@ -55,34 +55,44 @@ describe('tax invoice issuance control', () => {
   describe('admitTaxInvoiceIssuance', () => {
     it('withholds when policy is disabled_pending_approval', () => {
       expect(admitTaxInvoiceIssuance({
-        taxControl: SANDBOX_COMMERCIAL_POLICY_CONTROLS.tax,
+        taxControl: SANDBOX_COMMERCIAL_POLICY_CONTROLS.tax, totalUnits: '5780000',
         customerTaxFacts: validFacts,
       })).toEqual({ kind: 'withheld', reason: 'policy_disabled' })
     })
 
     it('withholds when enabled but customer tax facts are missing', () => {
       expect(admitTaxInvoiceIssuance({
-        taxControl: enabledTaxControl,
+        taxControl: enabledTaxControl, totalUnits: '1000000000',
       })).toEqual({ kind: 'withheld', reason: 'customer_tax_facts_missing' })
     })
 
     it('withholds when enabled but ABN is invalid', () => {
       expect(admitTaxInvoiceIssuance({
-        taxControl: enabledTaxControl,
+        taxControl: enabledTaxControl, totalUnits: '1000000000',
         customerTaxFacts: { ...validFacts, abn: '12345678901' },
       })).toEqual({ kind: 'withheld', reason: 'customer_abn_invalid' })
     })
 
-    it('withholds when enabled but customer is not GST registered', () => {
+    it('admits an identified recipient who is not GST registered', () => {
       expect(admitTaxInvoiceIssuance({
-        taxControl: enabledTaxControl,
+        taxControl: enabledTaxControl, totalUnits: '1000000000',
         customerTaxFacts: { ...validFacts, gstRegistered: false },
-      })).toEqual({ kind: 'withheld', reason: 'customer_not_gst_registered' })
+      })).toEqual({ kind: 'admitted' })
+    })
+
+    it('admits a small invoice without buyer tax registration or identity', () => {
+      expect(admitTaxInvoiceIssuance({ taxControl: enabledTaxControl, totalUnits: '999990000' })).toEqual({ kind: 'admitted' })
+    })
+
+    it('admits a large invoice with recipient legal name without an ABN', () => {
+      expect(admitTaxInvoiceIssuance({ taxControl: enabledTaxControl, totalUnits: '1000000000',
+        customerTaxFacts: { legalCustomerRef: 'customer:test', legalName: 'Alex Buyer', gstRegistered: false, effectiveAt: 1 },
+      })).toEqual({ kind: 'admitted' })
     })
 
     it('admits when enabled with valid ABN and GST registration', () => {
       expect(admitTaxInvoiceIssuance({
-        taxControl: enabledTaxControl,
+        taxControl: enabledTaxControl, totalUnits: '1000000000',
         customerTaxFacts: validFacts,
       })).toEqual({ kind: 'admitted' })
     })

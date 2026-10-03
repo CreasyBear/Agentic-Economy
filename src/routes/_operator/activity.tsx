@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Activity } from 'lucide-react'
+import { z } from 'zod'
 
 import { AeActivity } from '@/components/ae/activity/AeActivity'
 import type { ActivityLoaderResult } from '@/components/ae/activity/activity.contracts'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import {
   readOwnerCallsServer,
   readOwnerSpendServer,
@@ -30,23 +32,34 @@ export const Route = createFileRoute('/_operator/activity')({
     },
   },
   ...operatorRouteOptions,
-  validateSearch: (search: Record<string, unknown>): { agent?: string } => {
-    const agent = typeof search.agent === 'string' && search.agent.trim().length > 0
-      ? search.agent.trim()
-      : undefined
-    return { ...(agent === undefined ? {} : { agent }) }
-  },
-  loaderDeps: ({ search: { agent } }) => ({ agent }),
+  validateSearch: z.object({
+    agent: z.string().trim().min(1).max(200).optional(),
+    range: z.enum(['all', 'today', '7d', '30d', 'month']).optional().catch(undefined),
+  }),
+  loaderDeps: ({ search: { agent, range } }) => ({ agent, range }),
   loader: async (ctx): Promise<ActivityLoaderResult> => {
     const agent = ctx?.deps?.agent
-    const periodStart = new Date().toISOString().slice(0, 7)
+    const dateRangeFilter = ctx?.deps?.range ?? '30d'
+    const now = new Date()
+    const periodEndAt = now.getTime() + 1
+    const periodStartAt = dateRangeFilter === 'all' ? 0
+      : dateRangeFilter === 'today' ? Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+        : dateRangeFilter === 'month' ? Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+          : periodEndAt - (dateRangeFilter === '7d' ? 7 : 30) * 24 * 60 * 60 * 1_000
+    const range = { periodStartAt, periodEndAt }
+    const periodStart = dateRangeFilter === 'all' ? `All recorded history through ${formatUtcTimestamp(periodEndAt)} UTC`
+      : `${formatUtcTimestamp(periodStartAt)} to ${formatUtcTimestamp(periodEndAt)} UTC`
+    const aggregateRangeTooLarge = periodEndAt - periodStartAt > 366 * 24 * 60 * 60 * 1_000
     const period = agent
-      ? { dimensionKind: 'agent' as const, dimensionRef: agent, periodKind: 'month' as const, periodStart }
-      : { dimensionKind: 'account' as const, periodKind: 'month' as const, periodStart }
+      ? { dimensionKind: 'agent' as const, dimensionRef: agent, ...range }
+      : { dimensionKind: 'account' as const, ...range }
     const [calls, usage, spend] = await Promise.allSettled([
-      readOwnerCallsServer({ data: agent ? { principalRef: agent } : {} }),
-      readOwnerUsageServer({ data: period }),
-      readOwnerSpendServer({ data: period }),
+      readOwnerCallsServer({ data: { ...range, ...(agent === undefined ? {} : { principalRef: agent }) } }),
+      aggregateRangeTooLarge ? Promise.resolve({ kind: 'unavailable' as const, code: 'usage_window_too_large' as const })
+        : readOwnerUsageServer({ data: period }),
+      agent !== undefined ? Promise.resolve({ kind: 'not_requested' as const })
+        : aggregateRangeTooLarge ? Promise.resolve({ kind: 'unavailable' as const, code: 'formance_spend_window_too_large' })
+          : readOwnerSpendServer({ data: period }),
     ])
     for (const result of [calls, usage, spend]) {
       if (result.status === 'rejected') captureRouteException(result.reason, { 'ae.surface': 'operator_activity_loader' })
@@ -58,6 +71,8 @@ export const Route = createFileRoute('/_operator/activity')({
       usage: usage.status === 'fulfilled' ? usage.value : { kind: 'unavailable', code: 'source_unavailable' },
       spend: spend.status === 'fulfilled' ? spend.value : { kind: 'unavailable', code: 'source_unavailable' },
       periodStart,
+      ...range,
+      dateRangeFilter,
       ...(agent === undefined ? {} : { filteredAgent: agent }),
     }
   },
