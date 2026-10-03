@@ -17,15 +17,32 @@ export function PageHeader({
   breadcrumbs,
   actions,
   detail,
+  className,
+  titleId,
+  descriptionId,
+  titleTabIndex,
+  context,
+  metadata,
 }: Readonly<{
   title: string
   description: string
   breadcrumbs: readonly PageHeaderCrumb[]
   actions?: ReactNode
   detail?: ReactNode
+  className?: string
+  titleId?: string
+  descriptionId?: string
+  titleTabIndex?: -1
+  context?: ReactNode
+  metadata?: ReactNode
 }>) {
-  return <header className={`arc-market ${styles.root}`}>
-    <div className={styles.bar}>
+  const hasBarContent = breadcrumbs.length > 0
+    || context !== undefined
+    || metadata !== undefined
+    || actions !== undefined
+
+  return <header className={['arc-market', styles.root, className].filter(Boolean).join(' ')}>
+    {hasBarContent ? <div className={styles.bar}>
       <div className={styles.lead}>
         {breadcrumbs.length > 0 ? <nav className={styles.breadcrumbs} aria-label="Breadcrumb">
           <ol>
@@ -45,14 +62,17 @@ export function PageHeader({
             })}
           </ol>
         </nav> : null}
+        {context === undefined ? null : <div className={styles.context}>{context}</div>}
       </div>
-      {actions === undefined ? null : <div className={styles.actions}>{actions}</div>}
-    </div>
-
+      {metadata === undefined && actions === undefined ? null : <div className={styles.actions}>
+        {metadata === undefined ? null : <div className={styles.metadata}>{metadata}</div>}
+        {actions}
+      </div>}
+    </div> : null}
     <div className={styles.introInner}>
-      <h1 className={styles.title}>{title}</h1>
+      <h1 id={titleId} tabIndex={titleTabIndex} className={styles.title}>{title}</h1>
       <div className={styles.details}>
-        <p className={styles.description}>{description}</p>
+        <p id={descriptionId} className={styles.description}>{description}</p>
         {detail === undefined ? null : <div className={styles.detail}>{detail}</div>}
       </div>
     </div>

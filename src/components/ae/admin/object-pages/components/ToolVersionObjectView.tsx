@@ -1,7 +1,10 @@
+import { Link } from '@tanstack/react-router'
+
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
 import { Badge } from '@/components/ui/badge'
 import type { AdminToolVersionView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
@@ -23,19 +26,41 @@ export function ToolVersionObjectView({ view }: ToolVersionObjectViewProps) {
       operatorRole="admin"
       currentPath={`/admin/tools/${view.ref}`}
       title={copy.title}
-      description={copy.description}
+      description=""
+      contentOwnsHeading
       breadcrumbs={[
         { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
         { label: copy.section, href: '/admin/search?kind=tool_version' },
         { label: view.ref },
       ]}
-      actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
       stickyHeader
     >
-      <div className="arc-market arc-admin-object-reference">
-        <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
-        <AeCopyReference label={ADMIN_OBJECT_PAGE_COPY.referenceLabel} value={view.ref} />
-      </div>
+      <PageHeader
+        title={copy.title}
+        description={copy.description}
+        breadcrumbs={[
+          {
+            id: 'admin',
+            label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb,
+            renderLink: ({ children, ...linkProps }) => <Link to="/admin" {...linkProps}>{children}</Link>,
+          },
+          {
+            id: 'section',
+            label: copy.section,
+            renderLink: ({ children, ...linkProps }) => (
+              <Link to="/admin/search" search={{ kind: 'tool_version' }} {...linkProps}>{children}</Link>
+            ),
+          },
+          { id: 'record', label: view.ref },
+        ]}
+        actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
+        detail={(
+          <div className="arc-market arc-admin-object-reference">
+            <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
+            <AeCopyReference label={ADMIN_OBJECT_PAGE_COPY.referenceLabel} value={view.ref} />
+          </div>
+        )}
+      />
       <div className="arc-market arc-admin-object-layout">
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.detailsTitle}>
           <AeFactList facts={[

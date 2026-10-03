@@ -25,8 +25,9 @@ vi.mock('@tanstack/react-router', async () => {
 
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
 import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
+import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
-import type { AccountSecurityHistoryResult } from '@/modules/security/account-security'
+import type { AccountSecurityHistoryItem, AccountSecurityHistoryResult } from '@/modules/security/account-security'
 
 afterEach(() => {
   cleanup()
@@ -51,7 +52,7 @@ describe('account security history', () => {
     expect(document.body.textContent).not.toContain('Contained')
   })
 
-  it('shows source time separately from recorded time and exposes only durable references', () => {
+  it('opens durable security evidence on demand without exposing raw identity or payloads', () => {
     render(<AeAccountSecurityHistory initialResult={available()} />)
 
     const table = screen.getByRole('table', { name: 'Account security history' })
@@ -66,12 +67,31 @@ describe('account security history', () => {
     expect(screen.getByText('Revoked')).toBeTruthy()
     expect(screen.getByText('Clerk observed')).toBeTruthy()
     expect(within(table).getByText(/^Recorded /u)).toBeTruthy()
-    expect(screen.queryByText('Evidence details')).toBeNull()
+    expect(screen.queryByText('clerk:delivery-hash')).toBeNull()
     expect(document.querySelector('details')).toBeNull()
-    expect(screen.getByText('clerk:delivery-hash')).toBeTruthy()
+    const detailsButton = screen.getByRole('button', {
+      name: 'View details for security event audit:clerk:delivery-hash',
+    })
+    detailsButton.focus()
+    fireEvent.click(detailsButton)
+
+    const drawer = screen.getByRole('dialog', { name: 'Security event' })
+    expect(within(drawer).getByText('Session revoked · Revoked')).toBeTruthy()
+    expect(within(drawer).getByText('Event reference')).toBeTruthy()
+    expect(within(drawer).getByText('audit:clerk:delivery-hash')).toBeTruthy()
+    expect(within(drawer).getByText('Clerk observed')).toBeTruthy()
+    expect(within(drawer).getByText('Observed time')).toBeTruthy()
+    expect(within(drawer).getByText('Recorded time')).toBeTruthy()
+    expect(within(drawer).getByText('Correlation reference')).toBeTruthy()
+    expect(within(drawer).getByText('clerk:delivery-hash')).toBeTruthy()
+    expect(within(drawer).getByText('Actor · Owner')).toBeTruthy()
+    expect(within(drawer).getByText('Target · Session')).toBeTruthy()
     expect(document.body.textContent).not.toContain('owner@example.test')
     expect(document.body.textContent).not.toContain('192.0.2.1')
     expect(document.body.textContent).not.toContain('session_raw_1')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: 'Security event' })).toBeNull()
+    expect(document.activeElement).toBe(detailsButton)
   })
 
   it('distinguishes AE, Clerk, and provider observations without exposing provider payloads', () => {
@@ -131,6 +151,84 @@ describe('account security history', () => {
 
     expect(screen.getByText('Observed time unavailable')).toBeTruthy()
     expect(within(screen.getByRole('table', { name: 'Account security history' })).getByText(/^Recorded /u)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', {
+      name: 'View details for security event audit:clerk:delivery-hash',
+    }))
+    const drawer = screen.getByRole('dialog', { name: 'Security event' })
+    expect(within(drawer).getByText('Observed time')).toBeTruthy()
+    expect(within(drawer).getByText('Observed time unavailable')).toBeTruthy()
+    expect(within(drawer).getByText('Recorded time')).toBeTruthy()
+  })
+
+  it('refreshes open evidence by event identity and closes when that event is removed', async () => {
+    const first = available().page.items[0]!
+    const props = {
+      caption: 'Account security history',
+      emptyMessage: 'No security events.',
+      isDone: true,
+      loading: false,
+      onLoadMore: vi.fn(),
+    }
+    const { rerender } = render(<AeSecurityHistoryTable rows={[first]} {...props} />)
+
+    fireEvent.click(screen.getByRole('button', {
+      name: `View details for security event ${first.eventRef}`,
+    }))
+    expect(screen.getByRole('dialog', { name: 'Security event' })).toBeTruthy()
+
+    const refreshed: AccountSecurityHistoryItem = {
+      ...first,
+      eventType: 'account.security_profile.updated',
+      outcome: 'changed',
+      sourceSystem: 'provider_observed',
+      correlationRef: 'provider:refresh-42',
+    }
+    rerender(<AeSecurityHistoryTable rows={[refreshed]} {...props} />)
+    const updatedDrawer = screen.getByRole('dialog', { name: 'Security event' })
+    expect(within(updatedDrawer).getByText('Security profile updated · Changed')).toBeTruthy()
+    expect(within(updatedDrawer).getByText('Provider observed')).toBeTruthy()
+    expect(within(updatedDrawer).getByText('provider:refresh-42')).toBeTruthy()
+    expect(within(updatedDrawer).queryByText('clerk:delivery-hash')).toBeNull()
+
+    rerender(<AeSecurityHistoryTable rows={[]} {...props} />)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Security event' })).toBeNull())
+  })
+
+  it('filters durable evidence while keeping actor and target facts behind their disclosure flag', () => {
+    const first = available().page.items[0]!
+    const second = {
+      ...first,
+      eventRef: 'audit:clerk:another-event',
+      actorRef: 'prn_fedcba9876543210fedcba9876543210',
+      correlationRef: 'clerk:another-delivery',
+    }
+    const rows = [first, second]
+    const props = {
+      rows,
+      caption: 'Account security history',
+      emptyMessage: 'No security events.',
+      isDone: true,
+      loading: false,
+      onLoadMore: vi.fn(),
+    }
+    const { rerender } = render(<AeSecurityHistoryTable {...props} />)
+    const table = screen.getByRole('table', { name: 'Account security history' })
+    const evidenceHeader = within(table).getByRole('columnheader', { name: 'Evidence' })
+    const search = screen.getByRole('searchbox', { name: 'Filter security history…' })
+
+    expect(evidenceHeader.hasAttribute('aria-sort')).toBe(false)
+    expect(within(evidenceHeader).queryByRole('button')).toBeNull()
+    expect(within(table).getByRole('button', { name: 'Sort by Activity' })).toBeTruthy()
+    expect(within(table).getByRole('button', { name: 'Sort by Time' })).toBeTruthy()
+    expect(within(table).getByRole('button', { name: 'Sort by Source' })).toBeTruthy()
+
+    fireEvent.change(search, { target: { value: first.actorRef } })
+    expect(screen.getByRole('button', { name: `View details for security event ${first.eventRef}` })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: `View details for security event ${second.eventRef}` })).toBeNull()
+
+    rerender(<AeSecurityHistoryTable {...props} showActorAndTarget={false} />)
+    expect(screen.queryByRole('button', { name: `View details for security event ${first.eventRef}` })).toBeNull()
+    expect(screen.getByText('No security events.')).toBeTruthy()
   })
 
   it('appends the next native page without replacing newer evidence', async () => {
@@ -274,7 +372,14 @@ describe('Agent security history', () => {
 
     expect(await screen.findByText('Agent renamed')).toBeTruthy()
     expect(screen.getByText('AE recorded')).toBeTruthy()
-    expect(screen.getByText('agent:rename-safe')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', {
+      name: 'View details for security event audit:agent:rename-safe',
+    }))
+    const drawer = screen.getByRole('dialog', { name: 'Security event' })
+    expect(within(drawer).getByText('Correlation reference')).toBeTruthy()
+    expect(within(drawer).getByText('agent:rename-safe')).toBeTruthy()
+    expect(within(drawer).queryByText(/Actor ·/u)).toBeNull()
+    expect(within(drawer).queryByText(/Target ·/u)).toBeNull()
     expect(readHistory).toHaveBeenCalledWith({ data: { principalRef } })
     expect(document.body.textContent).not.toContain(principalRef)
     expect(document.body.textContent).not.toContain(`prn_${'b'.repeat(32)}`)

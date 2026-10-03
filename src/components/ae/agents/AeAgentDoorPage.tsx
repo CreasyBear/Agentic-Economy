@@ -1,24 +1,20 @@
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeSiteFaq } from '@/components/ae/website/AeSiteFaq'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { HeroContent } from '@/components/arc/blocks/hero-section/hero-content'
 import { AGENT_PAGE } from '@/content/brand-copy'
 import './AgentDoorComposition.css'
 
 export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string }) {
   return (
     <div className="arc-market arc-agent-door">
-      <section className="arc-agent-door-hero" aria-labelledby="agent-hero">
-        <div className="arc-agent-door-layout">
-          <div className="arc-agent-door-copy">
-            <h1 id="agent-hero">{AGENT_PAGE.heading}</h1>
-            <p>{AGENT_PAGE.subhead}</p>
-            <a
-              href="#agent-setup"
-              className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md].join(' ')}
-            >
-              {AGENT_PAGE.primaryCta}
-            </a>
-          </div>
+      <HeroContent
+        layout="split"
+        title={AGENT_PAGE.heading}
+        titleId="agent-hero"
+        description={AGENT_PAGE.subhead}
+        primaryAction={{ label: AGENT_PAGE.primaryCta, href: '#agent-setup' }}
+        animateIn={false}
+        media={(
           <section
             id="agent-setup"
             aria-label="Agent connection"
@@ -27,8 +23,8 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
           >
             <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
           </section>
-        </div>
-      </section>
+        )}
+      />
       <AeSiteFaq
         labelledBy="agent-faq"
         title={AGENT_PAGE.faqHeading}

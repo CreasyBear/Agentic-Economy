@@ -1,5 +1,8 @@
 /* Cells are opaque so rows passing each other during a sort cover one another cleanly instead of blending text. */
 .wrapper { --column-tint: var(--surface-muted); position: relative; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--foreground); font-family: var(--font-body); }
+/* Table actions use the compact Arc size; the app-wide touch token stays intact. */
+:global(.arc-market).wrapper { --control-height-sm: 32px; }
+@media (max-width: 620px), (pointer: coarse), (hover: none) { :global(.arc-market).wrapper { --control-height-sm: 44px; } }
 .scroller { position: relative; overflow-x: auto; overscroll-behavior-x: contain; }
 .band { position: absolute; top: 0; bottom: 0; background: var(--column-tint); pointer-events: none; }
 .table { position: relative; z-index: 1; width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; font-size: var(--text-sm); line-height: var(--leading-body); letter-spacing: var(--tracking-body); text-align: left; }

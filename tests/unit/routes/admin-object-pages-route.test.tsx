@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { createElement, type ComponentType, type ReactNode } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -20,12 +20,18 @@ vi.mock('@tanstack/react-router', () => ({
     }
   },
   useLocation: () => ({ pathname: '/admin/search', hash: '' }),
+  Link: ({ to, search, children, className }: {
+    to: string
+    search?: Record<string, string>
+    children: ReactNode
+    className?: string
+  }) => <a href={`${to}${search === undefined ? '' : `?${new URLSearchParams(search)}`}`} className={className}>{children}</a>,
 }))
 vi.mock('convex/react', () => ({ useQuery: runtime.query }))
 vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
-  AeOperatorPage: ({ title, children }: { title: string; children: ReactNode }) => (
-    <main><h1>{title}</h1>{children}</main>
+  AeOperatorPage: ({ title, children, contentOwnsHeading }: { title: string; children: ReactNode; contentOwnsHeading?: boolean }) => (
+    <main>{contentOwnsHeading ? null : <h1>{title}</h1>}{children}</main>
   ),
 }))
 vi.mock('@/components/ae/layout/AeRouteNotFound', () => ({
@@ -113,7 +119,12 @@ describe('admin object page routes', () => {
   it.each(cases)('renders the $view.kind identity and copyable reference', ({ path, param, ref, view, heading }) => {
     renderRoute(path, param, ref, view)
     expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
-    expect(screen.getByText(ref)).toBeTruthy()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByRole('link', { name: 'Admin' }).getAttribute('href')).toBe('/admin')
+    expect(within(breadcrumb).getAllByRole('link')[1]?.getAttribute('href')).toBe(`/admin/search?kind=${view.kind}`)
+    expect(within(breadcrumb).getByText(ref).getAttribute('aria-current')).toBe('page')
+    expect(document.querySelector('code')?.textContent).toBe(ref)
   })
 
   it('recovers to Search when the object does not exist', () => {

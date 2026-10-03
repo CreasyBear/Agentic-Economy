@@ -1,0 +1,12 @@
+/* Actual Arc Hero section registry source retrieved 2026-10-03. hero-section.module.css SHA-256: e275345b32cfb3d71c4048db1ac3cced39bd5f4f1abad8154ccc837fa621b0ef
+ * Installed content path; native link and heading identity ports preserve host semantics. */
+/* Shared shell for the three hero variants. Each variant adds its own module for its one idea. */
+.hero { position: relative; container: hero / inline-size; overflow: clip; background: var(--background); color: var(--foreground); font-family: var(--font-body); letter-spacing: var(--tracking-body); }
+
+.title { margin: 0; font-family: var(--font-display); font-size: clamp(2.25rem, 1.3rem + 4.4cqi, 4.5rem); font-weight: 500; letter-spacing: var(--tracking-display); line-height: var(--leading-display); text-wrap: balance; }
+.description { margin: 0; color: var(--text-secondary); font-size: var(--text-lg); line-height: var(--leading-body); text-wrap: pretty; }
+
+@container hero (max-width: 560px) {
+  .description { font-size: var(--text-base); }
+}
+

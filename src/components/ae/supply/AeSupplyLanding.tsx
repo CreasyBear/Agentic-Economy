@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { HeroContent } from '@/components/arc/blocks/hero-section/hero-content'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeSiteFaq } from '@/components/ae/website'
 import { PROVIDER_FAQ } from '@/content/provider-copy'
@@ -46,25 +46,17 @@ export function AeSupplyLanding({
 }>) {
   return (
     <div className="arc-market arc-provider-landing">
-      <section className="arc-provider-hero" aria-labelledby="supply-hero">
-        <div className="arc-provider-hero-inner">
-          <div className="arc-provider-hero-copy">
-            <h1 className="arc-provider-hero-title" id="supply-hero">Add a Tool.</h1>
-            <p className="arc-provider-hero-description">{SUPPLY_OFFER_SENTENCE}</p>
-            <div className="arc-provider-hero-actions">
-              <Link
-                to="/owner/operations/new"
-                className={[
-                  buttonStyles.button,
-                  buttonStyles.primary,
-                  buttonStyles.lg,
-                  'arc-provider-action',
-                ].join(' ')}
-              >
-                Add Tool
-              </Link>
-            </div>
-          </div>
+      <HeroContent
+        layout="split"
+        title="Add a Tool."
+        titleId="supply-hero"
+        description={SUPPLY_OFFER_SENTENCE}
+        primaryAction={{
+          label: 'Add Tool',
+          renderLink: ({ children, ...linkProps }) => <Link to="/owner/operations/new" {...linkProps}>{children}</Link>,
+        }}
+        animateIn={false}
+        media={(
           <aside className="arc-provider-requirements" aria-labelledby="supply-requirements-heading">
             <h2 className="arc-provider-requirements-title" id="supply-requirements-heading">
               Before you sign in
@@ -73,8 +65,8 @@ export function AeSupplyLanding({
               {SUPPLY_REQUIREMENTS.map((item) => <li key={item}>{item}</li>)}
             </ul>
           </aside>
-        </div>
-      </section>
+        )}
+      />
       {sourceError === undefined ? null : (
         <section className="arc-provider-error" aria-label="Provider recovery">
           <div className="arc-provider-error-inner">

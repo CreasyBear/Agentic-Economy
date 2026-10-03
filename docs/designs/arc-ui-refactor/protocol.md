@@ -4,6 +4,32 @@
 
 ## Progress counter
 
+### Full Arc block regions and record details, 2026-10-03
+
+**14 / 14 work units source-integrated; 24 / 24 across the two current branch milestones.** These are bounded implementation units, not an app-completion percentage. Visual acceptance and the long-running broad refactor remain open.
+
+| Units | Actual Arc source now owns | Preserved boundary |
+| ---: | --- | --- |
+| 5 | Agent, Quote, Tool version, Workspace and Call record `PageHeader` regions | Native typed section-query links, current record breadcrumb, single h1, reference/status and all existing body facts/controllers |
+| 1 | Shared `FaqSection` across Agents, Providers and Support | Exact questions/answers, caller heading IDs, keyboard/single-open behavior and optional native status continuation |
+| 2 | Agent and Provider `HeroContent` split regions | Exact public copy, native setup/owner operation actions, focusable real connection funnel and supplied requirements |
+| 1 | Public `SiteFooter` navigation | Exact brand/legal/social identity, named regions/navigation, all native RouterLink destinations and `reloadDocument`; optional existing media closer stays a separate region |
+| 3 | Compact Agent call/Agent directory projections and security evidence `Drawer` | Exact money/unknown sorting, status/authority, encoded receipt URLs, revisioned rename failure behavior, current-record inspection, disclosure privacy and pagination/retry |
+| 1 | Shared `AePageHeader` delegates its inner hierarchy to actual `PageHeader` | Unique region/title/description IDs, requested title focus on updates, live metadata, context, action callbacks and layout-profile metadata |
+| 1 | Recorded Call progress uses actual vertical `Stepper` | Independent supplied stage IDs/order/labels/details/states, including reserved-current/submitted-complete; no inferred sequential completion, fake clock or retry |
+
+**Requires:** authoritative supplied view models, stable record/stage IDs, native destinations and caller-owned callbacks. **Ensures:** content/navigation/disclosure parity, a complete current evidence view, compact recognition rows and literal unknown/pending facts. **Invariant:** no payment, authority, source, pagination or command engine is replaced by sample block state. **On violation:** missing observations remain explicit, unavailable actions stay absent, rejected rename remains editable, a removed inspected record closes, and hidden actor/target evidence cannot match a retained filter.
+
+The cognitive review moves complete evidence into Arc Drawer and keeps scan cells to title/reference, source, date, exact money/status and the native detail exit. Arc table-small actions use a scoped 32px desktop token, returning to 44px at narrow/coarse-pointer widths; 44px row targets retain intrinsic growth. The existing inline-edit engine remains because Arc's stock optimistic/blur engine treats a resolved false result as success and closes on rejection; migrating it requires preserving the current refusal/retry contract first.
+
+Complexity keep/remove decision: add small semantic/native-link/status ports to actual installed Arc source and remove duplicate AE header/hero/FAQ/footer/stage markup and geometry. Reuse the settled controllers, Base UI modal engine and native links; no dependency or transport is added. Actual HeroContent's stock CopyButton dependency is installed, but current connection command copying still uses its existing consent/clipboard boundary. Call progress follows Arc's documented Stepper fit; AgentRun's scripted coding/approval demo and Timeline's recency sorting cannot represent these fixed independent observations.
+
+Observable verification: integrated existing region suites passed **55 files / 387 tests**. After the last Stepper caption/strict-type refinement, the final FAQ/header/footer/receipt port run passed **4 files / 20 tests**, including the added unresolved-explicit-state case. `npm run check` passed lint, zero cycles, application/Convex types and the import/standards fences on Node22/npm11.5.1. Expanded verification restored two original footer landmarks and updated recovery assertions to demand one supplied record after removal of duplicate desktop/mobile markup. `npm run build` passed the client/server build and syntax verification for 462 server modules. The current source/action census includes all newly installed sources and explicit adaptation/retention reasons; source fingerprints are reconciled. No rendered sizing, contrast, perceived-speed, five-width or browser acceptance is claimed. Full gate remains required before merging to main.
+
+New installed provenance: FAQ TSX `5af43fde71647c95a0e9e4538345ea9ad4324dd5f76afb6622b64b4fb63c1565`, CSS `3346449f678590ac4a0457594f5a99cffad7c15587cd0d1ea16f390f7e67da9f`; HeroContent TSX `bc1b5672c25bc4ae6c1785c3b98206ee38d275d9775f277bac4e1742d3e9abf5`, CSS `0fb963f57acb7e7f8104b8bbf69e52eb3460cd6379e646d1516fb4d15370017c`; Stepper TSX `62a86a10f72ef20ca8f28e04dad460099e2aed65084187c99d780f4bdd9b53f2`, CSS `d495e43e23d4866dd9cced3b336b134a0a80072ebfc833129a63306bafcb54dc`. Other installed dependency/footer hashes and bounded ports are recorded with their source. These are copied, adapted Arc implementations, not unchanged stock APIs.
+
+Next source slice: compact credit transactions with complete current-record Drawer details; remaining record-header and inline-edit seams; remaining full-block opportunities in the audited queue. Integrate released main PR311 before touching its credit-test boundary or running the release gate. Its production slot is now released.
+
 ### Compact Arc table foundation, 2026-10-03
 
 **10 / 10 work units source-integrated.** This is one implementation milestone, not whole-app or visual acceptance. The broader Arc goal remains active. The completed full-block audit covers 530 source presenters/route bindings; its [baseline report](full-block-opportunities-2026-10-03.md) is distinct from this implementation counter.
@@ -175,16 +201,16 @@ The [source inventory](source-inventory.csv) contains every non-test `.tsx`, `.t
 
 | Census | Count | Meaning |
 | --- | ---: | --- |
-| Current source files | 849 | 784 component-area files and 65 TSX route bindings |
-| Presenters and routes | 530 | 465 presenters plus 57 page, three layout and five redirect source bindings |
-| Source companions | 319 | Hooks, contracts, styles and presentation helpers; context, not extra page redesigns |
-| Block-depth decisions assessed | 48 / 465 | Includes complete blocks, bounded adaptations, controller seams and native retention |
-| Shared Button sites | 327 | 298 Arc and 29 legacy JSX source sites |
-| Button-style sites | 135 | 14 legacy calls and 121 native Arc button-style links |
-| Other action sites | 44 | 41 native buttons and three deliberately retained dormant site buttons |
-| Current source status | 503 reviewing | 266 inventoried, one deferred and 79 retained; current visual acceptance is incomplete |
+| Current source files | 862 | 797 component-area files and 65 TSX route bindings |
+| Presenters and routes | 535 | 470 presenter/library source files plus 57 page, three layout and five redirect bindings |
+| Source companions | 327 | Hooks, contracts, styles and presentation helpers; context, not extra page redesigns |
+| Historical full-block audit | 530 / 530 | Presenter/route baseline assessed; newly installed library capabilities are recorded with this batch |
+| Shared Button sites | 328 | 299 Arc and 29 legacy JSX source sites |
+| Button-style sites | 138 | 14 legacy calls and 124 native Arc button-style links |
+| Other action sites | 54 | 51 native source buttons and three retained dormant site buttons; includes optional installed Arc capabilities |
+| Current source status | 518 reviewing | 265 inventoried, one deferred and 78 retained; current visual acceptance is incomplete |
 
-The action census scans 489 non-test AE/Arc/route TSX files; upstream `ui` and `ai-elements` implementation files are inventoried separately. Source occurrence counts are not runtime control counts: a row action rendered in a loop counts once. Census/action totals include PR309's incoming commercial changes without claiming their block-depth acceptance.
+The action census scans 494 non-test AE/Arc/route TSX files; upstream `ui` and `ai-elements` implementation files are inventoried separately. Source occurrence counts are not runtime control counts: a row action rendered in a loop counts once. Census/action totals include PR309's incoming commercial changes without claiming their block-depth acceptance.
 
 Areas and candidate batches in the CSV are routing hints. Trace callers before assigning ownership: a shared component can serve several groups, and an apparent old page can still export a live subcomponent. All rows start `inventoried`; census coverage is not proof of reachability, parity or migration.
 

@@ -12,6 +12,8 @@ describe("supply landing", () => {
     expect(
       screen.getByRole("heading", { name: "Add a Tool." }),
     ).toBeDefined();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Add a Tool." }).getAttribute("aria-labelledby")).toBe("supply-hero");
     expect(screen.getByRole("heading", { name: "Before you sign in" })).toBeDefined();
     expect(
       screen

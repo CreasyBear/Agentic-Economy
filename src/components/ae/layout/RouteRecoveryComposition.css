@@ -33,12 +33,6 @@
 }
 .arc-market .arc-route-state-stage > svg { width: 48px; height: 48px; }
 .arc-market.arc-route-state .arc-page-header { width: 100%; min-width: 0; margin: 0; padding: 0; }
-.arc-market.arc-route-state .arc-page-header-bar { grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: center; gap: var(--space-6); padding: 0; border: 0; }
-.arc-market.arc-route-state .arc-page-header-intro { max-width: 480px; justify-items: center; gap: var(--space-3); text-align: center; }
-.arc-market.arc-route-state .arc-page-header-title { font-size: 32px; font-weight: 500; line-height: 1.25; }
-.arc-market.arc-route-state .arc-page-header-title-row { justify-content: center; }
-.arc-market.arc-route-state .arc-page-header-description { margin-inline: auto; }
-.arc-market.arc-route-state :is(.arc-page-header-trailing, .arc-page-header-actions) { width: 100%; justify-content: center; justify-items: center; }
 .arc-market.arc-recovery-actions { display: grid; width: 100%; min-width: 0; gap: var(--space-4); }
 .arc-market .arc-recovery-action-row,
 .arc-market.arc-recovery-action-row {
@@ -81,7 +75,5 @@
 .arc-market.arc-inline-state [data-slot='badge'] { white-space: normal; font-size: var(--text-sm); font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
 @media (max-width: 479px) {
   .arc-market.arc-route-state { margin-block: var(--space-6); padding: var(--space-6) var(--space-4); }
-  .arc-market.arc-route-state .arc-page-header-title { font-size: 24px; }
-  .arc-market.arc-route-state :is(.arc-page-header-trailing, .arc-page-header-actions) { align-items: stretch; }
   .arc-market.arc-recovery-actions .arc-recovery-action-row { flex-direction: column; align-items: stretch; }
 }

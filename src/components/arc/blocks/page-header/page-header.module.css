@@ -5,7 +5,9 @@
 .root { --page-pad: 28px; box-sizing: border-box; width: 100%; min-width: 0; container: page-header / inline-size; border-bottom: 1px solid var(--border); padding-top: 16px; background: var(--surface); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); letter-spacing: var(--tracking-body); line-height: var(--leading-body); }
 .root :where(h1, p, ol) { margin: 0; }
 .bar { display: grid; min-height: 44px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding-inline: var(--page-pad); }
-.lead { min-width: 0; }
+.lead { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.context { min-width: 0; color: var(--text-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.metadata { display: flex; min-width: 0; align-items: center; color: var(--text-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 
 .breadcrumbs { min-width: 0; }
 .breadcrumbs ol { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0; list-style: none; }

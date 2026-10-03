@@ -27,16 +27,25 @@
 }
 
 .arc-security-activity {
-  display: grid;
+  display: flex;
   min-width: 0;
-  gap: var(--space-1);
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
   font-size: var(--text-sm);
-  overflow-wrap: anywhere;
+  line-height: 18px;
 }
 
 .arc-security-activity-name {
+  min-width: 0;
+  max-width: min(24rem, 100%);
+  overflow: hidden;
   color: var(--foreground);
   font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .arc-security-outcome {
@@ -48,42 +57,37 @@
   background: var(--surface-muted);
   color: var(--text-secondary);
   font-size: var(--text-sm);
-  line-height: 1.25;
+  line-height: 18px;
   overflow-wrap: anywhere;
 }
 
-.arc-security-time,
-.arc-security-evidence {
+.arc-security-time {
   display: grid;
   min-width: 0;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  overflow-wrap: anywhere;
+  gap: 2px;
+  font-size: 14px;
+  line-height: 18px;
 }
 
-.arc-security-time > *,
-.arc-security-evidence > div {
+.arc-security-time > * {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .arc-security-recorded {
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: 12px;
+  line-height: 14px;
 }
 
-.arc-security-evidence > div {
-  display: grid;
-  gap: var(--space-1);
+.arc-security-history [data-key='evidence'],
+.arc-security-history [data-column='evidence'] {
+  width: 104px;
+  max-width: 104px;
 }
 
-.arc-security-evidence dt {
-  color: var(--text-secondary);
-}
-
-.arc-security-evidence dd {
-  min-width: 0;
-  margin: 0;
+.arc-security-evidence-trigger {
+  width: 100%;
 }
 
 .arc-security-recovery [data-settings-group-rows] {

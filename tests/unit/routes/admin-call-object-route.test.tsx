@@ -34,6 +34,7 @@ vi.mock('@/components/ae/website/AeSiteNav', () => ({
 import { AeAppHeader } from '@/components/ae/layout/app-shell/AeAppHeader'
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { AdminCallObjectPage } from '@/components/ae/admin/call-object/AdminCallObjectPage'
+import { ADMIN_CALL_OBJECT_COPY } from '@/components/ae/admin/call-object/call-object.contracts'
 import { parseCallRef } from '@/modules/capability-execution/call-contracts'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
 import {
@@ -167,11 +168,27 @@ describe('/admin/calls/$callRef', () => {
     expect(screen.getByText('Unknown')).toBeTruthy()
   })
 
-  it('shows the canonical uncertainty sentence without claiming a zero charge', () => {
+  it('renders the found Call header and keeps uncertainty distinct from a zero charge', () => {
     const { container } = renderCallPage()
     const uncertainty = uncertainView.receipt.issue?.moneyMovement
     if (uncertainty === undefined) throw new Error('admin_call_fixture_uncertainty_missing')
 
+    const content = screen.getByTestId('operator-content')
+    expect(within(content).getByRole('heading', { level: 1, name: ADMIN_CALL_OBJECT_COPY.title })).toBeTruthy()
+    expect(container.querySelectorAll('h1')).toHaveLength(1)
+    expect(screen.getByText(ADMIN_CALL_OBJECT_COPY.description)).toBeTruthy()
+
+    const breadcrumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumbs).getByRole('link', { name: ADMIN_CALL_OBJECT_COPY.adminBreadcrumb }).getAttribute('href')).toBe('/admin')
+    expect(within(breadcrumbs).getByRole('link', { name: ADMIN_CALL_OBJECT_COPY.callsBreadcrumb }).getAttribute('href')).toBe('/admin/search')
+    expect(within(breadcrumbs).getByText(callRefText, { exact: true }).getAttribute('aria-current')).toBe('page')
+
+    expect(screen.getByText('Attention')).toBeTruthy()
+    expect(screen.getByText(callRefText, { selector: 'code' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Reference' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Call facts' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Related references' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Activity' })).toBeTruthy()
     expect(screen.getByText(uncertainty)).toBeTruthy()
     expect(container.textContent).not.toContain('A$0.00')
   })

@@ -109,4 +109,54 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
     expect(rows[1]?.textContent).toContain('Larger')
     expect(rows[2]?.textContent).toContain('Unknown')
   })
+
+  it('keeps full identity values and the encoded native receipt link available', () => {
+    const callRef = 'call:encoded /?'
+    const toolLabel = `Research tool ${'with a very long display name '.repeat(4).trimEnd()}`
+    const toolRef = `tool_${'canonical_reference_'.repeat(5)}`
+    const providerRef = `provider_${'canonical_reference_'.repeat(5)}`
+
+    render(<AeAgentCallHistoryTable activity={[
+      {
+        ...sampleActivity[0]!,
+        callRef,
+        toolLabel,
+        toolRef,
+        providerRef,
+      },
+      sampleActivity[1]!,
+    ]} />)
+
+    expect(screen.getByText(toolLabel)).toHaveAttribute('title', toolLabel)
+    expect(screen.getByText(toolRef)).toHaveAttribute('title', toolRef)
+    expect(screen.getByText(providerRef)).toHaveAttribute('title', providerRef)
+
+    const receipt = screen.getByRole('link', { name: `View call receipt ${callRef}` })
+    expect(receipt).toHaveAttribute('href', `/calls/${encodeURIComponent(callRef)}`)
+    expect(receipt).toHaveAttribute('aria-label', `View call receipt ${callRef}`)
+
+    const table = screen.getByRole('table')
+    const receiptHeader = within(table).getAllByRole('columnheader').at(-1)
+    expect(receiptHeader).toHaveAttribute('data-key', 'receipt')
+    expect(receiptHeader).not.toHaveAttribute('data-sortable')
+    const firstDataRow = within(table).getAllByRole('row')[1]!
+    const cells = within(firstDataRow).getAllByRole('cell')
+    expect(cells.map((cell) => cell.getAttribute('data-label'))).toEqual([
+      'Tool / Task',
+      'Provider',
+      'Amount',
+      'Status',
+      'When',
+      'Receipt',
+    ])
+    expect(cells[2]).toHaveAttribute('data-numeric')
+
+    const filter = screen.getByRole('searchbox', { name: 'Filter rows…' })
+    fireEvent.change(filter, { target: { value: toolLabel } })
+    expect(screen.getByText(toolLabel)).toBeInTheDocument()
+    expect(screen.queryByText('Code Execution')).not.toBeInTheDocument()
+    fireEvent.change(filter, { target: { value: providerRef } })
+    expect(screen.getByText(toolLabel)).toBeInTheDocument()
+    expect(screen.queryByText('Code Execution')).not.toBeInTheDocument()
+  })
 })
