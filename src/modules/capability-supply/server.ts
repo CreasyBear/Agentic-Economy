@@ -8,6 +8,7 @@ export {
   x402PaymentCredentialRefFromEnvironment,
 } from './internal/server-credential'
 export {
+  cdpX402TreasuryConfigurationFromEnvironment,
   X402_CDP_ACCOUNT_NAME_ENV,
   X402_CDP_ACCOUNT_POLICY_ID_ENV,
   X402_CDP_API_KEY_ID_ENV,

@@ -192,6 +192,16 @@ describe('payment readiness read-only refresh', () => {
     expect(io.chain).not.toHaveBeenCalled()
   })
 
+  it('probes the configured chain while custody is disabled and preserves the signing refusal', async () => {
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+    io.cdp.mockResolvedValue({ kind: 'refused', code: 'cdp_custody_configuration_invalid' })
+    const f = actionFixture()
+    await refreshPaymentReadiness(f.ctx)
+    expect(io.chain).toHaveBeenCalledWith({ environment: 'sandbox', address: ADDRESS, now: NOW })
+    expect(f.snapshot().checks.base_rpc.kind).toBe('passed')
+    expect(f.snapshot().checks.cdp_custody).toEqual({ kind: 'failed', code: 'cdp_custody_configuration_invalid' })
+  })
+
   it('does not probe the chain when explicit CDP custody configuration is missing', async () => {
     vi.stubEnv('CDP_API_KEY_SECRET', undefined)
     io.cdp.mockResolvedValue({ kind: 'refused', code: 'cdp_custody_configuration_invalid' })

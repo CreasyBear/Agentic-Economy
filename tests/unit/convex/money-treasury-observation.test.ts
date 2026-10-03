@@ -77,10 +77,11 @@ function backendWithObserver(reader: CdpUsdcBalanceReader = stubBalanceReader())
   } as unknown as Parameters<typeof observeTreasuryHandler>[0]
   return {
     backend,
-    observe: async (overrides: Readonly<{ now?: number; enabled?: boolean; deployment?: string }> = {}) =>
+    observe: async (overrides: Readonly<{ now?: number; enabled?: boolean; configured?: boolean; deployment?: string }> = {}) =>
       await observeTreasuryHandler(ctx, {
-        environment: overrides.enabled === false ? { AE_DEPLOYMENT_ENVIRONMENT: 'production' }
-          : { ...custodyEnvironment, AE_DEPLOYMENT_ENVIRONMENT: overrides.deployment ?? 'production' },
+        environment: overrides.configured === false ? { AE_DEPLOYMENT_ENVIRONMENT: 'production' }
+          : { ...custodyEnvironment, AE_X402_CUSTODY_ENABLED: String(overrides.enabled ?? true),
+            AE_DEPLOYMENT_ENVIRONMENT: overrides.deployment ?? 'production' },
         now: overrides.now ?? OBSERVED_AT,
         createBalanceReader: () => reader,
       }),
@@ -95,19 +96,31 @@ describe('x402 treasury observation workload', () => {
     const observer = backendWithObserver()
 
     try {
-      await expect(observer.observe({ enabled: false })).resolves.toEqual({
+      await expect(observer.observe({ configured: false })).resolves.toEqual({
         kind: 'skipped',
-        reason: 'custody_disabled',
+        reason: 'custody_configuration_invalid',
         observations: [],
       })
       expect(log).toHaveBeenCalledWith('money_treasury_observation_skipped', {
         workload: 'observe x402 treasury',
-        reason: 'custody_disabled',
+        reason: 'custody_configuration_invalid',
       })
     } finally {
       log.mockRestore()
     }
     await expect(observer.rows()).resolves.toEqual([])
+  })
+
+  it('records a disabled wallet once under concurrent retries using only balance reads', async () => {
+    const reader = stubBalanceReader()
+    const read = vi.spyOn(reader, 'listTokenBalances')
+    const observer = backendWithObserver(reader)
+    const results = await Promise.all([observer.observe({ enabled: false }), observer.observe({ enabled: false })])
+    expect(results).toEqual(Array(2).fill({ kind: 'recorded', observations: [
+      { environment: 'production', network: lane('production').profile.network, totalUnits: '5000000' },
+    ] }))
+    expect(read).toHaveBeenCalledTimes(2)
+    await expect(observer.rows()).resolves.toHaveLength(1)
   })
 
   it('records only the production Base lane on a production deployment', async () => {

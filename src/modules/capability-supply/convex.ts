@@ -6,6 +6,7 @@ export { dereferenceLocalSchema } from './internal/schema-deref-shared'
 export {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
+  cdpX402TreasuryConfigurationFromEnvironment,
   type CdpX402CustodyConfiguration,
 } from './internal/x402-custody-configuration'
 export {

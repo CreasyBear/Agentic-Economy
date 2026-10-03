@@ -95,6 +95,27 @@ async function command(admin: ConvexFixtureAdmin, key: string, paused: boolean) 
 }
 
 describe('registered treasury snapshot publication and control behavior', () => {
+  it('publishes and displays fresh evidence while custody is disabled but refuses payment resume', async () => {
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+    const backend = convexTestWithMarketComponents()
+    const admin = await ownerAdmin(backend, 'user_snapshot-disabled-custody')
+    await seedObservation(backend)
+    const snapshot = report()
+    await expect(backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot }))
+      .resolves.toMatchObject({ kind: 'published', replayed: false })
+    await expect(admin.query(api.adminConsoleTreasury.read, {})).resolves.toMatchObject({
+      kind: 'ready', custody: identity, observation: { totalUnits: '15000000', observedAt: NOW }, snapshot,
+    })
+    await expect(admin.mutation(api.adminTreasuryCommands.setPaymentsPaused, await command(admin, 'disabled:pause', true)))
+      .resolves.toMatchObject({ kind: 'completed', code: 'payments_paused' })
+    const paused = (await stored(backend)).launch
+    await expect(admin.mutation(api.adminTreasuryCommands.setPaymentsPaused, await command(admin, 'disabled:resume', false)))
+      .resolves.toMatchObject({ kind: 'refused', code: 'treasury_configuration_unavailable' })
+    expect((await stored(backend)).launch).toEqual(paused)
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+      .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_configuration_unavailable' } })
+  })
+
   it('readiness preserves the original FX and wallet evidence expiry', async () => {
     const backend = convexTestWithMarketComponents()
     await seedObservation(backend, NOW - 120_000)
