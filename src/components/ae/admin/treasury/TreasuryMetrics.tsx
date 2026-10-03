@@ -1,8 +1,11 @@
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
-import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
+import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
+import { Badge } from '@/components/arc/badge/badge'
+import { MetricsOverview, MetricsPanel } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
+import { UsageMeter } from '@/components/arc/usage-meter/usage-meter'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import type { ColumnDef } from '@tanstack/react-table'
 import { formatCount, formatRelativeTime, formatTimestamp } from '@/lib/ui/format-time'
 import type { AdminTreasuryView, TreasuryCheck } from '@/modules/money/treasury-report'
 import { sumTreasuryUnits, treasuryMoney, treasuryRatios } from './treasury-view-model'
@@ -14,8 +17,75 @@ function SourceTime({ label, at }: { label: string; at: number }) {
 }
 function Check({ label, check }: { label: string; check: TreasuryCheck | undefined }) {
   if (check === undefined || check.kind === 'unavailable') return unavailable(label)
-  if (check.kind === 'matched') return <p className="text-sm"><Badge variant="success">{label === 'Cash' ? 'Cash reconciled' : `${label} matched`}</Badge> <span className="text-muted-foreground">{formatCount(check.checkedCount)} checked</span></p>
-  return <p className="text-sm"><Badge variant={check.kind === 'mismatch' ? 'destructive' : 'warning'}>{label} needs review</Badge> <span className="text-muted-foreground">{check.kind === 'attention' ? `${formatCount(check.pendingCount)} pending` : `${formatCount(check.checkedCount)} checked`}</span></p>
+  if (check.kind === 'matched') return <p className="text-sm"><Badge tone="success">{label === 'Cash' ? 'Cash reconciled' : `${label} matched`}</Badge> <span className="text-muted-foreground">{formatCount(check.checkedCount)} checked</span></p>
+  return <p className="text-sm"><Badge tone={check.kind === 'mismatch' ? 'danger' : 'warning'}>{label} needs review</Badge> <span className="text-muted-foreground">{check.kind === 'attention' ? `${formatCount(check.pendingCount)} pending` : `${formatCount(check.checkedCount)} checked`}</span></p>
+}
+
+type BookedRefill = NonNullable<AdminTreasuryView['snapshot']>['deposits'][number]
+type InFlightCall = Extract<NonNullable<AdminTreasuryView['snapshot']>['inFlight'], { kind: 'available' }>['calls'][number]
+const amountSort = (left: string, right: string) => new Decimal(left).comparedTo(right)
+
+function BookedRefills({ deposits, environment }: { deposits: readonly BookedRefill[]; environment: AdminTreasuryView['environment'] }) {
+  const columns: ColumnDef<BookedRefill, unknown>[] = [
+    { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount', numeric: true },
+      header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
+      sortingFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
+      cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.chainTransactionHash === null ? 'Opening balance · ' : ''}{treasuryMoney(row.original.amountUnits)}</span> },
+    { id: 'booked', accessorKey: 'bookedAt', meta: { label: 'Booked' },
+      header: ({ column }) => <AeOperatorSortableHeader label="Booked" column={column} />,
+      cell: ({ row }) => <time className="whitespace-nowrap" dateTime={new Date(row.original.bookedAt).toISOString()}>{formatTimestamp(row.original.bookedAt)}</time> },
+    { id: 'transfer', accessorFn: row => `${row.transactionRef} ${row.chainTransactionHash ?? ''}`, header: 'Transfer', meta: { label: 'Transfer' }, enableSorting: false,
+      cell: ({ row }) => {
+        const hash = row.original.chainTransactionHash
+        return <details className="min-w-0">
+          <summary className="cursor-pointer text-sm">Transfer details</summary>
+          <p className="mt-intra break-all text-xs" title={row.original.transactionRef}>{row.original.transactionRef}</p>
+          {hash === null ? null : <p className="mt-intra break-all text-xs" title={hash}>{hash}</p>}
+          {hash !== null && /^0x[0-9a-fA-F]{64}$/.test(hash) ? <a
+            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm} mt-intra`} target="_blank" rel="noopener noreferrer"
+            href={`https://${environment === 'production' ? 'basescan.org' : 'sepolia.basescan.org'}/tx/${hash}`}
+          >View transfer<span className="sr-only"> on {environment === 'production' ? 'Base' : 'Base Sepolia'} (opens a new tab)</span></a> : null}
+        </details>
+      } },
+  ]
+  return <AeRecordTable columns={columns} data={deposits} getRowId={row => row.transactionRef} caption="Recent booked refills"
+    filterPlaceholder="Filter booked refills" countLabel="refills" emptyMessage="No booked refills match this filter." />
+}
+
+function InFlightCalls({ calls }: { calls: readonly InFlightCall[] }) {
+  const columns: ColumnDef<InFlightCall, unknown>[] = [
+    { id: 'call', accessorKey: 'callRef', meta: { label: 'Call', truncate: true },
+      header: ({ column }) => <AeOperatorSortableHeader label="Call" column={column} />,
+      cell: ({ row }) => <a className="block min-w-0 truncate underline underline-offset-4" title={row.original.callRef}
+        href={`/admin/calls/${encodeURIComponent(row.original.callRef)}`}>{row.original.callRef}</a> },
+    { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount', numeric: true },
+      header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
+      sortingFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
+      cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{treasuryMoney(row.original.amountUnits)}</span> },
+    { id: 'created', accessorKey: 'createdAt', meta: { label: 'Created' },
+      header: ({ column }) => <AeOperatorSortableHeader label="Created" column={column} />,
+      cell: ({ row }) => <time className="whitespace-nowrap" title={formatTimestamp(row.original.createdAt)}
+        dateTime={new Date(row.original.createdAt).toISOString()}>{formatRelativeTime(row.original.createdAt)}</time> },
+  ]
+  return <AeRecordTable columns={columns} data={calls} getRowId={row => row.callRef} caption="Unresolved Calls"
+    filterPlaceholder="Filter unresolved Calls" countLabel="Calls" emptyMessage="No unresolved Calls match this filter." />
+}
+
+/**
+ * Requires a typed source read; only a positive limit can define a percentage.
+ * Ensures approximate geometry and exact under/at/over state come from the same units.
+ * Invariant: display rounding never changes the limit state or the exact money facts.
+ * On violation: null means the percentage is unavailable; source amounts remain visible.
+ */
+function exposureMeter(spending: NonNullable<AdminTreasuryView['snapshot']>['spending'] | undefined) {
+  if (spending?.kind !== 'available') return null
+  const maximum = new Decimal(spending.maximumUnits)
+  if (!maximum.gt(0)) return null
+  const used = new Decimal(sumTreasuryUnits(spending.settledUnits, spending.liabilityUnits))
+  const percentage = used.div(maximum).mul(100).toNumber()
+  if (!Number.isFinite(percentage)) return null
+  const limitState = used.gt(maximum) ? 'over' as const : used.eq(maximum) ? 'at' as const : 'under' as const
+  return { percentage, limitState }
 }
 export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
   const snapshot = view.snapshot
@@ -24,13 +94,17 @@ export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
   const inflight = snapshot?.inFlight
   const spending = snapshot?.spending
   const ratios = treasuryRatios(snapshot)
-  const percentage = spending?.kind === 'available' && new Decimal(spending.maximumUnits).gt(0)
-    ? Decimal.min(new Decimal(sumTreasuryUnits(spending.settledUnits, spending.liabilityUnits)).div(spending.maximumUnits).mul(100), 100).toNumber() : null
-  return <>
-    <AeSection title="Float" description="Company USDC working capital. Customer credit is held in AUD.">
-      <div className="grid gap-related rounded-card border border-border bg-card p-related">
+  const exposure = exposureMeter(spending)
+  return <MetricsOverview title="Treasury position" cards={[
+    { label: 'Available for spending', value: ledger?.kind === 'available' ? treasuryMoney(ledger.availableUnits) : 'Unavailable' },
+    { label: 'Committed to Calls', value: ledger?.kind === 'available' ? treasuryMoney(ledger.committedUnits) : 'Unavailable' },
+    { label: 'Protected buffer', value: ledger?.kind === 'available' ? treasuryMoney(ledger.bufferUnits) : 'Unavailable' },
+    { label: 'Customer credit · AUD', value: ratios.creditAudUnits === null ? 'Unavailable' : treasuryMoney(ratios.creditAudUnits, 'AUD') },
+  ]}>
+    <MetricsPanel title="Float" description="Company USDC working capital. Customer credit is held in AUD.">
+      <div className="grid min-w-0 gap-related">
         {view.observation === null ? unavailable('Wallet observation') : <>
-          <p className="text-2xl font-semibold tabular-nums">{treasuryMoney(view.observation.totalUnits)}</p>
+          <p className="text-2xl font-medium tabular-nums">{treasuryMoney(view.observation.totalUnits)}</p>
           <SourceTime label="Latest CDP wallet observation" at={view.observation.observedAt} />
         </>}
         {ledger?.kind !== 'available' ? unavailable('Ledger balances') : <>
@@ -58,21 +132,12 @@ export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
         </details> : null}
         {snapshot === null ? unavailable('Booked refills') : <div className="grid gap-intra border-t border-border pt-related">
           <h3 className="text-sm font-medium">Recent booked refills</h3>
-          {snapshot.deposits.length === 0 && !snapshot.depositsComplete ? unavailable('Booked refills') : snapshot.deposits.length === 0 ? <p className="text-sm text-muted-foreground">No booked refills in this report.</p> : <ul className="grid gap-related text-sm">
-            {snapshot.deposits.map(deposit => <li key={deposit.transactionRef} className="grid gap-intra sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-related">
-              <span className="font-medium tabular-nums">{deposit.chainTransactionHash === null ? 'Opening balance · ' : ''}{treasuryMoney(deposit.amountUnits)}</span>
-              <time className="text-muted-foreground" dateTime={new Date(deposit.bookedAt).toISOString()}>{formatTimestamp(deposit.bookedAt)}</time>
-              {deposit.chainTransactionHash !== null && /^0x[0-9a-fA-F]{64}$/.test(deposit.chainTransactionHash) ? <a
-                className="underline underline-offset-4" target="_blank" rel="noopener noreferrer"
-                href={`https://${view.environment === 'production' ? 'basescan.org' : 'sepolia.basescan.org'}/tx/${deposit.chainTransactionHash}`}
-              >View transfer<span className="sr-only"> on {view.environment === 'production' ? 'Base' : 'Base Sepolia'} (opens a new tab)</span></a> : null}
-            </li>)}
-          </ul>}
+          {snapshot.deposits.length === 0 && !snapshot.depositsComplete ? unavailable('Booked refills') : snapshot.deposits.length === 0 ? <p className="text-sm text-muted-foreground">No booked refills in this report.</p> : <BookedRefills deposits={snapshot.deposits} environment={view.environment} />}
           {!snapshot.depositsComplete ? <p className="text-xs text-muted-foreground">Additional booked entries are not shown here.</p> : null}
         </div>}
       </div>
-    </AeSection>
-    <AeSection title="Runway" description="Available USDC divided by the average daily provider payments over the last seven days. Committed funds and the buffer are excluded.">
+    </MetricsPanel>
+    <MetricsPanel title="Runway" description="Available USDC divided by the average daily provider payments over the last seven days. Committed funds and the buffer are excluded.">
       {ledger?.kind !== 'available' ? unavailable('Runway') : <>
         <AeFactList density="compact" className="grid-cols-1 sm:grid-cols-3" facts={[
           { label: 'Provider payments · last 24 hours', value: treasuryMoney(ledger.payments24hUnits) },
@@ -88,8 +153,8 @@ export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
         { label: 'Low-water mark · fixed', value: treasuryMoney(view.controls.thresholds.lowWaterUnits) },
         { label: 'Target float · fixed', value: treasuryMoney(view.controls.thresholds.targetFloatUnits) },
       ]} />
-    </AeSection>
-    <AeSection title="Coverage" description="Available USDC against all purchased and promotional AUD credit, including credit reserved for Calls. Committed USDC and the protected buffer are excluded from available funds.">
+    </MetricsPanel>
+    <MetricsPanel title="Coverage" description="Available USDC against all purchased and promotional AUD credit, including credit reserved for Calls. Committed USDC and the protected buffer are excluded from available funds.">
       {ledger?.kind !== 'available' ? unavailable('Customer credit') : <>
         <AeFactList density="compact" className="grid-cols-1 sm:grid-cols-3" facts={[
           { label: 'Purchased credit · available + reserved', value: treasuryMoney(sumTreasuryUnits(ledger.purchasedAvailableAudUnits, ledger.purchasedReservedAudUnits), 'AUD') },
@@ -105,20 +170,15 @@ export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
         </>}
       </>}
       <Check label="Customer funding" check={snapshot?.checks.funding} />
-    </AeSection>
-    <AeSection title="In flight" description="Unresolved Calls and spend exposure remain visible while payments are paused.">
+    </MetricsPanel>
+    <MetricsPanel title="In flight" description="Unresolved Calls and spend exposure remain visible while payments are paused.">
       {inflight?.kind !== 'available' ? unavailable('Reconciliation queue') : <>
         <AeFactList density="compact" className="grid-cols-1 sm:grid-cols-3" facts={[
           { label: 'Calls requiring reconciliation', value: `${formatCount(inflight.count)} · ${treasuryMoney(inflight.amountUnits)}` },
           { label: 'Oldest unresolved Call', value: inflight.oldestAt === null ? 'None' : formatRelativeTime(inflight.oldestAt) },
           { label: 'Overdue reservations', value: `${formatCount(inflight.overdueCount)} · ${treasuryMoney(inflight.overdueUnits)}` },
         ]} />
-        {inflight.calls.length > 0 ? <ul className="grid gap-intra text-sm">
-          {inflight.calls.map(call => <li key={call.callRef} className="flex flex-wrap items-center justify-between gap-intra">
-            <a className="break-all underline underline-offset-4" href={`/admin/calls/${encodeURIComponent(call.callRef)}`}>{call.callRef}</a>
-            <span className="tabular-nums">{treasuryMoney(call.amountUnits)} · {formatRelativeTime(call.createdAt)}</span>
-          </li>)}
-        </ul> : null}
+        {inflight.calls.length > 0 ? <InFlightCalls calls={inflight.calls} /> : null}
         {!inflight.listedCallsComplete ? <a href="/admin/exceptions?kind=uncertain_call&partition=reconciliation_required" className="text-sm underline underline-offset-4">More Calls remain. Open the reconciliation queue.</a> : null}
       </>}
       {spending?.kind !== 'available' ? unavailable('Rolling spend exposure') : <div className="grid gap-intra">
@@ -127,10 +187,13 @@ export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
           { label: 'Unresolved signing liability', value: treasuryMoney(spending.liabilityUnits) },
           { label: 'Exposure / rolling limit', value: `${treasuryMoney(sumTreasuryUnits(spending.settledUnits, spending.liabilityUnits))} / ${treasuryMoney(spending.maximumUnits)}` },
         ]} />
-        {percentage === null ? null : <Progress value={percentage} aria-label="Rolling spend exposure against limit" />}
+        {exposure === null ? unavailable('Exposure percentage') : <UsageMeter label="Rolling spend exposure against limit" unit="%" limit={100} decimals={1}
+          warnAt={1} freeLabel="Remaining allowance" overLabel="Above rolling limit"
+          limitState={exposure.limitState} segments={[{ id: 'rolling-exposure', label: 'Rolling spend exposure', value: exposure.percentage }]} />}
+        {exposure === null ? null : <p className="text-xs text-muted-foreground">The percentage is approximate. Exposure and limit amounts above remain exact.</p>}
         <SourceTime label="Rolling window starts" at={spending.windowStartsAt} />
       </div>}
       <div className="grid gap-intra sm:grid-cols-2"><Check label="Provider payments" check={snapshot?.checks.settlements} /><Check label="Reservations" check={snapshot?.checks.reservations} /></div>
-    </AeSection>
-  </>
+    </MetricsPanel>
+  </MetricsOverview>
 }

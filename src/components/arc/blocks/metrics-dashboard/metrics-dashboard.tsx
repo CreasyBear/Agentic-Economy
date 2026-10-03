@@ -53,6 +53,47 @@ export function MetricsSummary({ cards, unavailable = false }: MetricsSummaryPro
   )
 }
 
+/** The genuine dashboard frame and KPI region, shared by live metric projections. */
+export function MetricsOverview({ title, cards, controls, coverageDescription, unavailable = false, label, children }: Readonly<{
+  title: string
+  cards: readonly MetricCard[]
+  controls?: ReactNode
+  coverageDescription?: string
+  unavailable?: boolean
+  label?: string
+  children: ReactNode
+}>) {
+  return <section className={'arc-market ' + styles.dashboard} aria-label={label ?? title}>
+    <header className={styles.header}>
+      <h2 className={styles.title}>{title}</h2>
+      {controls === undefined ? null : <div className={styles.actions}>{controls}</div>}
+    </header>
+    {coverageDescription === undefined ? null : <p className={styles.coverageNotice} role="status">{coverageDescription}</p>}
+    <MetricsSummary cards={cards} unavailable={unavailable} />
+    {children}
+  </section>
+}
+
+/** The source dashboard's inspectable section, without a synthetic chart or series. */
+export function MetricsPanel({ title, titleId, description, action, children }: Readonly<{
+  title: string
+  titleId?: string
+  description?: string
+  action?: ReactNode
+  children: ReactNode
+}>) {
+  const generatedId = useId()
+  const id = titleId ?? generatedId
+  return <section className={styles.chartSection} aria-labelledby={id}>
+    <div className={styles.chartBar}>
+      <h3 id={id} className={styles.chartTitle}>{title}</h3>
+      {action}
+    </div>
+    {description === undefined ? null : <p className={styles.chartDescription}>{description}</p>}
+    <div className={description === undefined ? undefined : styles.panelDetails}>{children}</div>
+  </section>
+}
+
 function niceScale(max: number) {
   const span = max || 1
   const raw = span / 3
@@ -146,21 +187,9 @@ export function MetricsDashboard({ cards, ratios, dailyCalls, controls, coverage
     : Math.min(88, Math.max(12, (chart.x(activeIndex) / W) * 100))
 
   return (
-    <section className={'arc-market ' + styles.dashboard} aria-label="Metrics dashboard">
-      <header className={styles.header}>
-        <h2 className={styles.title}>Headline metrics</h2>
-        <div className={styles.actions}>{controls}</div>
-      </header>
-
-      {totalsWithheld ? (
-        <p className={styles.coverageNotice} role="status">{coverageDescription}</p>
-      ) : null}
-
-      <MetricsSummary cards={displayedCards} unavailable={totalsWithheld} />
-
-      <section className={styles.chartSection} aria-labelledby={uid + '-daily-calls'}>
-        <div className={styles.chartBar}>
-          <h3 id={uid + '-daily-calls'} className={styles.chartTitle}>Daily Calls</h3>
+    <MetricsOverview title="Headline metrics" label="Metrics dashboard" cards={displayedCards} controls={controls}
+      unavailable={totalsWithheld} {...(coverageDescription === undefined ? {} : { coverageDescription })}>
+      <MetricsPanel title="Daily Calls" titleId={uid + '-daily-calls'} action={
           <div className={styles.seriesControls} role="group" aria-label="Daily Call series">
             {seriesOptions.map((option) => {
               const selected = metricKey === option.key
@@ -188,7 +217,7 @@ export function MetricsDashboard({ cards, ratios, dailyCalls, controls, coverage
               )
             })}
           </div>
-        </div>
+      }>
 
         {points.length > 0 ? (
           <p id={uid + '-snapshot-scope'} className={styles.chartDescription}>{observationDescription}</p>
@@ -283,7 +312,7 @@ export function MetricsDashboard({ cards, ratios, dailyCalls, controls, coverage
             </div>
           </div>
         )}
-      </section>
+      </MetricsPanel>
 
       {totalsWithheld ? null : <section className={styles.ratioSection} aria-labelledby={uid + '-ratios'}>
         <h3 id={uid + '-ratios'} className={styles.ratioTitle}>Ratios</h3>
@@ -296,6 +325,6 @@ export function MetricsDashboard({ cards, ratios, dailyCalls, controls, coverage
           ))}
         </dl>
       </section>}
-    </section>
+    </MetricsOverview>
   )
 }
