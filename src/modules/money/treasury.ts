@@ -13,6 +13,13 @@ export const DEFAULT_TREASURY_THRESHOLDS: TreasuryThresholds = {
 export const TREASURY_DRIFT_TOLERANCE_UNITS = '10000'
 export const TREASURY_RECONCILIATION_INTERVAL_MS = 15 * 60_000
 export const TREASURY_RESERVATION_AGE_LIMIT_MS = 30 * 60_000
+/**
+ * Finalized Base blocks inherit Ethereum finality and can predate a fresh RPC
+ * read by tens of minutes. Preserve the chain reader's one-hour ceiling across
+ * audit and readiness; source observations and snapshots expire independently.
+ * An expired finalized block cannot become fresh through a later report.
+ */
+export const TREASURY_FINALIZED_BLOCK_MAX_AGE_MS = 60 * 60_000
 
 export const treasuryChainCheckpointValue = v.object({
   blockNumber: v.string(), blockHash: v.string(), balanceUnits: v.string(),

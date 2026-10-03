@@ -3,7 +3,7 @@ import { cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability
 import { env, type QueryCtx } from '../../../_generated/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { TREASURY_SNAPSHOT_MAX_AGE_MS, type TreasurySnapshot, type TreasuryResumeRefusalCode } from '@/modules/money/treasury-report'
-import type { TreasuryIdentity } from '@/modules/money/treasury'
+import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS, type TreasuryIdentity } from '@/modules/money/treasury'
 import { configuredTreasuryIdentity } from './progress'
 import { readTreasurySpendExposure } from './auditSources'
 import { x402SpendPolicyFromEnvironment } from '@/modules/money/x402-spend-admission'
@@ -42,7 +42,7 @@ export async function treasuryResumeRefusal(ctx: Pick<QueryCtx, 'db'>, environme
   const policy = x402SpendPolicyFromEnvironment(env, { environment, network: identity.network, asset: identity.asset })
   if (policy === undefined || exposure.kind !== 'available' || snapshot.chain.observedAt > now
     || now - snapshot.chain.observedAt >= TREASURY_SNAPSHOT_MAX_AGE_MS
-    || now - snapshot.chain.blockTimestamp >= TREASURY_SNAPSHOT_MAX_AGE_MS) return 'treasury_reconciliation_required'
+    || now - snapshot.chain.blockTimestamp >= TREASURY_FINALIZED_BLOCK_MAX_AGE_MS) return 'treasury_reconciliation_required'
   if (BigInt(snapshot.ledger.availableUnits) <= 0n
     || BigInt(observation.totalUnits) <= BigInt(identity.bufferTargetUnits)
     || BigInt(exposure.totalExposureUnits) >= BigInt(policy.platformDailyMaximumUnits)) {
@@ -71,7 +71,7 @@ export async function readTreasuryPaymentReadinessCheck(
   return { kind: 'passed', validUntil: Math.min(
     snapshot.snapshotAt + TREASURY_SNAPSHOT_MAX_AGE_MS,
     snapshot.chain.observedAt + TREASURY_SNAPSHOT_MAX_AGE_MS,
-    snapshot.chain.blockTimestamp + TREASURY_SNAPSHOT_MAX_AGE_MS,
+    snapshot.chain.blockTimestamp + TREASURY_FINALIZED_BLOCK_MAX_AGE_MS,
     observation.observedAt + 10 * 60_000,
   ) }
 }

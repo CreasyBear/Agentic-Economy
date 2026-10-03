@@ -4,7 +4,7 @@ import { makeFunctionReference } from 'convex/server'
 import type { ActionCtx } from '../../../convex/_generated/server'
 import schema from '../../../convex/schema'
 import { seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
-import { TREASURY_SNAPSHOT_MAX_AGE_MS } from '@/modules/money/treasury-report'
+import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS } from '@/modules/money/treasury'
 import { readWebConfiguration, refreshPaymentReadiness } from '../../../convex/lib/money/readiness/refresh'
 import { backendPaymentReadinessDigest, paymentReadinessExpiresAt, sealPaymentReadinessSnapshot, type PaymentReadinessSnapshot, type PaymentReadinessChecks } from '@/modules/money/payment-readiness'
 import { getFunctionName } from 'convex/server'
@@ -904,7 +904,7 @@ describe('production aggregate payment readiness', () => {
     vi.mocked(Date.now).mockReturnValue(startedAt + 2)
     const treasuryExpiresAt = startedAt + 1002
     await seedTreasuryReadinessFacts(backend, { observation: 'preserve',
-      chainBlockTimestamp: treasuryExpiresAt - TREASURY_SNAPSHOT_MAX_AGE_MS })
+      chainBlockTimestamp: treasuryExpiresAt - TREASURY_FINALIZED_BLOCK_MAX_AGE_MS })
     let releaseSearch: (() => void) | undefined
     const searchBarrier = new Promise<void>(resolve => { releaseSearch = resolve })
     const paymentBarrier = new Promise<PaymentReadinessView>(resolve => { paymentObserved = resolve })
