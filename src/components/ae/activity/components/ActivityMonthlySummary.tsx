@@ -1,19 +1,11 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
+import { MetricsSummary } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
 
 import './ActivitySummaryComposition.css'
 
 import type { ActivityMonthlySummaryProps } from '../activity.contracts'
-
-function ActivityMetric({ label, value }: Readonly<{ label: string; value: string }>) {
-  return (
-    <div className="arc-activity-monthly-summary__metric">
-      <dt className="arc-activity-monthly-summary__label">{label}</dt>
-      <dd className="arc-activity-monthly-summary__value">{value}</dd>
-    </div>
-  )
-}
 
 export function ActivityMonthlySummary({
   periodStart,
@@ -43,13 +35,15 @@ export function ActivityMonthlySummary({
           </AlertDescription>
         </Alert>
       ) : null}
-      <dl className="arc-market arc-activity-monthly-summary">
-        <ActivityMetric label="Calls" value={monthly.callCountLabel} />
-        <ActivityMetric label="Completed" value={monthly.completedLabel} />
-        <ActivityMetric label="Refused" value={monthly.refusedLabel} />
-        <ActivityMetric label="Outcome unknown" value={monthly.attentionLabel} />
-        <ActivityMetric label={monthly.spendTitle} value={monthly.spendLabel} />
-      </dl>
+      <div className="arc-market arc-activity-monthly-summary">
+        <MetricsSummary cards={[
+          { label: 'Calls', value: monthly.callCountLabel },
+          { label: 'Completed', value: monthly.completedLabel },
+          { label: 'Refused', value: monthly.refusedLabel },
+          { label: 'Outcome unknown', value: monthly.attentionLabel },
+          { label: monthly.spendTitle, value: monthly.spendLabel },
+        ]} />
+      </div>
       <p className="text-xs text-muted-foreground">{monthly.spendBasis} Call completion does not by itself confirm delivery or settlement.</p>
     </AeSection>
   )

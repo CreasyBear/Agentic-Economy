@@ -3,9 +3,8 @@
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/arc/button/button'
-import { Field, FieldGroup, FieldLabel, FieldDescription } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Input } from '@/components/arc/input/input'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
 import { x402DirectoryFilterSchema, type X402DirectoryFilters } from '@/modules/market/x402-directory'
 
 type Props = { search: X402DirectoryFilters; onApply: (filters: X402DirectoryFilters) => void }
@@ -13,22 +12,18 @@ type Props = { search: X402DirectoryFilters; onApply: (filters: X402DirectoryFil
 export function DirectoryFilters({ search, onApply }: Props) {
   const [open, setOpen] = useState(false)
   const count = [search.network, search.provider, search.maxUsdPrice].filter(value => value !== undefined).length
-  return <Sheet open={open} onOpenChange={setOpen}>
-    <SheetTrigger
+  return <Drawer open={open} onOpenChange={setOpen}>
+    <DrawerTrigger
       render={
         <Button type="button" variant="secondary" className="min-h-touch rounded-full sm:min-h-10">
           <SlidersHorizontal className="size-4" /> Filters{count > 0 ? ` (${count})` : ''}
         </Button>
       }
     />
-      <SheetContent className="arc-market arc-market-filters flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
-        <SheetHeader className="border-b p-6 pr-12">
-          <SheetTitle>Filter Tools</SheetTitle>
-          <SheetDescription>Search the directory by network, provider or maximum price per Call.</SheetDescription>
-        </SheetHeader>
+      <DrawerContent className="arc-market-filters" title="Filter Tools" description="Search the directory by network, provider or maximum price per Call.">
         {open ? <FilterForm search={search} onApply={filters => { onApply(filters); setOpen(false) }} /> : null}
-      </SheetContent>
-  </Sheet>
+      </DrawerContent>
+  </Drawer>
 }
 
 // A fresh draft on each opening keeps cancelled changes out of applied filters.
@@ -69,26 +64,14 @@ function FilterForm({ search, onApply }: Props) {
     setError(undefined)
     onApply(parsed.data)
   }
-  return <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" noValidate>
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
-    <FieldGroup className="gap-6">
-    <Field>
-      <FieldLabel htmlFor={`${id}-network`} className="text-sm font-medium">Network</FieldLabel>
-      <Input ref={networkRef} id={`${id}-network`} value={network} onChange={event => setNetwork(event.target.value)} placeholder="Any network" aria-invalid={invalidField === 'network'} aria-describedby={invalidField === 'network' ? `${id}-network-help ${id}-error` : `${id}-network-help`} />
-      <FieldDescription id={`${id}-network-help`}>For example, eip155:8453 for Base.</FieldDescription>
-    </Field>
-    <Field>
-      <FieldLabel htmlFor={`${id}-provider`} className="text-sm font-medium">Provider hostname</FieldLabel>
-      <Input ref={providerRef} id={`${id}-provider`} value={provider} onChange={event => setProvider(event.target.value)} placeholder="Any provider" autoCapitalize="none" aria-invalid={invalidField === 'provider'} aria-describedby={invalidField === 'provider' ? `${id}-error` : undefined} />
-    </Field>
-    <Field>
-      <FieldLabel htmlFor={`${id}-price`} className="text-sm font-medium">Maximum price (USD)</FieldLabel>
-      <Input ref={priceRef} id={`${id}-price`} value={price} onChange={event => setPrice(event.target.value)} placeholder="No maximum" inputMode="decimal" aria-invalid={invalidField === 'price'} aria-describedby={invalidField === 'price' ? `${id}-error` : undefined} />
-    </Field>
-    </FieldGroup>
+  return <form onSubmit={submit} className="flex min-w-0 flex-col gap-6" noValidate>
+    <div className="grid min-w-0 gap-6">
+      <Input label="Network" description="For example, eip155:8453 for Base." ref={networkRef} id={`${id}-network`} value={network} onChange={event => setNetwork(event.target.value)} placeholder="Any network" aria-invalid={invalidField === 'network'} aria-describedby={invalidField === 'network' ? `${id}-error` : undefined} />
+      <Input label="Provider hostname" ref={providerRef} id={`${id}-provider`} value={provider} onChange={event => setProvider(event.target.value)} placeholder="Any provider" autoCapitalize="none" aria-invalid={invalidField === 'provider'} aria-describedby={invalidField === 'provider' ? `${id}-error` : undefined} />
+      <Input label="Maximum price (USD)" ref={priceRef} id={`${id}-price`} value={price} onChange={event => setPrice(event.target.value)} placeholder="No maximum" inputMode="decimal" aria-invalid={invalidField === 'price'} aria-describedby={invalidField === 'price' ? `${id}-error` : undefined} />
     {error === undefined ? null : <p id={`${id}-error`} role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
     </div>
-    <div className="flex items-stretch gap-3 border-t p-6">
+    <div className="flex items-stretch gap-3 border-t pt-6">
       <Button labelLayout="wrap" type="button" variant="secondary" className="min-h-touch flex-1" onClick={() => { setNetwork(''); setProvider(''); setPrice(''); setError(undefined); setInvalidField(undefined) }}>Clear filters</Button>
       <Button labelLayout="wrap" type="submit" className="min-h-touch flex-1">Show results</Button>
     </div>

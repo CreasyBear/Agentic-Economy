@@ -77,9 +77,11 @@ describe('Arc metrics dashboard', () => {
 
     expect(screen.getByRole('heading', { name: 'Headline metrics' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(description)
-    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByRole('term')).toHaveLength(4)
     for (const label of ['Settled Call value', 'Settled Calls', 'Success rate', 'Transacting Workspaces']) {
-      expect(screen.getByText(label)).toBeInTheDocument()
+      const fact = screen.getByText(label).parentElement!
+      expect(within(fact).getByText('Not available')).toBeInTheDocument()
+      expect(within(fact).getByText('Range totals withheld')).toBeInTheDocument()
     }
     expect(screen.getAllByText('Not available')).toHaveLength(4)
     expect(screen.getAllByText('Range totals withheld')).toHaveLength(4)
@@ -113,7 +115,7 @@ describe('Arc metrics dashboard', () => {
 
   it('withholds range values with zero recorded snapshots and keeps the explicit empty state', () => {
     render(dashboard([], '0 of 7 days have completed snapshots. Range totals are withheld.'))
-    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByRole('term')).toHaveLength(4)
     expect(screen.getAllByText('Not available')).toHaveLength(4)
     expect(screen.getByText('No daily Call snapshots recorded.')).toBeInTheDocument()
     expect(screen.queryByRole('img')).toBeNull()

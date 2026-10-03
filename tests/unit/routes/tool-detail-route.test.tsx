@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-inspector-model'
+import { nextActionCode, toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-inspector-model'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import { projectAdmittedListing, projectDirectoryListing } from '@/modules/registry/public'
 import { REFERENCE_RATE_MAX_AGE_MS } from '@/modules/money/public'
@@ -28,6 +28,7 @@ import {
   nextActionForToolFacts,
 } from '@/modules/market/suggested-next-action'
 
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
 const readDetailMock = vi.hoisted(() => vi.fn())
 const readDirectoryDetailMock = vi.hoisted(() => vi.fn())
 vi.mock('@/modules/market/tool-detail-route.functions', () => ({
@@ -216,6 +217,8 @@ afterEach(() => {
   cleanup()
   readDetailMock.mockReset()
   readDirectoryDetailMock.mockReset()
+  if (originalClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard')
+  else Object.defineProperty(navigator, 'clipboard', originalClipboard)
 })
 
 describe('/tools/$toolRef', () => {
@@ -250,6 +253,59 @@ describe('/tools/$toolRef', () => {
     expect(within(history).getByText(/Performance history is unavailable/)).toBeTruthy()
     expect(within(history).queryByText('0')).toBeNull()
     expect(within(history).queryByText('0/5 samples')).toBeNull()
+  })
+
+  it('copies the exact Agent request and confirms only after clipboard completion', async () => {
+    let complete: (() => void) | undefined
+    const pending = new Promise<void>(resolve => { complete = resolve })
+    const writeText = vi.fn(() => pending)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderInspectorWithRouter('compact')
+    const decision = screen.getByRole('region', { name: 'Operational' })
+    const copy = within(decision).getByRole('button', { name: 'Copy request for Agent' })
+    fireEvent.click(copy)
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(nextActionCode(toToolInspectorModel(tool)))
+    expect(within(decision).getByRole('status').textContent).toBe('')
+    complete?.()
+    await waitFor(() => expect(within(decision).getByRole('status').textContent).toBe('Copy request for Agent: Copied'))
+    expect(screen.getByRole('link', { name: /Open full Tool details/ }).getAttribute('href')).toBe(`/tools/${encodeURIComponent(tool.toolRef)}`)
+  })
+
+  it('announces a clipboard refusal and retains the factual inspector and full detail exit', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('clipboard refused')) } })
+    renderInspectorWithRouter('compact')
+    const decision = screen.getByRole('region', { name: 'Operational' })
+    fireEvent.click(within(decision).getByRole('button', { name: 'Copy request for Agent' }))
+    await waitFor(() => expect(within(decision).getByRole('status').textContent).toBe('Copy request for Agent: Could not copy'))
+    expect(within(decision).getAllByText('US$1.25').length).toBeGreaterThan(0)
+    expect(within(decision).getByRole('button', { name: 'Copy request for Agent' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Open full Tool details/ })).toBeTruthy()
+  })
+
+  it('opens named exact technical details and returns keyboard focus when the Arc drawer closes', async () => {
+    const { parameters: _parameters, ...withoutFlatParameters } = tool
+    renderInspectorWithRouter('full', undefined, withoutFlatParameters)
+    const trigger = screen.getByRole('button', { name: 'Open schemas and references' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    const drawer = await screen.findByRole('dialog', { name: 'Schemas and references' })
+    expect(drawer.getAttribute('aria-describedby')).toBeTruthy()
+    expect(drawer.textContent).toContain(JSON.stringify(tool.contract.inputJsonSchema, null, 2))
+    expect(drawer.textContent).toContain(tool.toolRef)
+    fireEvent.keyDown(drawer, { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Schemas and references' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+    fireEvent.click(trigger)
+    fireEvent.click(await screen.findByRole('button', { name: 'Close schemas and references' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Schemas and references' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+    fireEvent.click(screen.getByRole('tab', { name: 'Contract' }))
+    const inlineTrigger = screen.getByRole('button', { name: 'Read the input JSON Schema' })
+    inlineTrigger.focus()
+    fireEvent.click(inlineTrigger)
+    fireEvent.keyDown(await screen.findByRole('dialog', { name: 'Schemas and references' }), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Schemas and references' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(inlineTrigger))
   })
 
   it('keeps compact and full inspectors on the same decision, facts, and continuation', () => {

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { SettingsGroup } from './settings-shell/components/SettingsSections'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createPrefixedRandomId } from '@/modules/common/random-id'
@@ -71,7 +71,7 @@ export function AeOwnerAdminBootstrap({ initialStatus }: { initialStatus: OwnerA
           {message === null ? null : <Alert role="status"><AlertDescription>{message}</AlertDescription></Alert>}
           <div className="flex flex-wrap gap-intra">
             {status.kind === 'eligible' && (command === null || phase === 'reviewed') ? <Button type="button" disabled={busy} onClick={() => void activate()}>{command === null ? 'Set up Admin owner access' : 'Retry reviewed setup'}</Button> : null}
-            {command !== null || status.kind === 'unavailable' ? <Button type="button" variant="outline" disabled={busy} onClick={() => void checkStatus()}>{phase === 'checking' ? 'Checking access…' : 'Check setup status'}</Button> : null}
+            {command !== null || status.kind === 'unavailable' ? <Button type="button" variant="secondary" disabled={busy} onClick={() => void checkStatus()}>{phase === 'checking' ? 'Checking access…' : 'Check setup status'}</Button> : null}
           </div>
           {phase === 'submitting' ? <p role="status">Submitting initial setup…</p> : null}
         </>}

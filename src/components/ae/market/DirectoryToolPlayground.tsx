@@ -5,10 +5,10 @@ import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { CodeBlock, CodeBlockActions, CodeBlockCopyButton, CodeBlockHeader, CodeBlockTitle } from '@/components/ai-elements/code-block'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
 import { Textarea } from '@/components/ui/textarea'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { AeToolInputForm } from '../shared/tool-input-form/AeToolInputForm'
@@ -58,11 +58,11 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
     <div className="grid min-w-0 gap-6 @2xl/playground:grid-cols-2">
       <section className="grid min-w-0 content-start gap-4" aria-labelledby={`${id}-input`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 id={`${id}-input`} className="text-lg font-semibold">Input</h3>
-          {initialValue !== undefined ? <Button type="button" variant="outline" size="sm" onClick={() => setInputText(initialText)}>Load example</Button> : null}
+          <h3 id={`${id}-input`} className="text-lg font-medium">Input</h3>
+          {initialValue !== undefined ? <Button type="button" variant="secondary" size="sm" onClick={() => setInputText(initialText)}>Load example</Button> : null}
         </div>
         <p className="text-sm text-muted-foreground">{canonical ? 'Prepare the request your agent will send.' : 'Explore the input published by this Provider.'}</p>
-        <Tabs value={mode === 'form' && (!formAvailable || value === undefined) ? 'json' : mode} onValueChange={setMode}>
+        <Tabs animateContent={false} value={mode === 'form' && (!formAvailable || value === undefined) ? 'json' : mode} onValueChange={setMode}>
           <TabsList aria-label="Input format">
             <TabsTrigger value="form" disabled={!formAvailable || value === undefined}>Form</TabsTrigger>
             <TabsTrigger value="json">JSON</TabsTrigger>
@@ -80,7 +80,7 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
         {!formAvailable ? <p className="text-sm text-muted-foreground">{schema ? 'Use JSON for this schema’s input structure.' : entry.input?.schemaOmitted ? 'The full input schema is too large to display here.' : 'This Provider has not published an input schema.'}</p> : null}
       </section>
       <section className="grid min-w-0 content-start gap-4" aria-labelledby={`${id}-output`}>
-        <div className="flex flex-wrap items-center justify-between gap-3"><h3 id={`${id}-output`} className="text-lg font-semibold">Output</h3><Badge variant="secondary">Provider example</Badge></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h3 id={`${id}-output`} className="text-lg font-medium">Output</h3><Badge variant="secondary">Provider example</Badge></div>
         <p className="text-sm text-muted-foreground">Published sample output. Editing the input does not generate a new result.</p>
         {outputExample !== undefined ? <JsonExample title="Example response" code={JSON.stringify(outputExample, null, 2)} />
           : <Empty className="min-h-72 border"><EmptyHeader><EmptyMedia variant="icon"><FileJsonIcon /></EmptyMedia><EmptyTitle>No output example</EmptyTitle><EmptyDescription>{entry.output?.exampleOmitted ? 'The published example is too large to display here.' : 'The Provider has not included a sample response.'}</EmptyDescription></EmptyHeader></Empty>}
@@ -88,7 +88,7 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
       </section>
     </div>
     <section className="grid min-w-0 gap-3 rounded-xl border bg-muted/30 p-5" aria-labelledby={`${id}-agent`}>
-      <h3 id={`${id}-agent`} className="flex items-center gap-2 font-semibold"><BracesIcon className="size-4" />Use with your agent</h3>
+      <h3 id={`${id}-agent`} className="flex items-center gap-2 font-medium"><BracesIcon className="size-4" />Use with your agent</h3>
       {command ? <><p className="text-sm text-muted-foreground">Run this command with your connected AE account and spending policy.</p><AeCopyCommand label="prepared call command" code={command} /></>
         : <p role="status" className="text-sm text-muted-foreground">{!canonical || !toolRef ? 'Prepare this Tool to get its AE input contract and Call command.' : 'Complete the required input to prepare your Call command.'}</p>}
     </section>

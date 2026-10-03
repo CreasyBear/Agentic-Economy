@@ -5,7 +5,7 @@ import { Link } from '@tanstack/react-router'
 import type { api } from '../../../../../convex/_generated/api'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { validCommercialPolicyControl, validProductionCommercialPolicyControl, type CommercialPolicyFamily } from '@/modules/money/public'
 import { POLICY_LABELS } from './commercial-policy-form'
@@ -57,7 +57,7 @@ export function CommercialPolicyTable({ summary, selectedFamily, locked, onSelec
         <span>Evidence: <AeCopyReference label="Evidence" value={current.evidenceRef} /></span>
       </div>
     } },
-    { id: 'action', header: 'Prepare', enableSorting: false, cell: ({ row }) => <Button type="button" variant="outline" size="sm" disabled={locked} aria-pressed={selectedFamily === row.original.family} onClick={() => onSelect(row.original.family)}>Select {POLICY_LABELS[row.original.family]}</Button> },
+    { id: 'action', header: 'Prepare', enableSorting: false, cell: ({ row }) => <Button type="button" variant="secondary" size="sm" disabled={locked} aria-pressed={selectedFamily === row.original.family} onClick={() => onSelect(row.original.family)}>Select {POLICY_LABELS[row.original.family]}</Button> },
   ]
   return <div className="grid gap-intra">
     <AeRecordTable columns={columns} data={summary.rows} getRowId={row => row.family} caption="Production commercial policy approvals" hideFilter emptyMessage="No policy families are available." />

@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { cn } from '@/lib/utils'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 
@@ -27,7 +27,7 @@ export function AeToolPosition({
         params={{ toolRef: tool.toolRef }}
         data-testid="command-panel-open-tool"
         onClick={onNavigate}
-        className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'min-h-touch justify-self-start')}
+        className={cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.sm, 'min-h-touch justify-self-start')}
       >
         Open full Tool details
         <ArrowUpRightIcon aria-hidden="true" data-icon="inline-end" />

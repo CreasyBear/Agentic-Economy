@@ -6,7 +6,7 @@ import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { directoryTitle } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
 import { projectDirectoryListing } from '@/modules/registry/public'
@@ -20,7 +20,7 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
   if (metadata.kind !== 'found' && metadata.kind !== 'found_upstream') {
     const reason = metadata.kind === 'not_found' ? 'resource_not_found' : metadata.reason === 'query_invalid' ? 'query_invalid' : 'source_unavailable'
     const copy = TOOL_UNAVAILABLE_COPY[reason]
-    return <AePageState tone="warning" title={copy.title} description={`${copy.cause} ${copy.nextStep}`} action={<Link to={copy.action.to} className={buttonVariants({ className: 'min-h-touch' })}>{copy.action.label}</Link>} />
+    return <AePageState tone="warning" title={copy.title} description={`${copy.cause} ${copy.nextStep}`} action={<Link to={copy.action.to} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md} min-h-touch`}>{copy.action.label}</Link>} />
   }
   const entry = metadata.item.entry
   const listing = projectDirectoryListing({ ...entry, title: directoryTitle(entry) })

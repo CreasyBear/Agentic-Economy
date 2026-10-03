@@ -29,53 +29,6 @@
   gap: var(--space-6);
 }
 
-.arc-credit-root .arc-credit-tabs__list {
-  width: 100%;
-  max-width: 100%;
-  justify-content: flex-start;
-  gap: var(--space-2);
-  overflow-x: auto;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  padding: 0;
-  scrollbar-width: thin;
-}
-
-.arc-credit-root .arc-credit-tabs__trigger {
-  position: relative;
-  display: inline-flex;
-  min-height: 44px;
-  height: auto;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  padding: var(--space-2) var(--space-4);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  white-space: nowrap;
-  box-shadow: none;
-}
-
-.arc-credit-root .arc-credit-tabs__trigger::after {
-  display: none;
-}
-
-.arc-credit-root .arc-credit-tabs__trigger[aria-selected="true"],
-.arc-credit-root .arc-credit-tabs__trigger[data-active] {
-  border-color: var(--foreground);
-  background: var(--foreground);
-  color: var(--background);
-}
-
-.arc-credit-root .arc-credit-tabs__trigger:hover:not([aria-selected="true"]):not([data-active]) {
-  border-color: var(--border);
-  background: var(--surface);
-  color: var(--foreground);
-}
-
 .arc-credit-tabs__content {
   min-width: 0;
 }

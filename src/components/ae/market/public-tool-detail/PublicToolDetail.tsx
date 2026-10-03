@@ -7,7 +7,7 @@ import { AeToolInputDisclosure, AeToolTechnicalContract } from '@/components/ae/
 import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
-import { buttonVariants } from '@/components/ui/button-variants'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { projectAdmittedListing } from '@/modules/registry/public'
 import type { PublicToolDetailProps, ToolUnavailablePresentation, ToolUnavailableProps } from './public-tool-detail.contracts'
@@ -31,9 +31,9 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
   if (result.kind !== 'found') {
     const presentation = toolUnavailablePresentation(result)
     if (result.kind === 'source_unavailable') {
-      return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<span className="flex flex-wrap gap-3"><Link to="/tools/$toolRef" params={{ toolRef: result.toolRef }} reloadDocument className={buttonVariants({ className: 'min-h-touch' })}>Try again</Link><Link to="/market" className={buttonVariants({ variant: 'outline', className: 'min-h-touch' })}>Browse Market</Link></span>} />
+      return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<span className="flex flex-wrap gap-3"><Link to="/tools/$toolRef" params={{ toolRef: result.toolRef }} reloadDocument className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md} min-h-touch`}>Try again</Link><Link to="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} min-h-touch`}>Browse Market</Link></span>} />
     }
-    return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<Link to={presentation.action.to} className={buttonVariants({ className: 'min-h-touch' })}>{presentation.action.label}</Link>} />
+    return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<Link to={presentation.action.to} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md} min-h-touch`}>{presentation.action.label}</Link>} />
   }
   const tool = result.tool
   const listing = projectAdmittedListing(tool, result.verifiedBusinessSlug)

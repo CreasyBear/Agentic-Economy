@@ -10,7 +10,7 @@ import { motionTokens } from '@/components/arc/motion-tokens'
 import { formatCount } from '@/lib/ui/format-time'
 import styles from './metrics-dashboard.module.css'
 
-export type MetricCard = Readonly<{ label: string; value: string; delta: string }>
+export type MetricCard = Readonly<{ label: string; value: string; delta?: string }>
 export type MetricRatio = Readonly<{ label: string; value: string }>
 export type DailyCallPoint = Readonly<{ day: string; attemptedCalls: number; completedCalls: number; uncertainCalls: number }>
 
@@ -33,6 +33,25 @@ export type MetricsDashboardProps = Readonly<{
   coverageDescription?: string
   withheldMetricLabels?: readonly string[]
 }>
+
+export type MetricsSummaryProps = Readonly<{
+  cards: readonly MetricCard[]
+  unavailable?: boolean
+}>
+
+export function MetricsSummary({ cards, unavailable = false }: MetricsSummaryProps) {
+  return (
+    <dl className={styles.kpis} data-count={cards.length}>
+      {cards.map((card) => (
+        <div key={card.label} className={styles.kpi} data-unavailable={unavailable || undefined}>
+          <dt className={styles.kpiLabel}>{card.label}</dt>
+          <dd className={styles.kpiValue}>{card.value}</dd>
+          {card.delta !== undefined ? <dd className={styles.kpiDelta}>{card.delta}</dd> : null}
+        </div>
+      ))}
+    </dl>
+  )
+}
 
 function niceScale(max: number) {
   const span = max || 1
@@ -137,15 +156,7 @@ export function MetricsDashboard({ cards, ratios, dailyCalls, controls, coverage
         <p className={styles.coverageNotice} role="status">{coverageDescription}</p>
       ) : null}
 
-      <div className={styles.kpis}>
-        {displayedCards.map((card) => (
-          <article key={card.label} className={styles.kpi} data-unavailable={totalsWithheld || undefined}>
-            <p className={styles.kpiLabel}>{card.label}</p>
-            <p className={styles.kpiValue}>{card.value}</p>
-            <p className={styles.kpiDelta}>{card.delta}</p>
-          </article>
-        ))}
-      </div>
+      <MetricsSummary cards={displayedCards} unavailable={totalsWithheld} />
 
       <section className={styles.chartSection} aria-labelledby={uid + '-daily-calls'}>
         <div className={styles.chartBar}>

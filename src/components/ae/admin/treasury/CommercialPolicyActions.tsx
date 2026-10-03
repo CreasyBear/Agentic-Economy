@@ -4,7 +4,7 @@ import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '../actions/AdminActionSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
@@ -82,7 +82,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
         {current === null ? <p>No approved policy is recorded for this family.</p> : <details><summary className="cursor-pointer">Recorded policy: {current.lifecycle}, revision {current.revision}</summary>
           <div className="mt-3 grid gap-related"><p className="break-all text-sm">{current.policyRef}</p><p className="text-sm">Effective {formatPerthTimestamp(current.effectiveAt)} · expires {formatPerthTimestamp(current.expiresAt)} Perth time</p><CommercialPolicyControlReview control={current.control} /><p className="break-all text-sm">Evidence: {current.evidenceRef}</p><p className="break-all text-sm">Approved by: {current.approvedByPrincipalRef}</p></div>
         </details>}
-        {draft === null ? <div className="flex flex-wrap gap-intra"><Button type="button" disabled={ready.conflict || review !== null} onClick={() => beginEdit(current?.lifecycle === 'active')}>{current?.lifecycle === 'active' ? 'Replace active policy' : 'Prepare new policy'}</Button>{current?.lifecycle === 'active' ? <Button type="button" variant="outline" disabled={ready.conflict || review !== null} onClick={suspend}>Suspend active policy</Button> : null}</div> : null}
+        {draft === null ? <div className="flex flex-wrap gap-intra"><Button type="button" disabled={ready.conflict || review !== null} onClick={() => beginEdit(current?.lifecycle === 'active')}>{current?.lifecycle === 'active' ? 'Replace active policy' : 'Prepare new policy'}</Button>{current?.lifecycle === 'active' ? <Button type="button" variant="secondary" disabled={ready.conflict || review !== null} onClick={suspend}>Suspend active policy</Button> : null}</div> : null}
       </>}
       {draft === null ? null : <form className="grid gap-related" onSubmit={event => { event.preventDefault(); reviewDraft() }}>
         <fieldset disabled={review !== null} className="grid gap-related">
@@ -96,7 +96,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
           {family === 'operations' || family === 'treasury_custody' ? <details><summary className="cursor-pointer text-sm">Server technical requirements (read only)</summary><dl className="mt-2 grid gap-intra text-sm">{Object.entries(draft.preparation.requirements).map(([key, value]) => <div key={key}><dt>{key}</dt><dd className="break-all">{value}</dd></div>)}</dl><p className="mt-2 text-sm">These required versions do not prove operational readiness.</p></details> : null}
           <p className="text-xs text-muted-foreground">Suggested amounts and recovery times are editable targets. Confirm operational controls only with actual evidence.</p>
           {error === null ? null : <Alert role="alert" variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-          <div className="flex gap-intra"><Button type="submit">Review policy</Button><Button type="button" variant="outline" onClick={() => { setDraft(null); setError(null) }}>Cancel editing</Button></div>
+          <div className="flex gap-intra"><Button type="submit">Review policy</Button><Button type="button" variant="secondary" onClick={() => { setDraft(null); setError(null) }}>Cancel editing</Button></div>
         </fieldset>
       </form>}
     </div>

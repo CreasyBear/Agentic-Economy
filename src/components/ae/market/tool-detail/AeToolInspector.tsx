@@ -2,15 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 
 import { FileCode2Icon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/arc/button/button'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import {
   type MarketListingEvidenceProjection,
@@ -73,24 +67,24 @@ export function AeToolInspector({
   const researchPanel = (
     <Tabs
       defaultValue="overview"
+      animateContent={false}
       className="flex min-w-0 flex-col gap-0"
     >
       <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-gutter">
-        <TabsList variant="line" aria-label="Tool views" className="h-12 p-0 max-sm:!h-12">
+        <TabsList aria-label="Tool views" className="h-12 p-0 max-sm:!h-12">
           <TabsTrigger value="overview" className="min-h-touch px-3">Overview</TabsTrigger>
           <TabsTrigger value="contract" className="min-h-touch px-3">Contract</TabsTrigger>
         </TabsList>
-        <Button
+        <DrawerTrigger render={<Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           aria-label="Open schemas and references"
           className="min-h-touch shrink-0"
-          onClick={() => setTechnicalContractOpen(true)}
         >
           <FileCode2Icon aria-hidden="true" />
           <span>Schemas</span>
-        </Button>
+        </Button>} />
       </div>
 
       <TabsContent
@@ -125,27 +119,21 @@ export function AeToolInspector({
       data-tool-inspector="full"
       className="min-w-0 outline-none focus:outline-solid focus:outline-2 focus:outline-offset-2 focus:outline-ring"
     >
-      <div data-tool-layout="responsive" className="min-w-0">
-        {researchPanel}
-        {continuation}
-      </div>
+      <Drawer open={technicalContractOpen} onOpenChange={setTechnicalContractOpen}>
+        <div data-tool-layout="responsive" className="min-w-0">
+          {researchPanel}
+          {continuation}
+        </div>
 
-      <Sheet open={technicalContractOpen} onOpenChange={setTechnicalContractOpen}>
-        <SheetContent
+        <DrawerContent
           side="right"
-          className="left-0 right-0 w-auto max-w-none gap-0 p-0 sm:left-auto sm:w-[min(100vw,46rem)] sm:max-w-2xl"
+          title="Schemas and references"
+          description="Exact transport, provenance, payment, data-use, effect, and JSON Schema facts for this Tool."
+          closeLabel="Close schemas and references"
         >
-          <SheetHeader className="shrink-0 border-b border-border px-gutter py-related">
-            <SheetTitle>Schemas and references</SheetTitle>
-            <SheetDescription>
-              Exact transport, provenance, payment, data-use, effect, and JSON Schema facts for this Tool.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-gutter">
-            <AeToolTechnicalContract tool={tool} />
-          </div>
-        </SheetContent>
-      </Sheet>
+          <AeToolTechnicalContract tool={tool} />
+        </DrawerContent>
+      </Drawer>
     </article>
   )
 }

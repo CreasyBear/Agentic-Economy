@@ -195,31 +195,6 @@
   min-width: 0;
 }
 
-.arc-market.arc-key-reveal-drawer .arc-key-tabs [data-slot="tabs-list"].arc-key-tab-list {
-  display: flex;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  flex: none;
-  justify-content: flex-start;
-  gap: var(--space-1);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  border-radius: var(--radius-control);
-  padding: var(--space-1);
-  background: var(--surface-muted);
-  scrollbar-width: thin;
-}
-
-.arc-market.arc-key-reveal-drawer .arc-key-tabs [data-slot="tabs-trigger"].arc-key-tab {
-  box-sizing: border-box;
-  min-width: 44px;
-  min-height: 44px;
-  flex: 0 0 auto;
-  padding-inline: var(--space-2);
-  white-space: nowrap;
-}
-
 .arc-market.arc-key-reveal-drawer .arc-key-tab-destination {
   min-height: var(--space-8);
   margin: 0;
