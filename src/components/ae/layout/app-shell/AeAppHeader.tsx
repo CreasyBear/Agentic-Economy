@@ -3,7 +3,7 @@
 import { OrganizationSwitcher, UserButton, useAuth } from '@clerk/tanstack-react-start'
 import { ArrowLeftIcon, MenuIcon } from 'lucide-react'
 import { Link, useRouter } from '@tanstack/react-router'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { Button as ArcButton } from '@/components/arc/button/button'
 import buttonStyles from '@/components/arc/button/button.module.css'
@@ -31,7 +31,6 @@ export type AeAppHeaderProps = Readonly<{
   elevated: boolean
   hydrated: boolean
   chatFrame: boolean
-  navigationTrigger?: ReactNode
 }>
 
 function chatActionSlot(chatFrame: boolean) {
@@ -61,7 +60,6 @@ export function AeAppHeader({
   elevated,
   hydrated,
   chatFrame,
-  navigationTrigger,
 }: AeAppHeaderProps) {
   const { isLoaded, orgId } = useAuth()
   const router = useRouter()
@@ -110,7 +108,7 @@ export function AeAppHeader({
           data-elevated={elevated ? '' : undefined}
           className={cn('ae-nav arc-app-header__bar arc-app-header__bar--signed-in px-1 sm:px-2 shadow-none data-[elevated]:shadow-soft', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}
         >
-          <div className={chatFrame ? 'hidden sm:block' : ''}>{navigationTrigger ?? <BrandLink />}</div>
+          <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
           {chatActionSlot(chatFrame)}
           {pageTitle === null || chatFrame ? null : contentOwnsHeading ? (
             <p className="arc-app-header__lead arc-app-header__title" title={pageTitle}>
@@ -125,7 +123,7 @@ export function AeAppHeader({
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><AeCommandPanel /></div>
             <div className={chatFrame ? 'hidden sm:block' : ''}><OrganizationSwitcher hidePersonal={false} /></div>
-            {navigationTrigger == null ? <div className={chatFrame ? 'hidden sm:block' : ''}><OperatorWorkspaceMenu operatorRole={operatorRole} /></div> : null}
+            <div className={chatFrame ? 'hidden sm:block' : ''}><OperatorWorkspaceMenu operatorRole={operatorRole} /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle /></div>
             <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />
           </div>

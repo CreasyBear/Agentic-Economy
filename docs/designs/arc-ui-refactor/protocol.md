@@ -4,6 +4,28 @@
 
 ## Progress counter
 
+### Compact documents and stable navigation, 2026-10-03
+
+**3 / 3 urgent correction units source-integrated; 27 / 27 across the three current branch milestones.** This counts bounded implementation units. The broad refactor and rendered acceptance remain open.
+
+| Unit | Result | Preserved boundary |
+| --- | --- | --- |
+| Accounting documents | Actual Arc `SortableDataTable`, `SearchField` and `Drawer` replace the tall document fact-grid list. Five columns show identity, exact amount, recorded time, status and actions; full references and policy evidence move to current-record details | Exact BigInt sorting, captured signing digest, existing open/CSV/sign guards, duplicate-request exclusion, literal async feedback and refreshed source state |
+| Market tab transitions | Immediate requested-tab selection, one local loading panel, stable header/search frame and no catalogue panel slide, fade or height measurement | Router-owned loader/race handling, committed source records, existing search/filter/pagination engines and retained-source recovery; late old pagination cannot publish an old-view URL over a requested tab |
+| Settings navigation | Restore the signed-in gear dropdown and remove the persistent global rail and settings inner sidebar | Existing native destinations, role/entitlement guards, active location, mobile navigation, content focus and keyboard behavior |
+
+**Requires:** authoritative records, stable references, native routes and caller-owned actions. **Ensures:** compact recognition rows, truthful current details, preserved document actions and usable navigation while data loads. **Invariant:** no fabricated signature state, money, authority or catalogue; the router and existing command engines retain ownership. **On violation:** missing inspected records close, failed actions remain explicit, unavailable source retains the previous catalogue with recovery, and obsolete pagination cannot replace a newer tab request.
+
+Cognitive and complexity decisions: externalize full document evidence into the existing Arc Drawer, keep money/time on one line and ellipsize references, and remove movement of the entire catalogue. Keep the existing Base UI native-link gear menu with an actual Arc button trigger: Arc's stock command-item dropdown would replace native route semantics and require an absent dependency. Add a bounded `animateContent` port to the actual Arc Tabs; other callers retain their default behavior. Memoize document columns/data and resolve focus to the current row trigger after refreshed records replace old DOM nodes. Two private row-action/detail components in the same file separate presentation from its single action controller. Lost inspection clears before commit; an effect records only the committed identifier for the modal engine's later focus restoration. No new library, cache, renderer, transport or payment state machine is introduced.
+
+Combined focused verification passed **11 files / 196 tests**, including exact amounts beyond Number precision, filter/clear, duplicate and failed actions, refreshed/removed inspection, focus after asynchronous actions, native menu destinations, stable search drafts, rapid tab changes and late pagination. The final document-component refinement passed **54 / 54 tests**, including restoration without reopening a previously closed inspection. `npm run check` passed on the combined source on Node22/npm11.5.1; all 862 source fingerprints and 523 action sites reconcile. The full release gate remains required before merging; no manual browser or visual acceptance is claimed.
+
+React Doctor's changed-scope scan retains its **84 baseline score**. The remaining stock FAQ/search-hint intrinsic reveal warnings require rendered performance evidence; source matches alone do not establish a defect. No rule is suppressed. An unused SiteFooter preview and its demo layout observer/morph were removed after verifying that no caller used it; the real footer and its landmarks remain covered.
+
+Production coordination: main PR311, PR312 and PR313 are integrated. PR313's exact treasury-finality source `ee6942dd7b61f4086b39a1b9d8ea3eadff55a871` matches merged main `42f55c4b8553e1a2a04b10e38d09ba545d74e4cc`, with zero overlap across the twelve incoming paths and the dirty UI batch. Its owner reported successful native cash-reconciliation acceptance and released the production slot before this UI release. This UI correction does not enable payment signing or change treasury logic.
+
+Next source slice: compact credit transactions, Reconciliation and Provider obligations with complete current-record details; remaining record-header/inline-edit seams and audited full-block opportunities. These remaining credit regions are not claimed as converted by the document correction.
+
 ### Full Arc block regions and record details, 2026-10-03
 
 **14 / 14 work units source-integrated; 24 / 24 across the two current branch milestones.** These are bounded implementation units, not an app-completion percentage. Visual acceptance and the long-running broad refactor remain open.
@@ -28,7 +50,7 @@ Observable verification: integrated existing region suites passed **55 files / 3
 
 New installed provenance: FAQ TSX `5af43fde71647c95a0e9e4538345ea9ad4324dd5f76afb6622b64b4fb63c1565`, CSS `3346449f678590ac4a0457594f5a99cffad7c15587cd0d1ea16f390f7e67da9f`; HeroContent TSX `bc1b5672c25bc4ae6c1785c3b98206ee38d275d9775f277bac4e1742d3e9abf5`, CSS `0fb963f57acb7e7f8104b8bbf69e52eb3460cd6379e646d1516fb4d15370017c`; Stepper TSX `62a86a10f72ef20ca8f28e04dad460099e2aed65084187c99d780f4bdd9b53f2`, CSS `d495e43e23d4866dd9cced3b336b134a0a80072ebfc833129a63306bafcb54dc`. Other installed dependency/footer hashes and bounded ports are recorded with their source. These are copied, adapted Arc implementations, not unchanged stock APIs.
 
-Next source slice: compact credit transactions with complete current-record Drawer details; remaining record-header and inline-edit seams; remaining full-block opportunities in the audited queue. Integrate released main PR311 before touching its credit-test boundary or running the release gate. Its production slot is now released.
+Next source slice at this milestone: compact credit transactions with complete current-record Drawer details; remaining record-header and inline-edit seams; remaining full-block opportunities in the audited queue. Subsequent main integrations and the current production slot are recorded in the latest milestone above.
 
 ### Compact Arc table foundation, 2026-10-03
 
@@ -205,7 +227,7 @@ The [source inventory](source-inventory.csv) contains every non-test `.tsx`, `.t
 | Presenters and routes | 535 | 470 presenter/library source files plus 57 page, three layout and five redirect bindings |
 | Source companions | 327 | Hooks, contracts, styles and presentation helpers; context, not extra page redesigns |
 | Historical full-block audit | 530 / 530 | Presenter/route baseline assessed; newly installed library capabilities are recorded with this batch |
-| Shared Button sites | 328 | 299 Arc and 29 legacy JSX source sites |
+| Shared Button sites | 331 | 302 Arc and 29 legacy JSX source sites |
 | Button-style sites | 138 | 14 legacy calls and 124 native Arc button-style links |
 | Other action sites | 54 | 51 native source buttons and three retained dormant site buttons; includes optional installed Arc capabilities |
 | Current source status | 518 reviewing | 265 inventoried, one deferred and 78 retained; current visual acceptance is incomplete |

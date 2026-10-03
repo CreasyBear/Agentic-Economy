@@ -36,8 +36,8 @@ export function SettingsPage({ title, description, navigation, currentHref, rend
       <h1 id={titleId}>{title}</h1>
       <p>{description}</p>
     </header>
-    <div className={styles.settings}>
-      <aside className={styles.sidebar}>
+    <div className={styles.settings} data-navigation={navigation.length === 0 ? 'none' : undefined}>
+      {navigation.length > 0 ? <aside className={styles.sidebar}>
         <LayoutGroup id={navGroup}>
           <nav aria-label="Settings sections" className={styles.navigation}>
             {navigation.map(group => <section key={group.label ?? 'overview'} className={styles.navGroup} aria-label={group.label}>
@@ -58,7 +58,7 @@ export function SettingsPage({ title, description, navigation, currentHref, rend
             </section>)}
           </nav>
         </LayoutGroup>
-      </aside>
+      </aside> : null}
       <div className={styles.main}><div className={styles.scroller}>{children}</div></div>
     </div>
   </section>

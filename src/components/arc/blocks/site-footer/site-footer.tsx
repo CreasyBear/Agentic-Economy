@@ -1,13 +1,12 @@
 /* Actual Arc site-footer registry source retrieved 2026-10-03. TSX SHA-256: e65687a7e940bfd127a42e37783c05e70d1e392795aea4072553b663bc2619c3
- * Adaptations: host link, copyright, heading identity and existing leading-content ports; strict optional/index access. */
+ * Adaptations: host link, copyright, heading identity and existing leading-content ports; strict optional/index access; unused registry preview removed. */
 "use client";
 
-import { forwardRef, useId, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useId, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowUpRight, Check } from "lucide-react";
 import { Button } from "../../button/button";
-import SegmentedControl from "../../segmented-control/segmented-control";
 import { motionTokens } from "../../lib/motion-tokens";
 import styles from "./site-footer.module.css";
 
@@ -253,36 +252,5 @@ export const SiteFooter = forwardRef<HTMLElement, SiteFooterProps>(function Site
 
 SiteFooter.displayName = "SiteFooter";
 
-const variantOptions = [{ value: "columns", label: "Columns" }, { value: "minimal", label: "Minimal" }, { value: "logo", label: "Logo" }];
 
-/** Preview: the footer with a switch between its three layouts and a note of the last link pressed. */
-export function SiteFooterBlock({ variant: initial = "columns" }: { variant?: SiteFooterVariant }) {
-  const [variant, setVariant] = useState<SiteFooterVariant>(initial);
-  const [last, setLast] = useState<string | null>(null);
-  const reduced = !!useReducedMotion();
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | null>(null);
-  // The frame springs between layout heights instead of snapping; the new layout fades in where it sits.
-  useLayoutEffect(() => {
-    const node = contentRef.current;
-    if (!node) return;
-    setHeight(node.offsetHeight);
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => setHeight(node.offsetHeight));
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [variant]);
-  return <div className={styles.preview}>
-    <SegmentedControl label="Footer layout" options={variantOptions} value={variant} onValueChange={value => setVariant(value as SiteFooterVariant)} />
-    <div className={styles.frame}>
-      <motion.div className={styles.frameBody} initial={false} animate={{ height: height ?? "auto" }} transition={reduced ? { duration: 0 } : motionTokens.spring.smooth}>
-        <motion.div ref={contentRef} key={variant} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: motionTokens.duration.standard, ease: enter }}>
-          <SiteFooter variant={variant} onNavigate={link => setLast(link.label)} />
-        </motion.div>
-      </motion.div>
-    </div>
-    <p className={styles.srOnly} aria-live="polite">{last ? `Opened ${last}` : ""}</p>
-  </div>;
-}
-
-export default SiteFooterBlock;
+export default SiteFooter;

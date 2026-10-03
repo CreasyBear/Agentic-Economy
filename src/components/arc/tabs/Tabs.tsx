@@ -2,7 +2,7 @@
 "use client";
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
-import { createContext, useCallback, useContext, useId, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, RefObject } from "react";
 import { ChevronLeft as NavArrowLeft, ChevronRight as NavArrowRight } from "lucide-react";
 import { AnimatePresence, LayoutGroup, animate, motion, useReducedMotion } from "motion/react";
@@ -10,11 +10,11 @@ import type { AnimationPlaybackControls, Variants } from "motion/react";
 import { motionTokens } from "../lib/motion-tokens";
 import styles from "./tabs.module.css";
 
-type RootProps = Omit<ComponentPropsWithoutRef<typeof TabsPrimitive.Root>, "value" | "defaultValue" | "onValueChange" | "className"> & { value?: string; defaultValue?: string; onValueChange?: (value: string) => void; className?: string };
+type RootProps = Omit<ComponentPropsWithoutRef<typeof TabsPrimitive.Root>, "value" | "defaultValue" | "onValueChange" | "className"> & { value?: string; defaultValue?: string; onValueChange?: (value: string) => void; className?: string; animateContent?: boolean };
 /** `direction` is +1 when the new tab sits after the old one; `panelHeightRef` holds the visible panel height so the next panel can morph from it; `leavingRectRef` pins the outgoing panel where it was on screen. */
-const TabsContext = createContext<{ active: string; layoutId: string; direction: number; panelHeightRef: RefObject<number | null>; leavingRectRef: RefObject<DOMRect | null> }>({ active: "", layoutId: "tabs", direction: 1, panelHeightRef: { current: null }, leavingRectRef: { current: null } });
+const TabsContext = createContext<{ active: string; layoutId: string; direction: number; animateContent: boolean; panelHeightRef: RefObject<number | null>; leavingRectRef: RefObject<DOMRect | null> }>({ active: "", layoutId: "tabs", direction: 1, animateContent: true, panelHeightRef: { current: null }, leavingRectRef: { current: null } });
 
-export function Tabs({ value, defaultValue, onValueChange, className, ...props }: RootProps) {
+export function Tabs({ value, defaultValue, onValueChange, className, animateContent = true, ...props }: RootProps) {
   const [internal, setInternal] = useState(defaultValue ?? "");
   const [direction, setDirection] = useState(1);
   const active = value ?? internal;
@@ -22,16 +22,17 @@ export function Tabs({ value, defaultValue, onValueChange, className, ...props }
   const root = useRef<HTMLDivElement>(null);
   const panelHeightRef = useRef<number | null>(null);
   const leavingRectRef = useRef<DOMRect | null>(null);
+  const contextValue = useMemo(() => ({ active, layoutId, direction, animateContent, panelHeightRef, leavingRectRef }), [active, layoutId, direction, animateContent, panelHeightRef, leavingRectRef]);
   function handleChange(next: unknown) {
     if (typeof next !== "string") return;
     const frame = root.current;
-    leavingRectRef.current = frame?.querySelector(':scope > [role="tabpanel"][data-state="active"]')?.getBoundingClientRect() ?? null;
+    leavingRectRef.current = animateContent ? frame?.querySelector(':scope > [role="tabpanel"][data-state="active"]')?.getBoundingClientRect() ?? null : null;
     const order = frame ? Array.from(frame.querySelectorAll<HTMLElement>('[role="tab"][data-value]')).filter(tab => tab.closest(`.${styles.root}`) === frame).map(tab => tab.dataset.value) : [];
     const from = order.indexOf(active), to = order.indexOf(next);
     if (from >= 0 && to >= 0 && from !== to) setDirection(to > from ? 1 : -1);
     if (value === undefined) setInternal(next); onValueChange?.(next);
   }
-  return <TabsContext.Provider value={{ active, layoutId, direction, panelHeightRef, leavingRectRef }}><LayoutGroup id={layoutId}><TabsPrimitive.Root {...props} ref={root} className={[styles.root, className].filter(Boolean).join(" ")} value={active} onValueChange={handleChange}/></LayoutGroup></TabsContext.Provider>;
+  return <TabsContext.Provider value={contextValue}><LayoutGroup id={layoutId}><TabsPrimitive.Root {...props} ref={root} className={[styles.root, className].filter(Boolean).join(" ")} value={active} onValueChange={handleChange}/></LayoutGroup></TabsContext.Provider>;
 }
 
 export function TabsList({ className, ...props }: Omit<ComponentPropsWithoutRef<typeof TabsPrimitive.List>, "className"> & { className?: string }) {
@@ -107,13 +108,18 @@ const panelFade: Variants = {
 };
 
 export function TabsContent({ className, value, keepMounted, children, ...props }: Omit<ComponentPropsWithoutRef<typeof TabsPrimitive.Panel>, "className" | "value"> & { className?: string; value: string }) {
-  const { active, direction, panelHeightRef, leavingRectRef } = useContext(TabsContext);
+  const { active, direction, animateContent, panelHeightRef, leavingRectRef } = useContext(TabsContext);
   const reduced = useReducedMotion();
   const panel = useRef<HTMLDivElement>(null);
   const selected = active === value;
   const classes = [styles.content, className].filter(Boolean).join(" ");
   // The incoming panel starts at the outgoing panel's height and settles at its own, so content below glides instead of jumping.
   useLayoutEffect(() => {
+    if (!animateContent) {
+      panelHeightRef.current = null;
+      leavingRectRef.current = null;
+      return;
+    }
     const node = panel.current;
     if (!node || keepMounted) return;
     // Outgoing: the tab root may have changed size around it, so pin the panel to where it was while it fades.
@@ -131,7 +137,11 @@ export function TabsContent({ className, value, keepMounted, children, ...props 
     const observer = new ResizeObserver(() => { panelHeightRef.current = node.offsetHeight; });
     observer.observe(node);
     return () => { observer.disconnect(); controls?.stop(); release(); };
-  }, [selected, reduced, keepMounted, panelHeightRef, leavingRectRef]);
+  }, [animateContent, selected, reduced, keepMounted, panelHeightRef, leavingRectRef]);
+  if (!animateContent) {
+    if (!keepMounted && !selected) return null;
+    return <TabsPrimitive.Panel {...props} value={value} {...(keepMounted ? { keepMounted: true } : {})} data-state={selected ? "active" : "inactive"} className={classes}>{children}</TabsPrimitive.Panel>;
+  }
   if (keepMounted) return <TabsPrimitive.Panel {...props} value={value} keepMounted data-state={selected ? "active" : "inactive"} className={classes}>{children}</TabsPrimitive.Panel>;
   return <AnimatePresence initial={false} mode="popLayout" custom={direction}>
     {selected && <TabsPrimitive.Panel {...props} key={value} value={value} keepMounted data-state={selected ? "active" : "inactive"} render={<motion.div ref={panel} className={classes} custom={direction} variants={reduced ? panelFade : panelMotion} initial="enter" animate="center" exit="exit" />}>{children}</TabsPrimitive.Panel>}

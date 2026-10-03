@@ -154,8 +154,8 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('heading', { level: 1 }).map(({ textContent }) => textContent)).toEqual(['Page not found'])
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getAllByTestId('skip-to-content')).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: 'Workspace menu' })).toBeNull()
-    expect(screen.getAllByRole('navigation', { name: 'App navigation' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Workspace menu' })).toBeTruthy()
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
 
     const recovery = screen.getByRole('link', { name: 'Back to Agents' })
@@ -302,70 +302,60 @@ describe('operator shell nested chrome', () => {
 
 })
 
-describe('Arc workspace navigation', () => {
-  it('commits compact native navigation with focus on the routed main', async () => {
-    const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
-      x: 0, y: 0, width: 380, height: 800, top: 0, left: 0, right: 380, bottom: 800, toJSON: () => ({}),
-    }))
-    try {
-      renderOperatorShell('owner', '/owner/operations')
-      fireEvent.click(await screen.findByRole('button', { name: 'Open navigation' }))
-      const drawer = await screen.findByRole('dialog', { name: 'App navigation' })
-      fireEvent.click(within(drawer).getByRole('link', { name: 'Activity' }))
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'App navigation' })).toBeNull())
-      await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('main')))
-    } finally {
-      measure.mockRestore()
-    }
+describe('workspace dropdown navigation', () => {
+  async function menu() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
+    return screen.findByRole('menu')
+  }
+
+  it('closes the gear menu after native navigation and focuses the routed main', async () => {
+    renderOperatorShell('owner', '/owner/operations')
+    const dropdown = await menu()
+    fireEvent.click(within(dropdown).getByRole('menuitem', { name: 'Activity' }))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('main')))
   })
 
   it('moves between workspace routes without a document navigation', async () => {
     renderOperatorShell('owner', '/owner/operations')
-
-    const mobileNav = await screen.findByRole('navigation', { name: 'App navigation' })
-    const calls = within(mobileNav).getByRole('link', { name: 'Activity' })
-    fireEvent.click(calls)
-
-    await waitFor(() => expect(calls.getAttribute('data-status')).toBe('active'))
+    fireEvent.click(within(await menu()).getByRole('menuitem', { name: 'Activity' }))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    const current = within(await menu()).getByRole('menuitem', { name: 'Activity' })
+    expect(current.getAttribute('data-status')).toBe('active')
+    expect(current.getAttribute('aria-current')).toBe('page')
   })
 
-  it('renders the canonical native destinations without a More sheet', async () => {
+  it('keeps every canonical destination in the dropdown and no persistent settings rail', async () => {
     renderOperatorShell('owner', '/owner/operations')
-    const mobileNav = await screen.findByRole('navigation', { name: 'App navigation' })
-    const links = within(mobileNav).getAllByRole('link')
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
+    const dropdown = await menu()
+    const links = within(dropdown).getAllByRole('menuitem')
     expect(links.map((link) => link.textContent)).toEqual(['Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Earnings', 'Tools', 'Settings', 'Support', 'Status'])
     expect(links.map((link) => link.getAttribute('href'))).toEqual(['/market', '/t/new', '/agent-access', '/activity', '/owner/credit', '/owner/operations#earnings', '/owner/operations', '/owner/settings', '/support', '/status'])
-    expect(within(mobileNav).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
-    expect(within(mobileNav).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBeNull()
-    expect(within(mobileNav).queryByRole('button', { name: 'More' })).toBeNull()
+    expect(within(dropdown).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
+    expect(within(dropdown).getByRole('menuitem', { name: 'Settings' }).getAttribute('aria-current')).toBeNull()
+    expect(within(dropdown).queryByRole('button', { name: 'More' })).toBeNull()
   })
 
-
-  it('keeps one Arc navigation across owner resources, receipts, and admin pages', async () => {
+  it('keeps one gear menu across owner resources, receipts, and entitled admin pages', async () => {
     const owner = renderOperatorShell('owner', '/owner/operations')
-    const ownerNavigation = await screen.findByRole('navigation', { name: 'App navigation' })
-    expect(screen.getAllByRole('navigation', { name: 'App navigation' })).toHaveLength(1)
-    expect(within(ownerNavigation).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
-
+    expect(screen.getAllByRole('button', { name: 'Workspace menu' })).toHaveLength(1)
+    expect(within(await menu()).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
     owner.unmount()
     const receipt = renderOperatorShell('owner', '/calls/call_test_123')
-    const receiptNavigation = await screen.findByRole('navigation', { name: 'App navigation' })
-    expect(within(receiptNavigation).getByRole('link', { name: 'Activity' }).getAttribute('aria-current')).toBe('page')
+    expect(within(await menu()).getByRole('menuitem', { name: 'Activity' }).getAttribute('aria-current')).toBe('page')
     receipt.unmount()
-
     shellMocks.canAccessAdmin = true
     renderOperatorShell('admin', '/admin')
-    const adminNavigation = await screen.findByRole('navigation', { name: 'App navigation' })
-    expect(within(adminNavigation).getByText('Admin')).toBeTruthy()
+    expect(within(await menu()).getByText('Admin')).toBeTruthy()
   })
 
-  it('keeps Arc navigation links keyboard reachable without reserving space for the removed bottom bar', async () => {
+  it('keeps native dropdown destinations keyboard reachable and preserves the mobile navigation inset', async () => {
     renderOperatorShell('owner', '/owner/operations')
-
-    const mobileNav = await screen.findByRole('navigation', { name: 'App navigation' })
     const content = document.querySelector('[data-shell="app-content"]')
-    expect(content?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(false)
-    for (const link of within(mobileNav).getAllByRole('link')) {
+    expect(content?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
+    for (const link of within(await menu()).getAllByRole('menuitem')) {
       expect(link.tagName).toBe('A')
       link.focus()
       expect(document.activeElement).toBe(link)

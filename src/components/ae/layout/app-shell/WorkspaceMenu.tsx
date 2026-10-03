@@ -4,7 +4,6 @@ import { SettingsIcon } from 'lucide-react'
 import { Link, useLocation } from '@tanstack/react-router'
 
 import { Button } from '@/components/arc/button/button'
-import { SidebarRailNavigation, type SidebarRailGroup } from '@/components/arc/blocks/sidebar-rail/sidebar-rail'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,12 +23,11 @@ import './WorkspaceNavigationComposition.css'
 export type WorkspaceMenuProps = Readonly<{
   operatorRole: OperatorRole
   canAccessAdmin: boolean
-  rail?: Readonly<{ collapsed: boolean; onNavigate: () => void }>
 }>
 
 const MENU_ITEM_CLASS = 'arc-workspace-menu-item'
 
-export function WorkspaceMenu({ operatorRole, canAccessAdmin, rail }: WorkspaceMenuProps) {
+export function WorkspaceMenu({ operatorRole, canAccessAdmin }: WorkspaceMenuProps) {
   const { pathname, hash } = useLocation()
   const activeDestinationId = resolveAppDestination(pathname, hash)
   const roleItems = roleNavigation(operatorRole, canAccessAdmin)
@@ -39,39 +37,6 @@ export function WorkspaceMenu({ operatorRole, canAccessAdmin, rail }: WorkspaceM
     { label: 'Developer', items: operatorRole === 'developer' ? DEVELOPER_NAVIGATION : [] },
   ]
 
-  if (rail !== undefined) {
-    const groups: readonly SidebarRailGroup[] = [
-      ...APP_NAV_GROUPS.map(({ id, destination }) => ({
-        id,
-        label: id === 'workspace' ? 'Workspace' : destination.label,
-        ...(id === 'workspace' ? { context: <AeWorkspaceIdentity inMenu /> } : {}),
-        items: APP_NAVIGATION.filter((item) => item.group === id).map((item) => {
-          const Icon = APP_NAVIGATION_ICONS[item.id]
-          return {
-            id: item.id, label: item.label, icon: <Icon aria-hidden="true" />,
-            active: item.id === activeDestinationId,
-            renderLink: ({ children, ...linkProps }) => (
-              <Link to={item.to} {...(item.hash === undefined ? {} : { hash: item.hash.slice(1) })} {...linkProps}>{children}</Link>
-            ),
-          } satisfies SidebarRailGroup['items'][number]
-        }),
-      })),
-      ...roleGroups.filter(({ items }) => items.length > 0).map(({ label, items }) => ({
-        id: label.toLowerCase(), label,
-        items: items.map((item) => {
-          const Icon = item.icon
-          return {
-            id: item.href, label: item.label, icon: <Icon aria-hidden="true" />,
-            active: item.href === activeRoleHref,
-            renderLink: ({ children, ...linkProps }) => (
-              <Link to={item.href} activeOptions={{ exact: true }} {...linkProps}>{children}</Link>
-            ),
-          } satisfies SidebarRailGroup['items'][number]
-        }),
-      })),
-    ]
-    return <SidebarRailNavigation groups={groups} collapsed={rail.collapsed} onNavigate={rail.onNavigate} />
-  }
 
   return (
     <DropdownMenu>

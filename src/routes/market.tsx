@@ -22,10 +22,10 @@ export const Route = createFileRoute("/market")({
   loader: ({ deps }) => loadMarketPageRouteData(deps),
   staleTime: 30_000,
   preloadStaleTime: 30_000,
-  // Keep current results visible during filter reloads; the router's 150ms
-  // default otherwise replaces the list with the full-page pending skeleton.
-  pendingMs: 1_000,
-  pendingMinMs: 500,
+  // Keep the marketplace frame and tab controls mounted through navigation.
+  // AeMarketPage shows a requested tab's local loading state until its genuine
+  // catalogue commits; filter reloads retain their current rows.
+  pendingMs: Infinity,
   pendingComponent: MarketPending,
   errorComponent: MarketError,
   head: ({ loaderData, match }) =>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
@@ -38,6 +38,14 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
   const decision = retainedMarketCatalogue(retained?.data, data);
   const shownData = decision.shown;
   const shownSearch = decision.retainPrevious && retained !== undefined ? retained.search : search;
+  // The router owns the request and race handling. Select the requested tab at
+  // once, but supply its rows only after the matching loader has committed.
+  const requestedView = useRouterState({ select: state => {
+    if (state.status !== "pending" || state.location.pathname !== "/market") return undefined;
+    const view = state.location.search.view;
+    return view === "tools" || view === "providers" || view === "saved" ? view : "discover";
+  } });
+  const pendingView = requestedView !== shownData.view ? requestedView : undefined;
   return (
     <AePublicPage>
       {decision.retainPrevious ? (
@@ -49,6 +57,7 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
       <AeX402Directory
         marketPath="/market"
         activeView={shownData.view}
+        {...(pendingView === undefined ? {} : { pendingView })}
         page={shownData.page}
         compareEntries={shownData.compareEntries}
         search={shownSearch}

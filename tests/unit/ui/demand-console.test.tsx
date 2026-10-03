@@ -317,12 +317,13 @@ describe('owner credit administration reads', () => {
     creditReads.render.mockReset(); creditReads.sign.mockReset()
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     render(<Accounting />)
-    await screen.findByRole('button', { name: 'Review close' })
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Daily close, document:original' }))
+    const drawer = await screen.findByRole('dialog')
     expect(screen.queryByText('Issued')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Sign close' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Review close' }))
+    expect(within(drawer).getByRole('button', { name: 'Sign close' })).toBeTruthy()
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Review close' }))
     await waitFor(() => expect(creditReads.documentUrl).toHaveBeenCalledWith({ data: { documentRef: document.documentRef, format: 'html' } }))
-    fireEvent.click(screen.getByRole('button', { name: 'Review CSV' }))
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Review CSV' }))
     await waitFor(() => expect(creditReads.documentUrl).toHaveBeenCalledWith({ data: { documentRef: document.documentRef, format: 'csv' } }))
     expect(open).toHaveBeenCalledTimes(2)
     expect(creditReads.render).not.toHaveBeenCalled()
@@ -334,15 +335,98 @@ describe('owner credit administration reads', () => {
   it('offers neither review nor signature when an awaiting close has no prepared files', async () => {
     render(<CreditAccountingPanel documents={[{ ...document, kind: 'daily_close', state: 'awaiting_signature', rendered: false }]}
       onOpenDocument={vi.fn()} onSignDailyClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Daily close, document:original' }))
+    const drawer = await screen.findByRole('dialog')
     expect(screen.queryByRole('button', { name: 'Review close' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Review CSV' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Sign close' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Preparing…' }).hasAttribute('disabled')).toBe(true)
+    expect(within(drawer).getByText('Awaiting owner signature')).toBeTruthy()
+  })
+
+  it('filters documents by kind, full reference, or status and the Arc clear control restores all rows', () => {
+    render(<CreditAccountingPanel documents={[
+      { ...document, documentRef: 'money-document:statement:full-secret-reference', state: 'failed' },
+      { ...document, documentRef: 'money-document:tax:other', kind: 'tax_invoice', state: 'issued' },
+    ]} />)
+    const search = screen.getByRole('searchbox', { name: 'Search documents' })
+    const table = screen.getByRole('table', { name: 'Accounting documents' })
+    const expectOnly = (reference: string) => {
+      const rows = within(table).getAllByRole('row').slice(1)
+      expect(rows).toHaveLength(1)
+      expect(within(rows[0]!).getByRole('button', { name: new RegExp(reference, 'u') })).toBeTruthy()
+    }
+    const clearAndExpectBoth = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+      expect(within(table).getAllByRole('row')).toHaveLength(3)
+    }
+
+    fireEvent.change(search, { target: { value: 'tax invoice' } })
+    expectOnly('money-document:tax:other')
+    clearAndExpectBoth()
+
+    fireEvent.change(search, { target: { value: 'full-secret-reference' } })
+    expectOnly('money-document:statement:full-secret-reference')
+    clearAndExpectBoth()
+
+    fireEvent.change(search, { target: { value: 'needs attention' } })
+    expectOnly('money-document:statement:full-secret-reference')
+  })
+
+  it('sorts adjacent large document amounts exactly with BigInt values', () => {
+    const high = { ...document, documentRef: 'document:high', amountUnits: '9007199254740992000001' }
+    const low = { ...document, documentRef: 'document:low', amountUnits: '9007199254740992000000' }
+    expect(Number(BigInt(high.amountUnits))).toBe(Number(BigInt(low.amountUnits)))
+    render(<CreditAccountingPanel documents={[high, low]} />)
+    const table = screen.getByRole('table', { name: 'Accounting documents' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by Amount' }))
+
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(within(rows[0]!).getByRole('button', { name: 'View details for Statement, document:low' })).toBeTruthy()
+    expect(within(rows[1]!).getByRole('button', { name: 'View details for Statement, document:high' })).toBeTruthy()
+  })
+
+  it('shows the current selected document in the drawer and closes on refresh, removal, and Escape with focus return', async () => {
+    const onOpenDocument = vi.fn(async () => undefined)
+    const { rerender } = render(<CreditAccountingPanel documents={[document]} onOpenDocument={onOpenDocument} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
+    await waitFor(() => expect(screen.getByText('Link prepared')).toBeTruthy())
+
+    const viewDetails = screen.getByRole('button', { name: 'View details for Statement, document:original' })
+    viewDetails.focus()
+    fireEvent.click(viewDetails)
+    let drawer = await screen.findByRole('dialog')
+    expect(within(drawer).getByText('A$12.50')).toBeTruthy()
+
+    const refreshed = { ...document, amountUnits: '7500000', state: 'failed' as const }
+    rerender(<CreditAccountingPanel documents={[refreshed]} />)
+    drawer = screen.getByRole('dialog')
+    expect(within(drawer).getByText('A$7.50')).toBeTruthy()
+    expect(within(drawer).getByText('Needs attention')).toBeTruthy()
+
+    fireEvent.keyDown(drawer, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(window.document.activeElement).toBe(screen.getByRole('button', { name: 'View details for Statement, document:original' })))
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Statement, document:original' }))
+    await screen.findByRole('dialog')
+    rerender(<CreditAccountingPanel documents={[]} />)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    rerender(<CreditAccountingPanel documents={[refreshed]} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Statement, document:original' }))
+    await screen.findByRole('dialog')
+    rerender(<CreditAccountingPanel documents={[refreshed]} unavailable={{ documents: true }} />)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    rerender(<CreditAccountingPanel documents={[refreshed]} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('explains a blocked rounding adjustment without claiming a payment or signature', () => {
     render(<CreditAccountingPanel documents={[{ ...document, kind: 'daily_close', state: 'failed', rendered: false,
       failureCode: 'statement_adjustment_requires_approved_policy' }]} onOpenDocument={vi.fn()} onSignDailyClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Daily close, document:original' }))
     expect(screen.getByText(/No ledger adjustment was made\./u).getAttribute('role')).toBe('status')
     expect(screen.queryByRole('button', { name: 'Sign close' })).toBeNull()
     expect(screen.queryByText('Issued')).toBeNull()
@@ -526,18 +610,21 @@ describe('owner credit target', () => {
     />)
 
     fireEvent.click(screen.getByText('Accounting records and administration'))
-    const openButtons = screen.getAllByRole('button', { name: 'Open document' })
-    fireEvent.click(openButtons[0]!)
+    const table = screen.getByRole('table', { name: 'Accounting documents' })
+    const documentRows = () => within(table).getAllByRole('row').slice(1)
+    const statementRow = () => documentRows()[0]!
+    const taxRow = () => documentRows()[1]!
+    fireEvent.click(within(statementRow()).getByRole('button', { name: 'Open document' }))
 
     expect(screen.getByRole('button', { name: 'Create previous month’s statement' }).hasAttribute('disabled')).toBe(false)
-    expect(screen.getByRole('button', { name: 'Open document' }).hasAttribute('disabled')).toBe(false)
-    expect(screen.getByText('Opening Statement…')).toBeTruthy()
+    expect(within(statementRow()).getByRole('button', { name: 'Opening…' }).hasAttribute('disabled')).toBe(true)
+    expect(within(statementRow()).getByText('Opening Statement…')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Create previous month’s statement' }))
     expect(await screen.findByText('Statement creation could not be confirmed. Refresh documents before trying again.')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
-    expect(screen.getByText('Opening Tax invoice…')).toBeTruthy()
+    fireEvent.click(within(taxRow()).getByRole('button', { name: 'Open document' }))
+    expect(within(taxRow()).getByText('Opening Tax invoice…')).toBeTruthy()
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(2))
 
     await act(async () => {
@@ -546,8 +633,19 @@ describe('owner credit target', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByText('Statement link prepared. If no tab opened, try opening it again.')).toBeTruthy()
-    expect(screen.getByText('Tax invoice could not be opened. This record remains available.')).toBeTruthy()
+    expect(within(statementRow()).getByText('Link prepared')).toBeTruthy()
+    expect(within(taxRow()).getByText('Could not open')).toBeTruthy()
+    expect(within(taxRow()).getByRole('status').getAttribute('title')).toBe('Tax invoice could not be opened. This record remains available.')
+
+    fireEvent.click(within(statementRow()).getByRole('button', { name: 'View details for Statement, money-document:statement:one' }))
+    let drawer = await screen.findByRole('dialog')
+    expect(within(drawer).getByText('Statement link prepared. If no tab opened, try opening it again.')).toBeTruthy()
+    fireEvent.keyDown(drawer, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    fireEvent.click(within(taxRow()).getByRole('button', { name: 'View details for Tax invoice, money-document:tax:two' }))
+    drawer = await screen.findByRole('dialog')
+    expect(within(drawer).getByText('Tax invoice could not be opened. This record remains available.')).toBeTruthy()
   })
 
   it('AM-11 does not label a preparing document as issued', async () => {
@@ -578,7 +676,7 @@ describe('owner credit target', () => {
     expect(screen.getByText('Preparing')).toBeTruthy()
     expect(screen.getByText('Recorded')).toBeTruthy()
     expect(screen.queryByText('Issued')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Preparing…' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'View details for Funding receipt, money-document:funding_receipt:am11-preparing' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open document' })).toBeNull()
   })
 
@@ -610,7 +708,7 @@ describe('owner credit target', () => {
     expect(screen.getByText('Needs attention')).toBeTruthy()
     expect(screen.getByText('Recorded')).toBeTruthy()
     expect(screen.queryByText('Issued')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Preparing…' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'View details for Adjustment document, money-document:adjustment:am11-failed' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open document' })).toBeNull()
   })
 
