@@ -1,5 +1,4 @@
-import { CheckCircle2Icon } from 'lucide-react'
-import { Button } from '@/components/arc/button/button'
+import { Stepper } from '@/components/arc/stepper/stepper'
 
 import '../OnboardingComposition.css'
 
@@ -12,39 +11,35 @@ export function OnboardingStepper({
   isCompleted,
   onGoToStep,
 }: OnboardingStepperProps) {
+  const steps = STEP_META.map(({ id, label, duration }) => {
+    const active = step === id
+    const completed = isCompleted(id)
+    const visited = isVisited(id)
+    return {
+      id,
+      label: label.replace(/^\d+\.\s*/u, ''),
+      description: duration,
+      status: active ? 'current' as const : completed ? 'complete' as const : 'upcoming' as const,
+      statusLabel: completed ? 'Completed' : visited ? 'Visited' : 'Not started',
+    }
+  })
+
   return (
-    <nav aria-label="Provider setup" className="arc-market arc-provider-setup-steps">
-      {STEP_META.map(({ id, label, duration, icon: Icon }) => {
-        const active = step === id
-        const completed = isCompleted(id)
-        const visited = isVisited(id)
-        return (
-          <Button
-            key={id}
-            type="button"
-            disabled={!visited}
-            aria-current={active ? 'step' : undefined}
-            onClick={() => onGoToStep(id)}
-            variant="ghost"
-            size="md"
-            labelLayout="start"
-            className="arc-provider-setup-step"
-          >
-            <span className="arc-provider-setup-step-content">
-              <span className="arc-provider-setup-step-title">
-                {completed ? (
-                  <CheckCircle2Icon className="arc-provider-setup-step-icon" aria-hidden />
-                ) : (
-                  <Icon className="arc-provider-setup-step-icon" aria-hidden />
-                )}
-                <span>{label}</span>
-                {completed ? <span className="sr-only">Completed</span> : null}
-              </span>
-              <span className="arc-provider-setup-step-duration">{duration}</span>
-            </span>
-          </Button>
-        )
-      })}
-    </nav>
+    <Stepper
+      steps={steps}
+      current={STEP_META.findIndex(({ id }) => id === step)}
+      orientation="vertical"
+      details="all"
+      label="Provider setup"
+      className="arc-market arc-provider-setup-steps"
+      canSelectStep={(index) => {
+        const meta = STEP_META[index]
+        return meta !== undefined && isVisited(meta.id)
+      }}
+      onStepSelect={(index) => {
+        const meta = STEP_META[index]
+        if (meta && isVisited(meta.id)) onGoToStep(meta.id)
+      }}
+    />
   )
 }

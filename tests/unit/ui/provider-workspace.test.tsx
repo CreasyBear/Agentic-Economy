@@ -72,7 +72,10 @@ describe('Tools management disclosure', () => {
     expect(screen.queryByText('Add a source, then choose a Tool to publish.')).toBeNull()
     const addTool = screen.getAllByRole('link', { name: 'Add Tool' })
     expect(addTool.every((link) => link.getAttribute('href') === '/owner/operations/new')).toBe(true)
-    expect(screen.getByRole('button', { name: /Provider identity.*Completed/u }).hasAttribute('disabled')).toBe(true)
+    const identityStep = screen.getByRole('button', { name: /Provider identity.*Completed/u })
+    expect(identityStep.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(identityStep)
+    expect(screen.queryByRole('textbox', { name: /provider or brand name/i })).toBeNull()
     expect(screen.queryByLabelText('Provider Website (HTTPS)')).toBeNull()
     expect(screen.getByRole('link', { name: 'Manage Provider identity' }).getAttribute('href')).toBe('/owner/operations')
     const setup = screen.getByRole('heading', { name: 'Provider setup' }).parentElement?.parentElement

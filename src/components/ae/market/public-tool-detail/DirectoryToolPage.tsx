@@ -39,10 +39,6 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
     id: 'output-example', label: 'Output example', description: 'Provider-published output',
     content: <pre><code>{entry.output.exampleJson}</code></pre>,
   })
-  if (entry.input?.schemaJson !== undefined) slides.push({
-    id: 'input-schema', label: 'Input contract', description: 'Published schema. This is a contract, not an example request.',
-    content: <pre><code>{entry.input.schemaJson}</code></pre>,
-  })
   return <AePublicPage>
     <div className="arc-pdp-page">
       <ProductDetail

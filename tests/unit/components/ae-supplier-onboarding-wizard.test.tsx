@@ -28,7 +28,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
   })
 
   it('shows identity and first Tool setup without unsupported payout steps', () => {
-    const { container } = render(
+    render(
       <AeSupplierOnboardingWizard
         currentStep="profile"
         onSaveProfile={vi.fn()}
@@ -36,18 +36,16 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     )
 
     expect(screen.getByRole('navigation', { name: /provider setup/i })).toBeInTheDocument()
-    expect(screen.getByText(/1\. Provider identity/i)).toBeInTheDocument()
-    expect(screen.getByText(/2\. First Tool/i)).toBeInTheDocument()
+    expect(screen.getByText('Provider identity')).toBeInTheDocument()
+    expect(screen.getByText('First Tool')).toBeInTheDocument()
     expect(screen.getByText('~2 mins')).toBeInTheDocument()
     expect(screen.getByText('~1 min')).toBeInTheDocument()
 
     const nav = screen.getByRole('navigation', { name: /provider setup/i })
-    expect(within(nav).getByRole('button', { name: /1\. provider identity/i })).toHaveAttribute('aria-current', 'step')
-    expect(within(nav).getByRole('button', { name: /2\. first tool/i })).toBeDisabled()
+    expect(within(nav).getByRole('button', { name: /provider identity/i })).toHaveAttribute('aria-current', 'step')
+    expect(within(nav).getByRole('button', { name: /first tool/i })).toHaveAttribute('aria-disabled', 'true')
 
-    const liveSlot = container.querySelector('[aria-live="polite"]')
-    expect(liveSlot).toBeInTheDocument()
-    expect(liveSlot).toBeEmptyDOMElement()
+    expect(within(nav).getByText('Step 1 of 2: Provider identity, Visited')).toBeInTheDocument()
   })
 
   it('T2: Step 1 validates brand name, website origin, and Australian ABN format', async () => {
@@ -142,13 +140,17 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     })
 
     const nav = screen.getByRole('navigation', { name: /provider setup/i })
-    const profileTab = within(nav).getByRole('button', { name: /1\. provider identity/i })
+    const profileTab = within(nav).getByRole('button', { name: /provider identity/i })
     expect(profileTab).toBeEnabled()
     expect(profileTab).toHaveAccessibleName(/completed/i)
-    expect(within(nav).getByRole('button', { name: /2\. first tool/i })).toHaveAttribute('aria-current', 'step')
+    expect(within(nav).getByRole('button', { name: /first tool/i })).toHaveAttribute('aria-current', 'step')
     fireEvent.click(profileTab)
 
     expect(screen.getByLabelText(/provider or brand name/i)).toBeInTheDocument()
+
+    fireEvent.click(within(nav).getByRole('button', { name: /first tool/i }))
+    expect(screen.getByRole('link', { name: 'Add Tool' })).toBeInTheDocument()
+    expect(onSaveProfileMock).toHaveBeenCalledTimes(1)
   })
 
   it('shows the first Tool action without payout prerequisite', () => {

@@ -388,6 +388,34 @@ describe('/tools/$toolRef', () => {
     expect(screen.getByText(/Readiness stale/)).toBeTruthy()
   })
 
+  it('keeps published inputs in the gallery and exact schemas only under Technical', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
+    const gallery = screen.getByRole('region', { name: 'Invoice line-item extraction published examples' })
+    const inputExample = JSON.stringify({ documentUrl: 'https://docs.example/invoice.pdf', includeTax: true }, null, 2)
+    expect(gallery.querySelector('code')?.textContent).toBe(inputExample)
+    for (const schema of [tool.contract.inputJsonSchema, tool.contract.outputJsonSchema]) {
+      const exact = JSON.stringify(schema, null, 2)
+      expect([...gallery.querySelectorAll('code')].some(node => node.textContent === exact)).toBe(false)
+      expect([...document.querySelectorAll('code')].filter(node => node.textContent === exact)).toHaveLength(1)
+    }
+    expect(screen.queryByRole('button', { name: 'Next example' })).toBeNull()
+    const technicalTrigger = screen.getByRole('button', { name: /Technical · operation IDs/ })
+    fireEvent.click(technicalTrigger)
+    const technical = screen.getByRole('region', { name: /Technical · operation IDs/ })
+    const technicalCodes = [...technical.querySelectorAll('code')].map(node => node.textContent)
+    expect(technicalCodes).toContain(JSON.stringify(tool.contract.outputJsonSchema, null, 2))
+    expect(technicalCodes).toContain(JSON.stringify(tool.contract.inputJsonSchema, null, 2))
+  })
+
+  it('does not use a schema as an example when no admitted input example is published', () => {
+    const noExamples = { ...tool, contract: { ...tool.contract, inputExamples: [] } }
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: noExamples })
+    const gallery = screen.getByRole('region', { name: 'Invoice line-item extraction published examples' })
+    expect(within(gallery).getByText('No example input is published for this Tool.')).toBeTruthy()
+    expect(gallery.querySelector('code')).toBeNull()
+    expect(screen.getByText('No published output example. The output contract is under Technical.')).toBeTruthy()
+  })
+
   it('searches for another eligible Tool by capability and exact current identity, not its title', () => {
     const admitted = projectAdmittedListing(tool)
     const href = alternativeToolSearchHref(admitted, `${tool.contract.capabilityId} ${tool.summary}`)
@@ -511,6 +539,26 @@ describe('/tools/$providerHost/$slug', () => {
     prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.000001 USDC', decimalAmount: '0.000001', symbol: 'USDC' }],
     metadataJson: '{}',
   }
+
+  it('retains both published directory examples while exposing its input schema once in Technical', () => {
+    const input = '{"documentUrl":"https://docs.example/invoice.pdf"}'
+    const output = '{"lineItems":[{"amount":"12.34"}]}'
+    const schema = '{"type":"object","required":["documentUrl"]}'
+    const publishedEntry = { ...entry, input: { fields: [], exampleJson: input, schemaJson: schema }, output: { fields: [], exampleJson: output } }
+    const root = createRootRoute()
+    const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/' }), createRoute({ getParentRoute: () => root, path: '/market' })]), history: createMemoryHistory({ initialEntries: ['/'] }) })
+    render(<RouterContextProvider router={router}><DirectoryToolPage metadata={{ kind: 'found_upstream', item: { entry: publishedEntry } }} providerHost="example.test" slug="invoices" /></RouterContextProvider>)
+    const gallery = screen.getByRole('region', { name: 'Invoice extraction published examples' })
+    expect(within(gallery).getByText(input)).toBeTruthy()
+    expect(within(gallery).queryByText(schema)).toBeNull()
+    expect([...document.querySelectorAll('code')].filter(node => node.textContent === schema)).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Next example' }))
+    expect(within(gallery).getByRole('group', { name: 'Output example, 2 of 2' }).textContent).toContain(output)
+    expect(screen.queryByRole('button', { name: 'Show Input contract' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Technical · endpoint and source' }))
+    expect(within(screen.getByRole('region', { name: 'Technical · endpoint and source' })).getByText(schema)).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
+  })
 
   it('passes fresh source rate to a directory-only detail and never claims an AE input recipient', async () => {
     const metadata = { kind: 'found_upstream' as const, item: { entry } }

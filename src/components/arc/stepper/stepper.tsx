@@ -34,8 +34,10 @@ export interface StepperProps {
   /** Index of the step in progress. `steps.length` marks the whole flow complete. */
   current: number;
   orientation?: StepperOrientation | undefined;
-  /** Called with the index of a completed step when it is chosen. Without it the stepper is a read-only indicator. */
+  /** Called with the index of a selectable step when it is chosen. Without it the stepper is a read-only indicator. */
   onStepSelect?: ((index: number) => void) | undefined;
+  /** Overrides which steps can be reached and selected. Without it, existing status-based reachability applies. */
+  canSelectStep?: ((index: number) => boolean) | undefined;
   /** `current` shows only the active step's description, for tight spaces. Errors always show. */
   details?: "all" | "current" | undefined;
   /** Markers only; labels stay available to assistive tech. Horizontal steppers switch to this below 30rem on their own
@@ -121,7 +123,7 @@ function Marker({ number, kind, current, glyphDelay, ringDelay, reduced }: { num
 
 const statusText: Record<StepperStatus, string> = { complete: "Completed", current: "", upcoming: "Not started", error: "Error" };
 
-export function Stepper({ steps, current, orientation = "horizontal", onStepSelect, details = "all", compact = false, label = "Progress", completeLabel = "All steps complete", announceLabel, className }: StepperProps) {
+export function Stepper({ steps, current, orientation = "horizontal", onStepSelect, canSelectStep, details = "all", compact = false, label = "Progress", completeLabel = "All steps complete", announceLabel, className }: StepperProps) {
   const reduced = useReducedMotion() ?? false;
   const count = steps.length;
   const hasExplicitStatuses = steps.some((step) => step.status !== undefined);
@@ -178,8 +180,11 @@ export function Stepper({ steps, current, orientation = "horizontal", onStepSele
       {steps.map((step, index) => {
         const status = statusAt(index);
         const isCurrent = status === "current";
-        const reachable = hasExplicitStatuses ? status === "complete" || isCurrent : index <= active;
-        const clickable = interactive && (hasExplicitStatuses ? status === "complete" : index < active);
+        const canSelect = canSelectStep?.(index);
+        const defaultReachable = hasExplicitStatuses ? status === "complete" || isCurrent : index <= active;
+        const defaultClickable = hasExplicitStatuses ? status === "complete" : index < active;
+        const reachable = canSelectStep ? canSelect === true : defaultReachable;
+        const clickable = interactive && (canSelectStep ? canSelect === true : defaultClickable);
         const detail = step.error ?? (details === "all" || isCurrent ? step.description : undefined);
         const kind: GlyphKind = status === "error" ? "error" : status === "complete" ? "check" : "number";
         const statusAnnouncement = step.statusLabel ?? statusText[status];
