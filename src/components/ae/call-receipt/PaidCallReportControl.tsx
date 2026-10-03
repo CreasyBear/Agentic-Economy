@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { formatDisplayAmount } from '@/modules/money/public'
 import { readOwnerPaidCallReportServer, reportOwnerPaidCallServer } from '@/modules/capability-execution/paid-call-report.functions'
 import type { PaidCallReportView } from '@/modules/capability-execution/paid-call-report'
@@ -124,7 +124,7 @@ export function PaidCallReportControl({
             ? `Return ${amount(view.amountUnits)} credit for an answer that was not useful.`
             : 'Return this purchase to its original credit sources if the answer was not useful.'}</p>
           {view.expiredPromotionalUnits !== '0' ? <p>Original promotional credit of {amount(view.expiredPromotionalUnits)} has expired and will stay expired.</p> : null}
-          <Button type="button" variant="outline" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void submit() }}>
+          <Button type="button" variant="secondary" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void submit() }}>
             {submitting ? 'Reporting…' : 'Report this answer'}
           </Button>
         </div>
@@ -133,7 +133,7 @@ export function PaidCallReportControl({
         <div className="grid gap-intra" role="status">
           <p>Report received. Credit return is pending; {amount(view.amountUnits)} is not yet confirmed in your balance.</p>
           {view.expiredPromotionalUnits !== '0' ? <p>Original promotional credit of {amount(view.expiredPromotionalUnits)} has expired and will stay expired.</p> : null}
-          <Button type="button" variant="outline" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void submit() }}>
+          <Button type="button" variant="secondary" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void submit() }}>
             {submitting ? 'Checking…' : 'Check refund'}
           </Button>
         </div>
@@ -147,14 +147,14 @@ export function PaidCallReportControl({
       {view?.kind === 'refused' && !hiddenRefusal ? (
         <div className="grid gap-intra">
           <p role="status">{refusalMessage(view)}</p>
-          {view.retryable ? <Button type="button" variant="outline" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void check() }}>Try again</Button> : null}
+          {view.retryable ? <Button type="button" variant="secondary" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void check() }}>Try again</Button> : null}
           <a href={supportHref(callRef)} className="w-fit underline">Contact support</a>
         </div>
       ) : null}
       {state.kind === 'error' ? (
         <div className="grid gap-intra">
           <p role="alert">{state.message} Check the status before relying on a refund.</p>
-          <Button type="button" variant="outline" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void check() }}>Check refund</Button>
+          <Button type="button" variant="secondary" className="min-h-touch w-fit" disabled={submitting} onClick={() => { void check() }}>Check refund</Button>
           <a href={supportHref(callRef)} className="w-fit underline">Contact support</a>
         </div>
       ) : null}

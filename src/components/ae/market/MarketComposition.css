@@ -13,10 +13,7 @@
 .arc-market .arc-search-result p { margin-top: var(--space-2); line-height: 1.65; overflow-wrap: anywhere; }
 .arc-market .arc-search-result [data-slot="badge"] { width: fit-content; min-height: 28px; white-space: normal; }
 .arc-market .arc-search-result > div:last-child { margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
-.arc-market-filters { background: var(--surface); color: var(--foreground); }
-.arc-market-filters input { min-height: 44px; border-radius: var(--radius-control); background: var(--background); }
-.arc-market-filters [data-slot="label"] { min-height: 44px; }
-.arc-market-filters button svg, .arc-market-page button svg { max-width: 20px; max-height: 20px; }
+.arc-market-page button svg { max-width: 20px; max-height: 20px; }
 .arc-comparison-dialog { border-radius: var(--radius-panel); background: var(--background); border-color: var(--border); }
 .arc-market-page a[class*="inline-flex"][class*="rounded"] { min-height: 44px; border-radius: var(--radius-control); font-weight: 500; }
 @media (max-width: 680px) {

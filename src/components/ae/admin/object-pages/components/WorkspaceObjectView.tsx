@@ -6,7 +6,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/ui/input'
 import type { AdminWorkspaceView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
@@ -120,7 +120,7 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
                   />
                 </label>
                 <p className="text-xs text-muted-foreground">Enter a positive AUD amount with up to six decimal places and a future expiry.</p>
-                <Button type="button" variant="outline" className="min-h-touch justify-self-start" disabled={!grant.canReview} onClick={grant.onReview}>
+                <Button type="button" variant="secondary" className="min-h-touch justify-self-start" disabled={!grant.canReview} onClick={grant.onReview}>
                   Review promotional credit grant
                 </Button>
               </div>

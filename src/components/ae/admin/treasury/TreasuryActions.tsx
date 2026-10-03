@@ -3,7 +3,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,10 +36,10 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
       </>}
     </div>
     <div className="flex flex-wrap gap-related">
-      <Button type="button" variant={state.paused ? 'default' : 'outline'} disabled={!view.controls.canManage || locked} onClick={() => state.open(state.paused ? 'resume' : 'pause')}>
+      <Button type="button" variant={state.paused ? 'primary' : 'secondary'} disabled={!view.controls.canManage || locked} onClick={() => state.open(state.paused ? 'resume' : 'pause')}>
         {state.paused ? (view.controls.resumeRequiresApproval ? 'Propose resuming payments' : 'Resume payments') : 'Pause payments'}
       </Button>
-      <Button type="button" variant="outline" disabled={!view.controls.canManage || locked} onClick={() => state.open('thresholds')}>Edit thresholds</Button>
+      <Button type="button" variant="secondary" disabled={!view.controls.canManage || locked} onClick={() => state.open('thresholds')}>Edit thresholds</Button>
     </div>
     {!view.controls.canManage ? <p className="text-sm text-muted-foreground">An Admin owner can change payment controls and thresholds.</p> : null}
     {state.receipt?.kind === 'completed' ? <Alert role="status"><AlertTitle>{state.receipt.action === 'change_treasury_thresholds' ? 'Treasury thresholds saved' : state.receipt.code === 'payments_paused' ? 'Payments paused' : 'Payments resumed'}</AlertTitle><AlertDescription><a href="/admin/audit-events" className="underline underline-offset-4">View the audit record</a></AlertDescription></Alert> : null}
@@ -77,7 +77,7 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
         {state.receipt?.kind === 'pending' ? <AeInlineState state="pending" label="Command pending" description="Recover this command's receipt before starting another change." /> : null}
         {state.pending ? <AeInlineState state="saving" label="Submitting" description="Complete MFA if prompted. Waiting for the command receipt." /> : null}
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={locked} onClick={state.close}>Cancel</Button>
+          <Button type="button" variant="secondary" disabled={locked} onClick={state.close}>Cancel</Button>
           {state.targetChanged ? <Button type="button" onClick={state.reviewCurrent}>Review current settings</Button> : approvalRequired ? <Button type="button" disabled={locked || !view.controls.canManage} onClick={state.proposeResume}>Submit proposal</Button> : retryable ? <Button type="button" disabled={state.pending || !view.controls.canManage} onClick={state.retry}>{state.unknown ? 'Recover command result' : 'Retry command'}</Button> : <Button type="button" disabled={state.pending || !view.controls.canManage || (refused?.retry === 'no')} onClick={() => void state.submit()}>{thresholdAction ? 'Save fixed thresholds' : propose ? 'Submit proposal' : resume ? 'Resume payments' : 'Pause payments'}</Button>}
         </DialogFooter>
       </DialogContent>

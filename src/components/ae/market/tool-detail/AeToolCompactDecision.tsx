@@ -1,14 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import { CheckIcon, CopyIcon } from 'lucide-react'
-
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
-import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
-import { Separator } from '@/components/ui/separator'
-import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
+import { CopyButton } from '@/components/arc/copy-button/copy-button'
+import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 
 import { AeToolFacts } from './AeToolFacts'
@@ -27,71 +22,45 @@ export function AeToolCompactDecision({
   onNavigate?: () => void
 }>) {
   const code = nextActionCode(model)
-  const { status, isCopied, copy } = useClipboardCopy(code ?? '', { timeout: 1_600 })
-
   return (
-    <Item
+    <DecisionPanel
       role="region"
       aria-label={model.decisionLabel}
-      variant="outline"
-      size="sm"
-      className="items-start"
     >
-      <ItemContent className="basis-full gap-related">
-        <div className="flex min-w-0 items-start justify-between gap-related">
-          <div className="grid min-w-0 gap-intra">
-            <ItemTitle>
-              <Badge variant={decisionVariant(model)}>{model.decisionLabel}</Badge>
-            </ItemTitle>
-            <ItemDescription className="line-clamp-none text-pretty">
-              {model.nextActionDescription}
-            </ItemDescription>
-          </div>
-          <AeToolPrice
-            price={model.totalPrice}
-            {...(model.priceValidUntil === undefined ? {} : { validUntil: model.priceValidUntil })}
-            size="sm"
-            label="Indicative price"
-            className="shrink-0 place-items-end"
-          />
+      <header className="arc-decision-header">
+        <div className="arc-decision-heading-group">
+          <h3 className="arc-decision-heading">
+            <Badge variant={decisionVariant(model)}>{model.decisionLabel}</Badge>
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {model.nextActionDescription}
+          </p>
         </div>
-
-        <Separator />
+        <AeToolPrice
+          price={model.totalPrice}
+          {...(model.priceValidUntil === undefined ? {} : { validUntil: model.priceValidUntil })}
+          size="sm"
+          label="Indicative price"
+          className="shrink-0 place-items-end"
+        />
+      </header>
+      <div className="arc-decision-body">
         <AeToolFacts tool={tool} model={model} variant="compact" />
-
+      </div>
+      <div className="arc-decision-actions">
         {model.nextAction.kind === 'navigate' && model.nextAction.href !== undefined ? (
           <Link
             to={model.nextAction.href}
             onClick={onNavigate}
-            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch w-fit self-start justify-self-start')}
+            className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.sm} min-h-touch w-fit`}
           >
             {model.nextAction.label}
           </Link>
         ) : code !== undefined ? (
-          <div className="flex items-center gap-intra">
-            <Button
-              type="button"
-              size="sm"
-              className="min-h-touch w-fit self-start"
-              aria-label={isCopied
-                ? `${model.nextAction.label} copied`
-                : `Copy ${model.nextAction.label}`}
-              onClick={() => { void copy() }}
-            >
-              {isCopied ? (
-                <CheckIcon aria-hidden="true" data-icon="inline-start" />
-              ) : (
-                <CopyIcon aria-hidden="true" data-icon="inline-start" />
-              )}
-              {isCopied ? 'Copied' : model.nextAction.label}
-            </Button>
-            <span role="status" aria-live="polite" className="text-xs text-muted-foreground">
-              {status === 'failed' ? 'Copy failed. Open full Tool details to copy the request manually.' : ''}
-            </span>
-          </div>
+          <CopyButton key={code} value={code} label={`Copy ${model.nextAction.label}`} className="min-h-touch w-fit" />
         ) : null}
-      </ItemContent>
-    </Item>
+      </div>
+    </DecisionPanel>
   )
 }
 

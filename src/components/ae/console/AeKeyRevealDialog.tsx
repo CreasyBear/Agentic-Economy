@@ -16,7 +16,7 @@ import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { cn } from '@/lib/utils'
 import { degrade } from '@/lib/observability/degrade'
@@ -288,6 +288,7 @@ export function AeKeyRevealDialog({
                 setDownloadStatus('')
                 setDownloadFailed(false)
               }}
+              animateContent={false}
               className="arc-key-tabs"
             >
               <TabsList className="arc-key-tab-list">

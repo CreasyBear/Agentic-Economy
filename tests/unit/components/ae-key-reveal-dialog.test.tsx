@@ -176,21 +176,24 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(screen.getByText(new RegExp('mcpServers'))).toBeInTheDocument()
     expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.cursor)).toBeInTheDocument()
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: /claude code/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /claude code/i }))
     await waitFor(() => {
       expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.claude)).toBeInTheDocument()
     })
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: /^python$/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /^python$/i }))
     await waitFor(() => {
       expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.python)).toBeInTheDocument()
     })
     expect(screen.queryByText(AGENT_ACCESS_SNIPPET_COPY_HINTS.python)).not.toBeInTheDocument()
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: /curl/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /curl/i }))
     await waitFor(() => {
       expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.curl)).toBeInTheDocument()
     })
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(screen.getByRole('tab', { name: /curl/i }).id)
+    expect(document.body.textContent).not.toContain(baseReveal.secret)
   })
 
   it('T6b: production reveal shows Production environment badge', () => {
@@ -356,7 +359,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
       />,
     )
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: /claude code/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /claude code/i }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /download \.env/i })).toBeInTheDocument()
     })
@@ -416,7 +419,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
       />,
     )
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: /python/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /python/i }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /download \.env/i })).toBeInTheDocument()
     })
