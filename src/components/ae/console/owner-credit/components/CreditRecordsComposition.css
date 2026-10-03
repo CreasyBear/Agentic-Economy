@@ -105,6 +105,7 @@
 .arc-credit-document-identity {
   display: grid;
   min-width: 0;
+  max-width: 22rem;
   gap: var(--space-1);
 }
 

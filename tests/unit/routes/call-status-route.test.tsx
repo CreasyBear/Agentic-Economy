@@ -237,9 +237,14 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    for (const stage of ['Authorized', 'Reserved', 'Submitted', 'Settled', 'Validated', 'Complete']) {
-      expect(screen.getByText(new RegExp(`\\d\\. ${stage}`))).toBeTruthy()
-    }
+    fireEvent.click(screen.getByText('Technical details'))
+    const recordedStages = within(screen.getByRole('group', { name: 'Recorded call stages' })).getAllByRole('listitem')
+    expect(recordedStages).toHaveLength(6)
+    const stageLabels = ['Authorized', 'Reserved', 'Submitted', 'Settled', 'Validated', 'Complete']
+    stageLabels.forEach((stage, index) => {
+      expect(within(recordedStages[index]!).getByText(stage)).toBeTruthy()
+      expect(within(recordedStages[index]!).getByText('Stage state: Complete')).toBeTruthy()
+    })
     expect(screen.getByRole('heading', { name: 'Money before and after the call' })).toBeTruthy()
     expect(screen.getByText('Buyer charge')).toBeTruthy()
     expect(screen.queryByText('Provider obligation')).toBeNull()
@@ -899,8 +904,13 @@ describe('/calls/$callRef', () => {
       ownerContext,
     })
 
-    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
-    expect(screen.queryByText('Complete')).toBeNull()
+    const summary = screen.getByRole('region', { name: 'Call summary' })
+    expect(within(summary).queryByText('Complete')).toBeNull()
+    fireEvent.click(screen.getByText('Technical details'))
+    const progress = screen.getByRole('group', { name: 'Recorded call stages' })
+    const completion = within(progress).getByText('Complete').closest('li')!
+    expect(within(completion).getByText('Stage state: Attention')).toBeTruthy()
+    expect(within(completion).queryByText('Stage state: Complete')).toBeNull()
     expect(screen.getAllByText(/Cancelled/i).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
@@ -930,8 +940,13 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
-    expect(screen.queryByText('Complete')).toBeNull()
+    const summary = screen.getByRole('region', { name: 'Call summary' })
+    expect(within(summary).queryByText('Complete')).toBeNull()
+    fireEvent.click(screen.getByText('Technical details'))
+    const progress = screen.getByRole('group', { name: 'Recorded call stages' })
+    const completion = within(progress).getByText('Complete').closest('li')!
+    expect(within(completion).getByText('Stage state: Attention')).toBeTruthy()
+    expect(within(completion).queryByText('Stage state: Complete')).toBeNull()
     expect(screen.getAllByText(/Not completed/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Authorize the Call and retry.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('AUD 0.00').length).toBeGreaterThan(0)
