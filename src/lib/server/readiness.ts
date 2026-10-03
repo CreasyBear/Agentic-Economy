@@ -14,6 +14,7 @@ import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-ind
 import { isMoneyRefusal } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
 import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
 import { callPublicSourceQuery, createConvexServerFunctionAssertion, sourceQuery, type ConvexServerFunctionAssertion } from './convex-source'
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000
@@ -206,7 +207,7 @@ export async function readServerReadiness(
   // Commercial reads can finish after the query. Authority is still evaluated
   // at response completion; a previously green response cannot extend expiry.
   const payments: ReadinessCheck | undefined = production
-    ? freshPaymentReadiness(paymentView, Date.now())
+    ? freshPaymentReadiness(paymentView, Date.now(), env)
       ? { status: 'ready' } : { status: 'failed', code: 'payments_unavailable' }
     : undefined
   if (convex.status === 'failed') {
@@ -268,7 +269,7 @@ async function readBackendPaymentReadiness(env: StringEnvironment, convexUrl: st
   }
 }
 
-function freshPaymentReadiness(value: unknown, now: number): boolean {
+function freshPaymentReadiness(value: unknown, now: number, environment: StringEnvironment): boolean {
   const clock = (input: unknown): input is number => typeof input === 'number' && Number.isSafeInteger(input) && input >= 0
   if (!isRecord(value) || value.kind !== 'ready' || value.environment !== 'production' || value.code !== null
     || !clock(value.checkedAt) || value.checkedAt > now || !clock(value.expiresAt) || value.expiresAt <= now
@@ -276,9 +277,14 @@ function freshPaymentReadiness(value: unknown, now: number): boolean {
     || Object.keys(value.checks).length !== PAYMENT_READINESS_CHECK_KEYS.length) return false
   const checks = value.checks
   const expiresAt = value.expiresAt
+  const alphaPolicy = environment.AE_X402_PAYEE_SCREENING_POLICY === ALPHA_X402_PAYEE_SCREENING_POLICY
+  if (alphaPolicy !== (checks.sanctions !== undefined && isRecord(checks.sanctions)
+    && checks.sanctions.kind === 'deferred')) return false
   return PAYMENT_READINESS_CHECK_KEYS.every(key => {
     const check = checks[key]
-    return isRecord(check) && check.kind === 'passed' && clock(check.validUntil)
+    return isRecord(check)
+      && (check.kind === 'passed' || (key === 'sanctions' && check.kind === 'deferred'
+        && check.policyRef === ALPHA_X402_PAYEE_SCREENING_POLICY)) && clock(check.validUntil)
       && check.validUntil > now && check.validUntil >= expiresAt
   })
 }

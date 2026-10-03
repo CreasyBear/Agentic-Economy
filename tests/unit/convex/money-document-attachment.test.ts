@@ -22,7 +22,7 @@ afterEach(() => vi.restoreAllMocks())
 
 async function fixture(kind: 'statement' | 'daily_close' = 'daily_close', accountRef = 'account:document-recovery') {
   const backend = convexTest(schema, convexModules)
-  const renderInput = { documentRef, kind, sourceCount: 0, amountUnits: '0' }
+  const renderInput = { documentRef, accountRef, kind, sourceCount: 0, amountUnits: '0' }
   await backend.run(ctx => ctx.db.insert('moneyDocuments', {
     documentRef, accountRef, kind, sourceTransactionRefs: [], amountUnits: '0', residualUnits: '0',
     policyRefs: ['policy:fixture'], policyDigest: canonicalDigest('fixture-policy'),
@@ -209,12 +209,15 @@ describe('financial document attachment recovery', () => {
     const first = await publishedBusinessOwner(backend, 'attachment-owner')
     const second = await publishedBusinessOwner(backend, 'attachment-other')
     const row = await document(backend)
-    await backend.run(ctx => ctx.db.patch(row._id, { accountRef: first.canonicalAccountRef }))
+    const input = { ...JSON.parse(row.renderInputJson), accountRef: first.canonicalAccountRef }
+    await backend.run(ctx => ctx.db.patch(row._id, { accountRef: first.canonicalAccountRef,
+      renderInputJson: JSON.stringify(input), renderInputDigest: canonicalDigest(input) }))
     const rpc = transport(backend)
     await render(rpc.ctx, { documentRef })
     expect(await backend.query(internal.moneyDocuments.readQueuedForRender, { documentRef })).toMatchObject({ state: 'awaiting_signature' })
     expect(await first.owner.query(internal.moneyDocuments.readForRender, { documentRef })).toBeNull()
-    expect(await first.owner.query(api.moneyDocuments.readOwnerDocumentUrl, { documentRef })).toBeNull()
+    expect(await first.owner.query(api.moneyDocuments.readOwnerDocumentUrl, { documentRef })).toEqual(expect.any(String))
+    expect(await first.owner.query(api.moneyDocuments.readOwnerDocumentUrl, { documentRef, format: 'csv' })).toEqual(expect.any(String))
     expect(await second.owner.query(api.moneyDocuments.readOwnerDocumentUrl, { documentRef })).toBeNull()
     const attached = await document(backend)
     expect(await first.owner.mutation(api.moneyDocuments.signOwnerDailyClose, { documentRef,

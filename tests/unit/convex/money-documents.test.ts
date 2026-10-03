@@ -208,10 +208,13 @@ describe('Formance-sourced money documents', () => {
       documentRef: string
       state: 'awaiting_signature' | 'issued'
     }>) => {
-      const renderInputDigest = canonicalDigest({
+      const renderInput = {
         format: 'test-money-document-render-input:v1',
         documentRef: input.documentRef,
-      })
+        accountRef: input.accountRef,
+        kind: 'daily_close',
+      }
+      const renderInputDigest = canonicalDigest(renderInput)
       const snapshotDigest = canonicalDigest({
         format: 'test-money-document-snapshot:v1',
         documentRef: input.documentRef,
@@ -233,7 +236,7 @@ describe('Formance-sourced money documents', () => {
           policyRefs: ['commercial-policy:sandbox'],
           policyDigest: `sha256:${'a'.repeat(64)}`,
           templateVersion: 'ae.money-document:html:v1',
-          renderInputJson: '{}',
+          renderInputJson: JSON.stringify(renderInput),
           renderInputDigest,
           state: input.state,
           environment: 'sandbox',

@@ -36,7 +36,7 @@ export function marketToolSearchInput(search: MarketSearch, cursor?: string) {
 export function marketHasBrowseOnlyFilters(search: MarketSearch): boolean {
   return search.minUsdPrice !== undefined || search.maxUsdPrice !== undefined
     || search.minPayers30d !== undefined || search.maxPayers30d !== undefined
-    || search.adoptionBand !== undefined || search.curatedOnly === true
+    || search.adoptionBand !== undefined || search.curatedOnly === true || search.reviewedProvidersOnly === true
     || search.hasInputFields === true || search.hasOutputFields === true
     || search.hasInputSchema === true || search.hasOutputSchema === true
     || search.hasOutputExample === true || (search.tags?.length ?? 0) > 0
@@ -45,6 +45,11 @@ export function marketHasBrowseOnlyFilters(search: MarketSearch): boolean {
 
 export type MarketSearch = MarketReturnSearch
 export type MarketView = NonNullable<MarketSearch['view']>
+
+/** Reviewed-provider and alternative searches need the catalogue's filtering path. */
+export function marketUsesCanonicalSearch(search: Pick<MarketSearch, 'query' | 'alternativeTo' | 'reviewedProvidersOnly'>): boolean {
+  return search.query !== undefined && search.alternativeTo === undefined && search.reviewedProvidersOnly !== true
+}
 
 export function marketDocumentTitle(view: MarketView | undefined): string {
   switch (view) {
@@ -261,7 +266,7 @@ export async function loadMarketRouteData(deps: MarketSearch) {
   const [loadedCatalogue, home, loadedOverview, compareEntries] = await Promise.all([
     showHome
       ? Promise.resolve(undefined)
-      : catalogueInput.query === undefined || catalogueInput.alternativeTo !== undefined
+      : !marketUsesCanonicalSearch(catalogueInput)
       ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: 'adoption' as const }) } }).catch((cause: unknown) => {
           console.error('[market] directory catalogue unavailable', { cause })
           return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }

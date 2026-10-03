@@ -6,6 +6,7 @@ import { canonicalDigest } from '../../../../src/modules/common/canonical-digest
 import { stableStringify, type StableHashValue } from '../../../../src/modules/common/stable-hash'
 import { documentEnvironment } from './insert'
 import { enqueueStatementPage } from './workpool'
+import { financialEnvironmentMatches } from '../formance/contracts'
 
 export const createOwnerStatementArgs = v.object({
     environment: documentEnvironment,
@@ -21,11 +22,14 @@ export const createOwnerStatementResult = v.union(
 export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<typeof createOwnerStatementArgs>) => {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner') return { kind: 'refused' as const, code: 'authentication_required' }
+    if (!financialEnvironmentMatches(args.environment)) return { kind: 'refused' as const, code: 'environment_mismatch' }
+    const snapshotCutoffAt = Date.now()
     const purpose = args.purpose ?? 'statement'
     if (!Number.isSafeInteger(args.periodStart)
       || !Number.isSafeInteger(args.periodEnd)
       || args.periodStart < 0
       || args.periodEnd <= args.periodStart
+      || args.periodEnd > snapshotCutoffAt
       || args.periodEnd - args.periodStart > 366 * 24 * 60 * 60 * 1_000) {
       return { kind: 'refused' as const, code: 'statement_period_invalid' }
     }
@@ -34,15 +38,6 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
         || args.periodStart % (24 * 60 * 60 * 1_000) !== 0)) {
       return { kind: 'refused' as const, code: 'daily_close_period_invalid' }
     }
-    const policy = await readCommercialPolicyGate(ctx.db, {
-      environment: args.environment,
-      now: Date.now(),
-      ...(args.environment === 'sandbox'
-        ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
-        : {}),
-    })
-    if (policy.kind === 'refused') return { kind: 'refused' as const, code: policy.code }
-    const snapshotCutoffAt = Date.now()
     const documentRef = `money-document:${purpose}:${canonicalDigest({
       format: 'ae.money-statement-identity:v2',
       accountRef: actor.canonicalAccountRef,
@@ -55,6 +50,29 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
       .withIndex('by_documentRef', (index) => index.eq('documentRef', documentRef))
       .unique()
     if (existing !== null) return { kind: 'replayed' as const, documentRef }
+    const policy = await readCommercialPolicyGate(ctx.db, {
+      environment: args.environment,
+      now: snapshotCutoffAt,
+      ...(args.environment === 'sandbox'
+        ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
+        : {}),
+    })
+    if (policy.kind === 'refused' && (policy.code === 'commercial_policy_environment_mismatch'
+      || policy.code === 'commercial_policy_deployment_profile_invalid'
+      || policy.code === 'commercial_policy_fixture_required')) return { kind: 'refused' as const, code: policy.code }
+    // A report may evidence the absence of approval. Its empty refs never grant
+    // adjustment authority; finalization requires zero residual in that case.
+    const policyAdmission = policy.kind === 'admitted' ? undefined : {
+      format: 'ae.money-statement-policy-context:v1',
+      kind: 'not_admitted',
+      environment: args.environment,
+      observedAt: snapshotCutoffAt,
+      refusalCode: policy.code,
+      ...(policy.family === undefined ? {} : { family: policy.family }),
+      ...(policy.missingFamilies === undefined ? {} : { missingFamilies: [...policy.missingFamilies] }),
+    } as const
+    const policyRefs = policy.kind === 'admitted' ? [...policy.policyRefs] : []
+    const policyDigest = policy.kind === 'admitted' ? policy.policyDigest : canonicalDigest(policyAdmission)
     const initialSnapshot = {
       format: 'ae.money-statement-snapshot:v2',
       documentRef,
@@ -63,6 +81,7 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
       periodEnd: args.periodEnd,
       snapshotCutoffAt,
       purpose,
+      ...(policyAdmission === undefined ? {} : { policyAdmission }),
     } as const satisfies StableHashValue
     const documentId = await ctx.db.insert('moneyDocuments', {
       documentRef,
@@ -71,8 +90,8 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
       sourceTransactionRefs: [],
       amountUnits: '0',
       residualUnits: '0',
-      policyRefs: [...policy.policyRefs],
-      policyDigest: policy.policyDigest,
+      policyRefs,
+      policyDigest,
       templateVersion: 'ae.money-document:html:v1',
       renderInputJson: stableStringify(initialSnapshot),
       renderInputDigest: canonicalDigest(initialSnapshot),
@@ -91,4 +110,3 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
     await ctx.db.patch(documentId, { workId })
     return { kind: 'created' as const, documentRef }
   }
-

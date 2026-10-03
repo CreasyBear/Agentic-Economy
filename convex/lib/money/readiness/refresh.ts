@@ -54,7 +54,9 @@ export async function refreshPaymentReadiness(ctx: ActionCtx): Promise<RefreshRe
     cdp_custody: cdp.kind === 'ready' ? { kind: 'passed', validUntil: expiresAt } : failed(cdp.code),
     base_rpc: chain?.kind === 'observed' ? { kind: 'passed', validUntil: Math.min(expiresAt, chain.blockTimestamp + VALID_FOR_MS) }
       : failed(chain?.code ?? 'treasury_chain_configuration_invalid'),
-    sanctions: failed(screening.code),
+    sanctions: screening.kind === 'deferred'
+      ? { kind: 'deferred', policyRef: screening.policyRef, validUntil: expiresAt }
+      : failed(screening.code),
     ...sources,
   }
   const completedAt = Date.now()
@@ -62,7 +64,7 @@ export async function refreshPaymentReadiness(ctx: ActionCtx): Promise<RefreshRe
   // or dropping the entire observation, which would conceal the named cause.
   for (const key of Object.keys(checks) as Array<keyof PaymentReadinessChecks>) {
     const check = checks[key]
-    if (check.kind === 'passed' && check.validUntil <= completedAt) checks[key] = failed('readiness_source_expired')
+    if ((check.kind === 'passed' || check.kind === 'deferred') && check.validUntil <= completedAt) checks[key] = failed('readiness_source_expired')
   }
   const snapshot = sealPaymentReadinessSnapshot({ environment, configurationDigest, startedAt, completedAt,
     expiresAt: paymentReadinessExpiresAt(startedAt, checks), checks })

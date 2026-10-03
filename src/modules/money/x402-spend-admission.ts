@@ -7,19 +7,36 @@ export const X402_SPEND_HISTORY_LIMIT = 256
 export const X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC_ENV = 'AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC'
 export const X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC_ENV = 'AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC'
 
-export const x402PayeeScreeningDecisionValue = v.object({
-  provider: v.literal('trm-wallet-screening'),
-  outcome: v.union(v.literal('clear'), v.literal('hit'), v.literal('unavailable')),
+export const ALPHA_X402_PAYEE_SCREENING_POLICY = 'alpha_not_screened_v1' as const
+export const ALPHA_X402_PAYEE_SCREENING_REASON = 'trm_deferred_until_beta' as const
+
+export function alphaX402PayeeScreeningEnabled(environment: Readonly<Record<string, string | undefined>>): boolean {
+  return environment.AE_X402_PAYEE_SCREENING_POLICY === ALPHA_X402_PAYEE_SCREENING_POLICY
+}
+
+const screeningIdentityValue = {
   network: v.string(),
   normalizedPayTo: v.string(),
   paymentUnsignedMaterialDigest: v.string(),
   typedDataDigest: v.string(),
   startedAt: v.number(),
   checkedAt: v.number(),
+}
+
+export const x402PayeeScreeningDecisionValue = v.union(v.object({
+  ...screeningIdentityValue,
+  provider: v.literal('trm-wallet-screening'),
+  outcome: v.union(v.literal('clear'), v.literal('hit'), v.literal('unavailable')),
   reason: v.string(),
   providerReference: v.optional(v.string()),
   evidenceDigest: v.optional(v.string()),
-})
+}), v.object({
+  ...screeningIdentityValue,
+  provider: v.literal('none'),
+  outcome: v.literal('not_screened'),
+  policyRef: v.literal(ALPHA_X402_PAYEE_SCREENING_POLICY),
+  reason: v.literal(ALPHA_X402_PAYEE_SCREENING_REASON),
+}))
 export type X402PayeeScreeningDecision = Infer<typeof x402PayeeScreeningDecisionValue>
 
 export const x402SpendAdmissionRefusalCodeValue = v.union(

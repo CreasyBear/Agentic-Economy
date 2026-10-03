@@ -68,6 +68,7 @@ type Env = {
   readonly AE_X402_CUSTODY_MAX_ATOMIC: string | undefined;
   readonly AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: string | undefined;
   readonly AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: string | undefined;
+  readonly AE_X402_PAYEE_SCREENING_POLICY: string | undefined;
   readonly AE_X402_PAYMENT_CREDENTIAL_REF: string | undefined;
   readonly AE_X402_PAYMENT_PRIVATE_KEY: string | undefined;
   readonly AE_X402_PAYMENT_SECRET_REF: string | undefined;

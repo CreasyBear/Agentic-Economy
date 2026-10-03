@@ -9,7 +9,7 @@ import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
-import { marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
+import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
 import type * as DemandFunctions from '@/modules/market-demand/market-demand.functions'
 // The rate-limit setup preloads degrade and its telemetry dependency. Reload
 // that graph so this file's capture mock observes the real degrade calls.
@@ -30,8 +30,10 @@ vi.mock('@/modules/market/market.functions', () => ({
 }))
 
 const readX402DirectoryCatalogueServer = vi.fn()
+const readX402DirectoryCatalogueOverviewServer = vi.fn()
 vi.mock('@/modules/market/x402-directory-index.functions', () => ({
   readX402DirectoryCatalogueServer: (...args: unknown[]) => readX402DirectoryCatalogueServer(...args),
+  readX402DirectoryCatalogueOverviewServer: (...args: unknown[]) => readX402DirectoryCatalogueOverviewServer(...args),
 }))
 const searchMarketToolsServer = vi.fn()
 vi.mock('@/modules/market/market-tool-search.functions', () => ({
@@ -85,7 +87,7 @@ function toolOpener(title: string) {
 }
 function toolHref(link: HTMLElement) { return new URL(link.getAttribute('href')!, 'https://aecon.ai') }
 beforeEach(() => { listSavedToolsForOwner.mockResolvedValue({ kind: 'available', items: [] }) })
-afterEach(() => { cleanup(); owner.userId = 'alice'; listSavedToolsForOwner.mockReset(); saveToolForOwner.mockReset(); recordOwnerMarketDemand.mockReset(); readX402DirectoryCatalogueServer.mockReset(); searchMarketToolsServer.mockReset(); captureRouteException.mockReset() })
+afterEach(() => { cleanup(); owner.userId = 'alice'; listSavedToolsForOwner.mockReset(); saveToolForOwner.mockReset(); recordOwnerMarketDemand.mockReset(); readX402DirectoryCatalogueServer.mockReset(); readX402DirectoryCatalogueOverviewServer.mockReset(); searchMarketToolsServer.mockReset(); captureRouteException.mockReset() })
 describe('native x402 catalogue', () => {
   it('shows the complete upstream page and pagination, linking every Tool to its canonical detail page', () => {
     show()
@@ -328,6 +330,42 @@ function pageLinkSearch(name: string) { return new URL(screen.getByRole('link', 
 function expectNativeFilters(search: URLSearchParams) {
   for (const [key, value] of Object.entries(nativeFilters)) expect(search.get(key)).toBe(String(value))
 }
+
+it.each([true, false, undefined])('routes reviewed-provider keyword search through the filtered catalogue only when enabled: %s', async reviewedProvidersOnly => {
+  readX402DirectoryCatalogueServer.mockResolvedValue(indexedCatalogue)
+  readX402DirectoryCatalogueOverviewServer.mockResolvedValue(overview)
+  const search = validateMarketSearch({ view: 'tools', query: 'research', reviewedProvidersOnly })
+  const result = await loadMarketRouteData(marketLoaderDeps(search))
+  if (reviewedProvidersOnly === true) {
+    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: { query: 'research', reviewedProvidersOnly: true } })
+    expect(result.catalogue).toBe(indexedCatalogue)
+  } else {
+    expect(readX402DirectoryCatalogueServer).not.toHaveBeenCalled()
+    expect(result.catalogue).toEqual({ kind: 'unavailable', reason: 'canonical_search' })
+  }
+})
+
+it.each([false, true])('continues reviewed-provider keyword pages without mixed search, including an empty native page: %s', async emptyPage => {
+  const page = { ...indexedPage, items: emptyPage ? [] : [entries[0]!] }
+  const nextPage = { ...indexedPage, items: [entries[1]!] }
+  readX402DirectoryCatalogueServer.mockResolvedValue({ ...indexedCatalogue, page: nextPage, isDone: true })
+  show({ view: 'tools', query: 'research', reviewedProvidersOnly: true }, [], {
+    page, catalogue: { ...indexedCatalogue, page, searchMethod: 'native_full_text' }, overview, jevRecipient: 'TypeSafe (api.typesafe.ai)',
+  })
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+  if (emptyPage) expect(screen.getByText('More of the catalogue remains')).toBeTruthy()
+  else expect(screen.getByRole('link', { name: 'Tool 0' })).toBeTruthy()
+  expect(screen.getByText('Published listings from reviewed providers')).toBeTruthy()
+  expect(screen.getByText('Search matches published listings from reviewed providers.')).toBeTruthy()
+  expect(screen.queryByText(/not applied to this search/)).toBeNull()
+  expect(screen.queryByText(/go to TypeSafe/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+  expect(await screen.findByRole('link', { name: 'Tool 1' })).toBeTruthy()
+  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: {
+    query: 'research', reviewedProvidersOnly: true, indexCursor: indexedCatalogue.indexCursor,
+  } })
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+})
 
 it('validates alternative identity and preserves it in Market loader dependencies', () => {
   const search = validateMarketSearch({ view: 'tools', query: 'weather forecast', alternativeTo: ' source-route:current ' })

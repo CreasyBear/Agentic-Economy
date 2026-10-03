@@ -64,13 +64,14 @@ function SelectContent({
 
   return (
     <SelectPrimitive.Portal>
+      {/* Match Arc Select's menu layer so portaled options stay above modal drawers. */}
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
-        className="isolate z-50"
+        className="isolate z-[1000]"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"

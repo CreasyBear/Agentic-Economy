@@ -11,7 +11,7 @@ afterEach(cleanup)
 function show(search: DirectoryExplorerFilterValues = {}) {
   const change = vi.fn(), reset = vi.fn()
   const rendered = render(<DirectoryExplorerFilters search={search} overview={overview} onChange={change} onReset={reset} />)
-  const filterCount = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'].filter(key => {
+  const filterCount = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'reviewedProvidersOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'].filter(key => {
     const value = search[key as keyof DirectoryExplorerFilterValues]
     return value !== undefined && value !== false
   }).length
@@ -67,6 +67,13 @@ it('picks a Provider from the catalogue index instead of typing a hostname', () 
   const { filters, change } = show()
   fireEvent.click(filters.getByRole('button', { name: 'api.example.com 42' }))
   expect(change).toHaveBeenCalledWith({ provider: 'api.example.com' })
+})
+it('offers the reviewed shortlist separately from source curation and permits returning to all providers', () => {
+  const { filters, change } = show({ reviewedProvidersOnly: true })
+  expect(filters.getByRole('checkbox', { name: 'Reviewed providers' }).getAttribute('aria-checked')).toBe('true')
+  expect(filters.getByText(/initial shortlist reviewed against public operator and service evidence/)).toBeTruthy()
+  fireEvent.click(filters.getByRole('checkbox', { name: 'Reviewed providers' }))
+  expect(change).toHaveBeenLastCalledWith({ reviewedProvidersOnly: undefined })
 })
 it('picks a listed-price band from the published index', () => {
   const { filters, change } = show()

@@ -57,6 +57,21 @@ const storedRows = (backend: ReturnType<typeof convexTest>) => backend.run(async
 const view = (backend: ReturnType<typeof convexTest>, now = NOW) => backend.query(read, { environment: 'production', now })
 
 describe('payment readiness evidence publication and admission view', () => {
+  it('accepts only the current alpha deferral and invalidates readiness when policy changes', async () => {
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'alpha_not_screened_v1')
+    const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    const checks = { ...passedChecks(), sanctions: { kind: 'deferred' as const,
+      policyRef: 'alpha_not_screened_v1' as const, validUntil: NOW + 120_000 } }
+    const evidence = snapshot({ checks })
+    expect(await backend.mutation(publish, { snapshot: evidence })).toEqual({ kind: 'published', replayed: false })
+    expect(await view(backend)).toMatchObject({ kind: 'ready', checks: { sanctions: { kind: 'deferred', policyRef: 'alpha_not_screened_v1' } } })
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', undefined)
+    expect(await view(backend)).toMatchObject({ kind: 'not_ready', code: 'readiness_configuration_changed' })
+    expect(await backend.mutation(publish, { snapshot: evidence })).toEqual({ kind: 'refused', code: 'readiness_configuration_changed' })
+    vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'unknown')
+    expect(await view(backend)).toMatchObject({ kind: 'not_ready', code: 'readiness_configuration_changed' })
+  })
   it('requires current treasury source facts despite a sealed passing provider row, without writing', async () => {
     const backend = convexTest(schema, modules)
     const evidence = snapshot()
