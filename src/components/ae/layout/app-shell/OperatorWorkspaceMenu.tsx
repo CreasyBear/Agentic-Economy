@@ -1,23 +1,22 @@
 import { AeRenderErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
-import type { OperatorRole } from '@/lib/operator/roles'
 
 import { useOperatorEntitlement } from './useOperatorEntitlement'
-import { WorkspaceMenu } from './WorkspaceMenu'
+import { WorkspaceMenu, type WorkspaceMenuProps } from './WorkspaceMenu'
 
-export type OperatorWorkspaceMenuProps = Readonly<{ operatorRole: OperatorRole }>
+export type OperatorWorkspaceMenuProps = Omit<WorkspaceMenuProps, 'canAccessAdmin'>
 
-function EntitledWorkspaceMenu({ operatorRole }: OperatorWorkspaceMenuProps) {
+function EntitledWorkspaceMenu(props: OperatorWorkspaceMenuProps) {
   const canAccessAdmin = useOperatorEntitlement()
-  return <WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={canAccessAdmin} />
+  return <WorkspaceMenu {...props} canAccessAdmin={canAccessAdmin} />
 }
 
-export function OperatorWorkspaceMenu({ operatorRole }: OperatorWorkspaceMenuProps) {
+export function OperatorWorkspaceMenu(props: OperatorWorkspaceMenuProps) {
   if (!import.meta.env.VITE_CONVEX_URL?.trim()) {
-    return <WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={false} />
+    return <WorkspaceMenu {...props} canAccessAdmin={false} />
   }
   return (
-    <AeRenderErrorBoundary fallback={<WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={false} />}>
-      <EntitledWorkspaceMenu operatorRole={operatorRole} />
+    <AeRenderErrorBoundary fallback={<WorkspaceMenu {...props} canAccessAdmin={false} />}>
+      <EntitledWorkspaceMenu {...props} />
     </AeRenderErrorBoundary>
   )
 }

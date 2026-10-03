@@ -3,8 +3,10 @@
  */
 .dashboard {
   box-sizing: border-box;
-  width: min(100%, 1120px);
+  width: 100%;
   min-width: 0;
+  container-name: arc-metrics-dashboard;
+  container-type: inline-size;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-surface);
@@ -34,7 +36,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3) var(--space-6);
-  padding: 28px;
+  padding: var(--space-5) var(--space-6);
 }
 
 .title {
@@ -54,6 +56,16 @@
   flex-wrap: wrap;
 }
 
+.coverageNotice {
+  margin: 0;
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -66,7 +78,7 @@
   align-content: start;
   gap: 6px;
   min-width: 0;
-  padding: var(--space-6) var(--space-5) var(--space-6) 28px;
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
 }
 
 .kpi + .kpi {
@@ -89,12 +101,17 @@
 
 .kpiValue {
   color: var(--foreground);
-  font-size: 40px;
+  font-size: var(--text-2xl);
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+}
+
+.kpi[data-unavailable] .kpiValue {
+  color: var(--text-secondary);
+  font-size: var(--text-xl);
 }
 
 .kpiDelta {
@@ -105,7 +122,7 @@
 }
 
 .chartSection {
-  padding: var(--space-6) 28px;
+  padding: var(--space-6);
   border-bottom: 1px solid var(--border);
 }
 
@@ -124,6 +141,12 @@
   font-size: var(--text-base);
   font-weight: 500;
   line-height: 1.4;
+}
+
+.chartDescription {
+  margin: var(--space-3) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .seriesControls {
@@ -159,6 +182,11 @@
   color: var(--foreground);
 }
 
+.seriesButton:focus {
+  background: var(--surface-raised);
+  color: var(--foreground);
+}
+
 .seriesThumb {
   position: absolute;
   inset: 0;
@@ -180,7 +208,7 @@
 .plot {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: 320px 28px;
+  grid-template-rows: 220px 28px;
   column-gap: var(--space-3);
   margin-top: var(--space-5);
 }
@@ -201,6 +229,10 @@
   min-width: 0;
   touch-action: pan-y;
   cursor: crosshair;
+}
+
+.chartArea:focus {
+  background: var(--surface-muted);
 }
 
 .grid {
@@ -240,6 +272,13 @@
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.observation {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
@@ -314,7 +353,7 @@
 }
 
 .ratioSection {
-  padding: var(--space-6) 28px 28px;
+  padding: var(--space-6);
 }
 
 .ratioTitle {
@@ -351,15 +390,16 @@
 .ratioValue {
   margin: 6px 0 0;
   color: var(--foreground);
-  font-size: 32px;
+  font-size: var(--text-2xl);
   font-weight: 500;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 719px) {
+@container arc-metrics-dashboard (max-width: 719px) {
   .header,
+  .coverageNotice,
   .chartSection,
   .ratioSection {
     padding-inline: var(--space-5);
@@ -405,27 +445,16 @@
   }
 
   .plot {
-    grid-template-rows: 240px 28px;
+    grid-template-rows: 200px 28px;
   }
 }
 
-@media (max-width: 390px) {
+@container arc-metrics-dashboard (max-width: 390px) {
   .header,
+  .coverageNotice,
   .chartSection,
   .ratioSection {
     padding-inline: var(--space-4);
-  }
-
-  .kpis,
-  .breakdowns {
-    grid-template-columns: 1fr;
-  }
-
-  .kpi + .kpi,
-  .kpi:nth-child(even),
-  .breakdown + .breakdown {
-    border-left: 0;
-    border-top: 1px solid var(--border);
   }
 
   .kpi,
@@ -435,15 +464,15 @@
 
   .breakdown,
   .breakdown:first-child {
-    padding: var(--space-4) 0;
+    padding: var(--space-4);
   }
 
   .kpiValue {
-    font-size: 40px;
+    font-size: var(--text-xl);
   }
 
   .plot {
-    grid-template-rows: 240px 28px;
+    grid-template-rows: 168px 28px;
   }
 }
 

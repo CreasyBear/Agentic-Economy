@@ -1,8 +1,7 @@
-import { CheckIcon } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
-import { Button } from '@/components/arc/button/button'
+import { MultiStepForm, type CompletedFormStep } from '@/components/arc/blocks/multi-step-form/multi-step-form'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
@@ -43,10 +42,24 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
     stageHeadingRef.current?.focus()
   }, [stage])
 
+  const completedSteps: readonly CompletedFormStep[] = stage === 'source' ? [] : [
+    { id: 'source', title: 'Source', detail: sourceSummary(vm.source), disabled: vm.pending !== undefined || vm.publicationLocked, onEdit: vm.editSource },
+    ...(vm.selected === undefined ? [] : [
+      { id: 'tool', title: 'Tool', detail: vm.selected.title, disabled: vm.pending !== undefined || vm.publicationLocked, onEdit: vm.editTool },
+    ]),
+    ...(stage !== 'review' ? [] : [
+      { id: 'terms', title: 'Terms', detail: termsSummary(vm), disabled: vm.pending !== undefined || vm.publicationLocked, onEdit: vm.editTerms },
+    ]),
+  ]
+
   return (
-    <div className="arc-market arc-supply-journey">
-      <SupplyProgress current={stage} />
-      <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />
+    <MultiStepForm
+      steps={supplySteps}
+      activeStep={stage}
+      completedSteps={completedSteps}
+      progressLabel="Add Tool progress"
+      feedback={<SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />}
+    >
 
       {stage === 'source' ? (
         <SupplySourceTypeSection
@@ -66,7 +79,6 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
 
       {stage !== 'tool' || vm.preview === undefined ? null : (
         <div className="grid gap-related">
-          <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} disabled={vm.pending !== undefined} onEdit={vm.editSource} />
           <SupplyCandidateSection
             candidates={vm.preview.candidates}
             selectedRef={vm.selectedRef}
@@ -83,11 +95,6 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
 
       {vm.selected === undefined || (stage !== 'terms' && stage !== 'review') ? null : (
         <div className="grid gap-section">
-          <div className="arc-supply-summaries sticky top-20 z-10">
-            <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editSource} />
-            <CompletedStageSummary step="Tool" detail={vm.selected.title} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTool} />
-            {stage === 'review' ? <CompletedStageSummary step="Terms" detail={termsSummary(vm)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTerms} /> : null}
-          </div>
           {props.initial !== undefined && stage === 'terms' ? (
             <p className="text-sm text-muted-foreground">
               {publishAuthorityRequired
@@ -152,47 +159,16 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
         </div>
       )}
       {vm.pending === 'select' ? <div role="status" aria-live="polite"><AeInlineState state="saving" description="Saving the selected Tool so you can return later." /></div> : null}
-    </div>
+    </MultiStepForm>
   )
 }
 
-const stages: readonly SupplyStage[] = ['source', 'tool', 'terms', 'review']
-
-function SupplyProgress({ current }: Readonly<{ current: SupplyStage }>) {
-  const currentIndex = stages.indexOf(current)
-  return (
-    <nav aria-label="Add Tool progress">
-      <ol className="arc-supply-progress">
-        {stages.map((stage, index) => {
-          const complete = index < currentIndex
-          const active = index === currentIndex
-          return (
-            <li key={stage} aria-current={active ? 'step' : undefined} data-complete={complete || undefined} className="arc-supply-progress-item">
-              <span className="arc-supply-progress-stage">
-                <span className="arc-supply-progress-index">
-                  {complete ? <CheckIcon aria-hidden="true" className="size-3" /> : index + 1}
-                </span>
-                <span className="arc-supply-progress-label">{stage}</span>
-              </span>
-            </li>
-          )
-        })}
-      </ol>
-    </nav>
-  )
-}
-
-function CompletedStageSummary({ step, detail, disabled, onEdit }: Readonly<{ step: string; detail: string; disabled: boolean; onEdit: () => void }>) {
-  return (
-    <div className="arc-supply-summary">
-      <span className="arc-supply-summary-copy">
-        <span className="arc-supply-summary-label">{step} complete</span>
-        <span className="arc-supply-summary-detail" data-numeric={step === 'Terms' || undefined} title={detail}>{detail}</span>
-      </span>
-      <Button type="button" size="md" variant="ghost" className="arc-supply-summary-edit" disabled={disabled} onClick={onEdit}>Edit {step}</Button>
-    </div>
-  )
-}
+const supplySteps = [
+  { id: 'source', title: 'Source' },
+  { id: 'tool', title: 'Tool' },
+  { id: 'terms', title: 'Terms' },
+  { id: 'review', title: 'Review' },
+] as const
 
 function SupplyFlowFeedback({ error, requiredAction, success, continuation, publicationLocked }: Readonly<{
   error: string | undefined
