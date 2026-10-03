@@ -1,6 +1,6 @@
 'use client'
 
-/* Arc sortable-data-table authored table, sort tint, mobile fold and FLIP row composition.
+/* Arc sortable-data-table authored table, sort tint and mobile fold.
  * Upstream TSX SHA-256 6115bc78d39abb4a3494e94f31259c93535b53fd5ebd1936c4cda2a95bb17241.
  * Requires stable caller rows/IDs and controlled selection/sort/filter contracts.
  * Ensures native table semantics and unchanged TanStack/RovingFocus callbacks.
@@ -14,6 +14,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type FilterFn,
   type OnChangeFn,
   type Row,
   type RowSelectionState,
@@ -22,15 +23,13 @@ import {
 } from '@tanstack/react-table'
 import * as RovingFocusGroup from '@/components/ui/roving-focus'
 import { Link } from '@tanstack/react-router'
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactElement, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/arc/button/button'
-import { motion, useReducedMotion } from 'motion/react'
-import { motionTokens } from '@/components/arc/motion-tokens'
+import buttonStyles from '@/components/arc/button/button.module.css'
+import { SortableDataTable, SortableDataTableHeader, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 import './RecordTable.css'
-import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
 
@@ -78,6 +77,8 @@ type AeRecordTableBaseProps<TData> = {
   loading?: boolean
   filterValue?: string
   onFilterChange?: (value: string) => void
+  /** Caller-owned matching over supplied facts, retained by the existing engine. */
+  globalFilterFn?: FilterFn<TData>
   sorting?: SortingState
   onSortingChange?: OnChangeFn<SortingState>
   /**
@@ -95,11 +96,6 @@ type AeRecordTableBaseProps<TData> = {
     onCurrentIdChange?: (id: string) => void
     restore?: boolean
   }>
-  /**
-   * Mobile-only content rendered above the table (compact cards). The table
-   * itself is hidden on small screens when provided.
-   */
-  compactContent?: ReactNode
 }
 
 type AeRecordTableProps<TData> = AeRecordTableBaseProps<TData> &
@@ -130,13 +126,12 @@ export function AeRecordTable<TData>({
   loading = false,
   filterValue,
   onFilterChange,
+  globalFilterFn,
   sorting: controlledSorting,
   onSortingChange,
   selectedRowClassName,
   rowActionFocus,
-  compactContent,
 }: AeRecordTableProps<TData>) {
-  const reduced = useReducedMotion() === true
   const [internalSorting, setInternalSorting] = useState<SortingState>([])
   const [internalGlobalFilter, setInternalGlobalFilter] = useState('')
   const tableRootRef = useRef<HTMLDivElement>(null)
@@ -152,6 +147,7 @@ export function AeRecordTable<TData>({
         ? undefined
         : {
             id: '__ae_selection',
+            meta: { label: 'Select' },
             enableSorting: false,
             enableHiding: false,
             header: ({ table }) => (
@@ -181,6 +177,7 @@ export function AeRecordTable<TData>({
         ? undefined
         : {
             id: '__ae_action',
+            meta: { label: rowAction.label },
             enableSorting: false,
             enableHiding: false,
             header: () => rowAction.label,
@@ -207,6 +204,7 @@ export function AeRecordTable<TData>({
     },
     onSortingChange: updateSorting,
     onGlobalFilterChange: updateGlobalFilter,
+    ...(globalFilterFn === undefined ? {} : { globalFilterFn }),
     ...(selection === undefined
       ? {}
       : {
@@ -250,6 +248,36 @@ export function AeRecordTable<TData>({
     return () => window.cancelAnimationFrame(frame)
   }, [rowActionFocus?.currentId, rowActionFocus?.restore, visibleRowKey])
 
+  // The existing engine owns filtering, exact comparators and guarded selection.
+  // Arc owns the complete table hierarchy; only typed cells/header callbacks cross.
+  type ArcRecordRow = { id: string; record: Row<TData> }
+  const arcRows: ArcRecordRow[] = visibleRows.map(record => ({ id: record.id, record }))
+  const leafHeaders = table.getFlatHeaders().filter(header => header.subHeaders.length === 0)
+  const arcColumns: DataColumn<ArcRecordRow>[] = leafColumns.map(column => {
+    const header = leafHeaders.find(item => item.column.id === column.id)
+    const meta = column.columnDef.meta as { label?: string; numeric?: boolean; truncate?: boolean } | undefined
+    const values = visibleRows.map(row => row.getValue(column.id))
+    const numeric = meta?.numeric ?? (values.some(value => typeof value === 'number' || typeof value === 'bigint') && values.every(value => value == null || value === '' || typeof value === 'number' || typeof value === 'bigint'))
+    const width = column.id === '__ae_selection' ? 44 : column.id === '__ae_action' ? 104 : undefined
+    return {
+      key: column.id,
+      label: meta?.label ?? (typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id),
+      sortable: column.getCanSort(),
+      sortDirection: column.getIsSorted(),
+      selection: column.id === '__ae_selection',
+      numeric,
+      truncate: meta?.truncate ?? false,
+      ...(width === undefined ? {} : { width }),
+      ...(typeof column.columnDef.header === 'function' ? {
+        renderHeader: () => header === undefined || header.isPlaceholder ? null : flexRender(column.columnDef.header, header.getContext()),
+      } : {}),
+      render: (_value, { record }) => {
+        const cell = record.getVisibleCells().find(item => item.column.id === column.id)
+        return cell === undefined ? null : flexRender(cell.column.columnDef.cell, cell.getContext())
+      },
+    }
+  })
+
   return (
     <div
       ref={tableRootRef}
@@ -266,108 +294,36 @@ export function AeRecordTable<TData>({
           {...(action === undefined ? {} : { action })}
         />
       ) : null}
-      {compactContent === undefined ? null : (
-        <div className="md:hidden">{compactContent}</div>
-      )}
-      <div
-        {...(maxHeight === undefined
-          ? {
-              className:
-                compactContent === undefined ? 'min-w-0' : 'hidden min-w-0 md:block',
-            }
-          : {
-              className:
-                compactContent === undefined
-                  ? 'overflow-auto'
-                  : 'hidden overflow-auto md:block',
-              style: { maxHeight },
-            })}
-      >
-        <div data-slot="table-container" className="arc-record-wrapper"><table role="table" className="arc-record-table" data-selectable={selection === undefined ? undefined : true}>
-          <caption className="sr-only">{caption}</caption>
-          <thead role="rowgroup">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr role="row" key={headerGroup.id} className="hover:bg-transparent">
-                {headerGroup.headers.map((header) => (
-                  <th role="columnheader"
-                    key={header.id}
-                    scope="col"
-                    className={header.column.id === '__ae_selection' ? 'arc-record-select-cell' : undefined}
-                    data-sorted={header.column.getIsSorted() || undefined}
-                    data-sortable={header.column.getCanSort() || undefined}
-                    aria-sort={
-                      !header.column.getCanSort()
-                        ? undefined
-                        : header.column.getIsSorted() === 'asc'
-                          ? 'ascending'
-                          : header.column.getIsSorted() === 'desc'
-                            ? 'descending'
-                            : 'none'
-                    }
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <RecordTableBody
+      <div className="min-w-0">
+        <SortableDataTable
+          rows={arcRows}
+          columns={arcColumns}
+          rowKey="id"
+          caption={caption}
+          manualSorting
+          onSortChange={({ key, direction }) => table.getColumn(key)?.toggleSorting(direction === 'desc')}
+          animateRows={false}
+          loading={showSkeleton}
+          tableClassName="arc-record-table"
+          {...(maxHeight === undefined ? {} : { maxHeight })}
+          isRowSelected={({ record }) => record.getIsSelected()}
+          getRowClassName={({ record }) => `has-[:focus-visible]:bg-muted/50${record.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
+          renderBody={(body) => <RecordTableBody
+            body={body}
             roving={rowAction !== undefined}
             {...(visibleRows[0] === undefined ? {} : { defaultTabStopId: visibleRows[0].id })}
-            {...(onCurrentRowActionIdChange === undefined
-              ? {}
-              : {
-                  onCurrentTabStopChange: (target: EventTarget | null) => {
-                    const id = (target as HTMLElement | null)?.dataset.aeRowActionId ?? null
-                    handleCurrentTabStopIdChange(id)
-                  },
-                })}
-          >
-            {showSkeleton ? (
-              Array.from({ length: 5 }, (_, index) => (
-                <tr role="row" key={`skeleton-${String(index)}`} className="hover:bg-transparent">
-                  {leafColumns.map((column) => (
-                    <td role="cell" key={`${column.id}-skeleton`}>
-                      <span className="block h-4 w-24 max-w-full animate-pulse rounded-sm bg-muted" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : rowCount === 0 ? (
-              <tr role="row" className="hover:bg-transparent">
-                <td role="cell" colSpan={leafColumns.length} className="arc-record-empty">
-                  <div className="flex flex-wrap items-center gap-related">
-                    <span>{emptyMessage}</span>
-                    {hasActiveFilter ? (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => updateGlobalFilter('')}
-                      >
-                        Clear filter
-                      </Button>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <RecordTableRow
-                  key={row.id}
-                  row={row}
-                  reduced={reduced}
-                  order={visibleRowKey}
-                  {...(selectedRowClassName === undefined
-                    ? {}
-                    : { selectedRowClassName })}
-                />
-              ))
-            )}
-          </RecordTableBody>
-        </table></div>
+            {...(onCurrentRowActionIdChange === undefined ? {} : {
+              onCurrentTabStopChange: (target: EventTarget | null) => {
+                const id = (target as HTMLElement | null)?.dataset.aeRowActionId ?? null
+                handleCurrentTabStopIdChange(id)
+              },
+            })}
+          />}
+          emptyContent={<div className="flex flex-wrap items-center gap-related">
+            <span>{emptyMessage}</span>
+            {hasActiveFilter ? <Button type="button" variant="secondary" size="sm" onClick={() => updateGlobalFilter('')}>Clear filter</Button> : null}
+          </div>}
+        />
       </div>
       {selection === undefined || selection.showStatus === false ? null : (
         <p
@@ -380,40 +336,6 @@ export function AeRecordTable<TData>({
         </p>
       )}
     </div>
-  )
-}
-
-function RecordTableRow<TData>({
-  row,
-  selectedRowClassName,
-  reduced,
-  order,
-}: {
-  row: Row<TData>
-  reduced: boolean
-  order: string
-  selectedRowClassName?: string
-}) {
-  return (
-    <motion.tr role="row"
-      layout={reduced ? false : 'position'}
-      layoutDependency={order}
-      transition={reduced ? { duration: 0 } : motionTokens.spring.smooth}
-      data-state={row.getIsSelected() ? 'selected' : undefined}
-      className={`has-[:focus-visible]:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring${row.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
-    >
-      {row.getVisibleCells().map((cell, index, cells) => (
-        <td role="cell" key={cell.id}
-          className={cell.column.id === '__ae_selection' ? 'arc-record-select-cell' : undefined}
-          data-primary={index === (cells[0]?.column.id === '__ae_selection' ? 1 : 0) || undefined}
-          data-sorted={cell.column.getIsSorted() || undefined}
-          data-label={typeof cell.column.columnDef.header === 'string' ? cell.column.columnDef.header : cell.column.id}
-          data-column={cell.column.id}
-        >
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </td>
-      ))}
-    </motion.tr>
   )
 }
 
@@ -432,7 +354,7 @@ function RecordTableAction<TData>({
         to={action.getHref(row.original)}
         aria-label={accessibleLabel}
         data-ae-row-action-id={row.id}
-        className="arc-record-action"
+        className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm} arc-record-action`}
       >
         {label}
       </Link>
@@ -469,7 +391,7 @@ function SelectionCheckbox({
   'aria-label': string
 }>) {
   return (
-    <div className="flex size-9 min-h-touch min-w-touch items-center justify-center">
+    <div className="arc-record-selection-hit">
       <Checkbox
         className="size-4"
         checked={checked}
@@ -482,17 +404,16 @@ function SelectionCheckbox({
 }
 
 function RecordTableBody({
-  children,
+  body,
   roving,
   defaultTabStopId,
   onCurrentTabStopChange,
 }: {
-  children: ReactNode
+  body: ReactElement
   roving: boolean
   defaultTabStopId?: string
   onCurrentTabStopChange?: (target: EventTarget | null) => void
 }) {
-  const body = <tbody role="rowgroup">{children}</tbody>
   return roving ? (
     <RovingFocusGroup.Root
       render={body}
@@ -543,27 +464,5 @@ export function AeOperatorSortableHeader({
   label: string
   column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | 'asc' | 'desc' }
 }) {
-  const sorted = column.getIsSorted()
-  const SortIcon =
-    sorted === 'asc' ? ArrowUpIcon : sorted === 'desc' ? ArrowDownIcon : ArrowUpDownIcon
-
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className={cn(
-        'arc-record-sort',
-        sorted ? 'text-foreground' : 'text-muted-foreground',
-      )}
-      onClick={() => column.toggleSorting(sorted === 'asc')}
-      aria-label={`Sort by ${label}${sorted ? `, ${sorted === 'asc' ? 'ascending' : 'descending'}` : ''}`}
-    >
-      <span>{label}</span>
-      <SortIcon
-        aria-hidden="true"
-        className={cn('size-3.5 shrink-0', sorted ? 'text-foreground' : 'opacity-50')}
-      />
-    </Button>
-  )
+  return <SortableDataTableHeader label={label} direction={column.getIsSorted()} onSort={() => column.toggleSorting(column.getIsSorted() === 'asc')} />
 }

@@ -1,5 +1,7 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 
+import { Button } from '@/components/arc/button/button'
+import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 import { ADMIN_METRICS_COPY, type AdminMetricDayRow } from '../metrics.contracts'
@@ -15,26 +17,96 @@ const views = [
   { value: 'resolution', label: 'Resolution', keys: ['terminalCalls', 'terminalCallsWithResolution'] },
 ] as const
 
+const snapshotGroups = [
+  {
+    label: 'Calls',
+    fields: [
+      { key: 'attemptedCalls', label: ADMIN_METRICS_COPY.columns.attemptedCalls },
+      { key: 'completedCalls', label: ADMIN_METRICS_COPY.columns.completedCalls },
+      { key: 'uncertainCalls', label: ADMIN_METRICS_COPY.columns.uncertainCalls },
+      { key: 'settledCalls', label: ADMIN_METRICS_COPY.columns.settledCalls },
+    ],
+  },
+  {
+    label: 'Money',
+    fields: [
+      { key: 'settledCallValue', label: ADMIN_METRICS_COPY.columns.settledValue },
+      { key: 'money', label: ADMIN_METRICS_COPY.columns.money },
+    ],
+  },
+  {
+    label: 'Quotes',
+    fields: [
+      { key: 'quotesCreated', label: ADMIN_METRICS_COPY.columns.quotesCreated },
+      { key: 'quotesConvertedAtClose', label: ADMIN_METRICS_COPY.columns.quotesConverted },
+    ],
+  },
+  {
+    label: 'Participants',
+    fields: [
+      { key: 'transactingWorkspaces', label: ADMIN_METRICS_COPY.columns.workspaces },
+      { key: 'transactingAgents', label: ADMIN_METRICS_COPY.columns.agents },
+      { key: 'transactingProviders', label: ADMIN_METRICS_COPY.columns.providers },
+      { key: 'transactingTools', label: ADMIN_METRICS_COPY.columns.tools },
+      { key: 'returningWorkspaces', label: ADMIN_METRICS_COPY.columns.returningWorkspaces },
+    ],
+  },
+  {
+    label: 'Resolution',
+    fields: [
+      { key: 'terminalCalls', label: ADMIN_METRICS_COPY.columns.terminalCalls },
+      { key: 'terminalCallsWithResolution', label: ADMIN_METRICS_COPY.columns.resolvedCalls },
+    ],
+  },
+] as const satisfies readonly Readonly<{
+  label: string
+  fields: readonly Readonly<{ key: keyof AdminMetricDayRow; label: string }>[]
+}>[]
+
+type CountMetricKey = Exclude<keyof AdminMetricDayRow, 'day' | 'settledCallValue' | 'money'>
+
+function countSortValue(value: string): bigint | undefined {
+  const canonical = value.replaceAll(',', '')
+  return /^\d+$/.test(canonical) ? BigInt(canonical) : undefined
+}
+
+function countColumn<Key extends CountMetricKey>(key: Key, label: string): DataColumn<AdminMetricDayRow> {
+  return {
+    key,
+    label,
+    sortable: true,
+    sortValue: (row) => countSortValue(row[key]),
+    numeric: true,
+    render: (_value, row) => <span className={styles.cellText}>{row[key]}</span>,
+  }
+}
+
 const columns: Record<keyof AdminMetricDayRow, DataColumn<AdminMetricDayRow>> = {
   day: {
-    key: 'day', label: ADMIN_METRICS_COPY.columns.day, sortable: false, width: 144,
+    key: 'day', label: ADMIN_METRICS_COPY.columns.day, sortable: true, width: 144,
     render: (_value, row) => <time className={styles.day} dateTime={row.day}>{row.day}</time>,
   },
-  settledCallValue: { key: 'settledCallValue', label: ADMIN_METRICS_COPY.columns.settledValue, sortable: false },
-  money: { key: 'money', label: ADMIN_METRICS_COPY.columns.money, sortable: false },
-  settledCalls: { key: 'settledCalls', label: ADMIN_METRICS_COPY.columns.settledCalls, sortable: false, numeric: true },
-  attemptedCalls: { key: 'attemptedCalls', label: ADMIN_METRICS_COPY.columns.attemptedCalls, sortable: false, numeric: true },
-  completedCalls: { key: 'completedCalls', label: ADMIN_METRICS_COPY.columns.completedCalls, sortable: false, numeric: true },
-  uncertainCalls: { key: 'uncertainCalls', label: ADMIN_METRICS_COPY.columns.uncertainCalls, sortable: false, numeric: true },
-  quotesCreated: { key: 'quotesCreated', label: ADMIN_METRICS_COPY.columns.quotesCreated, sortable: false, numeric: true },
-  quotesConvertedAtClose: { key: 'quotesConvertedAtClose', label: ADMIN_METRICS_COPY.columns.quotesConverted, sortable: false, numeric: true },
-  transactingWorkspaces: { key: 'transactingWorkspaces', label: ADMIN_METRICS_COPY.columns.workspaces, sortable: false, numeric: true },
-  transactingAgents: { key: 'transactingAgents', label: ADMIN_METRICS_COPY.columns.agents, sortable: false, numeric: true },
-  transactingProviders: { key: 'transactingProviders', label: ADMIN_METRICS_COPY.columns.providers, sortable: false, numeric: true },
-  transactingTools: { key: 'transactingTools', label: ADMIN_METRICS_COPY.columns.tools, sortable: false, numeric: true },
-  returningWorkspaces: { key: 'returningWorkspaces', label: ADMIN_METRICS_COPY.columns.returningWorkspaces, sortable: false, numeric: true },
-  terminalCalls: { key: 'terminalCalls', label: ADMIN_METRICS_COPY.columns.terminalCalls, sortable: false, numeric: true },
-  terminalCallsWithResolution: { key: 'terminalCallsWithResolution', label: ADMIN_METRICS_COPY.columns.resolvedCalls, sortable: false, numeric: true },
+  settledCallValue: {
+    key: 'settledCallValue', label: ADMIN_METRICS_COPY.columns.settledValue, sortable: false, width: 184,
+    render: (_value, row) => <span className={styles.cellText} title={row.settledCallValue}>{row.settledCallValue}</span>,
+  },
+  money: {
+    key: 'money', label: ADMIN_METRICS_COPY.columns.money, sortable: false, width: 144,
+    render: (_value, row) => <span className={styles.cellText} title={row.money}>{row.money}</span>,
+  },
+  settledCalls: countColumn('settledCalls', ADMIN_METRICS_COPY.columns.settledCalls),
+  attemptedCalls: countColumn('attemptedCalls', ADMIN_METRICS_COPY.columns.attemptedCalls),
+  completedCalls: countColumn('completedCalls', ADMIN_METRICS_COPY.columns.completedCalls),
+  uncertainCalls: countColumn('uncertainCalls', ADMIN_METRICS_COPY.columns.uncertainCalls),
+  quotesCreated: countColumn('quotesCreated', ADMIN_METRICS_COPY.columns.quotesCreated),
+  quotesConvertedAtClose: countColumn('quotesConvertedAtClose', ADMIN_METRICS_COPY.columns.quotesConverted),
+  transactingWorkspaces: countColumn('transactingWorkspaces', ADMIN_METRICS_COPY.columns.workspaces),
+  transactingAgents: countColumn('transactingAgents', ADMIN_METRICS_COPY.columns.agents),
+  transactingProviders: countColumn('transactingProviders', ADMIN_METRICS_COPY.columns.providers),
+  transactingTools: countColumn('transactingTools', ADMIN_METRICS_COPY.columns.tools),
+  returningWorkspaces: countColumn('returningWorkspaces', ADMIN_METRICS_COPY.columns.returningWorkspaces),
+  terminalCalls: countColumn('terminalCalls', ADMIN_METRICS_COPY.columns.terminalCalls),
+  terminalCallsWithResolution: countColumn('terminalCallsWithResolution', ADMIN_METRICS_COPY.columns.resolvedCalls),
 }
 
 export type MetricsDayTableProps = Readonly<{ rows: readonly AdminMetricDayRow[] }>
@@ -42,7 +114,29 @@ export type MetricsDayTableProps = Readonly<{ rows: readonly AdminMetricDayRow[]
 export function MetricsDayTable({ rows }: MetricsDayTableProps) {
   const headingId = useId()
   const [view, setView] = useState<string>('calls')
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null)
   const current = views.find((item) => item.value === view) ?? views[0]
+  const selectedRow = selectedDayId === null ? undefined : rows.find((row) => row.day === selectedDayId)
+  const detailsColumn: DataColumn<AdminMetricDayRow> = {
+    key: 'details', label: 'Details', sortable: false, width: 104,
+    render: (_value, row) => (
+      <Button
+        className={styles.detailsButton}
+        size="sm"
+        variant="secondary"
+        aria-label={`View snapshot for ${row.day}`}
+        onClick={() => setSelectedDayId(row.day)}
+      >
+        View
+      </Button>
+    ),
+  }
+
+  // The drawer follows the current report props; it must never retain a removed snapshot.
+  useEffect(() => {
+    if (selectedDayId !== null && !rows.some((row) => row.day === selectedDayId)) setSelectedDayId(null)
+  }, [rows, selectedDayId])
+
   return (
     <section className={`arc-market ${styles.region}`} aria-labelledby={headingId}>
       <header className={styles.header}>
@@ -53,13 +147,38 @@ export function MetricsDayTable({ rows }: MetricsDayTableProps) {
         <SegmentedControl label="Daily metric view" options={[...views]} value={current.value} onValueChange={setView} />
       </header>
       <SortableDataTable
-        columns={[columns.day, ...current.keys.map((key) => columns[key])]}
+        columns={[columns.day, ...current.keys.map((key) => columns[key]), detailsColumn]}
         rows={[...rows]}
         rowKey="day"
         animateRows={false}
         caption={`${ADMIN_METRICS_COPY.dailyTitle}: ${current.label}`}
         emptyMessage={ADMIN_METRICS_COPY.noDays}
+        defaultSort={{ key: 'day', direction: 'desc' }}
       />
+      <Drawer
+        open={selectedRow !== undefined}
+        onOpenChange={(open) => { if (!open) setSelectedDayId(null) }}
+      >
+        {selectedRow ? (
+          <DrawerContent title={selectedRow.day} description="Recorded metric snapshot.">
+            <div className={styles.snapshot}>
+              {snapshotGroups.map((group) => (
+                <section className={styles.snapshotGroup} key={group.label} aria-label={group.label}>
+                  <h3>{group.label}</h3>
+                  <dl>
+                    {group.fields.map((field) => (
+                      <div className={styles.fact} key={field.key}>
+                        <dt>{field.label}</dt>
+                        <dd>{selectedRow[field.key]}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              ))}
+            </div>
+          </DrawerContent>
+        ) : null}
+      </Drawer>
     </section>
   )
 }

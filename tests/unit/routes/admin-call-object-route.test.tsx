@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type * as ClerkModule from '@clerk/tanstack-react-start'
 import {
   RouterContextProvider,
@@ -114,17 +114,53 @@ function renderCallPage(view: AdminCallView = uncertainView) {
 
 describe('/admin/calls/$callRef', () => {
   it('shows the whole answer subtotal and its unpriced Jev request separately from Call money', () => {
+    const requests = [
+      { requestRef: 'sdk:one:0', source: 'openrouter' as const, purpose: 'initial' as const, requestedModel: 'test/model', model: 'test/actual',
+        inputTokens: 10, outputTokens: 20, providerGenerationId: 'generation:one', accounting: { status: 'priced' as const, amountUsd: '0.001', source: 'inline' as const } },
+      { requestRef: 'jev:one', source: 'jev' as const, purpose: 'discovery_rerank' as const, requestedModel: '~typesafe/jev-latest',
+        accounting: { status: 'unpriced' as const, reason: 'jev_usage_only' as const } },
+    ]
     renderCallPage({ ...uncertainView, answerModelCost: {
       cost: { turnRef: 'turn:answer', status: 'incomplete', knownCostUsd: '0.001', requestCount: 2, unknownRequestCount: 1,
-        requests: [
-          { requestRef: 'sdk:one:0', source: 'openrouter', purpose: 'initial', requestedModel: 'test/model', model: 'test/actual',
-            inputTokens: 10, outputTokens: 20, accounting: { status: 'priced', amountUsd: '0.001', source: 'inline' } },
-          { requestRef: 'jev:one', source: 'jev', purpose: 'discovery_rerank', requestedModel: '~typesafe/jev-latest',
-            accounting: { status: 'unpriced', reason: 'jev_usage_only' } },
-        ] }, callRefs: [callRefText, 'operation-invocation:v1:second'], callsTruncated: false,
+        requests }, callRefs: [callRefText, 'operation-invocation:v1:second'], callsTruncated: false,
     } })
     expect(screen.getByText('Known subtotal US$0.001 · incomplete (1 unpriced request)')).toBeTruthy()
     expect(screen.getByText('The cost of the originating chat answer, shared by all its Calls.')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Request details'))
+    const table = screen.getByRole('table', { name: 'Answer model requests' })
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent?.trim())).toEqual([
+      'Request', 'Model', 'Tokens in / out', 'USD cost',
+    ])
+    const requestRows = () => within(table).getAllByRole('row').slice(1)
+    const firstColumnValues = () => requestRows().map((row) => within(row).getAllByRole('cell')[0]?.textContent?.trim())
+    expect(firstColumnValues()).toEqual(['OpenRouter · initialgeneration:one', 'Jev · discovery rerankjev:one'])
+
+    expect(within(table).getByRole('button', { name: 'Sort by Request' })).toBeTruthy()
+    expect(within(table).getByRole('button', { name: 'Sort by Model' })).toBeTruthy()
+    expect(within(table).getAllByRole('columnheader')[2]?.getAttribute('aria-sort')).toBeNull()
+    expect(within(table).getAllByRole('columnheader')[3]?.getAttribute('aria-sort')).toBeNull()
+    expect(within(table).getAllByRole('columnheader')[2]?.hasAttribute('data-numeric')).toBe(true)
+    expect(within(table).getAllByRole('columnheader')[3]?.hasAttribute('data-numeric')).toBe(true)
+    expect(within(table).getByText('test/actual')).toBeTruthy()
+    expect(within(table).getByText('Reported model')).toBeTruthy()
+    expect(within(table).getByText('~typesafe/jev-latest')).toBeTruthy()
+    expect(within(table).getByText('Requested model')).toBeTruthy()
+    expect(within(table).getByText('10 / 20')).toBeTruthy()
+    expect(within(table).getByText('Unknown / Unknown')).toBeTruthy()
+    expect(within(table).getByText('0.001', { exact: true })).toBeTruthy()
+    expect(within(table).getByText('Response usage')).toBeTruthy()
+    expect(within(table).getByText('Unknown', { exact: true })).toBeTruthy()
+    expect(within(table).getByText('jev usage only')).toBeTruthy()
+
+    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Request' }))
+    expect(within(table).getAllByRole('columnheader')[0]?.getAttribute('aria-sort')).toBe('ascending')
+    expect(firstColumnValues()).toEqual(['OpenRouter · initialgeneration:one', 'Jev · discovery rerankjev:one'])
+    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Model' }))
+    expect(within(table).getAllByRole('columnheader')[1]?.getAttribute('aria-sort')).toBe('ascending')
+    expect(firstColumnValues()).toEqual(['Jev · discovery rerankjev:one', 'OpenRouter · initialgeneration:one'])
+    expect(requests.map((request) => request.requestRef)).toEqual(['sdk:one:0', 'jev:one'])
+
     expect(screen.getByText('test/actual')).toBeTruthy()
     expect(screen.getByText('jev usage only')).toBeTruthy()
     expect(screen.getByText('Related Calls (2)')).toBeTruthy()

@@ -4,6 +4,37 @@
 
 ## Progress counter
 
+### Compact Arc table foundation, 2026-10-03
+
+**10 / 10 work units source-integrated.** This is one implementation milestone, not whole-app or visual acceptance. The broader Arc goal remains active. The completed full-block audit covers 530 source presenters/route bindings; its [baseline report](full-block-opportunities-2026-10-03.md) is distinct from this implementation counter.
+
+| Unit | Actual Arc presentation | Source result |
+| --- | --- | --- |
+| Shared table renderer | Installed `SortableDataTable` owns all table/head/body/mobile-fold markup; existing TanStack and roving-focus engines remain | Duplicate AE table renderer removed; controlled sorting, guarded selection, filter, loading/refresh and native detail actions preserved |
+| Record search | Installed `SearchField` | Controlled search, clear/refocus and retained sort/selection verified |
+| Daily metrics | `SortableDataTable`, `SegmentedControl`, `Drawer` | Five focused views; exact integer/date sorting; complete current snapshot details and removal/refresh behavior verified; full CSV unchanged |
+| Chat suggestions | Installed `ArcAiChatSuggestions` from AI Chat | Existing first-three prompts, order, draft callback and empty omission preserved |
+| Tool market rows | Installed `SortableDataTable` | Compact identity and exact price/context/access/activity; existing detail links, server ordering and Save/Compare callbacks retained |
+| Provider index | Installed `SortableDataTable` | Native table removed; scoped activity, unknown values, row order and URLs preserved. Index remains dormant at audit baseline; this is not a live-route claim |
+| Call activity | Shared actual Arc table fold | Duplicate mobile cards removed; eight facts, exact BigInt comparator and receipt exit remain once |
+| Chat Tool comparison | Installed Arc `ComparisonTable` block | Duplicate table/cards removed; one-choice and multiple-choice facts, safe detail URLs and critical equal price/access/readiness facts survive differences-only mode |
+| Answer model requests | Installed `SortableDataTable` | Model-cost disclosure retains exact cost/provenance, source order before sorting and stable request identities; only identity/model columns sort |
+| Owner inventory | Shared actual Arc table | Duplicate mobile renderer and separate sort/focus projection removed; cross-field matching, supplied facts, controlled state and native continuation remain |
+
+**Requires:** supplied typed records and stable IDs, exact sort inputs, caller-owned matching and enabled callbacks. **Ensures:** only supplied records are sorted/filtered, exact count/amount values remain intact, and detail targets resolve to the same record. **Invariant:** no source mutation, inferred money, changed authority, synthetic Call recovery or second selection/state engine. **On violation:** existing unknown, empty, first-load and retained-refresh states remain explicit; clearing a filter preserves sorting/selection and native focus restoration.
+
+The installed Arc source receives bounded controlled ports for header/cell renderers, manual sorting, guarded selection styling, the existing roving body, empty/loading content and scroll height. `sortValue` separates exact values from formatted display; direct Arc sorting preserves ties and keeps empty values last. Existing TanStack comparators remain authoritative for their callers. No new library, dependency, table framework or renderer is added. Arc's native table, sort glyph, keyboard navigation, mobile fold and reduced-motion behavior remain; paged records disable row FLIP/width measurement. This is an adapted copy of actual Arc source, not a claim of unchanged stock props.
+
+Source cognitive review keeps scan rows short and facts externalized: the actual Arc table CSS targets 44px desktop rows with intrinsic growth, 12px insets, sticky headers and right-aligned tabular numbers. Coarse-pointer controls retain 44px targets. Tool names/providers/summaries ellipsize with full text titles and existing detail exits; metric facts have a complete Drawer. Money, status and actionable controls remain readable. Removing the owner mobile projection exposed that its cross-field matcher never reached desktop global search. A typed `globalFilterFn` now delegates the same existing matcher to TanStack; summary, protocol, price, Calls and reference search pass across the single projection. The separate mobile matcher and focus effect are deleted.
+
+Complexity keep/remove decision: retain the existing typed state engines and add small controlled ports to the installed Arc renderer; remove duplicate AE table hierarchy/CSS and mobile projections. Replacing the engines with the sample selection state would lose eligibility, exact money comparators and native continuation behavior. A DataGrid is rejected for these read-only records; Arc documents SortableDataTable as the appropriate surface. The Base UI guarded selection checkbox remains because the separately installable Arc checkbox requires an absent dependency; native row action links now use the actual Arc button stylesheet.
+
+Verification: the combined existing UI suites passed **146 files / 1,320 tests**; a final focused renderer/search/inventory run passed **4 files / 30 tests** after the last control/type refinements. `npm run check` passed lint, zero dependency cycles, application/Convex types and 76 import/standards assertions on Node 22/npm 11.5.1. `npm run build` passed the client/server build and syntax verification for 462 server modules. Tests establish supplied data/URL/callback parity, exact large signed integer ordering, native keyboard/selection behavior, clear/filter/focus restoration, retained error/refresh records, and explicit missing facts. Source grep finds no native table/head/body or duplicate `compactContent` markup under `src/components/ae`. The current source/action inventories reconcile changed fingerprints and exact imported action sites; the original full-block audit retains its historical baseline.
+
+Rendered density, five-width layout, contrast, perceived speed and end-to-end browser acceptance remain deferred as Joel requested. No benchmark or whole-app completion claim is made. The full release gate remains required before merging. This branch has no changed path in common with the alpha operations worker's current source batch; its Convex/Vercel release slot remains reserved while it finishes. No deployment is part of this milestone.
+
+Next source work: five admin record PageHeader regions; shared FAQ and public heroes; compact security/credit details; shared PageHeader consolidation; recorded receipt stages; public footer. Existing account/payment/authority controllers remain the native boundary for those ports.
+
 ### Chat block replacement, 2026-10-03
 
 Before this batch, the header/history retained Vercel presenters and the composer retained AE markup under Arc class names. The retrieved Arc AI Chat and AI Composer block regions now own their presentation; preserve the existing session, read-only shared transcript, streaming scroller and authority controllers. The native engine is an explicit integration gap in Arc's sample transport, not a reason to retain the old chrome.

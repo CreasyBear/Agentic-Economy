@@ -1,8 +1,6 @@
 import { useId, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { AeFactList } from '@/components/ae/data/AeFactList'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 import {
   AeOperatorSortableHeader,
@@ -37,6 +35,7 @@ export function ActivityCallQueue({
       {
         id: 'call',
         accessorKey: 'callRef',
+        meta: { label: 'Call' },
         header: ({ column }) => <AeOperatorSortableHeader label="Call" column={column} />,
         cell: ({ row }) => (
           <span
@@ -50,19 +49,21 @@ export function ActivityCallQueue({
       {
         id: 'agent',
         accessorFn: (item) => item.agentTitle,
+        meta: { label: 'Caller Agent' },
         header: ({ column }) => <AeOperatorSortableHeader label="Caller Agent" column={column} />,
         cell: ({ row }) => (
-          <span className="arc-activity-reference" title={row.original.agentTitle}>
-            {row.original.agentShortId}
+          <span className="arc-activity-reference" title={row.original.agentTitle ?? 'Not available'}>
+            {row.original.agentTitle ?? 'Not available'}
           </span>
         ),
       },
       {
         id: 'tool',
         accessorFn: (item) => item.toolLabel,
+        meta: { label: 'Tool' },
         header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
         cell: ({ row }) => (
-          <span className="font-medium text-foreground">
+          <span className="arc-activity-tool font-medium text-foreground" title={row.original.toolLabel}>
             {row.original.toolLabel}
           </span>
         ),
@@ -70,6 +71,7 @@ export function ActivityCallQueue({
       {
         id: 'duration',
         accessorFn: (item) => item.latencyMs,
+        meta: { label: 'Time to outcome', numeric: true },
         sortUndefined: 'last',
         header: ({ column }) => <AeOperatorSortableHeader label="Time to outcome" column={column} />,
         cell: ({ row }) => (
@@ -81,6 +83,7 @@ export function ActivityCallQueue({
       {
         id: 'amount',
         accessorFn: (item) => item.amountUnits,
+        meta: { label: 'Amount', numeric: true },
         sortUndefined: 'last',
         sortingFn: (left, right) => {
           const a = BigInt(left.original.amountUnits ?? '0')
@@ -97,15 +100,17 @@ export function ActivityCallQueue({
       {
         id: 'status',
         accessorFn: (item) => item.stateBadge.label,
+        meta: { label: 'Call status' },
         header: ({ column }) => <AeOperatorSortableHeader label="Call status" column={column} />,
         cell: ({ row }) => <ActivityBadge badge={row.original.stateBadge} />,
       },
       {
         id: 'outcome',
         accessorFn: (item) => item.purchaseLabel,
+        meta: { label: 'Purchase status' },
         header: ({ column }) => <AeOperatorSortableHeader label="Purchase status" column={column} />,
         cell: ({ row }) => (
-          <div className="grid gap-1">
+          <div className="arc-activity-purchase">
             <ActivityBadge badge={row.original.purchaseBadge} />
             <div className="arc-activity-detail">
               Payment: {row.original.paymentStateLabel}
@@ -116,6 +121,7 @@ export function ActivityCallQueue({
       {
         id: 'when',
         accessorKey: 'createdAt',
+        meta: { label: 'When', numeric: true },
         header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
         cell: ({ row }) => (
           <time className="arc-activity-number" dateTime={new Date(row.original.createdAt).toISOString()}>
@@ -153,33 +159,6 @@ export function ActivityCallQueue({
             getHref: (item) => item.receiptHref,
             getAccessibleLabel: (item) => item.receiptAccessibleLabel,
           }}
-          compactContent={(
-            <div className="arc-activity-mobile-records">
-              {rows.map((row) => (
-                <article key={row.callRef} className="arc-activity-record">
-                  <header className="arc-activity-record-header">
-                    <h3>{row.toolLabel}</h3>
-                    <ActivityBadge badge={row.purchaseBadge} />
-                  </header>
-                  <div className="arc-activity-record-facts">
-                    <AeFactList density="compact" facts={[
-                      { label: 'Call reference', value: <span className="arc-activity-reference">{row.callRef}</span> },
-                      { label: 'Caller Agent', value: row.agentTitle ?? 'Not available' },
-                      { label: 'Time to outcome', value: row.durationLabel },
-                      { label: 'Amount', value: <span className="font-mono tabular-nums">{row.amountLabel}</span> },
-                      { label: 'Status', value: row.stateBadge.label },
-                      { label: 'Purchase status', value: row.purchaseLabel },
-                      { label: 'Payment', value: row.paymentStateLabel },
-                      { label: 'When', value: row.whenLabel },
-                    ]} />
-                  </div>
-                  <footer>
-                    <a href={row.receiptHref} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>{attention ? 'Review Call' : 'View receipt'} <span className="sr-only">for {row.toolLabel}</span></a>
-                  </footer>
-                </article>
-              ))}
-            </div>
-          )}
         />
       )}
     </section>

@@ -131,12 +131,12 @@ describe('ActivityPage & Filtering (W-38)', () => {
   it('shows time to outcome and no charge for a released reservation', () => {
     renderActivity()
 
-    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(2)
-    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
-    expect(screen.getAllByText('alpha').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('beta').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('142 ms')).toHaveLength(2)
-    expect(screen.getAllByText('85 ms')).toHaveLength(2)
+    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(1)
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(1)
+    expect(screen.getByText('agent:alpha').getAttribute('title')).toBe('agent:alpha')
+    expect(screen.getByText('agent:beta').getAttribute('title')).toBe('agent:beta')
+    expect(screen.getAllByText('142 ms')).toHaveLength(1)
+    expect(screen.getAllByText('85 ms')).toHaveLength(1)
     expect(screen.getByRole('button', { name: /Time to outcome/u })).toBeTruthy()
     const releasedRow = screen.getByRole('row', { name: /Postal Address Lookup/u })
     expect(within(releasedRow).getByText('No charge')).toBeTruthy()
@@ -148,7 +148,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
   ])('formats a %i ms Call without exposing a raw millisecond count', (latencyMs, expected) => {
     render(<AeActivity result={{ kind: 'available', calls: { ...sampleCalls, page: [{ ...sampleCalls.page[0]!, latencyMs }] },
       usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09', ...windowScope }} />)
-    expect(screen.getAllByText(expected)).toHaveLength(2)
+    expect(screen.getAllByText(expected)).toHaveLength(1)
   })
 
   it('keeps a Call needing review reachable and does not imply a zero charge', () => {
@@ -163,7 +163,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getAllByRole('link', { name: 'Review Australian Tax Calculator' })[0]?.getAttribute('href')).toBe('/calls/call%3A1')
     view.rerender(<AeActivity result={{ ...result, calls: { ...sampleCalls, page: [sampleCalls.page[0]!] } }} />)
     expect(screen.queryByText('Needs review')).toBeNull()
-    expect(screen.getAllByRole('link', { name: 'View receipt for Australian Tax Calculator' })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: 'View receipt for Australian Tax Calculator' })).toHaveLength(1)
   })
 
   it('shows status chips with counts from loaded calls', () => {
@@ -209,7 +209,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
     fireEvent.keyDown(attention, { key: 'ArrowRight' })
     expect(document.activeElement).toBe(all)
-    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(1)
 
     const thirtyDays = within(dates).getByRole('button', { name: 'Last 30 days' })
     fireEvent.keyDown(thirtyDays, { key: 'Home' })
@@ -221,12 +221,12 @@ describe('ActivityPage & Filtering (W-38)', () => {
   it('filters loaded calls by status and requests a fresh server range for dates', async () => {
     renderActivity()
     fireEvent.click(screen.getByRole('button', { name: /Completed\s+1/u }))
-    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(2)
+    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(1)
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /All\s+2/u }))
     fireEvent.click(screen.getByRole('button', { name: 'Today (UTC)' }))
     await waitFor(() => expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today' } }))
-    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(1)
   })
 
   it('resets status and date filters', () => {
@@ -236,7 +236,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
-    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(1)
   })
 
   it('renders status and purchase status badges with payment line', () => {

@@ -2,7 +2,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
+import type { KeyboardEvent, MouseEvent as ReactMouseEvent, ReactElement, ReactNode, RefObject } from "react";
 import { ArrowUp } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, type Transition, type Variants } from "motion/react";
 import { motionTokens } from "../lib/motion-tokens";
@@ -20,6 +20,14 @@ export type DataColumn<T> = {
   numeric?: boolean;
   /** Fixed width such as 120 or "20%". Other columns are measured once and held, so sorting never reflows them. */
   width?: number | string;
+  /** Exact sort input, independent of the formatted cell content. */
+  sortValue?: (row: T) => unknown;
+  /** Controlled table engines can retain their existing header controls. */
+  renderHeader?: () => ReactNode;
+  sortDirection?: SortDirection | false;
+  selection?: boolean;
+  /** Opt in for short text summaries; controls and full facts remain unclipped. */
+  truncate?: boolean;
 };
 
 export type SortableDataTableProps<T extends Record<string, unknown>> = {
@@ -42,6 +50,16 @@ export type SortableDataTableProps<T extends Record<string, unknown>> = {
   onSelectionChange?: (keys: string[]) => void;
   /** Noun for the count line, as in "6 projects". */
   itemName?: { one: string; other: string };
+  /** Rows are already sorted by the caller's typed engine. */
+  manualSorting?: boolean;
+  isRowSelected?: (row: T) => boolean;
+  getRowClassName?: (row: T) => string;
+  /** Retain the caller's native roving-focus group around the Arc tbody. */
+  renderBody?: (body: ReactElement) => ReactNode;
+  emptyContent?: ReactNode;
+  loading?: boolean;
+  maxHeight?: string;
+  tableClassName?: string;
 };
 
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
@@ -77,6 +95,7 @@ function Swap({ value, direction, reduced, className }: { value: string; directi
       settled = true;
     };
     measure();
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
@@ -111,6 +130,14 @@ function SortGlyph({ active, descending, reduced }: { active: boolean; descendin
   </span>;
 }
 
+/** The upstream Arc sort control, also used by caller-owned exact sort engines. */
+export function SortableDataTableHeader({ label, direction, onSort }: { label: string; direction: SortDirection | false; onSort: () => void }) {
+  const reduced = useReducedMotion() ?? false;
+  return <button className={styles.sortButton} type="button" data-nav="head" onClick={onSort} aria-label={`Sort by ${label}${direction ? `, ${direction === "asc" ? "ascending" : "descending"}` : ""}`}>
+    <span className={styles.sortInner}><span title={label}>{label}</span><SortGlyph active={!!direction} descending={direction === "desc"} reduced={reduced} /></span>
+  </button>;
+}
+
 function SelectBox({ checked, mixed = false, label, nav, reduced, onToggle, inputRef }: { checked: boolean; mixed?: boolean; label: string; nav: "head" | "row"; reduced: boolean; onToggle: (extend: boolean) => void; inputRef?: RefObject<HTMLInputElement | null> }) {
   const local = useRef<HTMLInputElement>(null);
   const ref = inputRef ?? local;
@@ -128,7 +155,7 @@ function SelectBox({ checked, mixed = false, label, nav, reduced, onToggle, inpu
   </label>;
 }
 
-export function SortableDataTable<T extends Record<string, unknown>>({ rows, columns, rowKey, caption = "Data table", ariaLabel, animateRows = true, rowClassName, emptyMessage = "No rows to show", defaultSort, onSortChange, selectable = false, selectedKeys, defaultSelectedKeys, onSelectionChange, itemName = { one: "row", other: "rows" } }: SortableDataTableProps<T>) {
+export function SortableDataTable<T extends Record<string, unknown>>({ rows, columns, rowKey, caption = "Data table", ariaLabel, animateRows = true, rowClassName, emptyMessage = "No rows to show", defaultSort, onSortChange, selectable = false, selectedKeys, defaultSelectedKeys, onSelectionChange, itemName = { one: "row", other: "rows" }, manualSorting = false, isRowSelected, getRowClassName, renderBody, emptyContent, loading = false, maxHeight, tableClassName }: SortableDataTableProps<T>) {
   const reduced = useReducedMotion() ?? false;
   const tableRef = useRef<HTMLTableElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -139,19 +166,29 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
   const selection = useMemo(() => new Set(selectedKeys ?? internalSelection), [internalSelection, selectedKeys]);
 
   const sortedRows = useMemo(() => {
-    if (!sort) return rows;
+    if (manualSorting || !sort) return rows;
+    const column = columns.find(column => column.key === sort.key);
+    if (!column || column.sortable === false) return rows;
     return rows.map((row, index) => ({ row, index })).sort((a, b) => {
-      const left = comparable(a.row[sort.key]);
-      const right = comparable(b.row[sort.key]);
+      const left = comparable(column.sortValue ? column.sortValue(a.row) : a.row[sort.key]);
+      const right = comparable(column.sortValue ? column.sortValue(b.row) : b.row[sort.key]);
       // Empty values stay at the bottom in both directions.
       if (isEmpty(left) || isEmpty(right)) return isEmpty(left) === isEmpty(right) ? a.index - b.index : isEmpty(left) ? 1 : -1;
-      const result = typeof left === "number" && typeof right === "number" ? left - right : collator.compare(String(left), String(right));
+      const result = typeof left === "bigint" && typeof right === "bigint"
+        ? left < right ? -1 : left > right ? 1 : 0
+        : typeof left === "number" && typeof right === "number" ? left - right : collator.compare(String(left), String(right));
       return (sort.direction === "asc" ? result : -result) || a.index - b.index;
     }).map(entry => entry.row);
-  }, [rows, sort]);
+  }, [rows, sort, columns, manualSorting]);
 
   const numeric = useMemo(() => new Set(columns.filter(column => column.numeric ?? (rows.some(row => typeof row[column.key] === "number") && rows.every(row => typeof row[column.key] === "number" || isEmpty(row[column.key])))).map(column => column.key)), [columns, rows]);
   const getRowKey = (row: T) => String(typeof rowKey === "function" ? rowKey(row) : row[rowKey]);
+  const directionFor = (column: DataColumn<T>) => manualSorting ? column.sortDirection || false : sort?.key === column.key ? sort.direction : false;
+  const activeSortKey = manualSorting ? columns.find(column => column.sortDirection)?.key : sort?.key;
+  const activeColumn = columns.find(column => column.key === activeSortKey);
+  const sortAnnouncement = manualSorting
+    ? activeColumn ? `Sorted by ${activeColumn.label}, ${directionFor(activeColumn) === "asc" ? "ascending" : "descending"}` : ""
+    : announcement;
   const keys = sortedRows.map(getRowKey);
   const order = keys.join("\u0000");
   const selectedCount = keys.filter(key => selection.has(key)).length;
@@ -173,6 +210,7 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
       return true;
     };
     if (measure()) return;
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => { if (measure()) observer.disconnect(); });
     observer.observe(table);
     return () => observer.disconnect();
@@ -183,15 +221,15 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
   const seenSort = useRef(false);
   useLayoutEffect(() => {
     const table = tableRef.current;
-    const key = sort?.key;
+    const key = activeSortKey;
     const update = () => {
-      const cell = key ? table?.querySelector<HTMLElement>(`thead th[data-key="${CSS.escape(key)}"]`) : null;
+      const cell = key ? [...(table?.querySelectorAll<HTMLElement>("thead th[data-key]") ?? [])].find(cell => cell.dataset.key === key) : undefined;
       setBand(current => !cell ? null : current?.left === cell.offsetLeft && current.width === cell.offsetWidth ? current : { left: cell.offsetLeft, width: cell.offsetWidth });
     };
     update();
     if (!table || !key) return;
     // On a phone the header is a scrolling strip of sort controls; keep the active one in view.
-    const cell = table.querySelector<HTMLElement>(`thead th[data-key="${CSS.escape(key)}"]`);
+    const cell = [...table.querySelectorAll<HTMLElement>("thead th[data-key]")].find(cell => cell.dataset.key === key);
     const strip = cell?.parentElement;
     if (cell && strip && strip.scrollWidth > strip.clientWidth && getComputedStyle(table).display !== "table") {
       const bounds = strip.getBoundingClientRect(), target = cell.getBoundingClientRect(), inset = 8;
@@ -200,10 +238,11 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
       if (shift) strip.scrollTo({ left: strip.scrollLeft + shift, behavior: reduced || !seenSort.current ? "auto" : "smooth" });
     }
     seenSort.current = true;
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(update);
     observer.observe(table);
     return () => observer.disconnect();
-  }, [reduced, sort?.key, widths]);
+  }, [reduced, activeSortKey, widths]);
 
   const shownCount = selectedCount || keys.length;
   const noun = selectedCount ? "selected" : keys.length === 1 ? itemName.one : itemName.other;
@@ -212,7 +251,7 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
   if (shownCount !== lastCount) { setLastCount(shownCount); setCountDirection(shownCount > lastCount ? 1 : -1); }
 
   function sortBy(column: DataColumn<T>) {
-    const next: SortState = { key: column.key, direction: sort?.key === column.key && sort.direction === "asc" ? "desc" : "asc" };
+    const next: SortState = { key: column.key, direction: directionFor(column) === "asc" ? "desc" : "asc" };
     setSort(next);
     onSortChange?.(next);
     setAnnouncement(`Sorted by ${column.label}, ${next.direction === "asc" ? "ascending" : "descending"}`);
@@ -271,10 +310,32 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
     next.focus();
   }
 
-  return <div className={`arc-market ${styles.wrapper}`} onKeyDown={onKeyDown}>
-    <div className={styles.scroller}>
+  // Requires stable row keys and exact sort inputs. Sorting changes display order
+  // only: ties retain source order, empty values stay last, and BigInt is never
+  // converted to Number. Manual callers retain their authoritative state engine.
+  // Native table, selection and focus semantics remain in this Arc renderer.
+  const body = <tbody role="rowgroup">{loading ? Array.from({ length: 5 }, (_, index) => <tr role="row" key={`skeleton-${index}`}>{selectable ? <td role="cell" className={styles.selectCell} /> : null}{columns.map(column => <td role="cell" key={column.key}><span className={`${styles.skeleton} animate-pulse`} /></td>)}</tr>) : sortedRows.length ? sortedRows.map(row => {
+          const key = getRowKey(row);
+          const selected = isRowSelected?.(row) ?? (selectable && selection.has(key));
+          const rowClass = [rowClassName, getRowClassName?.(row)].filter(Boolean).join(" ") || undefined;
+          const cells = <>
+            {selectable ? <td role="cell" className={styles.selectCell}><SelectBox checked={selected} label={`Select ${String(columns[0] === undefined ? key : row[columns[0].key] ?? key)}`} nav="row" reduced={reduced} onToggle={extend => toggleRow(key, extend)} /></td> : null}
+            {columns.map((column, columnIndex) => {
+              const content = column.render ? column.render(row[column.key], row) : String(row[column.key] ?? "–");
+              const truncate = column.truncate === true;
+              const title = truncate && (typeof content === "string" || typeof content === "number") ? String(content) : undefined;
+              return <td key={column.key} role="cell" className={column.selection ? styles.selectCell : undefined} data-column={column.key} data-label={column.label} data-primary={columnIndex === columns.findIndex(item => !item.selection) || undefined} data-sorted={directionFor(column) || undefined} data-numeric={numeric.has(column.key) || undefined}>
+                {truncate ? <span className={styles.cellContent} title={title}>{content}</span> : content}
+              </td>;
+            })}
+          </>;
+          return animateRows ? <motion.tr key={key} className={rowClass} role="row" layout={reduced ? false : "position"} layoutDependency={order} transition={motionTokens.spring.smooth} data-selected={selected || undefined} data-state={selected ? "selected" : undefined} onClick={event => onRowClick(event, key)} onMouseDown={event => { if (selectable && event.shiftKey) event.preventDefault(); }}>{cells}</motion.tr>
+            : <tr key={key} className={rowClass} role="row" data-selected={selected || undefined} data-state={selected ? "selected" : undefined} onClick={event => onRowClick(event, key)}>{cells}</tr>;
+        }) : <tr role="row"><td role="cell" className={styles.empty} colSpan={columns.length + (selectable ? 1 : 0)}>{emptyContent ?? emptyMessage}</td></tr>}</tbody>;
+  return <div className={`arc-market ${styles.wrapper}`} aria-busy={loading || undefined} onKeyDown={onKeyDown}>
+    <div data-slot="table-container" className={styles.scroller} style={maxHeight === undefined ? undefined : { maxHeight, overflowY: "auto" }}>
       {band ? <span className={styles.band} style={{ left: band.left, width: band.width }} aria-hidden="true" /> : null}
-      <table ref={tableRef} role="table" aria-label={ariaLabel} className={styles.table} data-fixed={widths ? "" : undefined} data-selectable={selectable || undefined}>
+      <table ref={tableRef} role="table" aria-label={ariaLabel} className={[styles.table, tableClassName].filter(Boolean).join(" ")} data-fixed={widths ? "" : undefined} data-selectable={selectable || columns.some(column => column.selection) || undefined} data-row-selectable={selectable || undefined}>
         <caption>{caption}</caption>
         <colgroup>
           {selectable ? <col className={styles.selectCol} /> : null}
@@ -283,25 +344,16 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
         <thead role="rowgroup"><tr role="row">
           {selectable ? <th scope="col" role="columnheader" className={styles.selectCell}><SelectBox inputRef={selectAllRef} checked={allSelected} mixed={selectedCount > 0 && !allSelected} label="Select all rows" nav="head" reduced={reduced} onToggle={() => commit(allSelected ? new Set() : new Set(keys))} /></th> : null}
           {columns.map((column, index) => {
-            const active = sort?.key === column.key;
+            const direction = directionFor(column);
             const sortable = column.sortable !== false;
-            return <th key={column.key} scope="col" role="columnheader" data-key={column.key} data-primary={index === 0 || undefined} data-sorted={active || undefined} data-numeric={numeric.has(column.key) || undefined} data-sortable={sortable || undefined} aria-sort={!sortable ? undefined : active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
-              {sortable ? <button className={styles.sortButton} type="button" data-nav="head" onClick={() => sortBy(column)} aria-label={`Sort by ${column.label}${active ? `, currently ${sort.direction === "asc" ? "ascending" : "descending"}` : ""}`}>
-                <span className={styles.sortInner}><span>{column.label}</span><SortGlyph active={active} descending={active && sort.direction === "desc"} reduced={reduced} /></span>
-              </button> : column.label}
+            return <th key={column.key} scope="col" role="columnheader" className={column.selection ? styles.selectCell : undefined} data-key={column.key} data-primary={index === columns.findIndex(item => !item.selection) || undefined} data-sorted={direction || undefined} data-numeric={numeric.has(column.key) || undefined} data-sortable={sortable || undefined} aria-sort={!sortable ? undefined : direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+              {column.renderHeader ? column.renderHeader() : sortable ? <button className={styles.sortButton} type="button" data-nav="head" onClick={() => sortBy(column)} aria-label={`Sort by ${column.label}${direction ? `, currently ${direction === "asc" ? "ascending" : "descending"}` : ""}`}>
+                <span className={styles.sortInner}><span title={column.label}>{column.label}</span><SortGlyph active={!!direction} descending={direction === "desc"} reduced={reduced} /></span>
+              </button> : <span title={column.label}>{column.label}</span>}
             </th>;
           })}
         </tr></thead>
-        <tbody role="rowgroup">{sortedRows.length ? sortedRows.map(row => {
-          const key = getRowKey(row);
-          const selected = selectable && selection.has(key);
-          const cells = <>
-            {selectable ? <td role="cell" className={styles.selectCell}><SelectBox checked={selected} label={`Select ${String(columns[0] === undefined ? key : row[columns[0].key] ?? key)}`} nav="row" reduced={reduced} onToggle={extend => toggleRow(key, extend)} /></td> : null}
-            {columns.map((column, columnIndex) => <td key={column.key} role="cell" data-label={column.label} data-primary={columnIndex === 0 || undefined} data-sorted={sort?.key === column.key || undefined} data-numeric={numeric.has(column.key) || undefined}>{column.render ? column.render(row[column.key], row) : String(row[column.key] ?? "–")}</td>)}
-          </>;
-          return animateRows ? <motion.tr key={key} className={rowClassName} role="row" layout={reduced ? false : "position"} layoutDependency={order} transition={motionTokens.spring.smooth} data-selected={selected || undefined} onClick={event => onRowClick(event, key)} onMouseDown={event => { if (selectable && event.shiftKey) event.preventDefault(); }}>{cells}</motion.tr>
-            : <tr key={key} className={rowClassName} role="row" data-selected={selected || undefined} onClick={event => onRowClick(event, key)}>{cells}</tr>;
-        }) : <tr role="row"><td role="cell" className={styles.empty} colSpan={columns.length + (selectable ? 1 : 0)}>{emptyMessage}</td></tr>}</tbody>
+        {renderBody ? renderBody(body) : body}
       </table>
     </div>
     {selectable ? <div className={styles.footer}>
@@ -312,7 +364,7 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
       </span>
       <AnimatePresence initial={false}>{selectedCount ? <motion.button key="clear" type="button" className={styles.clear} data-clear="" onClick={clearSelection} initial={reduced ? { opacity: 0 } : { opacity: 0, scale: .96, filter: blur(motionTokens.blur.soft) }} animate={{ opacity: 1, scale: 1, filter: blur(0) }} exit={reduced ? { opacity: 0, transition: instant } : { opacity: 0, scale: .98, filter: blur(motionTokens.blur.subtle), transition: leave }} transition={reduced ? instant : enter} {...(reduced ? {} : { whileTap: { scale: .97, transition: { duration: motionTokens.duration.instant } } })}>Clear selection</motion.button> : null}</AnimatePresence>
     </div> : null}
-    <p className={styles.srOnly} role="status">{announcement}</p>
+    {!manualSorting || sortAnnouncement ? <p className={styles.srOnly} role="status">{sortAnnouncement}</p> : null}
   </div>;
 }
 

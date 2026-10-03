@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { SortingState } from '@tanstack/react-table'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -60,6 +61,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
       protocolLabel: 'MCP',
       pricingLabel: 'A$0.02 / call',
       callsCount: 0,
+      blocker: 'Reconnect the provider',
     },
   ]
 
@@ -185,7 +187,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     }
   })
 
-  it('T6: shows filter empty state on desktop and compact layouts', () => {
+  it('T6: shows the supplied filter empty message and clears the controlled filter from Arc', () => {
     const onFilterChange = vi.fn()
     render(
       <AeOwnerOfferingsList
@@ -195,35 +197,96 @@ describe('AeOwnerOfferingsList (W-34)', () => {
       />,
     )
 
-    const emptyMessages = screen.getAllByText("No tools match 'xyz'")
-    expect(emptyMessages.length).toBeGreaterThanOrEqual(1)
+    const table = screen.getByRole('table', { name: 'Tools' })
+    expect(within(table).getByText("No tools match 'xyz'")).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toBeNull()
 
-    const resetButtons = screen.getAllByRole('button', { name: 'Reset filter' })
-    expect(resetButtons.length).toBeGreaterThan(0)
-    const firstResetButton = resetButtons[0]
-    expect(firstResetButton).toBeDefined()
-    if (firstResetButton) {
-      fireEvent.click(firstResetButton)
-    }
+    fireEvent.click(within(table).getByRole('button', { name: 'Clear filter' }))
     expect(onFilterChange).toHaveBeenCalledWith('')
   })
 
-  it('T7: compact list shows canonical badges, price, Calls, and one row exit', () => {
+  it('keeps controlled sorting and restores a focused row action when filtering reveals it again', async () => {
+    function ControlledTable() {
+      const [filterValue, setFilterValue] = useState('')
+      const [sorting, setSorting] = useState<SortingState>([])
+      const [activeRowActionId, setActiveRowActionId] = useState<string | undefined>(undefined)
+      return (
+        <AeOwnerOfferingsList
+          offerings={testTools}
+          filterValue={filterValue}
+          onFilterChange={setFilterValue}
+          sorting={sorting}
+          onSortingChange={setSorting}
+          {...(activeRowActionId === undefined ? {} : { activeRowActionId })}
+          onActiveRowActionIdChange={setActiveRowActionId}
+          restoreRowActionFocus
+        />
+      )
+    }
+
+    render(<ControlledTable />)
+
+    const table = screen.getByRole('table', { name: 'Tools' })
+    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Tool' }))
+    expect(within(table).getByRole('columnheader', { name: /Tool/ })).toHaveAttribute('aria-sort', 'ascending')
+    const taxAction = screen.getByRole('link', { name: 'Open Tool for Australian Tax Calculator' })
+    taxAction.focus()
+    expect(document.activeElement).toBe(taxAction)
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search name, protocol, or ID…' }), {
+      target: { value: 'xyz' },
+    })
+    expect(screen.queryByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toBeNull()
+    fireEvent.click(within(table).getByRole('button', { name: 'Clear filter' }))
+
+    await waitFor(() => {
+      const restoredAction = screen.getByRole('link', { name: 'Open Tool for Australian Tax Calculator' })
+      expect(document.activeElement).toBe(restoredAction)
+    })
+    expect(within(table).getAllByRole('row')[1]).toHaveTextContent('AU Postcode Validator')
+  })
+
+  it('T7: Arc Tools table folds to one row projection with all facts and one native exit', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
-    const compactList = screen.getByTestId('provider-workspace-compact-list')
-    const firstRow = within(compactList).getAllByRole('listitem')[0]
+    const table = screen.getByRole('table', { name: 'Tools' })
+    const rows = within(table).getAllByRole('row')
+    const firstRow = rows[1]
     expect(firstRow).toBeDefined()
     if (!firstRow) return
 
+    expect(within(firstRow).getByText('Australian Tax Calculator')).toHaveAttribute('title', 'Australian Tax Calculator')
+    expect(within(firstRow).getByText('Calculates exact PAYG withholding and Medicare levy.'))
+      .toHaveAttribute('title', 'Calculates exact PAYG withholding and Medicare levy.')
     expect(within(firstRow).getByText('Published')).toBeInTheDocument()
     expect(within(firstRow).getByText('Available')).toBeInTheDocument()
     expect(within(firstRow).getByText('OpenAPI')).toBeInTheDocument()
     expect(within(firstRow).getByText('A$0.10 / call')).toBeInTheDocument()
     expect(within(firstRow).getByText('1,420')).toBeInTheDocument()
-    expect(within(firstRow).getByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toBeInTheDocument()
+    const openTool = within(firstRow).getByRole('link', { name: 'Open Tool for Australian Tax Calculator' })
+    expect(openTool.tagName).toBe('A')
+    expect(openTool).toHaveAttribute('href', '/owner/operations/tax-calculator')
     expect(within(firstRow).queryByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeNull()
     expect(within(firstRow).queryByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeNull()
+    const cells = within(firstRow).getAllByRole('cell')
+    expect(cells.map((cell) => cell.getAttribute('data-label'))).toEqual([
+      'Tool', 'Status', 'Price', 'Calls', 'Next action',
+    ])
+    expect(cells.filter((cell) => cell.hasAttribute('data-numeric')).map((cell) => cell.getAttribute('data-label')))
+      .toEqual(['Calls'])
+
+    const secondRow = rows[2]
+    expect(secondRow).toBeDefined()
+    if (!secondRow) return
+    expect(within(secondRow).getByText('AU Postcode Validator')).toBeInTheDocument()
+    expect(within(secondRow).getByText('Draft')).toBeInTheDocument()
+    expect(within(secondRow).getByText('Unavailable')).toBeInTheDocument()
+    expect(within(secondRow).getByText('MCP')).toBeInTheDocument()
+    expect(within(secondRow).getByText('Reconnect the provider')).toBeInTheDocument()
+    expect(within(secondRow).getByText('A$0.02 / call')).toBeInTheDocument()
+    expect(within(secondRow).getByText('0')).toBeInTheDocument()
+
+    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toHaveLength(1)
   })
 })

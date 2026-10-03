@@ -76,39 +76,33 @@
 @container arc-shelf (min-width: 1180px) { .arc-listing-track { grid-auto-columns: calc((100% - 3 * var(--space-4)) / 4); } }
 .arc-listing-empty { padding: var(--space-6); border: 1px dashed var(--border-strong); border-radius: var(--radius-panel); color: var(--text-secondary); font-size: var(--text-sm); }
 
-.arc-listing-table-wrap { min-width: 0; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-panel); }
-.arc-listing-table { width: 100%; border-collapse: collapse; font-family: var(--font-body); font-size: var(--text-sm); }
-.arc-listing-table th { padding: var(--space-4); background: var(--surface-muted); color: var(--text-secondary); font-size: var(--text-xs); font-weight: 500; text-align: left; }
-.arc-listing-table th:nth-child(3), .arc-listing-table th:nth-child(4) { text-align: right; }
-.arc-listing-table td { padding: var(--space-4); border-top: 1px solid var(--border-subtle); vertical-align: middle; }
 .arc-listing-row { background: var(--surface); }
 .arc-listing-row[data-selected] { background: var(--surface-muted); }
-.arc-listing-row-identity { display: flex; align-items: start; gap: var(--space-3); min-width: 0; }
-.arc-listing-row-identity > div { min-width: 0; }
-.arc-listing-row h3 { font-size: var(--text-sm); font-weight: 500; line-height: 1.45; }
-.arc-listing-row h3 a { display: inline-flex; align-items: center; min-height: 44px; color: var(--foreground); text-decoration: none; overflow-wrap: anywhere; }
-.arc-listing-row-provider, .arc-listing-row-summary, .arc-listing-row-activity { color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
-.arc-listing-row-summary { margin-top: var(--space-1); }
-.arc-listing-row-access { color: var(--text-secondary); font-size: var(--text-xs); }
+.arc-listing-row-identity { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.arc-listing-row-identity > div { min-width: 0; max-width: 24rem; }
+.arc-listing-row .arc-listing-mark { width: 28px; height: 28px; border-radius: 9px; }
+.arc-listing-row h3 { min-width: 0; max-width: 24rem; overflow: hidden; font-size: var(--text-sm); font-weight: 500; line-height: 18px; }
+.arc-listing-row h3 a { display: block; min-width: 0; max-width: 24rem; min-height: 18px; overflow: hidden; color: var(--foreground); line-height: 18px; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.arc-listing-row-provider { min-width: 0; max-width: 24rem; overflow: hidden; color: var(--text-secondary); font-size: var(--text-xs); line-height: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.arc-listing-row-access { color: var(--text-secondary); font-size: var(--text-xs); line-height: 14px; }
 .arc-listing-row-price { width: 150px; min-width: 0; overflow-wrap: anywhere; text-align: right; }
-.arc-listing-row-price > p { min-width: 0; overflow-wrap: anywhere; }
+.arc-listing-row-price > p { min-width: 0; overflow-wrap: anywhere; line-height: 18px; }
 .arc-listing-row-price p:first-child { font-weight: 500; font-variant-numeric: tabular-nums; }
-.arc-listing-row-price p:last-child { margin-top: var(--space-1); color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.5; }
-.arc-listing-row-activity { font-variant-numeric: tabular-nums; text-align: right; }
+.arc-listing-row-price p + p { margin-top: 0; overflow: hidden; color: var(--text-secondary); font-size: var(--text-xs); line-height: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .arc-listing-row-actions { display: flex; align-items: center; justify-content: end; gap: var(--space-2); }
 .arc-listing-row-inspect { display: none; }
+.arc-listing-row .arc-listing-icon-button { width: 32px; height: 32px; }
+.arc-listing-row .arc-listing-inspect, .arc-listing-row .arc-listing-compare { min-height: 32px; padding: 0 var(--space-2); }
 .arc-listing-row :where(p, h3) { margin: 0; }
 @media (max-width: 767px) {
-  .arc-listing-table-wrap { overflow-x: hidden; border: 0; border-radius: 0; }
-  .arc-listing-table, .arc-listing-table tbody, .arc-listing-table tr, .arc-listing-table td { display: block; min-width: 0; }
-  .arc-listing-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .arc-listing-table tbody { display: grid; gap: var(--space-3); }
-  .arc-listing-table tr { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-panel); }
-  .arc-listing-table td { padding: var(--space-2) 0; border: 0; }
   .arc-listing-row-price { width: auto; }
   .arc-listing-row-price, .arc-listing-row-activity { text-align: left; }
   .arc-listing-row-actions { justify-content: start; flex-wrap: wrap; }
   .arc-listing-row-inspect { display: inline-flex; margin-right: auto; }
-  .arc-listing-row-activity::before { content: 'Coinbase Bazaar calls · 30 days: '; }
+}
+@media (hover: none), (pointer: coarse) {
+  .arc-listing-row h3 a { min-height: 44px; padding-block: 13px; box-sizing: border-box; }
+  .arc-listing-row .arc-listing-icon-button { width: 44px; height: 44px; }
+  .arc-listing-row .arc-listing-inspect, .arc-listing-row .arc-listing-compare { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .arc-listing-card *, .arc-listing-shelf * { transition-duration: 0s !important; scroll-behavior: auto !important; } }

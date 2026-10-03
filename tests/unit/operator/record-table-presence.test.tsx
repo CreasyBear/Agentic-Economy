@@ -82,7 +82,7 @@ describe('AeRecordTable filtered-empty recovery', () => {
       />,
     )
 
-    const filter = screen.getByRole('textbox', { name: 'Filter rows…' })
+    const filter = screen.getByRole('searchbox', { name: 'Filter rows…' })
     fireEvent.change(filter, { target: { value: 'no-such-operation' } })
 
     expect(screen.getAllByText('No operations match this filter.')).toHaveLength(1)
@@ -102,13 +102,13 @@ describe('AeRecordTable filtered-empty recovery', () => {
       <AeRecordTable columns={columns} data={rows} caption="Operations" countLabel="operations" />,
     )
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Filter rows…' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter rows…' }), {
       target: { value: 'weather' },
     })
     expect(screen.getByText('weather.lookup')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull()
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Filter rows…' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter rows…' }), {
       target: { value: '' },
     })
 
@@ -125,7 +125,7 @@ describe('AeRecordTable filtered-empty recovery', () => {
     expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull()
   })
 
-  it('preserves the current sort after clearing an unmatched filter', () => {
+  it('clears a matched search while preserving rows, sort, selection, and focus', () => {
     const sortableColumns: ColumnDef<Row, unknown>[] = [
       {
         id: 'name',
@@ -141,25 +141,44 @@ describe('AeRecordTable filtered-empty recovery', () => {
         data={rows}
         caption="Operations"
         countLabel="operations"
+        getRowId={(row) => row.id}
+        selection={{
+          state: { 'row-1': true },
+          onChange: () => undefined,
+          getRowLabel: (row) => row.name,
+        }}
       />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Sort by Name' }))
-    expect(within(screen.getByRole('table')).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
-      'fx.convert',
-      'weather.lookup',
-    ])
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Filter rows…' }), {
-      target: { value: 'no-such-operation' },
+    const table = screen.getByRole('table')
+    const visibleNames = () => within(table).getAllByRole('row').slice(1).map((row) => {
+      const cells = within(row).getAllByRole('cell')
+      return cells[cells.length - 1]?.textContent
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }))
-
-    expect(within(screen.getByRole('table')).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
+    expect(visibleNames()).toEqual([
       'fx.convert',
       'weather.lookup',
     ])
-    expect(screen.getByRole('columnheader').getAttribute('aria-sort')).toBe('ascending')
+
+    const filter = screen.getByRole('searchbox', { name: 'Filter rows…' })
+    fireEvent.change(filter, {
+      target: { value: 'weather' },
+    })
+    expect((filter as HTMLInputElement).value).toBe('weather')
+    expect(visibleNames()).toEqual(['weather.lookup'])
+    expect(screen.getByRole('checkbox', { name: 'Select weather.lookup' }).getAttribute('aria-checked')).toBe('true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+
+    expect((filter as HTMLInputElement).value).toBe('')
+    expect(document.activeElement).toBe(filter)
+    expect(visibleNames()).toEqual([
+      'fx.convert',
+      'weather.lookup',
+    ])
+    expect(within(table).getByRole('columnheader', { name: /Name/ }).getAttribute('aria-sort')).toBe('ascending')
+    expect(screen.getByRole('checkbox', { name: 'Select weather.lookup' }).getAttribute('aria-checked')).toBe('true')
   })
 })
 
