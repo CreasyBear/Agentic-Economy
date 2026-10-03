@@ -120,9 +120,9 @@ No second permanent AWS stack is approved.
 Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
 Joel selected the existing AWS self-hosted Formance route. The production ledger
 is provisioned, bound and verified empty. Backend `cautious-zebra-473` runs
-Stage 53 revision `2f7cb3dbc059006fd13bbf499a97becacd01beb1`, including fresh-session
-recovery after revocation. Vercel Production `dpl_CXEVvGNCKLi6e9m3fYBJZoeoQin1`
-serves the same revision from [PR #304](https://github.com/CreasyBear/Agentic-Economy/pull/304).
+Stage 55 revision `485ac3b4d65cdb7c759ef12fca53f6fd20e2bb12`, including financial
+document attachment recovery. Vercel Production `dpl_C5ZxzNDDUUAzLNjCcWu5mkaR8xHp`
+serves the same revision from [PR #307](https://github.com/CreasyBear/Agentic-Economy/pull/307).
 This retains explicit owner bootstrap, commercial-policy review, protected chat
 admission, enforced Clerk CSP and canonical HTTPS admission behind Vercel TLS
 termination. Native release verification passes; release and health return HTTP 200. Readiness
@@ -136,7 +136,7 @@ Infura and Alchemy now pass the actual Base-mainnet treasury observation,
 including an agreed finalized checkpoint, balance and 2,000-block transfer range.
 Joel completed Alchemy Pay As You Go setup; the US$1 account-wide monthly usage
 cap is verified. Both endpoints are bound to the production vault, Convex and
-Vercel setting; the latter consumes the updated setting on its next deployment.
+Vercel setting; the Stage 55 production deployment consumes the updated setting.
 Custody remains disabled and the wallet unfunded. Joel's selected owner identity is
 verified and allowlisted, and real sign-in at 11:57 UTC is recorded in Security
 activity. The first explicit Admin bootstrap was refused at web admission;

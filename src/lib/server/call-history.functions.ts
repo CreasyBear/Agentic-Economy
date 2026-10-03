@@ -11,6 +11,8 @@ import {
 
 const listOwnerCallsQuery = sourceQuery<{
   principalRef?: string
+  periodStartAt?: number
+  periodEndAt?: number
   paginationOpts: { numItems: number; cursor: string | null }
 }, {
   page: Array<{
@@ -38,13 +40,23 @@ const listOwnerCallsQuery = sourceQuery<{
   isDone: boolean
 }>('capabilityCallProjections:listOwnerCalls')
 
-const periodInput = z.strictObject({
+const dimensionInput = {
   dimensionKind: z.enum(['account', 'agent', 'operation', 'provider', 'application']),
   dimensionRef: z.string().min(1).max(500).optional(),
+}
+const rangeInput = z.strictObject({
+  ...dimensionInput,
+  periodStartAt: z.number().int().nonnegative().safe(),
+  periodEndAt: z.number().int().positive().safe(),
+}).refine(({ periodStartAt, periodEndAt }) => periodEndAt > periodStartAt
+  && periodEndAt - periodStartAt <= 366 * 24 * 60 * 60 * 1_000, { message: 'usage_period_invalid' })
+const periodInput = z.union([rangeInput, z.strictObject({
+  ...dimensionInput,
   periodKind: z.enum(['day', 'month']),
   periodStart: z.string().regex(/^\d{4}-(?:\d{2})(?:-\d{2})?$/u),
-})
+})])
 type PeriodInput = z.infer<typeof periodInput>
+const countUnits = z.string().regex(/^(?:0|[1-9]\d*)$/u)
 
 const usageResult = z.union([
   z.strictObject({
@@ -53,12 +65,15 @@ const usageResult = z.union([
     dimensionRef: z.string(),
     periodStartAt: z.number(),
     periodEndAt: z.number(),
-    callCountUnits: z.string(),
-    completedCountUnits: z.string(),
-    outcomeUnknownCountUnits: z.string(),
+    callCountUnits: countUnits,
+    completedCountUnits: countUnits,
+    outcomeUnknownCountUnits: countUnits,
+    settledSpendUnits: z.string().regex(/^(?:0|[1-9]\d*)$/u).optional(),
+    amountCoverage: z.enum(['complete', 'incomplete']).optional(),
     updatedAt: z.number(),
     source: z.literal('convex_call_evidence'),
-  }),
+  }).refine((usage) => BigInt(usage.callCountUnits) >= BigInt(usage.completedCountUnits) + BigInt(usage.outcomeUnknownCountUnits),
+    { message: 'usage_counts_inconsistent' }),
   z.strictObject({ kind: z.literal('empty') }),
   z.strictObject({ kind: z.literal('unavailable'), code: z.literal('usage_window_too_large') }),
 ])
@@ -99,7 +114,10 @@ const readOwnerSpendAction = sourceAction<{
 const callsInput = z.strictObject({
   cursor: z.string().max(2_000).nullable().optional(),
   principalRef: z.string().min(1).max(200).optional(),
-})
+  periodStartAt: z.number().int().nonnegative().safe().optional(),
+  periodEndAt: z.number().int().positive().safe().optional(),
+}).refine(({ periodStartAt, periodEndAt }) => (periodStartAt === undefined && periodEndAt === undefined)
+  || (periodStartAt !== undefined && periodEndAt !== undefined && periodEndAt > periodStartAt), { message: 'usage_period_invalid' })
 
 const accountHistoryInput = z.strictObject({ cursor: z.string().min(1).max(4096).optional() })
 const readOwnerHistoryAction = sourceAction<{ cursor?: string }, AccountHistoryResult>('moneyOwnerSpend:readOwnerHistory')
@@ -114,6 +132,8 @@ export const readOwnerCallsServer = createServerFn({ method: 'GET' })
   .validator((data) => callsInput.parse(data ?? {}))
   .handler(async ({ data }) => await callSourceQuery(listOwnerCallsQuery, {
     ...(data.principalRef === undefined ? {} : { principalRef: data.principalRef }),
+    ...(data.periodStartAt === undefined ? {} : { periodStartAt: data.periodStartAt }),
+    ...(data.periodEndAt === undefined ? {} : { periodEndAt: data.periodEndAt }),
     paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
   }))
 
@@ -140,10 +160,11 @@ export const readOwnerSpendServer = createServerFn({ method: 'GET' })
     ))
   })
 
-function periodBounds(input: Pick<PeriodInput, 'periodKind' | 'periodStart'>): {
+function periodBounds(input: PeriodInput): {
   periodStartAt: number
   periodEndAt: number
 } {
+  if ('periodStartAt' in input) return { periodStartAt: input.periodStartAt, periodEndAt: input.periodEndAt }
   if (input.periodKind === 'day') {
     if (!/^\d{4}-\d{2}-\d{2}$/u.test(input.periodStart)) {
       throw new Error('usage_period_invalid')

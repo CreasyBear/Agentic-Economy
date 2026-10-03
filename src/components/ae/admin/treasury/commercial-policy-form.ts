@@ -24,6 +24,19 @@ export const emptyPolicyFields = (): PolicyFields => ({
   commitmentSeconds: '', reportsPerDay: '', perimeterConfirmed: false, legalHoldConfirmed: false,
   custodyConfirmed: false, backupConfirmed: false, restoreConfirmed: false, dailyCloseConfirmed: false,
 })
+/** Editable proposals only. Operational confirmations remain unchecked. */
+export function proposedProductionPolicyFields(family: CommercialPolicyFamily, now: number): PolicyFields {
+  const dates = { effectiveAt: localDate(now), expiresAt: localDate(now + 30 * 24 * 60 * 60 * 1_000) }
+  const fields = { ...emptyPolicyFields(), ...dates }
+  switch (family) {
+    case 'commercial_perimeter': return fields
+    case 'tax': return { ...fields, serviceFeeTax: '10', callTax: '0', invoiceIssuance: 'disabled_pending_approval' }
+    case 'accounting_client_money': return { ...fields, minimumFunding: '5', maximumFunding: '20', fundingIncrement: '0.01', customerMaximum: '20' }
+    case 'privacy_retention': return { ...fields, retentionDays: '2557' }
+    case 'treasury_custody': return { ...fields, minimumBuffer: '0.50', rpoMinutes: '5', rtoMinutes: '60' }
+    case 'operations': return { ...fields, serviceFee: '5', pricingMargin: '0', commitmentSeconds: '300', reportsPerDay: '3' }
+  }
+}
 export function policyDecimal(units: string, exponent = 6): string {
   return formatExactAmount({ currency: 'AUD', units, exponent })?.replace(/(\.\d*?[1-9])0+$|\.0+$/u, '$1') ?? units
 }
@@ -37,11 +50,11 @@ export function fieldsFromCurrent(current: NonNullable<PolicyPreparation['curren
   const control = current.control
   switch (control.family) {
     case 'commercial_perimeter': break
-    case 'tax': Object.assign(fields, { serviceFeeTax: policyDecimal(String(control.serviceFeeTaxBps), 2), callTax: control.callTaxBps === undefined ? '' : policyDecimal(String(control.callTaxBps), 2), invoiceIssuance: control.taxInvoiceIssuance }); break
+    case 'tax': Object.assign(fields, { serviceFeeTax: policyDecimal(String(control.serviceFeeTaxBps), 2), callTax: '0', invoiceIssuance: control.taxInvoiceIssuance }); break
     case 'accounting_client_money': Object.assign(fields, { minimumFunding: policyDecimal(control.minimumFundingPrincipalUnits), maximumFunding: policyDecimal(control.maximumFundingPrincipalUnits), fundingIncrement: policyDecimal(control.fundingIncrementUnits), customerMaximum: policyDecimal(control.legalCustomerMaximumAccessibleUnits) }); break
     case 'privacy_retention': fields.retentionDays = String(control.evidenceRetentionDays); break
     case 'treasury_custody': Object.assign(fields, { minimumBuffer: policyDecimal(control.minimumBufferUnits), rpoMinutes: String(control.recoveryPointObjectiveMinutes), rtoMinutes: String(control.recoveryTimeObjectiveMinutes) }); break
-    case 'operations': Object.assign(fields, { serviceFee: policyDecimal(String(control.fundingServiceFeeBps), 2), pricingMargin: policyDecimal(String(control.buyerPricingMarginBps), 2), commitmentSeconds: String(control.commitmentTtlMs / 1_000), reportsPerDay: control.paidCallReportsPerDay === undefined ? '' : String(control.paidCallReportsPerDay) }); break
+    case 'operations': Object.assign(fields, { serviceFee: policyDecimal(String(control.fundingServiceFeeBps), 2), pricingMargin: '0', commitmentSeconds: String(control.commitmentTtlMs / 1_000), reportsPerDay: control.paidCallReportsPerDay === undefined ? '' : String(control.paidCallReportsPerDay) }); break
   }
   return fields
 }
@@ -79,7 +92,7 @@ export function buildPolicyInput(preparation: PolicyPreparation, fields: PolicyF
         control = { family, sellerModel: 'principal_reseller', customerSegment: 'business_only', customerCryptoEntitlement: false }; break
       case 'tax':
         if (fields.invoiceIssuance !== 'enabled' && fields.invoiceIssuance !== 'disabled_pending_approval') throw new Error('Choose whether tax invoice issuance is approved.')
-        control = { family, serviceFeeTaxBps: percent(fields.serviceFeeTax, 'Tax on service fees'), ...(fields.callTax.trim() === '' ? {} : { callTaxBps: percent(fields.callTax, 'Tax on Calls') }), taxInvoiceIssuance: fields.invoiceIssuance }; break
+        control = { family, serviceFeeTaxBps: percent(fields.serviceFeeTax, 'Tax on credit funding'), callTaxBps: 0, taxInvoiceIssuance: fields.invoiceIssuance }; break
       case 'accounting_client_money':
         control = { family, minimumFundingPrincipalUnits: units(fields.minimumFunding, 'Minimum funding'), maximumFundingPrincipalUnits: units(fields.maximumFunding, 'Maximum funding'), fundingIncrementUnits: units(fields.fundingIncrement, 'Funding increment'), legalCustomerMaximumAccessibleUnits: units(fields.customerMaximum, 'Customer accessible limit'), balanceClassification: 'customer_contract_liability' }; break
       case 'privacy_retention':
@@ -90,7 +103,7 @@ export function buildPolicyInput(preparation: PolicyPreparation, fields: PolicyF
         control = { family, treasuryAsset: 'USDC', treasuryExponent: 6, minimumBufferUnits: units(fields.minimumBuffer, 'Minimum treasury buffer'), ledgerAuthority: 'formance_community', formanceLedgerVersion: pins.ledgerVersion, formanceGatewayVersion: pins.gatewayVersion, formanceSchemaVersion: pins.schemaVersion, maximumSdkIntegerUnits: pins.maximumSdkIntegerUnits, architectureReviewCumulativeUnits: pins.architectureReviewCumulativeUnits, deploymentClass: 'real_money', postgresProtection: 'managed_pitr', recoveryPointObjectiveMinutes: integer(fields.rpoMinutes, 'Recovery point objective', 1, 5), recoveryTimeObjectiveMinutes: integer(fields.rtoMinutes, 'Recovery time objective', 1, 60) }; break
       case 'operations':
         attest(fields.backupConfirmed && fields.restoreConfirmed && fields.dailyCloseConfirmed, 'Confirm each operational control using actual backup, production restore and signed daily-close evidence.')
-        control = { family, fundingServiceFeeBps: percent(fields.serviceFee, 'Funding service fee'), buyerPricingMarginBps: percent(fields.pricingMargin, 'Buyer pricing margin'), commitmentTtlMs: integer(fields.commitmentSeconds, 'Commitment lifetime in seconds', 10, 900) * 1_000, ...(fields.reportsPerDay.trim() === '' ? {} : { paidCallReportsPerDay: integer(fields.reportsPerDay, 'Paid Call reports per day', 0, 20) }), formanceSdkVersion: pins.sdkVersion, formanceSdkArtifactDigest: pins.sdkArtifactDigest, backupControl: 'postgres_pitr', restoreControl: 'production_rehearsed', dailyCloseControl: 'human_signed' }; break
+        control = { family, fundingServiceFeeBps: percent(fields.serviceFee, 'Funding service fee'), buyerPricingMarginBps: 0, commitmentTtlMs: integer(fields.commitmentSeconds, 'Commitment lifetime in seconds', 10, 900) * 1_000, ...(fields.reportsPerDay.trim() === '' ? {} : { paidCallReportsPerDay: integer(fields.reportsPerDay, 'Paid Call reports per day', 0, 20) }), formanceSdkVersion: pins.sdkVersion, formanceSdkArtifactDigest: pins.sdkArtifactDigest, backupControl: 'postgres_pitr', restoreControl: 'production_rehearsed', dailyCloseControl: 'human_signed' }; break
     }
     if (!validCommercialPolicyControl(control)) throw new Error('Check the policy values. Funding amounts must be positive, minimum funding must not exceed maximum, and minimum funding must be a multiple of the increment.')
     const active = preparation.current?.lifecycle === 'active' ? preparation.current : null

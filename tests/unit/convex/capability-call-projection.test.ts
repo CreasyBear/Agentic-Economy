@@ -274,6 +274,38 @@ describe('Account Call projection', () => {
     })).rejects.toThrow('call_history_page_size_invalid')
   })
 
+  it.each([
+    ['refused', 'not_delivered', 'complete'],
+    ['refused', 'unknown', 'incomplete'],
+    ['completed', 'delivered', 'incomplete'],
+    ['outcome_unknown', 'unknown', 'incomplete'],
+  ] as const)('keeps %s / %s without a payment receipt at %s coverage', async (state, deliveryState, amountCoverage) => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, `no-charge-${state}-${deliveryState}`)
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('capabilityCallProjections', {
+        callRef: 'call:no-charge-evidence', accountRef: fixture.canonicalAccountRef,
+        principalRef: 'principal:no-charge', credentialRef: 'credential:no-charge', applicationRef: 'application:no-charge',
+        toolRef: 'tool:no-charge', providerRef: 'provider:no-charge', toolLabel: 'No-charge evidence',
+        state, deliveryState, paymentState: 'not_applicable', audAmountUnits: '3000000',
+        latencyMs: 1, createdAt: 10, updatedAt: 11,
+      })
+    })
+    const usageQuery = anyApi.capabilityCallProjections?.readOwnerUsage
+    const agentQuery = anyApi.capabilityCallProjections?.readOwnerAgentReadback
+    if (usageQuery === undefined || agentQuery === undefined) throw new Error('Owner usage queries missing')
+    const usage = await fixture.owner.query(usageQuery, {
+      dimensionKind: 'agent', dimensionRef: 'principal:no-charge', periodStartAt: 0, periodEndAt: 100,
+    })
+    const agent = await fixture.owner.query(agentQuery, { principalRef: 'principal:no-charge', periodStartAt: 0, periodEndAt: 100,
+      paginationOpts: { numItems: 50, cursor: null } })
+    for (const result of [usage, agent.usage]) {
+      expect(result).toMatchObject({ kind: 'available', callCountUnits: '1', amountCoverage })
+      if (amountCoverage === 'complete') expect(result.settledSpendUnits).toBe('0')
+      else expect(result).not.toHaveProperty('settledSpendUnits')
+    }
+  })
+
   it('keeps Agent activity at 50 rows with an opaque continuation separate from directory paging', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'call-projection-agent-page')
@@ -324,6 +356,29 @@ describe('Account Call projection', () => {
     expect(secondPage.activity.page).toHaveLength(1)
     expect(secondPage.activity.isDone).toBe(true)
     expect(secondPage.activity.page[0]?.createdAt).toBe(periodStartAt)
+
+    const listOwnerCalls = anyApi.capabilityCallProjections?.listOwnerCalls
+    const readOwnerUsage = anyApi.capabilityCallProjections?.readOwnerUsage
+    if (listOwnerCalls === undefined || readOwnerUsage === undefined) throw new Error('Owner reporting queries missing')
+    const scope = { principalRef, periodStartAt: periodStartAt + 1, periodEndAt: periodStartAt + 50 }
+    const bounded = await fixture.owner.query(listOwnerCalls, { ...scope, paginationOpts: { numItems: 25, cursor: null } })
+    const remaining = await fixture.owner.query(listOwnerCalls, { ...scope, paginationOpts: { numItems: 25, cursor: bounded.continueCursor } })
+    const rows = [...bounded.page, ...remaining.page]
+    expect(rows).toHaveLength(49)
+    expect(rows.every((row: { createdAt: number; principalRef: string; accountRef: string }) => row.createdAt >= scope.periodStartAt
+      && row.createdAt < scope.periodEndAt && row.principalRef === principalRef && row.accountRef === fixture.canonicalAccountRef)).toBe(true)
+    expect(new Set(rows.map((row: { callRef: string }) => row.callRef)).size).toBe(49)
+    await expect(fixture.owner.query(readOwnerUsage, { dimensionKind: 'agent', dimensionRef: principalRef,
+      periodStartAt: scope.periodStartAt, periodEndAt: scope.periodEndAt })).resolves.toMatchObject({
+      callCountUnits: '49', settledSpendUnits: '49000000', amountCoverage: 'complete',
+    })
+    await expect(fixture.owner.query(listOwnerCalls, { periodStartAt, paginationOpts: { numItems: 50, cursor: null } }))
+      .rejects.toThrow('usage_period_invalid')
+    await expect(fixture.owner.query(listOwnerCalls, { ...scope, periodEndAt: scope.periodStartAt,
+      paginationOpts: { numItems: 50, cursor: null } })).rejects.toThrow('usage_period_invalid')
+    const stranger = await publishedBusinessOwner(backend, 'call-projection-period-stranger')
+    await expect(stranger.owner.query(listOwnerCalls, { ...scope, paginationOpts: { numItems: 50, cursor: null } }))
+      .resolves.toMatchObject({ page: [], isDone: true })
   })
 
   it('pages a 10,000-Call fixture through the Account index without exposing another Account', async () => {
@@ -359,6 +414,9 @@ describe('Account Call projection', () => {
       paginationOpts: { numItems: 50, cursor: null },
     })
     expect(firstPage.page).toHaveLength(50)
+    await expect(fixture.owner.query(listOwnerCalls, {
+      periodStartAt: 0, periodEndAt: 400 * 86_400_000, paginationOpts: { numItems: 50, cursor: null },
+    })).resolves.toMatchObject({ isDone: false, page: expect.any(Array) })
     expect(firstPage.page.every((call: { accountRef: string }) => (
       call.accountRef === fixture.canonicalAccountRef
     ))).toBe(true)
@@ -395,6 +453,23 @@ describe('Account Call projection', () => {
       kind: 'available',
       callCountUnits: '2500',
     })
+
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 5_001; index += 1) {
+        await ctx.db.insert('capabilityCallProjections', {
+          callRef: `call:overflow:${index}`, accountRef: fixture.canonicalAccountRef,
+          principalRef: 'principal:overflow', credentialRef: 'credential:overflow', applicationRef: 'application:overflow',
+          toolRef: 'tool:overflow', providerRef: 'provider:overflow', toolLabel: 'Overflow Tool',
+          state: 'completed', deliveryState: 'delivered', paymentState: 'settled', audAmountUnits: '1',
+          latencyMs: 1, createdAt: 1, updatedAt: 1,
+        })
+      }
+    })
+    await expect(fixture.owner.query(readOwnerUsage, { dimensionKind: 'account', periodStartAt: 0, periodEndAt: 10_001 }))
+      .resolves.toEqual({ kind: 'unavailable', code: 'usage_window_too_large' })
+    await expect(fixture.owner.query(listOwnerCalls, {
+      periodStartAt: 0, periodEndAt: 10_001, paginationOpts: { numItems: 50, cursor: null },
+    })).resolves.toMatchObject({ isDone: false, page: expect.any(Array) })
 
   }, 30_000)
 

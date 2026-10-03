@@ -6,6 +6,7 @@ import { resolveBusinessActor } from '../../../authz'
 import type { AdminCommandSpec } from '../commands/commandEnvelope'
 import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from '../commands/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
   COMMERCIAL_POLICY_FAMILIES,
@@ -13,6 +14,7 @@ import {
   validCommercialPolicyControl,
   validProductionCommercialPolicyControl,
   PACKAGE4_FORMANCE_REQUIREMENTS,
+  productionTreasuryBufferSupported,
   type CommercialPolicyApproval,
   type CommercialPolicyEnvironment,
   type CommercialPolicyGateResult,
@@ -79,6 +81,66 @@ export async function prepareCommercialPolicyChange(
       stateDigest: policyStateDigest(current),
     },
   }
+}
+
+/** Read existing policy and proposal records for one authorised operator view.
+ * A saturated proposal read is unavailable rather than reporting a false absence. */
+export async function readCommercialPolicySummary(
+  ctx: QueryCtx,
+  args: { environment: CommercialPolicyEnvironment; refreshAt: number },
+) {
+  if (!Number.isSafeInteger(args.refreshAt) || args.refreshAt < 0) {
+    return { kind: 'refused' as const, code: 'commercial_policy_refresh_invalid' }
+  }
+  if (deploymentPaymentEnvironment(env) !== args.environment) {
+    return { kind: 'refused' as const, code: 'commercial_policy_environment_mismatch' }
+  }
+  // The refresh argument changes the query cache key; the server clock decides expiry.
+  const observedAt = Date.now()
+  const proposals = await ctx.db.query('adminApprovalProposals')
+    .withIndex('by_status_and_expiresAt', query => query
+      .eq('status', 'awaiting_second_approval').gt('expiresAt', observedAt))
+    .order('asc').take(101)
+  if (proposals.length > 100) {
+    return { kind: 'refused' as const, code: 'commercial_policy_proposals_unavailable' }
+  }
+  const pending: { family: CommercialPolicyFamily; proposalRef: string; proposerRef: string; expiresAt: number }[] = []
+  for (const proposal of proposals) {
+    if (proposal.action !== 'change_commercial_policy') continue
+    let parsed: unknown
+    try { parsed = JSON.parse(proposal.commandJson) } catch {
+      return { kind: 'refused' as const, code: 'commercial_policy_proposal_invalid' }
+    }
+    if (!isRecord(parsed) || !isRecord(parsed.input)) {
+      return { kind: 'refused' as const, code: 'commercial_policy_proposal_invalid' }
+    }
+    const input = parsed.input
+    if (input.environment !== 'sandbox' && input.environment !== 'production') {
+      return { kind: 'refused' as const, code: 'commercial_policy_proposal_invalid' }
+    }
+    if (input.environment !== args.environment) continue
+    if (!COMMERCIAL_POLICY_FAMILIES.some(family => family === input.family)) {
+      return { kind: 'refused' as const, code: 'commercial_policy_proposal_invalid' }
+    }
+    pending.push({ family: input.family as CommercialPolicyFamily, proposalRef: proposal.proposalRef,
+      proposerRef: proposal.proposerRef, expiresAt: proposal.expiresAt })
+  }
+  const rows = await Promise.all(COMMERCIAL_POLICY_FAMILIES.map(async family => {
+    const prepared = await prepareCommercialPolicyChange(ctx, { environment: args.environment, family })
+    if (prepared.kind !== 'ready') return null
+    return {
+      family, conflict: prepared.conflict, current: prepared.current,
+      deploymentProfileValid: args.environment === 'production'
+        && prepared.current?.control.family === 'treasury_custody'
+        ? productionTreasuryBufferSupported(prepared.current.control, env.AE_X402_CUSTODY_MAX_ATOMIC)
+        : true,
+      pending: pending.filter(proposal => proposal.family === family),
+    }
+  }))
+  if (rows.some(row => row === null)) {
+    return { kind: 'refused' as const, code: 'commercial_policy_summary_unavailable' }
+  }
+  return { kind: 'ready' as const, environment: args.environment, observedAt, rows: rows.filter(row => row !== null) }
 }
 export async function readCommercialPolicyGate(
   db: GenericDatabaseReader<DataModel>,
@@ -152,11 +214,16 @@ export async function readCommercialPolicyGate(
       ...(row.suspendedAt === undefined ? {} : { suspendedAt: row.suspendedAt }),
     })))
   }
-  return evaluateCommercialPolicyGate({
+  const decision = evaluateCommercialPolicyGate({
     environment: input.environment,
     now: input.now,
     approvals,
   })
+  if (decision.kind === 'admitted'
+    && !productionTreasuryBufferSupported(decision.controls.treasury_custody, env.AE_X402_CUSTODY_MAX_ATOMIC)) {
+    return { kind: 'refused', code: 'commercial_policy_deployment_profile_invalid', family: 'treasury_custody' }
+  }
+  return decision
 }
 export function commercialPolicySpec(
   ctx: MutationCtx,
@@ -184,6 +251,11 @@ export function commercialPolicySpec(
         || (input.changeKind !== 'suspend' && input.environment === 'production'
           && !validProductionCommercialPolicyControl(input.control))) {
         return { kind: 'refused', code: 'authority_mismatch' }
+      }
+      if (input.changeKind !== 'suspend' && input.environment === 'production'
+        && input.control.family === 'treasury_custody'
+        && !productionTreasuryBufferSupported(input.control, env.AE_X402_CUSTODY_MAX_ATOMIC)) {
+        return { kind: 'refused', code: 'commercial_policy_deployment_profile_invalid' }
       }
       const actor = await resolveBusinessActor(ctx)
       if (actor.kind !== 'authenticated_owner') return { kind: 'refused', code: 'authority_mismatch' }

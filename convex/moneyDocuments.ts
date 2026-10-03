@@ -7,12 +7,28 @@ import { completeDocumentWorkArgs, completeDocumentWorkResult, completeDocumentW
 import { listOwnerDocumentsArgs, listOwnerDocumentsResult, listOwnerDocumentsHandler, readForRenderArgs, readForRenderResult, readForRenderHandler, readQueuedForRenderArgs, readQueuedForRenderResult, readQueuedForRenderHandler, readOwnerDocumentUrlArgs, readOwnerDocumentUrlResult, readOwnerDocumentUrlHandler } from './lib/money/documents/reads'
 import { attachRenderedFileArgs, attachRenderedFileResult, attachRenderedFileHandler } from './lib/money/documents/attachment'
 import { signOwnerDailyCloseArgs, signOwnerDailyCloseResult, signOwnerDailyCloseHandler } from './lib/money/documents/signing'
+import {
+  issueOwnerFundingTaxInvoiceArgs, issueFundingTaxInvoiceArgs, issueFundingTaxInvoiceResult,
+  issueOwnerFundingTaxInvoiceHandler, issueFundingTaxInvoiceHandler,
+} from './lib/money/documents/taxInvoices'
 
 
 export const createOwnerStatement = mutation({
   args: createOwnerStatementArgs,
   returns: createOwnerStatementResult,
   handler: createOwnerStatementHandler,
+})
+
+export const issueOwnerFundingTaxInvoice = mutation({
+  args: issueOwnerFundingTaxInvoiceArgs,
+  returns: issueFundingTaxInvoiceResult,
+  handler: issueOwnerFundingTaxInvoiceHandler,
+})
+
+export const issueFundingTaxInvoice = internalMutation({
+  args: issueFundingTaxInvoiceArgs,
+  returns: issueFundingTaxInvoiceResult,
+  handler: issueFundingTaxInvoiceHandler,
 })
 
 export const readStatementPage = internalQuery({

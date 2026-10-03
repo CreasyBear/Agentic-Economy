@@ -92,7 +92,7 @@ const renderDocumentAction = sourceAction<
   { documentRef: string },
   { kind: 'available'; fileId: string }
 >('moneyDocumentRender:renderOwnerDocument')
-const readDocumentUrlQuery = sourceQuery<{ documentRef: string }, string | null>(
+const readDocumentUrlQuery = sourceQuery<{ documentRef: string; format?: 'html' | 'csv' }, string | null>(
   'moneyDocuments:readOwnerDocumentUrl',
 )
 const listCasesQuery = sourceQuery<{
@@ -276,3 +276,9 @@ export const renderOwnerMoneyDocumentServer = createServerFn({ method: 'POST' })
     await callSourceAction(renderDocumentAction, data)
     return await callSourceQuery(readDocumentUrlQuery, data)
   })
+
+export const readOwnerMoneyDocumentUrlServer = createServerFn({ method: 'GET' })
+  .validator((data) => z.strictObject({
+    documentRef: z.string().min(1).max(500), format: z.enum(['html', 'csv']).default('html'),
+  }).parse(data))
+  .handler(async ({ data }) => await callSourceQuery(readDocumentUrlQuery, data))

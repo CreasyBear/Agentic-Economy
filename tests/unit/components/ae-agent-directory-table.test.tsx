@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -43,7 +43,7 @@ const baseItem: AgentDirectoryItem = {
 afterEach(cleanup)
 
 describe('AeAgentDirectoryTable (W-25)', () => {
-  it('T1: renders Monthly spend header and A$12.50 / A$100.00', () => {
+  it('T1: renders UTC month charges and their separate limit', () => {
     render(
       <AeAgentDirectoryTable
         directoryItems={[baseItem]}
@@ -52,7 +52,7 @@ describe('AeAgentDirectoryTable (W-25)', () => {
       />,
     )
 
-    expect(screen.getByRole('columnheader', { name: /Monthly spend/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Charges \/ UTC month limit/i })).toBeInTheDocument()
     expect(screen.getByText('A$12.50 / A$100.00')).toBeInTheDocument()
   })
 
@@ -103,7 +103,7 @@ describe('AeAgentDirectoryTable (W-25)', () => {
       />,
     )
 
-    expect(within(screen.getByRole('table', { name: 'Agents' })).getByText(label)).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Agents' })).getByText(`A$12.50 / ${label}`)).toBeInTheDocument()
     expect(screen.queryByText(/No limit|A\$100\.00|Active/)).not.toBeInTheDocument()
     expect(container.querySelector('[data-slot="progress"]')).not.toBeInTheDocument()
   })
@@ -124,6 +124,22 @@ describe('AeAgentDirectoryTable (W-25)', () => {
 
     expect(screen.getByText('Unavailable / A$100.00')).toBeInTheDocument()
     expect(container.querySelector('[data-slot="progress"]')).not.toBeInTheDocument()
+  })
+
+  it('shows complete monthly counts and sorts exact charges rather than budget percentages', () => {
+    const usage = { periodStartAt: 0, periodEndAt: 1000, callCount: 51, completedCallCount: 49,
+      outcomeUnknownCallCount: 2, amountCoverage: 'complete' as const, updatedAt: 999 }
+    const larger: AgentDirectoryItem = { ...baseItem, principalRef: 'agent:large', displayName: 'Larger', usage,
+      monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '9007199254740993' } }
+    const smaller: AgentDirectoryItem = { ...baseItem, principalRef: 'agent:small', displayName: 'Smaller', usage,
+      monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '9007199254740992' } }
+    render(<AeAgentDirectoryTable directoryItems={[larger, smaller]} loading={false} onOpenAgent={vi.fn()} />)
+    expect(screen.getAllByText('51')).toHaveLength(2)
+    expect(screen.getAllByText('49 completed · 2 outcome unknown')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: /Charges \/ UTC month limit/u }))
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    expect(rows[0]?.textContent).toContain('Smaller')
+    expect(rows[1]?.textContent).toContain('Larger')
   })
 
   it('keeps same-named Agents distinct by principal in view and row actions', () => {

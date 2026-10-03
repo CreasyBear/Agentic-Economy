@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '../../common/canonical-digest'
+import { isPositiveX402AtomicUnits } from '../x402-spend-admission'
 
 export const COMMERCIAL_POLICY_FAMILIES = Object.freeze([
   'commercial_perimeter',
@@ -386,6 +387,8 @@ export function validCommercialPolicyControl(control: CommercialPolicyControl): 
 
 export function validProductionCommercialPolicyControl(control: CommercialPolicyControl): boolean {
   switch (control.family) {
+    case 'tax':
+      return control.callTaxBps === 0
     case 'treasury_custody':
       return control.formanceLedgerVersion === PACKAGE4_FORMANCE_REQUIREMENTS.ledgerVersion
         && control.formanceGatewayVersion === PACKAGE4_FORMANCE_REQUIREMENTS.gatewayVersion
@@ -401,7 +404,8 @@ export function validProductionCommercialPolicyControl(control: CommercialPolicy
         && control.recoveryTimeObjectiveMinutes > 0
         && control.recoveryTimeObjectiveMinutes <= 60
     case 'operations':
-      return control.formanceSdkVersion === PACKAGE4_FORMANCE_REQUIREMENTS.sdkVersion
+      return control.buyerPricingMarginBps === 0
+        && control.formanceSdkVersion === PACKAGE4_FORMANCE_REQUIREMENTS.sdkVersion
         && control.formanceSdkArtifactDigest
           === PACKAGE4_FORMANCE_REQUIREMENTS.sdkArtifactDigest
         && control.backupControl === 'postgres_pitr'
@@ -410,6 +414,20 @@ export function validProductionCommercialPolicyControl(control: CommercialPolicy
     default:
       return true
   }
+}
+
+/** Requires a canonical current custody cap. Ensures the claimed production floor
+ * never exceeds the reserve target enforced by treasury admission. Invariant:
+ * approval and later admission use the same comparison. On violation,
+ * both refuse rather than accepting drift. */
+export function productionTreasuryBufferSupported(
+  control: Extract<CommercialPolicyControl, { family: 'treasury_custody' }>,
+  configuredMaxAtomic: unknown,
+): boolean {
+  const minimum = nonnegativeUnits(control.minimumBufferUnits)
+  return minimum !== undefined
+    && isPositiveX402AtomicUnits(configuredMaxAtomic)
+    && minimum <= BigInt(configuredMaxAtomic)
 }
 
 function positiveUnits(value: string): bigint | undefined {

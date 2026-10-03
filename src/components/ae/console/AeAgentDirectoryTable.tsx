@@ -109,9 +109,27 @@ export function AeAgentDirectoryTable({
         },
       },
       {
+        id: 'monthlyCalls',
+        accessorFn: (item) => item.usage?.callCount,
+        sortUndefined: 'last',
+        header: ({ column }) => <AeOperatorSortableHeader label="Calls this UTC month" column={column} />,
+        cell: ({ row }) => row.original.usage === undefined ? 'Usage unavailable' : (
+          <div className="arc-agent-directory-cell">
+            <span className="font-mono tabular-nums">{row.original.usage.callCount}</span>
+            <span className="arc-agent-directory-note">{row.original.usage.completedCallCount} completed · {row.original.usage.outcomeUnknownCallCount} outcome unknown</span>
+          </div>
+        ),
+      },
+      {
         id: 'monthlySpend',
-        accessorFn: (item) => monthlyUtilizationPercent(item) ?? -1,
-        header: ({ column }) => <AeOperatorSortableHeader label="Monthly spend" column={column} />,
+        accessorFn: (item) => item.monthlySpendCoverage === 'complete' ? item.monthlySettledSpend?.units : undefined,
+        sortUndefined: 'last',
+        sortingFn: (left, right) => {
+          const a = BigInt(left.getValue<string | undefined>('monthlySpend') ?? '0')
+          const b = BigInt(right.getValue<string | undefined>('monthlySpend') ?? '0')
+          return a < b ? -1 : a > b ? 1 : 0
+        },
+        header: ({ column }) => <AeOperatorSortableHeader label="Charges / UTC month limit" column={column} />,
         cell: ({ row }) => {
           const spendText = monthlySpendLabel(row.original)
           const percent = monthlyUtilizationPercent(row.original)

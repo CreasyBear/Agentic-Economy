@@ -61,6 +61,14 @@ The implemented foundation includes canonical Tools, comparison, Quotes,
 brokered Calls, prepaid buyer credit, Charges, Provider
 earnings, refunds, status and recovery.
 
+Owner reporting includes scoped Call totals, monthly Agent usage and charge
+coverage, sortable history and exports. Receipts include generation of approved
+funding tax invoices and linked full-refund adjustment notes, with immutable
+HTML/print and CSV records. Treasury shows the six commercial approval families
+and proposed defaults through its existing protected review flow. These source
+capabilities do not establish production payment, screening or recovery acceptance;
+the [readiness record](./docs/production-readiness-plan.md) tracks those separately.
+
 The complete Australian principal-reseller record is the next product milestone.
 Buyer-facing Seller identity, a separate Provider obligation, attributed tax
 facts, business-document evidence and purchase resolution are not yet one

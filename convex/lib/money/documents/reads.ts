@@ -1,7 +1,13 @@
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
-import type { QueryCtx } from '../../../_generated/server'
+import type { Doc } from '../../../_generated/dataModel'
+import { env, type QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+import { isRecord } from '../../../../src/modules/common/is-record'
+import { parseTaxDocumentSnapshot } from '../../../../src/modules/money/public'
+import { deploymentPaymentEnvironment } from '../../../../src/lib/deployment/environment'
+import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 
 const documentKind = v.union(
   v.literal('funding_receipt'),
@@ -39,6 +45,37 @@ const documentValue = v.object({
   createdAt: v.number(),
 })
 
+type TaxReadiness = 'ordinary' | 'ready' | 'awaiting_original' | 'invalid'
+
+/** Shares evidence admission across the owner list and download boundary.
+ * Projection only: a rendered note waits for its original without altering either
+ * immutable snapshot or the worker's persisted attachment state. Ordinary receipts,
+ * adjustments and signed-close documents keep their existing lifecycle. */
+async function taxDocumentReadiness(ctx: QueryCtx, row: Doc<'moneyDocuments'>): Promise<TaxReadiness> {
+  if (row.kind !== 'tax_invoice' && row.kind !== 'adjustment') return 'ordinary'
+  let input: unknown
+  try { input = JSON.parse(row.renderInputJson) }
+  catch (cause) {
+    return degradeBackend(cause, row.kind === 'tax_invoice' ? 'invalid' : 'ordinary', {
+      site: 'taxDocumentReadiness', reason: 'invalid_response',
+    })
+  }
+  if (!isRecord(input) || input.format !== 'ae.tax-document:v1') return row.kind === 'tax_invoice' ? 'invalid' : 'ordinary'
+  const snapshot = parseTaxDocumentSnapshot(input)
+  if (snapshot === undefined || snapshot.kind !== row.kind || snapshot.accountRef !== row.accountRef
+    || snapshot.documentRef !== row.documentRef || snapshot.environment !== deploymentPaymentEnvironment(env)
+    || snapshot.environment !== row.environment || canonicalDigest(snapshot) !== row.renderInputDigest) return 'invalid'
+  if (row.state === 'issued' && (row.fileId === undefined || row.csvFileId === undefined
+    || row.fileDigest === undefined || row.csvFileDigest === undefined)) return 'invalid'
+  if (snapshot.kind !== 'adjustment') return 'ready'
+  const original = await ctx.db.query('moneyDocuments').withIndex('by_documentRef', q => q.eq('documentRef', snapshot.original.documentRef)).unique()
+  if (original === null || original.accountRef !== row.accountRef || original.environment !== row.environment
+    || original.kind !== 'tax_invoice' || original.renderInputDigest !== snapshot.original.renderInputDigest) return 'invalid'
+  // Recursion stops at the required tax_invoice kind above.
+  if (await taxDocumentReadiness(ctx, original) !== 'ready') return 'invalid'
+  return original.state === 'issued' ? 'ready' : 'awaiting_original'
+}
+
 export const listOwnerDocumentsArgs = v.object({ paginationOpts: paginationOptsValidator })
 export const listOwnerDocumentsResult = paginationResultValidator(documentValue)
 export const listOwnerDocumentsHandler = async (ctx: QueryCtx, args: Infer<typeof listOwnerDocumentsArgs>) => {
@@ -53,7 +90,10 @@ export const listOwnerDocumentsHandler = async (ctx: QueryCtx, args: Infer<typeo
       .paginate(args.paginationOpts)
     return {
       ...page,
-      page: page.page.map((row) => ({
+      page: await Promise.all(page.page.map(async (row) => {
+        const readiness = await taxDocumentReadiness(ctx, row)
+        const state = readiness === 'invalid' ? 'failed' : readiness === 'awaiting_original' ? 'adjusting' : row.state
+        return {
         documentRef: row.documentRef,
         kind: row.kind,
         amountUnits: row.amountUnits,
@@ -63,14 +103,16 @@ export const listOwnerDocumentsHandler = async (ctx: QueryCtx, args: Infer<typeo
         policyDigest: row.policyDigest,
         renderInputDigest: row.renderInputDigest,
         templateVersion: row.templateVersion,
-        state: row.state,
+        state,
         sourceCount: row.sourceCount,
-        ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
-        rendered: (row.state === 'issued' || row.state === 'awaiting_signature') && row.fileId !== undefined,
+        ...(readiness === 'invalid' ? { failureCode: 'document_integrity_failed' }
+          : row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
+        rendered: (state === 'issued' || state === 'awaiting_signature') && row.fileId !== undefined,
         ...(row.signedByPrincipalRef === undefined ? {} : { signedByPrincipalRef: row.signedByPrincipalRef }),
         ...(row.signedAt === undefined ? {} : { signedAt: row.signedAt }),
         ...(row.closeEvidenceDigest === undefined ? {} : { closeEvidenceDigest: row.closeEvidenceDigest }),
         createdAt: row.createdAt,
+        }
       })),
     }
   }
@@ -138,7 +180,7 @@ export const readQueuedForRenderHandler = async (ctx: QueryCtx, args: Infer<type
     }
   }
 
-export const readOwnerDocumentUrlArgs = v.object({ documentRef: v.string() })
+export const readOwnerDocumentUrlArgs = v.object({ documentRef: v.string(), format: v.optional(v.union(v.literal('html'), v.literal('csv'))) })
 export const readOwnerDocumentUrlResult = v.union(v.null(), v.string())
 export const readOwnerDocumentUrlHandler = async (ctx: QueryCtx, args: Infer<typeof readOwnerDocumentUrlArgs>) => {
     const actor = await resolveBusinessActor(ctx)
@@ -148,5 +190,8 @@ export const readOwnerDocumentUrlHandler = async (ctx: QueryCtx, args: Infer<typ
       .unique()
     if (row === null || row.accountRef !== actor.canonicalAccountRef
       || row.state !== 'issued' || row.fileId === undefined) return null
-    return await ctx.storage.getUrl(row.fileId)
+    const readiness = await taxDocumentReadiness(ctx, row)
+    if (readiness === 'invalid' || readiness === 'awaiting_original') return null
+    const fileId = args.format === 'csv' ? row.csvFileId : row.fileId
+    return fileId === undefined ? null : await ctx.storage.getUrl(fileId)
   }

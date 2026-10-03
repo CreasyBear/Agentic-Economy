@@ -146,6 +146,11 @@ export const ADMIN_REFUSAL_PRESENTATION = {
   proof_stale: stalePolicyProof,
   proof_replayed: refusedPolicyProof,
   authority_mismatch: refusedPolicyProof,
+  commercial_policy_deployment_profile_invalid: {
+    certainty: 'not_applied', retry: 'new_key',
+    copy: 'The current custody maximum cannot support the proposed treasury buffer.',
+    nextStep: 'Restore a valid custody cap at least as high as the policy floor, then review and submit a new command.',
+  },
   approval_required: approvalRequired,
   approval_not_found: noLongerActionable,
   approval_same_actor: noLongerActionable,

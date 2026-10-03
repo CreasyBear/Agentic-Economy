@@ -1,5 +1,3 @@
-import { Link } from '@tanstack/react-router'
-
 import { Button as ArcButton } from '@/components/arc/button/button'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 
@@ -10,7 +8,7 @@ import {
 } from '../activity.contracts'
 
 const STATUS_FILTERS = ['all', 'completed', 'refused', 'outcome_unknown'] as const satisfies readonly ActivityStatusFilter[]
-const DATE_FILTERS = ['all', 'today', '7d', '30d'] as const satisfies readonly ActivityDateRangeFilter[]
+const DATE_FILTERS = ['today', '7d', '30d', 'month', 'all'] as const satisfies readonly ActivityDateRangeFilter[]
 
 export function ActivityFilterBar({
   statusFilter,
@@ -21,6 +19,8 @@ export function ActivityFilterBar({
   onDateRangeFilterChange,
   dateChipLabel,
   filteredAgentShortId,
+  onClearAgent,
+  datePending,
   filtersActive,
   onResetFilters,
 }: ActivityFilterBarProps) {
@@ -38,7 +38,7 @@ export function ActivityFilterBar({
     <div className="arc-market flex min-h-[3rem] min-w-0 max-w-full flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
       <div className="flex min-w-0 max-w-full flex-wrap items-center gap-4">
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Status:</span>
+          <span className="text-xs font-medium text-muted-foreground">Loaded status:</span>
           <SegmentedControl
             options={STATUS_FILTERS.map((status) => ({
               value: status,
@@ -51,7 +51,7 @@ export function ActivityFilterBar({
           />
         </div>
 
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2" aria-busy={datePending || undefined}>
           <span className="text-xs font-medium text-muted-foreground">Date:</span>
           <SegmentedControl
             options={DATE_FILTERS.map((dateRange) => ({
@@ -62,6 +62,7 @@ export function ActivityFilterBar({
             onValueChange={handleDateChange}
             label="Call date range"
           />
+          {datePending ? <span className="text-xs text-muted-foreground" role="status">Updating period…</span> : null}
         </div>
 
         {filteredAgentShortId ? (
@@ -69,13 +70,14 @@ export function ActivityFilterBar({
             <span className="text-muted-foreground">
               Agent · <span className="font-mono text-foreground">{filteredAgentShortId}</span>
             </span>
-            <Link
-              to="/activity"
+            <button
+              type="button"
+              onClick={onClearAgent}
               aria-label="Clear agent filter"
               className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-control)] border border-border px-2 text-lg text-muted-foreground transition-colors hover:bg-muted"
             >
               ×
-            </Link>
+            </button>
           </div>
         ) : null}
       </div>

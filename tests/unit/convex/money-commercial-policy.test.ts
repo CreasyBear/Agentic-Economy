@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { makeFunctionReference } from 'convex/server'
 import { convexTest } from 'convex-test'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { api } from '../../../convex/_generated/api'
@@ -15,6 +15,7 @@ import {
   type CommercialPolicyControl,
 } from '../../../src/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
+import { seedCommercialPolicies } from '../../helpers/quote-fixtures'
 import { ownerAdmin, reviewerAdmin, supportAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
@@ -23,6 +24,7 @@ const convexModules = Object.fromEntries(
     .map(([path, load]) => [path.replace('../../../convex/', './'), load]),
 )
 
+beforeEach(() => vi.stubEnv('AE_X402_CUSTODY_MAX_ATOMIC', '500000'))
 afterEach(() => vi.unstubAllEnvs())
 
 type PolicyChangeResult = AdminCommandReceipt<'change_commercial_policy'>
@@ -346,6 +348,7 @@ describe('protected commercial policy preparation and write requirements', () =>
       expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual(before)
     }
     const signed = await withSourceWrite('admin_operator', proofFor(subject, suspend))
+    vi.stubEnv('AE_X402_CUSTODY_MAX_ATOMIC', undefined)
     const receipt = await owner.mutation(changeCommercialPolicy, signed)
     expect(receipt).toMatchObject({ kind: 'completed' })
     expect(await owner.mutation(changeCommercialPolicy, signed)).toEqual(receipt)
@@ -369,5 +372,81 @@ describe('protected commercial policy preparation and write requirements', () =>
     expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, other)))).toMatchObject({ kind: 'refused', code: 'target_changed' })
     const rows = await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())
     expect(rows.filter(row => row.lifecycle === 'active').map(row => row.policyRef)).toEqual(['policy:race:three'])
+  })
+})
+
+describe('production policy terms backed by current implementation', () => {
+  it.each([
+    { family: 'tax' as const, control: { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax, callTaxBps: 100 } },
+    { family: 'operations' as const, control: { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.operations, buyerPricingMarginBps: 100 } },
+  ])('refuses unsupported $family terms without storing an approval', async ({ family, control }) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTest(schema, convexModules)
+    const subject = `user_policy-unsupported-${family}`
+    const owner = await ownerAdmin(backend, subject)
+    const base = command(subject, `policy:unsupported:${family}`, 'activate', `policy:unsupported:${family}`, 1)
+    const request = { ...base, input: { ...base.input, family, control } }
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, request))))
+      .toMatchObject({ kind: 'refused', code: 'authority_mismatch' })
+    expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual([])
+  })
+
+  it.each([
+    [undefined, 'missing'],
+    ['invalid', 'malformed'],
+    ['499999', 'below floor'],
+  ] as const)('refuses treasury activation when custody cap is %s (%s)', async (cap, label) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_X402_CUSTODY_MAX_ATOMIC', cap)
+    const backend = convexTest(schema, convexModules)
+    const key = label.replaceAll(' ', '-')
+    const subject = `user_policy-cap-${key}`
+    const owner = await ownerAdmin(backend, subject)
+    const base = command(subject, `policy:cap:${key}`, 'activate', `policy:cap:${key}`, 1)
+    const request = { ...base, input: { ...base.input, family: 'treasury_custody' as const,
+      control: { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, minimumBufferUnits: '500000' } } }
+    const signed = await withSourceWrite('admin_operator', proofFor(subject, request))
+    const receipt = await owner.mutation(api.moneyCommercialPolicy.change,
+      { ...signed, evidenceRefs: [...signed.evidenceRefs] })
+    expect(receipt).toMatchObject({ kind: 'refused', code: 'commercial_policy_deployment_profile_invalid' })
+    expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual([])
+  })
+
+  it.each(['500000', '600000'] as const)('admits treasury floor 500000 with enforced cap %s', async cap => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('AE_X402_CUSTODY_MAX_ATOMIC', cap)
+    const backend = convexTest(schema, convexModules)
+    const subject = `user_policy-cap-allowed-${cap}`
+    const owner = await ownerAdmin(backend, subject)
+    const base = command(subject, `policy:cap:allowed:${cap}`, 'activate', `policy:cap:allowed:${cap}`, 1)
+    const request = { ...base, input: { ...base.input, family: 'treasury_custody' as const,
+      control: { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.treasury_custody, minimumBufferUnits: '500000' } } }
+    expect(await owner.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', proofFor(subject, request))))
+      .toMatchObject({ kind: 'completed', code: 'commercial_policy_changed' })
+  })
+
+  it('closes an approved gate after custody cap drift without altering approvals', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTest(schema, convexModules)
+    const now = Date.now()
+    await seedCommercialPolicies(backend, 'buffer-drift', now)
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyCommercialPolicies')
+        .withIndex('by_policyRef', q => q.eq('policyRef', 'commercial-policy:quote:buffer-drift:treasury_custody:1')).unique()
+      if (row === null || row.control.family !== 'treasury_custody') throw new Error('treasury_policy_missing')
+      await ctx.db.patch(row._id, { control: { ...row.control, minimumBufferUnits: '500000' } })
+    })
+    expect(await backend.query(ctx => readCommercialPolicyGate(ctx.db, { environment: 'production', now })))
+      .toMatchObject({ kind: 'admitted' })
+    const before = await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())
+    vi.stubEnv('AE_X402_CUSTODY_MAX_ATOMIC', '600000')
+    expect(await backend.query(ctx => readCommercialPolicyGate(ctx.db, { environment: 'production', now })))
+      .toMatchObject({ kind: 'admitted' })
+    for (const cap of ['499999', 'malformed', undefined]) {
+      vi.stubEnv('AE_X402_CUSTODY_MAX_ATOMIC', cap)
+      expect(await backend.query(ctx => readCommercialPolicyGate(ctx.db, { environment: 'production', now })))
+        .toEqual({ kind: 'refused', code: 'commercial_policy_deployment_profile_invalid', family: 'treasury_custody' })
+    }
+    expect(await backend.run(ctx => ctx.db.query('moneyCommercialPolicies').collect())).toEqual(before)
   })
 })

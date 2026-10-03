@@ -3727,6 +3727,16 @@ failure, definitive refusal, concurrent renders, failed duplicate cleanup,
 immutable digests, late completion and real owner signing/access boundaries.
 Hosted response-loss injection remains unverified.
 
+PR #307 is merged as `485ac3b4d65cdb7c759ef12fca53f6fd20e2bb12` and deployed
+to production Convex `cautious-zebra-473`. Native verification at 23:25 UTC
+confirms Vercel Production `dpl_C5ZxzNDDUUAzLNjCcWu5mkaR8xHp` serves the same
+revision and the updated RPC configuration. Release and health return HTTP 200;
+readiness remains HTTP 503 for the outstanding prerequisites. The backend's live
+Formance probe reports ready, Ledger 2.4.14 and schema 1.6.0. The provider's
+function-metadata inspection timed out; deployment acceptance comes from the
+successful native deployment command and live probes. This is not a hosted
+response-loss injection or financial-event acceptance result.
+
 The audit also distinguishes implemented controls from launch evidence. Authority,
 atomic custody admission, payment replay and ledger readback have substantive
 source/test coverage; successful native screening, paid Calls and the live failure
@@ -3737,3 +3747,39 @@ are the next authorised implementation. Stored policy approvals alone cannot
 prove retention procedures, a signed close or production recovery objectives.
 The historical alpha cloud restore remains valid for its documented target and
 cutoff, not proof of a current whole-production restore.
+
+## Stage 56 — Commercial application surfaces
+
+The [commercial-surface design](./designs/2026-10-03-production-commercial-surfaces.md)
+records the contracts and complexity decisions for Joel's authorised completion
+of invoices, approval records and Account/Agent reporting.
+
+The existing funding/document flow now produces a separately numbered tax invoice
+from confirmed funding, original approved tax facts and current issuance approval.
+Seller identity, customer identity where required, amounts, tax, dates and policy
+evidence are frozen. A confirmed full refund produces a linked adjustment note;
+partial refunds remain reconciliation work. Owner receipts expose issuance state,
+actionable missing prerequisites, retries, printable HTML and CSV. Duplicate and
+concurrent issuance retain one immutable document identity and canonical files.
+
+Treasury now shows all six approval families, current and pending state, validity,
+recorded approver and evidence in a selectable table. Conservative values populate
+editable drafts; attestations remain unchecked. Production admission rejects
+unsupported nonzero Call tax or margin and a treasury buffer above the deployment's
+actual enforced reserve. Defaults do not activate policy or certify controls.
+
+Activity starts with a fixed last-30-days window and offers explicit UTC day,
+week, month and all-time history. Whole-period metrics precede paginated rows.
+Account spend is labelled as ledger Charges by settlement date; Agent spend is
+labelled as attributed charge evidence by Call date, with incomplete coverage
+shown explicitly. Tables sort exact amounts and dates, retain status selection,
+and allow pagination when loaded rows do not match a filter. Loaded-row exports
+state their scope and no longer invent GST or a seller from Provider identity.
+
+The implementation reuses existing storage, document workers, approval records,
+authorisation and table components. It adds no dependency, service or data schema.
+Focused source regressions and rendered invoice fixtures establish the local
+behaviour; a fixture invoice is not evidence of a production financial event.
+The combined release gate and hosted acceptance must be recorded before this
+stage is treated as deployed. Real paid Calls, licensed screening, operational
+attestations and current production restore evidence remain separate acceptance.

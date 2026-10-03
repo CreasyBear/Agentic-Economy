@@ -13,7 +13,7 @@ export function ActivityPaginationControl({ pagination, onLoadMore }: ActivityPa
         <Alert>
           <AlertTitle>Could not load older Calls.</AlertTitle>
           <AlertDescription>
-            A$0.00 affected — your account balance is unchanged. Check your connection and try loading more again.
+            The loaded Calls remain available. Retry to read the remaining history for this period.
           </AlertDescription>
         </Alert>
       ) : null}

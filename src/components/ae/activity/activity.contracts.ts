@@ -17,8 +17,11 @@ export type ActivityLoaderResult =
       kind: 'available'
       calls: Awaited<ReturnType<typeof readOwnerCallsServer>>
       usage: Awaited<ReturnType<typeof readOwnerUsageServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
-      spend: Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
+      spend: Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }> | Readonly<{ kind: 'not_requested' }>
       periodStart: string
+      periodStartAt: number
+      periodEndAt: number
+      dateRangeFilter: ActivityDateRangeFilter
       filteredAgent?: string
     }>
   | Readonly<{ kind: 'unavailable' }>
@@ -34,7 +37,7 @@ export type CallPaginationState = Readonly<{
 }>
 
 export type ActivityStatusFilter = 'all' | 'completed' | 'refused' | 'outcome_unknown'
-export type ActivityDateRangeFilter = 'all' | 'today' | '7d' | '30d'
+export type ActivityDateRangeFilter = 'all' | 'month' | 'today' | '7d' | '30d'
 
 export type ActivityBadgeView = Readonly<{
   variant: 'secondary' | 'outline'
@@ -48,12 +51,15 @@ export type ActivityCallRowView = Readonly<{
   agentShortId: string
   agentTitle: string | undefined
   durationLabel: string
+  latencyMs: number | undefined
   amountLabel: string
+  amountUnits: string | undefined
   stateBadge: ActivityBadgeView
   purchaseBadge: ActivityBadgeView
   purchaseLabel: string
   paymentStateLabel: string
   whenLabel: string
+  createdAt: number
   receiptHref: string
   receiptAccessibleLabel: string
 }>
@@ -62,8 +68,13 @@ export type ActivityMonthlySummaryView = Readonly<{
   unavailable: boolean
   callCountLabel: string
   completedLabel: string
+  refusedLabel: string
   attentionLabel: string
   spendLabel: string
+  spendTitle: string
+  spendBasis: string
+  scopeLabel: string
+  windowTooLarge: boolean
 }>
 
 export type AeActivityProps = Readonly<{
@@ -84,6 +95,8 @@ export type ActivityFilterBarProps = Readonly<{
   onDateRangeFilterChange: (filter: ActivityDateRangeFilter) => void
   dateChipLabel: (filter: ActivityDateRangeFilter) => string
   filteredAgentShortId: string | undefined
+  onClearAgent: () => void
+  datePending: boolean
   filtersActive: boolean
   onResetFilters: () => void
 }>

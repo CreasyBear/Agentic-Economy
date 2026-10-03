@@ -92,7 +92,7 @@ const spend = {
 const periodStart = '2026-09'
 
 function available(calls: Extract<ActivityLoaderResult, { kind: 'available' }>['calls']): ActivityLoaderResult {
-  return { kind: 'available', calls, usage, spend, periodStart }
+  return { kind: 'available', calls, usage, spend, periodStart, periodStartAt: usage.periodStartAt, periodEndAt: usage.periodEndAt, dateRangeFilter: '30d' }
 }
 
 describe('Calls side-surface recovery', () => {
@@ -116,12 +116,12 @@ describe('Calls side-surface recovery', () => {
     serverMocks.readUsage.mockResolvedValue(usage)
     serverMocks.readSpend.mockResolvedValue(spend)
     const loader = ActivityRoute.options.loader as () => Promise<unknown>
-    await expect(loader()).resolves.toEqual({
+    await expect(loader()).resolves.toMatchObject({
       kind: 'available',
       calls,
       usage,
       spend,
-      periodStart: new Date().toISOString().slice(0, 7),
+      dateRangeFilter: '30d',
     })
   })
 
@@ -145,10 +145,85 @@ describe('Calls side-surface recovery', () => {
     expect(screen.getAllByText('Tool kept')).toHaveLength(2)
     expect(screen.queryByText('No Calls yet')).toBeNull()
     expect(screen.queryByText('Usage unavailable')).toBeNull()
-    const monthlySummary = screen.getByRole('region', { name: 'This month' })
+    const monthlySummary = screen.getByRole('region', { name: 'Period totals' })
     expect(within(monthlySummary).getByText('Some summaries are unavailable')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Refresh summaries' }))
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1))
+  })
+
+  it('uses one fixed 30-day window for all owner reads and defaults to 50-row history', async () => {
+    serverMocks.readCalls.mockResolvedValue({ page: [], isDone: true, continueCursor: '' })
+    serverMocks.readUsage.mockResolvedValue({ kind: 'empty' })
+    serverMocks.readSpend.mockResolvedValue({ kind: 'empty' })
+    const loader = ActivityRoute.options.loader as () => Promise<ActivityLoaderResult>
+    const result = await loader()
+    if (result.kind !== 'available') throw new Error('Expected owner data')
+    expect(result.periodEndAt - result.periodStartAt).toBe(30 * 86_400_000)
+    const range = { periodStartAt: result.periodStartAt, periodEndAt: result.periodEndAt }
+    expect(serverMocks.readCalls).toHaveBeenCalledWith({ data: range })
+    expect(serverMocks.readUsage).toHaveBeenCalledWith({ data: { dimensionKind: 'account', ...range } })
+    expect(serverMocks.readSpend).toHaveBeenCalledWith({ data: { dimensionKind: 'account', ...range } })
+    renderActivity(result)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('Gross settled charges').parentElement?.textContent).toContain('A$0.00')
+  })
+
+  it('uses midnight UTC for Today and never requests unsupported native Agent spend', async () => {
+    serverMocks.readCalls.mockResolvedValue({ page: [], isDone: true, continueCursor: '' })
+    serverMocks.readUsage.mockResolvedValue({ kind: 'empty' })
+    const loader = ActivityRoute.options.loader as (context: unknown) => Promise<ActivityLoaderResult>
+    const result = await loader({ deps: { agent: 'principal:exact', range: 'today' } })
+    if (result.kind !== 'available') throw new Error('Expected Agent data')
+    const start = new Date(result.periodStartAt)
+    expect(start.getUTCHours()).toBe(0)
+    expect(start.getUTCMinutes()).toBe(0)
+    expect(start.getUTCSeconds()).toBe(0)
+    expect(start.getUTCMilliseconds()).toBe(0)
+    expect(result.periodEndAt - result.periodStartAt).toBeLessThanOrEqual(86_400_000)
+    expect(serverMocks.readSpend).not.toHaveBeenCalled()
+    expect(serverMocks.readCalls).toHaveBeenCalledWith({ data: {
+      principalRef: 'principal:exact', periodStartAt: result.periodStartAt, periodEndAt: result.periodEndAt,
+    } })
+    expect(serverMocks.readUsage).toHaveBeenCalledWith({ data: {
+      dimensionKind: 'agent', dimensionRef: 'principal:exact', periodStartAt: result.periodStartAt, periodEndAt: result.periodEndAt,
+    } })
+  })
+
+  it('keeps continuation reachable after a status filter matches no loaded rows', async () => {
+    serverMocks.readCalls.mockResolvedValue({ page: [callRow('attention-later', 'outcome_unknown', 1)], isDone: true, continueCursor: '' })
+    renderActivity(available({ page: [callRow('first', 'completed', 2)], isDone: false, continueCursor: 'cursor:next' }))
+    fireEvent.click(screen.getByRole('button', { name: /Outcome unknown\s+0/u }))
+    expect(screen.getByText('No Calls match these filters')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    await waitFor(() => expect(screen.getAllByText('Tool attention-later')).toHaveLength(2))
+    expect(screen.queryByText('No Calls match these filters')).toBeNull()
+  })
+
+  it('retains All time history with a fixed cutoff and an explicit shorter-period totals state', async () => {
+    serverMocks.readCalls.mockResolvedValue({ page: [callRow('historic', 'completed', 1)], isDone: false, continueCursor: 'cursor:historic' })
+    const loader = ActivityRoute.options.loader as (context: unknown) => Promise<ActivityLoaderResult>
+    const result = await loader({ deps: { range: 'all' } })
+    if (result.kind !== 'available') throw new Error('Expected history')
+    expect(serverMocks.readCalls).toHaveBeenCalledWith({ data: { periodStartAt: 0, periodEndAt: result.periodEndAt } })
+    expect(serverMocks.readUsage).not.toHaveBeenCalled()
+    expect(serverMocks.readSpend).not.toHaveBeenCalled()
+    renderActivity(result)
+    expect(screen.getAllByText('Tool historic')).toHaveLength(2)
+    expect(screen.getByText('Choose a shorter period for totals')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Refresh summaries' })).toBeNull()
+    expect(screen.queryByText('A$0.00')).toBeNull()
+  })
+
+  it('preserves unknown Agent charges instead of displaying a zero or account amount', () => {
+    const result = available({ page: [], isDone: true, continueCursor: '' })
+    if (result.kind !== 'available') throw new Error('Expected data')
+    renderActivity({ ...result, filteredAgent: 'principal:exact', spend: { kind: 'not_requested' }, usage: {
+      ...usage, dimensionKind: 'agent', dimensionRef: 'principal:exact', amountCoverage: 'incomplete',
+    } })
+    expect(screen.getByText('Agent settled charges').parentElement?.textContent).toContain('Amount coverage incomplete')
+    expect(screen.queryByText('A$0.00')).toBeNull()
+    expect(screen.queryByText('Gross settled charges')).toBeNull()
   })
 
   it('foregrounds Calls needing attention and keeps routine history separate', () => {
@@ -160,7 +235,7 @@ describe('Calls side-surface recovery', () => {
 
     const attention = screen.getByRole('region', { name: 'Needs attention' })
     const recent = screen.getByRole('region', { name: 'Recent Calls' })
-    const monthlySummary = screen.getByRole('region', { name: 'This month' })
+    const monthlySummary = screen.getByRole('region', { name: 'Period totals' })
     expect(within(attention).getAllByText('Tool attention')).toHaveLength(2)
     expect(within(attention).getAllByText('Needs review').length).toBeGreaterThan(0)
     expect(within(attention).queryByText('Tool routine')).toBeNull()
@@ -168,7 +243,7 @@ describe('Calls side-surface recovery', () => {
     expect(within(recent).getAllByText('Resolved — delivered').length).toBeGreaterThan(0)
     expect(within(recent).queryByText('Tool attention')).toBeNull()
     expect(attention.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(recent.compareDocumentPosition(monthlySummary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(monthlySummary.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(attention).getAllByRole('link', { name: 'Review Tool attention' })[0]?.getAttribute('href')).toBe('/calls/attention')
     expect(screen.queryByText('reconciliation required')).toBeNull()
   })
@@ -199,13 +274,14 @@ describe('Calls side-surface recovery', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     const failure = await screen.findByRole('alert')
     expect(failure.textContent).toContain('Could not load older Calls.')
-    expect(failure.textContent).toContain('A$0.00 affected')
+    expect(failure.textContent).toContain('The loaded Calls remain available')
+    expect(failure.textContent).not.toContain('A$0.00')
     expect(screen.getAllByText('Tool newer')).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))
 
     await waitFor(() => expect(screen.getAllByText('Tool older')).toHaveLength(2))
-    expect(serverMocks.readCalls).toHaveBeenNthCalledWith(1, { data: { cursor: 'cursor:older' } })
-    expect(serverMocks.readCalls).toHaveBeenNthCalledWith(2, { data: { cursor: 'cursor:older' } })
+    expect(serverMocks.readCalls).toHaveBeenNthCalledWith(1, { data: { cursor: 'cursor:older', periodStartAt: usage.periodStartAt, periodEndAt: usage.periodEndAt } })
+    expect(serverMocks.readCalls).toHaveBeenNthCalledWith(2, { data: { cursor: 'cursor:older', periodStartAt: usage.periodStartAt, periodEndAt: usage.periodEndAt } })
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
@@ -226,7 +302,7 @@ describe('Calls side-surface recovery', () => {
 
     expect(await screen.findAllByText('Tool older')).toHaveLength(2)
     expect(screen.getAllByText('Tool newer')).toHaveLength(2)
-    expect(serverMocks.readCalls).toHaveBeenCalledWith({ data: { cursor: 'cursor:older' } })
+    expect(serverMocks.readCalls).toHaveBeenCalledWith({ data: { cursor: 'cursor:older', periodStartAt: usage.periodStartAt, periodEndAt: usage.periodEndAt } })
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
@@ -251,5 +327,38 @@ describe('Calls side-surface recovery', () => {
     expect(screen.queryByText('Tool initial')).toBeNull()
     expect(screen.queryByText('Tool stale')).toBeNull()
     expect(screen.getByRole('button', { name: 'Load more' })).toBeTruthy()
+  })
+
+  it('ignores a prior-period continuation even when the new period starts with identical Calls', async () => {
+    let resolveContinuation: (value: unknown) => void = () => undefined
+    serverMocks.readCalls.mockImplementation(() => new Promise((resolve) => { resolveContinuation = resolve }))
+    const calls = { page: [callRow('shared', 'completed', usage.periodStartAt + 3)], isDone: false, continueCursor: 'cursor:old' }
+    const initial = available(calls)
+    if (initial.kind !== 'available') throw new Error('Expected history')
+    const view = renderActivity(initial)
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    view.updateResult({ ...initial, periodStartAt: usage.periodStartAt + 2 })
+    resolveContinuation({ page: [callRow('outside-new-period', 'completed', usage.periodStartAt + 1)], isDone: true, continueCursor: '' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Load more' })).toBeTruthy())
+    expect(screen.queryByText('Tool outside-new-period')).toBeNull()
+    expect(screen.getAllByText('Tool shared')).toHaveLength(2)
+  })
+
+  it('preserves the status filter through summary refresh, date changes and exact Agent changes', async () => {
+    const initial = available({ page: [callRow('done', 'completed', 3), callRow('refused', 'refused', 2)],
+      isDone: true, continueCursor: '' })
+    if (initial.kind !== 'available') throw new Error('Expected history')
+    const view = renderActivity({ ...initial, usage: { kind: 'unavailable', code: 'source_unavailable' } })
+    fireEvent.click(screen.getByRole('button', { name: /Refused\s+1/u }))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh summaries' }))
+    await waitFor(() => expect(view.invalidate).toHaveBeenCalledTimes(1))
+    view.updateResult({ ...initial, periodEndAt: initial.periodEndAt + 1 })
+    expect(screen.getByRole('button', { name: /Refused\s+1/u }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByText('Tool done')).toBeNull()
+    view.updateResult({ ...initial, dateRangeFilter: '7d', periodStartAt: initial.periodStartAt + 1, filteredAgent: 'principal:agent' })
+    expect(screen.getByRole('button', { name: /Refused\s+1/u }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByText('Tool done')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
+    expect(screen.getAllByText('Tool done')).toHaveLength(2)
   })
 })

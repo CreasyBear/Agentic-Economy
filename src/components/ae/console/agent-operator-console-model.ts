@@ -155,10 +155,10 @@ export function agentActivityFacts(detail: AgentDetail): readonly AeFact[] {
       ? formatAmount(usage.settledSpend)
       : 'Amount coverage incomplete'
   return [
-    { label: 'Calls this month', value: usage === undefined ? 'Unavailable' : String(usage.callCount), mono: true },
+    { label: 'Calls this UTC month', value: usage === undefined ? 'Unavailable' : String(usage.callCount), mono: true },
     { label: 'Completed', value: usage === undefined ? 'Unavailable' : String(usage.completedCallCount), mono: true },
     { label: 'Needs checking', value: usage === undefined ? 'Unavailable' : String(usage.outcomeUnknownCallCount) },
-    { label: 'Settled charges', value: settledCharges, mono: true },
+    { label: 'Projected settled charges', value: settledCharges, mono: true },
     { label: 'Amount coverage', value: usage === undefined ? 'Unavailable' : usage.amountCoverage === 'complete' ? 'Complete' : 'Incomplete' },
     { label: 'Usage data', value: dataLabel(detail.dataState), muted: true },
   ]
@@ -220,16 +220,15 @@ export function agentStatusBadgeVariant(
 
 export function monthlySpendLabel(item: AgentDirectoryItem): string {
   const policy = item.spendingPolicy
-  if (policy.kind !== 'known') return spendingPolicyStateLabel(policy.kind)
-  const ceiling = policy.maximumMonthlySpend
-  if (item.monthlySpendCoverage === 'incomplete' || item.monthlySettledSpend === undefined) {
-    return `Unavailable / ${formatDisplayAmount(ceiling)}`
-  }
-  return `${formatDisplayAmount(item.monthlySettledSpend)} / ${formatDisplayAmount(ceiling)}`
+  const charges = item.monthlySpendCoverage === 'complete' && item.monthlySettledSpend !== undefined
+    ? formatDisplayAmount(item.monthlySettledSpend) : 'Unavailable'
+  const limit = policy.kind === 'known'
+    ? formatDisplayAmount(policy.maximumMonthlySpend) : spendingPolicyStateLabel(policy.kind)
+  return `${charges} / ${limit}`
 }
 
 export function monthlyUtilizationPercent(item: AgentDirectoryItem): number | undefined {
-  if (item.spendingPolicy.kind !== 'known' || item.monthlySpendCoverage === 'incomplete') return undefined
+  if (item.spendingPolicy.kind !== 'known' || item.monthlySpendCoverage !== 'complete') return undefined
   if (item.monthlySettledSpend === undefined) return undefined
   const ceiling = item.spendingPolicy.maximumMonthlySpend
   if (ceiling.currency !== item.monthlySettledSpend.currency) return undefined

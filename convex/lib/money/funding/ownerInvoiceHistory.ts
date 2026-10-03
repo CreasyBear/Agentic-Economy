@@ -8,23 +8,11 @@ import {
   requireAccessFactForAccount,
   resolveActiveAccountRefForPrincipal,
 } from '../../../interactiveAuthority'
-import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../../../../src/modules/principal-account/external-identity/public'
 import { accountRef } from '../../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../../src/modules/principal-account/principal/public'
-import { admitTaxInvoiceIssuance } from '../../../../src/modules/money/public'
+import { fundingTaxDocumentStatusValue, readFundingTaxDocuments } from '../documents/taxInvoices'
 
-const ownerInvoiceHistoryTaxInvoiceValue = v.union(
-  v.object({ kind: v.literal('issued'), documentRef: v.string() }),
-  v.object({
-    kind: v.literal('withheld'),
-    reason: v.union(
-      v.literal('policy_disabled'),
-      v.literal('customer_tax_facts_missing'),
-      v.literal('tax_invoice_not_generated'),
-    ),
-  }),
-)
 const ownerInvoiceHistoryRowValue = v.object({
   commandRef: v.string(),
   createdAt: v.number(),
@@ -36,7 +24,8 @@ const ownerInvoiceHistoryRowValue = v.object({
   status: v.union(v.literal('succeeded'), v.literal('reversed')),
   appliedTransactionRef: v.union(v.string(), v.null()),
   hasPaymentReceipt: v.boolean(),
-  taxInvoice: ownerInvoiceHistoryTaxInvoiceValue,
+  taxInvoice: fundingTaxDocumentStatusValue,
+  adjustmentNote: v.optional(fundingTaxDocumentStatusValue),
 })
 export const listOwnerInvoiceHistoryArgs = { paginationOpts: paginationOptsValidator }
 export const listOwnerInvoiceHistoryResult = paginationResultValidator(ownerInvoiceHistoryRowValue)
@@ -114,59 +103,6 @@ function isTerminalFundingState(state: Doc<'moneyFundingCommands'>['state']): bo
   return state === 'succeeded' || state === 'reversed'
 }
 
-async function resolveFundingCommandTaxInvoice(
-  ctx: QueryCtx,
-  input: Readonly<{
-    accountRef: string
-    environment: Doc<'moneyFundingCommands'>['environment']
-    appliedTransactionRef: string | undefined
-  }>,
-): Promise<
-  | Readonly<{ kind: 'issued'; documentRef: string }>
-  | Readonly<{ kind: 'withheld'; reason: 'policy_disabled' | 'customer_tax_facts_missing' | 'tax_invoice_not_generated' }>
-> {
-  if (input.appliedTransactionRef !== undefined) {
-    const documentRef = `money-document:tax_invoice:${input.appliedTransactionRef}`
-    const document = await ctx.db.query('moneyDocuments')
-      .withIndex('by_documentRef', (index) => index.eq('documentRef', documentRef))
-      .unique()
-    if (document !== null && document.kind === 'tax_invoice' && document.state === 'issued') {
-      return { kind: 'issued', documentRef: document.documentRef }
-    }
-  }
-
-  const customerTaxFacts = await ctx.db.query('moneyCustomerTaxFacts')
-    .withIndex('by_accountRef', (index) => index.eq('accountRef', input.accountRef))
-    .unique()
-  if (customerTaxFacts === null) {
-    return { kind: 'withheld', reason: 'customer_tax_facts_missing' }
-  }
-
-  const policy = await readCommercialPolicyGate(ctx.db, {
-    environment: input.environment,
-    now: Date.now(),
-    ...(input.environment === 'sandbox'
-      ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
-      : {}),
-  })
-  if (policy.kind === 'refused') {
-    return { kind: 'withheld', reason: 'policy_disabled' }
-  }
-
-  const admission = admitTaxInvoiceIssuance({
-    taxControl: policy.controls.tax,
-    customerTaxFacts,
-  })
-  if (admission.kind === 'withheld') {
-    if (admission.reason === 'policy_disabled') {
-      return { kind: 'withheld', reason: 'policy_disabled' }
-    }
-    return { kind: 'withheld', reason: 'customer_tax_facts_missing' }
-  }
-
-  return { kind: 'withheld', reason: 'tax_invoice_not_generated' }
-}
-
 export async function listOwnerInvoiceHistoryHandler(
   ctx: QueryCtx,
   args: { paginationOpts: Infer<typeof paginationOptsValidator> },
@@ -188,11 +124,7 @@ export async function listOwnerInvoiceHistoryHandler(
   const page = []
   for (const command of commands.page) {
     if (!isTerminalFundingState(command.state)) continue
-    const taxInvoice = await resolveFundingCommandTaxInvoice(ctx, {
-      accountRef: canonicalAccountRef,
-      environment: command.environment,
-      appliedTransactionRef: command.appliedTransactionRef,
-    })
+    const documents = await readFundingTaxDocuments(ctx, command, Date.now())
     page.push({
       commandRef: command.commandRef,
       createdAt: command.createdAt,
@@ -204,7 +136,7 @@ export async function listOwnerInvoiceHistoryHandler(
       status: (command.state === 'succeeded' ? 'succeeded' : 'reversed') as 'succeeded' | 'reversed',
       appliedTransactionRef: command.appliedTransactionRef ?? null,
       hasPaymentReceipt: typeof command.paymentId === 'string' && command.paymentId.length > 0,
-      taxInvoice,
+      ...documents,
     })
   }
 

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
@@ -8,6 +8,8 @@ import { toast } from '@/lib/ui/toast'
 import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 
 afterEach(cleanup)
+
+const routerMocks = vi.hoisted(() => ({ navigate: vi.fn().mockResolvedValue(undefined) }))
 
 vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -27,7 +29,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   return {
     ...actual,
     Link: ({ children, to, 'aria-label': label }: { children: ReactNode; to: string; 'aria-label'?: string }) => <a href={to} aria-label={label}>{children}</a>,
-    useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn(), routesByPath: {} }),
+    useRouter: () => ({ invalidate: vi.fn(), navigate: routerMocks.navigate, routesByPath: {} }),
     useMatches: () => [],
     useLocation: () => ({ pathname: '/activity', hash: '' }),
   }
@@ -101,6 +103,8 @@ describe('ActivityPage & Filtering (W-38)', () => {
     authoritativeForConsequences: false as const,
   }
 
+  const windowScope = { periodStartAt: sampleUsage.periodStartAt, periodEndAt: sampleUsage.periodEndAt, dateRangeFilter: '30d' as const }
+
   const renderActivity = (overrides?: { filteredAgent?: string }) => {
     render(
       <AeActivity
@@ -109,7 +113,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
           calls: sampleCalls,
           usage: sampleUsage,
           spend: sampleSpend,
-          periodStart: '2026-09',
+          periodStart: '2026-09', ...windowScope,
           ...(overrides?.filteredAgent === undefined ? {} : { filteredAgent: overrides.filteredAgent }),
         }}
       />,
@@ -117,6 +121,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
   }
 
   beforeEach(() => {
+    routerMocks.navigate.mockClear()
     vi.mocked(downloadCsv).mockClear()
     vi.mocked(downloadJson).mockClear()
     vi.mocked(toast.success).mockClear()
@@ -142,7 +147,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     [15_001, '15.0 s'], [65_432, '1 min 5 s'], [3_665_432, '1 hr 1 min'],
   ])('formats a %i ms Call without exposing a raw millisecond count', (latencyMs, expected) => {
     render(<AeActivity result={{ kind: 'available', calls: { ...sampleCalls, page: [{ ...sampleCalls.page[0]!, latencyMs }] },
-      usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09' }} />)
+      usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09', ...windowScope }} />)
     expect(screen.getAllByText(expected)).toHaveLength(2)
   })
 
@@ -150,7 +155,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     const call = { ...sampleCalls.page[0]!, state: 'outcome_unknown' as const,
       deliveryState: 'unknown' as const, paymentState: 'unknown' as const, audAmountUnits: '0' }
     const result = { kind: 'available' as const, calls: { ...sampleCalls, page: [call] },
-      usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09' }
+      usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09', ...windowScope }
     const view = render(<AeActivity result={result} />)
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Not confirmed').length).toBeGreaterThan(0)
@@ -167,21 +172,21 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByRole('button', { name: /All\s+2/u })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Completed\s+1/u })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Refused\s+1/u })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Needs attention\s+0/u })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Outcome unknown\s+0/u })).toBeTruthy()
   })
 
   it('shows date range chips with labels and aria-pressed', () => {
     renderActivity()
 
-    const allTime = screen.getByRole('button', { name: 'All time' })
-    const today = screen.getByRole('button', { name: 'Today' })
+    const thisMonth = screen.getByRole('button', { name: 'This month (UTC)' })
+    const today = screen.getByRole('button', { name: 'Today (UTC)' })
     const sevenDay = screen.getByRole('button', { name: 'Last 7 days' })
     const thirtyDay = screen.getByRole('button', { name: 'Last 30 days' })
 
-    expect(allTime.getAttribute('aria-pressed')).toBe('true')
+    expect(thisMonth.getAttribute('aria-pressed')).toBe('false')
     expect(today.getAttribute('aria-pressed')).toBe('false')
     expect(sevenDay.getAttribute('aria-pressed')).toBe('false')
-    expect(thirtyDay.getAttribute('aria-pressed')).toBe('false')
+    expect(thirtyDay.getAttribute('aria-pressed')).toBe('true')
   })
 
   it('moves selection and focus by keyboard within each filter group', () => {
@@ -196,39 +201,32 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(completed.getAttribute('aria-pressed')).toBe('true')
     expect(within(status).getAllByRole('button').filter(button => button.tabIndex === 0)).toEqual([completed])
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
-    expect(within(dates).getByRole('button', { name: 'All time' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(dates).getByRole('button', { name: 'Last 30 days' }).getAttribute('aria-pressed')).toBe('true')
 
     fireEvent.keyDown(completed, { key: 'End' })
-    const attention = within(status).getByRole('button', { name: /Needs attention\s+0/u })
+    const attention = within(status).getByRole('button', { name: /Outcome unknown\s+0/u })
     expect(document.activeElement).toBe(attention)
     expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
     fireEvent.keyDown(attention, { key: 'ArrowRight' })
     expect(document.activeElement).toBe(all)
     expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
 
-    const allTime = within(dates).getByRole('button', { name: 'All time' })
-    fireEvent.keyDown(allTime, { key: 'End' })
     const thirtyDays = within(dates).getByRole('button', { name: 'Last 30 days' })
-    expect(document.activeElement).toBe(thirtyDays)
-    expect(thirtyDays.getAttribute('aria-pressed')).toBe('true')
     fireEvent.keyDown(thirtyDays, { key: 'Home' })
-    expect(document.activeElement).toBe(allTime)
-    expect(all.getAttribute('aria-pressed')).toBe('true')
+    const today = within(dates).getByRole('button', { name: 'Today (UTC)' })
+    expect(document.activeElement).toBe(today)
+    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today' } })
   })
 
-  it('filters calls by status and date range', () => {
+  it('filters loaded calls by status and requests a fresh server range for dates', async () => {
     renderActivity()
-
     fireEvent.click(screen.getByRole('button', { name: /Completed\s+1/u }))
-
     expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(2)
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
-
     fireEvent.click(screen.getByRole('button', { name: /All\s+2/u }))
-    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
-
-    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(2)
-    expect(screen.queryByText('Postal Address Lookup')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Today (UTC)' }))
+    await waitFor(() => expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today' } }))
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
   })
 
   it('resets status and date filters', () => {
@@ -258,7 +256,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByText('Exporting 2 records')).toBeTruthy()
   })
 
-  it('exports CSV with nine columns, tool labels, and count-aware success toast', () => {
+  it('exports usage CSV with seven columns and no unproven tax fields, tool labels, and count-aware success toast', () => {
     renderActivity()
 
     fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
@@ -270,8 +268,9 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(typeof csvArg).toBe('string')
     const headerLine = (csvArg as string).split('\r\n')[0] ?? ''
     const columns = headerLine.split(',')
-    expect(columns).toHaveLength(9)
-    expect(columns).toContain('Net AUD')
+    expect(columns).toHaveLength(7)
+    expect(columns).not.toContain('Net AUD')
+    expect(columns).not.toContain('GST AUD')
     expect(csvArg).toContain('Australian Tax Calculator')
   })
 
@@ -286,7 +285,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
       exportKind: string
       recordCount: number
     }
-    expect(payload.exportKind).toBe('activity-calls')
+    expect(payload.exportKind).toBe('call-usage')
     expect(payload.recordCount).toBe(2)
   })
 
@@ -299,19 +298,19 @@ describe('ActivityPage & Filtering (W-38)', () => {
       ],
     }
     render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
-      spend: { ...sampleSpend, spendUnits: '12' }, periodStart: '2026-09' }} />)
+      spend: { ...sampleSpend, spendUnits: '12' }, periodStart: '2026-09', ...windowScope }} />)
 
-    expect(screen.getByText('Account spend').parentElement?.textContent).toContain('A$0.01')
+    expect(screen.getByText('Gross settled charges').parentElement?.textContent).toContain('A$0.01')
     expect(screen.getAllByText('A$0.01').length).toBeGreaterThan(1)
     fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
     const csv = vi.mocked(downloadCsv).mock.calls[0]?.[1]
-    expect(csv).toContain('call:1,Australian Tax Calculator,Agentic Economy Seller,agent:alpha,0.000006,0.000000,0.000006,')
+    expect(csv).toContain('call:1,Australian Tax Calculator,prov:1,agent:alpha,0.000006,')
 
     fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
     const document = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
-      records: readonly { costAud: string; gstAud: string; netAud: string }[]
+      records: readonly { costAud: string }[]
     }
-    expect(document.records[0]).toMatchObject({ costAud: '0.000006', gstAud: '0.000000', netAud: '0.000006' })
+    expect(document.records[0]).toMatchObject({ costAud: '0.000006' })
   })
 
   it('exports only booked AUD amounts; refunded and unknown Calls do not become charges', () => {
@@ -327,29 +326,30 @@ describe('ActivityPage & Filtering (W-38)', () => {
       ],
     }
     render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
-      spend: sampleSpend, periodStart: '2026-09' }} />)
+      spend: sampleSpend, periodStart: '2026-09', ...windowScope }} />)
     fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
     const document = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
-      records: readonly { callRef: string; costAud: string; gstAud: string; netAud: string }[]
+      records: readonly { callRef: string; costAud: string }[]
     }
     expect(document.records[0]?.costAud).toBe('9007199254.740993')
-    expect(document.records[1]).toMatchObject({ costAud: '0.000000', gstAud: '0.000000', netAud: '0.000000' })
-    expect(document.records[2]).toMatchObject({ costAud: 'Not confirmed', gstAud: '', netAud: '' })
-    expect(document.records[3]).toMatchObject({ costAud: 'Not confirmed', gstAud: '', netAud: '' })
+    expect(document.records[1]).toMatchObject({ costAud: '0.000000' })
+    expect(document.records[2]).toMatchObject({ costAud: 'Not confirmed' })
+    expect(document.records[3]).toMatchObject({ costAud: 'Not confirmed' })
     const booked = document.records[0]!
-    expect(BigInt(booked.netAud.replace('.', '')) + BigInt(booked.gstAud.replace('.', '')))
-      .toBe(9007199254740993n)
+    expect(BigInt(booked.costAud.replace('.', ''))).toBe(9007199254740993n)
+    expect(booked).not.toHaveProperty('gstAud')
+    expect(booked).not.toHaveProperty('netAud')
     fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
     const csv = vi.mocked(downloadCsv).mock.calls[0]?.[1]
     expect(csv).toContain('9007199254.740993')
-    expect(csv).toContain('call:unknown,Postal Address Lookup,Agentic Economy Seller,agent:beta,Not confirmed,,,')
-    expect(csv).toContain('call:pending,Australian Tax Calculator,Agentic Economy Seller,agent:alpha,Not confirmed,,,')
+    expect(csv).toContain('call:unknown,Postal Address Lookup,prov:2,agent:beta,Not confirmed,')
+    expect(csv).toContain('call:pending,Australian Tax Calculator,prov:1,agent:alpha,Not confirmed,')
   })
 
   it('refuses to export an invalid booked amount instead of substituting a display placeholder', () => {
     const calls = { ...sampleCalls, page: [{ ...sampleCalls.page[0]!, audAmountUnits: 'not-a-number' }] }
     render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
-      spend: sampleSpend, periodStart: '2026-09' }} />)
+      spend: sampleSpend, periodStart: '2026-09', ...windowScope }} />)
     fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
     fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
     expect(downloadCsv).not.toHaveBeenCalled()
@@ -357,10 +357,26 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(toast.error).toHaveBeenCalledTimes(2)
   })
 
+  it('exports a terminal no-delivery refusal as zero while a completed Call without payment evidence stays unconfirmed', () => {
+    const calls = { ...sampleCalls, page: [
+      { ...sampleCalls.page[0]!, paymentState: 'not_applicable' as const },
+      { ...sampleCalls.page[1]!, paymentState: 'not_applicable' as const },
+    ] }
+    render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage, spend: sampleSpend,
+      periodStart: 'Test range', ...windowScope }} />)
+    const completed = screen.getByRole('row', { name: /Australian Tax Calculator/u })
+    expect(within(completed).getByText('Not confirmed')).toBeTruthy()
+    const refused = screen.getByRole('row', { name: /Postal Address Lookup/u })
+    expect(within(refused).getByText('No charge')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    const exported = vi.mocked(downloadJson).mock.calls[0]?.[1] as { records: readonly { costAud: string }[] }
+    expect(exported.records.map(({ costAud }) => costAud)).toEqual(['Not confirmed', '0.000000'])
+  })
+
   it('disables CSV and JSON export when no calls match filters', () => {
     renderActivity()
 
-    fireEvent.click(screen.getByRole('button', { name: /Needs attention\s+0/u }))
+    fireEvent.click(screen.getByRole('button', { name: /Outcome unknown\s+0/u }))
 
     expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: /^JSON$/u })).toHaveProperty('disabled', true)
@@ -378,7 +394,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
           },
           usage: sampleUsage,
           spend: sampleSpend,
-          periodStart: '2026-09',
+          periodStart: '2026-09', ...windowScope,
         }}
       />,
     )
@@ -386,13 +402,49 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByText('Exporting 2 loaded records')).toBeTruthy()
   })
 
+  it('sorts numeric amounts, duration and timestamps instead of their display text', () => {
+    const first = sampleCalls.page[0]!
+    const calls = { ...sampleCalls, page: [
+      { ...first, callRef: 'call:large', toolLabel: 'Larger', audAmountUnits: '10000000', latencyMs: 10_000, createdAt: Date.UTC(2026, 11, 1) },
+      { ...first, callRef: 'call:small', toolLabel: 'Smaller', audAmountUnits: '2000000', latencyMs: 2_000, createdAt: Date.UTC(2026, 0, 1) },
+    ] }
+    render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage, spend: sampleSpend,
+      periodStart: 'Test range', ...windowScope }} />)
+    for (const label of ['Amount', 'Time to outcome', 'When']) {
+      const control = screen.getByRole('button', { name: new RegExp(label, 'u') })
+      fireEvent.click(control)
+      if (control.closest('th')?.getAttribute('aria-sort') !== 'ascending') fireEvent.click(control)
+      const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+      expect(rows[0]?.textContent).toContain('Smaller')
+      expect(rows[1]?.textContent).toContain('Larger')
+    }
+  })
+
+  it('keeps exact unit ordering beyond Number precision and unknown amounts last', () => {
+    const first = sampleCalls.page[0]!
+    const { audAmountUnits: omittedAmount, ...withoutAmount } = first
+    void omittedAmount
+    const calls = { ...sampleCalls, page: [
+      { ...first, callRef: 'call:large', toolLabel: 'Larger', audAmountUnits: '9007199254740993' },
+      { ...first, callRef: 'call:small', toolLabel: 'Smaller', audAmountUnits: '9007199254740992' },
+      { ...withoutAmount, callRef: 'call:missing', toolLabel: 'Missing' },
+    ] }
+    render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage, spend: sampleSpend,
+      periodStart: 'Test range', ...windowScope }} />)
+    fireEvent.click(screen.getByRole('button', { name: /Amount/u }))
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    expect(rows[0]?.textContent).toContain('Smaller')
+    expect(rows[1]?.textContent).toContain('Larger')
+    expect(rows[2]?.textContent).toContain('Missing')
+  })
+
   it('shows filter empty message when no calls match', () => {
     renderActivity()
 
-    fireEvent.click(screen.getByRole('button', { name: /Needs attention\s+0/u }))
+    fireEvent.click(screen.getByRole('button', { name: /Outcome unknown\s+0/u }))
 
     expect(screen.getByText('No Calls match these filters')).toBeTruthy()
-    const emptyState = screen.getByText('Active filters are hiding matching Calls.').closest('[role="status"]') as HTMLElement
+    const emptyState = screen.getByText('No Calls in this period have the selected status.').closest('[role="status"]') as HTMLElement
     expect(emptyState).toBeTruthy()
     fireEvent.click(within(emptyState).getByRole('button', { name: 'Reset filters' }))
     expect(screen.queryByText('No Calls match these filters')).toBeNull()
@@ -402,8 +454,8 @@ describe('ActivityPage & Filtering (W-38)', () => {
     renderActivity({ filteredAgent: 'agent:alpha' })
 
     expect(screen.getByText(/Agent ·/u)).toBeTruthy()
-    expect(within(screen.getByText(/Agent ·/u).parentElement as HTMLElement).getByText('alpha')).toBeTruthy()
-    const dismissLinks = screen.getAllByRole('link').filter((link) => link.getAttribute('href') === '/activity')
-    expect(dismissLinks.length).toBeGreaterThanOrEqual(1)
+    expect(within(screen.getByText(/Agent ·/u).parentElement as HTMLElement).getByText('agent:alpha')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear agent filter' }))
+    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: '30d' } })
   })
 })

@@ -147,8 +147,8 @@ describe('assistant access owner continuation anchors', () => {
       ...(units === undefined ? {} : { settledSpend: { currency: 'AUD', exponent: 6, units } }),
     }
     render(<AeAgentCallHistoryTable activity={[]} usage={usage} showStats />)
-    const metric = screen.getByText('Settled spend').parentElement
-    expect(metric?.textContent).toBe(`Settled spend${expected}`)
+    const metric = screen.getByText('Projected settled charges').parentElement
+    expect(metric?.textContent).toBe(`Projected settled charges${expected}`)
   })
 
   it('changes the local Agent status scope with Arc controls while preserving row destinations', () => {
@@ -362,7 +362,7 @@ describe('assistant access owner continuation anchors', () => {
     expect(within(dialog).getByText('Spending policy', { selector: 'dt' }).nextElementSibling?.textContent).toBe('Unavailable')
     expect(within(dialog).queryByText('Concurrency', { selector: 'dt' })).toBeNull()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Activity' }))
-    expect(within(dialog).getByText('Settled charges', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Projected settled charges', { selector: 'dt' })).toBeTruthy()
     expect(within(dialog).getByText('Usage data', { selector: 'dt' })).toBeTruthy()
   })
 
