@@ -3,7 +3,7 @@ import { CdpClient } from '@coinbase/cdp-sdk'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment } from './server-credential'
+import { cdpX402CustodyBudgetRef, cdpX402TreasuryConfigurationFromEnvironment } from './x402-custody-configuration'
 import { x402PaymentProfileForEnvironment, type X402AeEnvironment } from './x402-payment-profile'
 import type {
   CdpClientLike,
@@ -21,8 +21,8 @@ export async function observeCdpX402Treasury(
   aeEnvironment: X402AeEnvironment,
   dependencies: CdpX402TreasuryObserverDependencies = {},
 ): Promise<CdpX402TreasuryObservation | undefined> {
-  const configuration = cdpX402CustodyConfigurationFromEnvironment(
-    dependencies.environment,
+  const configuration = cdpX402TreasuryConfigurationFromEnvironment(
+    dependencies.environment ?? process.env,
   )
   const profile = x402PaymentProfileForEnvironment(aeEnvironment)
   if (configuration === undefined || profile === undefined) return undefined

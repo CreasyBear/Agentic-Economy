@@ -1,4 +1,5 @@
 import type { PaymentReadinessCheck } from '@/modules/money/payment-readiness'
+import { cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/convex'
 import { env, type QueryCtx } from '../../../_generated/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { TREASURY_SNAPSHOT_MAX_AGE_MS, type TreasurySnapshot, type TreasuryResumeRefusalCode } from '@/modules/money/treasury-report'
@@ -18,6 +19,8 @@ export async function readLatestTreasurySnapshot(ctx: Pick<QueryCtx, 'db'>, iden
 
 /** Resume admits new exposure only after fresh complete checks for the current wallet. */
 export async function treasuryResumeRefusal(ctx: Pick<QueryCtx, 'db'>, environment: 'sandbox' | 'production', now: number): Promise<TreasuryResumeRefusalCode | undefined> {
+  // Observation/reconciliation may continue while signing is explicitly disabled.
+  if (cdpX402CustodyConfigurationFromEnvironment(env) === undefined) return 'treasury_configuration_unavailable'
   const identity = configuredTreasuryIdentity()
   if (identity === undefined || identity.environment !== environment) return 'treasury_configuration_unavailable'
   const [snapshot, observation, exposure] = await Promise.all([

@@ -4,7 +4,7 @@ import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/dep
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import { isRecord } from '@/modules/common/is-record'
 import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
-import { cdpX402CustodyConfigurationFromEnvironment, readCdpX402CustodyReadiness } from '@/modules/capability-supply/server'
+import { cdpX402TreasuryConfigurationFromEnvironment, readCdpX402CustodyReadiness } from '@/modules/capability-supply/server'
 import { createFormanceContext, readFormanceConfiguration, readFormanceHealth } from '../formance/gateway'
 import { backendPaymentReadinessDigest, paymentReadinessExpiresAt, sealPaymentReadinessSnapshot,
   type PaymentReadinessCheck, type PaymentReadinessChecks } from '@/modules/money/payment-readiness'
@@ -31,7 +31,7 @@ export async function refreshPaymentReadiness(ctx: ActionCtx): Promise<RefreshRe
   if (environment === undefined) return { kind: 'refused', code: 'readiness_environment_mismatch' }
   const configurationDigest = backendPaymentReadinessDigest(process.env)
   const expiresAt = startedAt + VALID_FOR_MS
-  const custody = cdpX402CustodyConfigurationFromEnvironment(process.env)
+  const custody = cdpX402TreasuryConfigurationFromEnvironment(process.env)
   const [web, formance, cdp, chain, sources] = await Promise.all([
     readWebConfiguration(process.env, environment, expiresAt),
     readLedgerHealth(expiresAt).catch(cause => sourceFailure(cause, 'formance_readiness_unavailable')),
