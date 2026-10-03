@@ -55,6 +55,18 @@ export function cdpX402CustodyConfigurationFromEnvironment(
   environment: StringEnvironment,
 ): CdpX402CustodyConfiguration | undefined {
   if (readTrimmedEnv(environment, X402_CUSTODY_ENABLED_ENV) !== 'true') return undefined
+  return cdpX402TreasuryConfigurationFromEnvironment(environment)
+}
+
+/**
+ * Requires the complete configured wallet identity and credentials. Ensures
+ * paused custody remains observable without granting signing authority.
+ * Invalid configuration remains unavailable; observations cannot enable custody.
+ * Shares validation with signing so wallet identity cannot diverge on pause.
+ */
+export function cdpX402TreasuryConfigurationFromEnvironment(
+  environment: StringEnvironment,
+): CdpX402CustodyConfiguration | undefined {
   const apiKeyId = readTrimmedEnv(environment, X402_CDP_API_KEY_ID_ENV)
   const apiKeySecret = readTrimmedEnv(environment, X402_CDP_API_KEY_SECRET_ENV)
   const walletSecret = readTrimmedEnv(environment, X402_CDP_WALLET_SECRET_ENV)
@@ -112,7 +124,7 @@ export function cdpX402CustodyConfigurationFromEnvironment(
       dailyMaxAtomic,
     }
   } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'cdpX402CustodyConfigurationFromEnvironment', reason: 'invalid_response' })
+    return degradeBackend(cause, undefined, { site: 'cdpX402TreasuryConfigurationFromEnvironment', reason: 'invalid_response' })
   }
 }
 

@@ -8,7 +8,7 @@ import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   cdpX402CustodyBudgetRef,
-  cdpX402CustodyConfigurationFromEnvironment,
+  cdpX402TreasuryConfigurationFromEnvironment,
   x402PaymentProfileForEnvironment,
   type CdpX402CustodyConfiguration,
 } from '@/modules/capability-supply/convex'
@@ -94,9 +94,9 @@ export async function observeTreasuryHandler(
   const configuredEnvironment = dependencies.environment ?? process.env
   const activeEnvironment = deploymentPaymentEnvironment(configuredEnvironment)
   if (activeEnvironment === undefined) return skipped('deployment_environment_invalid')
-  const configuration = cdpX402CustodyConfigurationFromEnvironment(configuredEnvironment)
+  const configuration = cdpX402TreasuryConfigurationFromEnvironment(configuredEnvironment)
   if (configuration === undefined) {
-    return skipped('custody_disabled')
+    return skipped('custody_configuration_invalid')
   }
   const observedAt = dependencies.now ?? Date.now()
   const bufferUnits = configuration.maxAtomic.toString()

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
+  cdpX402TreasuryConfigurationFromEnvironment,
 } from '@/modules/capability-supply/server'
 
 const validEnvironment = {
@@ -35,6 +36,14 @@ describe('CDP x402 custody configuration', () => {
       maxAtomic: 10000n,
       dailyMaxAtomic: 100000n,
     })
+  })
+
+  it.each(['false', undefined, 'invalid'])('observes a configured wallet with enablement %s without authorizing signing', enabled => {
+    const environment = { ...validEnvironment, AE_X402_CUSTODY_ENABLED: enabled }
+    expect(cdpX402TreasuryConfigurationFromEnvironment(environment))
+      .toEqual(cdpX402CustodyConfigurationFromEnvironment(validEnvironment))
+    expect(cdpX402CustodyConfigurationFromEnvironment(environment)).toBeUndefined()
+    expect(cdpX402TreasuryConfigurationFromEnvironment({ ...environment, CDP_API_KEY_SECRET: undefined })).toBeUndefined()
   })
 
   it('derives an opaque stable wallet budget identity', () => {

@@ -1,7 +1,7 @@
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import {
-  cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment, x402PaymentProfileForEnvironment,
+  cdpX402CustodyBudgetRef, cdpX402TreasuryConfigurationFromEnvironment, x402PaymentProfileForEnvironment,
 } from '@/modules/capability-supply/convex'
 import type { TreasuryBatch, TreasuryChainObservation, TreasuryChainCheckpoint, TreasuryIdentity, TreasuryProgress } from '@/modules/money/treasury'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
@@ -14,7 +14,7 @@ const MAX_TRANSFERS = 100
 
 export function configuredTreasuryIdentity(): TreasuryIdentity | undefined {
   const environment = deploymentPaymentEnvironment(env)
-  const configuration = cdpX402CustodyConfigurationFromEnvironment(env)
+  const configuration = cdpX402TreasuryConfigurationFromEnvironment(env)
   const profile = x402PaymentProfileForEnvironment(environment)
   if (environment === undefined || configuration === undefined || profile === undefined) return undefined
   return { environment, custodyRef: cdpX402CustodyBudgetRef(configuration, environment),

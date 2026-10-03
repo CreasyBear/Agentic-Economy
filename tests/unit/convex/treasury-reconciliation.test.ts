@@ -166,7 +166,8 @@ function ledgerFixture(options: { legacyActivity?: boolean; hideReadback?: boole
 }
 
 describe('treasury durable range and native posting recovery', () => {
-  it('chooses one immutable range from concurrent different observations with the same predecessor', async () => {
+  it.each(['true', 'false'])('chooses one immutable range from concurrent observations with custody enabled %s', async enabled => {
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', enabled)
     const f = backendFixture()
     const previous = await f.ready()
     const a = observation(previous, [transfer(0, '5')])
@@ -184,7 +185,8 @@ describe('treasury durable range and native posting recovery', () => {
     expect(await f.rows()).toEqual(before)
   })
 
-  it('retries native posting after a finish crash using the same pending range and references without reading the chain', async () => {
+  it.each(['true', 'false'])('recovers a finish crash without duplicating native postings with custody enabled %s', async enabled => {
+    vi.stubEnv('AE_X402_CUSTODY_ENABLED', enabled)
     const f = backendFixture()
     const previous = await f.ready()
     const ledger = ledgerFixture()

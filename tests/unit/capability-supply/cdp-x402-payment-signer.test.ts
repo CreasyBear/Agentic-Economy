@@ -247,7 +247,7 @@ function makeDependencies(options: Readonly<{
 }
 
 describe('CDP x402 custody signer', () => {
-  it('reads a bounded USDC treasury observation through the maintained CDP client', async () => {
+  it.each(['true', 'false'])('reads a bounded USDC observation without signing with custody enabled %s', async enabled => {
     const fixture = makeDependencies({ aeEnvironment: 'sandbox' })
     const listTokenBalances = vi.fn(async () => ({
       balances: [{
@@ -258,8 +258,9 @@ describe('CDP x402 custody signer', () => {
         amount: { amount: 999n, decimals: 18 },
       }],
     }))
+    const signTypedData = vi.fn(async (_input: SignTypedDataInput) => ({ signature: SIGNATURE }))
     const observation = await observeCdpX402Treasury('sandbox', {
-      environment: fixture.dependencies.environment!,
+      environment: { ...fixture.dependencies.environment!, AE_X402_CUSTODY_ENABLED: enabled },
       now: () => 1_800_000_000_000,
       createClient: () => ({
         policies: { getPolicyById: vi.fn() },
@@ -268,7 +269,7 @@ describe('CDP x402 custody signer', () => {
             address: account.address,
             policies: [ACCOUNT_POLICY_ID, PROJECT_POLICY_ID],
           }),
-          signTypedData: async (_input: SignTypedDataInput) => ({ signature: SIGNATURE }),
+          signTypedData,
           listTokenBalances,
         },
       }),
@@ -290,6 +291,7 @@ describe('CDP x402 custody signer', () => {
       network: 'base-sepolia',
       pageSize: 100,
     })
+    expect(signTypedData).not.toHaveBeenCalled()
     expect(JSON.stringify(observation)).not.toContain('key-secret')
     expect(JSON.stringify(observation)).not.toContain('wallet-secret')
   })
