@@ -4103,8 +4103,11 @@ The production pause commits after owner MFA at 14:41 UTC: the audience changes
 from `admins` to `none`, with `admins` retained as the only resume audience. A
 new authenticated CLI Quote refuses `payments_paused`; exact replay of the last
 completed Call returns its unchanged original receipt while paused. Native
-audit readback records the owner action and before/after states. Resume remains
-pending the deployed receipt-audit repair and current readiness.
+audit readback records the owner action and before/after states. Fresh owner
+MFA completes resume at 15:05:03 UTC, restoring `admins` without audience
+expansion; native readback records revision 2 and the exact `none` → `admins`
+audit event. The scheduled 15:04:51 treasury audit also passes all 20 payments
+with zero cash difference and current readiness.
 Live mainnet evidence separately covers an uncertain payment recovering from
 its original reference, an expired unused authorization releasing its held
 credit, same-key replay and the owner report/refund flow. No new purchase is
@@ -4199,7 +4202,9 @@ A separate RPC readiness probe initially refuses; one later ordinary refresh
 at 14:57 UTC passes all required checks, with the approved screening deferral
 still explicit. Retained evidence is `stage69-native-readiness.json`,
 `stage69-readiness-retry.json`, `stage69-web-release.json` and the backend deploy
-log. This is point-in-time readiness; recurring RPC availability remains a limit.
+log. The later scheduled audit and readiness refresh also pass, confirmed by
+`stage69-resume-native.json`. These are point-in-time observations; recurring
+RPC availability remains a limit.
 
 ### Availability and decision limits
 

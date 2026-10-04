@@ -1,6 +1,6 @@
 # Current deployments
 
-Production application acceptance updated on **4 October 2026, 14:57 UTC**;
+Production application acceptance updated on **4 October 2026, 15:05 UTC**;
 the wider deployment inventory below dates from 2 October. This is the current
 deployment map. [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256)
 owns the real-money alpha work; [the readiness record](../production-readiness-plan.md)
@@ -46,14 +46,16 @@ liability are zero. The credit expires 5 October at 12:45 Perth time.
 The deployed automatic treasury audit matches all 20 settlements, 44 cash
 records and 21 reservations at 14:55 UTC with zero cash difference. An ordinary
 readiness refresh passes at 14:57 UTC after a separate transient RPC failure.
+The later scheduled 15:04:51 audit and readiness refresh also pass.
 Both RPC providers, confirmation requirements, source stability and audit
 bounds remain enforced. Readiness is point-in-time: RPC failures can still
 refuse new purchases, and the observed CLI recovery path takes 72–132 seconds
 for the final nine Calls.
 
 The live pause drill passes after owner MFA: new Quotes refuse and completed-key
-replay returns the original receipt. The saved resume audience is `admins`;
-resume is awaiting the owner's fresh MFA. No alpha invitations or audience
+replay returns the original receipt. Fresh owner MFA completes resume at
+15:05:03 UTC, restoring only the saved `admins` audience. Both state transitions
+have exact native audit records. No alpha invitations or audience
 expansion are authorized by this record. The test Agent retains AUD 1 per Call,
 AUD 5 daily and AUD 20 monthly authority; custody limits remain unchanged.
 
@@ -61,7 +63,7 @@ Protected founder review, manual close and usefulness feedback are proved on
 a real paid Call with native audit readback. Nine failure scenarios pass against
 native Formance with controlled Provider/custody/RPC fixtures; live evidence
 separately covers uncertain-payment recovery, expired unused authorization,
-same-key replay, pause and the owner report/refund flow. The induced failure
+same-key replay, pause/resume and the owner report/refund flow. The induced failure
 fixtures are not described as live mainnet Provider failures.
 
 The earlier model-credential blocker is repaired. Paid chat completion and the
