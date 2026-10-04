@@ -709,14 +709,14 @@ describe('indexed x402 catalogue controls', () => {
     show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     fireEvent.click(screen.getByRole('button', { name: 'Filters' }))
 
-    expect(screen.getByRole('group', { name: 'Provider category' })).toBeTruthy()
-    expect(screen.getByText('Provider-listed price · USDC')).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Provider category' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Provider-listed price · USDC' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Advanced filters' }).getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByRole('group', { name: 'Network' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Network' })).toBeNull()
     expect(screen.queryByLabelText('Provider')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Advanced filters' }))
-    expect(screen.getByRole('group', { name: 'Network' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Network' })).toBeTruthy()
     expect(screen.getByLabelText('Provider')).toBeTruthy()
     expect(screen.getByText('Published details')).toBeTruthy()
   })
@@ -726,7 +726,7 @@ describe('indexed x402 catalogue controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filters 1' }))
 
     expect(screen.getByRole('button', { name: 'Advanced filters 1 active' }).getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByRole('group', { name: 'Network' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Network' })).toBeTruthy()
   })
 
   it('never puts the Convex page cursor in the market URL and offers a next page instead', () => {
@@ -740,7 +740,7 @@ describe('indexed x402 catalogue controls', () => {
     expect(within(ordering).getByRole('combobox', { name: /Sort results/ }).textContent).toContain('Most used')
     expect(within(ordering).getByRole('group', { name: 'Result layout' })).toBeTruthy()
     expect(within(ordering).getByRole('button', { name: 'Table' }).getAttribute('aria-pressed')).toBe('true')
-    expect(within(ordering).getByRole('button', { name: /^Filters/ })).toBeTruthy()
+    expect(within(screen.getByRole('group', { name: 'Applied catalogue filters' })).getByRole('button', { name: /^Filters/ })).toBeTruthy()
     expect(screen.getByRole('navigation', { name: 'Catalogue pages' })).toBeTruthy()
   })
   it('replaces the list with the next page, then returns to the first page without another request', async () => {
@@ -854,7 +854,8 @@ describe('indexed x402 catalogue controls', () => {
     searchMarketToolsServer.mockResolvedValue({ ...searchMeta, kind: 'scoped', results: [], reason: 'More pages remain.' })
     const { router } = show({ ...nativeFilters, query: 'weather', sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     fireEvent.click(screen.getByRole('button', { name: /Filters \d+/u }))
-    fireEvent.click(screen.getByRole('button', { name: 'Media 405' }))
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Provider category' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Media 405' }))
     await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, query: 'weather', sort: 'relevance', directoryCategory: 'media' }))
     expect(router.state.location.search).not.toHaveProperty('indexCursor')
   })
@@ -962,7 +963,8 @@ describe('canonical Market search', () => {
     const status = screen.getByRole('status', { name: 'Searching admitted Tools and Coinbase Bazaar' })
     expect(status.textContent).toContain('Searching admitted Tools and Coinbase Bazaar…')
     expect(status.querySelector('[aria-hidden="true"]')).toBeTruthy()
-    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getAllByRole('status').filter(region => region.getAttribute('aria-busy') === 'true')).toHaveLength(1)
+    expect(within(status).queryByRole('status')).toBeNull()
   })
   it('replaces directory results with one mixed page, uses exact detail links, row-source freshness and an executable filtered cursor', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
@@ -1214,4 +1216,39 @@ it('restores the gallery and its comparison context through history and a fresh 
   expect(screen.getByRole('button', { name: 'Remove Tool 0 from comparison' })).toBeTruthy()
   expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
   expect(readX402DirectoryCatalogueServer).not.toHaveBeenCalled()
+})
+
+
+describe('visible Arc catalogue facets', () => {
+  it('keeps category selection and applied filters beside results with query, comparison and layout intact', async () => {
+    searchMarketToolsServer.mockResolvedValue({ ...searchMeta, kind: 'scoped', results: [], reason: 'More pages remain.' })
+    const compare = entries[0]!.resource
+    const { router } = show({ ...nativeFilters, query: 'weather', sort: 'relevance', compare, layout: 'grid' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    const categories = screen.getByRole('group', { name: 'Browse by Provider category' })
+    expect(within(categories).getByRole('button', { name: 'Research 201' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(within(categories).getByRole('button', { name: 'Media 405' }))
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, query: 'weather', sort: 'relevance', directoryCategory: 'media', compare, layout: 'grid' }))
+    const applied = screen.getByRole('group', { name: 'Applied catalogue filters' })
+    fireEvent.click(within(applied).getByRole('button', { name: 'Clear all' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({ view: 'tools', query: 'weather', sort: 'relevance', compare, layout: 'grid' }))
+    expect(screen.queryByRole('dialog', { name: 'Refine Tools' })).toBeNull()
+  })
+
+  it('accumulates independent rapid facet writes on the latest Provider route without losing comparison or layout', async () => {
+    const compare = entries[0]!.resource
+    const { router } = show({ view: 'providers', compare, layout: 'grid' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    fireEvent.click(screen.getByRole('button', { name: /^Filters(?: \d+)?$/u }))
+    const dialog = screen.getByRole('dialog', { name: 'Refine Providers' })
+    act(() => within(dialog).getByRole('combobox', { name: 'Provider category' }).focus())
+    const category = within(dialog).getByRole('option', { name: 'Media 405' })
+    const price = within(dialog).getByRole('button', { name: 'Under 0.01 Provider-listed USDC' })
+    act(() => {
+      fireEvent.click(category)
+      fireEvent.click(price)
+    })
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ view: 'providers', directoryCategory: 'media', priceBand: 'lt_0_01', compare, layout: 'grid' }))
+    expect(router.state.location.search).not.toHaveProperty('page')
+    expect(router.state.location.search).not.toHaveProperty('indexCursor')
+    expect(router.state.location.search).not.toHaveProperty('offset')
+  })
 })

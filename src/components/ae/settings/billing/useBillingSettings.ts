@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useConvexAuth, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 
@@ -61,8 +61,10 @@ export function useBillingSpending() {
   )
   const configureMonthlySpendBudget = useMutation(api.moneyMonthlySpendBudget.configureMonthlySpendBudget)
   const [monthSpend, setMonthSpend] = useState<Readonly<{ kind: 'available' | 'empty' | 'unavailable'; spendUnits?: string }>>({ kind: 'unavailable' })
+  const monthlySpendRequest = useRef(0)
 
   const loadMonthlySpend = useCallback(async () => {
+    const request = ++monthlySpendRequest.current
     if (monthlySpendBudgetRead?.enabled !== true) {
       setMonthSpend({ kind: 'empty' })
       return
@@ -70,15 +72,19 @@ export function useBillingSpending() {
     try {
       const periodStart = new Date().toISOString().slice(0, 7)
       const spend = await readOwnerSpendServer({ data: { dimensionKind: 'account', periodKind: 'month', periodStart } })
+      if (request !== monthlySpendRequest.current) return
       if (spend.kind === 'available') setMonthSpend({ kind: 'available', spendUnits: spend.spendUnits })
       else if (spend.kind === 'empty') setMonthSpend({ kind: 'empty', spendUnits: '0' })
       else setMonthSpend({ kind: 'unavailable' })
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setMonthSpend({ kind: 'unavailable' })
+      if (request === monthlySpendRequest.current) setMonthSpend({ kind: 'unavailable' })
     }
   }, [monthlySpendBudgetRead?.enabled])
-  useEffect(() => { void loadMonthlySpend() }, [loadMonthlySpend])
+  useEffect(() => {
+    void loadMonthlySpend()
+    return () => { monthlySpendRequest.current += 1 }
+  }, [loadMonthlySpend])
 
   return {
     monthlySpendCeilingSettings: monthlySpendBudgetRead === undefined ? undefined : {

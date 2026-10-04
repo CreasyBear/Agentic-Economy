@@ -414,6 +414,15 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
     // environment/source identity lets the backend reject a different deployment.
     // Provider health and payment readiness remain separate, preventing a probe cycle.
     if (deploymentPaymentEnvironment(env) === 'production' && !deployment.ok) {
+      // Requires validator findings. Ensures protected server diagnostics contain
+      // only setting names/codes. Invariant: no values or public detail escape;
+      // a logger failure cannot change the readiness refusal.
+      try {
+        console.error('[ae.deployment]', JSON.stringify({
+          code: 'deployment_manifest_invalid',
+          findings: deployment.findings.map(({ kind, code, names, scope }) => ({ kind, code, names, scope })),
+        }))
+      } catch { /* Diagnostic failures must not change readiness. */ }
       return { kind: 'failed', code: 'deployment_manifest_invalid' }
     }
     const sharedScopes: readonly string[] = ['canonical', 'convex', 'convex-auth', 'clerk', 'source-write', 'browser-security', 'runtime']

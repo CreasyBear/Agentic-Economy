@@ -34,8 +34,13 @@
 .arc-market-search-hint { margin: var(--space-2) 0 var(--space-4); color: var(--text-secondary); font-size: var(--text-xs); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .arc-market-result-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-4); min-width: 0; }
 .arc-market-result-controls > div:first-child { min-width: min(100%, 11rem); }
-.arc-market-result-controls > button:last-child { margin-left: auto; }
 .arc-market-tabs svg { width: 16px; height: 16px; }
 .arc-provider-source-facts { display: grid; gap: var(--space-1); color: var(--text-secondary); font-size: var(--text-xs); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .arc-provider-source-facts p { margin: 0; }
-@media (max-width: 639px) { .arc-market-result-controls > button:last-child { margin-left: 0; } .arc-market-hero .arc-market-hero-tools { justify-content: flex-start; } }
+@media (max-width: 639px) { .arc-market-hero .arc-market-hero-tools { justify-content: flex-start; } }
+
+/* Categories are entry points; applied selections stay beside the result list. */
+.arc-market-discovery-filters { display: grid; min-width: 0; gap: var(--space-4); margin-bottom: var(--space-6); }
+.arc-market-category-entry { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-market-category-entry h2 { margin: 0; font-size: var(--text-sm); font-weight: 500; }
+.arc-market-category-entry p { margin: 0; color: var(--text-secondary); font-size: var(--text-xs); line-height: var(--leading-body); }

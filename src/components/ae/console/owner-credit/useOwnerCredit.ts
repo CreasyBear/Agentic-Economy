@@ -57,6 +57,9 @@ export function useOwnerCredit(): AeOwnerCreditProps {
   const [historyLoading, setHistoryLoading] = useState(true)
   const [constraintsLoading, setConstraintsLoading] = useState(true)
   const [administrationLoading, setAdministrationLoading] = useState(true)
+  const balanceRequest = useRef(0)
+  const historyRequest = useRef(0)
+  const constraintsRequest = useRef(0)
   const administrationRequest = useRef(0)
   const [unavailable, setUnavailable] = useState({
     balance: false,
@@ -68,16 +71,18 @@ export function useOwnerCredit(): AeOwnerCreditProps {
   })
 
   const loadBalance = useCallback(async () => {
+    const request = ++balanceRequest.current
     setBalanceLoading(true)
     try {
       const nextBalance = await readAccountBalance()
+      if (request !== balanceRequest.current) return
       setAccountBalance((current) => nextBalance.kind === 'available' ? nextBalance : current ?? nextBalance)
       setUnavailable((current) => ({ ...current, balance: nextBalance.kind !== 'available' }))
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setUnavailable((current) => ({ ...current, balance: true }))
+      if (request === balanceRequest.current) setUnavailable((current) => ({ ...current, balance: true }))
     } finally {
-      setBalanceLoading(false)
+      if (request === balanceRequest.current) setBalanceLoading(false)
     }
   }, [readAccountBalance])
 
@@ -89,31 +94,35 @@ export function useOwnerCredit(): AeOwnerCreditProps {
   }, [accountBalance, loadBalance])
 
   const loadHistory = useCallback(async () => {
+    const request = ++historyRequest.current
     setHistoryLoading(true)
     try {
       const nextHistory = await readAccountHistory({ data: {} })
+      if (request !== historyRequest.current) return
       setAccountHistory((current) => nextHistory.kind === 'available' ? nextHistory : current ?? nextHistory)
       setUnavailable((current) => ({ ...current, history: nextHistory.kind !== 'available' }))
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setUnavailable((current) => ({ ...current, history: true }))
+      if (request === historyRequest.current) setUnavailable((current) => ({ ...current, history: true }))
     } finally {
-      setHistoryLoading(false)
+      if (request === historyRequest.current) setHistoryLoading(false)
     }
   }, [readAccountHistory])
 
 
   const loadConstraints = useCallback(async () => {
+    const request = ++constraintsRequest.current
     setConstraintsLoading(true)
     try {
       const nextConstraints = await readFundingConstraints()
+      if (request !== constraintsRequest.current) return
       setFundingConstraints(nextConstraints)
       setUnavailable((current) => ({ ...current, constraints: false }))
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setUnavailable((current) => ({ ...current, constraints: true }))
+      if (request === constraintsRequest.current) setUnavailable((current) => ({ ...current, constraints: true }))
     } finally {
-      setConstraintsLoading(false)
+      if (request === constraintsRequest.current) setConstraintsLoading(false)
     }
   }, [readFundingConstraints])
 
@@ -148,7 +157,12 @@ export function useOwnerCredit(): AeOwnerCreditProps {
 
   useEffect(() => {
     void load()
-    return () => { administrationRequest.current += 1 }
+    return () => {
+      balanceRequest.current += 1
+      historyRequest.current += 1
+      constraintsRequest.current += 1
+      administrationRequest.current += 1
+    }
   }, [load])
 
   return {
