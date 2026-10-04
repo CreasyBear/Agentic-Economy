@@ -403,7 +403,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         {item.entry?.title ?? ('missing' in item ? MARKET_COMPARE_MISSING_LABEL : MARKET_COMPARE_PENDING_LABEL)}
         <Button type="button" size="sm" variant="ghost" aria-label={'missing' in item ? 'Remove unavailable Tool from comparison' : item.entry === undefined ? 'Remove pending Tool from comparison' : `Remove ${item.entry.title} from selected comparison`} onClick={() => changeComparison(item.resource)}><XIcon /></Button>
       </Badge>)}
-      <Button type="button" ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparisonEntries.length < 2}>Compare Tools</Button>
+      <Button type="button" variant="secondary" ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparisonEntries.length < 2}>Compare Tools</Button>
       <Button type="button" size="sm" variant="ghost" onClick={() => changeComparison()} aria-label="Clear comparison"><XIcon /></Button>
     </section>
   )
