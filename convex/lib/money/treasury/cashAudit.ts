@@ -43,9 +43,12 @@ function attention(code: string, refs: readonly string[], units: bigint | null =
  * are distinct. Ledger-before-finality adds payment back to expected chain cash;
  * finalized-payment-before-ledger subtracts it, without erasing the pending task.
  * Invariant: no net-zero orphan pair, duplicate transfer or released buyer balance
- * proves a Provider payment; unresolved source/readback cannot produce green.
+ * proves a Provider payment; every configured RPC must agree and at least twelve
+ * confirmations remain required. Payment histories are read sequentially so one
+ * audit does not multiply each receipt's RPC requests into a provider burst.
  * On violation: mismatch for contradictory evidence, attention for a known pending
- * transition, unavailable for incomplete evidence. Never moves money or signs.
+ * transition, unavailable for incomplete or immature evidence. RPC outages are
+ * recoverable at the next scheduled audit; no money changes and no signing occurs.
  * Complexity: one bounded history join owns cross-source meaning. It reuses native
  * command builders, guarded RPCs and exact payment verification; no second journal.
  */
@@ -95,8 +98,9 @@ export async function auditTreasuryCash(input: CashAuditInput, readReceipt?: Rec
   const dispatcher = readReceipt === undefined ? new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } }) : undefined
   const reader: ReceiptReader = readReceipt ?? (async (attempt, hash) => {
     if (dispatcher === undefined || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return undefined
-    return await readX402EvmReceipt(attempt.network, attempt.asset, hash, dispatcher, input.identity.environment,
-      attempt.paymentPayer, attempt.paymentNonce, { minimumConfirmations: 12, timeoutMs: 5_000 })
+    const receipt = await readX402EvmReceipt(attempt.network, attempt.asset, hash, dispatcher, input.identity.environment,
+      attempt.paymentPayer, attempt.paymentNonce)
+    return receipt !== undefined && receipt.confirmations >= 12n ? receipt : undefined
   })
   let settlement: Awaited<ReturnType<typeof auditPayments>>
   try { settlement = await auditPayments(input, history.transfers, history.openingBlock, reader, callsByDigest) }
@@ -222,59 +226,57 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
   // Above the alpha readback bound, retain native attribution but never claim a full audit.
   const receiptDeadline = Date.now() + 120_000
   let receiptBudgetExceeded = candidateAttempts.length > 250
-  // Bounded parallel RPC groups avoid one slow Provider history monopolizing a worker.
-  for (let offset = 0; offset < candidateAttempts.length; offset += 5) {
+  // Each payment already fans out to both RPC providers. Keep historical reads
+  // sequential and inspect current confirmations rather than polling for a block.
+  for (const source of candidateAttempts) {
     receiptBudgetExceeded ||= Date.now() >= receiptDeadline
-    const checked = await Promise.all(candidateAttempts.slice(offset, offset + 5).map(async source => {
-      const hashes = transactionHashes(source)
-      const hash = hashes[0]
-      if (source.joinIssues.length > 0 || source.native.kind !== 'available' || hash === undefined || hashes.length !== 1
-        || source.material.paymentNonce === undefined || source.material.paymentPayer === undefined) return { source, hash, receipt: undefined }
-      if (receiptBudgetExceeded) return { source, hash, receipt: undefined }
-      try { return { source, hash, receipt: await readReceipt(source.material, hash) } }
-      catch (cause) { return { source, hash, receipt: degradeBackend(boundaryCauseKind(cause), undefined,
-        { site: 'treasuryPaymentReceipt', reason: 'source_unavailable' }) } }
-    }))
-    for (const { source, hash, receipt } of checked) {
-      const attempt = source.material
-      if (source.joinIssues.length > 0 || source.native.kind !== 'available' || transactionHashes(source).length > 1) {
-        mismatches.push(attempt.dispatchRef); continue
-      }
-      const booking = source.native.booking
-      const evidence = [attempt.paymentResponseDigest, attempt.reconciliationEvidenceDigest, source.call?.evidenceHash]
-        .filter((value): value is string => value !== undefined)
-      if (hash !== undefined) evidence.push(canonicalDigest({ format: 'ae.managed-x402-settlement:v1', callRef: attempt.dispatchRef, settlementRef: hash }))
-      const matchedRows = native.filter(row => matchTreasuryProviderSettlement(row, booking, evidence))
-      const nativeRow = matchedRows[0]
-      if (matchedRows.length > 1 || (nativeRow?.commandRef !== undefined && nativeRow.commandRef !== null && nativeRefs.includes(nativeRow.commandRef))) {
-        mismatches.push(attempt.dispatchRef); continue
-      }
-      if (nativeRow?.commandRef !== undefined && nativeRow.commandRef !== null) nativeRefs.push(nativeRow.commandRef)
-      if (hash === undefined || receipt === undefined) { missing.push(attempt.dispatchRef); continue }
-      if (usedHashes.has(hash) || !verifyExactEvmX402Settlement({ aeEnvironment: input.identity.environment,
-        requirement: { scheme: attempt.scheme, network: attempt.network, asset: attempt.asset, amount: attempt.amountUnits, payTo: attempt.payTo },
-        response: { success: true, transaction: hash, network: attempt.network, amount: attempt.amountUnits, ...(attempt.paymentPayer === undefined ? {} : { payer: attempt.paymentPayer }) },
-        payer: attempt.paymentPayer, paymentNonce: attempt.paymentNonce ?? '', receipt })) {
-        mismatches.push(attempt.dispatchRef); continue
-      }
-      usedHashes.add(hash)
-      if (receipt.blockNumber <= openingBlock) { missing.push(attempt.dispatchRef); continue }
-      const isFinalized = input.progress.kind === 'ready' && receipt.blockNumber <= BigInt(input.progress.checkpoint.blockNumber)
-      const retained = outgoing.filter(transfer => transfer.transactionHash.toLowerCase() === hash)
-      if (isFinalized && (retained.length !== 1 || retained[0]?.blockHash.toLowerCase() !== receipt.blockHash.toLowerCase()
-        || retained[0]?.blockNumber !== receipt.blockNumber.toString() || retained[0]?.recipient !== attempt.payTo.toLowerCase()
-        || retained[0]?.amountUnits !== attempt.amountUnits)) { mismatches.push(attempt.dispatchRef); continue }
-      const amount = BigInt(attempt.amountUnits)
-      verifiedUnits += amount
-      if (nativeRow === undefined) {
-        pending.push(attempt.dispatchRef)
-        if (isFinalized) timingAdjustment -= amount
-      } else {
-        if (nativeRow.commandRef === null) { mismatches.push(attempt.dispatchRef); continue }
-        if (!isFinalized) timingAdjustment += amount
-        if (source.obligation?.state !== 'settled' || source.obligation.settlementTransactionRef !== nativeRow.commandRef
-          || !source.call?.settlementRefs.includes(nativeRow.commandRef)) pending.push(attempt.dispatchRef)
-      }
+    const hashes = transactionHashes(source)
+    const hash = hashes[0]
+    let receipt: X402EvmReceipt | undefined
+    if (!receiptBudgetExceeded && source.joinIssues.length === 0 && source.native.kind === 'available'
+      && hash !== undefined && hashes.length === 1 && source.material.paymentNonce !== undefined && source.material.paymentPayer !== undefined) {
+      try { receipt = await readReceipt(source.material, hash) }
+      catch (cause) { receipt = degradeBackend(boundaryCauseKind(cause), undefined,
+        { site: 'treasuryPaymentReceipt', reason: 'source_unavailable' }) }
+    }
+    const attempt = source.material
+    if (source.joinIssues.length > 0 || source.native.kind !== 'available' || transactionHashes(source).length > 1) {
+      mismatches.push(attempt.dispatchRef); continue
+    }
+    const booking = source.native.booking
+    const evidence = [attempt.paymentResponseDigest, attempt.reconciliationEvidenceDigest, source.call?.evidenceHash]
+      .filter((value): value is string => value !== undefined)
+    if (hash !== undefined) evidence.push(canonicalDigest({ format: 'ae.managed-x402-settlement:v1', callRef: attempt.dispatchRef, settlementRef: hash }))
+    const matchedRows = native.filter(row => matchTreasuryProviderSettlement(row, booking, evidence))
+    const nativeRow = matchedRows[0]
+    if (matchedRows.length > 1 || (nativeRow?.commandRef !== undefined && nativeRow.commandRef !== null && nativeRefs.includes(nativeRow.commandRef))) {
+      mismatches.push(attempt.dispatchRef); continue
+    }
+    if (nativeRow?.commandRef !== undefined && nativeRow.commandRef !== null) nativeRefs.push(nativeRow.commandRef)
+    if (hash === undefined || receipt === undefined) { missing.push(attempt.dispatchRef); continue }
+    if (usedHashes.has(hash) || !verifyExactEvmX402Settlement({ aeEnvironment: input.identity.environment,
+      requirement: { scheme: attempt.scheme, network: attempt.network, asset: attempt.asset, amount: attempt.amountUnits, payTo: attempt.payTo },
+      response: { success: true, transaction: hash, network: attempt.network, amount: attempt.amountUnits, ...(attempt.paymentPayer === undefined ? {} : { payer: attempt.paymentPayer }) },
+      payer: attempt.paymentPayer, paymentNonce: attempt.paymentNonce ?? '', receipt })) {
+      mismatches.push(attempt.dispatchRef); continue
+    }
+    usedHashes.add(hash)
+    if (receipt.blockNumber <= openingBlock) { missing.push(attempt.dispatchRef); continue }
+    const isFinalized = input.progress.kind === 'ready' && receipt.blockNumber <= BigInt(input.progress.checkpoint.blockNumber)
+    const retained = outgoing.filter(transfer => transfer.transactionHash.toLowerCase() === hash)
+    if (isFinalized && (retained.length !== 1 || retained[0]?.blockHash.toLowerCase() !== receipt.blockHash.toLowerCase()
+      || retained[0]?.blockNumber !== receipt.blockNumber.toString() || retained[0]?.recipient !== attempt.payTo.toLowerCase()
+      || retained[0]?.amountUnits !== attempt.amountUnits)) { mismatches.push(attempt.dispatchRef); continue }
+    const amount = BigInt(attempt.amountUnits)
+    verifiedUnits += amount
+    if (nativeRow === undefined) {
+      pending.push(attempt.dispatchRef)
+      if (isFinalized) timingAdjustment -= amount
+    } else {
+      if (nativeRow.commandRef === null) { mismatches.push(attempt.dispatchRef); continue }
+      if (!isFinalized) timingAdjustment += amount
+      if (source.obligation?.state !== 'settled' || source.obligation.settlementTransactionRef !== nativeRow.commandRef
+        || !source.call?.settlementRefs.includes(nativeRow.commandRef)) pending.push(attempt.dispatchRef)
     }
   }
   const unattributed = outgoing.filter(transfer => !candidateHashes.has(transfer.transactionHash.toLowerCase()))
