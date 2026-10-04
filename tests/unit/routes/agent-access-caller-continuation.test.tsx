@@ -357,6 +357,8 @@ describe('agent-access caller route continuation', () => {
         setupApp: 'codex',
       },
       replace: true,
+      resetScroll: false,
+      viewTransition: false,
     })
 
     routeHarness.search = { ...routeHarness.search, setupApp: 'codex' }
@@ -375,6 +377,8 @@ describe('agent-access caller route continuation', () => {
         callRef: 'call:setup-app',
       },
       replace: true,
+      resetScroll: false,
+      viewTransition: false,
     })
     expect(disconnectAgent).not.toHaveBeenCalled()
     expect(disconnectConnection).not.toHaveBeenCalled()

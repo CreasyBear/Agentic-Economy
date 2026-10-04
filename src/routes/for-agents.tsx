@@ -44,6 +44,9 @@ function ForAgentsRoute() {
       search: nextSetupApp === undefined ? {} : { setupApp: nextSetupApp },
       hash: location.hash,
       replace: true,
+      resetScroll: false,
+      hashScrollIntoView: false,
+      viewTransition: false,
     })
   }
 

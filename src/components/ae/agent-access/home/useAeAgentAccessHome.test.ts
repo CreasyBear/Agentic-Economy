@@ -93,7 +93,8 @@ describe('Agent setup app choice', () => {
 
     await act(async () => { result.current.onSetupAppChange(setupApp) })
 
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/agent-access', search: expected, replace: true })
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/agent-access', search: expected, replace: true,
+      resetScroll: false, viewTransition: false })
   })
 
   it('clears only setupApp while keeping setup open', async () => {
@@ -111,6 +112,8 @@ describe('Agent setup app choice', () => {
       to: '/agent-access',
       search: { caller: 'prn_agent', resumeTool: 'tool_ref', grantRef: 'grant:one', state: 'grant-state', callRef: 'call_one', setup: 'oauth' },
       replace: true,
+      resetScroll: false,
+      viewTransition: false,
     })
   })
 
@@ -164,7 +167,7 @@ describe('Agent setup app choice', () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 
     expect(mocks.navigate).toHaveBeenCalledWith({ to: '/agent-access',
-      search: { ...search, setupApp: 'cursor' }, replace: true })
+      search: { ...search, setupApp: 'cursor' }, replace: true, resetScroll: false, viewTransition: false })
     expect(mocks.readDirectory).toHaveBeenCalledTimes(reads.directory)
     expect(mocks.readApprovals).toHaveBeenCalledTimes(reads.approvals)
     expect(mocks.readRequest).toHaveBeenCalledTimes(reads.request)

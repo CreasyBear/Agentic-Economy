@@ -508,6 +508,8 @@ export function useAeAgentAccessHome({
         ...(setupApp === undefined ? {} : { setupApp }),
       },
       replace: true,
+      resetScroll: false,
+      viewTransition: false,
     })
   }, [navigate, search])
 

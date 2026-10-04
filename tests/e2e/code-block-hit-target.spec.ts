@@ -12,7 +12,17 @@ async function expectInitialHitTarget(page: Page, button: Locator) {
 }
 
 test('native setup choice and copy work by pointer and keyboard', async ({ context, page }) => {
-
+  await page.addInitScript(() => {
+    const state = window as unknown as { setupPageTransitions: number }
+    state.setupPageTransitions = 0
+    if ('startViewTransition' in document) {
+      const original = document.startViewTransition.bind(document)
+      document.startViewTransition = ((callback: () => void | Promise<void>) => {
+        state.setupPageTransitions += 1
+        return original(callback)
+      }) as typeof document.startViewTransition
+    }
+  })
   await page.goto('/for-agents')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
 
@@ -23,6 +33,7 @@ test('native setup choice and copy work by pointer and keyboard', async ({ conte
   await codexChoice.click()
   await expect(page.getByRole('group', { name: 'Connect and approve access', exact: true }).locator('legend')).toBeFocused()
   await expect(page.getByRole('navigation', { name: 'Agent connection steps' })).toContainText('Step 2 of 2')
+  expect(await page.evaluate(() => (window as unknown as { setupPageTransitions: number }).setupPageTransitions)).toBe(0)
   const manifestCopyButton = page.getByRole('region', { name: 'Codex MCP command', exact: true }).getByRole('button')
 
   await expect(page.getByRole('link', { name: 'Start setup', exact: true })).toHaveAttribute('href', '#agent-setup')
@@ -50,6 +61,7 @@ test('native setup choice and copy work by pointer and keyboard', async ({ conte
   await page.keyboard.press('Enter')
   await expect(page.getByRole('group', { name: 'Connect and approve access', exact: true }).locator('legend')).toBeFocused()
   await expect(page.getByRole('region', { name: 'Codex MCP command', exact: true })).toHaveCount(0)
+  expect(await page.evaluate(() => (window as unknown as { setupPageTransitions: number }).setupPageTransitions)).toBe(0)
   await expect(page.getByRole('status').filter({ hasText: 'Claude Code MCP command copied.' })).toHaveCount(0)
   const alternativeCopy = page.getByRole('region', { name: 'Claude Code MCP command', exact: true }).getByRole('button')
   await alternativeCopy.scrollIntoViewIfNeeded()
