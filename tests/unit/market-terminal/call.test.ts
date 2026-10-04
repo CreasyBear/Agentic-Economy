@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { runCallCommand, runProcureCommand } from '../../../tools/ae/commands/call'
+import { runCallCommand, runProcureCommand, runQuoteCommand } from '../../../tools/ae/commands/call'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/common/market-tool-paths'
 import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
@@ -100,13 +100,13 @@ function stalledBody(signal: AbortSignal): Response {
     },
   }), { headers: { 'content-type': 'application/json' } })
 }
-function controlRequestDeadline(): { expire: () => void; restore: () => void } {
+function controlRequestDeadline(timeoutMs = CLI_REQUEST_TIMEOUT_MS): { expire: () => void; restore: () => void } {
   const originalSetTimeout = globalThis.setTimeout
   let expire: (() => void) | undefined
   const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
-    if (delay !== CLI_REQUEST_TIMEOUT_MS) return originalSetTimeout(callback, delay, ...args)
+    if (delay !== timeoutMs) return originalSetTimeout(callback, delay, ...args)
     expire = () => callback(...args)
-    return originalSetTimeout(() => {}, CLI_REQUEST_TIMEOUT_MS)
+    return originalSetTimeout(() => {}, timeoutMs)
   })
   return {
     expire: () => {
@@ -119,6 +119,28 @@ function controlRequestDeadline(): { expire: () => void; restore: () => void } {
 
 
 describe('CLI request deadline', () => {
+  it('receives a first-use Quote after ledger preparation exceeds the ordinary read deadline', async () => {
+    setApiKey('ae-test-key')
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.useFakeTimers()
+    try {
+      const send = vi.fn<typeof fetch>().mockImplementation((_url, init) => new Promise((resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+        setTimeout(() => resolve(jsonResponse(toolQuote({ network: 'ethereum' }))), 20_000)
+      }))
+      vi.stubGlobal('fetch', send)
+      const result = runQuoteCommand([toolRef], { ...options, input: '{"network":"ethereum"}' })
+        .then(() => ({ kind: 'received' }), error => ({ kind: 'failed', error }))
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(await result).toEqual({ kind: 'received' })
+      expect(JSON.parse(output.mock.calls.flat().join(''))).toMatchObject({ kind: 'committed', quoteRef })
+      expect(send).toHaveBeenCalledOnce()
+      expect(send.mock.calls[0]?.[0]).toBe(`${options.baseUrl}/api/v1/tools/quote`)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('bounds a server that never sends headers', async () => {
     vi.useFakeTimers()
     try {
@@ -149,6 +171,26 @@ describe('CLI request deadline', () => {
       await vi.advanceTimersByTimeAsync(CLI_REQUEST_TIMEOUT_MS / 2)
       await vi.advanceTimersByTimeAsync(CLI_REQUEST_TIMEOUT_MS / 2)
       await failure
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bounds a stalled Quote body at 60 seconds without making a Call', async () => {
+    setApiKey('ae-test-key')
+    vi.useFakeTimers()
+    try {
+      const send = vi.fn<typeof fetch>().mockImplementation((_url, init) => new Promise(resolve => {
+        setTimeout(() => resolve(stalledBody(init!.signal!)), 30_000)
+      }))
+      vi.stubGlobal('fetch', send)
+      const pending = runQuoteCommand([toolRef], { ...options, input: '{}' })
+      const failure = expect(pending).rejects.toMatchObject({ code: 'request-timeout', message: 'The request timed out after 60000ms.' })
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(send.mock.calls[0]?.[1]?.signal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(30_000)
+      await failure
+      expect(send).toHaveBeenCalledOnce()
     } finally {
       vi.useRealTimers()
     }
@@ -533,7 +575,7 @@ describe('market-terminal authenticated Tool Call', () => {
 
   it('retains the prepared Call on a stalled acknowledgement and refuses a fresh purchase', async () => {
     setApiKey('ae-test-caller-key')
-    const deadline = controlRequestDeadline()
+    const deadline = controlRequestDeadline(60_000)
     const reachedCall = Promise.withResolvers<void>()
     try {
       const fetchMock = vi.fn<typeof fetch>()

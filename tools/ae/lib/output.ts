@@ -165,14 +165,22 @@ export type HttpOutcome = {
 
 export const CLI_REQUEST_TIMEOUT_MS = 15_000
 
+/**
+ * Requires an origin-bound request and one of the bounded request budgets.
+ * Ensures the same deadline covers headers and the complete response body.
+ * Invariant: caller cancellation is retained; transport never retries a request.
+ * On timeout: release the timer and surface request-timeout. Purchase recovery
+ * owns the durable identity because a timeout cannot establish non-execution.
+ */
 export async function callJson(
   baseUrl: string,
   path: string,
   init: RequestInit = {},
+  timeoutMs: typeof CLI_REQUEST_TIMEOUT_MS | 60_000 = CLI_REQUEST_TIMEOUT_MS,
 ): Promise<HttpOutcome> {
   const startedAt = Date.now()
   const deadline = new AbortController()
-  const timer = setTimeout(() => deadline.abort(), CLI_REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => deadline.abort(), timeoutMs)
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...init,
@@ -189,7 +197,7 @@ export async function callJson(
     return { ...await readHttpOutcome(response, startedAt), baseUrl }
   } catch (error) {
     if (deadline.signal.aborted) {
-      throw new CliFailure(`The request timed out after ${CLI_REQUEST_TIMEOUT_MS}ms.`, {
+      throw new CliFailure(`The request timed out after ${timeoutMs}ms.`, {
         kind: 'UNAVAILABLE', code: 'request-timeout',
       })
     }
