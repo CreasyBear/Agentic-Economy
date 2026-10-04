@@ -61,11 +61,11 @@ const call = {
 const proof = { callRef, attemptRef, effectGeneration: 1, paymentIdentityDigest: identity,
   paymentNonce: nonce, evidenceDigest, evidenceRef: 'chain:safe:block' }
 
-async function fixture() {
+async function fixture(settlementStatus: 'unknown' | 'not_settled' = 'unknown') {
   const backend = convexTest(schema, modules)
   await backend.run(async ctx => {
     await ctx.db.insert('capabilityCalls', call)
-    await ctx.db.insert('moneyX402PaymentAttempts', payment)
+    await ctx.db.insert('moneyX402PaymentAttempts', { ...payment, settlementStatus })
     await ctx.db.insert('moneyX402SpendReservations', {
       reservationRef: payment.spendReservationRef, platformBudgetRef: 'platform:sandbox',
       custodyBudgetRef: 'wallet:sandbox', custodyRef: payment.custodyRef, custodyGeneration: 1,
@@ -95,8 +95,8 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('expired unused authorization claims', () => {
-  it('pins one financial evidence identity across concurrent recovery and blocks settlement while claimed', async () => {
-    const backend = await fixture()
+  it.each(['unknown', 'not_settled'] as const)('pins one financial evidence identity across concurrent %s recovery and blocks settlement while claimed', async settlementStatus => {
+    const backend = await fixture(settlementStatus)
     const claims = await Promise.all([
       backend.mutation(internal.moneyX402Expiry.claim, proof),
       backend.mutation(internal.moneyX402Expiry.claim, { ...proof, evidenceDigest: `sha256:${'e'.repeat(64)}` }),
@@ -149,8 +149,8 @@ describe('expired unused authorization claims', () => {
     expect(row?.formanceFinancialState).toBe('outcome_unknown')
   })
 
-  it('finishes and replays one refunded Activity row, with no delivery or Provider obligation', async () => {
-    const backend = await fixture()
+  it.each(['unknown', 'not_settled'] as const)('finishes and replays one refunded Activity row for %s payment, with no delivery or Provider obligation', async settlementStatus => {
+    const backend = await fixture(settlementStatus)
     await backend.mutation(internal.moneyX402Expiry.claim, proof)
     const finish = { callRef, evidenceDigest, transactionRefs: ['release:aud', 'release:usdc'] }
     expect(await backend.mutation(internal.moneyX402Expiry.finish, { ...finish, evidenceDigest: identity })).toEqual({ kind: 'refused' })

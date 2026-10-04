@@ -249,7 +249,11 @@ export async function invokeX402(
     asset: requirement.asset,
     payTo: requirement.payTo,
     amount: paymentAmount,
-    providerEndpoint: target.href,
+    // Requires the admitted fresh challenge. Ensures events retain the resource
+    // identity saved during preparation; mapped GET queries may be absent there.
+    // The exact target remains bound by requestDigest and the signing fingerprint.
+    // A different resource or request still refuses before paid transmission.
+    providerEndpoint: challenge.resource.url,
     custodyRef: preparedAuthorization.custodyRef,
     authorizationDigest: preparedAuthorization.authorizationDigest,
   }
