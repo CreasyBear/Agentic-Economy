@@ -25,6 +25,18 @@ contracts needs the matching backend release and verification.
 
 ## Latest production acceptance — 4 October 2026
 
+Frontend update verified on **5 October 2026 Perth**: [PR #344](https://github.com/CreasyBear/Agentic-Economy/pull/344)
+is live on READY Vercel deployment `dpl_6NZpfPB2EuFtrsKVXjsZ4XfXWHBV` in
+project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The `app.aecon.ai` alias and release
+endpoint confirm `e310e1e111260a2b38cfecb6f8d7a79520880075`, whose tree equals
+the gated source. Health is HTTP 200; readiness currently returns HTTP 503 /
+`payments_unavailable`, with config and Convex ready. The Arc Agent setup update
+changes frontend presentation/navigation only. It does not redeploy Convex or
+establish native OAuth or financial acceptance. The exact gate and preservation
+evidence is in the [Arc protocol](../designs/arc-ui-refactor/protocol.md).
+The preceding READY frontend `dpl_FdLPCJgNiYMVyga5MJ2f9n9cXvdo` is retained as
+the rollback point. The financial acceptance below remains dated evidence.
+
 [PR #339](https://github.com/CreasyBear/Agentic-Economy/pull/339) is deployed to
 Convex `cautious-zebra-473` and Vercel Production. The application release
 endpoint confirms `2fe3a0dd90e0b80b60dc8da70d449794ccfdd2c1`, matching the backend
