@@ -10,10 +10,69 @@ import {
   type SchemaDereferencer,
 } from '@/modules/capability-supply/public'
 import { dereferenceLocalSchema } from '@/modules/capability-supply/convex'
+import { validateJsonSchema } from '@/modules/capability-contract/public'
 
 const JSON_SCHEMA = 'https://json-schema.org/draft/2020-12/schema'
 
 describe('capability publication validate (pre-flight admission)', () => {
+  it('admits a closed empty input while still rejecting open input at publication admission', async () => {
+    const document = openApiDocument()
+    const request = document.paths['/lookup'].post.requestBody.content['application/json'] as {
+      schema: Record<string, unknown>
+    }
+    request.schema = {
+      $schema: JSON_SCHEMA, type: 'object', properties: {}, additionalProperties: false,
+    }
+    const metadata = contractMetadata('independent.validate')
+    const source = {
+      ...openApiAdmissionSource({ document }),
+      contract: {
+        ...metadata,
+        customerAnnotations: metadata.customerAnnotations.filter(annotation => annotation.document === 'output'),
+        dataUse: [], effects: [],
+      },
+    }
+    const result = await validateCapabilityPublication(source)
+    expect(result.kind).toBe('accepted')
+    if (result.kind !== 'accepted') throw new Error(`empty_input_refused:${result.reason}`)
+    const contract = JSON.parse(result.normalized.documentJson)
+    expect(validateJsonSchema(contract.inputSchema, {})).toBe(true)
+    expect(validateJsonSchema(contract.inputSchema, { unexpected: 'data' })).toBe(false)
+    const { sourceRevision, ...publication } = source
+    const prepared = await preparePublicationDraft({
+      source: publication, sourceRevision,
+      pricingConfig: { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '12000000' },
+      evidenceRefs: ['source:no-arguments'],
+    })
+    expect(prepared.kind).toBe('prepared')
+    if (prepared.kind !== 'prepared') throw new Error(`empty_preparation_refused:${prepared.reason}`)
+    for (const additionalProperties of [true, undefined]) {
+      const changed = JSON.parse(prepared.prepared.documentJson)
+      changed.inputSchema.additionalProperties = additionalProperties
+      await expect(admitPublicationDraft({
+        prepared: { ...prepared.prepared, documentJson: JSON.stringify(changed) },
+        businessId: 'business:independent',
+      })).resolves.toMatchObject({ kind: 'refused', reason: 'contract_invalid' })
+    }
+  })
+  it('accepts a required closed empty child without inventing request fields', async () => {
+    const document = openApiDocument()
+    const request = document.paths['/lookup'].post.requestBody.content['application/json'] as {
+      schema: Record<string, unknown>
+    }
+    request.schema = {
+      $schema: JSON_SCHEMA, type: 'object',
+      properties: { query: { type: 'object', properties: {}, additionalProperties: false } },
+      required: ['query'], additionalProperties: false,
+    }
+    const result = await validateCapabilityPublication(openApiAdmissionSource({ document }))
+    expect(result.kind).toBe('accepted')
+    if (result.kind !== 'accepted') throw new Error(`empty_child_refused:${result.reason}`)
+    const contract = JSON.parse(result.normalized.documentJson)
+    expect(validateJsonSchema(contract.inputSchema, { query: {} })).toBe(true)
+    expect(validateJsonSchema(contract.inputSchema, { query: { unexpected: 'data' } })).toBe(false)
+    expect(validateJsonSchema(contract.inputSchema, {})).toBe(false)
+  })
   it('accepts a valid import with a normalized draft summary and source digest', async () => {
     const result = await validateCapabilityPublication(openApiAdmissionSource())
 
