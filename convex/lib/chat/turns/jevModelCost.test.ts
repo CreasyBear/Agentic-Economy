@@ -11,6 +11,21 @@ const binding = { turnRef: 'turn:jev', threadId: 'thread:jev', promptMessageId: 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('chat Jev attribution through the SDK boundary', () => {
+  it.each(['noMatch', 'unavailable'] as const)('records a %s search without keeping the query or invoking a model', async kind => {
+    const query = 'private search need'
+    const source = misorderedSearchResult(query)
+    const base = projectToolSearchChoices(source, undefined, { verdict: 'matched', nearMisses: [] })
+    const catalogue = { ...base, kind, results: [] as [], reason: 'source_unavailable' as const,
+      pagination: { limit: 8, hasMore: false } }
+    const fetcher = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetcher)
+    const result = await recommendTool({ catalogue, promptText: query, ownerId: 'account:jev', ...binding, searchLatencyMs: 120 })
+    expect(result).toMatchObject({ recommendation: null, decision: { offered: [], fit: [], latencyMs: 120,
+      tier: kind === 'noMatch' ? 'no_match' : 'selection_unavailable' } })
+    expect(JSON.stringify(result)).not.toContain(query)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   it('waits for the bound begin mutation and projects only usage, never a price or payload', async () => {
     const begin = Promise.withResolvers<null>()
     const runMutation = vi.fn().mockReturnValueOnce(begin.promise).mockResolvedValue(null)

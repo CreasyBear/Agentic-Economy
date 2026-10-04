@@ -260,7 +260,8 @@ export async function reserveAndStartTurn(
     await updateThreadMetadata(ctx, components.agent, { threadId: row.threadId, patch: { title } })
   }
   await ctx.db.patch(row._id, {
-    title, activePromptMessageId: promptMessageId, activeStartedAt: now, updatedAt: now,
+    title, ...(title !== row.title ? { titleUpdatedAt: now } : {}),
+    activePromptMessageId: promptMessageId, activeStartedAt: now, updatedAt: now,
   })
   await ctx.db.patch(reservationId, {
     threadId: row.threadId, sequence, promptMessageId, updatedAt: now,
@@ -287,6 +288,9 @@ export async function readTurnStreams(
   turn: Doc<'chatTurns'> & { threadId: string; promptMessageId: string },
   streamArgs: typeof vStreamArgs.type,
 ) {
+  if (turn.contentRetention !== undefined) return streamArgs?.kind === 'deltas'
+    ? { kind: 'deltas' as const, deltas: [] }
+    : { kind: 'list' as const, messages: [] }
   const [prompt] = await ctx.runQuery(components.agent.messages.getMessagesByIds, {
     messageIds: [turn.promptMessageId],
   })

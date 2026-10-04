@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { JsonValue } from '@/modules/capability-contract/public'
 import type { CallService } from './call-authority'
 import type { CallResult } from './call-contracts'
 import {
@@ -22,7 +21,7 @@ import {
 } from '@/modules/money/public'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
-import { toolProcureResultSchema, type ToolProcureInput, type ToolProcureResult } from './procure'
+import { procureQuoteSnapshotSchema, toolProcureResultSchema, type ToolProcureInput, type ToolProcureResult } from './procure'
 import { MIN_MODEL_CONFIDENCE, routeSelection } from './route-selection'
 import { recordSelectionDecision } from './selection-decision-recorder'
 
@@ -70,15 +69,7 @@ const identityResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('conflict') }),
   z.strictObject({ kind: z.literal('unauthorized') }),
 ])
-const quoteSnapshotSchema = z.strictObject({
-  quoteRef: z.string().min(1),
-  price: z.strictObject({ currency: z.literal('AUD'), units: z.string(), exponent: z.number() }),
-  toolRef: z.string(),
-  input: z.record(z.string(), z.unknown()),
-  toolName: z.string().optional(),
-  endpoint: z.string().optional(),
-  routingLatencyMs: z.number(),
-})
+const quoteSnapshotSchema = procureQuoteSnapshotSchema
 type IdentityResult = z.infer<typeof identityResultSchema>
 export class ProcureConflictError extends Error {}
 export class ProcureInProgressError extends Error {}
@@ -191,14 +182,22 @@ export class CapabilityProcurementEngine {
 
   private async select(input: Extract<ToolProcureInput, { kind: 'need' }>): Promise<ToolProcureResult> {
     const common = { schemaVersion: 'tool.procure:v1' as const }
+    const startedAt = Date.now()
+    const correlationId = this.dependencies.correlationId ?? globalThis.crypto.randomUUID()
+    const recordEmpty = async (tier: 'no_match' | 'selection_unavailable') => await recordSelectionDecision({
+      kind: 'procure', accountRef: this.dependencies.principal.ownerId, correlationId, offered: [], fit: [],
+      pickedToolRef: null, tier, modelConfidence: null, latencyMs: Date.now() - startedAt, costAud: null,
+    })
     let candidates: readonly CatalogToolCandidate[]
     try {
       candidates = await this.dependencies.catalogSearcher(input.need, 10)
     } catch (cause) {
       if (!(cause instanceof ProcureSelectionUnavailableError)) throw cause
+      await recordEmpty('selection_unavailable')
       return { ...common, kind: 'refused', status: 'refused', code: 'selection_unavailable', retryable: true, detail: 'Tool selection is unavailable; retry the need.' }
     }
     if (candidates.length === 0) {
+      await recordEmpty('no_match')
       return { ...common, kind: 'refused', status: 'refused', code: 'no_matching_tool', retryable: false, detail: 'No matching published Tool was found.' }
     }
     let evidenceRows: readonly SelectionEvidenceRow[]
@@ -237,9 +236,8 @@ export class CapabilityProcurementEngine {
       rank,
       score: item.score,
     }))
-    const correlationId = this.dependencies.correlationId ?? globalThis.crypto.randomUUID()
     const routing = await routeSelection(input.need, rankedCandidates, { disableSecondaryLlm: true })
-    void recordSelectionDecision({
+    await recordSelectionDecision({
       kind: 'procure',
       accountRef: this.dependencies.principal.ownerId,
       correlationId,
@@ -412,14 +410,21 @@ export class CapabilityProcurementEngine {
         },
       })
     }
+    if (callRes.contentExpiredAt === undefined && !('input' in quote)) {
+      throw new ProcureInProgressError('Call content expiry is being recorded; retry with the same purchase key.')
+    }
     return await finish({
       ...committed, kind: 'delivered', status: 'delivered',
       toolRef: callRes.toolRef,
       ...(quote.toolName === undefined ? {} : { toolName: quote.toolName }),
-      ...(quote.endpoint === undefined ? {} : { endpoint: quote.endpoint }),
       price: procurePriceBreakdownFromQuote(quotePrice),
-      input: quote.input as Record<string, JsonValue>,
-      output: callRes.output,
+      ...(callRes.contentExpiredAt === undefined
+        ? {
+            ...(!('endpoint' in quote) || quote.endpoint === undefined ? {} : { endpoint: quote.endpoint }),
+            input: 'input' in quote ? quote.input : suppliedInput,
+            output: callRes.output,
+          }
+        : { contentExpiredAt: callRes.contentExpiredAt }),
       audit: {
         routingLatencyMs: quote.routingLatencyMs, executionLatencyMs, totalLatencyMs: Date.now() - startedAt,
         jevDecisionsCostAud: 'unknown',
@@ -428,5 +433,3 @@ export class CapabilityProcurementEngine {
   }
 
 }
-
-

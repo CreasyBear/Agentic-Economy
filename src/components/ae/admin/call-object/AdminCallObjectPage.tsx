@@ -1,4 +1,7 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import { ErrorBoundary } from '@sentry/react'
+import { AeSection } from '@/components/ae/layout/AeSection'
+import { Button } from '@/components/arc/button/button'
 import { Badge } from '@/components/ui/badge'
 import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -9,6 +12,7 @@ import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { AdminCallActivity } from './components/AdminCallActivity'
 import { AdminCallEvidence } from './components/AdminCallEvidence'
 import { AdminCallReferences } from './components/AdminCallReferences'
+import { CallContentReview } from './CallContentReview'
 import {
   ADMIN_CALL_OBJECT_COPY,
   type AdminCallLoaderResult,
@@ -91,6 +95,14 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
         <AdminCallReferences refs={model.relatedRefs} />
       </div>
       <AdminCallActivity rows={model.activity} />
+      <ErrorBoundary key={view.ref} fallback={({ resetError }) => (
+        <AeSection title="Founder content review">
+          <p role="status">Content review access is unavailable.</p>
+          <Button type="button" variant="secondary" onClick={resetError}>Retry content review access</Button>
+        </AeSection>
+      )}>
+        <CallContentReview callRef={view.ref} />
+      </ErrorBoundary>
     </AeOperatorPage>
   )
 }

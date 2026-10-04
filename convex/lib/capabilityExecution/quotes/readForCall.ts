@@ -47,6 +47,9 @@ export async function readForCallHandler(
       || call.quoteRef !== row.quoteRef
       || call.credentialId !== args.principal.credentialId
       || call.idempotencyKey !== args.idempotencyKey) return null
+    // A consumed Quote replays its stable Call identity after content expiry.
+    // It never needs the original input and cannot open another purchase.
+    return { consumedCallRef, toolRef: row.toolRef, quoteRef: row.quoteRef }
   } else {
     if (row.state !== 'issued' || row.expiresAt <= args.now) return null
     // An unused Quote binds the policy decision that created it. Refuse its
@@ -59,11 +62,11 @@ export async function readForCallHandler(
       || current.grantGeneration !== row.grantGeneration
       || current.spendingPolicyDigest !== row.grantPolicyDigest) return null
   }
+  if (row.contentExpiredAt !== undefined || row.normalizedInputJson === undefined) return null
   try {
     const input = JSON.parse(row.normalizedInputJson) as unknown
     return isBoundedJsonValue(input) && typeof input === 'object' && input !== null && !Array.isArray(input)
       ? {
-          ...(row.state === 'consumed' && row.consumedCallRef !== undefined ? { consumedCallRef: row.consumedCallRef } : {}),
           toolRef: row.toolRef,
           input: input as Record<string, Infer<typeof jsonObject>[string]>,
           decisionPrice: { currency: 'AUD' as const, exponent: 6 as const, units: row.decisionAudUnits },

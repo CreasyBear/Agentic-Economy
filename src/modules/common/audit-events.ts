@@ -88,6 +88,7 @@ export const AuditEventTypeValues = [
   'admin.membership_revoked',
   'admin.break_glass_used',
   'admin.action_denied',
+  'admin.call_content_reviewed',
   'admin.action_proposed',
   'admin.proposal_approved',
   'money.promotional_credit_requested',

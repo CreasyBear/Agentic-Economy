@@ -50,7 +50,9 @@ export type DispatchResult =
   | { kind: 'refused' }
 
 export function assertCallResultJson(value: CallResultValue): void {
-  if (value.kind === 'completed' && !isBoundedJsonValue(value.output)) {
+  if (value.kind === 'completed' && ('output' in value
+    ? !isBoundedJsonValue(value.output)
+    : !Number.isSafeInteger(value.contentExpiredAt) || value.contentExpiredAt < 0)) {
     throw new Error('operation_invocation_result_json_invalid')
   }
 }

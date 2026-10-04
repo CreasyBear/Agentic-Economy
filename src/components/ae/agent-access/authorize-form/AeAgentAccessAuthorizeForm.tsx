@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
 import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { AgentAccessAuthorizeFormDetails, ConsentLocator } from '@/modules/agent-access/consent.contracts'
@@ -125,6 +126,7 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
                     onRemoveApprovedTool={vm.removeApprovedTool}
                   />
                 ) : null}
+                {vm.accessProfile === 'market' ? <AlphaLearningNotice /> : null}
               </div>
             </div>
             {decisionBar}

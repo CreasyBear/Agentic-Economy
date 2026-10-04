@@ -6,6 +6,7 @@ import { Button } from '@/components/arc/button/button'
 import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
+import type { JsonValue } from '@/modules/capability-contract/public'
 import type { CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 import { nextActionForCallStatus } from '@/modules/market/suggested-next-action'
 import { formatCurrencyAmount } from '@/modules/money/public'
@@ -144,10 +145,15 @@ export function CallRequestSection({ input }: Readonly<{ input: FoundCallStatus[
 
 export function CallOutputSection({ result }: Readonly<{ result: CallResult }>) {
   if (result.kind !== 'completed') return null
+  if (result.contentExpiredAt !== undefined) return (
+    <AeSection title="Output">
+      <p>Call content expired on {formatUtcTimestamp(result.contentExpiredAt)}. The purchase record remains available.</p>
+    </AeSection>
+  )
   return <RecordedCallOutput key={result.evidenceHash} output={result.output} />
 }
 
-function RecordedCallOutput({ output }: Readonly<{ output: Extract<CallResult, { kind: 'completed' }>['output'] }>) {
+function RecordedCallOutput({ output }: Readonly<{ output: JsonValue }>) {
   const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2)
   const clipboard = useClipboardCopy(text)
   return (

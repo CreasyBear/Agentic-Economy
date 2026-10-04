@@ -79,7 +79,7 @@ describe('public semantic comfort', () => {
 
     const article = screen.getByRole('article')
     const headings = within(article).getAllByRole('heading')
-    expect(headings.map((heading) => heading.tagName)).toEqual(['H1', ...Array(15).fill('H2')])
+    expect(headings.map((heading) => heading.tagName)).toEqual(['H1', ...Array(16).fill('H2')])
     const contents = within(article).getByRole('navigation', { name: 'On this page' })
     for (const link of within(contents).getAllByRole('link')) {
       expect(document.querySelector(link.getAttribute('href') ?? '')).toBeTruthy()

@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Button } from '@/components/arc/button/button'
 import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { AdminObjectSearchForm } from '../object-search/components/AdminObjectSearchForm'
 import { useAdminObjectSearch } from '../object-search/useAdminObjectSearch'
@@ -11,6 +12,7 @@ import { ConfigurationBanner } from './components/ConfigurationBanner'
 import { OverviewExceptionsSection } from './components/OverviewExceptionsSection'
 import { OverviewMetricsSection } from './components/OverviewMetricsSection'
 import { RecentlyViewed } from './components/RecentlyViewed'
+import { AlphaLearning } from './AlphaLearning'
 import { ADMIN_OVERVIEW_COPY } from './overview.contracts'
 import { useAdminOverview, useOverviewExceptions, useOverviewMetrics } from './useAdminOverview'
 import './OverviewComposition.css'
@@ -61,6 +63,14 @@ export function AdminOverviewPage() {
             </ErrorBoundary>
           </div>
           <RecentlyViewed rows={data.recent} />
+          <ErrorBoundary fallback={({ resetError }) => (
+            <AeSection title="Alpha learning">
+              <p role="status">Learning signals are unavailable.</p>
+              <Button type="button" variant="secondary" onClick={resetError}>Retry learning signals</Button>
+            </AeSection>
+          )}>
+            <AlphaLearning />
+          </ErrorBoundary>
         </div>
       )}
     </AeOperatorPage>

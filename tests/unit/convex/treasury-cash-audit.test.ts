@@ -146,7 +146,7 @@ function fixture(mode: Mode = 'settled', options: { nativePaid?: boolean; chainP
   } }
   const material: AttemptSource['material'] = {
     dispatchRef: b.callRef, attemptRef: call.call.attemptRef!, effectGeneration: 1, toolRef: b.toolRef, inputDigest: b.inputDigest,
-    paymentIdentifier: `payment:${b.callRef}`, challengeDigest: evidence, selectedRequirementJson: '{}', scheme: 'exact',
+    paymentIdentifier: `payment:${b.callRef}`, challengeDigest: evidence, scheme: 'exact',
     network: NETWORK, asset: ASSET, payTo: PAYEE, amountUnits: PAYMENT, currency: 'USDC', exponent: 6,
     custodyRef: `authorization-custody:${b.callRef}`, custodyBudgetRef: identity.custodyRef, custodyGeneration: 1,
     authorizationDigest: evidence, spendReservationRef: `spend:${b.callRef}`, paymentIdentityDigest: evidence,

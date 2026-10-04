@@ -67,6 +67,7 @@ import {
 } from './workload-cron.harness'
 
 const EXPECTED_BINDINGS = {
+  'expire alpha content': 'workloadCron:expireAlphaContent',
   'cleanup expired agent access oauth grants': 'workloadCron:cleanupExpiredAgentAccessOAuthGrants',
   'cleanup expired source write nonces': 'workloadCron:cleanupExpiredSourceWriteNonces',
   'expire stale pending approvals': 'workloadCron:expireStalePendingApprovals',

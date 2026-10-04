@@ -76,6 +76,125 @@ The first product change improves **buyer matching and purchase**: an Agent can 
 
 **Open owner decisions:** approve exact content and backup periods; decide which sensitive or secret-bearing routes AE will support initially; set the minimum evidence for Provider claims; inspect live recipients and logging; and get an entity-specific Australian legal review. Until those are resolved, describe unknown handling honestly and do not advertise a blanket “private,” “no retention” or Australian-only route.
 
+## Approved alpha learning change — 4 October 2026
+
+Joel approved 30-day Call content retention, disclosed founder review,
+usefulness feedback and 90-day learning metrics that exclude content. This
+section is the implementation contract; it is not deployment evidence.
+
+**Thesis:** learn which purchases help the Customer's Agent continue, while
+content expires independently of the permanent purchase and retry identities.
+The design review uses the approved decision and source evidence directly;
+no additional interview is needed. Conceptual integrity is strong if every
+new field either bounds retained content or records a useful learning signal.
+
+**Scope and cost decision.** Reuse the existing Call, Quote, procurement replay,
+chat component, admin command and selection-decision paths. Add one bounded,
+content-free feedback record per Account and Call; do not add an analytics
+service, duplicate payload store, general privacy framework or training pipeline.
+An explicit expired-content result and bounded cleanup are necessary complexity:
+removing an entire Call or returning a fabricated output would either destroy
+purchase evidence or make a replay unsafe. Use existing Convex transactions,
+schedulers and component deletion APIs. Keep purchase reporting/refunds separate
+from learning feedback.
+
+The implementation proceeds in dependency order:
+
+1. Model expired content while preserving completed delivery, receipts, amounts,
+   original digests and idempotency. A consumed Quote must replay its Call using
+   the stable references without needing deleted input.
+2. Delete eligible copies through bounded, repeatable cleanup. Cover the Quote,
+   Call, procurement cache, x402 attempt, consequence observation and associated
+   chat messages/continuations. Preserve unresolved financial work. Use component
+   APIs to remove message embeddings and file references as well as messages.
+3. Add Account-scoped usefulness feedback and owner-admin content review through
+   existing audited command admission. A review returns content only for the
+   explicitly selected Call; it never stores content in the command receipt.
+4. Explain the retention/review purpose before alpha use, show expired-content
+   states, and expose recent failures and feedback in existing admin views.
+5. Verify the behavior and native settings before publishing an operational
+   retention claim or widening the current alpha audience.
+
+| Boundary | Requires | Ensures | Invariant / on violation |
+| --- | --- | --- | --- |
+| Call expiry | Thirty days since final Purchase resolution, with no pending report, dispute, obligation reversal or recovery | Input/output and associated active-store copies are removed; completed delivery and money evidence remain readable | Unknown or unresolved state retains the required evidence and is surfaced for investigation. Expiry never issues a new Call, charge or payment. |
+| Quote expiry | Unconsumed Quote expired for at least 24 hours, or its consumed Call is eligible for content expiry | Submitted input and content-bearing price-inspection material are removed | Original Quote identity and digests remain; the same consumed Quote can return the original expired-content Call. |
+| Chat expiry | Turn is no longer generating, its content is at least 30 days old and linked purchases are eligible | Message content, component embeddings/file references and saved search continuation content are removed in bounded batches | An active generation or unresolved linked purchase blocks deletion. A cleanup retry resumes deletion and never resumes generation. Shared chat links reference the same retained messages; they hold no snapshot. |
+| Learning feedback | Current authenticated Account owns the Call; choice and reason belong to bounded enums | One current usefulness choice per Account/Call, retained for 90 days | Duplicate/concurrent updates cannot create duplicate votes, leak another Account's Call or initiate a refund. No prompt, output or free-text comment is accepted. |
+| Founder review | Current owner-admin membership, fresh normal admin command authority, a selected Call and bounded review reason | An audited, explicit content read whose command receipt contains only references and metadata | Support/reviewer roles and expired content cannot use this path. Replay cannot restore deleted content or bypass current membership and the review freshness bound. |
+| Learning metrics | Existing content-free selection facts and feedback within the last 90 days | Recent no-match, failure, latency, cost and usefulness evidence for prioritisation | Customer content never enters the learning metrics. Financial/audit records remain governed separately and are not represented as deleted learning content. |
+| Learning UI failure | An optional learning or review-access query rejects | The affected panel shows an explicit retry; the surrounding readiness, queues and Call receipt remain available | Review content stays closed on access failure. Retrying only remounts the failed panel and cannot issue a purchase or review command. |
+
+**Type decision.** A completed Call has either its original output or an explicit
+content-expiry timestamp, never both and never neither. Purchase state does not
+become failed when content expires. Procurement replay has the equivalent
+delivered-content distinction. Storage markers must not make an old command
+appear unclaimed or allow a stale worker to restore purged content.
+
+**Verification.** Exercise immediately before/at/after expiry; unresolved Calls,
+pending refunds and disputed obligations; interrupted cleanup and duplicate or
+concurrent runs; cached and direct Call replay after deletion; preserved receipt
+and ledger references; Account and admin-role separation; stale review authority;
+and absence of content in feedback, metrics and audit receipts. Verify every
+known active copy, including the native chat component. Run the required project
+checks and full release gate on the final integrated change.
+The native scheduler drill exposed Convex's query-bound cursor requirement:
+all pages now carry the sweep's fixed cutoff, while each transaction checks the
+current purchase state. Content becoming old enough mid-sweep waits for the next
+sweep. Invalid or incomplete checkpoints fail before deleting content. The
+regression advances the clock between scheduled pages and verifies both cases.
+
+**Material risks and cuts.** The greatest risks are secondary payload copies,
+stale workers restoring them, and public copy overstating backup/recipient
+deletion. Inspect those boundaries explicitly. Backups and independent model or
+Tool Providers have separate retention; do not infer their deletion from an
+application purge. Keep the existing honest limitation until native evidence
+establishes a specific period. Cut free-text feedback, automatic model training,
+cross-Customer content search and a new analytics dashboard from this change.
+The smallest useful loop is a bounded review of failed/no-match/low-usefulness
+cases, followed by a redacted regression case and a measured fix.
+
+**Interface review.** Feedback sits beside the delivered result: three choices,
+then one optional bounded reason for a negative response. The control saves the
+choice directly and shows confirmation only after the server accepts it. A
+separate sentence points to the existing answer-report flow for credit returns.
+The founder opens one selected Call, chooses one of two reasons and uses the
+existing MFA flow. Input and output stay collapsed until requested and disappear
+when the review expires, the selected Call changes or the admin role is lost.
+Keyed component state costs one small local component per control and removes
+the risk of an old asynchronous response appearing against a new Call; keep it.
+The overview labels its 50-record samples and displays at most five attention
+links per category. It adds no new navigation, modal workflow or analytics store.
+The existing error-boundary pattern contains failed learning and review-access
+queries to their panels. Route tests reject each query, assert that operational
+context remains visible and recover through the explicit retry control.
+
+**Module audit.** The expected alpha changes are feedback categories, retention
+periods and the criteria for founder investigation; existing authorization and
+payment boundaries remain settled. The feedback contract exposes bounded domain
+values while its server adapter hides signed request construction. Changing the
+feedback database layout affects its Convex concern and schema, not callers;
+changing a category deliberately affects the public contract and its UI label.
+Retention concerns hide eligibility and traversal of payload copies; a period
+change also requires the corresponding customer notice. The admin concern hides
+receipt-safe content access behind the existing command protocol; replacing the
+identity provider remains the security module's responsibility. No storage rows
+or internal cleanup phase state cross these public entry points. Keep the two
+feedback entry surfaces in the existing capability-execution module and place
+data-aware admin controls beside the existing container panels, leaving the
+presentation-only component folders pure.
+
+**Source evidence.** The Call and chat retention tests exercise exact expiry,
+unresolved-money holds, repeatable cleanup, interrupted native message deletion,
+embeddings and file release. A delayed procurement completion returns an expired
+result without restoring input, output or endpoint. The learning-control tests
+exercise Account isolation, duplicate votes, 90-day deletion, admin-role/MFA
+admission, ten-minute replay expiry, membership revocation, content-free audit
+receipts and bounded metrics. Component tests cover lost-response retries,
+selection changes, role loss, escaping and the review deadline. Deployment,
+native cron operation, backups and independent recipients require separate
+runtime evidence; these source tests do not establish their settings.
+
 ## Legal and standards basis
 
 The [Australian Privacy Principles](https://www.oaic.gov.au/privacy/australian-privacy-principles/australian-privacy-principles-guidelines) and the [OAIC Privacy Impact Assessment guide](https://www.oaic.gov.au/privacy/privacy-guidance-for-organisations-and-government-agencies/privacy-impact-assessments/guide-to-undertaking-privacy-impact-assessments) guide notice, minimisation, disclosure, overseas recipients, security, disposal and individual requests. Whether particular duties apply to AE needs legal review. A proportionate privacy impact assessment should map each new data path and be revisited when recipients, purposes or retention change.

@@ -59,6 +59,7 @@ const MFA_PROOF_FAILURES: Record<ProofFailureCode, 'mfa_reverification_required'
 const PROOF_FAILURE_BY_ACTION: {
   [A in AdminCommandAction]: Record<ProofFailureCode, AdminRefusalCode<A>>
 } = {
+  review_call_content: MFA_PROOF_FAILURES,
   set_business_suppression: MFA_PROOF_FAILURES,
   close_removal_dispute: MFA_PROOF_FAILURES,
   grant_admin_membership: MFA_PROOF_FAILURES,

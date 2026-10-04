@@ -5,7 +5,7 @@ import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrit
 import { principalValue } from './contracts'
 import { resolveCurrentAgentAuthority } from './agentCallAuthority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { toolProcureInputSchema, toolProcureResultSchema } from '@/modules/capability-execution/procure'
+import { expireProcureResultContent, toolProcureInputSchema, toolProcureResultSchema } from '@/modules/capability-execution/procure'
 
 const fields = {
   principal: principalValue,
@@ -102,7 +102,9 @@ export async function completeProcureHandler(ctx: MutationCtx, args: Command & {
   if (!await admitted(ctx, args, true)) return { kind: 'unauthorized' as const }
   const row = await rowFor(ctx, args)
   if (row === null || row.requestHash !== material(args) || row.scope !== 'capability_execution') return { kind: 'conflict' as const }
-  const result = toolProcureResultSchema.parse(JSON.parse(args.resultJson))
+  const submitted = toolProcureResultSchema.parse(JSON.parse(args.resultJson))
+  const result = row.contentExpiredAt === undefined ? submitted : expireProcureResultContent(submitted, row.contentExpiredAt)
+  if (result === null) return { kind: 'conflict' as const }
   if (result.status === 'needs_input') return { kind: 'conflict' as const }
   if ('callRef' in result && row.effectRefs[1] !== undefined && row.effectRefs[1] !== result.callRef) {
     return { kind: 'conflict' as const }

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
 import {
   Accordion,
   AccordionContent,
@@ -50,6 +51,7 @@ export function AeToolInputDisclosure({ tool }: Readonly<{ tool: PublicToolDescr
         </ul>
       )}
       <p className="text-xs text-muted-foreground">Input JSON Schema and exact data-use pointers are under Technical.</p>
+      <AlphaLearningNotice />
     </section>
   )
 }

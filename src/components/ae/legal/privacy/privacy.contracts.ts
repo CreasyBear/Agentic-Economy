@@ -1,10 +1,10 @@
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
-// Alpha draft: processor locations, retention schedule and legal contact ownership need review.
-export const privacyLastUpdated = '1 October 2026'
+// Alpha draft: processor locations, remaining retention schedules and legal contact ownership need review.
+export const privacyLastUpdated = '4 October 2026'
 export const privacyTitle = 'Privacy policy.'
 export const privacyIntro = 'How Agentic Economy collects and uses data.'
-export const privacyOpening = 'This draft describes information handled by the website, accounts, chat and Tool Calls. Confirmed legal contact details, processor locations and a retention schedule are required before publication.'
+export const privacyOpening = 'This alpha notice describes information handled by the website, accounts, chat and Tool Calls. The alpha content and learning periods are set out below. Legal contact details, processor locations and schedules for other records remain under review.'
 export const privacyTermsLead = 'Read alongside our'
 export const privacyTermsLink = 'terms of service'
 export const privacyOaicLead = 'Australian privacy information and complaints guidance are available from the'
@@ -12,6 +12,17 @@ export const privacyOaicLink = 'OAIC'
 export const privacyCorrectionLink = 'Request a correction or removal'
 
 export const privacySections = [
+  {
+    id: 'alpha-learning',
+    heading: 'Invitation-only alpha learning',
+    body: [
+      'During the alpha, AE retains Call inputs and results to investigate failures and learn which purchases help the Customer’s Agent continue. The founder, acting through an owner-admin account, may review the content of a selected Call for alpha quality or failure investigation. Each review requires current admin authority and verification, is recorded in Audit without copying content into the audit record, and has a ten-minute access window.',
+      'Scheduled cleanup removes eligible Call content 30 days after final purchase resolution. Unresolved delivery, payment, reports, disputes or Provider obligations retain the evidence needed to resolve them. Unused Quote inputs are eligible for cleanup 24 hours after the Quote expires. Cleanup runs hourly and may need additional batches to finish.',
+      'Inactive chat turns and saved search continuation content are eligible after 30 days, provided linked purchases are resolved. Active generation and unresolved purchases delay deletion. Chat titles expire after 30 days from their last update. Message deletion removes embeddings and releases file references; the chat component then keeps unreferenced files for a further 24-hour grace period before storage cleanup.',
+      'Optional usefulness feedback records a bounded choice and reason, with no free-text comment, prompt or output. Feedback and content-free selection records are retained for 90 days. We use recent usefulness, no-match, failure, latency and cost signals to prioritise fixes and create redacted regression cases. Feedback does not request a refund; use the separate answer-report flow for that.',
+      'Content expiry preserves purchase identities, original digests, receipts, settlement and other financial or security records on their separate schedules. Backups and independent Tool or model Providers have separate retention arrangements that are not established by this application cleanup. Do not assume every recipient or backup has deleted content when it expires in AE.',
+    ],
+  },
   {
     id: 'scope',
     heading: 'Who this policy covers',
@@ -38,7 +49,7 @@ export const privacySections = [
     body: [
       'AE uses information to establish and administer accounts, authenticate users and agents, apply permissions and spending controls, route and deliver requests, maintain usage records, reconcile payments, handle refunds, assist customers and providers, and investigate service failures.',
       'AE may also need information to protect the service, detect fraud and misuse, comply with applicable legal obligations, respond to lawful requests and establish or defend legal claims. A materially different use requires an appropriate legal basis and an updated notice or consent where required.',
-      'For service improvement, AE uses aggregate or appropriately de-identified information where practicable. AE does not sell personal information or use Customer prompts, files or outputs to train its own general-purpose models. This statement does not describe an independent Provider’s or model host’s practices. Any optional AE use beyond service delivery requires a specific explanation and separate agreement.',
+      'For service improvement, AE uses aggregate or appropriately de-identified information where practicable, alongside the disclosed founder review during the invitation-only alpha. AE does not sell personal information or use Customer prompts, files or outputs to train its own general-purpose models. This statement does not describe an independent Provider’s or model host’s practices. A materially different optional use requires a specific explanation and appropriate agreement.',
     ],
   },
   {
@@ -102,7 +113,7 @@ export const privacySections = [
     id: 'retention',
     heading: 'Retention and deletion',
     body: [
-      'Chat and Call content, account data, financial records, diagnostics and support correspondence serve different purposes and may need different retention periods. This draft does not yet set a complete retention schedule. That schedule must be confirmed before publication; do not assume that closing a chat immediately deletes all copies.',
+      'The alpha learning section sets the active-store periods for Call, Quote and chat content, usefulness feedback and selection records. Account data, financial records, diagnostics, support correspondence and backups have separate schedules that remain under review. Closing a chat does not immediately delete all copies.',
       'A deletion request must be assessed separately for active content, financial and dispute records, backups and information already disclosed to independent Providers. Legal recordkeeping and unresolved transactions can limit deletion. Public blockchain records cannot be erased by closing an AE account.',
       'Use Support to request access, correction or deletion and to ask what is retained and why. AE will explain applicable limits where lawful. This draft does not promise immediate deletion from every backup or independent recipient.',
     ],
@@ -152,7 +163,7 @@ export const privacySections = [
     id: 'updates',
     heading: 'Changes to this policy',
     body: [
-      'This draft was last updated on 1 October 2026. AE reviews the policy when its services, information practices or legal obligations change.',
+      'This draft was last updated on 4 October 2026. AE reviews the policy when its services, information practices or legal obligations change.',
       'Revisions display their update date. Material changes require appropriate notice before new handling begins, and fresh consent where required. Publishing a revised notice does not retrospectively authorise an unrelated use of information already collected.',
     ],
   },
