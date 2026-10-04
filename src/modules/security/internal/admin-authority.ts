@@ -12,6 +12,7 @@ import type {
 
 const AdminActionMatrix = {
   owner_admin: {
+    review_call_content: true,
     read_admin_readbacks: true,
     annotate_triage: true,
     manage_admin_membership: true,
@@ -26,6 +27,7 @@ const AdminActionMatrix = {
     suppress_business: true,
   },
   support: {
+    review_call_content: false,
     read_admin_readbacks: true,
     annotate_triage: true,
     manage_admin_membership: false,
@@ -40,6 +42,7 @@ const AdminActionMatrix = {
     suppress_business: false,
   },
   reviewer: {
+    review_call_content: false,
     read_admin_readbacks: true,
     annotate_triage: false,
     manage_admin_membership: false,

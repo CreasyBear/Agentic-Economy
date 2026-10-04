@@ -299,16 +299,39 @@ export const callResultKindValues = [
   'reconciliation_required',
   'refused',
 ] as const
-export const callResultSchema: z.ZodType<CallResult> = z.discriminatedUnion('kind', [
+/** Content expiry preserves the completed purchase, usage, receipt and digests.
+ * A completed result contains either its original output or an expiry marker. */
+export type CompletedCallResult = Readonly<{
+  kind: 'completed'
+  callRef: string
+  toolRef: string
+  evidenceHash: string
+  usage: CallUsageSummary
+  receipt?: CallReceipt
+}> & (
+  | Readonly<{ output: JsonValue; contentExpiredAt?: never }>
+  | Readonly<{ output?: never; contentExpiredAt: number }>
+)
+
+const completedCallFields = {
+  kind: z.literal('completed'),
+  callRef: z.string(),
+  toolRef: z.string(),
+  evidenceHash: z.string(),
+  usage: callUsageSchema,
+  receipt: callReceiptSchema.exactOptional(),
+} as const
+
+const completedCallResultSchema: z.ZodType<CompletedCallResult> = z.union([
+  z.strictObject({ ...completedCallFields, output: jsonValueSchema }),
   z.strictObject({
-    kind: z.literal(callResultKindValues[0]),
-    callRef: z.string(),
-    toolRef: z.string(),
-    output: jsonValueSchema,
-    evidenceHash: z.string(),
-    usage: callUsageSchema,
-    receipt: callReceiptSchema.exactOptional(),
+    ...completedCallFields,
+    contentExpiredAt: z.number().int().nonnegative().describe('Call content was deleted under the retention policy; the completed purchase and receipt remain valid.'),
   }),
+])
+
+export const callResultSchema: z.ZodType<CallResult> = z.union([
+  completedCallResultSchema,
   z.strictObject({
     kind: z.literal(callResultKindValues[1]),
     callRef: z.string(),
@@ -341,15 +364,7 @@ export const callResultSchema: z.ZodType<CallResult> = z.discriminatedUnion('kin
 export type CallRefusalCode = (typeof callRefusalCodeValues)[number]
 
 export type CallResult =
-  | Readonly<{
-      kind: 'completed'
-      callRef: string
-      toolRef: string
-      output: JsonValue
-      evidenceHash: string
-      usage: CallUsageSummary
-      receipt?: CallReceipt
-    }>
+  | CompletedCallResult
   | Readonly<{
       kind: 'pending'
       callRef: string
@@ -384,16 +399,8 @@ const callOwnerHandoffSchema = z.strictObject({
   toolRef: z.string(),
 })
 
-export const callMachineResultSchema = z.discriminatedUnion('kind', [
-  z.strictObject({
-    kind: z.literal('completed'),
-    callRef: z.string(),
-    toolRef: z.string(),
-    output: jsonValueSchema,
-    evidenceHash: z.string(),
-    usage: callUsageSchema,
-    receipt: callReceiptSchema.exactOptional(),
-  }),
+export const callMachineResultSchema = z.union([
+  completedCallResultSchema,
   z.strictObject({
     kind: z.literal('pending'),
     callRef: z.string(),

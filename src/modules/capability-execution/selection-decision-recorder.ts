@@ -12,7 +12,7 @@ export type SelectionDecisionRecord = Readonly<{
   correlationId: string
   offered: readonly { toolRef: string; rank: number; score: number }[]
   pickedToolRef: string | null
-  tier: 'jev_system_one' | 'secondary_llm_adapter' | 'deterministic_rule_engine' | 'safe_refusal'
+  tier: 'jev_system_one' | 'secondary_llm_adapter' | 'deterministic_rule_engine' | 'safe_refusal' | 'no_match' | 'selection_unavailable'
   modelConfidence: number | null
   fit: readonly { toolRef: string; noul: number | null; score: number | null }[]
   latencyMs: number

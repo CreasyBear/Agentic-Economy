@@ -76,10 +76,14 @@ export async function insertSelectionDecision(
   ctx: MutationCtx,
   args: SelectionDecisionRowInput,
 ): Promise<void> {
-  if (args.offered.length === 0 || args.offered.length > MAX_SELECTION_DECISION_ITEMS) {
+  const noCandidates = args.tier === 'no_match' || args.tier === 'selection_unavailable'
+  if (noCandidates && (args.pickedToolRef !== undefined || args.offered.length !== 0 || args.fit.length !== 0)) {
+    throw new Error('capability_selection_decision_empty_outcome_invalid')
+  }
+  if ((!noCandidates && args.offered.length === 0) || args.offered.length > MAX_SELECTION_DECISION_ITEMS) {
     throw new Error('capability_selection_decision_offered_invalid')
   }
-  if (args.fit.length === 0 || args.fit.length > MAX_SELECTION_DECISION_ITEMS) {
+  if ((!noCandidates && args.fit.length === 0) || args.fit.length > MAX_SELECTION_DECISION_ITEMS) {
     throw new Error('capability_selection_decision_fit_invalid')
   }
   if (args.offered.some((item) => !Number.isFinite(item.score))) {
@@ -194,4 +198,3 @@ export async function readRecentSelectionDecisions(
     createdAt: row.createdAt,
   }))
 }
-

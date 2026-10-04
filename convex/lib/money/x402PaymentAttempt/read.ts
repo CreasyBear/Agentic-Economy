@@ -206,7 +206,9 @@ async function loadByAuthorizationDigest(
     .unique()
 }
 
-function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthorizationMaterial> {
+function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthorizationMaterial> | null {
+  if (row.contentExpiredAt !== undefined || row.challengeJson === undefined
+    || row.selectedRequirementJson === undefined || row.providerEndpoint === undefined) return null
   return {
     dispatchRef: row.dispatchRef,
     attemptRef: row.attemptRef,
@@ -258,7 +260,9 @@ function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthori
   }
 }
 
-function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue> {
+function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue> | null {
+  if (row.contentExpiredAt !== undefined || row.challengeJson === undefined
+    || row.selectedRequirementJson === undefined || row.providerEndpoint === undefined) return null
   const hasQuarantinedResponseDigest = row.quarantinedResponseDigest !== undefined
   const hasQuarantinedOutputJson = row.quarantinedOutputJson !== undefined
   if (hasQuarantinedResponseDigest !== hasQuarantinedOutputJson) {

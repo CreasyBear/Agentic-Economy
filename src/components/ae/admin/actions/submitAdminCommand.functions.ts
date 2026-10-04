@@ -16,6 +16,7 @@ import {
   sourceWriteRequestFromAdmission,
 } from '@/lib/server/source-write-admission'
 import type { AdminCommandAction, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
+import type { CallContentReview } from '@/lib/operator/admin-console/call-content-review'
 import type {
   SourceWriteAdmission,
   SourceWriteAdmissionRequest,
@@ -37,6 +38,7 @@ const grantPromotionalCredit = sourceMutation<AdminWireArgs<'grant_promotional_c
 
 const setPaymentsPaused = sourceMutation<AdminWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
 const changeTreasuryThresholds = sourceMutation<AdminWireArgs<'change_treasury_thresholds'>, AdminCommandReceipt<'change_treasury_thresholds'>>('adminTreasuryCommands:changeThresholds')
+const reviewCallContent = sourceMutation<AdminWireArgs<'review_call_content'>, CallContentReview>('adminCallContent:review')
 
 export const submitAdminCommandServer = createServerFn({ method: 'POST' })
   .validator((data) => adminCommandRequestSchema.parse(data))
@@ -63,6 +65,9 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
       const sourceWriteRequest = sourceWriteRequestFromAdmission(sourceWrite)
       let receipt: AdminActionSheetReceipt
       switch (data.action) {
+        case 'review_call_content':
+          receipt = (await callSourceMutation(reviewCallContent, { ...data, ...evidence, sourceWrite, sourceWriteRequest })).receipt
+          break
         case 'set_payments_paused':
           receipt = await callSourceMutation(setPaymentsPaused, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break

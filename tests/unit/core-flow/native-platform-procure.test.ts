@@ -1,18 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { executeDecisionGateway } from '@/modules/decision-engine/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { CallService } from '@/modules/capability-execution/call-authority'
+import { recordSelectionDecision } from '@/modules/capability-execution/selection-decision-recorder'
 import { toolProcureInputSchema, toolProcureResultSchema, type ToolProcureInput } from '@/modules/capability-execution/procure'
 import {
-  CapabilityProcurementEngine, ProcureConflictError,
+  CapabilityProcurementEngine, ProcureConflictError, ProcureSelectionUnavailableError,
   type ProcureIdentityPort, type ToolCatalogSearcher,
 } from '@/modules/capability-execution/procure-engine'
 vi.mock('@/modules/decision-engine/public', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   executeDecisionGateway: vi.fn(),
 }))
+vi.mock('@/modules/capability-execution/selection-decision-recorder', () => ({ recordSelectionDecision: vi.fn().mockResolvedValue(undefined) }))
+beforeEach(() => vi.mocked(recordSelectionDecision).mockClear())
 
 const principal: AgentAccessPrincipal = {
   principalId: 'prn_00000000000040008000000000000044',
@@ -77,6 +80,36 @@ function engine(callService: CallService, identity = identityPort(), catalogSear
 }
 
 describe('native procurement replay and recovery', () => {
+  it('records no-match and unavailable selection without persisting the requested need or purchasing', async () => {
+    const callService = service({ kind: 'refused' })
+    const request = { kind: 'need' as const, need: 'private customer need' }
+    expect(await engine(callService).procure(request)).toMatchObject({ code: 'no_matching_tool' })
+    expect(recordSelectionDecision).toHaveBeenLastCalledWith(expect.objectContaining({ offered: [], fit: [], tier: 'no_match', pickedToolRef: null }))
+    expect(await engine(callService, identityPort(), async () => { throw new ProcureSelectionUnavailableError() }).procure(request))
+      .toMatchObject({ code: 'selection_unavailable' })
+    expect(recordSelectionDecision).toHaveBeenLastCalledWith(expect.objectContaining({ offered: [], fit: [], tier: 'selection_unavailable' }))
+    expect(JSON.stringify(vi.mocked(recordSelectionDecision).mock.calls)).not.toContain(request.need)
+    expect(callService.quoteTool).not.toHaveBeenCalled()
+    expect(callService.callTool).not.toHaveBeenCalled()
+  })
+
+  it('returns and replays an expired completed Call without retaining its input or buying again', async () => {
+    const callService = service({ kind: 'completed', callRef: 'call:one', toolRef, evidenceHash: 'sha256:retained',
+      contentExpiredAt: 3_000, usage: { usageRef: 'usage:one', observedAt: 1, chargeState: 'paid',
+        amount: { currency: 'AUD', units: '2000', exponent: 6 }, priceDigest: 'sha256:price' } })
+    const procure = engine(callService)
+    const result = await procure.procure(input)
+    expect(result).toMatchObject({ status: 'delivered', callRef: 'call:one', quoteRef: 'quote:one', contentExpiredAt: 3_000 })
+    expect(result).not.toHaveProperty('output')
+    expect(result).not.toHaveProperty('input')
+    expect(result).not.toHaveProperty('endpoint')
+    expect(toolProcureResultSchema.parse(result)).toEqual(result)
+    expect(toolProcureResultSchema.safeParse({ ...result, output: 'restored' }).success).toBe(false)
+    expect(await procure.procure(input)).toEqual(result)
+    expect(callService.quoteTool).toHaveBeenCalledTimes(1)
+    expect(callService.callTool).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects malformed exact references at the branded boundary', () => {
     expect(toolProcureInputSchema.safeParse({ ...input, toolRef: 'operation:v1:not-a-digest' }).success).toBe(false)
     const parsed = toolProcureInputSchema.parse(input)

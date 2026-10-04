@@ -9,12 +9,14 @@ export const chatTables = {
     principalKind: v.optional(v.union(v.literal('agent_key'), v.literal('clerk_owner'))),
     principalRef: v.optional(v.string()),
     title: v.string(),
+    titleUpdatedAt: v.optional(v.number()),
     updatedAt: v.number(),
     activePromptMessageId: v.optional(v.string()),
     activeStartedAt: v.optional(v.number()),
     searchCursorSigningKey: v.optional(v.string()),
   })
     .index('by_threadId', ['threadId'])
+    .index('by_titleUpdatedAt', ['titleUpdatedAt'])
     .index('by_ownerId_and_updatedAt', ['ownerId', 'updatedAt'])
     .searchIndex('search_title_by_ownerId', {
       searchField: 'title',
@@ -49,13 +51,18 @@ export const chatTables = {
     cancelRequestedAt: v.optional(v.number()),
     inFlightCallRefs: v.optional(v.array(v.string())),
     callRefs: v.optional(v.array(v.string())),
+    contentRetention: v.optional(v.union(
+      v.object({ state: v.literal('purging'), order: v.number(), cursor: v.union(v.string(), v.null()) }),
+      v.object({ state: v.literal('expired'), expiredAt: v.number() }),
+    )),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index('by_principalRef_and_clientTurnId', ['principalRef', 'clientTurnId'])
     .index('by_threadId_and_sequence', ['threadId', 'sequence'])
     .index('by_promptMessageId', ['promptMessageId'])
-    .index('by_turnRef', ['turnRef']),
+    .index('by_turnRef', ['turnRef'])
+    .index('by_retentionState_and_updatedAt', ['contentRetention.state', 'updatedAt']),
   chatModelCostRequests: defineTable(chatModelCostBeginValue.extend({
     accountRef: v.string(), accounting: chatModelCostStoredAccountingValue,
     model: v.optional(v.string()), inputTokens: v.optional(v.number()), outputTokens: v.optional(v.number()),

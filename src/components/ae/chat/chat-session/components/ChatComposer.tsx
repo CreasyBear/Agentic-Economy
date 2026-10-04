@@ -2,6 +2,7 @@
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { ArcAiComposer } from '@/components/arc/blocks/ai-composer/ai-composer'
+import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
 import './ChatComposerFeedback.css'
 import { RecoveryNotice } from '../../recovery/RecoveryNotice'
 import { chatAnonymousCountLine, chatComposer, chatRecovery } from '@/lib/public/chat-ia'
@@ -14,7 +15,7 @@ export function ChatComposer({ prompt, busy, disabled, error, errorReference, br
   const promptLength = Array.from(prompt).length
   const invalid = error.length > 0
   const canSend = !busy && !disabled && prompt.trim().length > 0 && Array.from(prompt.trim()).length <= MAX_PROMPT_CHARACTERS
-  return <ArcAiComposer value={prompt} onValueChange={onPromptChange} onSubmit={onSubmit}
+  return <><ArcAiComposer value={prompt} onValueChange={onPromptChange} onSubmit={onSubmit}
     busy={busy} disabled={disabled} canSend={canSend} inputId="tool-chat-prompt"
     label={chatComposer.promptLabel} placeholder={chatComposer.placeholder}
     describedBy="tool-chat-limit tool-chat-error" invalid={invalid}
@@ -33,5 +34,5 @@ export function ChatComposer({ prompt, busy, disabled, error, errorReference, br
       </div>
       <p id="tool-chat-limit" className="arc-chat-character-count">{promptLength >= 1_800 ? `${promptLength.toLocaleString('en-AU')} / 2,000` : ''}</p>
     </div>
-    } />
+    } /><AlphaLearningNotice /></>
 }

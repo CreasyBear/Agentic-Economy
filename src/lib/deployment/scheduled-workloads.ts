@@ -18,6 +18,7 @@ export type ScheduledWorkload = Readonly<{
 }>
 
 export const SCHEDULED_WORKLOADS = [
+  { name: 'expire alpha content', workloadKind: 'cron', handler: 'expireAlphaContent', interval: { hours: 1 } },
   { name: 'refresh payment readiness', workloadKind: 'cron', handler: 'refreshPaymentReadiness', interval: { minutes: 5 } },
   { name: 'reconcile paid Call reports', workloadKind: 'reconciliation', handler: 'reconcilePaidCallReports', interval: { minutes: 1 } },
   { name: 'reconcile promotional credit', workloadKind: 'reconciliation', handler: 'reconcilePromotionalCredit', interval: { minutes: 1 } },
@@ -49,6 +50,7 @@ export type ScheduledWorkloadName = typeof SCHEDULED_WORKLOADS[number]['name']
 export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'cleanup expired agent access oauth grants',
   'cleanup expired source write nonces',
+  'expire alpha content',
   'expire stale pending approvals',
   'observe x402 treasury',
   'reconcile business supply projections',

@@ -85,7 +85,7 @@ export const finishTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeo
   }
   const turn = await ctx.db.query('chatTurns')
     .withIndex('by_turnRef', query => query.eq('turnRef', args.turnRef)).unique()
-  if (turn === null || turn.promptMessageId !== args.promptMessageId || turn.cancelRequestedAt !== undefined) {
+  if (turn === null || turn.contentRetention !== undefined || turn.promptMessageId !== args.promptMessageId || turn.cancelRequestedAt !== undefined) {
     return false
   }
   if (['completed', 'failed', 'rejected', 'canceled'].includes(turn.state)) return turn.state === args.state

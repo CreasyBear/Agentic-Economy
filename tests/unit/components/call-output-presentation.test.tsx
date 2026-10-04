@@ -6,8 +6,9 @@ import '../../setup/jsdom-platform'
 
 import { CallOutputSection, CallRequestSection } from '@/components/ae/call-receipt/CallTechnicalRecord'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
+import type { JsonValue } from '@/modules/capability-contract/public'
 
-const completed = (output: Extract<CallResult, { kind: 'completed' }>['output']): CallResult => ({
+const completed = (output: JsonValue): CallResult => ({
   kind: 'completed', callRef: 'call:output', toolRef: 'tool:output', evidenceHash: 'sha256:output', output,
   usage: { usageRef: 'usage:output', observedAt: 1, chargeState: 'paid', amount: { currency: 'AUD', units: '1', exponent: 2 }, priceDigest: 'sha256:price' },
 })
@@ -15,6 +16,17 @@ const completed = (output: Extract<CallResult, { kind: 'completed' }>['output'])
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('Call result presentation', () => {
+  it('explains content expiry without presenting a failed purchase or copyable output', () => {
+    const result = completed('old output')
+    if (result.kind !== 'completed') throw new Error('completed_fixture_required')
+    const { output: _output, ...purchase } = result
+    render(<CallOutputSection result={{ ...purchase, contentExpiredAt: 1_790_000_000_000 }} />)
+    expect(screen.getByRole('heading', { name: 'Output' })).toBeVisible()
+    expect(screen.getByText(/Call content expired on/)).toHaveTextContent('The purchase record remains available.')
+    expect(screen.queryByText('old output')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy output' })).not.toBeInTheDocument()
+  })
+
   it('presents recorded field names and values without inventing units or interpreting strings', () => {
     render(<CallOutputSection result={completed({ temperature: 17, units: 'celsius', confirmed: false, missing: null, answer: '' })} />)
     expect(screen.getByText('Temperature', { selector: 'dt' })).toBeVisible()

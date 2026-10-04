@@ -41,8 +41,10 @@ describe('privacy route', () => {
 
     expect(screen.getByText('How Agentic Economy collects and uses data.')).toBeTruthy()
     expect(screen.getByText(/Alpha draft for review/u)).toBeTruthy()
-    expect(screen.getByText(/retention schedule are required before publication/u)).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: '1. Who this policy covers' })).toBeTruthy()
+    expect(screen.getByText(/alpha content and learning periods are set out below/u)).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: '1. Invitation-only alpha learning' })).toBeTruthy()
+    expect(screen.getByText(/30 days after final purchase resolution/u)).toBeTruthy()
+    expect(screen.getByText(/ten-minute access window/u)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
       .toBe('/privacy/remove-business')
 
@@ -56,7 +58,7 @@ describe('privacy route', () => {
       .toBe('https://www.oaic.gov.au/privacy/privacy-complaints')
     const contents = screen.getByRole('navigation', { name: 'On this page' })
     const links = within(contents).getAllByRole('link')
-    expect(links).toHaveLength(15)
+    expect(links).toHaveLength(16)
     for (const link of links) {
       const href = link.getAttribute('href')
       expect(href).toMatch(/^#[a-z-]+$/)

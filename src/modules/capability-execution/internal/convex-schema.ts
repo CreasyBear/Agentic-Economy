@@ -148,6 +148,15 @@ export const callResultValue = v.union(
     usage: v.optional(usageValue),
     receipt: v.optional(callReceiptValue),
   }),
+  v.object({
+    kind: v.literal('completed'),
+    callRef: v.string(),
+    toolRef: v.string(),
+    contentExpiredAt: v.number(),
+    evidenceHash: v.string(),
+    usage: v.optional(usageValue),
+    receipt: v.optional(callReceiptValue),
+  }),
   v.object({ kind: v.literal('pending'), callRef: v.string(), toolRef: v.string(), retryAfterMs: v.number() }),
   v.object({ kind: v.literal('needs_authority'), callRef: v.string(), toolRef: v.string(), authorityRequest: authorityRequestValue }),
   v.object({ kind: v.literal('reconciliation_required'), callRef: v.string(), toolRef: v.string(), evidence: reconciliationValue, receipt: v.optional(callReceiptValue) }),
@@ -267,6 +276,7 @@ export const capabilityCallTables = {
     updatedAt: v.number(),
   })
     .index('by_callRef', ['callRef'])
+    .index('by_createdAt', ['createdAt'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
     .index('by_accountRef_and_principalRef_and_createdAt', ['accountRef', 'principalRef', 'createdAt'])
     .index('by_accountRef_and_toolRef_and_createdAt', ['accountRef', 'toolRef', 'createdAt'])
@@ -290,7 +300,8 @@ export const capabilityCallTables = {
     toolMaterialDigest: v.string(),
     currentToolDigest: v.string(),
     toolJson: v.string(),
-    normalizedInputJson: v.string(),
+    normalizedInputJson: v.optional(v.string()),
+    contentExpiredAt: v.optional(v.number()),
     inputDigest: v.string(),
     pricingJson: v.string(),
     pricingDigest: v.string(),
@@ -338,6 +349,7 @@ export const capabilityCallTables = {
     updatedAt: v.number(),
   })
     .index('by_quoteRef', ['quoteRef'])
+    .index('by_contentExpiredAt_and_expiresAt', ['contentExpiredAt', 'expiresAt'])
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
     .index('by_state_and_expiresAt', ['state', 'expiresAt'])
     .index('by_createdAt', ['createdAt']),
@@ -360,6 +372,7 @@ export const capabilityCallTables = {
     grantExpiresAt: v.number(),
     toolJson: v.optional(v.string()),
     inputJson: v.optional(v.string()),
+    contentExpiredAt: v.optional(v.number()),
     inputDigest: v.string(),
     requestDigest: v.string(),
     formanceFinancialState: v.optional(v.union(
@@ -406,6 +419,7 @@ export const capabilityCallTables = {
   })
     .index('by_callRef', ['callRef'])
     .index('by_chatTurnRef', ['chatTurnRef'])
+    .index('by_contentExpiredAt_and_createdAt', ['contentExpiredAt', 'createdAt'])
     .index('by_environment_and_createdAt', ['environment', 'createdAt'])
     .index('by_ownerId_and_buyerSaleTransactionRef', ['ownerId', 'buyerSaleTransactionRef'])
     // Idempotency is keyed by the stable Principal, never by the rotating
@@ -430,9 +444,8 @@ export const capabilityCallTables = {
       'environment', 'state', 'reconciliation.disposition', 'reconciliation.reason', 'reconciliation.nextAttemptAt',
     ])
     .index('by_createdAt', ['createdAt']),
-  // Authority-provenance-only journal. It stores no provider or payment secret
-  // material; every field either pins the admitted consequence snapshot or
-  // prevents a duplicate/ambiguous external effect.
+  // Authority and effect provenance remain after the content-bearing transport
+  // observation expires. Provider/payment secrets are never stored here.
   providerConsequenceJournal: defineTable({
     ticketRef: v.string(),
     effectRef: v.string(),
@@ -478,12 +491,15 @@ export const capabilityCallTables = {
     claimRef: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     observationJson: v.optional(v.string()),
+    contentExpiredAt: v.optional(v.number()),
     observationDigest: v.optional(v.string()),
     completedAt: v.optional(v.number()),
     abortedAt: v.optional(v.number()),
     updatedAt: v.number(),
   })
     .index('by_ticketRef', ['ticketRef'])
+    .index('by_contentExpiredAt_and_issuedAt', ['contentExpiredAt', 'issuedAt'])
+    .index('by_callRef', ['callRef'])
     .index('by_effectRef', ['effectRef'])
     .index('by_commandId', ['commandId'])
     .index('by_claimRef', ['claimRef'])

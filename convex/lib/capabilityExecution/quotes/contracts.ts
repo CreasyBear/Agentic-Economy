@@ -225,7 +225,10 @@ export const spendingPeriodPreparationResult = v.union(
 )
 
 export const invocationMaterial = v.union(v.object({
-  consumedCallRef: v.optional(v.string()),
+  consumedCallRef: v.string(),
+  toolRef: v.string(),
+  quoteRef: v.string(),
+}), v.object({
   toolRef: v.string(),
   input: jsonObject,
   decisionPrice: exactAud,

@@ -16,6 +16,7 @@ import { persistAuditEvent } from '../../security/audit/persistence'
 
 const APPROVAL_TTL_MS = 24 * 60 * 60 * 1_000
 const PROPOSABLE_BY_ACTION = {
+  review_call_content: false,
   set_business_suppression: true,
   close_removal_dispute: false,
   grant_admin_membership: true,
