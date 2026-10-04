@@ -18,6 +18,7 @@ import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
 import { ActivityReconciliation } from './components/ActivityReconciliation'
 import { ActivityMonthlySummary } from './components/ActivityMonthlySummary'
+import { ActivityCompleteMonth } from './components/ActivityCompleteMonth'
 import { ActivityMonthlyDraft } from './components/ActivityMonthlyDraft'
 import { ActivityUsageReports } from './components/ActivityUsageReports'
 import { ActivityPaginationControl } from './components/ActivityPaginationControl'
@@ -123,7 +124,8 @@ function AeActivityAvailable({
           onRetry={vm.retrySummaries}
         />
         {result.reconciliation === undefined ? null : <ActivityReconciliation returnScope={returnScope} result={result.reconciliation} retryPending={vm.summaryRetryPending} onRetry={vm.retrySummaries} />}
-        {result.filteredAgent === undefined ? <ActivityMonthlyDraft returnScope={returnScope} {...(draftRef === undefined ? {} : {draftRef})} /> : null}
+        {result.filteredAgent === undefined ? <ActivityCompleteMonth returnScope={returnScope} {...(draftRef===undefined?{}:{draftRef})}/> : null}
+        {result.filteredAgent===undefined&&draftRef?.startsWith('monthly-usage-draft:')?<ActivityMonthlyDraft returnScope={returnScope} draftRef={draftRef}/>:null}
         {vm.showFilterBar ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Call usage export · not an invoice</span>

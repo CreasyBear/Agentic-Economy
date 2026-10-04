@@ -2,8 +2,10 @@
 
 import { financialUsageReadSchema, reconciliationPeriodSchema, type FinancialUsageEntry, type FinancialUsageRead } from '../usage-reconciliation'
 import { formanceCommandPostingsMatch } from './formance-postings'
-import { historyTransactionEffect, type LedgerHistoryTransaction } from './formance-reads'
+import { historyTransactionEffect, encodeHistoryCursor,decodeHistoryCursor,type LedgerHistoryTransaction } from './formance-reads'
 import { DIGEST_PATTERN, COMMAND_REFERENCE_PATTERN, formanceSafeUnitsFromSdk, NO_RETRY, type FormanceContext, type FormanceMoneyCommand } from './formance-config'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { usageReadSourceDigest } from '../usage-read-source'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 type Transaction = LedgerHistoryTransaction
@@ -34,22 +36,30 @@ function providerUnits(transaction: Transaction, callDigest: string, providerDig
 /** Official SDK/native cursor. Effective-time filter and inserted-time cutoff are
  * checked independently on every row. Only bounded, allowlisted metadata leaves
  * this boundary; unknown templates/reverts prevent complete amount claims. */
-export async function readFormanceUsageReconciliation(context: FormanceContext, input: {
-  accountDigest: string; periodStartAt: number; periodEndAt: number; now?: number
-}): Promise<FinancialUsageRead> {
+type ReadInput={accountDigest:string;periodStartAt:number;periodEndAt:number;now?:number}
+export type FinancialUsagePageRead=Extract<FinancialUsageRead,{kind:'available'}>&{continueCursor:string;isDone:boolean;lastTransactionId:string|null;scannedCount:number}
+  | Exclude<FinancialUsageRead,{kind:'available'}>
+export async function readFormanceUsageReconciliation(context:FormanceContext,input:ReadInput):Promise<FinancialUsageRead>{
+  return financialUsageReadSchema.parse(await readFinancialPages(context,input))
+}
+export async function readFormanceUsageReconciliationPage(context:FormanceContext,input:ReadInput&{cursor:string|null;lastTransactionId:string|null}):Promise<FinancialUsagePageRead>{
+  return await readFinancialPages(context,{...input,page:{cursor:input.cursor,lastTransactionId:input.lastTransactionId}}) as FinancialUsagePageRead
+}
+async function readFinancialPages(context:FormanceContext,input:ReadInput&{page?:{cursor:string|null;lastTransactionId:string|null}}):Promise<FinancialUsageRead|FinancialUsagePageRead> {
   if (!DIGEST_PATTERN.test(input.accountDigest) || !reconciliationPeriodSchema.safeParse({ periodStartAt: input.periodStartAt, periodEndAt: input.periodEndAt }).success) {
     return { kind: 'setup_required', code: 'formance_reconciliation_query_invalid' }
   }
   const snapshotAt = input.now ?? Date.now()
   if (!Number.isSafeInteger(snapshotAt) || snapshotAt < 0) return { kind: 'setup_required', code: 'formance_reconciliation_query_invalid' }
   const entries: FinancialUsageEntry[] = []
-  let cursor: string | undefined
-  let lastId: bigint | undefined
+  if(input.page!==undefined && ((input.page.cursor!==null && (input.page.cursor.length<1||input.page.cursor.length>2000)) || (input.page.lastTransactionId!==null&&!/^(0|[1-9]\d{0,77})$/u.test(input.page.lastTransactionId))))return {kind:'setup_required',code:'formance_reconciliation_query_invalid'}
+  let cursor:string|undefined=input.page?.cursor??undefined
+  let lastId:bigint|undefined=input.page?.lastTransactionId==null?undefined:BigInt(input.page.lastTransactionId)
   const cursors = new Set<string>()
   let scanned = 0
   let coverage: 'complete' | 'partial' = 'complete'
   try {
-    for (let index = 0; index < 200; index += 1) {
+    for (let index = 0; index < (input.page===undefined?200:1); index += 1) {
       const response = await context.sdk.ledger.v2.listTransactions(cursor === undefined ? {
         ledger: context.configuration.ledger, pageSize: 15, pit: new Date(snapshotAt), sort: 'id:desc',
         query: { $and: [ { $match: { 'metadata[account_digest]': input.accountDigest } },
@@ -62,7 +72,7 @@ export async function readFormanceUsageReconciliation(context: FormanceContext, 
         return { kind: 'unavailable', code: 'formance_reconciliation_page_invalid' }
       }
       scanned += page.data.length
-      if (scanned > 1500) return { kind: 'unavailable', code: 'reconciliation_window_too_large' }
+      if (input.page===undefined && scanned > 1500) return { kind: 'unavailable', code: 'reconciliation_window_too_large' }
       for (const transaction of page.data) {
         const occurredAt = transaction.timestamp.getTime()
         const recordedAt = transaction.insertedAt?.getTime() ?? null
@@ -101,7 +111,9 @@ export async function readFormanceUsageReconciliation(context: FormanceContext, 
         entries.push({ transactionId: transaction.id.toString(), transactionRef, callDigest, providerDigest,
           kind, units, occurredAt, recordedAt, reverted: transaction.reverted })
       }
-      if (!page.hasMore) return financialUsageReadSchema.parse({ kind: 'available', entries, snapshotAt, coverage })
+      const parsed=financialUsageReadSchema.parse({kind:'available',entries,snapshotAt,coverage})
+      if(input.page!==undefined && parsed.kind==='available')return {...parsed,continueCursor:page.hasMore?page.next!:'',isDone:!page.hasMore,lastTransactionId:lastId?.toString()??null,scannedCount:page.data.length}
+      if (!page.hasMore) return parsed
       cursor = page.next
       if (cursor !== undefined) cursors.add(cursor)
     }
@@ -109,4 +121,28 @@ export async function readFormanceUsageReconciliation(context: FormanceContext, 
   } catch (cause) {
     return degradeBackend(cause instanceof Error ? 'Error' : typeof cause, { kind: 'unavailable' as const, code: 'formance_read_unavailable' }, { site: 'readFormanceUsageReconciliation', reason: 'source_unavailable' })
   }
+}
+
+
+export type CredentialFinancialPage=FinancialUsagePageRead&{periodStartAt?:number;periodEndAt?:number}
+/** Reuse the existing server-signed history cursor. The added scope digest binds
+ * credential, month and configured source; native rows still prove the Account. */
+export async function readFormanceCredentialActivityPage(context:FormanceContext,input:{accountDigest:string;credentialRef:string;cursorKey:string;cursor?:string;now?:number}):Promise<CredentialFinancialPage>{
+  if(!DIGEST_PATTERN.test(input.accountDigest)||input.cursorKey.length<32||!input.credentialRef||input.credentialRef.length>200)return {kind:'setup_required',code:'credential_activity_configuration_invalid'}
+  const previous=input.cursor===undefined?undefined:decodeHistoryCursor(input.cursor,input.cursorKey)
+  if(input.cursor!==undefined&&(previous===undefined||previous.accountDigest!==input.accountDigest||previous.ledger!==context.configuration.ledger))return {kind:'unavailable',code:'credential_activity_cursor_invalid'}
+  const snapshotAt=previous?.snapshotAt??input.now??Date.now(),date=new Date(snapshotAt)
+  if(!Number.isSafeInteger(snapshotAt)||snapshotAt<0)return {kind:'unavailable',code:'credential_activity_cursor_invalid'}
+  const periodStartAt=Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),1),periodEndAt=Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,1)
+  const scopeDigest=canonicalDigest({format:'ae.credential-activity-cursor:v1',accountDigest:input.accountDigest,credentialRef:input.credentialRef,periodStartAt,periodEndAt,sourceDigest:usageReadSourceDigest(context.configuration)})
+  if(previous!==undefined&&previous.scopeDigest!==scopeDigest)return {kind:'unavailable',code:'credential_activity_cursor_invalid'}
+  const result=await readFormanceUsageReconciliationPage(context,{accountDigest:input.accountDigest,periodStartAt,periodEndAt,now:snapshotAt,cursor:previous?.cursor??null,lastTransactionId:previous?.lastId??null})
+  if(result.kind!=='available')return result
+  const coverage=previous?.coverage==='partial'||result.coverage==='partial'?'partial' as const:'complete' as const
+  if(!result.isDone&&(result.lastTransactionId===null||result.continueCursor===previous?.cursor))return {kind:'unavailable',code:'credential_activity_cursor_invalid'}
+  let continueCursor=''
+  if(!result.isDone){if(result.lastTransactionId===null)return {kind:'unavailable',code:'credential_activity_cursor_invalid'}
+    continueCursor=encodeHistoryCursor({accountDigest:input.accountDigest,ledger:context.configuration.ledger,snapshotAt,cursor:result.continueCursor,lastId:result.lastTransactionId,coverage,scopeDigest},input.cursorKey)
+  }
+  return {...result,coverage,continueCursor,periodStartAt,periodEndAt}
 }

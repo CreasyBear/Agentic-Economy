@@ -481,18 +481,18 @@ export async function readFormanceStatementPage(
 }
 
 export type LedgerHistoryTransaction = NonNullable<Awaited<ReturnType<SDK['ledger']['v2']['listTransactions']>>['v2TransactionsCursorResponse']>['cursor']['data'][number]
-type HistoryCursor = ReturnType<typeof accountHistoryCursorSchema.parse>
+export type HistoryCursor = ReturnType<typeof accountHistoryCursorSchema.parse>
 
 function historyCursorSignature(payload: string, key: string): Buffer {
   return createHmac('sha256', key).update(`ae.account-history-cursor:v1.${payload}`).digest()
 }
 
-function encodeHistoryCursor(payload: HistoryCursor, key: string): string {
+export function encodeHistoryCursor(payload: HistoryCursor, key: string): string {
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `${encoded}.${historyCursorSignature(encoded, key).toString('base64url')}`
 }
 
-function decodeHistoryCursor(token: string, key: string): HistoryCursor | undefined {
+export function decodeHistoryCursor(token: string, key: string): HistoryCursor | undefined {
   if (token.length > 4096) return undefined
   const match = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/u.exec(token)
   if (match?.[1] === undefined || match[2] === undefined) return undefined
@@ -583,7 +583,7 @@ export async function readFormanceAccountHistory(
   }
   const cursor = input.cursor === undefined ? undefined : decodeHistoryCursor(input.cursor, input.cursorKey)
   if (input.cursor !== undefined && (cursor === undefined || cursor.accountDigest !== input.accountDigest
-    || cursor.ledger !== context.configuration.ledger)) return { kind: 'refused', code: 'account_history_cursor_invalid' }
+    || cursor.ledger !== context.configuration.ledger || cursor.scopeDigest !== undefined)) return { kind: 'refused', code: 'account_history_cursor_invalid' }
   const snapshotAt = cursor?.snapshotAt ?? input.now ?? Date.now()
   if (!Number.isSafeInteger(snapshotAt) || snapshotAt < 0) return { kind: 'refused', code: 'account_history_cursor_invalid' }
   try {

@@ -2714,6 +2714,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "readCredentialActivityPage",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "readCreditBalance",
     "kind": "action"
   },
@@ -2763,6 +2769,12 @@
     "visibility": "internal",
     "module": "moneyFormance",
     "method": "readUsageReconciliation",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readUsageReconciliationPage",
     "kind": "action"
   },
   {
@@ -2824,6 +2836,24 @@
     "module": "moneyLedger",
     "method": "readAgentProviderEarnings",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readCredentialActivityFacts",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readCredentialCreatedCalls",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readCredentialSource",
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -3008,8 +3038,38 @@
   {
     "visibility": "internal",
     "module": "moneyMonthlyUsageDraft",
+    "method": "advanceCompleteMonth",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "applyMonthlyFinancialPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
     "method": "captureFinancial",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "completeMonthWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "configureReporting",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "continueCompleteMonth",
+    "kind": "action"
   },
   {
     "visibility": "public",
@@ -3026,6 +3086,30 @@
   {
     "visibility": "public",
     "module": "moneyMonthlyUsageDraft",
+    "method": "readCompleteMonth",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readCompleteMonthWork",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readMonthlyDocumentParts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readMonthlyFinancialParts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
     "method": "readOwnerDraft",
     "kind": "query"
   },
@@ -3034,6 +3118,24 @@
     "module": "moneyMonthlyUsageDraft",
     "method": "readOwnerDraftInternal",
     "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readReportingPolicy",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "requestAutomaticMonths",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "requestCompleteMonth",
+    "kind": "mutation"
   },
   {
     "visibility": "public",

@@ -17,6 +17,8 @@ vi.mock('@/lib/server/durable-usage-report.functions', () => ({
   readOwnerUsageReportPartsServer:vi.fn(),
 }))
 
+vi.mock('@/lib/server/complete-monthly-usage.functions',()=>({readUsageReportingPolicyServer:vi.fn().mockResolvedValue({automaticMonthly:false,revision:0,ownerConsentCurrent:false,schedulerActive:false}),requestCompleteMonthlyUsageServer:vi.fn(),readCompleteMonthlyUsageServer:vi.fn(),readMonthlyRelatedDocumentsServer:vi.fn(),readMonthlyFinancialPartsServer:vi.fn(),configureUsageReportingServer:vi.fn()}))
+
 vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))

@@ -13,6 +13,8 @@ export const failureValues = [
   v.object({ kind: v.literal('refused'), code: v.string() }),
 ] as const
 export const financialReadResult = v.union(v.object({ kind: v.literal('available'), entries: v.array(financialEntryValue), snapshotAt: v.number(), coverage: v.union(v.literal('complete'), v.literal('partial')) }), ...failureValues.slice(0,2))
+export const financialPageReadResult=v.union(v.object({kind:v.literal('available'),entries:v.array(financialEntryValue),snapshotAt:v.number(),coverage:v.union(v.literal('complete'),v.literal('partial')),continueCursor:v.string(),isDone:v.boolean(),lastTransactionId:nullableString,scannedCount:v.number()}),...failureValues.slice(0,2))
+export const credentialFinancialPageResult=v.union(v.object({kind:v.literal('available'),entries:v.array(financialEntryValue),snapshotAt:v.number(),coverage:v.union(v.literal('complete'),v.literal('partial')),continueCursor:v.string(),isDone:v.boolean(),lastTransactionId:nullableString,scannedCount:v.number(),periodStartAt:v.optional(v.number()),periodEndAt:v.optional(v.number())}),...failureValues.slice(0,2))
 export const callFactValue = v.object({
   callRef: v.string(), credentialRef: v.string(), principalRef: v.string(), createdAt: v.number(),
   environment: v.union(v.literal('sandbox'), v.literal('production')), providerDigest: nullableString,

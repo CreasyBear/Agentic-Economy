@@ -202,14 +202,26 @@ const x402SpendReservationFields = {
 }
 
 export const moneyTables = {
+  moneyUsageReportingPolicies: defineTable({
+    accountRef:v.string(),ownerPrincipalRef:v.string(),authorityRevisionAccount:v.number(),revision:v.number(),
+    automaticMonthly:v.boolean(),updatedAt:v.number(),idempotencyRef:v.string(),requestDigest:v.string(),
+  }).index('by_accountRef',['accountRef']).index('by_automaticMonthly_and_accountRef',['automaticMonthly','accountRef']),
   moneyMonthlyUsageDrafts: defineTable({
     draftRef: v.string(), accountRef: v.string(), month: v.string(), revision: v.number(), priorDraftRef: v.union(v.string(), v.null()),
     ledgerSnapshotAt: v.number(), createdAt: v.number(),
     sourceIdentity: v.object({environment: v.union(v.literal('sandbox'), v.literal('production')), sourceDigest: v.string()}),
     requestedByPrincipalRef: v.string(), authorityRevisionAccount: v.number(),
+    priorFrozenDigest:v.optional(v.string()),
+    durableVersion:v.optional(v.literal(2)),usageReportRef:v.optional(v.string()),documentRef:v.optional(v.string()),
+    durableState:v.optional(v.union(v.literal('building'),v.literal('complete'),v.literal('failed'))),failureCode:v.optional(v.string()),
+    monthlyWorkId:v.optional(v.string()),
+    financialCursor:v.optional(v.string()),financialLastTransactionId:v.optional(v.string()),financialPageCount:v.optional(v.number()),financialComplete:v.optional(v.boolean()),financialSummaryJson:v.optional(v.string()),financialPartsDigest:v.optional(v.string()),
+    relatedDocumentsCursor:v.optional(v.string()),relatedDocumentPartCount:v.optional(v.number()),relatedDocumentCountUnits:v.optional(v.string()),relatedDocumentsDigest:v.optional(v.string()),
     financialSnapshotJson: v.optional(v.string()), financialSnapshotDigest: v.optional(v.string()),
     snapshotJson: v.optional(v.string()), snapshotDigest: v.optional(v.string()), sourcesCapturedAt: v.optional(v.number()),
-  }).index('by_draftRef', ['draftRef']).index('by_accountRef_and_month_and_revision', ['accountRef', 'month', 'revision']),
+  }).index('by_draftRef', ['draftRef']).index('by_accountRef_and_month_and_revision', ['accountRef', 'month', 'revision']).index('by_usageReportRef',['usageReportRef']),
+  moneyMonthlyUsageDocumentParts: defineTable({draftRef:v.string(),accountRef:v.string(),position:v.number(),recordsJson:v.string(),partDigest:v.string()}).index('by_draftRef_and_position',['draftRef','position']),
+  moneyMonthlyUsageFinancialParts:defineTable({draftRef:v.string(),accountRef:v.string(),position:v.number(),recordsJson:v.string(),partDigest:v.string()}).index('by_draftRef_and_position',['draftRef','position']),
   moneyPromotionalGrants: defineTable({
     grantRef: v.string(),
     accountRef: v.string(),
@@ -359,6 +371,7 @@ export const moneyTables = {
       v.literal('funding_receipt'),
       v.literal('service_fee_document'),
       v.literal('statement'),
+      v.literal('monthly_usage'),
       v.literal('daily_close'),
       v.literal('adjustment'),
       v.literal('tax_invoice'),
@@ -380,6 +393,7 @@ export const moneyTables = {
       v.literal('failed'),
     ),
     environment: v.union(v.literal('sandbox'), v.literal('production')),
+    usageReportRef:v.optional(v.string()),usageReportDigest:v.optional(v.string()),monthlyCloseRef:v.optional(v.string()),
     sourceCount: v.number(),
     snapshotDigest: identifier,
     snapshotCutoffAt: v.optional(v.number()),

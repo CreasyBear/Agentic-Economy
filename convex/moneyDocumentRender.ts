@@ -10,7 +10,7 @@ import type { Id } from './_generated/dataModel'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
-import { formatAbnDisplay, formatExactAmount, parseTaxDocumentSnapshot, type TaxDocumentSnapshot } from '../src/modules/money/public'
+import { financialReportSummarySchema,formatAbnDisplay, formatExactAmount, parseTaxDocumentSnapshot, type TaxDocumentSnapshot } from '../src/modules/money/public'
 
 type RenderDocument = Readonly<{
   documentRef: string
@@ -46,6 +46,7 @@ const attachRenderedFileRef = makeFunctionReference<'mutation', {
 
 const DISPLAY_FIELDS = [
   'accountRef', 'environment', 'kind', 'currency', 'exponent', 'periodStart', 'periodEnd', 'snapshotCutoffAt',
+  'monthlyCloseRef','usageReportRef','usageReportDigest',
   'exactCallUnits', 'roundedCallUnits', 'residualUnits', 'sourceCount', 'amountUnits',
   'principalUnits', 'serviceFeeUnits', 'taxUnits', 'totalUnits', 'direction',
   'reasonCode', 'transactionRef', 'occurredAt', 'policyDigest',
@@ -58,6 +59,7 @@ function titleForKind(kind: string): string {
     case 'funding_receipt': return 'Funding receipt'
     case 'service_fee_document': return 'Service fee document'
     case 'statement': return 'Account statement'
+    case 'monthly_usage': return 'Monthly usage statement'
     case 'daily_close': return 'Account daily close'
     case 'adjustment': return 'Adjustment document'
     case 'tax_invoice': return 'Tax invoice'
@@ -77,6 +79,17 @@ function displayRows(document: RenderDocument): { title: string; rows: DisplayRo
     throw new Error('money_document_render_input_invalid')
   }
   const rows: DisplayRow[] = [['Reference', document.documentRef], ['Template', document.templateVersion]]
+  if(parsed.kind==='monthly_usage'){
+    rows.push(['Scope','Consolidated usage evidence for a closed UTC month. Call quantities use creation dates; ledger amounts use financial effective dates and a fixed insertion cutoff. This statement grants no charge, refund, tax invoice or adjustment authority.'])
+    if(isRecord(parsed.monthlyEvidence)){
+      for(const field of ['priorDraftRef','relatedDocumentsDigest']){const value=parsed.monthlyEvidence[field];if(typeof value==='string')rows.push([humanLabel(field),value])}
+      if(typeof parsed.monthlyEvidence.financialSummaryJson==='string'){
+        const summary=financialReportSummarySchema.parse(JSON.parse(parsed.monthlyEvidence.financialSummaryJson))
+        for(const field of Object.keys(summary.totals) as Array<keyof typeof summary.totals>){const asset=field.startsWith('provider')||field.startsWith('netProvider')?'USDC':'AUD';rows.push([humanLabel(field),formatExactAmount({currency:asset,exponent:6,units:summary.totals[field]})??'Unknown'])}
+        rows.push(['Amount coverage',summary.amountCoverage],['Attribution coverage',summary.attributionCoverage])
+      }
+    }
+  }
   if (parsed.kind === 'statement' || parsed.kind === 'daily_close') {
     rows.push(['Scope', 'Account settled Tool purchases: non-reverted sale and GST postings in the stated UTC period, as recorded at the snapshot cutoff. Funding, refunds, treasury and chain reconciliation are outside this report.'])
     if (parsed.kind === 'daily_close') rows.push(['Signature', 'Review these frozen bytes before signing. The owner signature and evidence digest are recorded separately in the Account document record.'])

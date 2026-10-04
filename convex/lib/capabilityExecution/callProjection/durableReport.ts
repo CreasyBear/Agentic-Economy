@@ -10,12 +10,16 @@ import { appendUsageReportSummary, emptyUsageReportSummary, usageReportSummarySc
 import { readProjectedSupport } from '../serviceUsage/projectedSupport'
 import { usageSourceVersionDigest } from '../serviceUsage/sourceVersions'
 import { validUsagePeriod } from './contracts'
+import { enqueueLinkedMonthlyClose } from '../../money/monthlyDraft/completeWork'
 import { enqueueUsageReportPage } from './durableReportWork'
 import { requestUsageReportArgs, captureUsageReportArgs, reportManifest, type usageReportPageArgs, type listUsageReportsArgs, type readUsageReportResult } from './durableReportContracts'
 
 export async function requestUsageReportHandler(ctx:MutationCtx,args:ObjectType<typeof requestUsageReportArgs>){
   const actor=await resolveBusinessActor(ctx)
   if(actor.kind !== 'authenticated_owner') throw new Error('call_history_authentication_required')
+  return await requestUsageReportForActor(ctx,args,actor)
+}
+export async function requestUsageReportForActor(ctx:MutationCtx,args:ObjectType<typeof requestUsageReportArgs>,actor:{canonicalAccountRef:string;canonicalPrincipalRef:string;authorityRevision:{account:number}}){
   if(!validUsagePeriod(args.periodStartAt,args.periodEndAt) || !/^call-usage-export:[a-f0-9-]{36}$/u.test(args.reportRef)
     || (args.principalRef !== undefined && (args.principalRef.length === 0 || args.principalRef.length>500))) throw new Error('call_export_scope_invalid')
   const scope={accountRef:actor.canonicalAccountRef,actorRef:actor.canonicalPrincipalRef,...args},scopeDigest=canonicalDigest(scope)
@@ -38,7 +42,7 @@ export async function requestUsageReportHandler(ctx:MutationCtx,args:ObjectType<
 export async function captureUsageReportPageHandler(ctx:MutationCtx,args:ObjectType<typeof captureUsageReportArgs>){
   const report=await ctx.db.query('capabilityUsageReports').withIndex('by_reportRef',q=>q.eq('reportRef',args.reportRef)).unique()
   if(report === null || report.state !== 'building' || report.pageCount !== args.expectedPageCount) return {kind:'replayed' as const}
-  if(await usageSourceVersionDigest(ctx,report) !== report.sourceVersionDigest){await ctx.db.patch(report._id,{state:'failed',failureCode:'call_export_source_changed'});return {kind:'failed' as const}}
+  if(await usageSourceVersionDigest(ctx,report) !== report.sourceVersionDigest){await ctx.db.patch(report._id,{state:'failed',failureCode:'call_export_source_changed'});await enqueueLinkedMonthlyClose(ctx,report.reportRef);return {kind:'failed' as const}}
   const principalRef=report.principalRef
   const query=principalRef === undefined ? ctx.db.query('capabilityCallProjections').withIndex('by_accountRef_and_createdAt',q=>q.eq('accountRef',report.accountRef).gte('createdAt',report.periodStartAt).lt('createdAt',report.periodEndAt))
     :ctx.db.query('capabilityCallProjections').withIndex('by_accountRef_and_principalRef_and_createdAt',q=>q.eq('accountRef',report.accountRef).eq('principalRef',principalRef).gte('createdAt',report.periodStartAt).lt('createdAt',report.periodEndAt))
@@ -74,6 +78,7 @@ export async function captureUsageReportPageHandler(ctx:MutationCtx,args:ObjectT
   const workId=page.isDone ? report.workId : await enqueueUsageReportPage(ctx,report.reportRef,pageCount)
   await ctx.db.patch(report._id,{pageCount,partCount,scannedCountUnits:(BigInt(report.scannedCountUnits)+BigInt(page.page.length)).toString(),recordCountUnits:summary.recordCountUnits,recordsChainDigest,summaryJson:JSON.stringify(summary),nextCursor:page.continueCursor,
     ...(workId === undefined ? {} : {workId}),...(page.isDone ? {state:'complete' as const,completedAt:Date.now()} : {})})
+  if(page.isDone)await enqueueLinkedMonthlyClose(ctx,report.reportRef)
   return {kind:'advanced' as const}
 }
 

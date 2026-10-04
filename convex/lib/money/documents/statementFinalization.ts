@@ -66,10 +66,10 @@ export const readStatementFinalizationHandler = async (ctx: QueryCtx, args: Infe
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
     if (row === null || row.state !== 'adjusting'
-      || (row.kind !== 'statement' && row.kind !== 'daily_close')) return null
+      || (row.kind !== 'statement' && row.kind !== 'daily_close' && row.kind !== 'monthly_usage')) return null
     const policyAdmission = readUnapprovedPolicyContext(row)
     return {
-      adjustmentAllowed: policyAdmission === undefined,
+      adjustmentAllowed: row.kind!=='monthly_usage' && policyAdmission === undefined,
       documentRef: row.documentRef,
       expectedEnvironment: row.environment,
       accountRef: row.accountRef,
@@ -85,7 +85,7 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close')) {
+    if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close' && row.kind !== 'monthly_usage')) {
       return { kind: 'refused' as const }
     }
     assertFinancialEnvironment(row.environment)
@@ -103,6 +103,9 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
       || row.periodStart === undefined
       || row.periodEnd === undefined
       || row.snapshotCutoffAt === undefined) return { kind: 'refused' as const }
+    if(row.kind==='monthly_usage' && (row.residualUnits!=='0'||args.adjustmentTransactionRefs.length!==0))return {kind:'refused' as const}
+    const monthly=row.kind==='monthly_usage'?{monthlyCloseRef:row.monthlyCloseRef,usageReportRef:row.usageReportRef,usageReportDigest:row.usageReportDigest}:undefined
+    if(monthly!==undefined&&(monthly.monthlyCloseRef===undefined||monthly.usageReportRef===undefined||monthly.usageReportDigest===undefined))return {kind:'refused' as const}
     const sourceTransactionRefs = [...row.sourceTransactionRefs, ...args.adjustmentTransactionRefs].slice(0, 32)
     const renderInput = {
       format: 'ae.money-document-render-input:v3',
@@ -120,6 +123,7 @@ export const queueStatementRenderHandler = async (ctx: MutationCtx, args: Infer<
       residualUnits: row.residualUnits,
       sourceCount: row.sourceCount,
       adjustmentTransactionRefs: args.adjustmentTransactionRefs,
+      ...(monthly===undefined?{}:{monthlyCloseRef:monthly.monthlyCloseRef,usageReportRef:monthly.usageReportRef,usageReportDigest:monthly.usageReportDigest,monthlyEvidence:JSON.parse(row.renderInputJson) as StableHashValue}),
       snapshotDigest: row.snapshotDigest,
       policyRefs: row.policyRefs,
       policyDigest: row.policyDigest,

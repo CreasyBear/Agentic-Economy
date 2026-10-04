@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { readFormanceUsageReconciliation, type FormanceContext } from '@/modules/money/formance'
+import { readFormanceUsageReconciliation, readFormanceUsageReconciliationPage, readFormanceCredentialActivityPage, readFormanceAccountHistory, type FormanceContext } from '@/modules/money/formance'
 const accountDigest = 'a'.repeat(64), callDigest = 'b'.repeat(64), providerDigest = 'c'.repeat(64), treasury = 'd'.repeat(64)
 const input = { accountDigest, periodStartAt: 100, periodEndAt: 2000, now: 3000 }
 const available = `accounts:${accountDigest}:available`, reserved = `calls:${callDigest}:buyer_reserved`
@@ -59,5 +59,46 @@ describe('native SDK usage reconciliation contract', () => {
     expect(await readFormanceUsageReconciliation(context,input)).toEqual({kind:'unavailable',code:'formance_read_unavailable'})
     expect(JSON.stringify(logs.mock.calls)).not.toContain(sentinel)
     expect(JSON.stringify(logs.mock.calls)).not.toContain('signed.example')
+  })
+})
+
+
+describe('durable native ledger page boundary',()=>{
+  it('binds signed credential cursors to Account, credential and configured source, preserves the snapshot and refuses scope substitution',async()=>{
+    const {context,listTransactions}=fixture(page([txn(2,'BUYER_SALE_SETTLED',[p(reserved,'platform:revenue:sales',7n)])],'native:next'),page([txn(1,'BUYER_SALE_SETTLED',[p(reserved,'platform:revenue:sales',3n)])]))
+    Object.assign(context.configuration,{environment:'sandbox',gatewayUrl:'https://fixture.invalid'})
+    const args={accountDigest,credentialRef:'credential:original',cursorKey:'fixture-only-cursor-key-000000000000',now:3000}
+    const first=await readFormanceCredentialActivityPage(context,args)
+    if(first.kind!=='available')throw new Error(first.code)
+    expect(first).toMatchObject({snapshotAt:3000,periodStartAt:0,isDone:false})
+    expect(first.continueCursor).not.toContain('native:next')
+    for(const changed of [{credentialRef:'credential:other'},{accountDigest:'f'.repeat(64)},{cursor:`${first.continueCursor}tampered`}]){
+      expect(await readFormanceCredentialActivityPage(context,{...args,cursor:first.continueCursor,...changed})).toMatchObject({kind:'unavailable',code:'credential_activity_cursor_invalid'})
+    }
+    expect(await readFormanceAccountHistory(context,{accountDigest,cursorKey:args.cursorKey,cursor:first.continueCursor})).toMatchObject({kind:'refused',code:'account_history_cursor_invalid'})
+    const original=context.configuration.gatewayUrl
+    Object.assign(context.configuration,{gatewayUrl:'https://changed.invalid'})
+    expect(await readFormanceCredentialActivityPage(context,{...args,cursor:first.continueCursor})).toMatchObject({kind:'unavailable',code:'credential_activity_cursor_invalid'})
+    Object.assign(context.configuration,{gatewayUrl:original})
+    expect(await readFormanceCredentialActivityPage(context,{...args,cursor:first.continueCursor,now:Date.UTC(2026,9,1)})).toMatchObject({kind:'available',snapshotAt:3000,isDone:true,entries:[{units:'3'}]})
+    expect(listTransactions).toHaveBeenCalledTimes(2)
+  })
+  it('retains native cursor and ID ordering across 10,000 rows without the bounded interactive collector cap',async()=>{
+    const {context,listTransactions}=fixture()
+    let offset=0
+    listTransactions.mockImplementation(async()=>{const size=Math.min(15,10000-offset),data=Array.from({length:size},(_,i)=>txn(10000-offset-i,'BUYER_SALE_SETTLED',[p(reserved,'platform:revenue:sales',10001n)]));offset+=size;return page(data,offset===10000?undefined:`native:${offset}`)})
+    let cursor:string|null=null,lastTransactionId:string|null=null,count=0,total=0n
+    for(;;){const result=await readFormanceUsageReconciliationPage(context,{...input,cursor,lastTransactionId})
+      if(result.kind!=='available')throw new Error(result.code)
+      count+=result.entries.length;for(const entry of result.entries)total+=BigInt(entry.units!)
+      if(result.isDone)break;cursor=result.continueCursor;lastTransactionId=result.lastTransactionId
+    }
+    expect(count).toBe(10000);expect(total).toBe(100010000n);expect(listTransactions).toHaveBeenCalledTimes(667)
+    expect(listTransactions.mock.calls[1]?.[0]).toEqual({ledger:'fixture',cursor:'native:15'})
+  })
+  it('refuses cross-page ID replay, foreign cursor data and malformed cursor state',async()=>{
+    const {context}=fixture(page([txn(1,'BUYER_SALE_SETTLED',[p(reserved,'platform:revenue:sales',1n)])]))
+    expect(await readFormanceUsageReconciliationPage(context,{...input,cursor:'native:previous',lastTransactionId:'1'})).toMatchObject({kind:'unavailable',code:'formance_reconciliation_snapshot_invalid'})
+    expect(await readFormanceUsageReconciliationPage(context,{...input,cursor:'',lastTransactionId:null})).toMatchObject({kind:'setup_required'})
   })
 })

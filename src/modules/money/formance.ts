@@ -73,4 +73,4 @@ export {
   mapFormanceWriteError,
 } from './internal/formance-writes'
 
-export { readFormanceUsageReconciliation } from './internal/formance-usage-reconciliation'
+export { readFormanceUsageReconciliation,readFormanceUsageReconciliationPage,readFormanceCredentialActivityPage,type CredentialFinancialPage,type FinancialUsagePageRead } from './internal/formance-usage-reconciliation'

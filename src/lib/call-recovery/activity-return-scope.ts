@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /** Bounded route state, never a caller-supplied redirect URL. */
-export const monthlyDraftRefSearchSchema = z.string().regex(/^monthly-usage-draft:[a-f0-9]{64}$/u).optional().catch(undefined)
+export const monthlyDraftRefSearchSchema = z.string().regex(/^monthly-usage-(?:draft|close):[a-f0-9]{64}$/u).optional().catch(undefined)
 export const activityReturnScopeSchema = z.object({
   returnRange: z.enum(['all','today','7d','30d','month']).optional().catch(undefined),
   returnDraftRef: monthlyDraftRefSearchSchema,

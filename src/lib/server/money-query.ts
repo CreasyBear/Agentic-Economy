@@ -3,7 +3,7 @@ import type {
   CreditAccountQuery,
   CreditAccountView,
   CreditActivityQuery,
-  CreditActivityView,
+  CreditActivityPage,
   KeyUsageQuery,
   KeyUsageView,
   MoneyQueryPort,
@@ -24,7 +24,7 @@ type CreditAccountSourceResult = Readonly<
   | { kind: 'refused'; code: string }
 >
 type CreditActivitySourceResult = Readonly<
-  | { kind: 'ok'; page: readonly CreditActivityView[]; isDone: boolean; continueCursor: string }
+  | ({ kind: 'ok' } & CreditActivityPage)
   | { kind: 'refused'; code: string; items: readonly [] }
 >
 type KeyUsageSourceResult = Readonly<
@@ -68,6 +68,12 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
         page: result.page,
         isDone: result.isDone,
         continueCursor: result.continueCursor,
+        ...(result.periodStartAt===undefined?{}:{periodStartAt:result.periodStartAt}),
+        ...(result.periodEndAt===undefined?{}:{periodEndAt:result.periodEndAt}),
+        ...(result.snapshotAt===undefined?{}:{snapshotAt:result.snapshotAt}),
+        ...(result.timeBasis===undefined?{}:{timeBasis:result.timeBasis}),
+        ...(result.coverage===undefined?{}:{coverage:result.coverage}),
+        ...(result.source===undefined?{}:{source:result.source}),
       }
     },
     readKeyUsage: async (query) => {
@@ -80,6 +86,17 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
         freeCallCount: result.freeCallCount,
         grossSpend: result.grossSpend,
         states: result.states,
+        ...(result.refundUnits===undefined?{}:{refundUnits:result.refundUnits}),
+        ...(result.netChargeUnits===undefined?{}:{netChargeUnits:result.netChargeUnits}),
+        ...(result.promotionalUseUnits===undefined?{}:{promotionalUseUnits:result.promotionalUseUnits}),
+        ...(result.promotionalRefundUnits===undefined?{}:{promotionalRefundUnits:result.promotionalRefundUnits}),
+        ...(result.periodStartAt===undefined?{}:{periodStartAt:result.periodStartAt}),
+        ...(result.periodEndAt===undefined?{}:{periodEndAt:result.periodEndAt}),
+        ...(result.snapshotAt===undefined?{}:{snapshotAt:result.snapshotAt}),
+        ...(result.countTimeBasis===undefined?{}:{countTimeBasis:result.countTimeBasis}),
+        ...(result.spendTimeBasis===undefined?{}:{spendTimeBasis:result.spendTimeBasis}),
+        ...(result.coverage===undefined?{}:{coverage:result.coverage}),
+        ...(result.source===undefined?{}:{source:result.source}),
       }
     },
     readProviderEarnings: async () => {
@@ -90,4 +107,3 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
     },
   }
 }
-

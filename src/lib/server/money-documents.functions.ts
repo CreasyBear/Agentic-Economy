@@ -16,7 +16,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export type MoneyDocumentView = Readonly<{
   documentRef: string
-  kind: 'funding_receipt' | 'service_fee_document' | 'statement' | 'daily_close' | 'adjustment' | 'tax_invoice'
+  kind: 'funding_receipt' | 'service_fee_document' | 'statement' | 'monthly_usage' | 'daily_close' | 'adjustment' | 'tax_invoice'
   amountUnits: string
   residualUnits: string
   sourceTransactionRefs: string[]

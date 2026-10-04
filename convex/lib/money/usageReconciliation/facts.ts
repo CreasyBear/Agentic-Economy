@@ -16,10 +16,10 @@ export async function readFactsHandler(ctx: QueryCtx, args: ObjectType<typeof fa
 }
 
 /** Shared read-only join; callers establish fresh owner authority first. */
-export async function readFactsForAccount(ctx: Pick<QueryCtx, 'db'>, args: ObjectType<typeof factsArgs>, accountRef: string): Promise<Infer<typeof factsResult>> {
+export async function readFactsForAccount(ctx: Pick<QueryCtx, 'db'>, args: ObjectType<typeof factsArgs>, accountRef: string, options:{includeCreatedCalls?:boolean;maximumCallUpdatedAt?:number}={}): Promise<Infer<typeof factsResult>> {
   if (!reconciliationPeriodSchema.safeParse({ periodStartAt: args.periodStartAt, periodEndAt: args.periodEndAt }).success || args.entries.length > 1500) return { kind: 'refused', code: 'reconciliation_period_invalid' }
   const calls = new Map<string, Doc<'capabilityCalls'>>()
-  for (const state of ['pending', 'completed', 'refused', 'reconciliation_required', 'cancelled'] as const) {
+  if(options.includeCreatedCalls!==false)for (const state of ['pending', 'completed', 'refused', 'reconciliation_required', 'cancelled'] as const) {
     const rows = await ctx.db.query('capabilityCalls').withIndex('by_ownerId_and_state_and_createdAt', q => q
       .eq('ownerId', accountRef).eq('state', state).gte('createdAt', args.periodStartAt).lt('createdAt', args.periodEndAt)).take(1501)
     for (const row of rows) calls.set(row.callRef, row)
@@ -53,6 +53,7 @@ export async function readFactsForAccount(ctx: Pick<QueryCtx, 'db'>, args: Objec
   if (calls.size > 1500) return { kind: 'unavailable', code: 'reconciliation_window_too_large' }
   const facts: ReconciliationCall[] = []
   for (const call of calls.values()) {
+    if(options.maximumCallUpdatedAt!==undefined&&call.updatedAt>options.maximumCallUpdatedAt)continue
     if (parseCallRef(call.callRef).kind !== 'valid' || !/^[A-Za-z0-9:._-]{1,200}$/u.test(call.credentialId) || !/^[A-Za-z0-9:._-]{1,200}$/u.test(call.principalId)) return { kind: 'unavailable', code: 'reconciliation_call_identity_invalid' }
     const report = await ctx.db.query('paidCallReports').withIndex('by_callRef', q => q.eq('callRef', call.callRef)).unique()
     const obligation = await ctx.db.query('moneyProviderObligations').withIndex('by_callRef', q => q.eq('callRef', call.callRef)).unique()

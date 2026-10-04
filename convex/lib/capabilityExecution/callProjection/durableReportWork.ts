@@ -1,3 +1,4 @@
+import { enqueueLinkedMonthlyClose } from '../../money/monthlyDraft/completeWork'
 import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { vOnCompleteArgs, type OnCompleteArgs } from '@convex-dev/workpool'
@@ -17,6 +18,7 @@ export async function completeUsageReportWorkHandler(ctx:MutationCtx,args:Infer<
   const report=await ctx.db.query('capabilityUsageReports').withIndex('by_reportRef',q=>q.eq('reportRef',args.context.reportRef)).unique()
   if(report !== null && report.state === 'building' && report.workId === args.workId && args.result.kind !== 'success'){
     await ctx.db.patch(report._id,{state:'failed',failureCode:args.result.kind === 'canceled' ? 'usage_report_work_canceled' : 'usage_report_work_failed'})
+    await enqueueLinkedMonthlyClose(ctx,report.reportRef)
   }
   return null
 }
