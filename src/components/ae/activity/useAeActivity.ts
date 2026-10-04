@@ -1,3 +1,4 @@
+import { providerUnitDefinitions } from '@/modules/capability-execution/provider-service-units'
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
@@ -328,6 +329,10 @@ export function useAeActivity({
     deliveredRequestLabel: usage.kind === 'available' ? usage.deliveredRequestUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
     currentDeliveredRequestLabel: usage.kind === 'available' ? usage.currentDeliveredRequestUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
     unknownDeliverySupportLabel: usage.kind === 'available' ? usage.unknownCurrentDeliveryCallCountUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
+    providerUnitCards: usage.kind === 'available' ? (usage.providerUnits ?? []).map(unit => ({label: `Observed ${providerUnitDefinitions[unit.unitDefinitionRef].label}`, value: unit.observedReceiptCountUnits === '0' ? 'Unknown' : unit.observedQuantityUnits})) : [],
+    providerUnitCoverageLabel: usage.kind === 'available' && usage.providerUnitReceiptCallCountUnits !== undefined
+      ? `${usage.providerUnitReceiptCallCountUnits} of ${usage.callCountUnits} Calls have supported provider receipt quantities. ${usage.providerUnitUnknownCallCountUnits} Calls lack supported quantities. ${(usage.providerUnits ?? []).map(unit => `${providerUnitDefinitions[unit.unitDefinitionRef].label}: ${unit.observedReceiptCountUnits} reported, ${unit.unknownReceiptCountUnits} unknown`).join('; ')}. Totals cover supported successful Call receipts; failed, unresolved and unsupported attempts remain unknown.`
+      : 'Provider receipt quantity coverage is unavailable.',
     serviceUnitCoverageLabel: usage.kind === 'empty' ? 'No Calls in this period.'
       : usage.kind === 'available' && usage.serviceUnitCoverage === 'complete'
         ? 'Delivered-request units are recorded once per Call; refunds do not erase measured usage.'

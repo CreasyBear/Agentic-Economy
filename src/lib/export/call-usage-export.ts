@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { providerUnitObservationSchema, summarizeProviderUnits } from '@/modules/capability-execution/provider-service-units'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import { escapeSpreadsheetText as csvText, formatCsvRow } from './csv-export'
 
@@ -15,6 +16,7 @@ export const callUsageExportRowSchema = z.strictObject({
   serviceUsageRef: z.string().optional(), deliveredRequestUnits: z.literal('1').optional(),
   currentDeliveredRequestUnits: z.literal('1').nullable().optional(), measurementRevisionRef: z.string().optional(),
   currentSupportVerified: z.boolean().optional(),
+  providerUnitObservation: providerUnitObservationSchema.optional(), providerUnitSupportVerified: z.boolean().optional(),
   observedAt: z.number().int().nonnegative().safe().optional(),
   latencyMs: z.number().nonnegative(),
   createdAt: z.number().int().nonnegative().safe(), updatedAt: z.number().int().nonnegative().safe(),
@@ -77,6 +79,10 @@ export function createCallUsageExport(
     serviceUnitDefinitionRef: 'delivered_request:v1' as const,
     deliveredRequestUnits: deliveredRequests.toString(), serviceUnitCoverage,
     currentDeliveredRequestUnits: currentDeliveredRequests.toString(), unknownCurrentDeliveryCallCountUnits: unknownCurrent.toString(),
+    providerUnits: summarizeProviderUnits(records.map(row => ({observation: row.providerUnitObservation ?? null, verified: row.providerUnitSupportVerified === true}))),
+    providerUnitCoverage: 'successful_call_receipts_only' as const,
+    providerUnitReceiptCallCountUnits: String(records.filter(row => row.providerUnitSupportVerified === true && row.providerUnitObservation?.units.every(unit => unit.state === 'observed')).length),
+    providerUnitUnknownCallCountUnits: String(records.filter(row => row.providerUnitSupportVerified !== true || row.providerUnitObservation === undefined || row.providerUnitObservation.units.some(unit => unit.state !== 'observed')).length),
     recordedChargeCurrency: 'AUD' as const, recordedChargeExponent: 6 as const,
     // The current canonical moneyProviderObligations contract fixes USDC/6.
     // An obligation is not a claimed provider cost or confirmed transfer.
@@ -100,7 +106,8 @@ export function generateCallUsageExportCsv(document: CallUsageExport): string {
     'Provider obligation USDC/6 units', 'Provider obligation state', 'Delivered request units', 'Service usage Ref',
     'Receipt Ref', 'Recovery Ref', 'Period start UTC', 'Period end UTC', 'Snapshot UTC',
     'Record count', 'Records digest', 'Records digest format', 'Service unit coverage', 'Charge coverage', 'Export Ref', 'Account Ref',
-    'Current supported request units', 'Measurement revision Ref']
+    'Current supported request units', 'Measurement revision Ref', 'Provider unit support',
+    'BlockRun input tokens', 'BlockRun output tokens', 'ElevenLabs reported character credits', 'Provider unit observation Ref']
   return [formatCsvRow(headers), ...document.records.map((row) => formatCsvRow([
     new Date(row.createdAt).toISOString(), csvText(row.callRef), csvText(row.toolLabel), csvText(row.providerRef),
     csvText(row.principalRef), csvText(row.credentialRef), csvText(row.applicationRef), row.state,
@@ -117,5 +124,11 @@ export function generateCallUsageExportCsv(document: CallUsageExport): string {
     document.recordsDigestFormat, document.serviceUnitCoverage, document.amountCoverage, document.exportRef ?? '', csvText(document.accountRef),
     row.currentSupportVerified === true && row.currentDeliveredRequestUnits === '1' ? '1' : row.serviceUsageRef !== undefined || row.deliveryState !== 'not_delivered' ? 'unknown' : '0',
     row.currentSupportVerified === true ? csvText(row.measurementRevisionRef) : '',
+    row.providerUnitSupportVerified === true ? 'verified' : 'unknown',
+    ...(['blockrun_prompt_token:v1', 'blockrun_completion_token:v1', 'blockrun_elevenlabs_character_credit:v1'] as const).map(ref => {
+      const unit = row.providerUnitObservation?.units.find(item => item.unitDefinitionRef === ref)
+      return row.providerUnitSupportVerified === true && unit?.state === 'observed' ? unit.quantityUnits ?? 'unknown' : 'unknown'
+    }),
+    csvText(row.providerUnitObservation?.observationRef),
   ]))].join('\r\n')
 }

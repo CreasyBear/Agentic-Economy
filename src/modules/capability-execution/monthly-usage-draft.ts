@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { providerUnitEvidenceSchema, validProviderObservation } from './provider-service-units'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import { serviceUsageEvidenceSchema, measurementSupportSchema, supportDigest } from '@/modules/capability-execution/service-usage-evidence'
@@ -26,6 +27,7 @@ export const monthlyDraftSnapshotSchema = z.strictObject({
   financial, calls: z.array(reconciliationCallSchema).max(MAX_MONTHLY_DRAFT_ROWS), sources: z.array(z.string().nullable()).max(MAX_MONTHLY_DRAFT_ROWS),
   measurements: z.array(z.strictObject({ credentialRef: z.string(), principalRef: z.string(), evidence: serviceUsageEvidenceSchema })).max(MAX_MONTHLY_DRAFT_ROWS),
   canonicalSupport: z.array(z.strictObject({ callRef: z.string(), updatedAt: z.number(), support: measurementSupportSchema, supportDigest: z.string() })).max(MAX_MONTHLY_DRAFT_ROWS),
+  providerUnitEvidence: z.array(z.strictObject({callRef: z.string(), evidence: providerUnitEvidenceSchema})).max(MAX_MONTHLY_DRAFT_ROWS).exactOptional(),
   authoritativeForConsequences: z.literal(false), issuedInvoice: z.literal(false),
 })
 export type MonthlyDraftSnapshot = z.infer<typeof monthlyDraftSnapshotSchema>
@@ -36,6 +38,9 @@ export function freezeMonthlyDraft(input: MonthlyDraftSnapshot) {
     || snapshot.financial.entries.length > MAX_MONTHLY_DRAFT_ROWS || snapshot.financial.entries.some(entry => entry.recordedAt === null)
     || snapshot.measurements.some(row => row.evidence.kind !== 'available')
     || snapshot.canonicalSupport.some(row => row.supportDigest !== supportDigest(row.support))) throw new Error('monthly_draft_snapshot_invalid')
+  if (snapshot.providerUnitEvidence?.some(row => !snapshot.canonicalSupport.some(call => call.callRef === row.callRef)
+    || row.evidence.observations.some(observation => observation.callRef !== row.callRef || observation.accountRef !== snapshot.accountRef || !validProviderObservation(observation))
+    || row.evidence.current !== null && (!validProviderObservation(row.evidence.current) || !row.evidence.observations.some(observation => observation.observationRef === row.evidence.current?.observationRef)))) throw new Error('monthly_draft_provider_units_invalid')
   // Validate all joins and periods before persisting the complete source facts.
   reconcileUsage({ ...period, financial: snapshot.financial, calls: snapshot.calls, sources: snapshot.sources })
   const snapshotJson = stableStringify(snapshot)

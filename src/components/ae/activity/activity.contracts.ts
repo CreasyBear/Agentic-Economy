@@ -82,6 +82,8 @@ export type ActivityMonthlySummaryView = Readonly<{
   currentDeliveredRequestLabel: string
   unknownDeliverySupportLabel: string
   serviceUnitCoverageLabel: string
+  providerUnitCards?: ReadonlyArray<{label: string; value: string}>
+  providerUnitCoverageLabel?: string
 }>
 
 export type AeActivityProps = Readonly<{

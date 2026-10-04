@@ -6,6 +6,7 @@ import {
 } from '@/modules/action-execution/runtime'
 import { spendingPeriodsValue, promotionalCreditAllocationValue, managedCallBookingValue } from '@/modules/money/public'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
+import { providerUnitObservationValue } from './provider-service-unit-values'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
@@ -252,6 +253,7 @@ export const capabilityCallTables = {
     source: v.literal('validated_call_result'),
     sourceEvidenceHash: v.optional(v.string()),
     supportDigest: v.optional(v.string()),
+    providerUnitHeadRef: v.optional(v.string()),
     receiptRef: v.optional(v.string()),
     priceDigest: v.string(),
     timeBasis: v.union(v.literal('receipt_issued'), v.literal('call_updated')),
@@ -264,6 +266,9 @@ export const capabilityCallTables = {
     .index('by_callRef', ['callRef'])
     .index('by_accountRef_and_callCreatedAt', ['accountRef', 'callCreatedAt'])
     .index('by_accountRef_and_occurredAt', ['accountRef', 'occurredAt']),
+  capabilityServiceUnitObservations: defineTable(providerUnitObservationValue)
+    .index('by_callRef_and_sequence', ['callRef', 'sequence'])
+    .index('by_observationRef', ['observationRef']),
   capabilityServiceUsageRevisions: defineTable({
     usageRef: v.string(), accountRef: v.string(), callRef: v.string(), revisionRef: v.string(), previousRevisionRef: v.string(), revision: v.number(),
     sourceDigest: v.string(), support: v.object({
@@ -305,6 +310,7 @@ export const capabilityCallTables = {
     deliveredRequestUnits: v.optional(v.string()),
     currentDeliveredRequestUnits: v.optional(v.union(v.literal('1'), v.null())),
     measurementRevisionRef: v.optional(v.string()),
+    providerUnitObservation: v.optional(providerUnitObservationValue),
     observedAt: v.optional(v.number()),
     latencyMs: v.number(),
     createdAt: v.number(),

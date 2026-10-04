@@ -13,6 +13,7 @@ import { assertCallResultJson } from './callIdentity'
 import { callState, environment, ownerCallContextValue, recoveryValue } from './contracts'
 import { readMeasurementEvidence } from '../serviceUsage/lineage'
 import { readCallAttemptEvidence } from './attemptEvidence'
+import { readProviderUnitEvidence } from '../serviceUsage/providerObservations'
 
 export const readRecoveryArgs = { callRef: v.string(), principalId: v.string() } as const
 export const readOwnerRecoveryArgs = { callRef: v.string() } as const
@@ -172,6 +173,7 @@ export async function readOwnerReceiptContextHandler(
   return {
     purpose: null,
     ...(serviceUsageEvidence === undefined ? {} : { serviceUsageEvidence }),
+    ...(args.observedAt === undefined ? {} : { providerUnitEvidence: await readProviderUnitEvidence(ctx, row, args.observedAt, args.observedAt) }),
     attemptEvidence: await readCallAttemptEvidence(ctx, row),
     agent: { principalRef: row.principalId, applicationRef: row.applicationRef, currentDisplayName },
     recordedTool: recordedReceiptTool(row),

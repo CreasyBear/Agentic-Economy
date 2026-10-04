@@ -36,6 +36,12 @@ async function fixture() {
   return { backend, id, result, rebuild, evidence }
 }
 describe('append-only canonical measurement support', () => {
+  it('keeps the existing bounded output node ceiling when composing provider-source fingerprints', async () => {
+    const f = await fixture(), output = Array(9999).fill(null)
+    await f.backend.run(async ctx => await ctx.db.patch(f.id,{result:{...f.result,output}}))
+    const projection = await f.backend.run(async ctx => (await ctx.db.query('capabilityCallProjections').unique())!)
+    expect(await f.backend.run(async ctx => await readProjectedSupport(ctx,projection))).toMatchObject({verified:true,providerUnitObservation:null})
+  })
   it('preserves one original through loss, replay and restoration with equal timestamps', async () => {
     const f = await fixture()
     vi.setSystemTime(start + 2000)

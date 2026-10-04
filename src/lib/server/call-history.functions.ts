@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { providerUnitSummarySchema, type ProviderUnitObservation } from '@/modules/capability-execution/provider-service-units'
 import { accountHistoryResultSchema, type AccountHistoryResult } from '@/modules/money/public'
 
 import {
@@ -36,6 +37,7 @@ const listOwnerCallsQuery = sourceQuery<{
     deliveredRequestUnits?: string
     currentDeliveredRequestUnits?: '1' | null
     measurementRevisionRef?: string
+    providerUnitObservation?: ProviderUnitObservation
     observedAt?: number
     latencyMs: number
     createdAt: number
@@ -78,6 +80,9 @@ const usageResult = z.union([
     unknownCurrentDeliveryCallCountUnits: countUnits.optional(),
     serviceUnitCoverage: z.enum(['complete', 'incomplete']).optional(),
     serviceUnitDefinitionRef: z.literal('delivered_request:v1').optional(),
+    providerUnits: z.array(providerUnitSummarySchema).optional(),
+    providerUnitReceiptCallCountUnits: countUnits.optional(),
+    providerUnitUnknownCallCountUnits: countUnits.optional(),
     settledSpendUnits: z.string().regex(/^(?:0|[1-9]\d*)$/u).optional(),
     amountCoverage: z.enum(['complete', 'incomplete']).optional(),
     updatedAt: z.number(),

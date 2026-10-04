@@ -5,6 +5,7 @@ import { financialUsageReadSchema } from '@/modules/money/public'
 import { freezeMonthlyDraft, monthlyDraftPeriod, MAX_MONTHLY_DRAFT_ROWS, type MonthlyDraftSnapshot } from '@/modules/capability-execution/monthly-usage-draft'
 import { measurementSupport, supportDigest } from '@/modules/capability-execution/service-usage-evidence'
 import { readMeasurementEvidence } from '../../capabilityExecution/serviceUsage/lineage'
+import { readProviderUnitEvidence } from '../../capabilityExecution/serviceUsage/providerObservations'
 import { readFactsForAccount } from '../usageReconciliation/facts'
 import { draftResult } from './contracts'
 import { ownedDraft, presentDraft } from './store'
@@ -36,9 +37,11 @@ export async function freezeOwnerDraftHandler(ctx: MutationCtx, args: { draftRef
   }
   if (callRefs.size > MAX_MONTHLY_DRAFT_ROWS) return { kind: 'unavailable', code: 'monthly_draft_too_large' }
   const canonicalSupport: MonthlyDraftSnapshot['canonicalSupport'] = []
+  const providerUnitEvidence: NonNullable<MonthlyDraftSnapshot['providerUnitEvidence']> = []
   for (const callRef of [...callRefs].sort()) {
     const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
     if (call?.ownerId !== row.accountRef) return { kind: 'unavailable', code: 'monthly_draft_source_changed' }
+    providerUnitEvidence.push({callRef, evidence: await readProviderUnitEvidence(ctx, call, sourcesCapturedAt, sourcesCapturedAt)})
     const support = measurementSupport(call)
     canonicalSupport.push({ callRef, updatedAt: call.updatedAt, support, supportDigest: supportDigest(support) })
   }
@@ -47,7 +50,7 @@ export async function freezeOwnerDraftHandler(ctx: MutationCtx, args: { draftRef
   const snapshot: MonthlyDraftSnapshot = { format: 'ae.monthly-usage-draft:v1', draftRef: row.draftRef, accountRef: row.accountRef, month: row.month, revision: row.revision,
     sourceIdentity: row.sourceIdentity, requestedByPrincipalRef: row.requestedByPrincipalRef, authorityRevisionAccount: row.authorityRevisionAccount,
     priorDraftDigest: prior?.snapshotDigest ?? null, ledgerSnapshotAt: row.ledgerSnapshotAt, sourcesCapturedAt, financial,
-    calls: facts.calls.sort((a,b) => a.callRef.localeCompare(b.callRef)), sources: facts.sources, measurements, canonicalSupport,
+    calls: facts.calls.sort((a,b) => a.callRef.localeCompare(b.callRef)), sources: facts.sources, measurements, canonicalSupport, providerUnitEvidence,
     authoritativeForConsequences: false, issuedInvoice: false }
   let frozen: ReturnType<typeof freezeMonthlyDraft>
   try { frozen = freezeMonthlyDraft(snapshot) } catch { return { kind: 'unavailable', code: 'monthly_draft_snapshot_invalid_or_too_large' } }

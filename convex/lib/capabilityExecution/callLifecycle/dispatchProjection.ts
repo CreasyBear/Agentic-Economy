@@ -3,6 +3,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import type { CallDispatchProjectionShape } from './contracts'
 import { recordDeliveredRequest } from './serviceUsage'
+import { captureProviderUnits } from '../serviceUsage/providerObservations'
 
 type CallRow = Doc<'capabilityCalls'>
 
@@ -77,6 +78,10 @@ export async function upsertCallProjection(
     : projection.state
   const providerFields = await providerObligationProjectionFields(ctx, row.callRef)
   const serviceUsage = await recordDeliveredRequest(ctx, row, projection, operation.identity.businessId, operation.priceDigest, now)
+  const measurementRoot = serviceUsage === undefined ? null : await ctx.db.query('capabilityServiceUsageRecords').withIndex('by_usageRef', q => q.eq('usageRef', serviceUsage.serviceUsageRef)).unique()
+  const providerUnitObservation = measurementRoot === null ? undefined : await captureProviderUnits(ctx, { ...row, ...projection, updatedAt: now }, measurementRoot)
+  const existing = await ctx.db.query('capabilityCallProjections').withIndex('by_callRef', q => q.eq('callRef', row.callRef)).unique()
+  const retainedProviderUnitObservation = providerUnitObservation ?? existing?.providerUnitObservation
   const fields = {
     accountRef: row.ownerId,
     principalRef: row.principalId,
@@ -90,6 +95,7 @@ export async function upsertCallProjection(
     paymentState: projectedPaymentState(accountReceipt),
     ...providerFields,
     ...serviceUsage,
+    ...(retainedProviderUnitObservation === undefined ? {} : { providerUnitObservation: retainedProviderUnitObservation }),
     ...(audAmountUnits === undefined ? {} : { audAmountUnits }),
     ...(receipt?.receiptRef === undefined || !/^receipt:sha256:[a-f0-9]{64}$/u.test(receipt.receiptRef) ? {} : { receiptRef: receipt.receiptRef }),
     ...(projection.state === 'reconciliation_required' ? { recoveryRef: row.callRef } : {}),
@@ -97,9 +103,6 @@ export async function upsertCallProjection(
     updatedAt: now,
     observedAt: Date.now(),
   }
-  const existing = await ctx.db.query('capabilityCallProjections')
-    .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))
-    .unique()
   const next = {
     callRef: row.callRef,
     ...fields,
@@ -109,6 +112,7 @@ export async function upsertCallProjection(
     await ctx.db.insert('capabilityCallProjections', next)
   } else {
     await ctx.db.patch(existing._id, { ...fields,
+      providerUnitObservation: retainedProviderUnitObservation,
       receiptRef: fields.receiptRef,
       recoveryRef: projection.state === 'reconciliation_required' ? row.callRef : undefined,
     })

@@ -18,6 +18,7 @@ import { CallOutputPreview } from './CallOutputPreview'
 import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallMeasurementEvidence } from './CallMeasurementEvidence'
 import { CallAttemptEvidence } from './CallAttemptEvidence'
+import { CallProviderUnits } from './CallProviderUnits'
 import { CallReceiptFact, CallReceiptRef } from './CallReceiptPrimitives'
 import './ReceiptComposition.css'
 
@@ -42,6 +43,7 @@ export function CallTechnicalRecord({ result, view }: Readonly<{ result: FoundCa
         <CallMoneyFacts view={view} />
       {ownerContext?.serviceUsageEvidence === undefined ? null : <CallMeasurementEvidence evidence={ownerContext.serviceUsageEvidence} />}
       {ownerContext?.attemptEvidence === undefined ? null : <CallAttemptEvidence evidence={ownerContext.attemptEvidence} />}
+      {ownerContext?.providerUnitEvidence === undefined ? null : <CallProviderUnits evidence={ownerContext.providerUnitEvidence} />}
         <CallReceiptTimeline stages={view.stages} />
         {result.result === undefined ? null : <ResultDetails result={result.result} />}
         <CallSuggestedNextAction result={result} />

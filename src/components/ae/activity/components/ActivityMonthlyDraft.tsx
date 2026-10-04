@@ -11,6 +11,7 @@ import { monthlyDraftIntentSchema, readFrozenMonthlyDraft } from '@/modules/capa
 import { activityReturnSearch } from '@/lib/call-recovery/activity-return-scope'
 import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { ActivityReconciliation } from './ActivityReconciliation'
+import { MonthlyProviderUnits } from './MonthlyProviderUnits'
 function priorMonth() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7) }
 export function ActivityMonthlyDraft({returnScope, draftRef}: {returnScope: ActivityReturnScope; draftRef?: string}) {
   const router = useRouter()
@@ -67,6 +68,7 @@ export function ActivityMonthlyDraft({returnScope, draftRef}: {returnScope: Acti
         {label: 'Historical measurements with unknown current support', value: String(frozen.snapshot.measurements.filter(row => row.evidence.kind === 'available' && row.evidence.currentQuantityUnits === null).length)},
         {label: 'Immutable snapshot digest', value: frozen.snapshotDigest, mono: true}]} />
       <Button type="button" variant="secondary" onClick={() => downloadJson(`monthly-usage-draft-${month}-r${frozen.snapshot.revision}.json`, frozen.snapshot)}>Download frozen evidence JSON</Button>
+      <MonthlyProviderUnits snapshot={frozen.snapshot} returnScope={returnScope} />
       <details><summary>Inspect the frozen reconciliation</summary><ActivityReconciliation result={frozen.reconciliation} retryPending={pending} onRetry={() => void create(frozen.snapshot.revision)} returnScope={{...returnScope, returnDraftRef: frozen.snapshot.draftRef}} sourceFactsCapturedAt={frozen.snapshot.sourcesCapturedAt} /></details>
     </>}
     <p className="text-xs text-muted-foreground">Automatic monthly scheduling is inactive. Drafts support at most 300 financial entries, Calls and measurements, with a 250 KB snapshot. Larger months are currently unavailable.</p>

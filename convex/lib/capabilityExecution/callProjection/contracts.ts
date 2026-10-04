@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { providerUnitObservationValue } from '@/modules/capability-execution/convex'
 
 export const callValue = v.object({
   callRef: v.string(),
@@ -24,6 +25,8 @@ export const callValue = v.object({
   currentDeliveredRequestUnits: v.optional(v.union(v.literal('1'), v.null())),
   measurementRevisionRef: v.optional(v.string()),
   currentSupportVerified: v.optional(v.boolean()),
+  providerUnitObservation: v.optional(providerUnitObservationValue),
+  providerUnitSupportVerified: v.optional(v.boolean()),
   observedAt: v.optional(v.number()),
   latencyMs: v.number(),
   createdAt: v.number(),

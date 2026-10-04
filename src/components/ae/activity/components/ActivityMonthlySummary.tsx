@@ -49,6 +49,8 @@ export function ActivityMonthlySummary({
       </div>
       <p className="text-xs text-muted-foreground">{monthly.spendBasis} Call completion does not by itself confirm delivery or settlement.</p>
       <p className="text-xs text-muted-foreground">{monthly.serviceUnitCoverageLabel}</p>
+      {monthly.providerUnitCards?.length ? <MetricsSummary cards={monthly.providerUnitCards.map(card => ({...card}))} /> : null}
+      <p className="text-xs text-muted-foreground">{monthly.providerUnitCoverageLabel}</p>
     </AeSection>
   )
 }

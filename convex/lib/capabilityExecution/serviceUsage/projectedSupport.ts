@@ -2,7 +2,9 @@ import type { QueryCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { measurementSupport, supportDigest, supportedQuantity, measurementSupportSchema } from '@/modules/capability-execution/service-usage-evidence'
-type Projection = Pick<Doc<'capabilityCallProjections'>, 'callRef' | 'accountRef' | 'principalRef' | 'credentialRef' | 'applicationRef' | 'toolRef' | 'serviceUsageRef' | 'currentDeliveredRequestUnits' | 'measurementRevisionRef'>
+import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
+import { verifiedProviderObservation, type ProviderUnitCallSource } from '@/modules/capability-execution/provider-service-units'
+type Projection = Pick<Doc<'capabilityCallProjections'>, 'callRef' | 'accountRef' | 'principalRef' | 'credentialRef' | 'applicationRef' | 'toolRef' | 'serviceUsageRef' | 'currentDeliveredRequestUnits' | 'measurementRevisionRef' | 'providerUnitObservation'>
 /** Bounded current-head check for summaries/exports. Full lineage validation
  * remains in the receipt and frozen draft. No projection alone proves freshness. */
 export async function readProjectedSupport(ctx: Pick<QueryCtx, 'db'>, row: Projection) {
@@ -23,9 +25,12 @@ export async function readProjectedSupport(ctx: Pick<QueryCtx, 'db'>, row: Proje
     && root.credentialRef === row.credentialRef && call.credentialId === row.credentialRef && root.principalRef === row.principalRef && call.principalId === row.principalRef
     && root.applicationRef === row.applicationRef && call.applicationRef === row.applicationRef && root.toolRef === row.toolRef && call.toolRef === row.toolRef
     && row.currentDeliveredRequestUnits === quantity && row.measurementRevisionRef === expectedRef
+  const providerUnitObservation = verified && call !== null ? verifiedProviderObservation(call as ProviderUnitCallSource,
+    call.toolJson === undefined ? undefined : parsePublishedToolSnapshot(call.toolJson), row.providerUnitObservation, root?.providerUnitHeadRef) : null
   const fingerprint = canonicalDigest({verified, quantityUnits: verified ? quantity : null, call: call === null ? null : {accountRef: call.ownerId, credentialRef: call.credentialId, principalRef: call.principalId,
-    applicationRef: call.applicationRef, toolRef: call.toolRef, createdAt: call.createdAt, updatedAt: call.updatedAt, supportDigest: sourceDigest},
-    root: root === null ? null : {usageRef: root.usageRef, accountRef: root.accountRef, callRef: root.callRef, credentialRef: root.credentialRef, principalRef: root.principalRef, applicationRef: root.applicationRef, toolRef: root.toolRef, supportDigest: root.supportDigest ?? null},
+    applicationRef: call.applicationRef, toolRef: call.toolRef, createdAt: call.createdAt, updatedAt: call.updatedAt, supportDigest: sourceDigest,
+    providerSource: call.result?.kind === 'completed' ? canonicalDigest({ outputDigest: canonicalDigest(call.result.output), attemptRef: call.attemptRef ?? null, requestDigest: call.requestDigest, toolJson: call.toolJson ?? null, inputJson: call.inputJson ?? null }) : null},
+    root: root === null ? null : {usageRef: root.usageRef, accountRef: root.accountRef, callRef: root.callRef, credentialRef: root.credentialRef, principalRef: root.principalRef, applicationRef: root.applicationRef, toolRef: root.toolRef, supportDigest: root.supportDigest ?? null, providerUnitHeadRef: root.providerUnitHeadRef ?? null},
     head: head === null ? null : {revisionRef: head.revisionRef, accountRef: head.accountRef, callRef: head.callRef, sourceDigest: head.sourceDigest, observedAt: head.observedAt}})
-  return { verified, quantityUnits: verified ? quantity : null, fingerprint }
+  return { verified, quantityUnits: verified ? quantity : null, fingerprint, providerUnitObservation }
 }

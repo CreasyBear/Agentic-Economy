@@ -4,6 +4,8 @@ import { resolveBusinessActor } from '../../../authz'
 import { MAX_USAGE_ROWS, validUsagePeriod } from './contracts'
 import { settledChargeSummary } from './ownerAgentReadback'
 import { readProjectedSupport } from '../serviceUsage/projectedSupport'
+import { providerUnitSummaryValue } from '@/modules/capability-execution/convex'
+import { summarizeProviderUnits, type ProviderUnitObservation } from '@/modules/capability-execution/provider-service-units'
 
 const dimensionKind = v.union(
   v.literal('account'),
@@ -28,6 +30,9 @@ const usageResult = v.union(
     unknownCurrentDeliveryCallCountUnits: v.string(),
     serviceUnitCoverage: v.union(v.literal('complete'), v.literal('incomplete')),
     serviceUnitDefinitionRef: v.literal('delivered_request:v1'),
+    providerUnits: v.array(providerUnitSummaryValue),
+    providerUnitReceiptCallCountUnits: v.string(),
+    providerUnitUnknownCallCountUnits: v.string(),
     settledSpendUnits: v.optional(v.string()),
     amountCoverage: v.union(v.literal('complete'), v.literal('incomplete')),
     updatedAt: v.number(),
@@ -111,6 +116,8 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
   let currentDeliveredRequests = 0n
   let unknownCurrent = 0n
   let serviceUnitCoverage: 'complete' | 'incomplete' = 'complete'
+  const providerRows: Array<{ observation?: ProviderUnitObservation; verified: boolean }> = []
+  let providerReceiptCalls = 0n
   for (const row of rows) {
     if (row.state === 'completed') completed += 1n
     if (row.state === 'outcome_unknown') outcomeUnknown += 1n
@@ -118,6 +125,9 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
     if (row.serviceUsageRef !== undefined && row.deliveredRequestUnits === '1') deliveredRequests += 1n
     else if (row.deliveryState !== 'not_delivered') serviceUnitCoverage = 'incomplete'
     const support = row.serviceUsageRef === undefined ? null : await readProjectedSupport(ctx, row)
+    const providerVerified = support?.providerUnitObservation !== null && support?.providerUnitObservation !== undefined
+    providerRows.push({ ...(row.providerUnitObservation === undefined ? {} : {observation: row.providerUnitObservation}), verified: providerVerified })
+    if (providerVerified && support?.providerUnitObservation?.units.every(unit => unit.state === 'observed')) providerReceiptCalls++
     if (support?.quantityUnits === '1') currentDeliveredRequests += 1n
     else if (row.serviceUsageRef !== undefined || row.deliveryState !== 'not_delivered') { unknownCurrent += 1n; serviceUnitCoverage = 'incomplete' }
   }
@@ -135,6 +145,8 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
     unknownCurrentDeliveryCallCountUnits: unknownCurrent.toString(),
     serviceUnitCoverage,
     serviceUnitDefinitionRef: 'delivered_request:v1' as const,
+    providerUnits: summarizeProviderUnits(providerRows), providerUnitReceiptCallCountUnits: providerReceiptCalls.toString(),
+    providerUnitUnknownCallCountUnits: (BigInt(rows.length) - providerReceiptCalls).toString(),
     ...settledChargeSummary(rows),
     updatedAt,
     source: 'convex_call_evidence' as const,

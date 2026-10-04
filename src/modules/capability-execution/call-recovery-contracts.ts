@@ -11,6 +11,7 @@ import type {
 import type { PurchaseResolutionRecord } from './purchase-resolution'
 import { serviceUsageEvidenceSchema, type ServiceUsageEvidence } from './service-usage-evidence'
 import { callAttemptEvidenceSchema, type CallAttemptEvidence } from './call-attempt-evidence'
+import { providerUnitEvidenceSchema, type ProviderUnitEvidence } from './provider-service-units'
 
 export const callStatusStateValues = [
   'gathering_information',
@@ -44,6 +45,7 @@ export type CallStatusState = z.infer<typeof callStatusStateSchema>
 export const ownerCallContextSchema = z.strictObject({
   purpose: z.null(),
   serviceUsageEvidence: serviceUsageEvidenceSchema.exactOptional(),
+  providerUnitEvidence: providerUnitEvidenceSchema.exactOptional(),
   attemptEvidence: callAttemptEvidenceSchema.exactOptional(),
   agent: z.strictObject({
     principalRef: z.string(), applicationRef: z.string(), currentDisplayName: z.string().nullable(),
@@ -61,7 +63,7 @@ export const ownerCallContextSchema = z.strictObject({
     requiresVerifiedEvidence: z.literal(true),
   }),
 })
-export type OwnerCallContext = Omit<z.infer<typeof ownerCallContextSchema>, 'serviceUsageEvidence' | 'attemptEvidence'> & { serviceUsageEvidence?: ServiceUsageEvidence; attemptEvidence?: CallAttemptEvidence }
+export type OwnerCallContext = Omit<z.infer<typeof ownerCallContextSchema>, 'serviceUsageEvidence' | 'attemptEvidence' | 'providerUnitEvidence'> & { serviceUsageEvidence?: ServiceUsageEvidence; attemptEvidence?: CallAttemptEvidence; providerUnitEvidence?: ProviderUnitEvidence }
 
 export type CallStatusResult =
   | Readonly<{

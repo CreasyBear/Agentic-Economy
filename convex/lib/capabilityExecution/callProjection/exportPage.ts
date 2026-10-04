@@ -54,6 +54,7 @@ export async function callExportPageHandler(ctx: QueryCtx, args: ObjectType<type
       const { receiptRef, ...safeRow } = row
       const support = await readProjectedSupport(ctx, row)
       captured.push({ ...safeRow, currentDeliveredRequestUnits: support.quantityUnits, currentSupportVerified: support.verified,
+        providerUnitSupportVerified: support.providerUnitObservation !== null,
         ...(receiptRef !== undefined && /^receipt:sha256:[a-f0-9]{64}$/u.test(receiptRef) ? { receiptRef } : {}) })
     }
   }

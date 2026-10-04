@@ -4,8 +4,12 @@ import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../he
 import { seedCommercialPolicies } from '../../helpers/quote-fixtures'
 import { readCommercialPolicyGate } from '../../../convex/moneyCommercialPolicy'
 import { digestReference } from '@/modules/money/public'
-import { readFrozenMonthlyDraft, monthlyDraftRef } from '@/modules/capability-execution/monthly-usage-draft'
+import { readFrozenMonthlyDraft, monthlyDraftRef, freezeMonthlyDraft } from '@/modules/capability-execution/monthly-usage-draft'
 import { supportDigest } from '@/modules/capability-execution/service-usage-evidence'
+import { createPublicToolRef } from '@/modules/capability-supply/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { blockrunTool, blockrunChatReceipt } from '../capability-execution/fixtures/blockrun-service-unit-evidence'
+import { upsertCallProjection } from '../../../convex/lib/capabilityExecution/callLifecycle/dispatchProjection'
 const ledger = vi.hoisted(() => ({ listTransactions: vi.fn(), createTransaction: vi.fn(), revertTransaction: vi.fn() }))
 vi.mock('@/modules/money/formance', async original => ({ ...await original<typeof import('@/modules/money/formance')>(),
   readFormanceConfiguration: () => ({ kind: 'configured', configuration: { ledger: process.env.AE_FORMANCE_LEDGER, environment: process.env.AE_FORMANCE_ENVIRONMENT, gatewayUrl: new URL(process.env.AE_FORMANCE_GATEWAY_URL!).origin } }),
@@ -40,12 +44,48 @@ async function fixture() {
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); Object.values(ledger).forEach(mock => mock.mockReset()) })
 describe('read-only monthly draft boundary', () => {
+  it('freezes provider quantities separately from money and preserves the old draft across a correction', async () => {
+    const f = await fixture(), tool = blockrunTool()
+    const toolRef = createPublicToolRef({operationId:tool.operationId,publicationRef:tool.identity.publicationRef,publicationRevision:tool.identity.publicationRevision,contractRef:tool.contract.ref})
+    await f.backend.run(async ctx => {
+      for (const row of await ctx.db.query('capabilityServiceUsageRecords').collect()) await ctx.db.delete(row._id)
+      await ctx.db.insert('actionExecutionAttempts',{executionRef:callRef,attemptRef:`operation-attempt:${callRef}:1`,attemptNumber:1,effectGeneration:1,
+        actor:{callerRef:'synthetic:caller',principalRef:f.owner.canonicalPrincipalRef},idempotency:{operationKey:'synthetic-operation',materialInputDigest:hash,effectIdentity:'synthetic-effect'},
+        lease:{owner:'synthetic-lease',expiresAt:new Date(now+10000).toISOString()},release:{state:'released',observedAt:new Date(occurredAt).toISOString()},outcome:{state:'returned',businessOutcome:'operation_succeeded'},recordedAt:new Date(occurredAt).toISOString()})
+      await ctx.db.patch(f.id,{toolRef,toolJson:JSON.stringify(tool),inputJson:'{"model":"requested-model"}',requestDigest:canonicalDigest('logical-request'),
+        attemptRef:`operation-attempt:${callRef}:1`,result:{kind:'completed',callRef,toolRef,output:blockrunChatReceipt,evidenceHash:hash},evidenceHash:hash,
+        usage:{usageRef:'usage:synthetic',observedAt:occurredAt,amount:{currency:'AUD',units:'10001',exponent:6},chargeState:'paid',priceDigest:tool.priceDigest}})
+      const call = (await ctx.db.get(f.id))!
+      await upsertCallProjection(ctx,call,{state:'completed',result:call.result!,attemptRef:call.attemptRef!,evidenceHash:hash,usage:call.usage!,dispatchState:'completed'},call.updatedAt)
+    })
+    const first = await f.owner.owner.action(api.moneyMonthlyUsageDraft.createOwnerDraft,{month,revision:1})
+    if(first.kind !== 'available')throw new Error(first.code)
+    const snapshot = readFrozenMonthlyDraft(first.snapshotJson,first.snapshotDigest)
+    expect(snapshot.snapshot.providerUnitEvidence?.[0]?.evidence.current?.units.map(unit=>unit.quantityUnits)).toEqual(['12','8'])
+    expect(snapshot.reconciliation.totals.grossChargeUnits).toBe('10001')
+    vi.setSystemTime(now+1000)
+    await f.backend.run(async ctx=>{
+      await ctx.db.patch(f.id,{result:{kind:'completed',callRef,toolRef,output:{...blockrunChatReceipt,usage:{prompt_tokens:14,completion_tokens:8,total_tokens:22}},evidenceHash:hash},updatedAt:now+1000})
+      const call=(await ctx.db.get(f.id))!
+      await upsertCallProjection(ctx,call,{state:'completed',result:call.result!,attemptRef:call.attemptRef!,evidenceHash:hash,usage:call.usage!,dispatchState:'completed'},call.updatedAt)
+    })
+    expect(await f.owner.owner.action(api.moneyMonthlyUsageDraft.createOwnerDraft,{month,revision:1})).toEqual(first)
+    const next=await f.owner.owner.action(api.moneyMonthlyUsageDraft.createOwnerDraft,{month,revision:2})
+    if(next.kind!=='available')throw new Error(next.code)
+    const supplemented=readFrozenMonthlyDraft(next.snapshotJson,next.snapshotDigest)
+    expect(supplemented.snapshot.providerUnitEvidence?.[0]?.evidence.current).toMatchObject({units:[{quantityUnits:'14'},{quantityUnits:'8'}],occurredAt})
+    expect(supplemented.reconciliation.totals.grossChargeUnits).toBe('10001')
+    expect(ledger.createTransaction).not.toHaveBeenCalled();expect(ledger.revertTransaction).not.toHaveBeenCalled()
+  })
   it('preserves all admitted sources across retry, next-day replay and canonical correction; explicit supplement sees later facts', async () => {
     const f = await fixture(), args = {month, revision: 1}
     const first = await f.owner.owner.action(api.moneyMonthlyUsageDraft.createOwnerDraft, args)
     expect(first.kind).toBe('available')
     if (first.kind !== 'available') throw new Error(first.code)
     const frozen = readFrozenMonthlyDraft(first.snapshotJson, first.snapshotDigest)
+    const {providerUnitEvidence: _providerUnits, ...legacy} = frozen.snapshot
+    const legacyFrozen = freezeMonthlyDraft(legacy)
+    expect(readFrozenMonthlyDraft(legacyFrozen.snapshotJson, legacyFrozen.snapshotDigest).snapshot).not.toHaveProperty('providerUnitEvidence')
     expect(frozen.reconciliation).toMatchObject({ totals: {grossChargeUnits: '10001'}, credentials: [{credentialRef: 'credential:original'}] })
     expect(frozen.snapshot).toMatchObject({ ledgerSnapshotAt: now, sourcesCapturedAt: now, measurements: [{evidence: {currentQuantityUnits: '1', revisions: []}}], issuedInvoice: false })
     vi.setSystemTime(now + 86_400_000)
