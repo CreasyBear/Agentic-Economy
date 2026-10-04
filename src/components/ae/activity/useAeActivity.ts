@@ -7,8 +7,7 @@ import {
   type BuyerCallSummaryFacts,
 } from '@/modules/capability-execution/call-receipt-view'
 import { readOwnerCallsServer } from '@/lib/server/call-history.functions'
-import { exportOwnerCallUsageServer } from '@/lib/server/call-usage-export.functions'
-import { generateCallUsageExportCsv } from '@/lib/export/call-usage-export'
+import { requestOwnerUsageReportServer } from '@/lib/server/durable-usage-report.functions'
 import { formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -233,6 +232,8 @@ export function useAeActivity({
   const { state: pagination, loadNextPage } = useCallPagination(initial, periodStartAt, periodEndAt, filteredAgent)
   const [datePending, setDatePending] = useState(false)
   const [periodExportPending, setPeriodExportPending] = useState(false)
+  const periodRequestInFlight = useRef(false)
+  const [usageReportRequest, setUsageReportRequest] = useState<{reportRef:string;format:'CSV'|'JSON'}>()
   const dateFilteredItems = pagination.items
 
   function navigateScope(range: ActivityDateRangeFilter, agent: string | undefined) {
@@ -340,24 +341,26 @@ export function useAeActivity({
   }
 
   async function exportPeriod(format: 'CSV' | 'JSON') {
-    if (periodExportPending) return
+    if (periodRequestInFlight.current) return
+    periodRequestInFlight.current = true
     setPeriodExportPending(true)
     try {
-      const document = await exportOwnerCallUsageServer({ data: {
+      const reportRef = `call-usage-export:${crypto.randomUUID()}`
+      await requestOwnerUsageReportServer({ data: {
+        reportRef,
         periodStartAt, periodEndAt, status: statusFilter,
         ...(filteredAgent === undefined ? {} : { principalRef: filteredAgent }),
       } })
-      const filename = `call-usage-period-${new Date().toISOString().slice(0, 10)}`
-      if (format === 'CSV') downloadCsv(`${filename}.csv`, generateCallUsageExportCsv(document))
-      else downloadJson(`${filename}.json`, document)
-      toast.success(`Exported ${document.recordCountUnits} Calls for the full filtered period to ${format}`)
+      setUsageReportRequest({reportRef,format})
+      toast.success('Full-period report requested. Its saved status is shown below.')
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       toast.error('Could not export the full period.', {
-        description: 'No partial file was downloaded. Records may have changed or the period may be too large. Retry or choose a shorter period.',
+        description: 'No partial file was downloaded. Retry the request when the service is available.',
       })
     } finally {
       setPeriodExportPending(false)
+      periodRequestInFlight.current = false
     }
   }
 
@@ -430,6 +433,7 @@ export function useAeActivity({
     exportCsv,
     exportJson,
     exportPeriod,
+    usageReportRequest,
     periodExportPending,
     periodExportDisabled: periodExportPending || datePending || periodEndAt - periodStartAt > 366 * 86_400_000,
     showFilterBar: true,

@@ -19,6 +19,7 @@ import { ActivityFilterBar } from './components/ActivityFilterBar'
 import { ActivityReconciliation } from './components/ActivityReconciliation'
 import { ActivityMonthlySummary } from './components/ActivityMonthlySummary'
 import { ActivityMonthlyDraft } from './components/ActivityMonthlyDraft'
+import { ActivityUsageReports } from './components/ActivityUsageReports'
 import { ActivityPaginationControl } from './components/ActivityPaginationControl'
 import { ActivityUnavailableState } from './components/ActivityUnavailableState'
 import { useAeActivity } from './useAeActivity'
@@ -159,6 +160,7 @@ function AeActivityAvailable({
             </Button>
           </div>
         ) : null}
+        <ActivityUsageReports {...(vm.usageReportRequest === undefined ? {} : {request:vm.usageReportRequest})} />
         {vm.showEmptyNoCalls ? (
           <AeEmptyState
             title="No Calls in this period"
@@ -193,7 +195,7 @@ function AeActivityAvailable({
           </>
         ) : null}
         <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
-        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Full-period exports read all pages for the selected period, Agent and status, up to 1,000 scanned Calls and 366 days.</p>
+        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Saved full-period reports read every page for the selected period, Agent and status, up to 366 days. Changed source records require a new report; incomplete reports cannot be downloaded.</p>
       </div>
     </AeOperatorPage>
   )

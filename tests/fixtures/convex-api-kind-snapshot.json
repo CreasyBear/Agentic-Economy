@@ -450,9 +450,27 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "captureUsageReportPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "completeUsageReportWork",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "capabilityCallProjections",
     "method": "listOwnerCalls",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "listOwnerUsageReports",
     "kind": "query"
   },
   {
@@ -480,10 +498,40 @@
     "kind": "query"
   },
   {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerUsageReport",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerUsageReportParts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerUsageReportUnits",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "capabilityCallProjections",
     "method": "rebuild",
     "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "requestOwnerUsageReport",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "runUsageReportPage",
+    "kind": "action"
   },
   {
     "visibility": "internal",

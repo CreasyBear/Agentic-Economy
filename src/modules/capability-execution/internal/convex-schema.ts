@@ -6,7 +6,7 @@ import {
 } from '@/modules/action-execution/runtime'
 import { spendingPeriodsValue, promotionalCreditAllocationValue, managedCallBookingValue } from '@/modules/money/public'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
-import { providerUnitObservationValue } from './provider-service-unit-values'
+import { providerUnitObservationValue, providerUnitSummaryValue } from './provider-service-unit-values'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
@@ -226,6 +226,22 @@ const paidCallReportFields = {
 }
 
 export const capabilityCallTables = {
+  capabilityUsageSourceVersions: defineTable({ accountRef: v.string(), month: v.string(), shard: v.number(), generationUnits: v.string() })
+    .index('by_accountRef_and_month_and_shard', ['accountRef', 'month', 'shard']),
+  capabilityUsageReports: defineTable({
+    reportRef: v.string(), accountRef: v.string(), actorRef: v.string(), scopeDigest: v.string(),
+    principalRef: v.optional(v.string()), periodStartAt: v.number(), periodEndAt: v.number(),
+    status: v.union(v.literal('all'), v.literal('completed'), v.literal('refused'), v.literal('outcome_unknown')),
+    snapshotAt: v.number(), sourceVersionDigest: v.string(),
+    state: v.union(v.literal('building'), v.literal('complete'), v.literal('failed')),
+    nextCursor: v.optional(v.string()), pageCount: v.number(), partCount: v.number(), scannedCountUnits: v.string(), recordCountUnits: v.string(),
+    recordsChainDigest: v.string(), summaryJson: v.string(), workId: v.optional(v.string()), failureCode: v.optional(v.string()),
+    createdAt: v.number(), completedAt: v.optional(v.number()),
+  }).index('by_reportRef', ['reportRef']).index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
+  capabilityUsageReportParts: defineTable({reportRef:v.string(),accountRef:v.string(),position:v.number(),partDigest:v.string(),recordsJson:v.string(),recordCountUnits:v.string(),createdAt:v.number()})
+    .index('by_reportRef_and_position',['reportRef','position']),
+  capabilityUsageReportUnits: defineTable({reportRef:v.string(),accountRef:v.string(),unitDefinitionRef:v.string(),summary:providerUnitSummaryValue})
+    .index('by_reportRef_and_unitDefinitionRef',['reportRef','unitDefinitionRef']),
   paidCallReports: defineTable(v.union(
     v.object({ ...paidCallReportFields, state: v.literal('pending'), nextWorkAt: v.number() }),
     v.object({ ...paidCallReportFields, state: v.literal('posted'), postedAt: v.number(), buyerRefundTransactionRef: v.string(), transactionRefs: v.array(v.string()) }),

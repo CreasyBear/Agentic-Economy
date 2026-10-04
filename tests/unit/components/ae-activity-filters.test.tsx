@@ -10,7 +10,12 @@ import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 afterEach(cleanup)
 
 const routerMocks = vi.hoisted(() => ({ navigate: vi.fn().mockResolvedValue(undefined), exportPeriod: vi.fn() }))
-vi.mock('@/lib/server/call-usage-export.functions', () => ({ exportOwnerCallUsageServer: routerMocks.exportPeriod }))
+vi.mock('@/lib/server/durable-usage-report.functions', () => ({
+  requestOwnerUsageReportServer:routerMocks.exportPeriod,
+  listOwnerUsageReportsServer:vi.fn().mockResolvedValue({page:[],isDone:true,continueCursor:''}),
+  readOwnerUsageReportServer:vi.fn().mockResolvedValue({kind:'refused',code:'usage_report_unavailable'}),
+  readOwnerUsageReportPartsServer:vi.fn(),
+}))
 
 vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -468,6 +473,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Full period JSON' }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not export the full period.', expect.any(Object)))
     expect(routerMocks.exportPeriod).toHaveBeenCalledWith({ data: {
+      reportRef:expect.stringMatching(/^call-usage-export:/u),
       periodStartAt: windowScope.periodStartAt, periodEndAt: windowScope.periodEndAt,
       status: 'completed', principalRef: 'agent:alpha',
     } })

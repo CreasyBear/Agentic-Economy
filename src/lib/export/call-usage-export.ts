@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { providerUnitObservationSchema, summarizeProviderUnits } from '@/modules/capability-execution/provider-service-units'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
-import { escapeSpreadsheetText as csvText, formatCsvRow } from './csv-export'
+import { escapeSpreadsheetText as csvText, formatCsvRow } from './csv-format'
 
 const units = z.string().regex(/^(?:0|[1-9]\d*)$/u)
 export const callUsageExportRowSchema = z.strictObject({
@@ -34,6 +34,8 @@ export type CallUsageExportInput = z.infer<typeof callUsageExportInputSchema>
 export function createCallUsageExport(
   input: CallUsageExportInput, records: CallUsageExportRow[], snapshotAt: number, scannedCount: number, accountRef: string, exportRef?: string,
 ) {
+  input = callUsageExportInputSchema.parse({periodStartAt:input.periodStartAt,periodEndAt:input.periodEndAt,status:input.status,
+    ...(input.principalRef === undefined ? {} : {principalRef:input.principalRef})})
   records = records.map(({ receiptRef, currentDeliveredRequestUnits, measurementRevisionRef, ...row }) => ({ ...row,
     ...(currentDeliveredRequestUnits === undefined ? {} : {currentDeliveredRequestUnits: row.currentSupportVerified === true ? currentDeliveredRequestUnits : null}),
     ...(measurementRevisionRef !== undefined && row.currentSupportVerified === true ? {measurementRevisionRef} : {}),

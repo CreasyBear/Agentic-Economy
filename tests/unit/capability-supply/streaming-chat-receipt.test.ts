@@ -23,6 +23,11 @@ describe('SDK parsed bounded streaming completion receipts',()=>{
     expect(output).toBeDefined()
     expect(decodeProviderUnits('blockrun_chat:v1',output).units.every(unit=>unit.quantityUnits === null)).toBe(true)
   })
+  it('accepts the documented OpenRouter final usage choice repeating the finish reason without counting another completion',async()=>{
+    const text=first+last+chunk([{index:0,delta:{},finish_reason:'stop'}],{usage:{prompt_tokens:12,completion_tokens:8,total_tokens:20}})+'data: [DONE]\n\n'
+    expect(await completedStreamingChatReceipt(text)).toMatchObject({choices:[{message:{content:'Hello world'},finish_reason:'stop'}],usage:{total_tokens:20}})
+    expect(await completedStreamingChatReceipt(first+last+chunk([{index:0,delta:{content:'extra'},finish_reason:'stop'}],{usage:{prompt_tokens:12,completion_tokens:8,total_tokens:20}})+'data: [DONE]\n\n')).toBeUndefined()
+  })
   it('uses the installed SDK tool delta tracker without dispatching tool calls',async()=>{
     const text=chunk([{index:0,delta:{role:'assistant',tool_calls:[{index:0,id:'call-synthetic',type:'function',function:{name:'weather',arguments:'{"city":'}}]},finish_reason:null}])
       +chunk([{index:0,delta:{tool_calls:[{index:0,function:{arguments:'"Perth"}'}}]},finish_reason:'tool_calls'}])+usage+'data: [DONE]\n\n'

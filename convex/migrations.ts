@@ -9,6 +9,7 @@ import { listingIdentityDigest } from './lib/market/directoryIndex/listingDigest
 import { directoryState, storedDirectoryEntry } from './lib/market/directoryIndex/rows'
 import schema from './schema'
 import { rebuildCallProjection } from './lib/capabilityExecution/callProjection/rebuild'
+import { usageSourceTriggers } from './lib/capabilityExecution/serviceUsage/sourceVersions'
 
 export const migrations = new Migrations(components.migrations, { schema })
 
@@ -18,7 +19,7 @@ export const migrations = new Migrations(components.migrations, { schema })
 export const backfillCallMeasurements = migrations.define({
   table: 'capabilityCalls',
   batchSize: 25,
-  migrateOne: async (ctx, doc) => { await rebuildCallProjection(ctx, doc) },
+  migrateOne: async (ctx, doc) => { await rebuildCallProjection(usageSourceTriggers.wrapDB(ctx), doc) },
 })
 
 /**
