@@ -25,6 +25,21 @@ contracts needs the matching backend release and verification.
 
 ## Latest production acceptance — 4 October 2026
 
+Frontend browsing update verified on **5 October 2026 Perth**: [PR #345](https://github.com/CreasyBear/Agentic-Economy/pull/345)
+is live on READY deployment `dpl_6n1PhfVxXijR1mnCQqLBkAxpwZuK` in project
+`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
+confirm main `ac310246ebdab436efefa119558a864e5dc2e5cb`, whose tree equals the
+gated source. Public detail observations now share Market's 30-second router
+freshness window; private account, Quote, Call and financial authority are unchanged.
+Check/full gate pass: 8625 unit cases, 2892 integration cases, 16 browser journeys,
+18 accessibility cases and the existing type/import/SEO/build/CLI checks; existing
+skips/TODOs remain outside acceptance. Health and readiness both return HTTP 200
+at this readback, with config/Convex/payments ready and stale catalogue observations.
+This frontend-only change neither redeploys Convex nor establishes a new transaction
+or native OAuth acceptance. The prior READY deployment `dpl_6NZpfPB2EuFtrsKVXjsZ4XfXWHBV`
+is the rollback boundary. Full evidence and the separate source-only onboarding
+composition brief are in the [Arc protocol](../designs/arc-ui-refactor/protocol.md).
+
 Frontend update verified on **5 October 2026 Perth**: [PR #344](https://github.com/CreasyBear/Agentic-Economy/pull/344)
 is live on READY Vercel deployment `dpl_6NZpfPB2EuFtrsKVXjsZ4XfXWHBV` in
 project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The `app.aecon.ai` alias and release
