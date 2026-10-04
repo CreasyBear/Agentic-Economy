@@ -19,7 +19,7 @@ function amount(units: string, currency: 'AUD' | 'USDC' = 'AUD') {
   return value === undefined ? 'Unavailable' : `${negative ? '−' : ''}${currency} ${value}`
 }
 const bridgeLabels = { before_period: 'Calls created before this period', in_period: 'Calls created in this period', after_period: 'Calls created after this period', unattributed: 'Unattributed entries' } as const
-export function ActivityReconciliation({ result, retryPending, onRetry, returnScope }: { result: UsageReconciliation; retryPending: boolean; onRetry: () => void; returnScope: ActivityReturnScope }) {
+export function ActivityReconciliation({ result, retryPending, onRetry, returnScope, sourceFactsCapturedAt }: { result: UsageReconciliation; retryPending: boolean; onRetry: () => void; returnScope: ActivityReturnScope; sourceFactsCapturedAt?: number }) {
   const columns = useMemo<ColumnDef<Credential, unknown>[]>(() => [
     { accessorKey: 'credentialRef', header: 'Credential', cell: ({ row }) => <span className="break-all">{row.original.credentialRef}</span> },
     { accessorKey: 'createdCallCountUnits', header: 'Calls created' },
@@ -52,7 +52,7 @@ export function ActivityReconciliation({ result, retryPending, onRetry, returnSc
     <p className="text-xs text-muted-foreground">Amount coverage: {result.amountCoverage}. {result.amountCoverage === 'partial' ? 'Every amount above is a measured subset; missing or reverted evidence prevents confirmed totals.' : 'All supported ledger entries in the financial period were read.'} Call attribution: {result.attributionCoverage}; {result.unattributedTransactionCountUnits} entries remain unattributed. Missing provider costs remain unknown.</p>
     <details><summary className="cursor-pointer text-sm">How these amounts and dates reconcile</summary>
     <p className="text-xs text-muted-foreground">Charges include the fees and tax already booked in the buyer sale. Provider transfers are shown separately in USDC; they are never subtracted again from the customer charge. A customer refund does not reverse provider payment.</p>
-    <p className="text-xs text-muted-foreground">Canonical Call links are verified at read time; financial entries retain their ledger snapshot cutoff.</p>
+    <p className="text-xs text-muted-foreground">{sourceFactsCapturedAt === undefined ? 'Canonical Call links are verified at read time; financial entries retain their ledger snapshot cutoff.' : `Canonical Call links were verified and frozen at ${formatUtcTimestamp(sourceFactsCapturedAt)} UTC. This view reproduces that draft version.`}</p>
     <ul className="grid gap-1 text-sm" aria-label="Call creation period bridge">
       {result.bridge.map(row => <li key={row.callCreated}>{bridgeLabels[row.callCreated]}: {amount(row.totals.netChargeUnits)} net purchased cost; {amount(row.totals.netPromotionalUseUnits)} net promotional use; {amount(row.totals.netProviderTransferUnits, 'USDC')} net provider transfer.</li>)}
     </ul>

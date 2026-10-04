@@ -13,6 +13,8 @@ export const callUsageExportRowSchema = z.strictObject({
   providerAmountUnits: units.optional(), audAmountUnits: units.optional(),
   receiptRef: z.string().optional(), recoveryRef: z.string().optional(),
   serviceUsageRef: z.string().optional(), deliveredRequestUnits: z.literal('1').optional(),
+  currentDeliveredRequestUnits: z.literal('1').nullable().optional(), measurementRevisionRef: z.string().optional(),
+  currentSupportVerified: z.boolean().optional(),
   observedAt: z.number().int().nonnegative().safe().optional(),
   latencyMs: z.number().nonnegative(),
   createdAt: z.number().int().nonnegative().safe(), updatedAt: z.number().int().nonnegative().safe(),
@@ -30,11 +32,15 @@ export type CallUsageExportInput = z.infer<typeof callUsageExportInputSchema>
 export function createCallUsageExport(
   input: CallUsageExportInput, records: CallUsageExportRow[], snapshotAt: number, scannedCount: number, accountRef: string, exportRef?: string,
 ) {
-  records = records.map(({ receiptRef, ...row }) => ({ ...row,
+  records = records.map(({ receiptRef, currentDeliveredRequestUnits, measurementRevisionRef, ...row }) => ({ ...row,
+    ...(currentDeliveredRequestUnits === undefined ? {} : {currentDeliveredRequestUnits: row.currentSupportVerified === true ? currentDeliveredRequestUnits : null}),
+    ...(measurementRevisionRef !== undefined && row.currentSupportVerified === true ? {measurementRevisionRef} : {}),
     ...(receiptRef !== undefined && /^receipt:sha256:[a-f0-9]{64}$/u.test(receiptRef) ? { receiptRef } : {}) }))
   let recordedCharge = 0n
   let amountCoverage: 'complete' | 'incomplete' = 'complete'
   let deliveredRequests = 0n
+  let currentDeliveredRequests = 0n
+  let unknownCurrent = 0n
   let serviceUnitCoverage: 'complete' | 'incomplete' = 'complete'
   const callRefs = new Set<string>()
   const accounts = new Set<string>()
@@ -47,6 +53,8 @@ export function createCallUsageExport(
       || (input.status !== 'all' && row.state !== input.status)) throw new Error('call_export_scope_mismatch')
     if (row.serviceUsageRef !== undefined && row.deliveredRequestUnits === '1') deliveredRequests += 1n
     else if (row.deliveryState !== 'not_delivered') serviceUnitCoverage = 'incomplete'
+    if (row.currentSupportVerified === true && row.currentDeliveredRequestUnits === '1') currentDeliveredRequests += 1n
+    else if (row.serviceUsageRef !== undefined || row.deliveryState !== 'not_delivered') { unknownCurrent += 1n; serviceUnitCoverage = 'incomplete' }
     if (row.paymentState === 'settled' && row.audAmountUnits !== undefined) recordedCharge += BigInt(row.audAmountUnits)
     else if (row.paymentState !== 'released'
       && !(row.paymentState === 'not_applicable' && row.state === 'refused' && row.deliveryState === 'not_delivered')) {
@@ -68,6 +76,7 @@ export function createCallUsageExport(
     recordCountUnits: BigInt(records.length).toString(), scannedCountUnits: BigInt(scannedCount).toString(),
     serviceUnitDefinitionRef: 'delivered_request:v1' as const,
     deliveredRequestUnits: deliveredRequests.toString(), serviceUnitCoverage,
+    currentDeliveredRequestUnits: currentDeliveredRequests.toString(), unknownCurrentDeliveryCallCountUnits: unknownCurrent.toString(),
     recordedChargeCurrency: 'AUD' as const, recordedChargeExponent: 6 as const,
     // The current canonical moneyProviderObligations contract fixes USDC/6.
     // An obligation is not a claimed provider cost or confirmed transfer.
@@ -90,7 +99,8 @@ export function generateCallUsageExportCsv(document: CallUsageExport): string {
     'Application Ref', 'Call state', 'Delivery state', 'Payment state', 'Recorded charge AUD/6 units',
     'Provider obligation USDC/6 units', 'Provider obligation state', 'Delivered request units', 'Service usage Ref',
     'Receipt Ref', 'Recovery Ref', 'Period start UTC', 'Period end UTC', 'Snapshot UTC',
-    'Record count', 'Records digest', 'Records digest format', 'Service unit coverage', 'Charge coverage', 'Export Ref', 'Account Ref']
+    'Record count', 'Records digest', 'Records digest format', 'Service unit coverage', 'Charge coverage', 'Export Ref', 'Account Ref',
+    'Current supported request units', 'Measurement revision Ref']
   return [formatCsvRow(headers), ...document.records.map((row) => formatCsvRow([
     new Date(row.createdAt).toISOString(), csvText(row.callRef), csvText(row.toolLabel), csvText(row.providerRef),
     csvText(row.principalRef), csvText(row.credentialRef), csvText(row.applicationRef), row.state,
@@ -105,5 +115,7 @@ export function generateCallUsageExportCsv(document: CallUsageExport): string {
     new Date(document.periodStartAt).toISOString(), new Date(document.periodEndAt).toISOString(),
     new Date(document.snapshotAt).toISOString(), document.recordCountUnits, document.recordsDigest,
     document.recordsDigestFormat, document.serviceUnitCoverage, document.amountCoverage, document.exportRef ?? '', csvText(document.accountRef),
+    row.currentSupportVerified === true && row.currentDeliveredRequestUnits === '1' ? '1' : row.serviceUsageRef !== undefined || row.deliveryState !== 'not_delivered' ? 'unknown' : '0',
+    row.currentSupportVerified === true ? csvText(row.measurementRevisionRef) : '',
   ]))].join('\r\n')
 }

@@ -79,10 +79,13 @@ export type ActivityMonthlySummaryView = Readonly<{
   scopeLabel: string
   windowTooLarge: boolean
   deliveredRequestLabel: string
+  currentDeliveredRequestLabel: string
+  unknownDeliverySupportLabel: string
   serviceUnitCoverageLabel: string
 }>
 
 export type AeActivityProps = Readonly<{
+  draftRef?: string
   result: ActivityLoaderResult
 }>
 

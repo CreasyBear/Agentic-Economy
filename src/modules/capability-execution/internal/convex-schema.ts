@@ -251,6 +251,7 @@ export const capabilityCallTables = {
     quantityExponent: v.literal(0),
     source: v.literal('validated_call_result'),
     sourceEvidenceHash: v.optional(v.string()),
+    supportDigest: v.optional(v.string()),
     receiptRef: v.optional(v.string()),
     priceDigest: v.string(),
     timeBasis: v.union(v.literal('receipt_issued'), v.literal('call_updated')),
@@ -261,7 +262,17 @@ export const capabilityCallTables = {
     .index('by_usageRef', ['usageRef'])
     .index('by_accountRef_and_callDigest', ['accountRef', 'callDigest'])
     .index('by_callRef', ['callRef'])
-    .index('by_accountRef_and_callCreatedAt', ['accountRef', 'callCreatedAt']),
+    .index('by_accountRef_and_callCreatedAt', ['accountRef', 'callCreatedAt'])
+    .index('by_accountRef_and_occurredAt', ['accountRef', 'occurredAt']),
+  capabilityServiceUsageRevisions: defineTable({
+    usageRef: v.string(), accountRef: v.string(), callRef: v.string(), revisionRef: v.string(), previousRevisionRef: v.string(), revision: v.number(),
+    sourceDigest: v.string(), support: v.object({
+      state: v.union(v.literal('pending'), v.literal('completed'), v.literal('refused'), v.literal('reconciliation_required'), v.literal('cancelled')),
+      resultKind: v.union(v.literal('completed'), v.literal('pending'), v.literal('needs_authority'), v.literal('reconciliation_required'), v.literal('refused'), v.null()),
+      evidenceHash: v.union(v.string(), v.null()), evidenceConflict: v.boolean(),
+    }),
+    quantityUnits: v.union(v.literal('1'), v.null()), effectiveAt: v.number(), observedAt: v.number(), source: v.literal('canonical_call_support'),
+  }).index('by_usageRef_and_revision', ['usageRef', 'revision']).index('by_revisionRef', ['revisionRef']),
   capabilityCallProjections: defineTable({
     callRef: v.string(),
     accountRef: v.string(),
@@ -292,6 +303,8 @@ export const capabilityCallTables = {
     recoveryRef: v.optional(v.string()),
     serviceUsageRef: v.optional(v.string()),
     deliveredRequestUnits: v.optional(v.string()),
+    currentDeliveredRequestUnits: v.optional(v.union(v.literal('1'), v.null())),
+    measurementRevisionRef: v.optional(v.string()),
     observedAt: v.optional(v.number()),
     latencyMs: v.number(),
     createdAt: v.number(),

@@ -322,6 +322,8 @@ export function useAeActivity({
       ? 'Gross charges use ledger transaction dates in this period. Refunds are recorded separately and are not deducted here.'
       : 'Agent charges use current Call payment records for Calls created in this period. They are not an account ledger balance or a refund total.',
     deliveredRequestLabel: usage.kind === 'available' ? usage.deliveredRequestUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
+    currentDeliveredRequestLabel: usage.kind === 'available' ? usage.currentDeliveredRequestUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
+    unknownDeliverySupportLabel: usage.kind === 'available' ? usage.unknownCurrentDeliveryCallCountUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
     serviceUnitCoverageLabel: usage.kind === 'empty' ? 'No Calls in this period.'
       : usage.kind === 'available' && usage.serviceUnitCoverage === 'complete'
         ? 'Delivered-request units are recorded once per Call; refunds do not erase measured usage.'

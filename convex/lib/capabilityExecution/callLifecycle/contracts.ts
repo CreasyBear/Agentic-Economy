@@ -10,10 +10,14 @@ import {
   usageValue,
   statusResultValue,
 } from '@/modules/capability-execution/convex'
+import { serviceUsageEvidenceValue } from '../serviceUsage/contracts'
+import { callAttemptEvidenceValue } from './attemptEvidenceContracts'
 
 export const environment = v.union(v.literal('sandbox'), v.literal('production'))
 export const ownerCallContextValue = v.object({
   purpose: v.null(),
+  serviceUsageEvidence: v.optional(serviceUsageEvidenceValue),
+  attemptEvidence: v.optional(callAttemptEvidenceValue),
   agent: v.object({ principalRef: v.string(), applicationRef: v.string(), currentDisplayName: v.union(v.string(), v.null()) }),
   recordedTool: v.union(
     v.object({ kind: v.literal('available'), basis: v.literal('call_snapshot'), name: v.string(), providerRef: v.string(), providerName: v.null() }),

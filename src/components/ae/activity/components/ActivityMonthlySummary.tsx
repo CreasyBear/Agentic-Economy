@@ -42,6 +42,8 @@ export function ActivityMonthlySummary({
           { label: 'Refused', value: monthly.refusedLabel },
           { label: 'Outcome unknown', value: monthly.attentionLabel },
           { label: 'Recorded delivered requests', value: monthly.deliveredRequestLabel },
+          { label: 'Currently supported delivered requests', value: monthly.currentDeliveredRequestLabel },
+          { label: 'Calls with unknown delivery support', value: monthly.unknownDeliverySupportLabel },
           { label: monthly.spendTitle, value: monthly.spendLabel },
         ]} />
       </div>

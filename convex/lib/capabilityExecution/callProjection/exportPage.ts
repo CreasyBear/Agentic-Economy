@@ -6,6 +6,7 @@ import { callValue, validUsagePeriod } from './contracts'
 import { beginCallExportArgs, callExportAuditId, callExportScope } from './exportAudit'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { callExportSourceDigest } from './exportSnapshot'
+import { readProjectedSupport } from '../serviceUsage/projectedSupport'
 
 export const callExportPageArgs = {
   ...beginCallExportArgs,
@@ -51,7 +52,9 @@ export async function callExportPageHandler(ctx: QueryCtx, args: ObjectType<type
     if ((row.observedAt ?? row.updatedAt) > args.snapshotAt) throw new Error('call_export_source_changed')
     if (args.status === 'all' || row.state === args.status) {
       const { receiptRef, ...safeRow } = row
-      captured.push({ ...safeRow, ...(receiptRef !== undefined && /^receipt:sha256:[a-f0-9]{64}$/u.test(receiptRef) ? { receiptRef } : {}) })
+      const support = await readProjectedSupport(ctx, row)
+      captured.push({ ...safeRow, currentDeliveredRequestUnits: support.quantityUnits, currentSupportVerified: support.verified,
+        ...(receiptRef !== undefined && /^receipt:sha256:[a-f0-9]{64}$/u.test(receiptRef) ? { receiptRef } : {}) })
     }
   }
   if (page.isDone) {

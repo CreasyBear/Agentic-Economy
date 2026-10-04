@@ -3,6 +3,7 @@ import type { QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { MAX_USAGE_ROWS, validUsagePeriod } from './contracts'
 import { settledChargeSummary } from './ownerAgentReadback'
+import { readProjectedSupport } from '../serviceUsage/projectedSupport'
 
 const dimensionKind = v.union(
   v.literal('account'),
@@ -23,6 +24,8 @@ const usageResult = v.union(
     completedCountUnits: v.string(),
     outcomeUnknownCountUnits: v.string(),
     deliveredRequestUnits: v.string(),
+    currentDeliveredRequestUnits: v.string(),
+    unknownCurrentDeliveryCallCountUnits: v.string(),
     serviceUnitCoverage: v.union(v.literal('complete'), v.literal('incomplete')),
     serviceUnitDefinitionRef: v.literal('delivered_request:v1'),
     settledSpendUnits: v.optional(v.string()),
@@ -105,6 +108,8 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
   let outcomeUnknown = 0n
   let updatedAt = 0
   let deliveredRequests = 0n
+  let currentDeliveredRequests = 0n
+  let unknownCurrent = 0n
   let serviceUnitCoverage: 'complete' | 'incomplete' = 'complete'
   for (const row of rows) {
     if (row.state === 'completed') completed += 1n
@@ -112,6 +117,9 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
     updatedAt = Math.max(updatedAt, row.updatedAt)
     if (row.serviceUsageRef !== undefined && row.deliveredRequestUnits === '1') deliveredRequests += 1n
     else if (row.deliveryState !== 'not_delivered') serviceUnitCoverage = 'incomplete'
+    const support = row.serviceUsageRef === undefined ? null : await readProjectedSupport(ctx, row)
+    if (support?.quantityUnits === '1') currentDeliveredRequests += 1n
+    else if (row.serviceUsageRef !== undefined || row.deliveryState !== 'not_delivered') { unknownCurrent += 1n; serviceUnitCoverage = 'incomplete' }
   }
   return {
     kind: 'available' as const,
@@ -123,6 +131,8 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
     completedCountUnits: completed.toString(),
     outcomeUnknownCountUnits: outcomeUnknown.toString(),
     deliveredRequestUnits: deliveredRequests.toString(),
+    currentDeliveredRequestUnits: currentDeliveredRequests.toString(),
+    unknownCurrentDeliveryCallCountUnits: unknownCurrent.toString(),
     serviceUnitCoverage,
     serviceUnitDefinitionRef: 'delivered_request:v1' as const,
     ...settledChargeSummary(rows),

@@ -1398,6 +1398,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "public",
+    "module": "capabilityServiceUsage",
+    "method": "readOwnerEvidence",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "capabilitySupply",
     "method": "authorizeOwnerSupplyAction",
@@ -2925,6 +2931,42 @@
     "visibility": "internal",
     "module": "moneyMonthlySpendBudget",
     "method": "readOrganizationMonthlySpendBudgetForAccount",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "admitOwnerDraft",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "captureFinancial",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "createOwnerDraft",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "freezeOwnerDraft",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readOwnerDraft",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readOwnerDraftInternal",
     "kind": "query"
   },
   {

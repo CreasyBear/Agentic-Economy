@@ -1,3 +1,4 @@
+import { monthlyDraftRefSearchSchema } from '@/lib/call-recovery/activity-return-scope'
 import { createFileRoute } from '@tanstack/react-router'
 import { Activity } from 'lucide-react'
 import { z } from 'zod'
@@ -34,6 +35,7 @@ export const Route = createFileRoute('/_operator/activity')({
   },
   ...operatorRouteOptions,
   validateSearch: z.object({
+    draftRef: monthlyDraftRefSearchSchema,
     agent: z.string().trim().min(1).max(200).optional(),
     range: z.enum(['all', 'today', '7d', '30d', 'month']).optional().catch(undefined),
   }),
@@ -91,5 +93,6 @@ export const Route = createFileRoute('/_operator/activity')({
 
 function ActivityRoute() {
   const result = Route.useLoaderData()
-  return <AeActivity result={result} />
+  const {draftRef} = Route.useSearch()
+  return <AeActivity result={result} {...(draftRef === undefined ? {} : {draftRef})} />
 }

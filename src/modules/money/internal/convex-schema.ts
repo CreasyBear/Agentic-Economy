@@ -202,6 +202,14 @@ const x402SpendReservationFields = {
 }
 
 export const moneyTables = {
+  moneyMonthlyUsageDrafts: defineTable({
+    draftRef: v.string(), accountRef: v.string(), month: v.string(), revision: v.number(), priorDraftRef: v.union(v.string(), v.null()),
+    ledgerSnapshotAt: v.number(), createdAt: v.number(),
+    sourceIdentity: v.object({environment: v.union(v.literal('sandbox'), v.literal('production')), sourceDigest: v.string()}),
+    requestedByPrincipalRef: v.string(), authorityRevisionAccount: v.number(),
+    financialSnapshotJson: v.optional(v.string()), financialSnapshotDigest: v.optional(v.string()),
+    snapshotJson: v.optional(v.string()), snapshotDigest: v.optional(v.string()), sourcesCapturedAt: v.optional(v.number()),
+  }).index('by_draftRef', ['draftRef']).index('by_accountRef_and_month_and_revision', ['accountRef', 'month', 'revision']),
   moneyPromotionalGrants: defineTable({
     grantRef: v.string(),
     accountRef: v.string(),

@@ -21,13 +21,16 @@ export const callValue = v.object({
   recoveryRef: v.optional(v.string()),
   serviceUsageRef: v.optional(v.string()),
   deliveredRequestUnits: v.optional(v.string()),
+  currentDeliveredRequestUnits: v.optional(v.union(v.literal('1'), v.null())),
+  measurementRevisionRef: v.optional(v.string()),
+  currentSupportVerified: v.optional(v.boolean()),
   observedAt: v.optional(v.number()),
   latencyMs: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
 
-export const MAX_USAGE_ROWS = 10_000
+export const MAX_USAGE_ROWS = 1_000
 
 export function validCallHistoryPeriod(periodStartAt: number, periodEndAt: number): boolean {
   return Number.isSafeInteger(periodStartAt)

@@ -18,6 +18,7 @@ import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
 import { ActivityReconciliation } from './components/ActivityReconciliation'
 import { ActivityMonthlySummary } from './components/ActivityMonthlySummary'
+import { ActivityMonthlyDraft } from './components/ActivityMonthlyDraft'
 import { ActivityPaginationControl } from './components/ActivityPaginationControl'
 import { ActivityUnavailableState } from './components/ActivityUnavailableState'
 import { useAeActivity } from './useAeActivity'
@@ -30,7 +31,7 @@ function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
   return `${vm.attentionRows.length} Calls need attention. ${vm.recentRows.length} recent Calls shown.`
 }
 
-export function AeActivity({ result }: AeActivityProps) {
+export function AeActivity({ result, draftRef }: AeActivityProps) {
   const router = useRouter()
   const [retryPending, setRetryPending] = useState(false)
   const [statusFilter, setStatusFilter] = useState<ActivityStatusFilter>('all')
@@ -54,6 +55,7 @@ export function AeActivity({ result }: AeActivityProps) {
     <AeActivityAvailable
       key={`${canonicalDigest(result.calls)}:${result.filteredAgent ?? 'all'}:${result.periodStartAt}:${result.periodEndAt}`}
       result={result}
+      {...(draftRef === undefined ? {} : {draftRef})}
       statusFilter={statusFilter}
       setStatusFilter={setStatusFilter}
     />
@@ -61,10 +63,12 @@ export function AeActivity({ result }: AeActivityProps) {
 }
 
 function AeActivityAvailable({
+  draftRef,
   result,
   statusFilter,
   setStatusFilter,
 }: Readonly<{
+  draftRef?: string
   result: Extract<ActivityLoaderResult, { kind: 'available' }>
   statusFilter: ActivityStatusFilter
   setStatusFilter: (filter: ActivityStatusFilter) => void
@@ -118,6 +122,7 @@ function AeActivityAvailable({
           onRetry={vm.retrySummaries}
         />
         {result.reconciliation === undefined ? null : <ActivityReconciliation returnScope={returnScope} result={result.reconciliation} retryPending={vm.summaryRetryPending} onRetry={vm.retrySummaries} />}
+        {result.filteredAgent === undefined ? <ActivityMonthlyDraft returnScope={returnScope} {...(draftRef === undefined ? {} : {draftRef})} /> : null}
         {vm.showFilterBar ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Call usage export · not an invoice</span>
@@ -188,7 +193,7 @@ function AeActivityAvailable({
           </>
         ) : null}
         <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
-        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Full-period exports read all pages for the selected period, Agent and status, up to 10,000 scanned Calls and 366 days.</p>
+        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Full-period exports read all pages for the selected period, Agent and status, up to 1,000 scanned Calls and 366 days.</p>
       </div>
     </AeOperatorPage>
   )

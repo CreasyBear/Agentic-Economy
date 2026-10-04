@@ -22,7 +22,7 @@ const readPage = sourceQuery<CallUsageExportInput & {
 }, z.infer<typeof pageSchema>>('capabilityCallProjections:readOwnerCallExportPage')
 
 /** Publish only a finished capture. A changed source, paging cycle, source outage
- * or explicit 10,000-scanned-row limit produces an error, never a partial download. */
+ * or explicit 1,000-scanned-row limit produces an error, never a partial download. */
 export const exportOwnerCallUsageServer = createServerFn({ method: 'GET' })
   .validator((data) => callUsageExportInputSchema.parse(data))
   .handler(async ({ data }) => {
@@ -42,7 +42,7 @@ export const exportOwnerCallUsageServer = createServerFn({ method: 'GET' })
         throw new Error('call_export_scope_mismatch')
       }
       scannedCount += page.scannedCount
-      if (scannedCount > 10_000 || records.length + page.page.length > 10_000) throw new Error('call_export_window_too_large')
+      if (scannedCount > 1_000 || records.length + page.page.length > 1_000) throw new Error('call_export_window_too_large')
       records.push(...page.page)
       if (page.isDone) return createCallUsageExport(data, records, snapshotAt, scannedCount, admission.accountRef, exportRef)
       if (!page.continueCursor || cursors.has(page.continueCursor)) throw new Error('call_export_cursor_invalid')

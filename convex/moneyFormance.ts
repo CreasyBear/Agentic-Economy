@@ -107,5 +107,5 @@ export const refundSettledSale = internalAction({
 })
 
 export const readUsageReconciliation = internalAction({
-  args: { ...periodArgs, accountRef: v.string() }, returns: financialReadResult, handler: readUsageReconciliationHandler,
+  args: { ...periodArgs, accountRef: v.string(), snapshotAt: v.optional(v.number()), expectedSourceDigest: v.optional(v.string()) }, returns: financialReadResult, handler: readUsageReconciliationHandler,
 })

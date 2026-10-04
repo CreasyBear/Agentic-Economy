@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as capabilityServiceUsage from "../capabilityServiceUsage.js";
+import type * as moneyMonthlyUsageDraft from "../moneyMonthlyUsageDraft.js";
 import type * as actionExecutionControl from "../actionExecutionControl.js";
 import type * as adminConsoleAudit from "../adminConsoleAudit.js";
 import type * as adminConsoleExceptions from "../adminConsoleExceptions.js";
@@ -743,6 +745,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  capabilityServiceUsage: typeof capabilityServiceUsage;
+  moneyMonthlyUsageDraft: typeof moneyMonthlyUsageDraft;
   actionExecutionControl: typeof actionExecutionControl;
   adminConsoleAudit: typeof adminConsoleAudit;
   adminConsoleExceptions: typeof adminConsoleExceptions;

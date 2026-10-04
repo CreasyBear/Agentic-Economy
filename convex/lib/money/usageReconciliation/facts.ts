@@ -12,8 +12,12 @@ import { factsArgs, factsResult } from './contracts'
 export async function readFactsHandler(ctx: QueryCtx, args: ObjectType<typeof factsArgs>): Promise<Infer<typeof factsResult>> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'refused', code: 'call_history_authentication_required' }
+  return await readFactsForAccount(ctx, args, actor.canonicalAccountRef)
+}
+
+/** Shared read-only join; callers establish fresh owner authority first. */
+export async function readFactsForAccount(ctx: Pick<QueryCtx, 'db'>, args: ObjectType<typeof factsArgs>, accountRef: string): Promise<Infer<typeof factsResult>> {
   if (!reconciliationPeriodSchema.safeParse({ periodStartAt: args.periodStartAt, periodEndAt: args.periodEndAt }).success || args.entries.length > 1500) return { kind: 'refused', code: 'reconciliation_period_invalid' }
-  const accountRef = actor.canonicalAccountRef
   const calls = new Map<string, Doc<'capabilityCalls'>>()
   for (const state of ['pending', 'completed', 'refused', 'reconciliation_required', 'cancelled'] as const) {
     const rows = await ctx.db.query('capabilityCalls').withIndex('by_ownerId_and_state_and_createdAt', q => q
