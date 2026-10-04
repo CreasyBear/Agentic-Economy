@@ -6,6 +6,7 @@ import { brandNonEmpty } from '@/modules/common/ids'
 import { redactPayload, validateAuditEvent } from '@/modules/observability/public'
 import { persistAuditEvent } from '../../security/audit/persistence'
 import { validUsagePeriod } from './contracts'
+import { callExportSourceDigest } from './exportSnapshot'
 
 export const beginCallExportArgs = {
   exportRef: v.string(), principalRef: v.optional(v.string()),
@@ -38,6 +39,7 @@ export async function beginCallExportHandler(ctx: MutationCtx, args: ObjectType<
     return { accountRef: actor.canonicalAccountRef, snapshotAt: Math.max(0, existing.createdAt - 1) }
   }
   const createdAt = Date.now()
+  const sourceDigest = await callExportSourceDigest(ctx, { ...args, accountRef: actor.canonicalAccountRef, snapshotAt: Math.max(0, createdAt - 1) })
   const audit = validateAuditEvent({
     eventId: brandNonEmpty(eventId, 'AuditEventId'), eventType: 'billing.call_usage_export_requested',
     actorKind: 'owner', actorRef: actor.canonicalPrincipalRef, activeAccountRef: actor.canonicalAccountRef,
@@ -46,7 +48,7 @@ export async function beginCallExportHandler(ctx: MutationCtx, args: ObjectType<
     idempotencyKey: brandNonEmpty(args.exportRef, 'OperationKey'),
     correlationId: brandNonEmpty(args.exportRef, 'CorrelationId'),
     beforeState: 'not_requested', afterState: 'requested', evidenceRefs: [],
-    redactedPayload: redactPayload(scope), payloadHash: brandNonEmpty(digest, 'SourceHash'), createdAt,
+    redactedPayload: redactPayload({ ...scope, sourceDigest }), payloadHash: brandNonEmpty(digest, 'SourceHash'), createdAt,
   })
   if (!audit.valid) throw new Error(`call_export_audit_invalid:${audit.reason}`)
   await persistAuditEvent(ctx.db, audit.event)

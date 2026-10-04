@@ -72,3 +72,5 @@ export {
   executeFormanceMoneyBulk,
   mapFormanceWriteError,
 } from './internal/formance-writes'
+
+export { readFormanceUsageReconciliation } from './internal/formance-usage-reconciliation'

@@ -480,7 +480,7 @@ export async function readFormanceStatementPage(
   }
 }
 
-type LedgerHistoryTransaction = NonNullable<Awaited<ReturnType<SDK['ledger']['v2']['listTransactions']>>['v2TransactionsCursorResponse']>['cursor']['data'][number]
+export type LedgerHistoryTransaction = NonNullable<Awaited<ReturnType<SDK['ledger']['v2']['listTransactions']>>['v2TransactionsCursorResponse']>['cursor']['data'][number]
 type HistoryCursor = ReturnType<typeof accountHistoryCursorSchema.parse>
 
 function historyCursorSignature(payload: string, key: string): Buffer {
@@ -507,7 +507,7 @@ function decodeHistoryCursor(token: string, key: string): HistoryCursor | undefi
   }
 }
 
-function historyTransactionEffect(transaction: LedgerHistoryTransaction, accountDigest: string): AccountHistoryEntry | null | undefined {
+export function historyTransactionEffect(transaction: LedgerHistoryTransaction, accountDigest: string): AccountHistoryEntry | null | undefined {
   if (transaction.metadata.account_digest !== accountDigest) return undefined
   const occurredAt = transaction.timestamp.getTime()
   const recordedAt = transaction.insertedAt?.getTime() ?? null

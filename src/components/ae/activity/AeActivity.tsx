@@ -16,6 +16,7 @@ import {
 } from './activity.contracts'
 import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
+import { ActivityReconciliation } from './components/ActivityReconciliation'
 import { ActivityMonthlySummary } from './components/ActivityMonthlySummary'
 import { ActivityPaginationControl } from './components/ActivityPaginationControl'
 import { ActivityUnavailableState } from './components/ActivityUnavailableState'
@@ -81,6 +82,7 @@ function AeActivityAvailable({
     ...(result.filteredAgent === undefined ? {} : { filteredAgent: result.filteredAgent }),
   })
 
+  const returnScope = { returnRange: result.dateRangeFilter, ...(result.filteredAgent === undefined ? {} : { returnAgent: result.filteredAgent }) }
   return (
     <AeOperatorPage
       operatorRole="owner"
@@ -115,6 +117,7 @@ function AeActivityAvailable({
           retryPending={vm.summaryRetryPending}
           onRetry={vm.retrySummaries}
         />
+        {result.reconciliation === undefined ? null : <ActivityReconciliation returnScope={returnScope} result={result.reconciliation} retryPending={vm.summaryRetryPending} onRetry={vm.retrySummaries} />}
         {vm.showFilterBar ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Call usage export · not an invoice</span>
@@ -169,14 +172,14 @@ function AeActivityAvailable({
           />
         ) : vm.showQueues ? (
           <>
-            <ActivityCallQueue
+            <ActivityCallQueue returnScope={returnScope}
               title="Needs attention"
               description={vm.attentionDescription}
               rows={vm.attentionRows}
               emptyMessage={vm.attentionEmptyMessage}
               attention
             />
-            <ActivityCallQueue
+            <ActivityCallQueue returnScope={returnScope}
               title="Recent Calls"
               description="Completed and refused Calls, separate from work that still needs a decision."
               rows={vm.recentRows}

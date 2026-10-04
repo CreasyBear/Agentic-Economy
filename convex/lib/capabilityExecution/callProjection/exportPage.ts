@@ -5,6 +5,7 @@ import { resolveBusinessActor } from '../../../authz'
 import { callValue, validUsagePeriod } from './contracts'
 import { beginCallExportArgs, callExportAuditId, callExportScope } from './exportAudit'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { callExportSourceDigest } from './exportSnapshot'
 
 export const callExportPageArgs = {
   ...beginCallExportArgs,
@@ -48,7 +49,17 @@ export async function callExportPageHandler(ctx: QueryCtx, args: ObjectType<type
   for (const { _id, _creationTime, ...row } of page.page) {
     if (_creationTime > args.snapshotAt) continue
     if ((row.observedAt ?? row.updatedAt) > args.snapshotAt) throw new Error('call_export_source_changed')
-    if (args.status === 'all' || row.state === args.status) captured.push(row)
+    if (args.status === 'all' || row.state === args.status) {
+      const { receiptRef, ...safeRow } = row
+      captured.push({ ...safeRow, ...(receiptRef !== undefined && /^receipt:sha256:[a-f0-9]{64}$/u.test(receiptRef) ? { receiptRef } : {}) })
+    }
+  }
+  if (page.isDone) {
+    const evidence: unknown = JSON.parse(admission.redactedPayloadJson)
+    const sourceDigest = typeof evidence === 'object' && evidence !== null && 'sourceDigest' in evidence ? evidence.sourceDigest : undefined
+    if (typeof sourceDigest !== 'string' || sourceDigest !== await callExportSourceDigest(ctx, {
+      ...args, accountRef: actor.canonicalAccountRef,
+    })) throw new Error('call_export_source_changed')
   }
   return { ...page, page: captured, scannedCount: page.page.length, accountRef: actor.canonicalAccountRef }
 }

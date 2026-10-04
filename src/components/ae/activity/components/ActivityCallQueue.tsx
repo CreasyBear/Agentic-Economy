@@ -1,3 +1,4 @@
+import { scopedCallHref } from '@/lib/call-recovery/activity-return-scope'
 import { useId, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -28,6 +29,7 @@ export function ActivityCallQueue({
   rows,
   emptyMessage,
   attention = false,
+  returnScope,
 }: ActivityCallQueueProps) {
   const headingId = useId()
   const columns = useMemo<ColumnDef<ActivityCallRowView, unknown>[]>(
@@ -156,7 +158,7 @@ export function ActivityCallQueue({
           rowAction={{
             kind: 'link',
             label: attention ? 'Review' : 'View receipt',
-            getHref: (item) => item.receiptHref,
+            getHref: (item) => scopedCallHref(item.receiptHref, returnScope),
             getAccessibleLabel: (item) => item.receiptAccessibleLabel,
           }}
         />

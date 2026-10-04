@@ -1,3 +1,4 @@
+import { activityReturnHref, activityReturnSearch, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
@@ -7,12 +8,14 @@ import './ReceiptComposition.css'
 
 export function CallReceiptWorkspace({
   callRef,
+  returnScope,
   title = 'Call receipt',
   description,
   pending = false,
   children,
 }: Readonly<{
   callRef: string
+  returnScope?: ActivityReturnScope
   title?: string
   description: string
   pending?: boolean
@@ -24,7 +27,7 @@ export function CallReceiptWorkspace({
       title={title}
       description={description}
       currentPath={`/calls/${encodeURIComponent(callRef)}`}
-      breadcrumbs={[{ label: 'Calls', href: '/activity' }, { label: 'Call receipt' }]}
+      breadcrumbs={[{ label: 'Calls', href: activityReturnHref(returnScope) }, { label: 'Call receipt' }]}
       actions={(
         <div className="arc-market arc-call-actions">
           <Link
@@ -42,6 +45,7 @@ export function CallReceiptWorkspace({
           </Link>
           <Link
             to="/activity"
+            search={activityReturnSearch(returnScope)}
             className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
           >
             Back to Calls

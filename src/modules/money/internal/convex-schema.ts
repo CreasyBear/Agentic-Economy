@@ -645,6 +645,8 @@ export const moneyTables = {
     reversedAt: v.optional(v.number()),
   })
     .index('by_obligationRef', ['obligationRef'])
+    .index('by_settlementTransactionRef', ['settlementTransactionRef'])
+    .index('by_reversalTransactionRef', ['reversalTransactionRef'])
     .index('by_callRef', ['callRef'])
     .index('by_buyerAccountRef_and_createdAt', ['buyerAccountRef', 'createdAt'])
     .index('by_providerRef_and_createdAt', ['providerRef', 'createdAt'])

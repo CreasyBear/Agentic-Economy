@@ -14,6 +14,28 @@ const convexModules = Object.fromEntries(
 )
 
 describe('Account Call projection', () => {
+  it('keeps provider payload and arbitrary evidence strings outside measurement and projection',async()=>{
+    const backend=convexTest(schema,convexModules),operation=buildDevelopmentPublishedToolEvidence().tool
+    const sentinel='sk-SENTINEL-PRIVATE-MEASUREMENT',now=Date.UTC(2026,8,2)
+    const callRef=`operation-invocation:v1:${'f'.repeat(64)}`
+    await backend.run(async ctx=>await ctx.db.insert('capabilityCalls',{
+      callRef,ownerId:'account:sentinel',principalId:'principal:sentinel',credentialId:'credential:sentinel',applicationRef:'application:sentinel',toolRef:operation.operationId,
+      idempotencyKey:'key:sentinel',environment:'sandbox',grantRef:'grant:sentinel',grantGeneration:1,policyDigest:'sha256:sentinel',grantExpiresAt:Date.now()+10000,
+      inputJson:JSON.stringify({Authorization:`Bearer ${sentinel}`}),inputDigest:'sha256:input',requestDigest:'sha256:request',toolJson:JSON.stringify(operation),
+      state:'completed',dispatchState:'completed',createdAt:now,updatedAt:now+1000,
+      result:{kind:'completed',callRef,toolRef:operation.operationId,evidenceHash:`Authorization: Bearer ${sentinel}`,
+        output:{privateText:sentinel,nested:{signedUrl:`https://signed.example?token=${sentinel}`,api_key:sentinel}}},
+      usage:{usageRef:'usage:sentinel',observedAt:now,chargeState:'free_tier',amount:{currency:'AUD',units:'0',exponent:6},priceDigest:`api_key=${sentinel}`},
+    }))
+    await backend.mutation(internal.capabilityCallProjections.rebuild,{paginationOpts:{numItems:100,cursor:null}})
+    const measured=await backend.run(async ctx=>await ctx.db.query('capabilityServiceUsageRecords').collect())
+    const projected=await backend.run(async ctx=>await ctx.db.query('capabilityCallProjections').collect())
+    expect(JSON.stringify(measured)).not.toContain(sentinel)
+    expect(JSON.stringify(projected)).not.toContain(sentinel)
+    expect(measured[0]?.priceDigest).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(measured[0]).not.toHaveProperty('sourceEvidenceHash')
+  })
+
   it('rebuilds a terminal managed Call exactly once from authoritative invocation evidence', async () => {
     const backend = convexTest(schema, convexModules)
     const operation = buildDevelopmentPublishedToolEvidence().tool
@@ -27,7 +49,7 @@ describe('Account Call projection', () => {
       evidenceHash: 'sha256:call-result',
       receipt: {
         commercialModel: 'account_aud' as const,
-        receiptRef: 'receipt:call-projection',
+        receiptRef: `receipt:sha256:${'a'.repeat(64)}`,
         state: 'settled' as const,
         buyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
         serviceFee: { currency: 'AUD', units: '0', exponent: 6 },
@@ -124,7 +146,7 @@ describe('Account Call projection', () => {
       providerObligationState: 'settled',
       providerAmountUnits: '1500000',
       audAmountUnits: '2500000',
-      receiptRef: 'receipt:call-projection',
+      receiptRef: `receipt:sha256:${'a'.repeat(64)}`,
       latencyMs: 250,
       deliveredRequestUnits: '1',
     })

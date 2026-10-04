@@ -2690,6 +2690,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "readUsageReconciliation",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "refundSettledSale",
     "kind": "action"
   },
@@ -3159,6 +3165,18 @@
     "visibility": "internal",
     "module": "moneyTreasurySnapshot",
     "method": "reconcile",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyUsageReconciliation",
+    "method": "readFacts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyUsageReconciliation",
+    "method": "readOwnerReconciliation",
     "kind": "action"
   },
   {

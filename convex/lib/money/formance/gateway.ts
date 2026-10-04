@@ -15,6 +15,7 @@ export {
   readFormanceHealth,
   executeFormanceMoneyCommand,
   readFormanceAccountHistory,
+  readFormanceUsageReconciliation,
   readFormancePeriodSpend,
   readFormanceStatementPage,
   type FormanceContext,

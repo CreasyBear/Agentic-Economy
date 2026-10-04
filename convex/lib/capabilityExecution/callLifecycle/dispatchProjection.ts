@@ -91,7 +91,7 @@ export async function upsertCallProjection(
     ...providerFields,
     ...serviceUsage,
     ...(audAmountUnits === undefined ? {} : { audAmountUnits }),
-    ...(receipt?.receiptRef === undefined ? {} : { receiptRef: receipt.receiptRef }),
+    ...(receipt?.receiptRef === undefined || !/^receipt:sha256:[a-f0-9]{64}$/u.test(receipt.receiptRef) ? {} : { receiptRef: receipt.receiptRef }),
     ...(projection.state === 'reconciliation_required' ? { recoveryRef: row.callRef } : {}),
     latencyMs: Math.max(0, now - row.createdAt),
     updatedAt: now,
@@ -109,6 +109,7 @@ export async function upsertCallProjection(
     await ctx.db.insert('capabilityCallProjections', next)
   } else {
     await ctx.db.patch(existing._id, { ...fields,
+      receiptRef: fields.receiptRef,
       recoveryRef: projection.state === 'reconciliation_required' ? row.callRef : undefined,
     })
   }

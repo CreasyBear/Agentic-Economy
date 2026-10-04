@@ -237,6 +237,7 @@ export const capabilityCallTables = {
   capabilityServiceUsageRecords: defineTable({
     usageRef: v.string(),
     callRef: v.string(),
+    callDigest: v.optional(v.string()),
     quoteRef: v.optional(v.string()),
     accountRef: v.string(),
     principalRef: v.string(),
@@ -258,6 +259,7 @@ export const capabilityCallTables = {
     observedAt: v.number(),
   })
     .index('by_usageRef', ['usageRef'])
+    .index('by_accountRef_and_callDigest', ['accountRef', 'callDigest'])
     .index('by_callRef', ['callRef'])
     .index('by_accountRef_and_callCreatedAt', ['accountRef', 'callCreatedAt']),
   capabilityCallProjections: defineTable({

@@ -90,4 +90,44 @@ describe('full-period Call export source', () => {
     await backend.run(async (ctx) => await ctx.db.patch(id, { paymentState: 'released', observedAt: snapshotAt + 1000 }))
     await expect(owner.owner.query(query, args)).rejects.toThrow('call_export_source_changed')
   })
+  it.each(['status_change', 'move_before_cursor', 'move_out_of_period', 'delete', 'delete_and_rebuild'])('rejects interleaved %s even when the changed row is never returned', async change => {
+    const backend = convexTestWithMarketComponents()
+    const owner = await publishedBusinessOwner(backend, `export-race-${change}`)
+    const ids = await backend.run(async ctx => {
+      const refs = []
+      for (let index=0; index<3; index+=1) refs.push(await ctx.db.insert('capabilityCallProjections',row(owner.canonicalAccountRef,index)))
+      return refs
+    })
+    vi.useFakeTimers(); vi.setSystemTime(Date.now()+1000)
+    const scope = {...period,exportRef,status:'completed'}
+    const {snapshotAt}=await owner.owner.mutation(begin,scope)
+    const first=await owner.owner.query(query,{...scope,snapshotAt,paginationOpts:{numItems:1,cursor:null}})
+    expect(first.page.map((item: {callRef:string})=>item.callRef)).toEqual(['call:export:2'])
+    vi.setSystemTime(snapshotAt+1000)
+    await backend.run(async ctx=> {
+      const target=ids[0]; if (!target) throw new Error('fixture missing')
+      if (change==='status_change') await ctx.db.patch(target,{state:'refused',observedAt:snapshotAt+1000})
+      if (change==='move_before_cursor') await ctx.db.patch(target,{createdAt:period.periodStartAt+20,observedAt:snapshotAt+1000})
+      if (change==='move_out_of_period') await ctx.db.patch(target,{createdAt:period.periodEndAt+1,observedAt:snapshotAt+1000})
+      if (change==='delete'||change==='delete_and_rebuild') await ctx.db.delete(target)
+      if (change==='delete_and_rebuild') await ctx.db.insert('capabilityCallProjections',row(owner.canonicalAccountRef,0))
+    })
+    await expect(owner.owner.query(query,{...scope,snapshotAt,paginationOpts:{numItems:50,cursor:first.continueCursor}})).rejects.toThrow('call_export_source_changed')
+  })
+  it('excludes equal-created-time later insertions and rechecks owner authority on later pages',async()=>{
+    const backend=convexTestWithMarketComponents()
+    const owner=await publishedBusinessOwner(backend,'export-equal-time')
+    await backend.run(async ctx=>{for(let i=0;i<3;i+=1) await ctx.db.insert('capabilityCallProjections',{...row(owner.canonicalAccountRef,i),createdAt:period.periodStartAt})})
+    vi.useFakeTimers();vi.setSystemTime(Date.now()+1000)
+    const scope={...period,exportRef,status:'all'}
+    const {snapshotAt}=await owner.owner.mutation(begin,scope)
+    const first=await owner.owner.query(query,{...scope,snapshotAt,paginationOpts:{numItems:1,cursor:null}})
+    vi.setSystemTime(snapshotAt+1000)
+    await backend.run(async ctx=>await ctx.db.insert('capabilityCallProjections',{...row(owner.canonicalAccountRef,99),createdAt:period.periodStartAt}))
+    const last=await owner.owner.query(query,{...scope,snapshotAt,paginationOpts:{numItems:50,cursor:first.continueCursor}})
+    expect([...first.page,...last.page].map((item:{callRef:string})=>item.callRef)).toHaveLength(3)
+    await backend.run(async ctx=>{for(const ownership of await ctx.db.query('accountOwnerships').collect()) if(ownership.accountRef===owner.canonicalAccountRef) await ctx.db.delete(ownership._id)})
+    await expect(owner.owner.query(query,{...scope,snapshotAt,paginationOpts:{numItems:50,cursor:first.continueCursor}})).rejects.toThrow('call_history_authentication_required')
+  })
+
 })

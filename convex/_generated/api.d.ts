@@ -683,6 +683,7 @@ import type * as moneyManagedCallRemedy from "../moneyManagedCallRemedy.js";
 import type * as moneyManagedCallRemedyActions from "../moneyManagedCallRemedyActions.js";
 import type * as moneyMonthlySpendBudget from "../moneyMonthlySpendBudget.js";
 import type * as moneyOwnerSpend from "../moneyOwnerSpend.js";
+import type * as moneyUsageReconciliation from "../moneyUsageReconciliation.js";
 import type * as moneyPromotionalCredit from "../moneyPromotionalCredit.js";
 import type * as moneyProviderObligations from "../moneyProviderObligations.js";
 import type * as moneyReadiness from "../moneyReadiness.js";
@@ -1417,6 +1418,7 @@ declare const fullApi: ApiFromModules<{
   moneyManagedCallRemedyActions: typeof moneyManagedCallRemedyActions;
   moneyMonthlySpendBudget: typeof moneyMonthlySpendBudget;
   moneyOwnerSpend: typeof moneyOwnerSpend;
+  moneyUsageReconciliation: typeof moneyUsageReconciliation;
   moneyPromotionalCredit: typeof moneyPromotionalCredit;
   moneyProviderObligations: typeof moneyProviderObligations;
   moneyReadiness: typeof moneyReadiness;

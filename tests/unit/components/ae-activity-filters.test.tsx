@@ -162,7 +162,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Not confirmed').length).toBeGreaterThan(0)
     expect(screen.queryByText('A$0.00')).toBeNull()
-    expect(screen.getAllByRole('link', { name: 'Review Australian Tax Calculator' })[0]?.getAttribute('href')).toBe('/calls/call%3A1')
+    expect(screen.getAllByRole('link', { name: 'Review Australian Tax Calculator' })[0]?.getAttribute('href')).toBe('/calls/call%3A1?returnRange=30d')
     view.rerender(<AeActivity result={{ ...result, calls: { ...sampleCalls, page: [sampleCalls.page[0]!] } }} />)
     expect(screen.queryByText('Needs review')).toBeNull()
     expect(screen.getAllByRole('link', { name: 'View receipt for Australian Tax Calculator' })).toHaveLength(1)

@@ -1,3 +1,4 @@
+import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import type { ReactNode } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
@@ -58,12 +59,14 @@ function CallReceiptTechnicalShell({
 export function CallStatusUnchangedView({
   result,
   actions,
+  returnScope,
 }: Readonly<{
   result: StatusUnchangedResult
   actions?: CallStatusPageActions
+  returnScope?: ActivityReturnScope
 }>) {
   return (
-    <CallReceiptWorkspace callRef={result.callRef} description="Checking whether this exact Call has changed.">
+    <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} description="Checking whether this exact Call has changed.">
       <section
         className="arc-market arc-call-barrier"
         aria-labelledby="unchanged-receipt-title"
@@ -100,12 +103,13 @@ export function CallStatusUnchangedView({
 export function CallStatusFoundView({
   result,
   actions,
-}: Readonly<{ result: FoundCallStatus; actions?: CallStatusPageActions }>) {
+  returnScope,
+}: Readonly<{ result: FoundCallStatus; actions?: CallStatusPageActions; returnScope?: ActivityReturnScope }>) {
   const receiptView = projectCallReceipt(result)
   const recordedTool = result.ownerContext?.recordedTool.kind === 'available' ? result.ownerContext.recordedTool : undefined
   const receiptTitle = recordedTool?.name
   return (
-    <CallReceiptWorkspace callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
+    <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
       <CallSummarySection result={result} receiptView={receiptView} />
       {result.ownerContext != null && result.result?.kind === 'completed'
         && (receiptView.receipt?.state === 'settled' || receiptView.receipt?.state === 'refunded'
@@ -129,14 +133,16 @@ export function CallStatusFoundView({
 export function CallStatusRefusedView({
   result,
   actions,
+  returnScope,
 }: Readonly<{
   result: StatusRefusedResult
   actions?: CallStatusPageActions
+  returnScope?: ActivityReturnScope
 }>) {
   const canRetry = result.retryable && actions?.onRefresh !== undefined
   const receiptView = projectCallReceipt(result)
   return (
-    <CallReceiptWorkspace callRef={result.callRef} description={receiptView.statusDetail}>
+    <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} description={receiptView.statusDetail}>
       <CallReceiptBarrierHeader
         badgeLabel={receiptView.statusLabel}
         callRef={result.callRef}
@@ -161,13 +167,15 @@ export function CallStatusRefusedView({
 export function CallStatusUnavailableView({
   result,
   actions,
+  returnScope,
 }: Readonly<{
   result: Extract<CallStatusPageResult, { kind: 'source_unavailable' }>
   actions?: CallStatusPageActions
+  returnScope?: ActivityReturnScope
 }>) {
   const receiptView = projectCallReceipt(result)
   return (
-    <CallReceiptWorkspace callRef={result.callRef} description={receiptView.statusDetail}>
+    <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} description={receiptView.statusDetail}>
       <CallReceiptBarrierHeader
         badgeLabel="Receipt unavailable"
         callRef={result.callRef}
@@ -190,6 +198,7 @@ function CallReceiptBarrierHeader({
   badgeLabel: string
   callRef: string
   actions?: CallStatusPageActions
+  returnScope?: ActivityReturnScope
   showRefresh: boolean
   receiptView: CallReceiptView
 }>) {

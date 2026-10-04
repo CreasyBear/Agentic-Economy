@@ -1,5 +1,8 @@
 "use node"
 
+import { financialReadResult, periodArgs } from './lib/money/usageReconciliation/contracts'
+import { readUsageReconciliationHandler } from './lib/money/formance/usageReconciliation'
+
 import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import {
@@ -101,4 +104,8 @@ export const readCreditBalance = internalAction({
 export const refundSettledSale = internalAction({
   args: { expectedEnvironment: financialEnvironmentValue, booking: v.object(managedCallBookingArgs), originalSettlementRefs: v.array(v.string()), reportDigest: v.string() },
   returns: moneyResult, handler: refundSettledSaleHandler,
+})
+
+export const readUsageReconciliation = internalAction({
+  args: { ...periodArgs, accountRef: v.string() }, returns: financialReadResult, handler: readUsageReconciliationHandler,
 })

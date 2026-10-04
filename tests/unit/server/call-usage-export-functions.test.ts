@@ -19,6 +19,15 @@ function row(index: number) {
 }
 afterEach(() => { source.query.mockReset(); source.mutation.mockClear() })
 describe('complete usage export', () => {
+  it('removes arbitrary legacy receipt references from JSON and CSV export',async()=>{
+    const sentinel='sk-SENTINEL-PRIVATE-EXPORT'
+    source.query.mockResolvedValue({accountRef:'account:one',page:[{...row(1),receiptRef:`https://signed.example?token=${sentinel}`}],scannedCount:1,isDone:true,continueCursor:''})
+    const document=await exportOwnerCallUsageServer({data:input})
+    expect(JSON.stringify(document)).not.toContain(sentinel)
+    expect(generateCallUsageExportCsv(document)).not.toContain(sentinel)
+    expect(document.records[0]).not.toHaveProperty('receiptRef')
+  })
+
   it('reconciles 101 exact charges and units, with manifest and safe CSV text', async () => {
     source.query.mockResolvedValueOnce({ accountRef: 'account:one', page: Array.from({ length: 50 }, (_, i) => row(i)), scannedCount: 50, isDone: false, continueCursor: 'cursor:1' })
       .mockResolvedValueOnce({ accountRef: 'account:one', page: Array.from({ length: 50 }, (_, i) => row(i + 50)), scannedCount: 50, isDone: false, continueCursor: 'cursor:2' })

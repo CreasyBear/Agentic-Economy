@@ -30,6 +30,8 @@ export type CallUsageExportInput = z.infer<typeof callUsageExportInputSchema>
 export function createCallUsageExport(
   input: CallUsageExportInput, records: CallUsageExportRow[], snapshotAt: number, scannedCount: number, accountRef: string, exportRef?: string,
 ) {
+  records = records.map(({ receiptRef, ...row }) => ({ ...row,
+    ...(receiptRef !== undefined && /^receipt:sha256:[a-f0-9]{64}$/u.test(receiptRef) ? { receiptRef } : {}) }))
   let recordedCharge = 0n
   let amountCoverage: 'complete' | 'incomplete' = 'complete'
   let deliveredRequests = 0n
