@@ -16,7 +16,7 @@ export function AeToolIdentity({
   return (
     <header className="grid gap-intra px-gutter pb-related pt-intra">
       <div className="grid min-w-0 gap-0.5">
-        <h2 className="text-base font-semibold text-foreground">
+        <h2 className="text-base font-medium text-foreground">
           {toolDisplayTitle(tool)}
         </h2>
         <p className="text-xs text-muted-foreground">

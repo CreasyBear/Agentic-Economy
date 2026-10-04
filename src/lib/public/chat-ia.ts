@@ -72,6 +72,9 @@ export const chatShared = {
   badge: 'Read-only',
   loadMore: 'Load earlier messages',
   loadingMore: 'Loading earlier messages…',
+  loadMoreErrorTitle: 'Earlier messages unavailable',
+  loadMoreErrorDescription: 'The messages already shown are still available. Try loading earlier messages again.',
+  retryLoadMore: 'Try again',
 } as const
 
 /** App-header slot filled by the chat thread controls on `/t/` and `/s/`. */

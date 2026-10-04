@@ -2,7 +2,12 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { sharedQuerySpy, sharedConvexClient } = vi.hoisted(() => {
+  const sharedQuerySpy = vi.fn<(...args: unknown[]) => Promise<unknown>>()
+  return { sharedQuerySpy, sharedConvexClient: { query: sharedQuerySpy } }
+})
 
 vi.mock('@clerk/tanstack-react-start', () => ({
   SignInButton: ({ children }: { children: ReactNode }) => children,
@@ -17,7 +22,7 @@ vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => undefined),
   usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() }),
   useMutation: () => vi.fn(async () => ({})),
-  useConvex: () => ({ query: vi.fn() }),
+  useConvex: () => sharedConvexClient,
   useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
 }))
 
@@ -29,14 +34,18 @@ import { ChatComposer } from '@/components/ae/chat/chat-session/components/ChatC
 import { ChatHistory } from '@/components/ae/chat/chat-session/components/ChatHistory'
 import { SharedChat } from '@/components/ae/chat/SharedChat'
 import { chatComposer, chatHistory, chatShared } from '@/lib/public/chat-ia'
+import * as degradeModule from '@/lib/observability/degrade'
 import { useQuery } from 'convex/react'
 
 const mockedUseQuery = vi.mocked(useQuery)
+const mockedDegrade = vi.spyOn(degradeModule, 'degrade')
 
 afterEach(() => {
   cleanup()
   mockedUseQuery.mockReset()
   mockedUseQuery.mockImplementation(() => undefined)
+  sharedQuerySpy.mockReset()
+  mockedDegrade.mockClear()
   vi.unstubAllGlobals()
 })
 
@@ -503,6 +512,11 @@ describe('Chat submission lock', () => {
 })
 
 describe('SharedChat shared-thread gate', () => {
+  beforeEach(() => {
+    sharedQuerySpy.mockReset()
+    mockedDegrade.mockClear()
+  })
+
   it('shows message placeholders until the share query has cached a page', () => {
     const { container } = render(<SharedChat shareToken="token-1" />)
 
@@ -576,4 +590,272 @@ describe('SharedChat shared-thread gate', () => {
     expect(screen.queryByRole('button', { name: 'Select' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Compare' })).toBeNull()
   })
+
+  it('admits one exact page query for two synchronous continuation clicks', async () => {
+    const response = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValue(response.promise)
+    setSharedInitial(sharedPage('Shared thread', [['newest', 'Newest confirmed message']], 'cursor-opaque-2'))
+    render(<SharedChat shareToken="token-exact" />)
+
+    const button = screen.getByRole('button', { name: chatShared.loadMore })
+    act(() => {
+      fireEvent.click(button)
+      fireEvent.click(button)
+    })
+
+    expect(sharedQuerySpy).toHaveBeenCalledTimes(1)
+    expect(sharedQuerySpy.mock.calls[0]?.[1]).toEqual({
+      shareToken: 'token-exact',
+      paginationOpts: { cursor: 'cursor-opaque-2', numItems: 20 },
+    })
+    await resolveDeferred(response, sharedPage('Shared thread', [['older', 'Older confirmed message']], ''))
+  })
+
+  it('prepends older pages chronologically, advances the exact cursor, then hides continuation', async () => {
+    const firstResponse = deferred<SharedPageFixture>()
+    const terminalResponse = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValueOnce(firstResponse.promise).mockReturnValueOnce(terminalResponse.promise)
+    setSharedInitial(sharedPage('Shared thread', [
+      ['newer-2', 'Newest message'],
+      ['newer-1', 'Earlier recent message'],
+    ], 'cursor-opaque-2'))
+    render(<SharedChat shareToken="token-order" />)
+
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    expect(sharedQuerySpy.mock.calls[0]?.[1]).toEqual({
+      shareToken: 'token-order',
+      paginationOpts: { cursor: 'cursor-opaque-2', numItems: 20 },
+    })
+    await resolveDeferred(firstResponse, sharedPage('Shared thread', [
+      ['older-2', 'Later older message'],
+      ['older-1', 'Oldest message'],
+    ], 'cursor-opaque-3'))
+
+    expectTextOrder(['Oldest message', 'Later older message', 'Earlier recent message', 'Newest message'])
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    expect(sharedQuerySpy.mock.calls[1]?.[1]).toEqual({
+      shareToken: 'token-order',
+      paginationOpts: { cursor: 'cursor-opaque-3', numItems: 20 },
+    })
+    await resolveDeferred(terminalResponse, sharedPage('Shared thread', [['older-0', 'Final oldest message']], ''))
+
+    expectTextOrder([
+      'Final oldest message',
+      'Oldest message',
+      'Later older message',
+      'Earlier recent message',
+      'Newest message',
+    ])
+    expect(screen.queryByRole('button', { name: chatShared.loadMore })).toBeNull()
+  })
+
+  it('keeps only the new share after a previous share request resolves late', async () => {
+    const oldResponse = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValue(oldResponse.promise)
+    let currentInitial = sharedPage('Share A', [['a-current', 'Share A current message']], 'cursor-a-2')
+    mockedUseQuery.mockImplementation(() => currentInitial as never)
+    const view = render(<SharedChat shareToken="token-a" />)
+
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    currentInitial = sharedPage('Share B', [['b-current', 'Share B current message']], '')
+    view.rerender(<SharedChat shareToken="token-b" />)
+    await resolveDeferred(oldResponse, sharedPage('Share A', [['a-old', 'Share A older message']], ''))
+
+    expect(screen.getByText('Share B current message')).toBeTruthy()
+    expect(screen.queryByText('Share A current message')).toBeNull()
+    expect(screen.queryByText('Share A older message')).toBeNull()
+  })
+
+  it('does not let an old share finally clear a newer share loading state', async () => {
+    const oldResponse = deferred<SharedPageFixture>()
+    const newResponse = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValueOnce(oldResponse.promise).mockReturnValueOnce(newResponse.promise)
+    let currentInitial = sharedPage('Share A', [['a-current', 'Share A current message']], 'cursor-a-2')
+    mockedUseQuery.mockImplementation(() => currentInitial as never)
+    const view = render(<SharedChat shareToken="token-a" />)
+
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    currentInitial = sharedPage('Share B', [['b-current', 'Share B current message']], 'cursor-b-2')
+    view.rerender(<SharedChat shareToken="token-b" />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /earlier messages/i })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /earlier messages/i }))
+    expect(sharedQuerySpy).toHaveBeenCalledTimes(2)
+    expect(sharedQuerySpy.mock.calls[1]?.[1]).toEqual({
+      shareToken: 'token-b',
+      paginationOpts: { cursor: 'cursor-b-2', numItems: 20 },
+    })
+    const busyButton = screen.getByRole('button', { name: /earlier messages/i })
+    expect(busyButton.getAttribute('aria-busy')).toBe('true')
+    expect(busyButton.hasAttribute('disabled')).toBe(true)
+
+    await resolveDeferred(oldResponse, sharedPage('Share A', [['a-old', 'Share A older message']], ''))
+
+    const stillBusyButton = screen.getByRole('button', { name: /earlier messages/i })
+    expect(stillBusyButton.getAttribute('aria-busy')).toBe('true')
+    expect(stillBusyButton.hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByText('Share A older message')).toBeNull()
+    await resolveDeferred(newResponse, sharedPage('Share B', [['b-old', 'Share B older message']], ''))
+  })
+
+  it('drops pages loaded for one share when the token changes', async () => {
+    const oldResponse = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValue(oldResponse.promise)
+    let currentInitial = sharedPage('Share A', [['a-current', 'Share A current message']], 'cursor-a-2')
+    mockedUseQuery.mockImplementation(() => currentInitial as never)
+    const view = render(<SharedChat shareToken="token-a" />)
+
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    await resolveDeferred(oldResponse, sharedPage('Share A', [['a-old', 'Share A older message']], ''))
+    expect(screen.getByText('Share A older message')).toBeTruthy()
+
+    currentInitial = sharedPage('Share B', [['b-current', 'Share B current message']], '')
+    view.rerender(<SharedChat shareToken="token-b" />)
+
+    expect(screen.getByText('Share B current message')).toBeTruthy()
+    expect(screen.queryByText('Share A current message')).toBeNull()
+    expect(screen.queryByText('Share A older message')).toBeNull()
+  })
+
+  it('keeps a late previous-share failure out of the current share warning', async () => {
+    const oldResponse = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValue(oldResponse.promise)
+    let currentInitial = sharedPage('Share A', [['a-current', 'Share A current message']], 'cursor-a-2')
+    mockedUseQuery.mockImplementation(() => currentInitial as never)
+    const view = render(<SharedChat shareToken="token-a" />)
+
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    currentInitial = sharedPage('Share B', [['b-current', 'Share B current message']], 'cursor-b-2')
+    view.rerender(<SharedChat shareToken="token-b" />)
+    const oldFailure = new Error('Share A continuation unavailable')
+    await rejectDeferred(oldResponse, oldFailure)
+
+    expect(screen.getByText('Share B current message')).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Earlier messages unavailable' })).toBeNull()
+  })
+
+  it('keeps the confirmed page and cursor on failure, then retries that cursor once and clears the warning', async () => {
+    const failedResponse = deferred<SharedPageFixture>()
+    const retryResponse = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValueOnce(failedResponse.promise).mockReturnValueOnce(retryResponse.promise)
+    const current = sharedPage('Shared thread', [['current', 'Confirmed shared message']], 'cursor-opaque-retry')
+    setSharedInitial(current)
+    render(<SharedChat shareToken="token-retry" />)
+
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    const queryArgs = {
+      shareToken: 'token-retry',
+      paginationOpts: { cursor: 'cursor-opaque-retry', numItems: 20 },
+    }
+    expect(sharedQuerySpy.mock.calls[0]?.[1]).toEqual(queryArgs)
+    const failure = new Error('temporary Convex read failure')
+    await rejectDeferred(failedResponse, failure)
+
+    expect(screen.getByText('Confirmed shared message')).toBeTruthy()
+    const warning = screen.getByRole('status', { name: 'Earlier messages unavailable' })
+    expect(warning.textContent).toContain('The messages already shown are still available. Try loading earlier messages again.')
+    expect(screen.getAllByRole('status', { name: 'Earlier messages unavailable' })).toHaveLength(1)
+    const retry = screen.getByRole('button', { name: 'Try again' })
+    expect(retry.hasAttribute('disabled')).toBe(false)
+    expect(retry.getAttribute('aria-busy')).toBe('false')
+    expect(mockedDegrade).toHaveBeenCalledWith(failure, undefined, {
+      site: 'SharedChat.loadMore',
+      reason: 'source_unavailable',
+    })
+    const telemetryContext = mockedDegrade.mock.calls[0]?.[2]
+    expect(JSON.stringify(telemetryContext)).not.toContain('token-retry')
+    expect(JSON.stringify(telemetryContext)).not.toContain('cursor-opaque-retry')
+    expect(JSON.stringify(telemetryContext)).not.toContain('Confirmed shared message')
+
+    fireEvent.click(retry)
+    expect(sharedQuerySpy).toHaveBeenCalledTimes(2)
+    expect(sharedQuerySpy.mock.calls[1]?.[1]).toEqual(queryArgs)
+    await resolveDeferred(retryResponse, sharedPage('Shared thread', [['older', 'Recovered older message']], ''))
+
+    expect(screen.getByText('Confirmed shared message')).toBeTruthy()
+    expect(screen.getByText('Recovered older message')).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Earlier messages unavailable' })).toBeNull()
+    expect(screen.queryByRole('button', { name: chatShared.loadMore })).toBeNull()
+  })
+
+  it('ignores an old request that settles after its share unmounts and another instance mounts', async () => {
+    const oldResponse = deferred<SharedPageFixture>()
+    sharedQuerySpy.mockReturnValue(oldResponse.promise)
+    let currentInitial = sharedPage('Share A', [['a-current', 'Share A current message']], 'cursor-a-2')
+    mockedUseQuery.mockImplementation(() => currentInitial as never)
+    const first = render(<SharedChat shareToken="token-a" />)
+
+    fireEvent.click(screen.getByRole('button', { name: chatShared.loadMore }))
+    first.unmount()
+    currentInitial = sharedPage('Share B', [['b-current', 'Share B current message']], '')
+    render(<SharedChat shareToken="token-b" />)
+    await resolveDeferred(oldResponse, sharedPage('Share A', [['a-old', 'Share A older message']], ''))
+
+    expect(screen.getByText('Share B current message')).toBeTruthy()
+    expect(screen.queryByText('Share A older message')).toBeNull()
+  })
 })
+
+type SharedPageFixture = {
+  title: string
+  page: { id: string; role: 'user' | 'assistant'; parts: { type: 'text'; text: string }[] }[]
+  isDone: boolean
+  continueCursor: string
+}
+
+function sharedPage(
+  title: string,
+  messages: readonly (readonly [string, string])[],
+  continueCursor: string,
+): SharedPageFixture {
+  return {
+    title,
+    page: messages.map(([id, text]) => ({ id, role: 'user', parts: [{ type: 'text', text }] })),
+    isDone: continueCursor === '',
+    continueCursor,
+  }
+}
+
+function setSharedInitial(page: SharedPageFixture): void {
+  mockedUseQuery.mockImplementation(() => page as never)
+}
+
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (reason: unknown) => void
+} {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = reason => rejectPromise(reason)
+  })
+  return { promise, resolve, reject }
+}
+
+async function resolveDeferred<T>(
+  response: ReturnType<typeof deferred<T>>,
+  value: T,
+): Promise<void> {
+  await act(async () => {
+    response.resolve(value)
+    await response.promise
+  })
+}
+
+async function rejectDeferred<T>(
+  response: ReturnType<typeof deferred<T>>,
+  reason: unknown,
+): Promise<void> {
+  await act(async () => {
+    response.reject(reason)
+    await expect(response.promise).rejects.toBe(reason)
+  })
+}
+
+function expectTextOrder(texts: readonly string[]): void {
+  const nodes = texts.map(text => screen.getByText(text))
+  for (let index = 0; index < nodes.length - 1; index += 1) {
+    expect(nodes[index]!.compareDocumentPosition(nodes[index + 1]!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  }
+}

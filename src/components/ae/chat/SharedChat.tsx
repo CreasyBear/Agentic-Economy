@@ -3,16 +3,18 @@
  * Sample composer/menus and local demo messages are omitted. */
 import { useConvex, useQuery } from 'convex/react'
 import { LockKeyholeIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import { api } from '../../../../convex/_generated/api'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { ArcAiChatHeader } from '@/components/arc/blocks/ai-chat/ai-chat'
+import { Alert } from '@/components/arc/alert/alert'
 import { Button } from '@/components/arc/button/button'
 import './SharedChatComposition.css'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
+import { degrade } from '@/lib/observability/degrade'
 import { chatShared } from '@/lib/public/chat-ia'
 
 import { ChatTranscript } from './ChatTranscript'
@@ -21,6 +23,8 @@ import type { TranscriptMessage } from './presentation'
 
 const PAGE_SIZE = 20
 const TRANSCRIPT_COLUMN = 'arc-market arc-chat arc-shared-column'
+
+type SharedMessageRequest = { shareToken: string; cursor: string }
 
 function projectSharedPage(
   page: readonly { id: string; role: 'user' | 'assistant'; parts: TranscriptMessage['parts'] }[],
@@ -33,6 +37,10 @@ function projectSharedPage(
 }
 
 export function SharedChat({ shareToken }: { shareToken: string }) {
+  return <SharedChatThread key={shareToken} shareToken={shareToken} />
+}
+
+function SharedChatThread({ shareToken }: { shareToken: string }) {
   const convex = useConvex()
   const initial = useQuery(api.chatShares.listSharedMessages, {
     shareToken,
@@ -41,14 +49,17 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
   const [olderMessages, setOlderMessages] = useState<TranscriptMessage[]>([])
   const [continueCursor, setContinueCursor] = useState<string | undefined>()
   const [isDone, setIsDone] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadMoreStatus, setLoadMoreStatus] = useState<'idle' | 'loading' | 'failed'>('idle')
+  const mounted = useRef(false)
+  const inFlightRequest = useRef<SharedMessageRequest | null>(null)
 
   useEffect(() => {
-    setOlderMessages([])
-    setContinueCursor(undefined)
-    setIsDone(true)
-    setLoadingMore(false)
-  }, [shareToken])
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      inFlightRequest.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (initial === undefined) return
@@ -61,26 +72,44 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
     ? []
     : projectSharedPage(initial.page)
   const messages = [...olderMessages, ...baseMessages]
+  const loadingMore = loadMoreStatus === 'loading'
   const slot = useChatHeaderSlot()
   const title = initial?.title ?? chatShared.fallbackTitle
   const sharedBar = <ArcAiChatHeader title={title} description={chatShared.detail}
     leading={<LockKeyholeIcon aria-hidden="true" size={18} />} actions={null}
     notice={<span>{chatShared.badge}</span>} />
 
-  async function onLoadMore() {
-    if (continueCursor === undefined || loadingMore) return
-    const cursor = continueCursor
-    setLoadingMore(true)
+  async function onLoadMore(): Promise<void> {
+    if (!mounted.current || continueCursor === undefined || inFlightRequest.current !== null) return
+    const request: SharedMessageRequest = { shareToken, cursor: continueCursor }
+    inFlightRequest.current = request
+    setLoadMoreStatus('loading')
     try {
-      const next = await convex.query(api.chatShares.listSharedMessages, {
-        shareToken,
-        paginationOpts: { cursor, numItems: PAGE_SIZE },
-      })
-      setOlderMessages((current) => [...projectSharedPage(next.page), ...current])
-      setIsDone(next.isDone)
-      setContinueCursor(next.isDone ? undefined : next.continueCursor)
+      const outcome = await convex.query(api.chatShares.listSharedMessages, {
+        shareToken: request.shareToken,
+        paginationOpts: { cursor: request.cursor, numItems: PAGE_SIZE },
+      }).then(
+        page => ({ kind: 'available' as const, page }),
+        cause => ({ kind: 'unavailable' as const, cause }),
+      )
+      if (!mounted.current || inFlightRequest.current !== request) return
+      if (outcome.kind === 'unavailable') {
+        degrade(outcome.cause, undefined, {
+          site: 'SharedChat.loadMore',
+          reason: 'source_unavailable',
+        })
+        setLoadMoreStatus('failed')
+        return
+      }
+      setOlderMessages(current => [...projectSharedPage(outcome.page.page), ...current])
+      setIsDone(outcome.page.isDone)
+      setContinueCursor(outcome.page.isDone ? undefined : outcome.page.continueCursor)
+      setLoadMoreStatus('idle')
     } finally {
-      setLoadingMore(false)
+      if (mounted.current && inFlightRequest.current === request) {
+        inFlightRequest.current = null
+        setLoadMoreStatus(current => current === 'loading' ? 'idle' : current)
+      }
     }
   }
 
@@ -106,15 +135,24 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
         <div className="arc-market arc-chat arc-shared-thread">
           <ChatTranscript messages={messages} readOnly />
           {isDone ? null : (
-            <div className={`flex shrink-0 justify-center ${TRANSCRIPT_COLUMN}`}>
+            <div className={`grid shrink-0 gap-related ${TRANSCRIPT_COLUMN}`}>
+              <Alert
+                aria-label={chatShared.loadMoreErrorTitle}
+                title={chatShared.loadMoreErrorTitle}
+                tone="warning"
+                open={loadMoreStatus === 'failed'}
+              >
+                {chatShared.loadMoreErrorDescription}
+              </Alert>
               <Button
                 type="button"
                 variant="secondary"
+                className="justify-self-center"
                 aria-busy={loadingMore}
                 disabled={loadingMore}
                 onClick={() => void onLoadMore()}
               >
-                {loadingMore ? chatShared.loadingMore : chatShared.loadMore}
+                {loadingMore ? chatShared.loadingMore : loadMoreStatus === 'failed' ? chatShared.retryLoadMore : chatShared.loadMore}
               </Button>
             </div>
           )}
