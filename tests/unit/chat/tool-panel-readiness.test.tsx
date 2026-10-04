@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -181,5 +181,31 @@ it('removes submission when fresh detail changes from allowed to blocked despite
   expect(screen.getByText(chatToolPanel.unavailable)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Run/u })).toBeNull()
   expect(props.onRun).not.toHaveBeenCalled()
+  expect(props.onAddCredit).not.toHaveBeenCalled()
+})
+
+it('preserves an in-flight submission when current detail becomes blocked without retrying it', async () => {
+  let finish: (() => void) | undefined
+  const onRun = vi.fn(() => new Promise<{ kind: 'submitted' }>(resolve => {
+    finish = () => resolve({ kind: 'submitted' })
+  }))
+  runtime.detail = foundDetail({ navigation: CALL_NAVIGATION })
+  const props = makeProps({ onRun })
+  const { rerender } = render(<ToolPanel {...props} />)
+  await waitFor(() => expect(screen.queryByRole('status', { name: chatToolPanel.loading })).toBeNull())
+  fireEvent.click(screen.getByRole('button', { name: /Run/u }))
+  expect(onRun).toHaveBeenCalledOnce()
+
+  runtime.detail = foundDetail({ posture: 'setup_required', reason: 'setup_required' })
+  rerender(<ToolPanel {...props} />)
+  expect(screen.getByText(chatToolPanel.unavailable)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Run/u })).toBeNull()
+
+  await act(async () => { finish?.() })
+  runtime.detail = foundDetail({ navigation: CALL_NAVIGATION })
+  rerender(<ToolPanel {...props} />)
+  expect(await screen.findByText(chatToolPanel.submitted)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: chatToolPanel.runAgain })).toBeInTheDocument()
+  expect(onRun).toHaveBeenCalledExactlyOnceWith({ toolRef: TOOL_REF, title: 'Lookup', input: {} })
   expect(props.onAddCredit).not.toHaveBeenCalled()
 })
