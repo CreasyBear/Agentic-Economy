@@ -123,6 +123,7 @@ The implementation proceeds in dependency order:
 | Learning feedback | Current authenticated Account owns the Call; choice and reason belong to bounded enums | One current usefulness choice per Account/Call, retained for 90 days | Duplicate/concurrent updates cannot create duplicate votes, leak another Account's Call or initiate a refund. No prompt, output or free-text comment is accepted. |
 | Founder review | Current owner-admin membership, fresh normal admin command authority, a selected Call and bounded review reason | An audited, explicit content read whose command receipt contains only references and metadata | Support/reviewer roles and expired content cannot use this path. Replay cannot restore deleted content or bypass current membership and the review freshness bound. |
 | Learning metrics | Existing content-free selection facts and feedback within the last 90 days | Recent no-match, failure, latency, cost and usefulness evidence for prioritisation | Customer content never enters the learning metrics. Financial/audit records remain governed separately and are not represented as deleted learning content. |
+| Learning UI failure | An optional learning or review-access query rejects | The affected panel shows an explicit retry; the surrounding readiness, queues and Call receipt remain available | Review content stays closed on access failure. Retrying only remounts the failed panel and cannot issue a purchase or review command. |
 
 **Type decision.** A completed Call has either its original output or an explicit
 content-expiry timestamp, never both and never neither. Purchase state does not
@@ -159,6 +160,9 @@ Keyed component state costs one small local component per control and removes
 the risk of an old asynchronous response appearing against a new Call; keep it.
 The overview labels its 50-record samples and displays at most five attention
 links per category. It adds no new navigation, modal workflow or analytics store.
+The existing error-boundary pattern contains failed learning and review-access
+queries to their panels. Route tests reject each query, assert that operational
+context remains visible and recover through the explicit retry control.
 
 **Module audit.** The expected alpha changes are feedback categories, retention
 periods and the criteria for founder investigation; existing authorization and

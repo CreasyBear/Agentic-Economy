@@ -1,12 +1,13 @@
 /** @vitest-environment jsdom */
 import type { ReactNode } from 'react'
 import { getFunctionName, type FunctionReference } from 'convex/server'
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessChecks, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 
 const mocks = vi.hoisted(() => ({
+  learningError: null as Error | null,
   overview: {
     paymentReadiness: null,
   } as Record<string, unknown>,
@@ -22,6 +23,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('convex/react', () => ({
   useQuery: (query: FunctionReference<'query'>) => {
     const name = getFunctionName(query)
+    if (name === 'adminConsoleMetrics:readAlphaLearningSample') {
+      if (mocks.learningError !== null) throw mocks.learningError
+      return { kind: 'learning', asOf: Date.now(), from: 0, sampleLimit: 50, truncated: false, calls: [], feedback: [], selections: [] }
+    }
     if (name === 'adminConsoleOverview:readAdminOverview') return mocks.overview
     if (name === 'adminConsoleExceptions:readAdminExceptionOverview') {
       if (mocks.exceptions instanceof Error) throw mocks.exceptions
@@ -52,6 +57,7 @@ function passingReadiness(expiresAt: number): PaymentReadinessView {
 }
 
 beforeEach(() => {
+  mocks.learningError = null
   mocks.overview = { paymentReadiness: null }
   mocks.exceptions = []
   mocks.metrics = {
@@ -64,6 +70,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('admin overview route', () => {
+  it('preserves readiness and queues after a learning failure and retries that panel', () => {
+    mocks.learningError = new Error('injected_learning_read_rejection')
+    mocks.exceptions = [{ kind: 'removal_dispute', partition: 'contested', observed: 1, complete: true, unavailable: false }]
+    render(<AdminOverviewPage />)
+    expect(screen.getByRole('status', { name: 'Payment readiness status' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Removal dispute · Contested' })).toBeTruthy()
+    expect(screen.getByText('Learning signals are unavailable.')).toBeTruthy()
+    mocks.learningError = null
+    fireEvent.click(screen.getByRole('button', { name: 'Retry learning signals' }))
+    expect(screen.getByRole('button', { name: 'Refresh signals' })).toBeTruthy()
+    expect(screen.queryByText('Learning signals are unavailable.')).toBeNull()
+  })
   it('shows alpha payee screening as deferred while preserving payment readiness', () => {
     const readiness = passingReadiness(Date.now() + 60_000)
     readiness.checks.sanctions = { kind: 'deferred', policyRef: 'alpha_not_screened_v1', validUntil: readiness.expiresAt! }

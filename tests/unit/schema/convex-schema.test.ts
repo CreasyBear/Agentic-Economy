@@ -109,6 +109,7 @@ const durableTables = [
   'agentAccessOAuthRefreshFamilies',
   'agentAccessOAuthRefreshTokens',
   'operationKeys',
+  'callUsefulnessFeedback',
   'sourceWriteNonces',
   'adminMemberships',
   'adminApprovalProposals',
@@ -264,7 +265,8 @@ const requiredIndexes = {
     'by_businessId_and_status',
     'by_businessId_and_offeringRef',
   ],
-  operationKeys: ['by_actor_operation_key', 'by_scope_key'],
+  operationKeys: ['by_actor_operation_key', 'by_scope_key', 'by_operationName_contentExpiredAt_createdAt'],
+  callUsefulnessFeedback: ['by_accountRef_and_callRef', 'by_updatedAt', 'by_expiresAt'],
   adminMemberships: [
     'by_clerkUserId_and_state',
     'by_tokenIdentifier_and_state',
