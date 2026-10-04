@@ -5,8 +5,7 @@ import { createPortal } from 'react-dom'
 import { ArcAiChatHeader } from '@/components/arc/blocks/ai-chat/ai-chat'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
-import { Field, FieldLabel } from '@/components/ui/field'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
+import { Input } from '@/components/arc/input/input'
 import { chatHistory, chatStageDetail, chatStageTitle } from '@/lib/public/chat-ia'
 
 import type { ChatHeaderProps } from '../chat-session.contracts'
@@ -115,20 +114,15 @@ export function ChatHeader({
         </p>
       ) : null}
       {sharePath === null ? null : (
-        <Field className="arc-market arc-chat arc-chat-share-field" role="status">
-          <FieldLabel htmlFor="tool-chat-share-link">{chatHistory.shareLabel}</FieldLabel>
-          <InputGroup>
-            <InputGroupInput id="tool-chat-share-link" value={sharePath} readOnly className="min-h-touch font-mono" />
-            <InputGroupAddon align="inline-end">
-              <Button type="button" variant="secondary" size="sm" onClick={onCopyShare}>
-                {copied
-                  ? <CheckIcon data-icon="inline-start" aria-hidden="true" />
-                  : <CopyIcon data-icon="inline-start" aria-hidden="true" />}
-                {copied ? chatHistory.copied : chatHistory.copy}
-              </Button>
-            </InputGroupAddon>
-          </InputGroup>
-        </Field>
+        <div role="status" className="arc-market arc-chat arc-chat-share-field grid min-w-0 gap-related sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <Input label={chatHistory.shareLabel} id="tool-chat-share-link" value={sharePath} readOnly className="min-h-touch font-mono" />
+          <Button type="button" variant="secondary" size="sm" className="justify-self-start" onClick={onCopyShare}>
+            {copied
+              ? <CheckIcon data-icon="inline-start" aria-hidden="true" />
+              : <CopyIcon data-icon="inline-start" aria-hidden="true" />}
+            {copied ? chatHistory.copied : chatHistory.copy}
+          </Button>
+        </div>
       )}
     </>
   )

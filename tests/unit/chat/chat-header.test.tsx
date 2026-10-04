@@ -36,6 +36,9 @@ describe('ChatHeader', () => {
     expect(screen.getByRole('button', { name: 'Toggle conversation history' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
     expect(screen.getByRole('button', { name: chatHistory.newChat })).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: chatHistory.shareLabel })).toBeNull()
+    expect(screen.queryByRole('button', { name: chatHistory.copy })).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('places thread controls in the app header slot instead of a second bar', () => {
@@ -101,12 +104,25 @@ describe('ChatHeader', () => {
   })
   it('preserves exact credit/share authority and emits commands without submitting a surrounding form', () => {
     const onNewChat = vi.fn(), onIssueShare = vi.fn(), onRevokeShare = vi.fn(), onCopyShare = vi.fn(), onSubmit = vi.fn()
-    render(<form onSubmit={onSubmit}><ChatHeader authenticated threadId="private-thread" threadTitle="Weather procurement" busy={false}
-      shareState="active" sharePath="/s/exact-share-token" copied={false} balanceLabel="A$10.01"
-      mobileHistory={null} mobileOpen={false} onMobileOpenChange={() => undefined} onToggleHistory={() => undefined}
-      onNewChat={onNewChat} onIssueShare={onIssueShare} onRevokeShare={onRevokeShare} onCopyShare={onCopyShare} /></form>)
+    const sharePath = '/s/exact-share-token'
+    const header = (copied: boolean) => (
+      <form onSubmit={onSubmit}><ChatHeader authenticated threadId="private-thread" threadTitle="Weather procurement" busy={false}
+        shareState="active" sharePath={sharePath} copied={copied} balanceLabel="A$10.01"
+        mobileHistory={null} mobileOpen={false} onMobileOpenChange={() => undefined} onToggleHistory={() => undefined}
+        onNewChat={onNewChat} onIssueShare={onIssueShare} onRevokeShare={onRevokeShare} onCopyShare={onCopyShare} /></form>
+    )
+    const { rerender } = render(header(false))
     expect(screen.getByRole('link', { name: 'Available credit A$10.01' }).getAttribute('href')).toBe('/owner/credit')
-    expect((screen.getByRole('textbox', { name: chatHistory.shareLabel }) as HTMLInputElement).value).toBe('/s/exact-share-token')
+    const shareInput = screen.getByRole('textbox', { name: chatHistory.shareLabel }) as HTMLInputElement
+    expect(shareInput.id).toBe('tool-chat-share-link')
+    expect(shareInput.value).toBe(sharePath)
+    expect(shareInput.readOnly).toBe(true)
+    const shareLabels = screen.getAllByText(chatHistory.shareLabel, { selector: 'label' })
+    expect(shareLabels).toHaveLength(1)
+    expect(shareLabels[0]?.getAttribute('for')).toBe(shareInput.id)
+    expect(shareInput.labels).toHaveLength(1)
+    expect(screen.getAllByRole('textbox', { name: chatHistory.shareLabel })).toHaveLength(1)
+    expect(screen.getAllByRole('status')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: chatHistory.newChat }))
     fireEvent.click(screen.getByRole('button', { name: chatHistory.shareGet }))
     fireEvent.click(screen.getByRole('button', { name: chatHistory.shareRevoke }))
@@ -115,6 +131,15 @@ describe('ChatHeader', () => {
     expect(onIssueShare).toHaveBeenCalledOnce()
     expect(onRevokeShare).toHaveBeenCalledOnce()
     expect(onCopyShare).toHaveBeenCalledOnce()
+
+    rerender(header(true))
+    const copiedShareInput = screen.getByRole('textbox', { name: chatHistory.shareLabel }) as HTMLInputElement
+    expect(copiedShareInput.id).toBe('tool-chat-share-link')
+    expect(copiedShareInput.value).toBe(sharePath)
+    expect(copiedShareInput.readOnly).toBe(true)
+    expect(screen.getByRole('button', { name: chatHistory.copied })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: chatHistory.copied }))
+    expect(onCopyShare).toHaveBeenCalledTimes(2)
     expect(onSubmit).not.toHaveBeenCalled()
   })
 })
