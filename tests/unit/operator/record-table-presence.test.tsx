@@ -194,11 +194,19 @@ describe('AeRecordTable interaction composition', () => {
     expect(container.querySelector('[data-slot="table-container"]')).not.toBeNull()
   })
 
-  it('lets Radix rove one native row action through Arrow and Home/End keys', async () => {
+  it('lets native roving focus follow row actions through Arrow and Home/End keys', async () => {
     const opened: string[] = []
+    const sortableColumns: ColumnDef<Row, unknown>[] = [
+      {
+        id: 'name',
+        accessorFn: (row) => row.name,
+        header: ({ column }) => <AeOperatorSortableHeader label="Name" column={column} />,
+        cell: ({ row }) => row.original.name,
+      },
+    ]
     const { container } = render(
       <AeRecordTable
-        columns={columns}
+        columns={sortableColumns}
         data={rows}
         caption="Operations"
         hideFilter
@@ -229,6 +237,28 @@ describe('AeRecordTable interaction composition', () => {
     fireEvent.click(actions[1]!)
     expect(opened).toEqual(['row-2'])
     expect(actions[1]?.closest('tr')?.className).toContain('has-[:focus-visible]')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by Name' }))
+    const sortedActions = screen.getAllByRole('button', { name: /^View / })
+    expect(sortedActions.map((action) => action.getAttribute('aria-label'))).toEqual([
+      'View fx.convert',
+      'View weather.lookup',
+    ])
+
+    const fxAction = screen.getByRole('button', { name: 'View fx.convert' })
+    const weatherAction = screen.getByRole('button', { name: 'View weather.lookup' })
+    fxAction.focus()
+    fireEvent.keyDown(fxAction, { key: 'ArrowDown', code: 'ArrowDown' })
+    await waitFor(() => expect(document.activeElement).toBe(weatherAction))
+    expect(opened).toEqual(['row-2'])
+
+    fireEvent.keyDown(weatherAction, { key: 'ArrowUp', code: 'ArrowUp' })
+    await waitFor(() => expect(document.activeElement).toBe(fxAction))
+    fireEvent.keyDown(fxAction, { key: 'Home', code: 'Home' })
+    await waitFor(() => expect(document.activeElement).toBe(fxAction))
+    fireEvent.keyDown(fxAction, { key: 'End', code: 'End' })
+    await waitFor(() => expect(document.activeElement).toBe(weatherAction))
+    expect(opened).toEqual(['row-2'])
   })
 
   it('keeps identity first and gives the trailing action a visible label', () => {
