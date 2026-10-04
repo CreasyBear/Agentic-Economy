@@ -5,7 +5,7 @@ import type { CallReceipt, CallUsageSummary } from '@/modules/capability-executi
 import type { CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 
-import { machineLabel } from './call-receipt-format'
+import { machineLabel, settledPaidBuyerCharge } from './call-receipt-format'
 import './ReceiptComposition.css'
 
 export function CallMoneyFacts({ view }: Readonly<{ view: CallReceiptView }>) {
@@ -51,13 +51,16 @@ function ReceiptSettlementFacts({
   usage,
   receipt,
 }: Readonly<{ usage: CallUsageSummary | undefined; receipt: CallReceipt | undefined }>) {
+  const amount = settledPaidBuyerCharge(receipt, usage) ?? usage?.amount
   return (
     <AeFactList
       facts={[
         ...(usage === undefined ? [] : [
           { label: "Recorded outcome", value: machineLabel(usage.chargeState) },
-          { label: "Charge", value: formatDisplayAmount(usage.amount) },
-          { label: "Exact amount", value: formatCurrencyAmount(usage.amount) },
+          ...(amount === undefined ? [] : [
+            { label: "Charge", value: formatDisplayAmount(amount) },
+            { label: "Exact amount", value: formatCurrencyAmount(amount) },
+          ]),
           { label: "Observed", value: <time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time> },
           ...(usage.durationMs === undefined ? [] : [{ label: "Duration", value: `${usage.durationMs} ms` }]),
         ]),
