@@ -167,3 +167,62 @@ captured and Joel explicitly confirms cleanup. Run
 `cleanup-restored-formance.sh` first so the exact drill-only Formance resources
 and secret-bearing Settings are removed before the reviewed OpenTofu destroy
 plan deletes their AWS backing resources.
+
+## Financial evidence archive
+
+The account baseline declares a separate private, versioned S3 bucket in Sydney
+for financial evidence. It uses SSE-S3 encryption, TLS-only access and Object
+Lock governance retention of 2,557 days. The existing CloudTrail retains all
+management events and records reads and writes for this bucket. Existing VPC
+flow-log delivery permissions remain in place. No application identity receives
+archive access, and no automatic exporter or lifecycle deletion is configured.
+
+The separate bucket avoids the audit bucket's 365-day/30-day expiry. SSE-S3 avoids
+adding a KMS key, key policy, key-deletion risk and recurring key charge. The cost
+is one bucket and its access, encryption, versioning and retention controls,
+plus S3 data-event charges. Keep this boundary for the financial retention need;
+full database backups and application payloads do not belong here.
+
+**Requires:** an authorized operator, identified financial records, source
+snapshot/version, approved retention policy and a unique export run ID.
+**Ensures:** each accepted manifest names the bucket, key, exact S3 version ID,
+source IDs, export time, SHA-256 and observed retain-until date; downloaded bytes
+from that exact version match the digest. **Invariant:** missing, unreadable,
+short-retained or unaccounted versions never count as archived. **On violation:**
+preserve the source and incomplete-run evidence; retry under a fresh run ID
+without overwriting previous evidence or claiming the close is archived.
+
+Until an exporter exists, the operator performs a bounded daily export after
+reconciliation and another after material corrections. Export only financial
+transaction and business-document evidence, its necessary tax/commercial-policy
+context and referenced financial attachments. Minimize fields at export time.
+Exclude chat, prompts, Call input/output, Provider payloads, credentials,
+unrelated Accounts and full database/file-storage backups. Content metadata is
+included only when material to a documented dispute.
+
+Use `financial/YYYY/MM/DD/<run-id>/` for table-scoped JSONL, attachments and a
+manifest containing source snapshot, interval, row counts, identities, policy
+revision and hashes. Upload without overriding the default retention; record
+returned version IDs and read every exact version back. Reconcile counts to the
+source and verify governance mode and at least 2,557 days of retention from the
+upload before accepting the run. Repeated attempts use new keys; version IDs
+remain mandatory even when a key is unique.
+
+A legal hold is separate from retention. On a documented instruction, an
+operator with existing authorized S3 access sets `ON` for each affected version,
+reads it back with `GetObjectLegalHold`, and records authority, scope, version ID
+and time. Only a separately authorized release sets it `OFF`; retention still
+applies afterward. Routine governance bypass is denied for `financial/*`.
+Account administrators can change policy, so this is governance protection,
+not a compliance-mode guarantee against account administration.
+
+Verify recovery and hold behavior with harmless `test/<unique-id>` fixtures,
+explicitly overriding the bucket default with short governance retention.
+Confirm exact-version digest readback and isolation across repeated uploads,
+retention denial before expiry, and deletion denial while a legal hold remains
+ON after retention expires. Remove the fixture hold and versions only as part
+of the authorized drill. Verify a principal without archive rights is denied and
+that CloudTrail captures the actual object and hold operations. Never upload a
+seven-year disposable fixture or shorten retention on real financial evidence.
+A configured bucket alone does not establish export completeness, an active
+hold, a successful drill or a signed daily close.
