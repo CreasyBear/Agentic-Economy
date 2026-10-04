@@ -5,10 +5,18 @@ import { api } from '../../../../../convex/_generated/api'
 import { degrade } from '@/lib/observability/degrade'
 import { bindToolInput } from '@/modules/common/tool-input-binding'
 import { parseChatQuoteInput } from '@/modules/chat/tool-card'
-import { deserializeToolDetailResult } from '@/modules/capability-supply/public'
+import { deserializeToolDetailResult, type PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { toolInputSchema, supportsToolInputForm, parseToolInputJson } from '@/components/ae/shared/tool-input-form/tool-input-form'
 import type { ToolPanelContract, ToolPanelProps, ToolPanelSubmission } from './tool-panel.contracts'
 import { projectToolPanel } from './tool-panel.view-model'
+
+function allowsToolPanelSubmission(tool: PublicToolDescriptor, selectedToolRef: string): boolean {
+  return tool.toolRef === selectedToolRef
+    && ((tool.availability.posture === 'routeable'
+      && tool.navigation.some(({ relation }) => relation === 'call'))
+      || (tool.availability.posture === 'setup_required'
+        && tool.availability.reason === 'inspection_required'))
+}
 
 export function useToolPanel(props: ToolPanelProps) {
   const result = useQuery(api.capabilitySupplyTools.detail, { toolRef: props.option.id })
@@ -50,6 +58,8 @@ export function useToolPanel(props: ToolPanelProps) {
   }, [detailState])
   const tool = detailState.kind === 'loading' ? undefined
     : detailState.kind === 'found' ? detailState.tool : null
+  const detailAllowsSubmission = detailState.kind === 'found'
+    && allowsToolPanelSubmission(detailState.tool, props.option.id)
   const schema = useMemo(() => tool === undefined || tool === null
     ? undefined
     : toolInputSchema(JSON.stringify(tool.contract.inputJsonSchema)), [tool])
@@ -62,7 +72,8 @@ export function useToolPanel(props: ToolPanelProps) {
   const binding = useMemo(() => schema === undefined ? undefined : bindToolInput(props.message, schema), [props.message, schema])
   const contract: ToolPanelContract | Readonly<{ kind: 'unavailable' }> | undefined = result === undefined
     ? undefined
-    : schema === undefined || binding === undefined ? { kind: 'unavailable' } : { kind: 'found', schema, binding }
+    : !detailAllowsSubmission || schema === undefined || binding === undefined
+      ? { kind: 'unavailable' } : { kind: 'found', schema, binding }
   const inputIdentity = schema === undefined ? undefined : JSON.stringify([props.message, schema])
   const inputText = inputIdentity === undefined || editedInput?.identity !== inputIdentity ? undefined : editedInput.text
   const submission = submissionState !== undefined && submissionState.identity === inputIdentity
