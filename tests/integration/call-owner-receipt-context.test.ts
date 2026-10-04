@@ -54,6 +54,7 @@ describe('owner receipt context', () => {
     const { backend } = await fixture()
     const context = await backend.query(internal.capabilityCalls.readOwnerReceiptContext, queryArgs)
     expect(context).toEqual({
+      attemptEvidence: { kind: 'not_recorded' },
       purpose: null,
       agent: { principalRef: principalId, applicationRef, currentDisplayName: 'Research assistant' },
       recordedTool: { kind: 'available', basis: 'call_snapshot', name: tool.contract.name, providerRef: tool.identity.businessId, providerName: null },
