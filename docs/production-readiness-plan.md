@@ -3957,3 +3957,17 @@ compiled transport setup, policy drift, private DNS, timeouts, cancellation,
 credential isolation and readiness publication. The regression fails before the
 import repair and passes afterward. Full release gate and native deployment
 acceptance are recorded separately; local success is not hosted readiness proof.
+
+PR #326 passes the full release gate and deploys as
+`31e63a89702f9c33ef74f3f46613564e9a3778cb`. Native production CDP custody,
+RPC, Formance, treasury, policy and reference-rate checks pass afterward. The
+matching web deployment still rejects its static configuration. Native Vercel
+metadata confirms every required setting exists; all readable values validate,
+while sensitive values are intentionally unavailable through native readback.
+
+The failed production manifest now reports only validator finding codes, scopes
+and setting names to protected server logs. It reports no supplied value and
+keeps the public readiness response generic. A logging failure cannot change
+the refusal. This uses the existing host logs and adds no diagnostic endpoint,
+access grant, dependency or storage service. The regression proves private
+values stay out of both outputs and invalid configuration never starts a probe.

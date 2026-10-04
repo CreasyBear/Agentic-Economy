@@ -192,6 +192,40 @@ describe('operational diagnostics routes', () => {
     },
   )
 
+  it('reports invalid setting names only to server logs while public readiness remains generic', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const env = { ...productionReadinessEnvironment(), STRIPE_SECRET_KEY: 'rk_test_private_deployment_value' }
+      const fetchImpl = vi.fn()
+      const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), { env, fetch: fetchImpl, nodeMajor: 22 })
+      expect(response.status).toBe(503)
+      const body = JSON.stringify(await response.json())
+      expect(body).toContain('deployment_manifest_invalid')
+      expect(body).not.toContain('STRIPE_SECRET_KEY')
+      expect(body).not.toContain(env.STRIPE_SECRET_KEY)
+      expect(fetchImpl).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith('[ae.deployment]', JSON.stringify({
+        code: 'deployment_manifest_invalid',
+        findings: [{ kind: 'malformed', code: 'stripe_secret_key_invalid', names: ['STRIPE_SECRET_KEY'], scope: 'stripe-money' }],
+      }))
+      expect(JSON.stringify(log.mock.calls)).not.toContain(env.STRIPE_SECRET_KEY)
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  it('preserves the readiness refusal when the diagnostic logger fails', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => { throw new Error('logger_unavailable') })
+    try {
+      const env = { ...productionReadinessEnvironment(), STRIPE_SECRET_KEY: 'rk_test_private_deployment_value' }
+      await expect(handleReadyRequest(new Request('https://ae.example/api/ready'), { env, nodeMajor: 22 }))
+        .resolves.toHaveProperty('status', 503)
+      expect(log).toHaveBeenCalledWith('[ae.deployment]', expect.any(String))
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   it('binds ready web evidence to the actual money environment and Convex origin with optional Provider features disabled', async () => {
     const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), {
       env: {
