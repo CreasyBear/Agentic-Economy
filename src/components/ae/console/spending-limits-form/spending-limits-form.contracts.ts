@@ -7,6 +7,7 @@ export type SpendingMonthlyQuotaGaugeProps = Readonly<{
   approachingCopy?: string
   progressValue: number
   progressAriaLabel: string
+  limitState?: 'under' | 'at' | 'over'
 }>
 
 export type SpendingPresetOption = Readonly<{

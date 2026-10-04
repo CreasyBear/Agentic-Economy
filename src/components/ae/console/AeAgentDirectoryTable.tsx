@@ -9,9 +9,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import arcButton from '@/components/arc/button/button.module.css'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
+import UsageMeter from '@/components/arc/usage-meter/usage-meter'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
-import { Progress } from '@/components/ui/progress'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-view-model'
@@ -23,7 +23,7 @@ import {
   currentAuthorityLabel,
   environmentLabel,
   monthlySpendLabel,
-  monthlyUtilizationPercent,
+  monthlyUtilization,
   scopeLabel,
 } from './agent-operator-console-model'
 import './AgentDirectoryComposition.css'
@@ -142,19 +142,28 @@ export function AeAgentDirectoryTable({
         header: ({ column }) => <AeOperatorSortableHeader label="Charges / UTC month limit" column={column} />,
         cell: ({ row }) => {
           const spendText = monthlySpendLabel(row.original)
-          const percent = monthlyUtilizationPercent(row.original)
-          if (percent === undefined) {
+          const utilization = monthlyUtilization(row.original)
+          if (utilization === undefined) {
             return (
               <span className="arc-agent-directory-note">{spendText}</span>
             )
           }
+          const thresholdText = utilization.limitState === 'under'
+            ? 'Under the limit.'
+            : utilization.limitState === 'at'
+              ? 'At the limit.'
+              : 'Over the limit.'
           return (
             <div className="arc-agent-directory-utilization">
               <span className="arc-agent-directory-money">{spendText}</span>
-              <Progress
-                value={percent}
-                className="h-1.5"
-                aria-label={`${percent}% (${spendText})`}
+              <UsageMeter
+                compact
+                label="UTC month utilization"
+                limit={100}
+                decimals={0}
+                segments={[{ id: 'settled', label: 'Settled spend', value: utilization.percent }]}
+                limitState={utilization.limitState}
+                summary={`${utilization.percent}% (${spendText}). ${thresholdText}`}
               />
             </div>
           )

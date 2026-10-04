@@ -35,6 +35,10 @@ export interface UsageMeterProps {
   warnAt?: number;
   /** Caller-owned exact threshold state when numeric segments are approximate display ratios. */
   limitState?: "under" | "at" | "over";
+  /** Show only the genuine allowance track in dense rows, without the headline or interactive legend. */
+  compact?: boolean;
+  /** Caller-formatted facts for the bar's accessible name, when numerical segments are display ratios. */
+  summary?: string;
 }
 
 const { spring, duration, ease, blur } = motionTokens;
@@ -181,7 +185,7 @@ function Segment({ index, amounts, span, width, highlight }: { index: number; am
   return <motion.span className={styles.segment} data-index={index} data-highlight={highlight} style={{ x, scaleX, originX: 0 }} />;
 }
 
-export function UsageMeter({ label, segments, limit, unit = "", decimals = 1, freeLabel = "Free", overLabel = "Over limit", warnAt = .9, limitState }: UsageMeterProps) {
+export function UsageMeter({ label, segments, limit, unit = "", decimals = 1, freeLabel = "Free", overLabel = "Over limit", warnAt = .9, limitState, compact = false, summary: suppliedSummary }: UsageMeterProps) {
   const { reduced, hydrated } = useReducedMotionSafe();
   const root = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -298,7 +302,7 @@ export function UsageMeter({ label, segments, limit, unit = "", decimals = 1, fr
     : status === "over" ? `${format(over)} over` : status === "near" ? "Almost full" : `${format(free)} free`;
   const thresholdSummary = limitState === "over" ? "Over the limit." : limitState === "at" ? "At the limit."
     : status === "over" ? `Over the limit by ${format(over)}.` : `${format(free)} free${status === "near" ? ", almost full" : ""}.`;
-  const summary = `${label}: ${format(total)} of ${limitText} used. ${segments.map(segment => `${segment.label} ${format(segment.value)}`).join(", ")}. ${thresholdSummary}`;
+  const summary = suppliedSummary ?? `${label}: ${format(total)} of ${limitText} used. ${segments.map(segment => `${segment.label} ${format(segment.value)}`).join(", ")}. ${thresholdSummary}`;
   // Status changes are announced, and so is a growing overage; routine changes inside a status stay quiet.
   const notice = limitState === "at" ? "at" : status === "over" ? `over:${over}` : status;
   const [announced, setAnnounced] = useState({ notice, message: "" });
@@ -306,8 +310,8 @@ export function UsageMeter({ label, segments, limit, unit = "", decimals = 1, fr
     : limitState === "at" ? "Limit reached." : status === "over" ? `Over the limit by ${format(over)}.`
     : status === "near" ? `Almost full. ${format(free)} free.` : `Under the limit. ${format(free)} free.` });
 
-  return <div ref={root} className={styles.meter} role="group" aria-labelledby={titleId} data-status={status}>
-    <div className={styles.top}>
+  return <div ref={root} className={`${styles.meter}${compact ? ` ${styles.compact}` : ""}`} role={compact ? "img" : "group"} aria-labelledby={compact ? undefined : titleId} aria-label={compact ? summary : undefined} data-status={status} data-density={compact ? "compact" : undefined}>
+    {!compact && <><div className={styles.top}>
       <span id={titleId} className={styles.title}>{label}</span>
       <StatusBadge status={status} text={badge} reduced={reduced} />
     </div>
@@ -315,9 +319,9 @@ export function UsageMeter({ label, segments, limit, unit = "", decimals = 1, fr
       <span className={styles.srOnly}>{format(total)} of {limitText} used</span>
       <span className={styles.amount} aria-hidden="true"><Ticker value={headline} decimals={decimals} reduced={reduced} /></span>
       <span className={styles.caption} aria-hidden="true"><Swap text={caption} reduced={reduced} /></span>
-    </p>
+    </p></>}
     <div className={styles.bar}>
-      <div ref={trackRef} className={styles.track} role="img" aria-label={summary} data-active={active ?? undefined} onPointerMove={onTrackMove} onPointerLeave={() => setHovered(null)} onPointerUp={onTrackTap}>
+      <div ref={trackRef} className={styles.track} role={compact ? undefined : "img"} aria-label={compact ? undefined : summary} data-active={compact ? undefined : active ?? undefined} onPointerMove={compact ? undefined : onTrackMove} onPointerLeave={compact ? undefined : () => setHovered(null)} onPointerUp={compact ? undefined : onTrackTap}>
         {segments.map((segment, index) => <Segment key={segment.id} index={index} amounts={amounts} span={span} width={width} highlight={active ? active === segment.id ? "on" : "off" : undefined} />)}
         {/* Past the limit the bar is struck through: the overflow keeps its colours, hatched so it reads as over without colour. */}
         <motion.svg className={styles.overflow} data-highlight={active ? active === "free" ? "on" : "off" : undefined} style={{ clipPath: overClip, opacity: markerOpacity }} aria-hidden="true" focusable="false">
@@ -328,7 +332,7 @@ export function UsageMeter({ label, segments, limit, unit = "", decimals = 1, fr
       </div>
       <motion.span className={styles.limit} style={{ x: limitX, opacity: markerOpacity }} aria-hidden="true" />
     </div>
-    <div ref={legend} className={styles.legend} role="group" aria-label={`${label} by category`} onKeyDown={onLegendKey}>
+    {!compact && <div ref={legend} className={styles.legend} role="group" aria-label={`${label} by category`} onKeyDown={onLegendKey}>
       {items.map((item, index) => {
         const warning = item.id === "free" && status === "over";
         return <button key={item.id} type="button" className={styles.item} data-highlight={active ? active === item.id ? "on" : "off" : undefined} aria-pressed={pinned === item.id} aria-label={`${item.label}, ${format(item.value)}`} tabIndex={index === roving ? 0 : -1}
@@ -346,8 +350,8 @@ export function UsageMeter({ label, segments, limit, unit = "", decimals = 1, fr
           <span className={styles.itemValue}><Ticker value={item.value} decimals={decimals} reduced={reduced} />{unit && <span className={styles.itemUnit}>{unit}</span>}</span>
         </button>;
       })}
-    </div>
-    <p className={styles.srOnly} aria-live="polite" aria-atomic="true">{announced.message}</p>
+    </div>}
+    {!compact && <p className={styles.srOnly} aria-live="polite" aria-atomic="true">{announced.message}</p>}
   </div>;
 }
 

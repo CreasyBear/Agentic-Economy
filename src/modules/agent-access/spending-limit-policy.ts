@@ -14,6 +14,7 @@ type MonthlyQuotaGaugeLocal = Readonly<{
   progressAriaLabel: string
   toneClass: string
   approachingCopy?: string
+  limitState?: 'under' | 'at' | 'over'
 }>
 
 export const SPENDING_LIMIT_CURRENCY = 'AUD' as const
@@ -194,7 +195,7 @@ export function monthlyQuotaGaugeFromFacts(facts: MonthlyQuotaGaugeFacts): Month
   const ceilingFormatted = formatDisplayAmount(ceiling)
 
   if (
-    facts.monthlySpendCoverage === 'incomplete'
+    facts.monthlySpendCoverage !== 'complete'
     || burn === undefined
     || burn.currency !== ceiling.currency
   ) {
@@ -208,6 +209,16 @@ export function monthlyQuotaGaugeFromFacts(facts: MonthlyQuotaGaugeFacts): Month
 
   const spendUnits = BigInt(burn.units)
   const ceilingUnits = BigInt(ceiling.units)
+
+  if (spendUnits < 0n) {
+    return {
+      label: `Monthly settled: unavailable / ${ceilingFormatted}`,
+      progressValue: 0,
+      progressAriaLabel: `Monthly settled unavailable of ${ceilingFormatted}`,
+      toneClass: 'text-muted-foreground',
+    }
+  }
+
   const burnFormatted = formatDisplayAmount(burn)
 
   if (ceilingUnits <= 0n) {
@@ -219,17 +230,26 @@ export function monthlyQuotaGaugeFromFacts(facts: MonthlyQuotaGaugeFacts): Month
     }
   }
 
-  const percentTenths = Number((spendUnits * 1000n) / ceilingUnits) / 10
-  const clampedPercent = Math.min(100, percentTenths)
-  const label = `Monthly settled: ${burnFormatted} / ${ceilingFormatted} (${percentTenths}%)`
-  const progressAriaLabel = `Monthly settled ${burnFormatted} of ${ceilingFormatted}, ${percentTenths} percent`
+  const numerator = spendUnits * 10n ** BigInt(ceiling.exponent)
+  const denominator = ceilingUnits * 10n ** BigInt(burn.exponent)
+  const normalizedComparison = numerator < denominator ? -1 : numerator > denominator ? 1 : 0
+  const limitState = normalizedComparison < 0 ? 'under' : normalizedComparison > 0 ? 'over' : 'at'
+  const percentTenthsBig = numerator * 1000n / denominator
+  const percentInteger = percentTenthsBig / 10n
+  const percentFraction = percentTenthsBig % 10n
+  const percentLabel = percentFraction === 0n
+    ? percentInteger.toString()
+    : `${percentInteger}.${percentFraction.toString()}`
+  const clampedPercent = Number(percentTenthsBig > 1000n ? 1000n : percentTenthsBig) / 10
+  const label = `Monthly settled: ${burnFormatted} / ${ceilingFormatted} (${percentLabel}%)`
+  const progressAriaLabel = `Monthly settled ${burnFormatted} of ${ceilingFormatted}, ${percentLabel} percent`
 
   let toneClass = 'text-success-foreground'
   let approachingCopy: string | undefined
-  if (percentTenths > 90) {
+  if (percentTenthsBig > 900n) {
     toneClass = 'text-destructive'
     approachingCopy = 'Approaching monthly limit'
-  } else if (percentTenths > 70) {
+  } else if (percentTenthsBig > 700n) {
     toneClass = 'text-warning-foreground'
   }
 
@@ -238,6 +258,7 @@ export function monthlyQuotaGaugeFromFacts(facts: MonthlyQuotaGaugeFacts): Month
     progressValue: clampedPercent,
     progressAriaLabel,
     toneClass,
+    limitState,
     ...(approachingCopy !== undefined ? { approachingCopy } : {}),
   }
 }

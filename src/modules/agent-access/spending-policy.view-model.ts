@@ -39,4 +39,5 @@ export type MonthlyQuotaGauge = Readonly<{
    * `monthlyQuotaGauge()` already spreads it conditionally.
    */
   approachingCopy?: string
+  limitState?: 'under' | 'at' | 'over'
 }>

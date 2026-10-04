@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeAgentDirectoryTable } from '@/components/ae/console/AeAgentDirectoryTable'
+import { monthlySpendLabel, monthlyUtilization } from '@/components/ae/console/agent-operator-console-model'
 import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 
@@ -12,7 +13,7 @@ const THREE_HOURS_MS = 3 * 60 * 60 * 1000
 const fixedNow = 1758200000000
 const fixedLastSeen = fixedNow - THREE_HOURS_MS
 
-const baseItem: AgentDirectoryItem = {
+const baseItem = {
   principalRef: 'prn_test_agent_1',
   principalRevision: 1,
   displayName: 'Research assistant',
@@ -38,7 +39,7 @@ const baseItem: AgentDirectoryItem = {
   monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '12500000' },
   monthlyLimit: { currency: 'AUD', exponent: 6, units: '100000000' },
   monthlySpendCoverage: 'complete',
-}
+} satisfies AgentDirectoryItem
 
 afterEach(cleanup)
 
@@ -56,27 +57,41 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     expect(screen.getByText('A$12.50 / A$100.00')).toBeInTheDocument()
   })
 
-  it('T2: renders Progress at 13% with accessible label', () => {
-    const { container } = render(
+  it('normalizes mixed amount exponents before calculating monthly utilization', () => {
+    const mixedExponents: AgentDirectoryItem = {
+      ...baseItem,
+      monthlySettledSpend: { currency: 'AUD', exponent: 2, units: '1250' },
+      monthlyLimit: { currency: 'AUD', exponent: 6, units: '100000000' },
+    }
+
+    expect(monthlyUtilization(mixedExponents)).toEqual({ percent: 13, limitState: 'under' })
+  })
+
+  it('T2: renders the exact monthly utilization summary for mixed amount exponents', () => {
+    const mixedExponents: AgentDirectoryItem = {
+      ...baseItem,
+      monthlySettledSpend: { currency: 'AUD', exponent: 2, units: '1250' },
+    }
+    render(
       <AeAgentDirectoryTable
-        directoryItems={[baseItem]}
+        directoryItems={[mixedExponents]}
         loading={false}
         onOpenAgent={vi.fn()}
       />,
     )
 
-    const progress = container.querySelector('[data-slot="progress"]')
-    expect(progress).toBeInTheDocument()
-    expect(progress).toHaveAttribute('aria-label', expect.stringContaining('13%'))
-    expect(progress).toHaveAttribute('aria-label', expect.stringContaining('A$12.50 / A$100.00'))
+    expect(screen.getByText('A$12.50 / A$100.00')).toBeInTheDocument()
+    expect(screen.getByRole('img', {
+      name: '13% (A$12.50 / A$100.00). Under the limit.',
+    })).toBeInTheDocument()
   })
 
-  it('T3: renders zero activity with a limit as A$0.00 / A$100.00 and progress 0%', () => {
+  it('T3: renders zero activity with a limit as A$0.00 / A$100.00 and utilization 0%', () => {
     const zeroItem: AgentDirectoryItem = {
       ...baseItem,
       monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '0' },
     }
-    const { container } = render(
+    render(
       <AeAgentDirectoryTable
         directoryItems={[zeroItem]}
         loading={false}
@@ -85,9 +100,9 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     )
 
     expect(screen.getByText('A$0.00 / A$100.00')).toBeInTheDocument()
-    const progress = container.querySelector('[data-slot="progress"]')
-    expect(progress).toBeInTheDocument()
-    expect(progress).toHaveAttribute('aria-label', expect.stringContaining('0%'))
+    expect(screen.getByRole('img', {
+      name: '0% (A$0.00 / A$100.00). Under the limit.',
+    })).toBeInTheDocument()
   })
 
   it.each([
@@ -95,7 +110,7 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     ['unset', { kind: 'unset' } as const, 'No spending policy set'],
     ['expired', { kind: 'expired', expiresAt: fixedNow } as const, 'Expired'],
   ])('%s policy never presents an unlimited ceiling or utilization', (_kind, spendingPolicy, label) => {
-    const { container } = render(
+    render(
       <AeAgentDirectoryTable
         directoryItems={[{ ...baseItem, spendingPolicy, monthlyLimit: undefined }]}
         loading={false}
@@ -105,16 +120,15 @@ describe('AeAgentDirectoryTable (W-25)', () => {
 
     expect(within(screen.getByRole('table', { name: 'Agents' })).getByText(`A$12.50 / ${label}`)).toBeInTheDocument()
     expect(screen.queryByText(/No limit|A\$100\.00|Active/)).not.toBeInTheDocument()
-    expect(container.querySelector('[data-slot="progress"]')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Agents' })).queryByRole('img')).not.toBeInTheDocument()
   })
 
-  it('T5: incomplete coverage renders Unavailable / A$100.00 with no progress bar', () => {
+  it('T5: incomplete coverage renders Unavailable / A$100.00 with no utilization meter', () => {
     const incompleteItem: AgentDirectoryItem = {
       ...baseItem,
-      monthlySettledSpend: undefined,
       monthlySpendCoverage: 'incomplete',
     }
-    const { container } = render(
+    render(
       <AeAgentDirectoryTable
         directoryItems={[incompleteItem]}
         loading={false}
@@ -123,7 +137,61 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     )
 
     expect(screen.getByText('Unavailable / A$100.00')).toBeInTheDocument()
-    expect(container.querySelector('[data-slot="progress"]')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Agents' })).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('omits utilization for a nonpositive ceiling or absent spend', () => {
+    const zeroCeiling: AgentDirectoryItem = {
+      ...baseItem,
+      spendingPolicy: {
+        ...baseItem.spendingPolicy,
+        maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '0' },
+      },
+    }
+    const noSpend: AgentDirectoryItem = {
+      ...baseItem,
+      monthlySettledSpend: undefined,
+    }
+    render(
+      <AeAgentDirectoryTable
+        directoryItems={[zeroCeiling, noSpend]}
+        loading={false}
+        onOpenAgent={vi.fn()}
+      />,
+    )
+
+    const table = within(screen.getByRole('table', { name: 'Agents' }))
+    expect(table.getByText('A$12.50 / A$0.00')).toBeInTheDocument()
+    expect(table.getByText('Unavailable / A$100.00')).toBeInTheDocument()
+    expect(table.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('keeps exact under, at and over state when adjacent atomic amounts all round to 100%', () => {
+    const ceilingUnits = 900719925474099312345678901234567890n
+    const ceiling = { currency: 'AUD', exponent: 0, units: ceilingUnits.toString() }
+    const itemFor = (displayName: string, spendUnits: bigint): AgentDirectoryItem => ({
+      ...baseItem,
+      principalRef: `agent:${displayName.toLowerCase()}`,
+      displayName,
+      spendingPolicy: { ...baseItem.spendingPolicy, maximumMonthlySpend: ceiling },
+      monthlySettledSpend: { ...ceiling, units: spendUnits.toString() },
+    })
+    const cases = [
+      { item: itemFor('One below', ceilingUnits - 1n), state: 'under' as const, text: 'Under the limit.' },
+      { item: itemFor('At ceiling', ceilingUnits), state: 'at' as const, text: 'At the limit.' },
+      { item: itemFor('One above', ceilingUnits + 1n), state: 'over' as const, text: 'Over the limit.' },
+    ]
+    for (const { item, state } of cases) {
+      expect(monthlyUtilization(item)).toEqual({ percent: 100, limitState: state })
+    }
+
+    render(<AeAgentDirectoryTable directoryItems={cases.map(({ item }) => item)} loading={false} onOpenAgent={vi.fn()} />)
+
+    for (const { item, text } of cases) {
+      expect(screen.getByRole('img', {
+        name: `100% (${monthlySpendLabel(item)}). ${text}`,
+      })).toBeInTheDocument()
+    }
   })
 
   it('shows complete monthly counts and sorts exact charges rather than budget percentages', () => {
@@ -136,8 +204,12 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     render(<AeAgentDirectoryTable directoryItems={[larger, smaller]} loading={false} onOpenAgent={vi.fn()} />)
     expect(screen.getAllByText('51')).toHaveLength(2)
     expect(screen.getAllByText('49 completed · 2 outcome unknown')).toHaveLength(2)
+    const table = within(screen.getByRole('table'))
+    let rows = table.getAllByRole('row').slice(1)
+    expect(rows[0]?.textContent).toContain('Larger')
+    expect(rows[1]?.textContent).toContain('Smaller')
     fireEvent.click(screen.getByRole('button', { name: /Charges \/ UTC month limit/u }))
-    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    rows = table.getAllByRole('row').slice(1)
     expect(rows[0]?.textContent).toContain('Smaller')
     expect(rows[1]?.textContent).toContain('Larger')
   })

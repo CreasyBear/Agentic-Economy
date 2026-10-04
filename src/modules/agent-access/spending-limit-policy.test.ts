@@ -112,11 +112,13 @@ describe('spending-limit-policy (via view-model surface)', () => {
       const gauge = monthlyQuotaGaugeFromFacts({ isPaused: true })
       expect(gauge.label).toBe('Spending frozen — A$0.00 new spend authorized')
       expect(gauge.progressValue).toBe(0)
+      expect(gauge).not.toHaveProperty('limitState')
     })
 
     it('missing ceiling', () => {
       const gauge = monthlyQuotaGaugeFromFacts({ isPaused: false })
       expect(gauge.label).toBe('Monthly settled: no monthly ceiling configured')
+      expect(gauge).not.toHaveProperty('limitState')
     })
 
     it('currency mismatch and incomplete coverage', () => {
@@ -127,6 +129,7 @@ describe('spending-limit-policy (via view-model surface)', () => {
         monthlySpendCoverage: 'complete',
       })
       expect(mismatch.label).toMatch(/unavailable/)
+      expect(mismatch).not.toHaveProperty('limitState')
 
       const incomplete = monthlyQuotaGaugeFromFacts({
         isPaused: false,
@@ -135,6 +138,15 @@ describe('spending-limit-policy (via view-model surface)', () => {
         monthlySpendCoverage: 'incomplete',
       })
       expect(incomplete.label).toMatch(/unavailable/)
+      expect(incomplete).not.toHaveProperty('limitState')
+
+      const unknownCoverage = monthlyQuotaGaugeFromFacts({
+        isPaused: false,
+        grantBudgetMonthlyCeiling: ceiling,
+        monthlySettledSpend: aud('1000000'),
+      })
+      expect(unknownCoverage.label).toBe('Monthly settled: unavailable / A$100.00')
+      expect(unknownCoverage).not.toHaveProperty('limitState')
     })
 
     it('zero ceiling with and without burn', () => {
@@ -145,7 +157,8 @@ describe('spending-limit-policy (via view-model surface)', () => {
         monthlySpendCoverage: 'complete',
       })
       expect(withBurn.progressValue).toBe(100)
-      expect(withBurn.label).not.toMatch(/%/)
+      expect(withBurn.label).toBe('Monthly settled: A$1.00 / A$0.00')
+      expect(withBurn).not.toHaveProperty('limitState')
 
       const noBurn = monthlyQuotaGaugeFromFacts({
         isPaused: false,
@@ -154,6 +167,36 @@ describe('spending-limit-policy (via view-model surface)', () => {
         monthlySpendCoverage: 'complete',
       })
       expect(noBurn.progressValue).toBe(0)
+      expect(noBurn.label).toBe('Monthly settled: A$0.00 / A$0.00')
+      expect(noBurn).not.toHaveProperty('limitState')
+
+      const negativeCeiling = monthlyQuotaGaugeFromFacts({
+        isPaused: false,
+        grantBudgetMonthlyCeiling: { currency: 'AUD', units: '-1', exponent: 6 },
+        monthlySettledSpend: aud('1000000'),
+        monthlySpendCoverage: 'complete',
+      })
+      expect(negativeCeiling.progressValue).toBe(100)
+      expect(negativeCeiling.label).toBe(
+        'Monthly settled: A$1.00 / Amount unknown',
+      )
+      expect(negativeCeiling).not.toHaveProperty('limitState')
+    })
+
+    it('keeps negative spend unavailable with zero geometry', () => {
+      const gauge = monthlyQuotaGaugeFromFacts({
+        isPaused: false,
+        grantBudgetMonthlyCeiling: ceiling,
+        monthlySettledSpend: { currency: 'AUD', units: '-1', exponent: 6 },
+        monthlySpendCoverage: 'complete',
+      })
+
+      expect(gauge).toMatchObject({
+        label: 'Monthly settled: unavailable / A$100.00',
+        progressValue: 0,
+        progressAriaLabel: 'Monthly settled unavailable of A$100.00',
+      })
+      expect(gauge).not.toHaveProperty('limitState')
     })
 
     const gaugeAtPercent = (percent: number) =>
@@ -186,6 +229,45 @@ describe('spending-limit-policy (via view-model surface)', () => {
       expect(at150.progressValue).toBe(100)
     })
 
+    it('derives exact limit state for one atomic unit under, at, and over the ceiling', () => {
+      const gaugeAtUnits = (units: string) =>
+        monthlyQuotaGaugeFromFacts({
+          isPaused: false,
+          grantBudgetMonthlyCeiling: ceiling,
+          monthlySettledSpend: aud(units),
+          monthlySpendCoverage: 'complete',
+        })
+
+      const under = gaugeAtUnits('99999999')
+      const at = gaugeAtUnits('100000000')
+      const over = gaugeAtUnits('100000001')
+
+      expect(under.limitState).toBe('under')
+      expect(under.label).toContain('A$100.00 / A$100.00 (99.9%)')
+      expect(at.limitState).toBe('at')
+      expect(at.progressValue).toBe(100)
+      expect(at.label).toContain('(100%)')
+      expect(over.limitState).toBe('over')
+      expect(over.progressValue).toBe(100)
+      expect(over.label).toContain('(100%)')
+    })
+
+    it('keeps huge over-limit percentages finite and renders them without Infinity', () => {
+      const gauge = monthlyQuotaGaugeFromFacts({
+        isPaused: false,
+        grantBudgetMonthlyCeiling: aud('1'),
+        monthlySettledSpend: aud('9'.repeat(400)),
+        monthlySpendCoverage: 'complete',
+      })
+
+      expect(gauge.limitState).toBe('over')
+      expect(gauge.progressValue).toBe(100)
+      expect(Number.isFinite(gauge.progressValue)).toBe(true)
+      expect(gauge.label).not.toContain('Infinity')
+      expect(gauge.progressAriaLabel).not.toContain('Infinity')
+      expect(gauge.label).toContain(`${'9'.repeat(400)}00%`)
+    })
+
     it('matches settled gauge copy at 12.5%', () => {
       const gauge = monthlyQuotaGaugeFromFacts({
         isPaused: false,
@@ -194,6 +276,21 @@ describe('spending-limit-policy (via view-model surface)', () => {
         monthlySpendCoverage: 'complete',
       })
       expect(gauge.label).toBe('Monthly settled: A$12.50 / A$100.00 (12.5%)')
+      expect(gauge.progressAriaLabel).toBe(
+        'Monthly settled A$12.50 of A$100.00, 12.5 percent',
+      )
+    })
+
+    it('normalizes differing amount exponents before computing utilization', () => {
+      const gauge = monthlyQuotaGaugeFromFacts({
+        isPaused: false,
+        grantBudgetMonthlyCeiling: ceiling,
+        monthlySettledSpend: { currency: 'AUD', units: '1250', exponent: 2 },
+        monthlySpendCoverage: 'complete',
+      })
+
+      expect(gauge.label).toBe('Monthly settled: A$12.50 / A$100.00 (12.5%)')
+      expect(gauge.progressValue).toBe(12.5)
       expect(gauge.progressAriaLabel).toBe(
         'Monthly settled A$12.50 of A$100.00, 12.5 percent',
       )
