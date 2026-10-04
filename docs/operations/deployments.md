@@ -1,6 +1,6 @@
 # Current deployments
 
-Production application acceptance updated on **4 October 2026, 08:49 UTC**;
+Production application acceptance updated on **4 October 2026, 14:57 UTC**;
 the wider deployment inventory below dates from 2 October. This is the current
 deployment map. [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256)
 owns the real-money alpha work; [the readiness record](../production-readiness-plan.md)
@@ -25,37 +25,59 @@ contracts needs the matching backend release and verification.
 
 ## Latest production acceptance — 4 October 2026
 
-[PR #330](https://github.com/CreasyBear/Agentic-Economy/pull/330) is deployed to
-Convex `cautious-zebra-473` and Vercel Production
-`dpl_FcnktcyKyPpBRLPCES3SaeYHznF7`. The application release endpoint confirms
-`be3583ed9fdc51302966d403cae38d098392b2d7`. The full source gate passes; native
-backend deployment validates the schema and adds the retention indexes.
+[PR #339](https://github.com/CreasyBear/Agentic-Economy/pull/339) is deployed to
+Convex `cautious-zebra-473` and Vercel Production. The application release
+endpoint confirms `2fe3a0dd90e0b80b60dc8da70d449794ccfdd2c1`, matching the backend
+deploy completed at 14:54:54 UTC. The merged tree equals the gated tree.
+Node 22/npm 11.5.1 `npm run check` and `npm run gate` pass: 8,516 unit tests,
+2,891 integration tests, 16 browser journeys, 18 accessibility cases,
+type/import/SEO checks, CLI packaging and the public build. Existing skips and
+todos remain outside this proof.
 
-Custody is enabled with the approved limits unchanged. The normal treasury
-observer has booked 9.905153 USDC, with 9.405153 USDC available after the
-0.500000 USDC buffer. Joel's Account has AUD 5 promotional credit, expiring
-5 October at 12:45 Perth time. After ordered observation, reconciliation and
-readiness refresh, `/api/ready` returns HTTP 200 and the authenticated Admin
-page reports Ready. Payee screening is explicitly deferred under the approved
-alpha policy; this is not a screened result. The catalogue freshness indicator
-remains stale. Earlier expired treasury evidence caused a temporary refusal;
-this observation does not establish uninterrupted readiness.
+**Twenty real mainnet payments are reconciled across five Tools.** The connected
+CLI completes the purchases; native Formance and both RPC providers verify every
+original settlement and transfer. An earlier expired unused authorization is
+excluded from the 20. Gross Provider spend is USDC 0.023000, leaving USDC 9.882153
+in the wallet: USDC 9.382153 available plus the protected USDC 0.500000 buffer.
+Buyer Charges total AUD 0.033209; one AUD 0.001444 report refund leaves net use
+of AUD 0.031765 and promotional credit of AUD 4.968235. All holds and signing
+liability are zero. The credit expires 5 October at 12:45 Perth time.
 
-The 30-day content policy, owner usefulness feedback, protected founder review
-and 90-day content-free learning signals are deployed. Live Admin refresh,
-chat disclosure and Privacy disclosure pass. Native retention continuations
-all succeed; no production content is old enough to expire. An isolated native
-Convex drill separately proves removal of eligible content and embeddings,
-preservation of pending Calls and financial records, and stable repeat cleanup.
+The deployed automatic treasury audit matches all 20 settlements, 44 cash
+records and 21 reservations at 14:55 UTC with zero cash difference. An ordinary
+readiness refresh passes at 14:57 UTC after a separate transient RPC failure.
+Both RPC providers, confirmation requirements, source stability and audit
+bounds remain enforced. Readiness is point-in-time: RPC failures can still
+refuse new purchases, and the observed CLI recovery path takes 72–132 seconds
+for the final nine Calls.
 
-**Paid-call acceptance remains open:** production Convex lacks
-`OPENROUTER_API_KEY`, so the chat cannot obtain its model response. The complete
-native census still contains zero Quotes, Calls and x402 payment attempts.
-The 20-Call exercise, failure/replay drills and transaction reconciliation are
-not passed. Founder review and feedback on a real production Call also remain
-unverified. Backups and independent Provider content retention are separate
-from application cleanup. Stage 62 in the readiness record holds this release's
-evidence and limits; launch approval remains open.
+The live pause drill passes after owner MFA: new Quotes refuse and completed-key
+replay returns the original receipt. The saved resume audience is `admins`;
+resume is awaiting the owner's fresh MFA. No alpha invitations or audience
+expansion are authorized by this record. Agent limits remain AUD 1 per Call,
+AUD 5 daily and AUD 20 monthly; custody limits remain unchanged.
+
+Protected founder review, manual close and usefulness feedback are proved on
+a real paid Call with native audit readback. Nine failure scenarios pass against
+native Formance with controlled Provider/custody/RPC fixtures; live evidence
+separately covers uncertain-payment recovery, expired unused authorization,
+same-key replay, pause and the owner report/refund flow. The induced failure
+fixtures are not described as live mainnet Provider failures.
+
+The earlier model-credential blocker is repaired. Paid chat completion and the
+separate Base Sepolia development journey remain unverified. Screening remains
+explicitly deferred under `alpha_not_screened_v1`; this is not a screened result.
+The founder's alpha go/no-go remains open. Stage 68 of the readiness record holds
+the exact proof and limitations.
+
+The 30-day application-content policy, protected review and 90-day content-free
+learning signals are deployed. Isolated native cleanup proves eligible content
+and embedding deletion while preserving pending Calls and financial records.
+The private financial archive has verified 2,557-day governance retention,
+governance-bypass refusal, legal-hold behavior, access isolation and signed
+Account-close/policy readback. The actual RDS and Convex/storage restore drills
+pass for their recorded historical cutoffs; they do not restore these new
+mainnet payments. Independent Provider retention remains outside AE's control.
 
 ## Retired in this cleanup
 

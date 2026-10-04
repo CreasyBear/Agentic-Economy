@@ -4037,3 +4037,197 @@ failure/replay drills, financial reconciliation and founder review/feedback on
 a real production Call remain open. No synthetic production Call is created to
 claim those checks. Backup retention, independent Provider retention and launch
 approval remain separately scoped and unverified by this release.
+
+## Stage 68 — Mainnet acceptance and launch decision evidence
+
+This acceptance record supersedes the open runtime items in Stages 57 and 62
+only where the evidence below proves them. It does not expand the approved
+alpha policy, change the product charter or authorize invitations.
+
+### Released repairs and verification
+
+Production web and Convex `cautious-zebra-473` run
+`2fe3a0dd90e0b80b60dc8da70d449794ccfdd2c1` after
+[PR #339](https://github.com/CreasyBear/Agentic-Economy/pull/339).
+The backend deploy completes at 14:54:54 UTC and the release endpoint confirms
+the matching web revision. The merged tree equals the tested combined tree.
+The model credential/configuration repair in
+[PR #335](https://github.com/CreasyBear/Agentic-Economy/pull/335) removes the
+Stage 62 missing-credential blocker. The connected CLI provides the actual
+purchase harness used below. [PR #334](https://github.com/CreasyBear/Agentic-Economy/pull/334)
+adds bounded Tool inspection, a 60-second client deadline and recovery guidance.
+
+Production findings required narrow financial repairs during the exercise. [PR #336](https://github.com/CreasyBear/Agentic-Economy/pull/336)
+keeps normalised query parameters when attributing the paid HTTP response to
+its original request. The subsequent Coincap purchase returns the requested
+Bitcoin/Ethereum data and settles exactly once.
+[PR #337](https://github.com/CreasyBear/Agentic-Economy/pull/337) compares complete,
+validated treasury histories without passing them through the smaller
+single-value canonical-digest bound. It preserves the existing page/row limits,
+two-read stability check and published digest contracts. A changed source during
+an audit still refuses the result; a 341-observation native-ledger regression
+fails before the repair and passes afterward.
+
+PR #339 removes five-payment concurrency and confirmation polling from the
+historical receipt audit. Each payment is read sequentially through both
+configured RPCs; current receipts still need at least 12 confirmations and
+exact transaction, nonce and transfer attribution. The 120-second budget and
+250-payment bound remain. Immature, missing, late or contradictory evidence
+cannot produce a successful audit. The new constrained-RPC and mature-receipt
+regressions fail before the change; all 77 focused cases pass afterward. This
+reduces request bursts without adding another journal, queue or service.
+
+Node 22/npm 11.5.1 `npm run check` and `npm run gate` pass for the deployed
+combined source. The gate includes 8,516 unit tests, 2,891 integration tests,
+type/import/SEO checks, 16 browser journeys, 18 accessibility cases, CLI
+packaging and the public build. Existing skips and todos remain outside that
+proof. A separate native Formance run passes the history comparison and money
+checks that the ordinary gate does not enable.
+
+### Failure and recovery evidence
+
+The maintained `capability-call-money-matrix.test.ts` passes all nine scenarios
+against a disposable native Formance Ledger 2.4.14 instance. It verifies paid
+2xx delivery including invalid output; unpaid Provider 500; settled 500 with a
+buyer refund and retained Provider cost; timeout with retained-response recovery
+or continued hold; price drift before signing; same-key replay; insufficient
+credit; per-Call/day limits; and concurrent allowance enforcement. Provider,
+custody and RPC failures are controlled fixtures in this suite. The native
+ledger is real, but these induced failures are not described as hostile live
+mainnet Provider behavior. All test-owned containers, network and volume are
+removed after verification.
+
+The 17 treasury payment-control tests verify fresh MFA, pause/refusal, unchanged
+recovery authority, current-state checks and the required resume authorization.
+The production pause commits after owner MFA at 14:41 UTC: the audience changes
+from `admins` to `none`, with `admins` retained as the only resume audience. A
+new authenticated CLI Quote refuses `payments_paused`; exact replay of the last
+completed Call returns its unchanged original receipt while paused. Native
+audit readback records the owner action and before/after states. Resume remains
+pending the deployed receipt-audit repair and current readiness.
+Live mainnet evidence separately covers an uncertain payment recovering from
+its original reference, an expired unused authorization releasing its held
+credit, same-key replay and the owner report/refund flow. No new purchase is
+submitted to resolve an uncertain result.
+
+### Founder review and retained financial evidence
+
+Joel completes MFA for protected founder review on a real paid Call. The
+production UI reveals the retained input/output and closes it through the
+existing action. Native audit readback contains exactly one matching
+`review_call_content` record with reason `alpha_quality`, actor, Call reference
+and review correlation; the audit record contains no Call payload. A separate
+owner feedback record marks the paid result useful. This proves the authorized
+review and manual close; automatic ten-minute expiry is covered by source tests,
+not by waiting in the production UI.
+
+The Stage 57 archive proposal is now implemented and verified. The approved
+private, encrypted and versioned AWS financial-evidence bucket uses 2,557-day
+governance retention and denies governance bypass under `financial/*`. A
+disposable object-version drill proves retained-version deletion refusal,
+legal-hold refusal after retention expiry, and denied non-operator reads/writes.
+Both fixture versions are removed after retention expiry and hold release.
+CloudTrail records the object events. The signed 3 October production Account
+daily close and commercial policies have exact-version archive/readback proof;
+all six active policy documents are subsequently archived. This is an operator
+archive procedure, not a claim of continuous automated export or a legal hold
+on every real document.
+
+The actual RDS restore and complete Convex/storage restore remain passed for
+their previously recorded targets and cutoffs. Neither is a joint restoration
+of the new mainnet purchases. Clerk owner MFA, signed webhook admission and
+real session revocation/re-sign-in were verified earlier. The separate real
+Base Sepolia development purchase remains unverified; native test-ledger
+scenarios and production payments are identified separately.
+
+### Twenty real mainnet payments
+
+The authenticated CLI completes 20 settled purchases across five published
+Tools: OneSource block number (7), network information (6), chain ID (5),
+live balance (1), and Coincap prices (1). There are 21 admitted Calls in total:
+one earlier Coincap authorization expires unused and releases its reservation.
+An Exa Quote refusal never admits a Call. The unused authorization and rejected
+Quote are excluded from the 20 paid results.
+
+Native, fully paginated readback at 14:23 UTC verifies every Quote/Call/attempt/
+Provider-obligation join and all 20 original Formance settlements. The 21
+signing reservations contain 20 settled records and one unused record, with
+zero liability. Eleven Account-history pages contain exactly 20 promotional
+uses, one promotional refund and the original promotional grant; transaction
+references are unique. The reported first Call retains its original Provider
+payment. Replaying the last Call with the same input and idempotency key returns
+the original Call, chain transaction and accounting references without another
+purchase.
+
+| Reconciled fact | Amount |
+| --- | ---: |
+| Original promotional credit | AUD 5.000000 |
+| Gross buyer Charges | AUD 0.033209 |
+| Report refund | AUD 0.001444 |
+| Net buyer use | AUD 0.031765 |
+| Remaining promotional credit | AUD 4.968235 |
+| Original treasury funding | USDC 9.905153 |
+| Gross Provider payments | USDC 0.023000 |
+| Remaining wallet balance | USDC 9.882153 |
+| Protected buffer within wallet balance | USDC 0.500000 |
+| Available treasury after buffer | USDC 9.382153 |
+| Buyer and treasury holds | 0 |
+
+Independent RPC verification completes at 14:27 UTC. Infura and Alchemy agree
+on Base safe block `52167296`, hash
+`0xa8a1842ab11757b4f325941b21316ae85eda5c2b8e2997ae818b6d2f2e34089e`,
+and the exact wallet balance above. All 40 receipt checks (20 on each provider)
+match successful status, USDC contract, payer, payee, amount and original
+`AuthorizationUsed` nonce, with at least 12 confirmations. This safe-block
+proof is distinguished from the treasury observer's older finalized checkpoint;
+its audit must preserve the corresponding cash timing adjustment.
+
+The final payment transaction is
+`0xf0b6074812dd1a58b542000ba6eba46e1728f003140eeb21fd3cfc450823beb0`.
+The retained operator evidence includes `stage68-native-reconciliation.json`,
+`stage68-chain-reconciliation.json` and `stage68-call22-replay.json`, containing
+the complete attributed identities and native results. Provider service inputs,
+CLI credentials and RPC URL credentials are not published in this record.
+
+The deployed automatic audit at 14:55 UTC independently passes with 20 Provider
+settlements, 44 cash records and 21 reservations matched. Provider settlements
+sum to USDC 0.023000; wallet and ledger cash both equal USDC 9.882153, with zero
+cash difference, zero timing adjustment and no signing liability or held credit.
+The finalized chain checkpoint is block `52167527`, hash
+`0xac9d24c1debd4c0374481213529ec70aba0b970ff8d3f1a5ad67445dcde40f89`.
+A separate RPC readiness probe initially refuses; one later ordinary refresh
+at 14:57 UTC passes all required checks, with the approved screening deferral
+still explicit. Retained evidence is `stage69-native-readiness.json`,
+`stage69-readiness-retry.json`, `stage69-web-release.json` and the backend deploy
+log. This is point-in-time readiness; recurring RPC availability remains a limit.
+
+### Availability and decision limits
+
+The last nine Calls take 72–132 seconds from admission to the final Call state.
+The CLI first reports an uncertain outcome and then resumes the same recovery
+reference. This proves eventual delivery and payment recovery; it does not
+establish a synchronous-response service level or paid chat purchase completion.
+The actual paid acceptance harness is the connected CLI.
+
+Treasury/readiness checks intermittently refuse on RPC timeout or unavailable
+receipt evidence. A direct diagnostic returns one transient HTTP 429; subsequent
+serial checks on both providers succeed. Concurrent source changes also correctly
+refuse an audit. Native ledger amounts and holds remain readable during these
+failures, while a failed audit prevents new paid admission. No timeout, freshness
+limit, RPC quorum or evidence check is relaxed to obtain readiness.
+
+The approved alpha exception remains `alpha_not_screened_v1`: payees are
+explicitly **not screened**. Existing limits stay unchanged: this test Agent has
+AUD 1 per Call, AUD 5 daily and AUD 20 monthly authority; custody separately
+limits each Call to USDC 0.5, platform daily spend to USDC 10, payee daily spend
+to USDC 2, and first use of a payee to USDC 0.5. Remaining promotional test credit
+expires on 5 October at 12:45 Perth time. Neither the wallet nor its funding
+authorizes additional users or spending.
+
+[Issue #287](https://github.com/CreasyBear/Agentic-Economy/issues/287) now has the
+20-payment and exact reconciliation evidence, together with explicitly scoped
+failure-drill results. [Issue #279](https://github.com/CreasyBear/Agentic-Economy/issues/279)
+remains open for the separate paid development chat journey.
+[Issue #288](https://github.com/CreasyBear/Agentic-Economy/issues/288) remains the
+human go/no-go decision for inviting 20 alpha users. No invitations or audience
+expansion occur as part of this acceptance record.
