@@ -120,11 +120,14 @@ export async function finalizeDispatchHandler(
   await recordFinalizationEvidence(ctx, row, normalizedProjection.state)
   // Commit recovery scheduling with the stopped Call. Closing the browser cannot
   // abandon this job; it reads the original nonce and never sends a new payment.
+  // A signed pre-submit refusal also needs proof of unused expiry: not_settled
+  // alone cannot release the hold while the authorization could still be used.
   if (normalizedProjection.state === 'reconciliation_required') {
     const payment = await ctx.db.query('moneyX402PaymentAttempts')
       .withIndex('by_attemptRef_and_effectGeneration', q => q.eq('attemptRef', attempt.attemptRef)
         .eq('effectGeneration', attempt.effectGeneration)).unique()
-    if (payment?.paymentAuthorizationExpiresAt !== undefined && payment.settlementStatus === 'unknown'
+    if (payment?.paymentAuthorizationExpiresAt !== undefined
+      && (payment.settlementStatus === 'unknown' || payment.settlementStatus === 'not_settled')
       && payment.paymentResponseDigest === undefined) {
       await ctx.scheduler.runAt(Math.max(finalizedAt, payment.paymentAuthorizationExpiresAt + 30_000),
         internal.moneyX402ExpiryActions.recover, { callRef: row.callRef })

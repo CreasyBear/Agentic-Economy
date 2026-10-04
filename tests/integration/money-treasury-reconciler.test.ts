@@ -73,11 +73,11 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs() })
 async function bookRange(backend: ConvexFixtureBackend, context: FormanceContext,
   previousCheckpoint: TreasuryChainCheckpoint | null, balanceUnits: string, transfers: TreasuryTransfer[] = []) {
   const at = Date.now()
-  const checkpoint = { blockNumber: previousCheckpoint === null ? '100' : '110',
-    blockHash: hash(previousCheckpoint === null ? 100 : 110), balanceUnits }
+  const blockNumber = previousCheckpoint === null ? 100 : Number(previousCheckpoint.blockNumber) + 10
+  const checkpoint = { blockNumber: String(blockNumber), blockHash: hash(blockNumber), balanceUnits }
   const pending = await backend.mutation(internal.moneyTreasuryReconciliation.beginBatch, { previousCheckpoint,
     observation: { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
-      fromBlock: previousCheckpoint === null ? '100' : '101', checkpoint,
+      fromBlock: previousCheckpoint === null ? '100' : String(Number(previousCheckpoint.blockNumber) + 1), checkpoint,
       blockTimestamp: at - 1_000, transfers, caughtUp: true, observedAt: at } })
   expect(pending.kind).toBe('pending')
   if (pending.kind !== 'pending') throw new Error('native_range_not_pending')
@@ -265,6 +265,46 @@ function installRpc() {
 // Invariant: an unexplained native credit remains critical during a later outage.
 // On violation: assertions expose the actual producer report and durable records.
 describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury reconciler publication', () => {
+  it('reconciles complete observation history beyond a single-value digest bound and refuses concurrent changes', async () => {
+    for (const [key, value] of Object.entries(sourceEnvironment)) vi.stubEnv(key, value)
+    const context = createFormanceContext({ environment: 'sandbox', ledger: `ae-history-${randomUUID().replaceAll('-', '')}`,
+      gatewayUrl: process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069', requestTimeoutMs: 30_000 })
+    expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+    const backend = convexTestWithMarketComponents()
+    const admin = await ownerAdmin(backend, 'user_native-history-owner')
+    const controller = { runQuery: backend.query.bind(backend), runMutation: backend.mutation.bind(backend) } as unknown as Parameters<typeof reconcileTreasurySnapshot>[0]
+    let previous = await bookRange(backend, context, null, '15000000')
+    for (let index = 0; index < 340; index++) previous = await bookRange(backend, context, previous, '15000000')
+    const publish = async () => {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      expect(await reconcileTreasurySnapshot(controller, { formance: context, admit: async () => true, now: Date.now() }))
+        .toMatchObject({ kind: 'published' })
+      const view = await admin.query(api.adminConsoleTreasury.read, {})
+      if (view.kind !== 'ready' || view.snapshot === null) throw new Error('native_history_snapshot_missing')
+      return view.snapshot
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await publish()).toMatchObject({ rawCashDifferenceUnits: '0', depositsComplete: true,
+        checks: { cash: { kind: 'matched', differenceUnits: '0' }, settlements: { kind: 'matched' },
+          reservations: { kind: 'matched' }, funding: { kind: 'matched' } } })
+    }
+    const readBalances = context.sdk.ledger.v2.getBalancesAggregated.bind(context.sdk.ledger.v2)
+    let changed = false
+    vi.spyOn(context.sdk.ledger.v2, 'getBalancesAggregated').mockImplementation(async (...args) => {
+      const result = await readBalances(...args)
+      if (!changed) {
+        changed = true
+        previous = await bookRange(backend, context, previous, '15000000')
+      }
+      return result
+    })
+    expect(await publish()).toMatchObject({ checks: {
+      cash: { kind: 'unavailable', code: 'treasury_sources_changed_during_audit' },
+      settlements: { kind: 'unavailable' }, reservations: { kind: 'unavailable' }, funding: { kind: 'unavailable' },
+    } })
+    expect(await readFormanceTreasuryBalances(context, identity)).toMatchObject({ availableUnits: '10000000', committedUnits: '0', bufferUnits: '5000000' })
+  }, 180_000)
+
   it('reconciles real funding and a paid Call, then retains orphan drift across native read unavailability', async () => {
     for (const [key, value] of Object.entries(sourceEnvironment)) vi.stubEnv(key, value)
     vi.clearAllMocks()

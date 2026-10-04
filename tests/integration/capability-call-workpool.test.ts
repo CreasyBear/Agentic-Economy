@@ -502,6 +502,49 @@ async function expectAgentPeriodBalances(
 
 
 describe('capability Call Workpool lifecycle', () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('schedules original-nonce recovery when the Provider connection is revoked after signing but before submission', async () => {
+    const { backend, published, buyer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer()
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const cdp = external.cdpClient.getMockImplementation()!()
+    const sign = cdp.evm.signTypedData
+    cdp.evm.signTypedData = async (data: Parameters<typeof sign>[0]) => {
+      const signed = await sign(data)
+      const connection = await backend.run(ctx => ctx.db.query('capabilityProviderConnections').first())
+      if (connection === null) throw new Error('provider_connection_missing')
+      const owner = backend.withIdentity({ subject: 'user_buyer-journey-provider', issuer: 'https://identity.example', exp: 8_000_000_000 })
+      expect(await owner.mutation(api.capabilityProviderConnections.revokeOwner, {
+        connectionRef: connection.connectionRef, commandId: 'provider-revoked-after-signing',
+        expectedAuthorityGeneration: connection.authorityGeneration, expectedAuthorityDigest: connection.authorityDigest,
+        evidenceRefs: [],
+      })).toMatchObject({ kind: 'applied' })
+      return signed
+    }
+    const pending = await invokeCall(backend, buyer.principal, published.toolRef, 'signed-before-revocation', 'signed-before-revocation')
+    if (pending.kind !== 'pending') throw new Error('revocation_call_not_pending')
+    await backend.action(internal.capabilityCallWorker.run, { callRef: pending.callRef })
+    const stopped = await readEvidence(backend, pending.callRef)
+    expect(stopped.call, JSON.stringify(stopped.call?.result)).toMatchObject({ state: 'reconciliation_required', formanceFinancialState: 'outcome_unknown' })
+    const payment = await backend.run(ctx => ctx.db.query('moneyX402PaymentAttempts').first())
+    expect(payment).toMatchObject({ settlementStatus: 'not_settled', paymentNonce: expect.any(String), paymentAuthorizationExpiresAt: expect.any(Number) })
+    expect(payment?.submissionStartedAt).toBeUndefined()
+    expect(payment?.paymentResponseDigest).toBeUndefined()
+    expect(signedAuthorizations).toHaveLength(1)
+    expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
+    const recoveryJobs = async () => (await backend.run(ctx => ctx.db.system.query('_scheduled_functions').collect()))
+      .filter(job => job.name === getFunctionName(internal.moneyX402ExpiryActions.recover))
+    expect(await recoveryJobs()).toMatchObject([{ args: [{ callRef: pending.callRef }], scheduledTime: payment!.paymentAuthorizationExpiresAt! + 30_000 }])
+    expect(await backend.action(internal.capabilityCallWorker.run, { callRef: pending.callRef })).toEqual({ kind: 'none' })
+    expect(await recoveryJobs()).toHaveLength(1)
+    expect(signedAuthorizations).toHaveLength(1)
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
+    // Dispose future proof work only after checking its persisted identity; the
+    // expiry unit suite exercises RPC quorum, release and concurrent recovery.
+    for (const job of await recoveryJobs()) await backend.run(ctx => ctx.scheduler.cancel(job._id))
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+  })
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')(
     'carries one standard-production mainnet USDC Quote through Call settlement and replay',
     async () => {
@@ -2361,6 +2404,8 @@ describe('capability Call Workpool lifecycle', () => {
   }, 15_000)
 
   it('runs the installed CLI through served routes and one real durable backend receipt', async () => {
+    // This native-suite selector is not deployed web configuration.
+    vi.stubEnv('AE_FORMANCE_INTEGRATION', undefined)
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
@@ -2424,6 +2469,8 @@ describe('capability Call Workpool lifecycle', () => {
             XDG_CONFIG_HOME: cliHome,
           },
           maxBuffer: 4 * 1024 * 1024,
+        }).catch((cause: { stdout?: string; stderr?: string }) => {
+          throw new Error(`served_cli_failed:${cause.stdout ?? ''}:${cause.stderr ?? ''}`)
         })
         return JSON.parse(executed.stdout) as unknown
       }

@@ -785,6 +785,42 @@ describe('registered route transport runtime', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it.each([false, true])('preserves the prepared resource identity for a paid GET (challenge includes query=%s)', async includesQuery => {
+    const endpoint = 'https://provider.example/paid'
+    const target = `${endpoint}?symbol=BTC&convert=USD`
+    const resourceUrl = includesQuery ? target : endpoint
+    let preparedEndpoint: string | undefined
+    const send = vi.fn<RouteTransportFetch>().mockResolvedValue(Response.json(
+      { serviceReference: 'service:query-result' },
+      { headers: { 'Payment-Response': settlementProofHeader({ transaction: '0xsettled', payer: 'test:payer' }) } },
+    ))
+    const observe = vi.fn()
+    const result = await invokeRouteTransport(x402ProviderInvocation(endpoint, {
+      challenge: x402PaymentRequired(resourceUrl),
+      configOverrides: { method: 'GET', query: [
+        { inputPointer: '/symbol', parameter: 'symbol' },
+        { inputPointer: '/convert', parameter: 'convert' },
+      ] },
+      inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
+    }), {
+      send, resolveCredential: resolveProviderCredential('unused'),
+      ...preparedX402Custody(async request => {
+        preparedEndpoint = request.challenge.resource.url
+        return 'signed-payment-payload'
+      }),
+      markX402PaymentPossiblySubmitted: event => {
+        if (event.providerEndpoint !== preparedEndpoint) throw new Error('x402_payment_attempt_attribution_invalid')
+      },
+      observeX402PaymentAttempt: observe,
+    })
+    expect(result).toMatchObject({ disposition: 'succeeded', settlementEvidence: { kind: 'settled' },
+      outputJson: JSON.stringify({ serviceReference: 'service:query-result' }) })
+    expect(send).toHaveBeenCalledOnce()
+    expect(send.mock.calls[0]?.[0].href).toBe(target)
+    expect(send.mock.calls[0]?.[1]?.headers).toHaveProperty('Payment-Signature', 'signed-payment-payload')
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({ providerEndpoint: resourceUrl }))
+  })
+
   it('holds an ambiguous paid GET x402 release as outcome unknown', async () => {
     const quotesEndpoint = 'https://provider.example/x402/v3/cryptocurrency/quotes/latest'
     const target = `${quotesEndpoint}?symbol=BTC&convert=USD`
