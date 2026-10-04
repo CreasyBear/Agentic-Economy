@@ -25,6 +25,21 @@ contracts needs the matching backend release and verification.
 
 ## Latest production acceptance — 4 October 2026
 
+Frontend Agent onboarding update verified on **5 October 2026 Perth**: [PR #346](https://github.com/CreasyBear/Agentic-Economy/pull/346)
+is live on READY deployment `dpl_ATkTbsJNYKVxu39JKtsdKTNL1pA2` in project
+`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
+confirm main `8961395f359c152bd8f6fafdb8a7832b260f45af`, whose tree equals the
+gated source. The first-use Call presenter now uses the genuine Arc Agent Run
+status/result regions with actual readback, independent current-access evidence,
+and delivered-only receipt facts. Check/full gate pass: 8634 unit cases,
+2892 integration cases, 16 browser journeys, 18 accessibility cases and the
+existing type/import/SEO/build/CLI checks; existing skips/TODOs remain.
+Health and readiness both return HTTP 200 at readback. This is a frontend-only
+release; native OAuth and financial transaction acceptance are unchanged.
+Previous READY `dpl_6n1PhfVxXijR1mnCQqLBkAxpwZuK` is the rollback boundary.
+Exact source, coordination and verification evidence is in the
+[Arc protocol](../designs/arc-ui-refactor/protocol.md).
+
 Frontend browsing update verified on **5 October 2026 Perth**: [PR #345](https://github.com/CreasyBear/Agentic-Economy/pull/345)
 is live on READY deployment `dpl_6n1PhfVxXijR1mnCQqLBkAxpwZuK` in project
 `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
