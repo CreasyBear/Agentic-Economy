@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -9,10 +11,18 @@ import { AeAgentApprovalsSection } from '@/components/ae/console/AeAgentApproval
 
 afterEach(cleanup)
 
+function renderWithRouter(ui: ReactNode) {
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/agent-access'] }),
+  })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+}
+
 describe('Agent connection progression', () => {
   it('presents app selection, setup and authoritative confirmation in order', () => {
     const checkConnection = vi.fn()
-    render(
+    renderWithRouter(
       <AeAssistantInstallFunnel
         canonicalBaseUrl="https://ae.example/"
         onCheckConnection={checkConnection}
@@ -44,7 +54,7 @@ describe('Agent connection progression', () => {
   })
 
   it('makes an in-progress confirmation explicit and non-repeatable', () => {
-    render(
+    renderWithRouter(
       <AeAssistantInstallFunnel
         canonicalBaseUrl="https://ae.example/"
         checkingConnection
@@ -58,7 +68,7 @@ describe('Agent connection progression', () => {
 
   it('keeps selected Tool context visible without claiming setup creates a Call', () => {
     const checkConnection = vi.fn()
-    render(
+    renderWithRouter(
       <AeAssistantInstallFunnel
         canonicalBaseUrl="https://ae.example/"
         resumeToolRef={`operation:v1:${'a'.repeat(64)}`}
@@ -69,6 +79,8 @@ describe('Agent connection progression', () => {
     expect(screen.getByText('Selected Tool saved for this setup')).toBeTruthy()
     expect(screen.getByText(/Keep its input in your Agent’s task/u)).toBeTruthy()
     expect(screen.getByText(/setup creates no Call/u)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Connect another app or script' }).getAttribute('href'))
+      .toBe(`/owner/settings/agent-keys?issue=manual&resumeTool=${encodeURIComponent(`operation:v1:${'a'.repeat(64)}`)}`)
     expect(checkConnection).not.toHaveBeenCalled()
   })
 })
