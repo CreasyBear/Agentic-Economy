@@ -16,6 +16,9 @@ Final Node 22 / npm 11.5.1 check passes. Full gate exits zero: 8,574 unit / 1 sk
 
 All 2,809 shared primary dirty paths, content/mode fingerprints, status and staging match the pre-integration snapshot, retaining its local onboarding HEAD 3f0971e96. Incoming paths have zero dirty overlap. Read-only founder-console merge simulation retains 32 existing conflict paths, none added or resolved. Source/action census stays 887 source paths / 539 actions and preserves the prior 664 coverage snapshot bytes before four appended current presenter snapshots (668). The owned onboarding branch is retired after merged-ancestry proof; reuse the active managed checkout on codex/arc-source-continuation. The broad source goal remains active.
 
+
+Additional readiness probes observe HTTP200 and then HTTP503 again. Final readback at 2026-10-04T16:52:15.692131+00:00 returns HTTP503. Readiness is intermittent; stable payment readiness is not established. The last native failed check was treasury_reconciliation_required. No coordinator financial intervention is performed.
+
 ### Agent onboarding block integration, 2026-10-04
 
 Prepared **four bounded presenter compositions**, with delivered count still96 until exact merge/deployment: installation funnel and manual-key review use the actual licensed Arc MultiStepForm; first-use and request progress use the actual Stepper with explicit recorded statuses. Two are full setup/wizard regions and two are progress compositions, not four full pages. New HomeOnboardingRequestSection is a request observer, not an integrations directory. Correct the earlier speculative integrations/security-settings/FAQ mappings to actual imports. Agent Run is a timer-driven demo with simulated approval/PR actions; Timeline is event history; webhooks and integrations describe other concerns. Do not mount them until their real domain facts exist.
