@@ -10,7 +10,7 @@ import styles from "./filter-toolbar.module.css";
 
 export interface FilterChip { id: string; label: string; value?: string; }
 /** One value a field can take. `hint` sits at the end of the row, for example a count. */
-export interface FilterOption { value: string; label?: string; hint?: string | number; icon?: ReactNode; }
+export interface FilterOption { value: string; label?: string | undefined; hint?: string | number; icon?: ReactNode; }
 export interface FilterField { id: string; label: string; icon?: ReactNode; options: (string | FilterOption)[]; }
 export interface FilterMenuProps {
   fields: FilterField[];
@@ -18,18 +18,18 @@ export interface FilterMenuProps {
   onSelect: (filter: FilterChip, field: FilterField) => void;
   /** Applied filters. Each field shows its current value and the value step marks it. */
   active?: FilterChip[];
-  label?: string;
+  label?: string | undefined;
   /** The trigger edge the panel lines up with. It flips or shifts when the viewport, or a clipping ancestor, has no room. */
-  align?: "start" | "end";
+  align?: "start" | "end" | undefined;
 }
 export interface FilterToolbarProps {
   filters: FilterChip[];
   onRemove: (id: string) => void;
   onClearAll?: () => void;
   children?: ReactNode;
-  label?: string;
+  label?: string | undefined;
   /** Adds an Add filter trigger that morphs into a two step field and value menu. */
-  addFilter?: { fields: FilterField[]; onAdd: (filter: FilterChip, field: FilterField) => void; label?: string; align?: "start" | "end" };
+  addFilter?: { fields: FilterField[]; onAdd: (filter: FilterChip, field: FilterField) => void; label?: string | undefined; align?: "start" | "end" };
 }
 
 const enter = { duration: motionTokens.duration.standard, ease: [...motionTokens.ease.enter] as const };
@@ -424,7 +424,7 @@ export function FilterToolbar({ filters, onRemove, onClearAll, children, label =
     if (index === null || !node) return;
     pendingFocus.current = null;
     const next = filters[Math.min(index, filters.length - 1)];
-    const target = next ? node.querySelector<HTMLElement>(`[data-chip-remove="${CSS.escape(next.id)}"]`) : node.querySelector<HTMLElement>("[data-filter-trigger]");
+    const target = next ? Array.from(node.querySelectorAll<HTMLElement>("[data-chip-remove]")).find(button => button.dataset.chipRemove === next.id) : node.querySelector<HTMLElement>("[data-filter-trigger]");
     (target ?? node).focus({ preventScroll: true });
   }, [filters]);
   const still = { duration: 0 };

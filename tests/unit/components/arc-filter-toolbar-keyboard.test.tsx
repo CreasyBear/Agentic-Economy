@@ -2,20 +2,10 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
 import { FilterToolbar, type FilterChip } from '@/components/arc/filter-toolbar/filter-toolbar'
 
-const originalCss = Object.getOwnPropertyDescriptor(globalThis, 'CSS')
-beforeAll(() => {
-  if (typeof CSS === 'undefined' || typeof CSS.escape !== 'function') {
-    Object.defineProperty(globalThis, 'CSS', { configurable: true, value: { escape: (value: string) => value } })
-  }
-})
-afterAll(() => {
-  if (originalCss === undefined) Reflect.deleteProperty(globalThis, 'CSS')
-  else Object.defineProperty(globalThis, 'CSS', originalCss)
-})
 afterEach(cleanup)
 
 function Applied({ action = true }: { action?: boolean }) {

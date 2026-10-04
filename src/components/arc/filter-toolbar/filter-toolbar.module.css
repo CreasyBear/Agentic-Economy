@@ -71,6 +71,10 @@
 @media (prefers-reduced-motion: reduce) { .chip button, .clear, .surface, .back { transition: none; } .chip button:active, .clear:active { transform: none; } }
 
 /* Preserve stock chip/menu geometry with visible keyboard and touch access. */
+.chip button:focus-visible, .clear:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.back:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.highlight[data-ring] { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .actions { min-width: 0; max-width: 100%; flex: 0 1 auto; flex-wrap: wrap; }
 .chip button { width: 32px; height: 32px; flex-basis: 32px; }
 .chip button:focus-visible, .clear:focus-visible { background: var(--border); color: var(--foreground); }
