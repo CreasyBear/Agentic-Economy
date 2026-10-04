@@ -100,7 +100,7 @@ describe('live payment pause at Quote and new Call admission', () => {
     const issued = await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs)
     if (issued.kind !== 'committed') throw new Error(`quote_refused:${issued.code}`)
     const row = await backend.run((ctx) => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', (q) => q.eq('quoteRef', issued.quoteRef)).unique())
-    if (row === null) throw new Error('quote_missing')
+    if (row === null || row.normalizedInputJson === undefined) throw new Error('quote_input_missing')
     const reservation = {
       quoteRef: row.quoteRef, callRef: 'call:payment-pause-new', principalId: row.principalId, ownerId: row.accountRef,
       credentialId: row.credentialId, applicationRef: row.applicationRef, grantRef: row.grantRef,

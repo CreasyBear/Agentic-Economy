@@ -1,5 +1,6 @@
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v } from 'convex/values'
+import { alphaLearningValue, readAlphaLearning } from './lib/adminConsole/reads/alphaLearning'
 
 import { defineAdminQuery } from './lib/adminConsole/reads/registrars'
 import {
@@ -40,6 +41,10 @@ const windowArgs = {
   toExclusive: v.number(),
   paginationOpts: paginationOptsValidator,
 }
+
+export const readAlphaLearningSample = defineAdminQuery({
+  action: 'read_admin_readbacks', args: { now: v.number() }, returns: alphaLearningValue, handler: readAlphaLearning,
+})
 
 export const snapshotMarketplaceMetricsDay = internalAction({
   args: { day: v.optional(v.string()), entityDay: v.optional(v.string()) },

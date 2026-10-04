@@ -24,6 +24,7 @@ type ImmediateTurnDeps = Readonly<{
 }>
 
 export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTurnDeps): Promise<boolean> {
+  const searchStartedAt = Date.now()
   let catalogue: ToolChoiceSearchOutput | null
   try {
     catalogue = await retrieveImmediateTools(ctx, deps.promptText, deps.args.searchTurn, deps.args.ownerId)
@@ -31,6 +32,7 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
     catalogue = null
   }
   if (catalogue === null) return false
+  const searchLatencyMs = Date.now() - searchStartedAt
 
   const toolName = immediateSearchToolName()
   deps.completedSteps.push({ toolResults: [{ toolName, output: catalogue }] })
@@ -51,6 +53,7 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
   const tool = toolMessages.length === 1 ? toolMessages[0] : undefined
   const selection = await recommendTool({
     catalogue,
+    searchLatencyMs,
     promptText: deps.promptText,
     ownerId: deps.args.ownerId,
     threadId: deps.args.threadId,

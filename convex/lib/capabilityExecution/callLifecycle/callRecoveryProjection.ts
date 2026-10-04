@@ -42,6 +42,7 @@ export async function recordHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
   if (row === null || row.principalId !== args.principalId) throw new Error('operation_invoke_identity_refused')
+  if (row.contentExpiredAt !== undefined) return { kind: 'recorded' as const }
   if (requiresManualSettlementReview(row)) throw new Error('call_manual_settlement_review_required')
   if (
     row.state !== 'pending'
@@ -164,6 +165,7 @@ export async function projectRecoveryHandler(
   if (!recoveryProjectionIdentityMatches(row, args)) {
     throw new Error('operation_invoke_identity_refused')
   }
+  if (row.contentExpiredAt !== undefined) return { kind: 'recorded' as const }
   if (isCompletedProjection(row)) {
     // Repair an interrupted result projection without changing its output or
     // applying any financial effect. Completed HTTP results require usage.
@@ -225,7 +227,8 @@ export async function projectRecoveryHandler(
     const evidenceHash = attempt.quarantinedResponseDigest ?? attempt.transportObservationDigest
     if (evidenceHash === undefined) return { kind: 'recorded' as const }
     if (paidResult.kind === 'completed') {
-      if (!retainedOutputMatches(attempt.quarantinedOutputJson, paidResult.output)
+      if (!('output' in paidResult)
+        || !retainedOutputMatches(attempt.quarantinedOutputJson, paidResult.output)
         || attempt.quarantinedResponseDigest !== paidResult.evidenceHash
         || paidResult.callRef !== row.callRef) return { kind: 'recorded' as const }
     } else {

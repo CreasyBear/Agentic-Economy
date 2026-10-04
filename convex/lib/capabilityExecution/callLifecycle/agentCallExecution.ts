@@ -61,14 +61,14 @@ export async function canonicalAgentCallCore(
   }
   const principal = trustedChat === undefined
     ? await canonicalAgentPrincipal(ctx, args.principal,
-      material.consumedCallRef === undefined
-        ? { toolRef: material.toolRef }
-        : { callRef: material.consumedCallRef })
+      'consumedCallRef' in material
+        ? { callRef: material.consumedCallRef }
+        : { toolRef: material.toolRef })
     : await ctx.runMutation(authorizeChatCallRef, { authority: trustedChat, quoteRef: args.quoteRef })
   if (principal === null) {
     return { kind: 'refused', toolRef: material.toolRef, code: 'grant_not_found', retryable: false }
   }
-  if (material.consumedCallRef !== undefined) {
+  if ('consumedCallRef' in material) {
     // Identify the consumed Call by the stable Principal tuple; the credential
     // it was reserved under may since have been replaced.
     const replay = await ctx.runQuery(internal.capabilityCalls.readReplay, {
@@ -149,4 +149,3 @@ export async function canonicalAgentReconcileHandler(
   if (principal === null) return agentRecoveryNotFound(args.callRef)
   return await reconcileCallHandler(ctx, { ...args, principal })
 }
-

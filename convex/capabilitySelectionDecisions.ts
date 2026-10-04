@@ -1,7 +1,7 @@
 // Attribute only the immediate preceding user prompt's shown pick; acceptance means its first offered Run matched the pick.
 import { components } from './_generated/api'
 import { v } from 'convex/values'
-import { internalMutation, mutation, query } from './_generated/server'
+import { internalMutation, internalQuery, mutation } from './_generated/server'
 import {
   insertSelectionDecision,
   readRecentSelectionDecisions,
@@ -114,7 +114,7 @@ export const markRunInternal = internalMutation({
   },
 })
 
-export const recent = query({
+export const recent = internalQuery({
   args: { kind: v.optional(v.string()), limit: v.number() },
   returns: v.array(selectionDecisionValue),
   handler: async (ctx, args) => {

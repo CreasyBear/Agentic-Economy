@@ -11,6 +11,7 @@ import { ConfigurationBanner } from './components/ConfigurationBanner'
 import { OverviewExceptionsSection } from './components/OverviewExceptionsSection'
 import { OverviewMetricsSection } from './components/OverviewMetricsSection'
 import { RecentlyViewed } from './components/RecentlyViewed'
+import { AlphaLearning } from './AlphaLearning'
 import { ADMIN_OVERVIEW_COPY } from './overview.contracts'
 import { useAdminOverview, useOverviewExceptions, useOverviewMetrics } from './useAdminOverview'
 import './OverviewComposition.css'
@@ -61,6 +62,7 @@ export function AdminOverviewPage() {
             </ErrorBoundary>
           </div>
           <RecentlyViewed rows={data.recent} />
+          <AlphaLearning />
         </div>
       )}
     </AeOperatorPage>

@@ -43,6 +43,12 @@
   },
   {
     "visibility": "public",
+    "module": "adminCallContent",
+    "method": "review",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
     "module": "adminConsoleAudit",
     "method": "listAdminApprovalProposals",
     "kind": "query"
@@ -399,6 +405,18 @@
     "visibility": "public",
     "module": "businesses",
     "method": "setBusinessSuppression",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallFeedback",
+    "method": "readOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallFeedback",
+    "method": "writeOwner",
     "kind": "mutation"
   },
   {
@@ -1368,7 +1386,7 @@
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "capabilitySelectionDecisions",
     "method": "recent",
     "kind": "query"
@@ -3555,6 +3573,12 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "ensurePlatformWorkloadIdentities",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "expireAlphaContent",
     "kind": "mutation"
   },
   {

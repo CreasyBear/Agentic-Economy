@@ -682,9 +682,10 @@ export const moneyTables = {
     paymentIdentifier: identifier,
     operationKeyDigest: identifier,
     challengeDigest: identifier,
-    challengeJson: v.string(),
-    selectedRequirementJson: v.string(),
-    providerEndpoint: v.string(),
+    challengeJson: v.optional(v.string()),
+    selectedRequirementJson: v.optional(v.string()),
+    providerEndpoint: v.optional(v.string()),
+    contentExpiredAt: v.optional(v.number()),
     credentialRef: identifier,
     scheme: v.string(),
     network: v.string(),
@@ -745,6 +746,7 @@ export const moneyTables = {
     evidenceRefs,
   })
     .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
+    .index('by_contentExpiredAt_and_preparedAt', ['contentExpiredAt', 'preparedAt'])
     .index('by_custodyRef', ['custodyRef'])
     .index('by_custodyBudgetRef_and_preparedAt', ['custodyBudgetRef', 'preparedAt'])
     .index('by_dispatchRef', ['dispatchRef'])

@@ -84,6 +84,7 @@ export const createThread = internalMutation({
       principalRef: actor.canonicalPrincipalRef,
       ownerId,
       title,
+      titleUpdatedAt: now,
       updatedAt: now,
     })
     const row = await ctx.db.get(rowId)
@@ -133,7 +134,7 @@ export const renameThread = mutation({
       threadId: row.threadId,
       patch: { title },
     })
-    await ctx.db.patch(row._id, { title, updatedAt: now })
+    await ctx.db.patch(row._id, { title, titleUpdatedAt: now, updatedAt: now })
     return projectThread({ ...row, title, updatedAt: now }, now)
   },
 })

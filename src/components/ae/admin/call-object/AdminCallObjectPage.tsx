@@ -9,6 +9,7 @@ import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { AdminCallActivity } from './components/AdminCallActivity'
 import { AdminCallEvidence } from './components/AdminCallEvidence'
 import { AdminCallReferences } from './components/AdminCallReferences'
+import { CallContentReview } from './CallContentReview'
 import {
   ADMIN_CALL_OBJECT_COPY,
   type AdminCallLoaderResult,
@@ -91,6 +92,7 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
         <AdminCallReferences refs={model.relatedRefs} />
       </div>
       <AdminCallActivity rows={model.activity} />
+      <CallContentReview key={view.ref} callRef={view.ref} />
     </AeOperatorPage>
   )
 }

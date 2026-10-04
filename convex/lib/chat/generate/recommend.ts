@@ -14,6 +14,7 @@ type RecommendToolInput = Readonly<{
   ownerId: string
   threadId: string
   promptMessageId: string
+  searchLatencyMs?: number
   signal?: AbortSignal
   modelCostBinding?: ChatModelCostBinding
 }>
@@ -24,7 +25,7 @@ type RecommendationDecision = Readonly<{
   threadId: string
   promptMessageId: string
   offered: readonly Readonly<{ toolRef: string; rank: number; score: number }>[]
-  tier: 'jev_system_one'
+  tier: 'jev_system_one' | 'no_match' | 'selection_unavailable'
   fit: readonly Readonly<{ toolRef: string; noul?: number }>[]
   latencyMs: number
   pickedToolRef?: string
@@ -45,7 +46,14 @@ function withinSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 
 export async function recommendTool(input: RecommendToolInput, ctx?: Pick<ActionCtx, 'runMutation'>): Promise<RecommendationResult> {
   if (input.catalogue.kind !== 'match' && input.catalogue.kind !== 'scoped') {
-    return { recommendation: null, decision: null }
+    // Preserve an empty search outcome without retaining its query or reason.
+    return { recommendation: null, decision: {
+      kind: 'chat_recommend', accountRef: input.ownerId,
+      correlationId: `${input.threadId}:${input.promptMessageId}`,
+      threadId: input.threadId, promptMessageId: input.promptMessageId,
+      offered: [], fit: [], tier: input.catalogue.kind === 'noMatch' ? 'no_match' : 'selection_unavailable',
+      latencyMs: input.searchLatencyMs ?? 0,
+    } }
   }
   const candidates = input.catalogue.results
     .filter(result => result.access === 'ae_callable' && result.toolRef !== undefined)

@@ -95,6 +95,7 @@ export async function issueProviderConsequenceTicketHandler(
   if (!canonicalIssueInput(args)) return unavailable('ticket_input_invalid')
   const prior = await ctx.db.query('providerConsequenceJournal')
     .withIndex('by_commandId', (query) => query.eq('commandId', args.commandId)).order('desc').first()
+  if (prior?.contentExpiredAt !== undefined) return unavailable('effect_content_expired')
   if (prior !== null && prior.state === 'pending' && prior.expiresAt <= now) {
     await ctx.db.patch(prior._id, { state: 'aborted', abortedAt: now, updatedAt: now })
   } else if (prior !== null && prior.state !== 'aborted') {

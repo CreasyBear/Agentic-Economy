@@ -159,6 +159,7 @@ export async function checkpointX402ResponseHandler(
     || !['possibly_submitted', 'observed', 'reconciliation_required'].includes(row.state)) {
     throw new Error('x402_payment_observation_attribution_invalid')
   }
+  if (row.contentExpiredAt !== undefined) throw new Error('x402_payment_content_expired')
   const persisted = quarantinedOutputFromRow(row)
   const txRef = args.settlementTransactionRef
   if (row.responseStatus !== undefined && row.responseStatus !== args.responseStatus) {
@@ -233,6 +234,7 @@ export async function recordX402PaymentObservationHandler(
       && row.state !== 'reconciliation_required'
     )
   ) throw new Error('x402_payment_observation_attribution_invalid')
+  if (row.contentExpiredAt !== undefined) throw new Error('x402_payment_content_expired')
   if (
     row.settlementStatus !== undefined
     && row.settlementStatus !== args.settlementStatus

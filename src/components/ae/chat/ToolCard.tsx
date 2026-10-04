@@ -27,6 +27,7 @@ import {
 } from '@/modules/chat/tool-card'
 import { NeedSaveAction } from './need-save-action/NeedSaveAction'
 import { PaidCallReportControl } from '@/components/ae/call-receipt/PaidCallReportControl'
+import { CallFeedbackControl } from '@/components/ae/call-receipt/CallFeedbackControl'
 import { RecoveryNotice } from './recovery/RecoveryNotice'
 import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './presentation'
 import type { RunIntent } from '@/modules/chat/run-request'
@@ -252,6 +253,8 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
           {projection.state === 'completed' && projection.paid !== undefined && projection.callRef !== undefined && reportOwner != null
             ? <PaidCallReportControl key={projection.callRef} callRef={projection.callRef} paidLabel={projection.paid} onPosted={reportOwner.onPosted} />
             : projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
+          {projection.state === 'completed' && projection.callRef !== undefined && reportOwner != null
+            ? <CallFeedbackControl key={projection.callRef} callRef={projection.callRef} /> : null}
         </div>
       )
     default: {

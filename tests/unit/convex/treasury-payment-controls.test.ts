@@ -290,7 +290,7 @@ describe('independent production paid preparation authority evaluation', () => {
       if (result.kind !== 'committed') throw new Error(`fixture_quote_refused:${result.code}`)
       const row = await fixture.backend.run(ctx => ctx.db.query('capabilityQuotes')
         .withIndex('by_quoteRef', q => q.eq('quoteRef', result.quoteRef)).unique())
-      if (row === null) throw new Error('fixture_quote_missing')
+      if (row === null || row.normalizedInputJson === undefined) throw new Error('fixture_quote_input_missing')
       expect(row.expiresAt).toBeGreaterThan(evidence.expiresAt)
       return { quoteRef: row.quoteRef, callRef: `call:readiness:${suffix}`, principalId: row.principalId,
         ownerId: row.accountRef, credentialId: row.credentialId, applicationRef: row.applicationRef,

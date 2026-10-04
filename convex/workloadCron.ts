@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { contentRetentionArgs, expireAlphaContentHandler } from './lib/capabilityExecution/contentRetention/cleanup'
 import { internalAction, internalMutation, internalQuery } from './_generated/server'
 import { admitWorkloadCronHandler, reconcileWorkloadCronSnapshotHandler } from './lib/platform/workloadCron/admission'
 import { ensurePlatformWorkloadIdentitiesHandler } from './lib/platform/workloadCron/identities'
@@ -20,6 +21,10 @@ export const admit = internalQuery({
   args: { name: workloadCronNameValue },
   returns: workloadCronSnapshotValue,
   handler: admitWorkloadCronHandler,
+})
+
+export const expireAlphaContent = internalMutation({
+  args: contentRetentionArgs, returns: v.null(), handler: expireAlphaContentHandler,
 })
 
 export const ensurePlatformWorkloadIdentities = internalMutation({
