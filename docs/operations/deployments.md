@@ -1,6 +1,7 @@
 # Current deployments
 
-Verified against Vercel and GitHub on **2 October 2026**. This is the current
+Production application acceptance updated on **4 October 2026, 08:49 UTC**;
+the wider deployment inventory below dates from 2 October. This is the current
 deployment map. [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256)
 owns the real-money alpha work; [the readiness record](../production-readiness-plan.md)
 holds the implementation and release evidence.
@@ -21,6 +22,40 @@ The website is a separate application and repository.
 `main` is the merged source baseline. Vercel automatically builds its web
 deployment. **That does not deploy Convex**: a release that changes backend
 contracts needs the matching backend release and verification.
+
+## Latest production acceptance — 4 October 2026
+
+[PR #330](https://github.com/CreasyBear/Agentic-Economy/pull/330) is deployed to
+Convex `cautious-zebra-473` and Vercel Production
+`dpl_FcnktcyKyPpBRLPCES3SaeYHznF7`. The application release endpoint confirms
+`be3583ed9fdc51302966d403cae38d098392b2d7`. The full source gate passes; native
+backend deployment validates the schema and adds the retention indexes.
+
+Custody is enabled with the approved limits unchanged. The normal treasury
+observer has booked 9.905153 USDC, with 9.405153 USDC available after the
+0.500000 USDC buffer. Joel's Account has AUD 5 promotional credit, expiring
+5 October at 12:45 Perth time. After ordered observation, reconciliation and
+readiness refresh, `/api/ready` returns HTTP 200 and the authenticated Admin
+page reports Ready. Payee screening is explicitly deferred under the approved
+alpha policy; this is not a screened result. The catalogue freshness indicator
+remains stale. Earlier expired treasury evidence caused a temporary refusal;
+this observation does not establish uninterrupted readiness.
+
+The 30-day content policy, owner usefulness feedback, protected founder review
+and 90-day content-free learning signals are deployed. Live Admin refresh,
+chat disclosure and Privacy disclosure pass. Native retention continuations
+all succeed; no production content is old enough to expire. An isolated native
+Convex drill separately proves removal of eligible content and embeddings,
+preservation of pending Calls and financial records, and stable repeat cleanup.
+
+**Paid-call acceptance remains open:** production Convex lacks
+`OPENROUTER_API_KEY`, so the chat cannot obtain its model response. The complete
+native census still contains zero Quotes, Calls and x402 payment attempts.
+The 20-Call exercise, failure/replay drills and transaction reconciliation are
+not passed. Founder review and feedback on a real production Call also remain
+unverified. Backups and independent Provider content retention are separate
+from application cleanup. Stage 62 in the readiness record holds this release's
+evidence and limits; launch approval remains open.
 
 ## Retired in this cleanup
 
@@ -56,7 +91,11 @@ before retirement; deleting its Vercel frontend does not decommission it.
   possible discovery binding. Neither was treated as a disposable fixture.
 - RENOZ, Easel and Handshake projects are outside this cleanup.
 
-## Production is not money-ready yet
+## Historical baseline — 2 October 2026
+
+The following records the earlier setup and recovery sequence. The latest
+production acceptance above supersedes its deployment, funding and readiness
+status; recovery evidence remains limited to the exact targets and cutoffs below.
 
 The 2 October inventory found two distinct failures:
 
