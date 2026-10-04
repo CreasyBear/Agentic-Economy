@@ -7,7 +7,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/arc/button/button'
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/arc/input/input'
 import type { AdminWorkspaceView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
 import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
@@ -100,9 +100,9 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
             ) : (
               <div className="grid gap-intra">
                 <p className="text-sm text-muted-foreground">Environment: {view.paymentEnvironment}</p>
-                <label className="grid gap-1 text-sm font-medium">
-                  Amount (AUD)
+                <div className="grid gap-1 text-sm font-medium">
                   <Input
+                    label="Amount (AUD)"
                     type="text"
                     inputMode="decimal"
                     autoComplete="off"
@@ -110,15 +110,15 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
                     value={grant.amount}
                     onChange={(event) => grant.onAmountChange(event.target.value)}
                   />
-                </label>
-                <label className="grid gap-1 text-sm font-medium">
-                  Expiry (your local time)
+                </div>
+                <div className="grid gap-1 text-sm font-medium">
                   <Input
+                    label="Expiry (your local time)"
                     type="datetime-local"
                     value={grant.expiry}
                     onChange={(event) => grant.onExpiryChange(event.target.value)}
                   />
-                </label>
+                </div>
                 <p className="text-xs text-muted-foreground">Enter a positive AUD amount with up to six decimal places and a future expiry.</p>
                 <Button type="button" variant="secondary" className="min-h-touch justify-self-start" disabled={!grant.canReview} onClick={grant.onReview}>
                   Review promotional credit grant

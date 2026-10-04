@@ -4,6 +4,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { projectFoundCallPurchaseStatus, type CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 import type { FoundCallStatus } from '@/lib/call-recovery/call-status-page-types'
+import { settledPaidBuyerCharge } from './call-receipt-format'
 import './ReceiptComposition.css'
 
 export function CallSummarySection({ result, receiptView: view }: Readonly<{
@@ -12,7 +13,7 @@ export function CallSummarySection({ result, receiptView: view }: Readonly<{
 }>) {
   const purchase = projectFoundCallPurchaseStatus(result)
   const resolution = view.purchaseResolution
-  const amount = receiptAmount(view)
+  const amount = receiptAmount(view, purchase.kind)
   const released = resolution?.terminalState === 'released' || view.receipt?.refundState === 'released'
   const amountLabel = purchase.kind === 'refunded'
     ? released ? 'Released' : 'Refunded'
@@ -60,7 +61,11 @@ function paymentFactLabel(
   return 'Unknown'
 }
 
-function receiptAmount(view: CallReceiptView) {
+function receiptAmount(view: CallReceiptView, purchaseKind: ReturnType<typeof projectFoundCallPurchaseStatus>['kind']) {
+  if (purchaseKind === 'delivered') {
+    const charge = settledPaidBuyerCharge(view.receipt, view.usage)
+    if (charge !== undefined) return charge
+  }
   if (view.purchaseResolution !== undefined) return view.purchaseResolution.considerationAmount
   if (view.receipt?.commercialModel === 'account_aud') return view.receipt.totalBuyerCharge
   return view.usage?.chargeState === 'outcome_unknown' ? undefined : view.usage?.amount

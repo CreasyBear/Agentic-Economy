@@ -5,7 +5,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/arc/input/input'
 import { Label } from '@/components/ui/label'
 import { ADMIN_REFUSAL_PRESENTATION } from '@/lib/operator/admin-console/refusal-presentation'
 import { formatTimestamp } from '@/lib/ui/format-time'
@@ -69,8 +69,8 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
           ]} />}
         </div>
         {thresholdAction ? <div className="grid gap-related">
-          <div className="grid gap-intra"><Label htmlFor="treasury-low-water">Low-water mark (USDC)</Label><Input id="treasury-low-water" inputMode="decimal" type="text" value={state.lowWater} disabled={locked || state.targetChanged} onChange={event => state.edit('lowWater', event.target.value)} /></div>
-          <div className="grid gap-intra"><Label htmlFor="treasury-target">Target float (USDC)</Label><Input id="treasury-target" inputMode="decimal" type="text" value={state.target} disabled={locked || state.targetChanged} onChange={event => state.edit('target', event.target.value)} /></div>
+          <div className="grid gap-intra"><Label htmlFor="treasury-low-water">Low-water mark (USDC)</Label><Input label="Low-water mark (USDC)" labelMode="external" id="treasury-low-water" inputMode="decimal" type="text" value={state.lowWater} disabled={locked || state.targetChanged} onChange={event => state.edit('lowWater', event.target.value)} /></div>
+          <div className="grid gap-intra"><Label htmlFor="treasury-target">Target float (USDC)</Label><Input label="Target float (USDC)" labelMode="external" id="treasury-target" inputMode="decimal" type="text" value={state.target} disabled={locked || state.targetChanged} onChange={event => state.edit('target', event.target.value)} /></div>
         </div> : null}
         {state.error === null ? null : <p role="alert" className="text-sm text-destructive">{state.error}</p>}
         {refused === null ? null : <p role="alert" className="text-sm text-destructive">{refused.copy}{state.targetChanged ? ' Review the current settings before submitting again.' : ''}</p>}

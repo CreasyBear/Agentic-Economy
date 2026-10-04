@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/arc/search-field/search-field'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
@@ -78,13 +78,12 @@ export function ConsentToolAccessFieldset({
           )}
           {toolAccess === 'all_admitted' ? (
             <div className="arc-consent-field-group">
-              <Label htmlFor="tool-search">Find an admitted Tool</Label>
               <div className="arc-consent-search-row">
-                <Input
+                <SearchField
+                  label="Find an admitted Tool"
                   id="tool-search"
-                  className="arc-consent-input"
                   value={toolQuery}
-                  onChange={(event) => onToolQueryChange(event.target.value)}
+                  onValueChange={onToolQueryChange}
                   aria-invalid={emptySelection || searchFailed || undefined}
                   {...(searchDescribedBy.length === 0 ? {} : { 'aria-describedby': searchDescribedBy })}
                   onKeyDown={(event) => {
