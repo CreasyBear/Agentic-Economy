@@ -42,7 +42,9 @@ export async function readCdpX402CustodyReadiness(
     || !/^[A-Za-z0-9][A-Za-z0-9-]{0,34}[A-Za-z0-9]$/.test(configuration.accountName)) {
     return { kind: 'refused', code: 'cdp_custody_configuration_invalid' }
   }
-  const [{ Agent, fetch: guardedFetch }, { createGuardedLookup, defaultDnsResolver }] = await Promise.all([
+  // The shared Convex chunk exposes this CommonJS package through its default
+  // export. Keep Node-only imports lazy because web routes share this module.
+  const [{ default: { Agent, fetch: guardedFetch } }, { createGuardedLookup, defaultDnsResolver }] = await Promise.all([
     import('undici'), import('@/modules/network-guard/public'),
   ])
   const completed = new AbortController()

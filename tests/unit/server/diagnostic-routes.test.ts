@@ -192,9 +192,14 @@ describe('operational diagnostics routes', () => {
     },
   )
 
-  it('binds ready web evidence to the actual money environment and Convex origin', async () => {
+  it('binds ready web evidence to the actual money environment and Convex origin with optional Provider features disabled', async () => {
     const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), {
-      env: productionReadinessEnvironment(), fetch: vi.fn(async () => new Response(null, { status: 200 })), nodeMajor: 22,
+      env: {
+        ...productionReadinessEnvironment(),
+        AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: 'false',
+        AE_SUPPLY_MCP_OAUTH_ENABLED: 'false',
+        AE_PROVIDER_OFFBOARDING_ENABLED: 'false',
+      }, fetch: vi.fn(async () => new Response(null, { status: 200 })), nodeMajor: 22,
     })
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')

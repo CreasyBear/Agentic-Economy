@@ -173,18 +173,27 @@ describe('deployment manifest validator', () => {
     ]))
   })
 
-  it('requires every Package 5 rollout switch to be explicitly enabled in controlled deployments', () => {
-    const production = validateDeploymentManifest({
-      ...productionEnvironment(),
-      AE_SUPPLY_MCP_OAUTH_ENABLED: 'false',
-    }, { nodeMajor: 22 })
-    expect(production.findings).toContainEqual({
-      kind: 'malformed',
-      code: 'package5_rollout_not_enabled',
-      names: ['AE_SUPPLY_MCP_OAUTH_ENABLED'],
-      scope: 'package5-rollout',
-    })
+  it.each([
+    'AE_PACKAGE5_WRITES_ENABLED',
+    'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+    'AE_SUPPLY_MCP_OAUTH_ENABLED',
+    'AE_PROVIDER_OFFBOARDING_ENABLED',
+  ])('accepts an explicit disabled rollout while still requiring a valid decision for %s', name => {
+    expect(validateDeploymentManifest({ ...productionEnvironment(), [name]: 'false' }, { nodeMajor: 22 }).ok).toBe(true)
+    for (const value of [undefined, '', 'FALSE', '0', 'enabled']) {
+      const result = validateDeploymentManifest({ ...productionEnvironment(), [name]: value }, { nodeMajor: 22 })
+      expect(result.ok).toBe(false)
+      expect(result.findings).toContainEqual(expect.objectContaining({ names: [name] }))
+    }
+  })
 
+  it('admits independent Provider rollouts without enabling unused features', () => {
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: 'false',
+      AE_SUPPLY_MCP_OAUTH_ENABLED: 'false',
+      AE_PROVIDER_OFFBOARDING_ENABLED: 'false',
+    }, { nodeMajor: 22 }).ok).toBe(true)
   })
 
   it('requires both Infisical scopes before live Provider Invocation can be enabled', () => {
