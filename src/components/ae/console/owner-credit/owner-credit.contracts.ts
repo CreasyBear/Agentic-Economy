@@ -25,6 +25,7 @@ export type AeOwnerCreditProps = Readonly<{
   unavailable?: Readonly<{
     balance?: boolean
     history?: boolean
+    constraints?: boolean
     documents?: boolean
     reconciliation?: boolean
     obligations?: boolean
