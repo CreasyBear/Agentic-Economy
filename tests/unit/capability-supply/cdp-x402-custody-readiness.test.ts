@@ -1,6 +1,6 @@
 import { CdpClient } from '@coinbase/cdp-sdk'
 import { getAuthHeaders } from '@coinbase/cdp-sdk/auth'
-import { fetch as guardedFetch } from 'undici'
+import undici from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 
@@ -39,7 +39,7 @@ function fixture(paymentEnvironment: X402AeEnvironment = 'sandbox') {
     AE_X402_CDP_POLICY_RULES_DIGEST: cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)!,
     AE_X402_CDP_CREDENTIAL_GENERATION: '7',
   }
-  const fetch = vi.mocked(guardedFetch).mockImplementation(async (input) => {
+  const fetch = vi.mocked(undici.fetch).mockImplementation(async (input) => {
     const path = new URL(String(input)).pathname
     const value = path.endsWith(ACCOUNT_ID) ? accountPolicy
       : path.endsWith(PROJECT_ID) ? projectPolicy : account
@@ -60,7 +60,7 @@ afterEach(() => {
 describe('read-only CDP custody readiness', () => {
   it('refuses private provider DNS answers through the actual guarded transport', async () => {
     const f = fixture()
-    vi.mocked(guardedFetch).mockImplementation((await vi.importActual<typeof import('undici')>('undici')).fetch)
+    vi.mocked(undici.fetch).mockImplementation((await vi.importActual<typeof import('undici')>('undici')).fetch)
     const dns = vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
     expect(await readCdpX402CustodyReadiness(f.environment, 'sandbox')).toEqual({
       kind: 'unavailable', code: 'cdp_custody_read_unavailable',
@@ -71,7 +71,7 @@ describe('read-only CDP custody readiness', () => {
 
   it('cancels stalled provider DNS at the shared deadline and releases its transport', async () => {
     const f = fixture()
-    vi.mocked(guardedFetch).mockImplementation((await vi.importActual<typeof import('undici')>('undici')).fetch)
+    vi.mocked(undici.fetch).mockImplementation((await vi.importActual<typeof import('undici')>('undici')).fetch)
     const controller = new AbortController()
     vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal)
     let started!: () => void

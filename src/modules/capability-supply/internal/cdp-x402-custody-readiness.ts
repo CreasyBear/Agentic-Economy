@@ -1,12 +1,10 @@
 import { getAuthHeaders } from '@coinbase/cdp-sdk/auth'
-import { Agent, fetch as guardedFetch } from 'undici'
 
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import { cancelResponseBody, readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
-import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 
 import { readCdpX402CustodyAccount, type CdpX402CustodyReadinessResult } from './cdp-x402-payment-policy'
 import { cdpX402CustodyConfigurationFromEnvironment } from './x402-custody-configuration'
@@ -44,6 +42,11 @@ export async function readCdpX402CustodyReadiness(
     || !/^[A-Za-z0-9][A-Za-z0-9-]{0,34}[A-Za-z0-9]$/.test(configuration.accountName)) {
     return { kind: 'refused', code: 'cdp_custody_configuration_invalid' }
   }
+  // The shared Convex chunk exposes this CommonJS package through its default
+  // export. Keep Node-only imports lazy because web routes share this module.
+  const [{ default: { Agent, fetch: guardedFetch } }, { createGuardedLookup, defaultDnsResolver }] = await Promise.all([
+    import('undici'), import('@/modules/network-guard/public'),
+  ])
   const completed = new AbortController()
   const signal = AbortSignal.any([AbortSignal.timeout(READ_TIMEOUT_MS), completed.signal])
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })

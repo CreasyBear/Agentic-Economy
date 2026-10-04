@@ -3946,8 +3946,10 @@ The native Convex debug bundle exposes dynamically imported Undici through a
 default export. Destructuring its named `Agent` export throws before CDP reads,
 although direct local TypeScript execution succeeds. A split-bundle regression
 reproduces `Agent is not a constructor` with the shared guarded HTTP transport.
-Static imports, already used by that transport, remove the interop failure
-without a wrapper, new dependency, policy change or schema change.
+Reading the package's default export removes the interop failure while retaining
+lazy Node-only imports for the web route graph. No wrapper, new dependency,
+policy change or schema change is needed. The full gate catches a static-import
+attempt crossing that browser boundary; the retained fix preserves it.
 
 Focused verification passes 246 assertions covering explicit disabled rollouts,
 missing/malformed configuration, retained feature refusals, ready web identity,
