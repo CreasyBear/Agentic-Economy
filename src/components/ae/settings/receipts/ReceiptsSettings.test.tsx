@@ -31,6 +31,17 @@ const topUp: AeInvoiceHistoryRow = {
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
+it('announces first-page loading once while keeping visual skeletons hidden from assistive technology', () => {
+  const { container } = render(<ReceiptsSettings invoiceHistoryRows={[]} invoiceHistoryLoading
+    onDownloadTaxInvoice={vi.fn(async () => {})}
+    onViewStripeReceipt={vi.fn(async () => {})}
+  />)
+
+  expect(screen.getAllByRole('status')).toHaveLength(1)
+  expect(screen.getByRole('status')).toHaveTextContent('Loading receipts.')
+  expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument()
+})
+
 it('renders real top-up receipt actions and exports invoice rows without linking funding to a Call', async () => {
   const onDownloadTaxInvoice = vi.fn(async () => {})
   const onViewStripeReceipt = vi.fn(async () => {})
@@ -106,6 +117,13 @@ it('offers older receipts even when the first bounded page has only unsettled co
   view.rerender(<ReceiptsSettings invoiceHistoryRows={[topUp]} invoiceHistoryLoading={false}
     invoiceHistoryHasMore {...callbacks} />)
   expect(screen.getByText('Account top-up')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Export shown CSV' })).toBeInTheDocument()
+
+  view.rerender(<ReceiptsSettings invoiceHistoryRows={[topUp]} invoiceHistoryLoading={false}
+    invoiceHistoryHasMore invoiceHistoryLoadingMore {...callbacks} />)
+  const existingRow = screen.getByRole('row', { name: /Account top-up/u })
+  expect(within(existingRow).getByRole('button', { name: 'Stripe receipt' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Loading older top-ups…' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Export shown CSV' })).toBeInTheDocument()
 })
 

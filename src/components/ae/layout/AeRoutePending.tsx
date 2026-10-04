@@ -2,6 +2,7 @@ import { useLocation } from '@tanstack/react-router'
 
 import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
 import { AePageSkeleton } from '@/components/ae/layout/AePageState'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { operatorRoleForPath } from '@/lib/operator/roles'
 
 import type { OperatorRouteSkeletonPreset } from './route-states.contracts'
@@ -36,15 +37,15 @@ export function inferOperatorSkeletonPreset(pathname: string): OperatorRouteSkel
 function TableSkeleton() {
   return (
     <div className="arc-loading-stack" aria-hidden="true">
-      <span className="arc-loading-line arc-loading-heading" />
-      <span className="arc-loading-line arc-loading-field" />
+      <Skeleton lines={1} className="arc-loading-heading" />
+      <Skeleton lines={1} className="arc-loading-field" />
       <div
         data-testid="skeleton-table"
         className="arc-loading-table"
       >
         <div className="arc-loading-table-row">
           {Array.from({ length: 4 }, (_, index) => (
-            <span key={`header-${index}`} className="arc-loading-line" />
+            <Skeleton key={`header-${index}`} lines={1} />
           ))}
         </div>
         {Array.from({ length: 5 }, (_, rowIndex) => (
@@ -54,11 +55,12 @@ function TableSkeleton() {
             className="arc-loading-table-row"
           >
             {Array.from({ length: 4 }, (_, colIndex) => (
-              <span
+              <div
                 key={`${rowIndex}-${colIndex}`}
-                className="arc-loading-line arc-loading-field"
                 data-testid="skeleton-table-cell"
-              />
+              >
+                <Skeleton lines={1} className="arc-loading-field" />
+              </div>
             ))}
           </div>
         ))}
@@ -71,8 +73,7 @@ function OverviewCardsSkeleton() {
   return (
     <div className="arc-loading-stack" aria-hidden="true">
       <div className="arc-loading-intro">
-        <span className="arc-loading-line arc-loading-heading" />
-        <span className="arc-loading-line" />
+        <Skeleton lines={2} />
       </div>
       <div className="arc-loading-metrics">
         {Array.from({ length: 3 }, (_, index) => (
@@ -81,15 +82,14 @@ function OverviewCardsSkeleton() {
             data-testid="skeleton-metric-card"
             className="arc-loading-metric"
           >
-            <span className="arc-loading-line arc-loading-label" />
-            <span className="arc-loading-line arc-loading-value" />
+            <Skeleton lines={2} />
           </div>
         ))}
       </div>
       <div
         data-testid="skeleton-overview-primary"
         className="arc-loading-well"
-      />
+      ><Skeleton lines={6} /></div>
     </div>
   )
 }
@@ -101,17 +101,15 @@ function SplitConsoleSkeleton() {
         data-testid="skeleton-split-rail"
         className="arc-loading-pane"
       >
-        <span className="arc-loading-line arc-loading-label" />
-        <span className="arc-loading-line arc-loading-field" />
-        <span className="arc-loading-line arc-loading-field" />
+        <Skeleton lines={3} />
       </div>
       <div
         data-testid="skeleton-split-panel"
         className="arc-loading-pane"
       >
-        <span className="arc-loading-line arc-loading-heading" />
-        <div className="arc-loading-well" />
-        <span className="arc-loading-line arc-loading-field" />
+        <Skeleton lines={1} className="arc-loading-heading" />
+        <div className="arc-loading-well"><Skeleton lines={6} /></div>
+        <Skeleton lines={1} className="arc-loading-field" />
       </div>
     </div>
   )
@@ -122,11 +120,12 @@ function FormRecordSkeleton() {
     <div className="arc-loading-form" aria-hidden="true">
       {Array.from({ length: 4 }, (_, index) => (
         <div key={index} data-testid="skeleton-form-field" className="arc-loading-intro">
-          <span className="arc-loading-line arc-loading-label" />
-          <span className="arc-loading-line arc-loading-field" />
+          <Skeleton lines={2} />
         </div>
       ))}
-      <span data-testid="skeleton-form-action" className="arc-loading-line arc-loading-action" />
+      <div data-testid="skeleton-form-action" className="arc-loading-action">
+        <Skeleton lines={1} />
+      </div>
     </div>
   )
 }
@@ -134,9 +133,9 @@ function FormRecordSkeleton() {
 function DefaultSkeleton() {
   return (
     <div data-testid="skeleton-default-body" className="arc-loading-rows" aria-hidden="true">
-      <div className="arc-loading-record"><span className="arc-loading-line arc-loading-heading" /></div>
+      <div className="arc-loading-record"><Skeleton lines={1} className="arc-loading-heading" /></div>
       {Array.from({ length: 6 }, (_, index) => (
-        <div key={index} className="arc-loading-record"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /></div>
+        <div key={index} className="arc-loading-record"><Skeleton lines={2} /></div>
       ))}
     </div>
   )
@@ -152,6 +151,7 @@ export function OperatorRoutePending({
   const body = (
     <div
       className="arc-market arc-route-loading"
+      role="status"
       aria-busy="true"
       aria-label="Loading workspace"
       data-skeleton-preset={resolvedPreset}

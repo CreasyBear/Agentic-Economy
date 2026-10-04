@@ -2,8 +2,8 @@ import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
 import { BillingOverview } from '@/components/arc/blocks/billing-overview/billing-overview'
 import { Button } from '@/components/arc/button/button'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
 import { formatDisplayAmount } from '@/modules/money/public'
 
 import type { AeOwnerCreditProps } from '../owner-credit.contracts'
@@ -65,12 +65,10 @@ export function CreditFundPanel({
           value: balance === undefined ? undefined : formatDisplayAmount(balance),
           busy: balanceLoading,
           content: balanceLoading && accountBalance === undefined ? (
-          <div className="grid gap-3">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-11 w-48" />
-            <Skeleton className="h-4 w-72 max-w-full" />
-          </div>
-        ) : balanceUnavailable ? (
+            <div aria-hidden="true" className="grid gap-3">
+              <Skeleton lines={3} />
+            </div>
+          ) : balanceUnavailable ? (
             <Alert>
               <AlertTitle>Credit unavailable</AlertTitle>
               <AlertDescription className="arc-credit-alert__description">
@@ -82,7 +80,7 @@ export function CreditFundPanel({
                 )}
               </AlertDescription>
             </Alert>
-        ) : (
+          ) : (
           <>
             {balance === undefined ? <p>Checking…</p> : null}
             {purchasedBalance === undefined || promotionalBalance === undefined ? null : (
