@@ -18,6 +18,7 @@ export function validateAgentAccessSearch(search: Record<string, unknown>): Agen
   const callerValid = caller !== undefined && canonicalPrincipalIdPattern.test(caller)
   const resumeTool = typeof search.resumeTool === 'string' ? search.resumeTool.trim() : undefined
   const setup = search.setup === 'choose' || search.setup === 'oauth' ? search.setup : undefined
+  const setupApp = search.setupApp === 'codex' || search.setupApp === 'claude-code' || search.setupApp === 'cursor' ? search.setupApp : undefined
   const grantRef = typeof search.grantRef === 'string' && search.grantRef.trim().length >= 3 && search.grantRef.length <= 160 ? search.grantRef.trim() : undefined
   const userCode = typeof search.userCode === 'string' && search.userCode.trim().length >= 3 && search.userCode.length <= 32 ? search.userCode.trim() : undefined
   const requestInvalid = search.grantRef !== undefined && search.userCode !== undefined
@@ -30,6 +31,7 @@ export function validateAgentAccessSearch(search: Record<string, unknown>): Agen
     ...(callerValid ? { caller } : {}),
     ...(resumeTool !== undefined && canonicalToolRefPattern.test(resumeTool) ? { resumeTool } : {}),
     ...(setup === undefined ? {} : { setup }),
+    ...(setupApp === undefined ? {} : { setupApp }),
     ...(callRef === undefined ? {} : { callRef }),
     ...(callInvalid ? { callInvalid: true as const } : {}),
     ...(requestInvalid ? { requestInvalid: true as const } : {

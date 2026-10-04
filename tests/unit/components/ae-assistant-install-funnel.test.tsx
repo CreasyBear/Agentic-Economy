@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
+import type { NativeMcpClientId } from '@/lib/cli-distribution'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, search, children, ...props }: { to: string; search?: Record<string, string>; children: ReactNode }) =>
@@ -12,6 +13,67 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 afterEach(cleanup)
 describe('one Agent connection path', () => {
+  it.each([
+    { rawChoice: 'Codex' }, { rawChoice: ' codex ' }, { rawChoice: 'private-token-canary' },
+    { rawChoice: ['codex'] }, { rawChoice: { app: 'cursor' } },
+  ])('returns raw invalid route choice $rawChoice to the chooser without echoing it', ({ rawChoice }) => {
+    render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example" setupApp={rawChoice as NativeMcpClientId} onSetupAppChange={vi.fn()} />)
+    expect(screen.getByRole('group', { name: 'Choose your Agent app' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy setup commands' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Completed steps' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Continue after approval' }).getAttribute('href')).toBe('/agent-access')
+    expect(document.body).not.toHaveTextContent('private-token-canary')
+  })
+
+  it.each<readonly [NativeMcpClientId, string]>([
+    ['codex', 'Codex'],
+    ['claude-code', 'Claude Code'],
+    ['cursor', 'Cursor'],
+  ])('restores the validated %s choice on fresh mount without claiming access or moving focus', (setupApp, displayName) => {
+    const onSetupAppChange = vi.fn()
+    const check = vi.fn()
+    const props = { canonicalBaseUrl: 'https://ae.example', setupApp, onSetupAppChange, onCheckConnection: check }
+    const first = render(<AeAssistantInstallFunnel {...props} />)
+    expect(screen.getAllByRole('region', { name: `${displayName} MCP command` })).toHaveLength(1)
+    expect(screen.queryByRole('group', { name: 'Choose your Agent app' })).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Completed steps' })).toHaveTextContent(displayName)
+    expect(screen.getByText('Connect and approve access', { selector: 'legend' })).not.toHaveFocus()
+    first.unmount()
+    render(<AeAssistantInstallFunnel {...props} />)
+    expect(screen.getAllByRole('region', { name: `${displayName} MCP command` })).toHaveLength(1)
+    expect(screen.getByText('Connect and approve access', { selector: 'legend' })).not.toHaveFocus()
+    expect(screen.queryByText('Connection complete')).not.toBeInTheDocument()
+    expect(onSetupAppChange).not.toHaveBeenCalled()
+    expect(check).not.toHaveBeenCalled()
+  })
+
+  it('waits for committed route choice before changing the step or focusing its legend', async () => {
+    const onSetupAppChange = vi.fn()
+    const view = render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example" onSetupAppChange={onSetupAppChange} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
+    expect(onSetupAppChange).toHaveBeenLastCalledWith('codex')
+    expect(screen.getByRole('group', { name: 'Choose your Agent app' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Codex MCP command' })).not.toBeInTheDocument()
+    view.rerender(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example" setupApp="codex" onSetupAppChange={onSetupAppChange} />)
+    await waitFor(() => expect(screen.getByText('Connect and approve access', { selector: 'legend' })).toHaveFocus())
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Agent app' }))
+    expect(onSetupAppChange).toHaveBeenLastCalledWith(undefined)
+    expect(screen.getByRole('region', { name: 'Codex MCP command' })).toBeInTheDocument()
+    view.rerender(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example" onSetupAppChange={onSetupAppChange} />)
+    await waitFor(() => expect(screen.getByText('Choose your Agent app', { selector: 'legend' })).toHaveFocus())
+    expect(screen.queryByRole('region', { name: 'Codex MCP command' })).not.toBeInTheDocument()
+    expect(onSetupAppChange).toHaveBeenCalledTimes(2)
+  })
+
+  it('carries the chosen app and selected Tool into Agents without an approval claim', () => {
+    const resumeToolRef = `operation:v1:${'b'.repeat(64)}`
+    render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example" setupApp="cursor" onSetupAppChange={vi.fn()} resumeToolRef={resumeToolRef} />)
+    const continuation = new URL(screen.getByRole('link', { name: 'Continue after approval' }).getAttribute('href') ?? '', 'https://ae.example')
+    expect(continuation.pathname).toBe('/agent-access')
+    expect(Object.fromEntries(continuation.searchParams)).toEqual({ resumeTool: resumeToolRef, setupApp: 'cursor' })
+    expect(screen.queryByText('Connection complete')).not.toBeInTheDocument()
+  })
+
   it.each([
     ['Codex', 'codex mcp login agentic-economy'],
     ['Claude Code', 'claude mcp add --transport http --scope user'],

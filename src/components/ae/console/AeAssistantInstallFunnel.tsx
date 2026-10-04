@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -9,7 +9,6 @@ import { MultiStepForm } from '@/components/arc/blocks/multi-step-form/multi-ste
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import {
   NATIVE_MCP_CLIENTS,
-  nativeMcpClient,
   type NativeMcpClientId,
 } from '@/lib/cli-distribution'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
@@ -21,6 +20,8 @@ export type AeAssistantInstallFunnelProps = Readonly<{
   onCheckConnection?: () => void
   resumeToolRef?: string
   hideSelfLinks?: boolean
+  setupApp?: NativeMcpClientId
+  onSetupAppChange?: (id: NativeMcpClientId | undefined) => void
 }>
 
 export function AeAssistantInstallFunnel({
@@ -28,23 +29,41 @@ export function AeAssistantInstallFunnel({
   checkingConnection = false,
   onCheckConnection,
   resumeToolRef,
+  setupApp,
+  onSetupAppChange,
 }: AeAssistantInstallFunnelProps) {
   const baseUrl = trimTrailingSlashes(canonicalBaseUrl)
   const clientMounted = useClientMounted()
-  const [clientId, setClientId] = useState<NativeMcpClientId>()
+  const [localClientId, setLocalClientId] = useState<NativeMcpClientId>()
+  const candidateClientId = onSetupAppChange === undefined ? localClientId : setupApp
+  // Router search may retain raw values beside its validated projection.
+  // Only a known recipe supplies the displayed choice or continuation URL.
+  const client = NATIVE_MCP_CLIENTS.find(option => option.id === candidateClientId)
+  const clientId = client?.id
   const stepHeading = useRef<HTMLDivElement>(null)
-  const client = clientId === undefined ? undefined : nativeMcpClient(clientId)
+  const previousClientId = useRef(clientId)
+  const continuationSearch = {
+    ...(resumeToolRef === undefined ? {} : { resumeTool: resumeToolRef }),
+    ...(clientId === undefined ? {} : { setupApp: clientId }),
+  }
 
-  // Requires an explicit local app selection. Ensures only that choice is
+  // Requires an explicit or validated app selection. Ensures only that choice is
   // marked complete; setup instructions never prove approval or authentication.
   // The existing optional check observes access and never completes this form.
   const chooseClient = (id: NativeMcpClientId | undefined) => {
-    setClientId(id)
-    requestAnimationFrame(() => {
+    if (onSetupAppChange === undefined) setLocalClientId(id)
+    else onSetupAppChange(id)
+  }
+
+  useEffect(() => {
+    if (clientId === previousClientId.current) return
+    previousClientId.current = clientId
+    const frame = requestAnimationFrame(() => {
       const legend = stepHeading.current?.querySelector('legend')
       if (legend) { legend.tabIndex = -1; legend.focus() }
     })
-  }
+    return () => cancelAnimationFrame(frame)
+  }, [clientId])
 
   return (
     <AeSection
@@ -110,7 +129,7 @@ export function AeAssistantInstallFunnel({
               >
                 {checkingConnection ? 'Checking connection…' : 'Check approved access'}
               </Button>
-            ) : <Link to="/agent-access" search={resumeToolRef === undefined ? {} : { resumeTool: resumeToolRef }} className="arc-agent-install-help-link">Continue after approval</Link>}
+            ) : <Link to="/agent-access" search={continuationSearch} className="arc-agent-install-help-link">Continue after approval</Link>}
           </div>
         </MultiStepForm>
       </div>
