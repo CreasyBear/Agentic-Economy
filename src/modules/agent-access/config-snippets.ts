@@ -3,7 +3,7 @@ export type AgentAccessConfigSnippetId = 'cursor' | 'claude' | 'python' | 'curl'
 export const AGENT_ACCESS_SNIPPET_DESTINATIONS: Readonly<Record<AgentAccessConfigSnippetId, string>> = {
   cursor: 'Add to .cursor/mcp.json (project) or ~/.cursor/mcp.json (user).',
   claude: 'Run in your terminal to install the MCP tool.',
-  python: 'Use in your Python agent script.',
+  python: 'Save as verify_access.py and run with Python 3. Uses the standard library; verifies account access without making a purchase.',
   curl: 'Run in your terminal to verify the credential (account whoami — not a purchase).',
 }
 
@@ -81,9 +81,15 @@ export function buildAgentAccessConfigSnippets(input: Readonly<{
 
   const claudeCommand = `claude mcp add --transport http --scope user agentic-economy "${mcpUrl}" --header "Authorization: Bearer ${input.secret}"`
 
-  const pythonCode = `from agentic_economy import AgenticEconomy
+  const pythonCode = `import json
+from urllib.request import Request, urlopen
 
-client = AgenticEconomy(api_key="${input.secret}", base_url="${base}")`
+request = Request(
+    ${JSON.stringify(`${base}/api/v1/account`)},
+    headers={"Authorization": ${JSON.stringify(`Bearer ${input.secret}`)}, "Accept": "application/json"},
+)
+with urlopen(request, timeout=30) as response:
+    print(json.dumps(json.load(response), indent=2))`
 
   const curlCommand = `curl -sS "${base}/api/v1/account" \\
   -H "Authorization: Bearer ${input.secret}" \\

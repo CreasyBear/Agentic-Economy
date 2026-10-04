@@ -26,10 +26,13 @@ export type ConnectAgentWizardDraft = Readonly<{
   monthlyAmount: string
 }>
 
+export type ConnectAgentIssuePhase = 'editing' | 'issuing' | 'confirmation_required'
+
 export type ConnectAgentWizardPorts = Readonly<{
   deploymentEnvironment: ConnectAgentEnvironment
   open?: boolean
   onOpenChange: (open: boolean) => void
+  onIssuePhaseChange?: (phase: ConnectAgentIssuePhase) => void
   onIssue: ConnectAgentWizardIssuePort
   onSuccess?: (reveal: IssuedAgentAccessReveal) => void
   initialDraft?: ConnectAgentWizardDraft
@@ -48,6 +51,7 @@ export type ConnectAgentWizardViewState = Readonly<{
   monthlyAmount: string
   diagnostic: Rule4Diagnostic | null
   isSubmitting: boolean
+  awaitingConfirmation: boolean
   spendingPresentation: 'editable' | 'sandbox-static'
 }>
 

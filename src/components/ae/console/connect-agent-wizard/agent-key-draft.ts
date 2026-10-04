@@ -21,11 +21,12 @@ export type AgentKeyIssueSearch = Readonly<{
   perCall?: string
   daily?: string
   monthly?: string
+  resumeTool?: string
 }>
 
 export const AGENT_KEY_DRAFT_DEFAULTS: Omit<AgentKeyDraft, 'environment'> = {
   name: '',
-  authorityMode: 'spending_policy',
+  authorityMode: 'approval_required',
   perCallAmount: '5.00',
   dailyAmount: '25.00',
   monthlyAmount: '100.00',
@@ -61,10 +62,11 @@ export function navigateAgentKeyIssueSearch(
   nextOpen: boolean,
   nextDraft: AgentKeyDraft,
   replace: boolean,
+  continuation: Pick<AgentKeyIssueSearch, 'resumeTool'> = {},
 ): void {
   void navigate({
     to: '/owner/settings/agent-keys',
-    search: agentKeySearchFromDraft(nextOpen, nextDraft),
+    search: { ...agentKeySearchFromDraft(nextOpen, nextDraft), ...continuation },
     replace,
   })
 }
@@ -96,6 +98,7 @@ export function validateAgentKeyIssueSearch(search: Record<string, unknown>): Ag
   const perCall = draftAmount(search.perCall)
   const daily = draftAmount(search.daily)
   const monthly = draftAmount(search.monthly)
+  const resumeTool = typeof search.resumeTool === 'string' && /^operation:v1:[0-9a-f]{64}$/u.test(search.resumeTool) ? search.resumeTool : undefined
   return {
     ...(issue === undefined ? {} : { issue }),
     ...(name === undefined ? {} : { name }),
@@ -103,5 +106,6 @@ export function validateAgentKeyIssueSearch(search: Record<string, unknown>): Ag
     ...(perCall === undefined ? {} : { perCall }),
     ...(daily === undefined ? {} : { daily }),
     ...(monthly === undefined ? {} : { monthly }),
+    ...(resumeTool === undefined ? {} : { resumeTool }),
   }
 }

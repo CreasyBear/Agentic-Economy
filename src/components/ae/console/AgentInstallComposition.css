@@ -1,25 +1,22 @@
 /* Arc security-settings header/section and FAQ disclosure composition.
  * Security-settings CSS SHA-256: 60cbc94070f39d27308bebc2a5e0c294a91bf5a932babde7dcbf41185ba6ad8c.
  * FAQ CSS SHA-256: 10dfef55c7ae55bb50f95858fa34cfb659fe32cb29af827750ee2bf974ba1a40.
- * Installation is an instruction sequence; only the supplied live check confirms a connection. */
-.arc-market.arc-agent-install { width: min(100%, 880px); min-width: 0; margin-inline: auto; gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
-.arc-market.arc-agent-install > .arc-section-header { padding: var(--space-4) var(--space-5); }
-.arc-market .arc-agent-install-saved { display: grid; min-width: 0; gap: var(--space-1); padding: var(--space-4) var(--space-5); border-block-start: 1px solid var(--border); background: var(--surface-muted); }
+ * Arc Multi-step form owns the installation step shell. Local app selection
+ * completes only the app choice; the check observes recorded access separately. */
+.arc-market.arc-agent-install { width: min(100%, 880px); min-width: 0; margin-inline: auto; gap: var(--space-4); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
+.arc-market .arc-agent-install-saved { display: grid; min-width: 0; gap: var(--space-1); }
 .arc-market .arc-agent-install-title { margin: 0; font-size: var(--text-sm); font-weight: 500; line-height: 1.55; overflow-wrap: anywhere; }
 .arc-market .arc-agent-install-copy { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
-.arc-market .arc-agent-install-steps { display: grid; min-width: 0; margin: 0; padding: 0; list-style: none; }
-.arc-market .arc-agent-install-step { display: grid; min-width: 0; grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: var(--space-3); padding: var(--space-5); border-block-start: 1px solid var(--border); }
-.arc-market .arc-agent-install-number { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .arc-market .arc-agent-install-step-body { display: grid; min-width: 0; justify-items: stretch; gap: var(--space-3); }
-.arc-market .arc-agent-install-check { justify-self: start; max-width: 100%; }
-.arc-market .arc-agent-install-alternatives { min-width: 0; border-block-start: 1px solid var(--border); padding-inline: var(--space-5); }
+.arc-market .arc-agent-install-check { justify-self: start; min-height: 44px; max-width: 100%; }
+.arc-market .arc-agent-install-alternatives { min-width: 0; border-block-start: 1px solid var(--border); }
 .arc-market .arc-agent-install-alternatives [data-slot="accordion-trigger"] { min-height: 44px; align-items: center; border-radius: 0; box-shadow: none; font-size: var(--text-sm); font-weight: 500; line-height: 1.55; }
-.arc-market .arc-agent-install-alternatives [data-slot="accordion-trigger"]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.arc-market .arc-agent-install-alternatives [data-slot="accordion-trigger"]:focus-visible { background: var(--surface-muted); }
 .arc-market .arc-agent-install-alternatives [data-slot="accordion-content"] { font-size: var(--text-sm); line-height: 1.55; }
-.arc-market .arc-agent-install-alternative-list { display: grid; min-width: 0; gap: var(--space-4); }
-.arc-market .arc-agent-install-alternative { display: grid; min-width: 0; gap: var(--space-3); padding-block: var(--space-4); border-block-start: 1px solid var(--border-subtle); }
 .arc-market .arc-agent-install-help { display: grid; min-width: 0; gap: var(--space-3); color: var(--text-secondary); }
 .arc-market .arc-agent-install-help p { margin: 0; overflow-wrap: anywhere; }
 .arc-market .arc-agent-install-help-link { display: inline-flex; min-height: 44px; min-width: 0; justify-self: start; align-items: center; color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
-.arc-market .arc-agent-install-help-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
-@media (max-width: 559px) { .arc-market.arc-agent-install > .arc-section-header, .arc-market .arc-agent-install-saved, .arc-market .arc-agent-install-step { padding: var(--space-4) var(--space-3); } .arc-market .arc-agent-install-alternatives { padding-inline: var(--space-3); } .arc-market .arc-agent-install-step { gap: var(--space-2); } }
+.arc-market .arc-agent-install-help-link:focus-visible { background: var(--surface-muted); text-decoration-thickness: 2px; }
+.arc-market .arc-agent-client-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); min-width: 0; }
+.arc-market .arc-agent-client-choices button { min-height: 44px; white-space: normal; }
+@media (max-width: 479px) { .arc-market .arc-agent-client-choices { grid-template-columns: minmax(0, 1fr); } }

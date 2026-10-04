@@ -1,7 +1,7 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 
 export const FINANCIAL_SAFE_NO_SECRET =
-  'A$0.00 deducted — your balance is safe. No secret was created.'
+  'Key setup makes no Tool purchase. Your Balance is unaffected.'
 
 export function mapValidationDiagnostic(message: string): Rule4Diagnostic {
   return {
@@ -48,17 +48,17 @@ export function mapIssueErrorDiagnostic(code: string): Rule4Diagnostic {
 
 export function mapNetworkDiagnostic(): Rule4Diagnostic {
   return {
-    whatHappened: 'Connection interrupted',
+    whatHappened: 'Key issuance could not be confirmed',
     financialImpact: FINANCIAL_SAFE_NO_SECRET,
-    nextStep: 'Check your network connection and try again.',
+    nextStep: 'A key may have been created. Check your connection and confirm this same issuance before changing access or creating another key.',
   }
 }
 
 export function mapUnexpectedDiagnostic(): Rule4Diagnostic {
   return {
-    whatHappened: 'The Agent could not be connected. Nothing was charged.',
+    whatHappened: 'Key issuance returned no confirmation',
     financialImpact: FINANCIAL_SAFE_NO_SECRET,
-    nextStep: 'Try again. Contact support if the problem continues.',
+    nextStep: 'A key may have been created. Confirm this same issuance. Contact support if confirmation remains unavailable.',
   }
 }
 

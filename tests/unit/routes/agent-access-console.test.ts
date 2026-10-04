@@ -54,7 +54,7 @@ describe('owner Agent projection', () => {
     const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
     expect(directory.items).toHaveLength(1)
     expect(directory.items[0]?.usage).toEqual(owner.usage)
-    expect(directory.details[0]).toMatchObject({ activity: [call], usage: owner.usage, dataState: 'source', activityTruncated: true })
+    expect(directory.details[0]).toMatchObject({ activity: [{ ...call, credentialRef: 'credential:key:one' }], usage: owner.usage, dataState: 'source', activityTruncated: true })
     expect(directory.details[0]?.credentials).toEqual(expect.arrayContaining([expect.objectContaining({ credentialRef: 'credential:key:one' })]))
     expect(directory.details[0]).not.toHaveProperty('account')
   })
@@ -68,11 +68,48 @@ describe('owner Agent projection', () => {
     expect(directory.items).toHaveLength(1)
     expect(directory.details[0]?.credentials).toHaveLength(2)
     expect(directory.details[0]?.activity.map(({ callRef, credentialRef }) => ({ callRef, credentialRef }))).toEqual([
-      { callRef: 'call:two', credentialRef: 'key:two' }, { callRef: 'call:one', credentialRef: 'key:one' },
+      { callRef: 'call:two', credentialRef: 'credential:key:two' }, { callRef: 'call:one', credentialRef: 'credential:key:one' },
     ])
     expect(directory.details[0]?.usage?.callCount).toBe(51)
   })
 
+  it('maps only proven credential bindings for terminal and live Calls, preserving unrecognized attribution', () => {
+    const rotated: AgentCredentialSource = { ...source, key: { ...source.key, keyId: 'key:two', createdAt: 20 } }
+    const externalRefs = ['key:one', 'key:two', 'key:unknown']
+    const activity = externalRefs.map((credentialRef, index) => ({ ...call, callRef: `call:${index}`, credentialRef }))
+    const liveCalls = activity.map(({ callRef, credentialRef, toolRef, createdAt, updatedAt }) => ({
+      callRef, credentialRef, toolRef, createdAt, updatedAt, phase: 'running' as const,
+    }))
+    const directory = projectAgentDirectory([], [canonicalAgentRecord([source, rotated])], [], [{ ...owner, activity, liveCalls }])
+    const detail = directory.details[0]!
+    expect(detail.currentCredentialRef).toBe('credential:key:two')
+    expect(detail.activity.map(item => item.credentialRef)).toEqual(['credential:key:one', 'credential:key:two', 'key:unknown'])
+    expect(detail.liveCalls?.map(item => item.credentialRef)).toEqual(['credential:key:one', 'credential:key:two', 'key:unknown'])
+    expect(activity.map(item => item.credentialRef)).toEqual(externalRefs)
+    expect(liveCalls.map(item => item.credentialRef)).toEqual(externalRefs)
+  })
+
+
+  it('keeps exact Call progress when monthly usage exceeds its reporting limit', async () => {
+    transport.keys.mockResolvedValue([])
+    transport.query.mockImplementation(async (ref, args) => {
+      switch (getFunctionName(ref)) {
+        case 'agentDirectory:listOwnedPage': return { page: [canonical], isDone: true, continueCursor: '' }
+        case 'agentAccessPolicy:listOwnerGrantReadbacks': return []
+        case 'agentAccessOAuth:listOwnerConnectionReadbacks': return []
+        case 'capabilityCallProjections:readOwnerAgentReadback':
+          expect(args.callRef).toBe(call.callRef)
+          return { activity: { page: [], isDone: true, continueCursor: '' }, usage: { kind: 'unavailable', code: 'usage_window_too_large' },
+            watchedCall: { kind: 'observed', live: { ...call, phase: 'finished' }, activity: { ...call, receiptRef: 'receipt:old', accountRef: 'private-source-account' } } }
+        default: throw new Error('Unexpected query')
+      }
+    })
+    const directory = await loadAgentDirectoryReadback(null, principalRef, call.callRef)
+    expect(directory.details[0]).toMatchObject({ usageUnavailable: true, watchedCall: { kind: 'observed', activity: { callRef: call.callRef, receiptRef: 'receipt:old' } } })
+    expect(directory.details[0]?.dataState).not.toBe('unavailable')
+    expect(directory.details[0]).not.toHaveProperty('usage')
+    expect(JSON.stringify(directory)).not.toContain('private-source-account')
+  })
 
   it('uses UTC calendar boundaries including year rollover', () => {
     expect(currentUtcMonthBounds(Date.parse('2026-12-31T23:59:59.999Z'))).toEqual({
@@ -122,7 +159,7 @@ describe('owner Agent projection', () => {
     expect(directory.items).toHaveLength(2)
     const firstAgent = directory.details.find(({ agent }) => agent.principalRef === principalRef)
     const secondAgent = directory.details.find(({ agent }) => agent.principalRef === secondPrincipalRef)
-    expect(firstAgent).toMatchObject({ activity: [call], dataState: 'source', usage: { callCount: 51, amountCoverage: 'incomplete' },
+    expect(firstAgent).toMatchObject({ activity: [{ ...call, credentialRef: 'credential:key:one' }], dataState: 'source', usage: { callCount: 51, amountCoverage: 'incomplete' },
       spendingPolicy: { kind: 'unavailable' }, agent: { spendingPolicy: { kind: 'unavailable' } } })
     expect(firstAgent?.credentials).toHaveLength(2)
     expect(firstAgent?.activity).toHaveLength(1)

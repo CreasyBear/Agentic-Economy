@@ -29,15 +29,26 @@ const ownerAgentUsageResult = v.union(
   v.object({ kind: v.literal('unavailable'), code: v.literal('usage_window_too_large') }),
 )
 
+const liveCallValue = v.object({
+  callRef: v.string(), credentialRef: v.string(), toolRef: v.string(),
+  phase: v.union(v.literal('awaiting_authority'), v.literal('queued'), v.literal('running'), v.literal('recovery_required'), v.literal('finished')),
+  createdAt: v.number(), updatedAt: v.number(),
+})
 const ownerAgentReadback = v.object({
   activity: paginationResultValidator(callValue),
   usage: ownerAgentUsageResult,
+  liveCalls: v.optional(v.array(liveCallValue)),
+  watchedCall: v.optional(v.union(
+    v.object({ kind: v.literal('missing') }),
+    v.object({ kind: v.literal('observed'), live: liveCallValue, activity: v.optional(callValue) }),
+  )),
 })
 
 const MAX_ACTIVITY_PAGE_SIZE = 50
 
 export const readOwnerAgentReadbackArgs = {
   principalRef: v.string(),
+  callRef: v.optional(v.string()),
   periodStartAt: v.number(),
   periodEndAt: v.number(),
   paginationOpts: paginationOptsValidator,
@@ -142,7 +153,8 @@ export async function readOwnerAgentReadbackHandler(ctx: QueryCtx, args: ObjectT
   if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > MAX_ACTIVITY_PAGE_SIZE) {
     throw new Error('call_history_page_size_invalid')
   }
-  const [activity, usageRows] = await Promise.all([
+  if (args.callRef !== undefined && (args.callRef.length === 0 || args.callRef.length > 500)) throw new Error('call_history_call_invalid')
+  const [activity, usageRows, recentCalls, pendingCalls, uncertainCalls, watched] = await Promise.all([
     ctx.db.query('capabilityCallProjections')
       .withIndex('by_accountRef_and_principalRef_and_createdAt', (index) => index
         .eq('accountRef', actor.canonicalAccountRef)
@@ -158,6 +170,18 @@ export async function readOwnerAgentReadbackHandler(ctx: QueryCtx, args: ObjectT
         .gte('createdAt', args.periodStartAt)
         .lt('createdAt', args.periodEndAt))
       .take(MAX_USAGE_ROWS + 1),
+    // Requires authenticated Account + exact Agent. Ensures only recorded
+    // lifecycle facts, with no input, secret or financial side effect. Account
+    // mismatch is excluded before projection; missing rows mean no observation.
+    // One bounded index read replaces polling terminal history as live progress.
+    ctx.db.query('capabilityCalls')
+      .withIndex('by_principalId_and_createdAt', index => index.eq('principalId', args.principalRef))
+      .order('desc').take(MAX_ACTIVITY_PAGE_SIZE),
+    ctx.db.query('capabilityCalls').withIndex('by_principalId_and_state', index => index
+      .eq('principalId', args.principalRef).eq('state', 'pending')).order('desc').take(MAX_ACTIVITY_PAGE_SIZE),
+    ctx.db.query('capabilityCalls').withIndex('by_principalId_and_state', index => index
+      .eq('principalId', args.principalRef).eq('state', 'reconciliation_required')).order('desc').take(MAX_ACTIVITY_PAGE_SIZE),
+    args.callRef === undefined ? Promise.resolve(undefined) : readWatchedCall(ctx, actor.canonicalAccountRef, args.principalRef, args.callRef),
   ])
   const usage = usageRows.length > MAX_USAGE_ROWS
     ? { kind: 'unavailable' as const, code: 'usage_window_too_large' as const }
@@ -173,5 +197,33 @@ export async function readOwnerAgentReadbackHandler(ctx: QueryCtx, args: ObjectT
       page: activity.page.map(({ _id, _creationTime, ...call }) => call),
     },
     usage,
+    liveCalls: [...new Map([...pendingCalls, ...uncertainCalls, ...recentCalls]
+      .filter(row => row.ownerId === actor.canonicalAccountRef).map(row => [row.callRef, row])).values()].map(projectLiveCall),
+    ...(watched === undefined ? {} : { watchedCall: watched }),
   }
+}
+
+function projectLiveCall(row: import('../../../_generated/dataModel').Doc<'capabilityCalls'>) {
+  return {
+    callRef: row.callRef, credentialRef: row.credentialId, toolRef: row.toolRef,
+    phase: row.state === 'reconciliation_required' ? 'recovery_required' as const
+      : row.state !== 'pending' ? 'finished' as const
+      : row.result?.kind === 'needs_authority' ? 'awaiting_authority' as const
+      : row.dispatchState === 'running' ? 'running' as const : 'queued' as const,
+    createdAt: row.createdAt, updatedAt: row.updatedAt,
+  }
+}
+
+/** Requires authenticated Account + selected Agent/Call. Ensures exact lifecycle
+ * and receipt evidence outside reporting windows. Invariant: references never
+ * authorize a read and observations never mutate. On mismatch: missing, without
+ * distinguishing a foreign Call from an absent one. Two bounded indexed reads
+ * replace an unbounded history scan; monthly usage keeps its own contract. */
+async function readWatchedCall(ctx: QueryCtx, accountRef: string, principalRef: string, callRef: string) {
+  const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', index => index.eq('callRef', callRef)).unique()
+  if (call === null || call.ownerId !== accountRef || call.principalId !== principalRef) return { kind: 'missing' as const }
+  const activity = await ctx.db.query('capabilityCallProjections').withIndex('by_callRef', index => index.eq('callRef', callRef)).unique()
+  if (activity !== null && (activity.accountRef !== accountRef || activity.principalRef !== principalRef)) return { kind: 'missing' as const }
+  return { kind: 'observed' as const, live: projectLiveCall(call),
+    ...(activity === null ? {} : { activity: (({ _id, _creationTime, ...value }) => value)(activity) }) }
 }

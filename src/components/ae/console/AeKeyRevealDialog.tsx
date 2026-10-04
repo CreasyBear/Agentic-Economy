@@ -36,7 +36,7 @@ import './KeyRevealComposition.css'
 const MASKED_SECRET_DISPLAY = '••••••••••••••••'
 
 const DOWNLOAD_ERROR_WHAT = 'Could not save the file to your computer.'
-const DOWNLOAD_ERROR_FINANCIAL = 'A$0.00 deducted — your balance is safe.'
+const DOWNLOAD_ERROR_FINANCIAL = 'Downloading a setup file makes no purchase. Your Balance is unaffected.'
 const DOWNLOAD_ERROR_NEXT = 'Copy the snippet instead, or try Download again.'
 
 export type AeKeyRevealDialogProps = Readonly<{
@@ -44,7 +44,7 @@ export type AeKeyRevealDialogProps = Readonly<{
   open: boolean
   onOpenChange: (open: boolean) => void
   canonicalBaseUrl?: string
-  connectionStatus?: 'waiting' | 'verified'
+  onContinueSetup?: () => void
 }>
 
 export function AeKeyRevealDialog({
@@ -52,7 +52,7 @@ export function AeKeyRevealDialog({
   open,
   onOpenChange,
   canonicalBaseUrl,
-  connectionStatus = 'waiting',
+  onContinueSetup,
 }: AeKeyRevealDialogProps) {
   const [acknowledged, setAcknowledged] = useState(false)
   const [copiedSecret, setCopiedSecret] = useState(false)
@@ -122,7 +122,7 @@ export function AeKeyRevealDialog({
       setCopiedSecret(true)
       setCopySecretFailed(false)
       setTimeout(() => setCopiedSecret(false), 2000)
-      toast.success('Copied to clipboard — save this secret; it will not be shown again.')
+      toast.success('Copied to clipboard. Save this secret; it will not be shown again.')
     } catch (cause) {
       setCopySecretFailed(true)
       setCopiedSecret(false)
@@ -141,7 +141,7 @@ export function AeKeyRevealDialog({
   }
 
   const secretCopyStatusMessage = copiedSecret
-    ? 'Copied to clipboard — save this secret; it will not be shown again.'
+    ? 'Copied to clipboard. Save this secret; it will not be shown again.'
     : copySecretFailed
       ? 'Copy failed. Select the secret and copy it manually.'
       : ''
@@ -175,8 +175,8 @@ export function AeKeyRevealDialog({
 
       const successMessage =
         activeTab === 'cursor'
-          ? 'Downloaded mcp.json — drop it into .cursor/mcp.json'
-          : 'Downloaded .env — add it to your project root'
+          ? 'Downloaded mcp.json. Save it as .cursor/mcp.json'
+          : 'Downloaded .env. Add it to your project root'
       setDownloadFailed(false)
       setDownloadStatus(successMessage)
       toast.success(successMessage)
@@ -193,7 +193,7 @@ export function AeKeyRevealDialog({
       <DrawerContent
         side="right"
         title="Save your secret key"
-        description="Step 2 of 2 · Save & install"
+        description="Save the one-time secret and configure your client."
         className={cn(
           'arc-key-reveal-drawer',
           dismissBlocked && 'ring-2 ring-warning-ring',
@@ -344,7 +344,7 @@ export function AeKeyRevealDialog({
 
                 <TabsContent value="python" className="arc-key-tab-content">
                   <AeCopyCommand
-                    label="Python snippet"
+                    label="Python account check"
                     {...snippetCopyProps(snippets.python)}
                     comfortable
                     prompt={false}
@@ -392,31 +392,17 @@ export function AeKeyRevealDialog({
             aria-live="polite"
             className="arc-key-connection-status"
           >
-            {connectionStatus === 'waiting' ? (
               <>
                 <span className="arc-key-connection-dot arc-key-connection-dot-warning" />
                 <div className="arc-key-connection-copy">
                   <p className="arc-key-connection-title">
-                    Waiting for first Call from {reveal.displayName}...
+                    Key issued for {reveal.displayName}.
                   </p>
                   <p className="arc-key-connection-description">
-                    Run the cURL command above or launch your agent to complete verification.
+                    Configure your client securely. The cURL account check verifies authentication; it makes no Tool Call. Continue in Agents to check first-use progress.
                   </p>
                 </div>
               </>
-            ) : (
-              <>
-                <span className="arc-key-connection-dot arc-key-connection-dot-success" />
-                <div className="arc-key-connection-copy">
-                  <p className="arc-key-connection-title">
-                    First request received from {reveal.displayName}.
-                  </p>
-                  <p className="arc-key-connection-description">
-                    You can save the secret and close this dialog.
-                  </p>
-                </div>
-              </>
-            )}
           </div>
         </div>
 
@@ -451,9 +437,9 @@ export function AeKeyRevealDialog({
             variant="primary"
             size="md"
             disabled={!acknowledged}
-            onClick={() => onOpenChange(false)}
+            onClick={() => { onOpenChange(false); onContinueSetup?.() }}
           >
-            Done
+            {onContinueSetup === undefined ? 'Done' : 'Continue in Agents'}
           </Button>
         </div>
       </DrawerContent>

@@ -25,8 +25,12 @@ export type { AgentLifecycleResult } from './agent-access'
 export { agentAuditOpaqueRef, createAgentAuditEnvelope } from './agent-audit'
 export type { AgentAuditEnvelope, AgentAuditInput } from './agent-audit'
 export { presentConnectionProblem } from './agent-connection'
+export { firstToolInstruction, projectAgentFirstUse } from './first-use.view-model'
+export type { AgentFirstUseState } from './first-use.view-model'
 export type {
   AgentConnectionReadback,
   ConnectionProblemPresentation,
   OwnerConnectionLifecycleResult,
 } from './agent-connection'
+
+export type { AgentOnboardingLocator, AgentOnboardingRequest } from './onboarding-request'

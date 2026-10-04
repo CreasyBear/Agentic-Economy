@@ -21,6 +21,7 @@ import {
   type AgentAccessOAuthErrorCode,
 } from '@/modules/agent-access/oauth-state'
 import { degrade } from '@/lib/observability/degrade'
+import { validOAuthResource } from './agent-access-oauth/resource'
 import {
   authorizationRequestScopeError,
   defaultOAuthScopeText,
@@ -81,6 +82,7 @@ export async function handleDeviceAuthorizationPost(request: Request, options: O
   if (formResult.kind === 'too_large') return oauthError('invalid_request', 413)
   if (formResult.kind !== 'ok') return oauthError('invalid_request', 400)
   const form = formResult.value
+  if (!validOAuthResource(form, request, options)) return oauthError('invalid_target', 400)
   const clientId = form.get('client_id')
   const limited = await oauthAdmissionResponse(request, options, `device_authorization:${clientId ?? 'missing'}`)
   if (limited !== undefined) return limited
@@ -117,6 +119,7 @@ export async function handleOAuthTokenPost(request: Request, options: OAuthApiOp
   if (formResult.kind === 'too_large') return oauthError('invalid_request', 413)
   if (formResult.kind !== 'ok') return oauthError('invalid_request', 400)
   const form = formResult.value
+  if (!validOAuthResource(form, request, options)) return oauthError('invalid_target', 400)
   const grantType = form.get('grant_type')
   if (grantType === DEVICE_GRANT_TYPE) return await pollDeviceGrantRequest(form, request, options)
   if (grantType === AUTHORIZATION_CODE_GRANT_TYPE) return await exchangeAuthorizationCode(form, request, options)
@@ -187,6 +190,7 @@ export async function handleOAuthRegisterPost(request: Request, options: OAuthAp
 
 export async function handleOAuthAuthorizeGet(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
   const url = new URL(request.url)
+  if (!validOAuthResource(url.searchParams, request, options)) return oauthError('invalid_target', 400)
   const agentCursor = readAgentCursor(url)
   if (agentCursor === undefined) return oauthError('invalid_request', 400)
   const userCode = url.searchParams.get('user_code')

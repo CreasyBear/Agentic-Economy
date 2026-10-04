@@ -23,7 +23,13 @@ export const fundingReturnCopy = {
   paid: {
     title: 'Credit added',
     description: (amount: string, agentName: string) =>
-      `Paid. ${amount} is now available as Credit. Return to ${agentName} and ask it to retry the original Tool.`,
+      `Paid. ${amount} is now available as Credit. Return to ${agentName} in the original task. Credit does not grant spending authority or complete a Tool purchase.`,
+    instruction: (fundingSessionId: string) => [
+      `Continue our original Agentic Economy task. Refresh the server’s Tool list and check funding.handoff.status for fundingSessionId ${JSON.stringify(fundingSessionId)}.`,
+      'Keep the original Tool and input. If a Call already exists, check that same Call and follow its recorded recovery actions. If delivered, return its actual result and receipt. An uncertain result is not permission to create another purchase.',
+      'If no Call exists and Credit is confirmed, get a fresh Quote for the intended Tool and input. Check current authority and any required approval. Make one authorized Call with a stable idempotency key, then return its actual result and receipt.',
+      'Funding is not purchase authority. Do not start another payment for this session.',
+    ].join('\n\n'),
   },
   openAgentsAction: 'Open Agents',
   openCreditAction: 'Open Credit',

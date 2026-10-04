@@ -1,10 +1,16 @@
+import { useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/arc/button/button'
+import { MultiStepForm } from '@/components/arc/blocks/multi-step-form/multi-step-form'
+import { useClientMounted } from '@/hooks/use-client-mounted'
 import {
   NATIVE_MCP_CLIENTS,
   nativeMcpClient,
+  type NativeMcpClientId,
 } from '@/lib/cli-distribution'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import './AgentInstallComposition.css'
@@ -24,48 +30,68 @@ export function AeAssistantInstallFunnel({
   resumeToolRef,
 }: AeAssistantInstallFunnelProps) {
   const baseUrl = trimTrailingSlashes(canonicalBaseUrl)
-  const recommended = nativeMcpClient('codex')
+  const clientMounted = useClientMounted()
+  const [clientId, setClientId] = useState<NativeMcpClientId>()
+  const stepHeading = useRef<HTMLDivElement>(null)
+  const client = clientId === undefined ? undefined : nativeMcpClient(clientId)
+
+  // Requires an explicit local app selection. Ensures only that choice is
+  // marked complete; setup instructions never prove approval or authentication.
+  // The existing optional check observes access and never completes this form.
+  const chooseClient = (id: NativeMcpClientId | undefined) => {
+    setClientId(id)
+    requestAnimationFrame(() => {
+      const legend = stepHeading.current?.querySelector('legend')
+      if (legend) { legend.tabIndex = -1; legend.focus() }
+    })
+  }
 
   return (
     <AeSection
-      title="Connect with Codex"
-      description="Follow these steps in order."
+      title="Put outside services within your Agent’s reach"
+      description="Choose your app, approve access, then return to your task for a first useful Tool result."
       className="arc-agent-install"
     >
       {resumeToolRef === undefined ? null : (
         <div className="arc-agent-install-saved">
           <h3 className="arc-agent-install-title">Selected Tool saved for this setup</h3>
-          <p className="arc-agent-install-copy">After Agents confirms a connection, this page will offer one return action to that Tool. No Call is created during setup.</p>
+          <p className="arc-agent-install-copy">Your Tool stays selected through setup. Keep its input in your Agent’s task; setup creates no Call.</p>
         </div>
       )}
-      <ol aria-label="Agent connection steps" className="arc-agent-install-steps">
-        <li className="arc-agent-install-step">
-          <span className="arc-agent-install-number" aria-hidden="true">1</span>
+      <div ref={stepHeading}>
+        <MultiStepForm
+          progressLabel="Agent connection steps"
+          activeStep={client === undefined ? 'app' : 'connect'}
+          steps={[
+            { id: 'app', title: 'Choose your Agent app', description: 'Use your existing app. No new Agent or task needs to be created here.' },
+            { id: 'connect', title: 'Connect and approve access', description: 'Run the setup commands in your app, then follow its approval link.' },
+          ]}
+          completedSteps={client === undefined ? [] : [{
+            id: 'app', title: 'Agent app', detail: client.displayName,
+            disabled: !clientMounted, onEdit: () => chooseClient(undefined),
+          }]}
+        >
           <div className="arc-agent-install-step-body">
-            <h3 className="arc-agent-install-title">Start the connection</h3>
-            <AeCopyCommand
-              label="Codex MCP command"
-              code={recommended.setupCommand(baseUrl)}
-              comfortable
-            />
-          </div>
-        </li>
-        <li className="arc-agent-install-step">
-          <span className="arc-agent-install-number" aria-hidden="true">2</span>
-          <div className="arc-agent-install-step-body">
-            <h3 className="arc-agent-install-title">Approve access in the browser</h3>
-            <p className="arc-agent-install-copy">{recommended.authenticationInstruction}</p>
-          </div>
-        </li>
-        <li className="arc-agent-install-step">
-          <span className="arc-agent-install-number" aria-hidden="true">3</span>
-          <div className="arc-agent-install-step-body">
-            <h3 className="arc-agent-install-title">Confirm the connection</h3>
+          {client === undefined ? (
+            <div className="arc-agent-client-choices" role="group" aria-label="Agent app">
+              {NATIVE_MCP_CLIENTS.map(option => (
+                <Button key={option.id} type="button" variant="secondary" disabled={!clientMounted}
+                  onClick={() => chooseClient(option.id)}>
+                  {option.displayName}
+                </Button>
+              ))}
+            </div>
+          ) : <>
+              <AeCopyCommand key={client.id} label={`${client.displayName} MCP command`} code={client.setupCommand(baseUrl)} comfortable actionLabel="Copy setup commands" />
+              <p className="arc-agent-install-copy">{client.authenticationInstruction}</p>
+              <p className="arc-agent-install-copy">In the approval page, choose Browse only, Ask each time, or Work within limits. Your Account balance never grants permission to spend.</p>
+            </>}
             <p className="arc-agent-install-copy">
-              Connection is complete only when it appears in Agents. A live result confirms the connection;
-              installing it alone does not. Account connection does not set a Spending policy.
+              {onCheckConnection === undefined
+                ? 'After approval, open Agents to follow live service progress while you continue in your existing task.'
+                : 'This page follows approved access automatically while you continue in your existing Agent task. You can check again below.'} Only a delivered Tool result and receipt completes first use.
             </p>
-            {onCheckConnection === undefined ? null : (
+            {onCheckConnection !== undefined ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -73,33 +99,24 @@ export function AeAssistantInstallFunnel({
                 disabled={checkingConnection}
                 onClick={onCheckConnection}
               >
-                {checkingConnection ? 'Checking connection…' : 'Check connection'}
+                {checkingConnection ? 'Checking connection…' : 'Check approved access'}
               </Button>
-            )}
+            ) : <Link to="/agent-access" search={resumeToolRef === undefined ? {} : { resumeTool: resumeToolRef }} className="arc-agent-install-help-link">Continue after approval</Link>}
           </div>
-        </li>
-      </ol>
+        </MultiStepForm>
+      </div>
       <Accordion type="single" collapsible className="arc-agent-install-alternatives">
-        <AccordionItem value="alternatives">
-          <AccordionTrigger>Use Claude Code or Cursor</AccordionTrigger>
-          <AccordionContent className="arc-agent-install-alternative-list">
-            {NATIVE_MCP_CLIENTS.filter((client) => client.id !== 'codex').map((client) => (
-              <div key={client.id} className="arc-agent-install-alternative">
-                <h3 className="arc-agent-install-title">{client.displayName}</h3>
-                <AeCopyCommand
-                  label={`${client.displayName} MCP command`}
-                  code={client.setupCommand(baseUrl)}
-                  comfortable
-                />
-                <p className="arc-agent-install-copy">{client.authenticationInstruction}</p>
-              </div>
-            ))}
+        <AccordionItem value="manual">
+          <AccordionTrigger>Connecting a custom script or another app?</AccordionTrigger>
+          <AccordionContent className="arc-agent-install-help">
+            <p>Issue a manual key, save it securely and configure your client. The key stays out of your conversation and setup URL.</p>
+            <Link to="/owner/settings/agent-keys" search={{ issue: 'manual', ...(resumeToolRef === undefined ? {} : { resumeTool: resumeToolRef }) }} className="arc-agent-install-help-link">Issue a manual key</Link>
           </AccordionContent>
         </AccordionItem>
         <AccordionItem value="help">
           <AccordionTrigger>Troubleshoot a connection</AccordionTrigger>
           <AccordionContent className="arc-agent-install-help">
-            <p>If Tools are missing, check the connection in your client settings. After connecting, start a fresh task and search again.</p>
+            <p>If Tools are missing, check the connection in your client settings and refresh its Tool list. Keep the selected Tool and input in your existing task.</p>
             <p>If a Call needs permission, follow the action shown for that Call. If its result is uncertain, check its status before trying again.</p>
             <a href="/support" className="arc-agent-install-help-link">Get connection help</a>
           </AccordionContent>

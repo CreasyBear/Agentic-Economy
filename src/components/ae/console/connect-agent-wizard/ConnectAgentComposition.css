@@ -21,6 +21,13 @@
   min-height: 0;
   overflow: hidden;
 }
+.arc-connect-agent-review { display: grid; min-width: 0; gap: var(--space-4); }
+.arc-connect-agent-review h3, .arc-connect-agent-review p, .arc-connect-agent-review dl, .arc-connect-agent-review dd { margin: 0; }
+.arc-connect-agent-review h3 { font-size: var(--text-base); font-weight: 500; }
+.arc-connect-agent-review dl { display: grid; gap: var(--space-4); }
+.arc-connect-agent-review dl > div { display: grid; gap: var(--space-1); }
+.arc-connect-agent-review dt, .arc-connect-agent-review p { color: var(--text-secondary); }
+.arc-connect-agent-review dd { overflow-wrap: anywhere; }
 
 .arc-connect-agent-fields {
   display: grid;

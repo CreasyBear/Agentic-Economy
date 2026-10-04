@@ -1099,6 +1099,13 @@ describe('issued agent binding', () => {
       })
     }))
 
+    await expect(owner.query(api.agentDirectory.findOwnedByCredential, { credentialId: agentA.credentialId })).resolves.toBe(principalA)
+    await expect(owner.query(api.agentDirectory.findOwnedByCredential, { credentialId: replacement.credentialId })).resolves.toBe(principalA)
+    await expect(owner.query(api.agentDirectory.findOwnedByCredential, { credentialId: 'missing-key' })).resolves.toBeNull()
+    await expect(backend.query(api.agentDirectory.findOwnedByCredential, { credentialId: replacement.credentialId })).resolves.toBeNull()
+    const otherOwner = backend.withIdentity(identity('user_other_progress_owner'))
+    await otherOwner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    await expect(otherOwner.query(api.agentDirectory.findOwnedByCredential, { credentialId: replacement.credentialId })).resolves.toBeNull()
     const finalDirectory = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     expect(finalDirectory).toEqual(expect.arrayContaining([
       expect.objectContaining({

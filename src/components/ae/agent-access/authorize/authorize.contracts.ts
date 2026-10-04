@@ -13,8 +13,8 @@ export type AgentAccessAuthorizeLoaderDeps = Readonly<{
 export type AgentAccessAuthorizeLoaded =
   | Readonly<{ kind: 'missing' }>
   | Readonly<{ kind: 'problem'; code: OAuthPermanentProblemCode }>
-  | Readonly<{ kind: 'outcome_unknown'; grantRef: string }>
-  | Readonly<{ kind: 'succeeded'; grantRef: string }>
+  | Readonly<{ kind: 'outcome_unknown'; grantRef: string; oauthState?: string }>
+  | Readonly<{ kind: 'succeeded'; grantRef: string; oauthState?: string }>
   | Readonly<{
       kind: 'ready'
       locator: ConsentLocator

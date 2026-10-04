@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 
+import { readAgentOnboardingRequestServer } from '@/lib/server/agent-access-consent.functions'
+import type { AgentOnboardingRequest } from '@/modules/agent-access/public'
 import { readAgentDirectoryPageServer, readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
@@ -19,6 +21,7 @@ import type {
 } from '@/modules/agent-access/spending-policy-update'
 import type { ExactAmount } from '@/modules/money/public'
 import { createRuntimeId } from '@/modules/common/runtime-id'
+import { projectAgentFirstUse } from '@/modules/agent-access/public'
 import { useTypedReverification } from '@/lib/client/useTypedReverification'
 import {
   decideCallApprovalServer,
@@ -49,13 +52,35 @@ function operationApprovalErrorCopy(
   return 'This operation could not be verified. Refresh the list before deciding.'
 }
 
+function projectHomeFirstUse({ search, onboarding, directory, tracked, accessUnconfirmed }: {
+  search: AeAgentAccessHomeProps['search']
+  onboarding: AgentOnboardingRequest | undefined
+  directory: AgentDirectoryProjection
+  tracked: Readonly<{ caller: string; callRef: string }> | undefined
+  accessUnconfirmed: boolean
+}) {
+  const hasRequest = search.grantRef !== undefined || search.userCode !== undefined || search.requestInvalid === true
+  const caller = onboarding?.kind === 'request' ? onboarding.principalRef : search.caller
+  const blocked = search.callInvalid === true || search.requestInvalid === true || onboarding?.kind === 'refused' && onboarding.reason !== 'not_found'
+  const selectedCallRef = search.callRef ?? (tracked !== undefined && tracked.caller === caller ? tracked.callRef : undefined)
+  const firstUse = projectAgentFirstUse({ directory: blocked ? { items: [], details: [] } : directory, unavailable: accessUnconfirmed || search.callInvalid === true,
+    ...(caller === undefined ? {} : { caller }),
+    ...(selectedCallRef === undefined ? {} : { callRef: selectedCallRef }),
+    ...(search.resumeTool === undefined ? {} : { toolRef: search.resumeTool }),
+  })
+  return { hasRequest, caller, blocked, firstUse }
+}
+
 export function useAeAgentAccessHome({
   canonicalBaseUrl,
   initialDirectory,
+  initialDirectoryUnavailable = false,
+  initialOnboarding,
   search,
 }: AeAgentAccessHomeProps): AeAgentAccessHomeView {
   const location = useLocation()
   const navigate = useNavigate()
+  const readRequest = useServerFn(readAgentOnboardingRequestServer)
   const readDirectory = useServerFn(readAgentDirectoryServer)
   const readDirectoryPage = useServerFn(readAgentDirectoryPageServer)
   const disconnectAgent = useServerFn(disconnectAgentServer)
@@ -72,38 +97,128 @@ export function useAeAgentAccessHome({
     result => result.kind === 'refused' && result.code === 'mfa_reverification_required' ? 'strict_mfa' : null)
 
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const requestLocator = JSON.stringify([search.grantRef, search.userCode])
+  const [requestState, setRequestState] = useState({ locator: requestLocator, result: initialOnboarding })
+  // Coupling evidence to its locator prevents even a render of another request.
+  // A new bootstrap outage retains confirmed facts for the same request only.
+  const onboarding = requestState.locator === requestLocator ? requestState.result : undefined
+  const setOnboarding = useCallback((result: AgentOnboardingRequest | undefined) => {
+    setRequestState({ locator: requestLocator, result })
+  }, [requestLocator])
+  useEffect(() => {
+    setRequestState(previous => ({ locator: requestLocator, result: previous.locator !== requestLocator ? undefined
+      : initialOnboarding?.kind === 'unavailable' || initialOnboarding === undefined ? previous.result : initialOnboarding }))
+  }, [requestLocator, initialOnboarding])
+  const [accessUnconfirmed, setAccessUnconfirmed] = useState(initialDirectoryUnavailable)
+  const target = JSON.stringify([search.caller, search.callRef, search.grantRef, search.userCode, search.requestInvalid, search.callInvalid])
+  const targetRef = useRef(target)
+  useEffect(() => { targetRef.current = target }, [target])
+  const requestRef = useRef(onboarding)
+  useEffect(() => { requestRef.current = onboarding }, [onboarding])
+  const [tracked, setTracked] = useState<Readonly<{ caller: string; callRef: string }> | undefined>()
+  const { hasRequest, caller, blocked, firstUse } = projectHomeFirstUse({ search, onboarding, directory, tracked, accessUnconfirmed })
+  const trackedCall = useRef(tracked)
+  useEffect(() => { trackedCall.current = tracked }, [tracked])
+  useEffect(() => { setTracked(undefined) }, [requestLocator])
+  const directoryReadInFlight = useRef(false)
+  const directoryPageInFlight = useRef(false)
+  const [liveUpdates, setLiveUpdates] = useState<'current' | 'delayed'>(initialDirectoryUnavailable ? 'delayed' : 'current')
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [directoryError, setDirectoryError] = useState<string>()
+  const [directoryError, setDirectoryError] = useState<string | undefined>(initialDirectoryUnavailable ? 'Agent progress is temporarily unavailable. Check the same request or Call again.' : undefined)
   const [directoryPaginationIssue, setDirectoryPaginationIssue] = useState<DirectoryPaginationIssue>()
   const [lifecycleIssue, setLifecycleIssue] = useState<LifecycleIssue>()
   const [lifecyclePending, setLifecyclePending] = useState<LifecycleCommand>()
   const [approvals, setApprovals] = useState<readonly PendingCallApproval[]>([])
+  const approvalsReadInFlight = useRef(false)
   const [approvalsLoading, setApprovalsLoading] = useState(true)
   const [approvalsError, setApprovalsError] = useState<string>()
   const [approvalDecision, setApprovalDecision] = useState<ApprovalDecision>()
   const [approvalStatus, setApprovalStatus] = useState<string>()
   const showSetup = search.setup === 'oauth'
 
-  const hasConnectedAgent = directory.items.some(({ status }) => status === 'connected')
-
-  const load = useCallback(async () => {
-    setLoading(true)
+  // Requires an owner read and the exact intended Agent when selected.
+  // Ensures observations only; refresh never issues access, buys or retries.
+  // Invariant: one read in flight, loaded Agents retained, no stale-target apply.
+  // On failure retain evidence, mark updates delayed, and back off in the poll.
+  // Reuses directory/status ownership instead of a persisted onboarding engine.
+  const load = useCallback(async (background = false): Promise<boolean> => {
+    if (directoryReadInFlight.current || directoryPageInFlight.current) return false
+    directoryReadInFlight.current = true
+    const startedTarget = target
+    const anchor = trackedCall.current
+    const selectedCall = search.callRef ?? (anchor !== undefined && anchor.caller === caller ? anchor.callRef : undefined)
+    if (!background) setLoading(true)
     try {
-      setDirectory(await readDirectory())
-      setDirectoryError(undefined)
+      let observed = requestRef.current
+      let requestDelayed = false
+      const locator = search.grantRef !== undefined ? { grantRef: search.grantRef } : search.userCode !== undefined ? { userCode: search.userCode } : undefined
+      if (locator !== undefined) {
+        const result = await readRequest({ data: locator })
+        if (!mounted.current || startedTarget !== targetRef.current) return false
+        if (result.kind === 'unavailable') requestDelayed = true
+        else { observed = result; setOnboarding(result) }
+        if (observed?.kind === 'refused' && observed.reason !== 'not_found') {
+          setDirectory({ items: [], details: [] }); setTracked(undefined)
+          setLiveUpdates('current'); setDirectoryError(undefined)
+          return true
+        }
+      }
+      const selected = observed?.kind === 'request' ? observed.principalRef : search.caller
+      if (search.callInvalid || search.requestInvalid || hasRequest && selected === undefined) {
+        setLiveUpdates(requestDelayed ? 'delayed' : 'current')
+        return !requestDelayed
+      }
+      const current = await readDirectory({ data: { ...(selected === undefined ? {} : { principalRef: selected }), ...(selectedCall === undefined ? {} : { callRef: selectedCall }) } })
+      if (!mounted.current || startedTarget !== targetRef.current) return false
+      const incomplete = current.details.some(detail => detail.dataState === 'unavailable' || detail.dataState === 'partial')
+      setDirectory(previous => {
+        const details = current.details.map(updated => {
+          const known = previous.details.find(detail => detail.agent.principalRef === updated.agent.principalRef)
+          return known !== undefined && (updated.dataState === 'unavailable' || updated.dataState === 'partial')
+            ? { ...updated, activity: known.activity, ...(known.liveCalls === undefined ? {} : { liveCalls: known.liveCalls }),
+              ...(known.watchedCall === undefined || updated.watchedCall !== undefined ? {} : { watchedCall: known.watchedCall }) } : updated
+        })
+        return selected === undefined && (current.nextCursor === undefined || previous.items.length <= current.items.length) ? { ...current, details } : {
+          ...previous,
+          items: [...previous.items.filter(agent => selected === undefined ? !current.items.some(updated => updated.principalRef === agent.principalRef) : agent.principalRef !== selected), ...current.items],
+          details: [...previous.details.filter(detail => selected === undefined ? !current.details.some(updated => updated.agent.principalRef === detail.agent.principalRef) : detail.agent.principalRef !== selected), ...details],
+        }
+      })
+      setDirectoryError(undefined); setAccessUnconfirmed(false)
+      setLiveUpdates(incomplete || requestDelayed ? 'delayed' : 'current')
+      return !incomplete && !requestDelayed
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setDirectoryError('The Agent directory is temporarily unavailable. Known Balance information is unaffected.')
+      if (mounted.current && startedTarget === targetRef.current) {
+        setLiveUpdates('delayed'); setAccessUnconfirmed(true)
+        if (!background) setDirectoryError('Agent progress is temporarily unavailable. Last confirmed Call records are retained.')
+      }
+      return false
     } finally {
-      setLoading(false)
+      directoryReadInFlight.current = false
+      if (mounted.current && !background) setLoading(false)
     }
-  }, [readDirectory])
+  }, [readDirectory, readRequest, setOnboarding, target, caller, hasRequest, search.caller, search.callRef, search.grantRef, search.userCode, search.requestInvalid, search.callInvalid])
+
+  // Pin the first unambiguous active Call. Renewal, completion and a page reload
+  // must keep following this attempt rather than selecting another purchase.
+  useEffect(() => {
+    if (!('call' in firstUse) || search.callRef !== undefined || blocked) return
+    const principalRef = firstUse.agent.principalRef
+    if (trackedCall.current?.caller === principalRef && trackedCall.current.callRef === firstUse.call.callRef) return
+    const anchor = { caller: principalRef, callRef: firstUse.call.callRef }
+    trackedCall.current = anchor; setTracked(anchor)
+    void navigate({ to: '/agent-access', search: { ...search, caller: principalRef, callRef: firstUse.call.callRef }, replace: true })
+  }, [firstUse, search, navigate, blocked])
 
   const loadMore = useCallback(async () => {
     const cursor = directory.nextCursor
-    if (cursor === undefined || loadingMore) return
+    if (cursor === undefined || loadingMore || directoryPageInFlight.current || directoryReadInFlight.current) return
     const source = directory
+    directoryPageInFlight.current = true
     setLoadingMore(true)
     try {
       const next = await readDirectoryPage({ data: { cursor } })
@@ -122,26 +237,59 @@ export function useAeAgentAccessHome({
       captureClientExceptionOnClient(cause)
       setDirectoryPaginationIssue({ source, cursor })
     } finally {
+      directoryPageInFlight.current = false
       setLoadingMore(false)
     }
   }, [directory, loadingMore, readDirectoryPage])
 
-  const loadApprovals = useCallback(async () => {
-    setApprovalsLoading(true)
+  const loadApprovals = useCallback(async (background = false) => {
+    if (approvalsReadInFlight.current) return true
+    approvalsReadInFlight.current = true
+    if (!background) setApprovalsLoading(true)
     try {
-      setApprovals(await readApprovals())
+      const current = await readApprovals()
+      if (!mounted.current) return false
+      setApprovals(current)
       setApprovalsError(undefined)
+      return true
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setApprovalsError('Waiting approvals are temporarily unavailable.')
+      if (mounted.current) setApprovalsError('Waiting approvals are temporarily unavailable.')
+      return false
     } finally {
-      setApprovalsLoading(false)
+      approvalsReadInFlight.current = false
+      if (mounted.current && !background) setApprovalsLoading(false)
     }
   }, [readApprovals])
 
   useEffect(() => {
+    let disposed = false
+    let failures = 0
+    let nextReadAt = Date.now() + 5_000
+    const poll = async () => {
+      if (disposed || document.visibilityState === 'hidden' || Date.now() < nextReadAt
+        || directoryReadInFlight.current || directoryPageInFlight.current) return
+      const [directorySuccess, approvalsSuccess] = await Promise.all([load(true), loadApprovals(true)])
+      const success = directorySuccess && approvalsSuccess
+      if (disposed) return
+      failures = success ? 0 : failures + 1
+      nextReadAt = Date.now() + Math.min(30_000, 5_000 * 2 ** failures)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') { nextReadAt = 0; void poll() }
+    }
+    const timer = setInterval(() => { void poll() }, 5_000)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) }
+  }, [load, loadApprovals, target])
+
+  useEffect(() => { if (hasRequest || search.callRef !== undefined) void load(true) }, [target, load, hasRequest, search.callRef])
+
+  useEffect(() => {
     void loadApprovals()
   }, [loadApprovals])
+
 
   useEffect(() => {
     const hash = location.hash.replace(/^#/, '')
@@ -316,14 +464,6 @@ export function useAeAgentAccessHome({
     ? 'Agent access unavailable'
     : 'Agents could not be refreshed'
 
-  const resumeSectionTitle = hasConnectedAgent
-    ? 'Continue with the selected Tool'
-    : 'Finish the Agent connection'
-
-  const resumeSectionDescription = hasConnectedAgent
-    ? 'Return to the Tool, then continue in your agent client. Browser access does not create a Call.'
-    : 'The selected Tool remains saved while you finish connecting an Agent.'
-
   const getAgentHref = useCallback((principalId: string) => {
     return `/agent-access?caller=${encodeURIComponent(principalId)}${search.resumeTool === undefined ? '' : `&resumeTool=${encodeURIComponent(search.resumeTool)}`}`
   }, [search.resumeTool])
@@ -346,16 +486,17 @@ export function useAeAgentAccessHome({
       : 'Load more Agents'
 
   const onSetupStep = useCallback((step: 'closed' | 'choose' | 'oauth') => {
+    const { setup: _setup, ...continuation } = search
     void navigate({
       to: '/agent-access',
       search: {
-        ...(search.caller === undefined ? {} : { caller: search.caller }),
+        ...continuation,
         ...(search.resumeTool === undefined ? {} : { resumeTool: search.resumeTool }),
         ...(step === 'closed' ? {} : { setup: step }),
       },
       replace: step === 'closed',
     })
-  }, [navigate, search.caller, search.resumeTool])
+  }, [navigate, search])
 
   const addAnotherToggleLabel = showSetup ? 'Hide setup' : 'Connect an Agent'
 
@@ -370,11 +511,11 @@ export function useAeAgentAccessHome({
 
 
   const agentHistoryPrincipalRef = useMemo(() => {
-    if (search.caller === undefined) return undefined
-    return directory.details.some(({ agent }) => agent.principalRef === search.caller)
-      ? search.caller
+    if (caller === undefined) return undefined
+    return directory.details.some(({ agent }) => agent.principalRef === caller)
+      ? caller
       : undefined
-  }, [directory.details, search.caller])
+  }, [directory.details, caller])
 
   return {
     canonicalBaseUrl,
@@ -390,11 +531,11 @@ export function useAeAgentAccessHome({
     lifecyclePending,
     onLifecycleRetry,
     lifecycleRetryLabel,
-    load,
+    load: async () => { await load() },
     loadMore: () => void loadMore(),
-    hasConnectedAgent,
-    resumeSectionTitle,
-    resumeSectionDescription,
+    firstUse,
+    onboarding,
+    liveUpdates,
     getAgentHref,
     clearSelectedPrincipal,
     onDisconnectAgent: disconnect,

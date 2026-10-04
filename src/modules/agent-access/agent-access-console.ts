@@ -6,6 +6,7 @@ import type { AgentConnectionReadback } from '@/modules/agent-access/agent-conne
 import { currentUtcMonthBounds } from '@/modules/common/freshness'
 import type {
   AgentActivityView,
+  AgentLiveCallView,
   AgentCredentialSummary,
   AgentCredentialSource,
   AgentDetail,
@@ -14,6 +15,7 @@ import type {
   AgentDirectoryProjection,
   AgentOwnerReadback,
   AgentUsageSummary,
+  AgentWatchedCall,
 } from '@/modules/agent-access/agent-operator-view-model'
 
 import { readAgentCredentialSources } from './internal/agent-credential-sources'
@@ -54,6 +56,7 @@ type CanonicalAgentDirectoryPage = Readonly<{
 }>
 const listOwnedAgentDirectoryQuery = sourceQuery<Readonly<{
   now: number
+  principalRef?: string
   paginationOpts: Readonly<{ numItems: number; cursor: string | null }>
 }>, CanonicalAgentDirectoryPage>(
   'agentDirectory:listOwnedPage',
@@ -113,6 +116,8 @@ type OwnerAgentUsageReadback = Readonly<{
   periodEndAt: number
 }> | Readonly<{ kind: 'unavailable'; code: 'usage_window_too_large' }>
 type OwnerAgentReadback = Readonly<{
+  liveCalls?: readonly AgentLiveCallView[]
+  watchedCall?: AgentWatchedCall
   activity: Readonly<{
     page: readonly OwnerAgentCallReadback[]
     isDone: boolean
@@ -125,6 +130,7 @@ export { currentUtcMonthBounds }
 
 const readOwnerAgentReadbackQuery = sourceQuery<Readonly<{
   principalRef: string
+  callRef?: string
   periodStartAt: number
   periodEndAt: number
   paginationOpts: Readonly<{ numItems: number; cursor: string | null }>
@@ -155,6 +161,8 @@ async function boundedDirectoryEnrichment<T, U>(read: Promise<T>, unavailable: U
 
 export async function loadAgentDirectoryReadback(
   cursor: string | null = null,
+  principalRef?: string,
+  callRef?: string,
 ): Promise<AgentDirectoryProjection> {
   const now = Date.now()
   const { periodStartAt, periodEndAt } = currentUtcMonthBounds(now)
@@ -165,6 +173,7 @@ export async function loadAgentDirectoryReadback(
   const source = await createAuthenticatedSourceTransport()
   const canonicalAgents = await source.query(listOwnedAgentDirectoryQuery, {
     now,
+    ...(principalRef === undefined ? {} : { principalRef }),
     paginationOpts: { numItems: 25, cursor },
   })
   const principalRefs = canonicalAgents.page.map(({ principalRef }) => principalRef)
@@ -179,6 +188,7 @@ export async function loadAgentDirectoryReadback(
       try {
         const readback = await source.query(readOwnerAgentReadbackQuery, {
           principalRef,
+          ...(callRef === undefined ? {} : { callRef }),
           periodStartAt,
           periodEndAt,
           paginationOpts: { numItems: 50, cursor: null },
@@ -226,7 +236,7 @@ function mapOwnerAgentReadback(
   principalRef: string,
   readback: OwnerAgentReadback,
 ): AgentOwnerReadback {
-  const activity = readback.activity.page.map(({ callRef, credentialRef, toolRef, toolLabel, providerRef, state, deliveryState, paymentState, audAmountUnits, receiptRef, recoveryRef, createdAt, updatedAt }): AgentActivityView => ({
+  const projectCall = ({ callRef, credentialRef, toolRef, toolLabel, providerRef, state, deliveryState, paymentState, audAmountUnits, receiptRef, recoveryRef, createdAt, updatedAt }: AgentActivityView): AgentActivityView => ({
     callRef,
     credentialRef,
     toolRef,
@@ -240,7 +250,8 @@ function mapOwnerAgentReadback(
     ...(recoveryRef === undefined ? {} : { recoveryRef }),
     createdAt,
     updatedAt,
-  }))
+  })
+  const activity = readback.activity.page.map(projectCall)
   const usage = readback.usage.kind === 'available'
     ? {
         periodStartAt: readback.usage.periodStartAt,
@@ -272,14 +283,17 @@ function mapOwnerAgentReadback(
           updatedAt: readback.usage.periodStartAt,
         }
       : undefined
-  const dataState = readback.usage.kind === 'unavailable'
-    ? activity.length === 0 ? 'unavailable' as const : 'partial' as const
-    : activity.length === 0 && readback.usage.kind === 'empty'
+  const dataState = activity.length === 0 && (readback.liveCalls?.length ?? 0) === 0
       ? 'empty' as const
       : 'source' as const
   return {
     principalRef,
     activity,
+    ...(readback.liveCalls === undefined ? {} : { liveCalls: readback.liveCalls }),
+    ...(readback.watchedCall === undefined ? {} : { watchedCall: readback.watchedCall.kind === 'missing' ? readback.watchedCall : {
+      ...readback.watchedCall, ...(readback.watchedCall.activity === undefined ? {} : { activity: projectCall(readback.watchedCall.activity) }),
+    } }),
+    ...(readback.usage.kind === 'unavailable' ? { usageUnavailable: true as const } : {}),
     activityIsDone: readback.activity.isDone,
     ...(readback.activity.isDone ? {} : { activityContinueCursor: readback.activity.continueCursor }),
     ...(usage === undefined ? {} : { usage }),
@@ -354,6 +368,10 @@ function projectAgentDetail(
     providerCredentialId === canonical.currentProviderCredentialId
   ))
   if (currentCanonicalCredential === undefined) throw new Error('agent_directory_current_credential_missing')
+  // Call records retain the external credential identifier. Owner progress uses
+  // canonical refs only through the proven binding, including old generations.
+  // No prefix-based guess may attribute a Call to the current credential.
+  const canonicalCredentialRefs = new Map(canonical.credentials.map(credential => [credential.providerCredentialId, credential.credentialRef]))
   const credentials: AgentCredentialSummary[] = canonical.credentials.map((credential) => ({
     credentialRef: credential.credentialRef,
     generation: credential.generation,
@@ -369,17 +387,14 @@ function projectAgentDetail(
   }))
   const hasUnavailable = ordered.some(({ dataState }) => dataState === 'unavailable')
   const allUnavailable = ordered.every(({ dataState }) => dataState === 'unavailable')
-  const ownerUnavailable = ownerReadback?.dataState === 'unavailable'
-    || ownerReadback?.dataState === 'partial'
-  const status: AgentDirectoryItem['status'] = canonical.status === 'connected' && (hasUnavailable || ownerUnavailable)
-    ? 'attention'
-    : canonical.status
+  const status = canonical.status
   const activityReadback = ownerReadback?.activity ?? ordered.flatMap(({ activity }) => activity)
   const activityByCallRef = new Map<string, AgentActivityView>()
   for (const entry of activityReadback) {
     if (!activityByCallRef.has(entry.callRef)) activityByCallRef.set(entry.callRef, entry)
   }
   const activity = [...activityByCallRef.values()]
+    .map(call => ({ ...call, credentialRef: canonicalCredentialRefs.get(call.credentialRef) ?? call.credentialRef }))
     .toSorted((left, right) => right.createdAt - left.createdAt)
   const lastSeenAt = Math.max(
     ...ordered.flatMap(({ key, activity }) => [
@@ -432,6 +447,16 @@ function projectAgentDetail(
     ...(current?.grant === undefined ? {} : { grant: current.grant }),
     spendingPolicy,
     activity,
+    ...(ownerReadback?.liveCalls === undefined ? {} : { liveCalls: ownerReadback.liveCalls.map(call => ({
+      ...call, credentialRef: canonicalCredentialRefs.get(call.credentialRef) ?? call.credentialRef,
+    })) }),
+    ...(ownerReadback?.watchedCall === undefined ? {} : { watchedCall: ownerReadback.watchedCall.kind === 'missing'
+      ? ownerReadback.watchedCall : { ...ownerReadback.watchedCall,
+        live: { ...ownerReadback.watchedCall.live, credentialRef: canonicalCredentialRefs.get(ownerReadback.watchedCall.live.credentialRef) ?? ownerReadback.watchedCall.live.credentialRef },
+        ...(ownerReadback.watchedCall.activity === undefined ? {} : { activity: { ...ownerReadback.watchedCall.activity,
+          credentialRef: canonicalCredentialRefs.get(ownerReadback.watchedCall.activity.credentialRef) ?? ownerReadback.watchedCall.activity.credentialRef } }),
+      } }),
+    ...(ownerReadback?.usageUnavailable ? { usageUnavailable: true as const } : {}),
     ...(usage === undefined ? {} : { usage }),
     dataState,
     ...(canonical.credentialHistoryTruncated ? { credentialHistoryTruncated: true } : {}),

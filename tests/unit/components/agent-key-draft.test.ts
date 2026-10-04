@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   AGENT_KEY_DRAFT_DEFAULTS,
   agentKeyDraftFromSearch,
   agentKeySearchFromDraft,
   isAgentKeyDraftDirty,
+  navigateAgentKeyIssueSearch,
   validateAgentKeyIssueSearch,
 } from '@/components/ae/console/connect-agent-wizard/agent-key-draft'
 
@@ -49,7 +50,19 @@ describe('agent key draft search', () => {
     expect(isAgentKeyDraftDirty(draft)).toBe(false)
   })
 
-  it('still rejects an unknown issue flag', () => {
+  it('retains only a valid selected Tool through draft edits and closing', () => {
+    const resumeTool = `operation:v1:${'a'.repeat(64)}`
+    expect(validateAgentKeyIssueSearch({ issue: 'manual', resumeTool, token: 'sek_private' })).toEqual({ issue: 'manual', resumeTool })
+    expect(validateAgentKeyIssueSearch({ resumeTool: '//evil.example', input: 'private task' })).toEqual({})
+    const navigate = vi.fn().mockResolvedValue(undefined)
+    const draft = agentKeyDraftFromSearch({ name: 'Ada' }, 'sandbox')
+    navigateAgentKeyIssueSearch(navigate, true, draft, true, { resumeTool })
+    expect(navigate).toHaveBeenLastCalledWith(expect.objectContaining({ search: expect.objectContaining({ issue: 'manual', name: 'Ada', resumeTool }) }))
+    navigateAgentKeyIssueSearch(navigate, false, draft, true, { resumeTool })
+    expect(navigate).toHaveBeenLastCalledWith(expect.objectContaining({ search: { resumeTool } }))
+  })
+
+  it('still rejects an unknown issue flag' , () => {
     expect(() => validateAgentKeyIssueSearch({ issue: 'oauth' })).toThrow()
   })
 })
