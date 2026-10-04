@@ -30,6 +30,7 @@ export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
   const [receipt, setReceipt] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
   const [outcomeUnknown, setOutcomeUnknown] = useState(false)
+  const requestBlockedRef = useRef(false)
   const contactInvalid = error?.includes('contact') === true
   const evidenceInvalid = error === 'What should change? is required.'
   const contactEmailRef = useRef<HTMLInputElement>(null)
@@ -44,7 +45,7 @@ export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (outcomeUnknown) return
+    if (pending || outcomeUnknown || requestBlockedRef.current) return
     setError(undefined)
     setReceipt(undefined)
 
@@ -69,9 +70,13 @@ export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
       return
     }
 
+    // Exclude repeated native submits before React commits disabled controls.
+    requestBlockedRef.current = true
+    let outcomeConfirmed = false
     setPending(true)
     try {
       const result = await openRemoval({ data: nextValue })
+      outcomeConfirmed = result.kind === 'ok' || !result.retryable
       if (result.kind === 'ok') {
         const message = `Request ${result.receipt.status}. Reference ${result.receipt.disputeId}.`
         setReceipt(message)
@@ -90,6 +95,7 @@ export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
       setOutcomeUnknown(true)
       setError('The request outcome could not be confirmed. Contact support before submitting another request.')
     } finally {
+      requestBlockedRef.current = !outcomeConfirmed
       setPending(false)
     }
   }

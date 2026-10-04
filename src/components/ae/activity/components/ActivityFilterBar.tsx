@@ -70,14 +70,16 @@ export function ActivityFilterBar({
             <span className="text-muted-foreground">
               Agent · <span className="font-mono text-foreground">{filteredAgentShortId}</span>
             </span>
-            <button
+            <ArcButton
               type="button"
+              variant="ghost"
+              size="md"
               onClick={onClearAgent}
               aria-label="Clear agent filter"
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-control)] border border-border px-2 text-lg text-muted-foreground transition-colors hover:bg-muted"
+              className="min-h-11 min-w-11"
             >
               ×
-            </button>
+            </ArcButton>
           </div>
         ) : null}
       </div>

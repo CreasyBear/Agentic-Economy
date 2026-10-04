@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
+import '@testing-library/jest-dom/vitest'
 import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -114,5 +115,143 @@ describe('privacy removal unknown outcomes', () => {
     const alert = screen.getByText('Request recorded').closest('[role="status"]')
     expect(alert?.textContent).toContain('Request opened. Reference dispute:test-reference.')
     expect(alert?.textContent).toContain('Quote this reference and status if you contact support.')
+  })
+
+  it('focuses invalid contact fields and resolves each Arc description and error reference once', async () => {
+    const Component = PrivacyRemovalRoute.options.component
+    if (Component === undefined) throw new Error('privacy_removal_component_missing')
+    render(<Component />)
+
+    const email = screen.getByLabelText<HTMLInputElement>('Your email')
+    const evidence = screen.getByLabelText<HTMLTextAreaElement>('What should change?')
+    const form = email.closest('form')
+    if (form === null) throw new Error('privacy_removal_form_missing')
+
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(document.activeElement).toBe(email))
+    expect(email.getAttribute('aria-invalid')).toBe('true')
+    expect(email).toHaveAccessibleDescription('Used only to follow up. A contact email is required.')
+    expect(document.querySelectorAll('#contactEmail-description')).toHaveLength(1)
+    expect(document.getElementById('contactEmail-error')?.textContent).toBeTruthy()
+    const emailDescriptionRefs = (email.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+    expect(emailDescriptionRefs.filter((id) => id === 'contactEmail-description')).toHaveLength(1)
+    expect(emailDescriptionRefs.filter((id) => id === 'contactEmail-error')).toHaveLength(1)
+
+    fireEvent.change(email, { target: { value: 'owner@example.com' } })
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(document.activeElement).toBe(evidence))
+    expect(evidence.getAttribute('aria-invalid')).toBe('true')
+    expect(evidence).toHaveAccessibleDescription('A short note is enough. What should change? is required.')
+    expect(document.querySelectorAll('#evidenceSummary-description')).toHaveLength(1)
+    expect(document.getElementById('evidenceSummary-error')?.textContent).toBeTruthy()
+    const evidenceDescriptionRefs = (evidence.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+    expect(evidenceDescriptionRefs.filter((id) => id === 'evidenceSummary-description')).toHaveLength(1)
+    expect(evidenceDescriptionRefs.filter((id) => id === 'evidenceSummary-error')).toHaveLength(1)
+    expect(routeMocks.openRemoval).not.toHaveBeenCalled()
+  })
+
+  it('disables all fields while a request is pending', async () => {
+    routeMocks.openRemoval.mockReturnValue(new Promise(() => {}))
+    const Component = PrivacyRemovalRoute.options.component
+    if (Component === undefined) throw new Error('privacy_removal_component_missing')
+    render(<Component />)
+
+    fireEvent.change(screen.getByLabelText('Provider slug'), { target: { value: 'example-provider' } })
+    fireEvent.change(screen.getByLabelText('Your email'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'Remove duplicate.' } })
+    const submit = screen.getByRole('button', { name: 'Submit request' })
+    const form = submit.closest('form')
+    if (form === null) throw new Error('privacy_removal_form_missing')
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(routeMocks.openRemoval).toHaveBeenCalledTimes(1))
+    expect(screen.getByLabelText('Provider slug')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Your email')).toHaveProperty('disabled', true)
+    expect(screen.getByRole('combobox', { name: 'Reason' })).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('What should change?')).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Submit request' })).toHaveProperty('disabled', true)
+
+    fireEvent.submit(form)
+    expect(routeMocks.openRemoval).toHaveBeenCalledTimes(1)
+    expect(screen.getByLabelText('Provider slug')).toHaveValue('example-provider')
+    expect(screen.getByLabelText('Your email')).toHaveValue('owner@example.com')
+    expect(screen.getByLabelText('What should change?')).toHaveValue('Remove duplicate.')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('excludes a second request before React commits the pending state and unlocks after a known refusal', async () => {
+    let resolveRequest: ((value: unknown) => void) | undefined
+    routeMocks.openRemoval.mockReturnValueOnce(new Promise((resolve) => { resolveRequest = resolve }))
+    const Component = PrivacyRemovalRoute.options.component
+    if (Component === undefined) throw new Error('privacy_removal_component_missing')
+    render(<Component />)
+    fireEvent.change(screen.getByLabelText('Provider slug'), { target: { value: 'example-provider' } })
+    fireEvent.change(screen.getByLabelText('Your email'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'Remove duplicate.' } })
+    const form = screen.getByLabelText('Your email').closest('form')
+    if (form === null) throw new Error('privacy_removal_form_missing')
+    act(() => {
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+    })
+    expect(routeMocks.openRemoval).toHaveBeenCalledTimes(1)
+    expect(screen.getByLabelText('Your email')).toHaveValue('owner@example.com')
+    if (resolveRequest === undefined) throw new Error('privacy_removal_request_missing')
+    resolveRequest({ kind: 'error', code: 'dispute_invalid_target', retryable: false, reason: 'Provider not found.' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Provider not found.')
+    expect(screen.getByRole('button', { name: 'Submit request' })).toBeEnabled()
+    routeMocks.openRemoval.mockResolvedValueOnce({ kind: 'error', code: 'dispute_invalid_target', retryable: false, reason: 'Provider not found.' })
+    fireEvent.submit(form)
+    await waitFor(() => expect(routeMocks.openRemoval).toHaveBeenCalledTimes(2))
+  })
+
+  it('submits the selected reason through the native reasonCode field', async () => {
+    routeMocks.openRemoval.mockResolvedValue({
+      kind: 'ok',
+      receipt: {
+        disputeId: 'dispute:reason-selection',
+        status: 'opened',
+      },
+    })
+    const Component = PrivacyRemovalRoute.options.component
+    if (Component === undefined) throw new Error('privacy_removal_component_missing')
+    render(<Component />)
+
+    const reason = screen.getByRole('combobox', { name: 'Reason' })
+    const form = reason.closest('form')
+    if (form === null) throw new Error('privacy_removal_form_missing')
+    expect(new FormData(form).getAll('reasonCode')).toEqual(['privacy_removal_requested'])
+
+    fireEvent.click(reason)
+    const options = await screen.findAllByRole('option')
+    const firstOption = options[0]
+    if (firstOption === undefined) throw new Error('privacy_removal_reason_options_missing')
+    const targetOption = screen.getByRole('option', { name: 'Incorrect Tool or Provider facts' })
+    fireEvent.keyDown(firstOption, { key: 'End' })
+    await waitFor(() => expect(document.activeElement).toBe(targetOption))
+    fireEvent.keyDown(targetOption, { key: 'Enter' })
+    fireEvent.keyUp(targetOption, { key: 'Enter' })
+    await waitFor(() => expect(document.activeElement).toBe(reason))
+
+    const selectedReasonCode = 'unsafe_or_inaccurate'
+    expect(new FormData(form).getAll('reasonCode')).toEqual([selectedReasonCode])
+
+    fireEvent.change(screen.getByLabelText('Provider slug'), { target: { value: 'example-provider' } })
+    fireEvent.change(screen.getByLabelText('Your email'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'Remove duplicate.' } })
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(routeMocks.openRemoval).toHaveBeenCalledTimes(1))
+    expect(new FormData(form).getAll('reasonCode')).toEqual([selectedReasonCode])
+    expect(routeMocks.openRemoval).toHaveBeenCalledWith({
+      data: {
+        slug: 'example-provider',
+        contactEmail: 'owner@example.com',
+        reasonCode: selectedReasonCode,
+        evidenceSummary: 'Remove duplicate.',
+      },
+    })
   })
 })

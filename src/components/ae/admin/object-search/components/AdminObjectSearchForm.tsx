@@ -1,15 +1,8 @@
 import { useState, type FormEvent } from 'react'
 
 import { Button } from '@/components/arc/button/button'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Input } from '@/components/arc/input/input'
+import { Select } from '@/components/arc/select/select'
 import type { AdminObjectKind } from '@/lib/operator/admin-console/contracts'
 import type { AdminObjectSearchInput, AdminObjectSearchState } from '../object-search.contracts'
 import {
@@ -44,44 +37,30 @@ export function AdminObjectSearchForm({
 
   return (
     <form className="arc-market arc-object-search" onSubmit={submit} aria-busy={busy}>
-      <FieldGroup className="arc-object-search-fields">
-        <Field className="arc-object-search-field">
-          <FieldLabel htmlFor="admin-object-kind">{ADMIN_OBJECT_SEARCH_COPY.kindLabel}</FieldLabel>
-          <Select
-            value={kind}
-            onValueChange={(value) => {
-              const parsed = adminObjectKindSchema.safeParse(value)
-              if (parsed.success) setKind(parsed.data)
-            }}
-          >
-            <SelectTrigger id="admin-object-kind" className="arc-object-search-select">
-              <SelectValue>{ADMIN_OBJECT_KIND_OPTIONS.find((option) => option.value === kind)?.label}</SelectValue>
-            </SelectTrigger>
-            <SelectContent className="arc-market arc-object-search-options">
-              <SelectGroup>
-                {ADMIN_OBJECT_KIND_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="arc-object-search-option">{option.label}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="arc-object-search-field" data-invalid={message?.tone === 'error' ? 'true' : undefined}>
-          <FieldLabel htmlFor="admin-object-ref">{ADMIN_OBJECT_SEARCH_COPY.referenceLabel}</FieldLabel>
-          <input
-            className="arc-object-search-input"
-            id="admin-object-ref"
-            type="search"
-            autoComplete="off"
-            spellCheck={false}
-            value={ref}
-            placeholder={ADMIN_OBJECT_SEARCH_COPY.referencePlaceholder}
-            aria-invalid={message?.tone === 'error' ? true : undefined}
-            aria-describedby={message === undefined ? undefined : 'admin-object-search-message'}
-            onChange={(event) => setRef(event.currentTarget.value)}
-          />
-        </Field>
-      </FieldGroup>
+      <div className="arc-object-search-fields">
+        <Select
+          id="admin-object-kind"
+          label={ADMIN_OBJECT_SEARCH_COPY.kindLabel}
+          options={[...ADMIN_OBJECT_KIND_OPTIONS]}
+          value={kind}
+          onValueChange={(value) => {
+            const parsed = adminObjectKindSchema.safeParse(value)
+            if (parsed.success) setKind(parsed.data)
+          }}
+        />
+        <Input
+          id="admin-object-ref"
+          label={ADMIN_OBJECT_SEARCH_COPY.referenceLabel}
+          type="search"
+          autoComplete="off"
+          spellCheck={false}
+          value={ref}
+          placeholder={ADMIN_OBJECT_SEARCH_COPY.referencePlaceholder}
+          aria-invalid={message?.tone === 'error' ? true : undefined}
+          aria-describedby={message === undefined ? undefined : 'admin-object-search-message'}
+          onChange={(event) => setRef(event.currentTarget.value)}
+        />
+      </div>
       <Button type="submit" size="md" className="arc-object-search-action" disabled={busy}>
         {busy ? ADMIN_OBJECT_SEARCH_COPY.searching : ADMIN_OBJECT_SEARCH_COPY.submit}
       </Button>
