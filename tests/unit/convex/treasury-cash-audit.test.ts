@@ -12,6 +12,9 @@ import type { FormanceTreasuryAuditTransaction } from '@/modules/money/formance-
 import type { TreasuryBatch, TreasuryIdentity, TreasuryTransfer } from '@/modules/money/treasury'
 import type { X402EvmReceipt } from '@/modules/capability-supply/server'
 import { auditTreasuryCash } from '../../../convex/lib/money/treasury/cashAudit'
+import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
+
+vi.mock('@/modules/capability-execution/call-runtime', () => ({ readX402EvmReceipt: vi.fn() }))
 
 type Input = Parameters<typeof auditTreasuryCash>[0]
 type CallSource = Input['calls'][number]
@@ -236,6 +239,55 @@ describe('independent treasury cash reconciliation behavior', () => {
     const result = await auditTreasuryCash(f.input, async () => undefined)
     expect(result).toMatchObject({ settlements: { kind: 'unavailable', code: 'treasury_payment_receipt_unavailable' },
       cash: { kind: 'unavailable', code: 'treasury_payment_attribution_required' } })
+  })
+
+  it.each([false, true])('respects RPC concurrency and total readback budget with elapsed deadline=%s', async deadlineExpires => {
+    const fixtures = Array.from({ length: 6 }, (_, index) => {
+      const value = fixture('settled', { suffix: `serial-${index}` })
+      value.attempt.material.evidenceRefs = [`chain:${NETWORK}:${hash(1_000 + index)}`]
+      value.attempt.material.paymentNonce = hash(2_000 + index)
+      return value
+    })
+    const opening = batch(undefined, '100000000')
+    const range = batch(opening, '70000000', fixtures.map((_, index) => transfer(hash(1_000 + index))))
+    let active = 0
+    let now = NOW
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const reader = vi.fn(async (material: AttemptSource['material'], tx: string) => {
+      if (active > 0) return undefined
+      active += 1
+      try {
+        await new Promise<void>(resolve => setTimeout(resolve, 1))
+        if (deadlineExpires) now += 61_000
+        return receipt(material, tx)
+      } finally { active -= 1 }
+    })
+    const result = await auditTreasuryCash({ identity, snapshotAt: NOW,
+      progress: { kind: 'ready', identity, checkpoint: range.observation.checkpoint, blockTimestamp: range.observation.blockTimestamp, bufferUnits: '1000000' },
+      batches: [opening, range], calls: fixtures.map(value => value.call), attempts: fixtures.map(value => value.attempt),
+      reservations: fixtures.map(value => value.reservation), ledger: ledger('69000000', '0'),
+      transactions: [...openingNative(opening), ...fixtures.flatMap(value => value.transactions.slice(2))]
+        .map((row, index) => ({ ...row, id: String(index + 1) })),
+    }, reader).finally(() => clock.mockRestore())
+    expect(result).toMatchObject(deadlineExpires ? {
+      cash: { kind: 'unavailable' }, settlements: { kind: 'unavailable', code: 'treasury_payment_readback_incomplete' },
+      reservations: { kind: 'matched', expectedUnits: '0' },
+    } : { cash: { kind: 'matched', differenceUnits: '0' },
+      settlements: { kind: 'matched', checkedCount: 6, expectedUnits: '30000000' },
+      reservations: { kind: 'matched', expectedUnits: '0' } })
+    expect(reader).toHaveBeenCalledTimes(deadlineExpires ? 2 : 6)
+    expect(active).toBe(0)
+  })
+
+  it.each([11n, 12n])('uses current receipt evidence with %s confirmations without waiting for a later block', async confirmations => {
+    const f = fixture()
+    vi.mocked(readX402EvmReceipt).mockImplementation(async (...args) => args[7] === undefined
+      ? { ...receipt(f.attempt.material, hash(1)), confirmations } : undefined)
+    const result = await auditTreasuryCash(f.input)
+    expect(result.settlements).toMatchObject(confirmations === 12n
+      ? { kind: 'matched', checkedCount: 1, expectedUnits: PAYMENT }
+      : { kind: 'unavailable', code: 'treasury_payment_receipt_unavailable' })
+    expect(result.cash.kind).toBe(confirmations === 12n ? 'matched' : 'unavailable')
   })
 
   it.each([false, true])('isolates a throwing RPC receipt boundary with confirmed orphan=%s', async hasOrphan => {
