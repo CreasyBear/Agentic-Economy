@@ -1,11 +1,11 @@
-import { ChevronDownIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react'
+import { ChevronDownIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { Button } from '@/components/arc/button/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { ChipGroup, type ChipOption } from '@/components/arc/chip-group/chip-group'
+import { Combobox, type ComboboxOption } from '@/components/arc/combobox/combobox'
+import { FilterToolbar, type FilterChip } from '@/components/arc/filter-toolbar/filter-toolbar'
+import { Input } from '@/components/arc/input/input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
 import { cn } from '@/lib/utils'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
@@ -22,14 +22,29 @@ export type DirectoryExplorerFiltersProps = Readonly<{
   onReset: () => void
   jevRecipient?: string
   showQuery?: boolean
+  entity?: 'tools' | 'providers'
 }>
+
+type ExplorerFilterKey = typeof explorerFilterKeys[number]
+
 const priceBandLabels = { lt_0_01: 'Under 0.01 Provider-listed USDC', '0_01_to_0_03': '0.01–<0.03 Provider-listed USDC', '0_03_to_0_10': '0.03–<0.10 Provider-listed USDC', '0_10_to_1': '0.10–<1 Provider-listed USDC', '1_to_10': '1–<10 Provider-listed USDC', '10_plus': '10+ Provider-listed USDC', unknown: 'Price not comparable' }
 const adoptionBandLabels = { missing: 'Payers not reported', '0': '0 paying addresses', '1': '1 paying address', '2_4': '2–4 paying addresses', '5_9': '5–9 paying addresses', '10_49': '10–49 paying addresses', '50_plus': '50+ paying addresses' }
-const advancedFilterKeys = ['network', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 const explorerFilterKeys = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'reviewedProvidersOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
+const advancedFilterKeys = ['network', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 
-const discoverFacetPill = 'rounded-full border border-transparent transition-[background-color,border-color,color] duration-fast ease-standard active:scale-100'
-const discoverFacetSelected = cn(discoverFacetPill, 'border-border/70 bg-card')
+const publishedDetailOptions = [
+  { value: 'hasInputFields', label: 'Request fields' },
+  { value: 'hasInputSchema', label: 'Request schema' },
+  { value: 'hasOutputFields', label: 'Output fields' },
+  { value: 'hasOutputSchema', label: 'Output schema' },
+  { value: 'hasOutputExample', label: 'Output example' },
+  { value: 'curatedOnly', label: 'Bazaar curated' },
+] as const satisfies readonly (ChipOption & { value: keyof DirectoryExplorerFilterValues })[]
+
+function isActive(search: DirectoryExplorerFilterValues, key: ExplorerFilterKey) {
+  const value = search[key]
+  return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== false
+}
 
 function activeAdvancedFilterCount(search: DirectoryExplorerFilterValues) {
   return advancedFilterKeys.filter(key => {
@@ -38,11 +53,23 @@ function activeAdvancedFilterCount(search: DirectoryExplorerFilterValues) {
   }).length
 }
 
-function DirectoryQueryFilter({ search, onChange, jevRecipient }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange' | 'jevRecipient'>) {
+function facetOptions(values: readonly X402DirectoryFacet[], selected: string | undefined, formatLabel?: (label: string) => string): ComboboxOption[] {
+  const options = values.map(item => ({
+    value: item.key,
+    label: `${formatLabel?.(item.label) ?? item.label} ${item.count.toLocaleString('en-AU')}`,
+    keywords: [item.key, item.label],
+  }))
+  if (selected !== undefined && !options.some(option => option.value === selected)) options.push({ value: selected, label: selected, keywords: [selected] })
+  return options
+}
+
+function DirectoryQueryFilter({ search, onChange, jevRecipient, entity }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange' | 'jevRecipient' | 'entity'>) {
   const id = useId()
   const [query, setQuery] = useState(search.query ?? '')
   const [queryError, setQueryError] = useState<string>()
   const inputRef = useRef<HTMLInputElement>(null)
+  const label = entity === 'providers' ? 'Search Providers' : 'Search Tools'
+
   return <form className="flex flex-col gap-2" onSubmit={event => {
     event.preventDefault()
     const trimmed = query.trim()
@@ -54,70 +81,62 @@ function DirectoryQueryFilter({ search, onChange, jevRecipient }: Pick<Directory
     setQueryError(undefined)
     onChange({ query: trimmed || undefined, sort: trimmed ? 'relevance' : undefined })
   }}>
-    <Field>
-      <FieldLabel htmlFor={`${id}-query`}>Search Tools</FieldLabel>
-      <Input ref={inputRef} id={`${id}-query`} type="search" value={query} onChange={event => { setQuery(event.target.value); setQueryError(undefined) }} placeholder="Weather forecasts, document analysis…" aria-invalid={queryError !== undefined} aria-describedby={queryError === undefined ? undefined : `${id}-query-error`} />
-      <FieldError id={`${id}-query-error`} className="text-xs">{queryError}</FieldError>
-      {jevRecipient === undefined ? <p className="text-xs text-muted-foreground">Search assesses Market Tool listings and published candidate descriptions.</p> : <p className="text-xs text-muted-foreground">Search query and candidate Tool text go to {jevRecipient}.</p>}
-    </Field>
-    <Button type="submit" variant="secondary" size="sm" className="w-full">Search Tools</Button>
+    <Input ref={inputRef} id={`${id}-query`} label={label} type="search" value={query} onChange={event => { setQuery(event.target.value); setQueryError(undefined) }} placeholder="Weather forecasts, document analysis…" {...(queryError === undefined ? {} : { error: queryError })} />
+    {entity === 'providers'
+      ? <p className="text-xs text-muted-foreground">Search indexed Provider names, descriptions, categories and hostnames.</p>
+      : jevRecipient === undefined
+        ? <p className="text-xs text-muted-foreground">Search assesses Market Tool listings and published candidate descriptions.</p>
+        : <p className="text-xs text-muted-foreground">Search query and candidate Tool text go to {jevRecipient}.</p>}
+    <Button type="submit" variant="secondary" size="sm" className="w-full">{label}</Button>
   </form>
 }
 
-function MultipleFacets({ label, values, selected = [], onChange }: Readonly<{ label: string; values: readonly X402DirectoryFacet[]; selected?: readonly string[] | undefined; onChange: (values: string[] | undefined) => void }>) {
-  const [query, setQuery] = useState('')
-  const visible = values.filter(item => `${item.label} ${item.key}`.toLowerCase().includes(query.trim().toLowerCase()))
-  const selectedKeys = new Set(selected)
-  const valueKeys = new Set(values.map(item => item.key))
-  const unlistedSelected: string[] = []
-  for (const key of selected) if (!valueKeys.has(key)) unlistedSelected.push(key)
-  function toggle(key: string) {
-    const next = selectedKeys.has(key) ? selected.filter(value => value !== key) : [...selected, key]
-    onChange(next.length === 0 ? undefined : next)
-  }
-  return <fieldset className="flex min-w-0 flex-col gap-3 border-t pt-5"><legend className="sr-only">{label}</legend><p className="text-sm font-medium">{label}</p><Input value={query} aria-label={`Find shown ${label.toLowerCase()}`} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9" /><div className="flex max-h-52 flex-col gap-1 overflow-y-auto overscroll-contain">
-    {visible.map(item => <Label key={item.key} className="min-h-10 justify-between gap-2 py-1 text-xs font-normal"><span className="flex min-w-0 items-center gap-2"><Checkbox aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} checked={selectedKeys.has(item.key)} disabled={selected.length >= 5 && !selectedKeys.has(item.key)} onCheckedChange={() => toggle(item.key)} /><span className="break-words">{item.label}</span></span><span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span></Label>)}
-    {visible.length === 0 ? <p className="text-xs text-muted-foreground">No match in the shown {label.toLowerCase()}.</p> : null}
-  </div>{unlistedSelected.map(key => <Button labelLayout="between" type="button" key={key} variant="secondary" size="sm" className={cn('h-auto min-h-9 justify-between whitespace-normal', discoverFacetSelected)} onClick={() => toggle(key)} aria-label={`Remove ${label.toLowerCase()}: ${key}`}>{key}<XIcon className="size-3" /></Button>)}<p className="text-xs leading-relaxed text-muted-foreground">A selection from the catalogue. Choose up to five; Tools can match any selected {label === 'Tags' ? 'tag' : 'collection'}.</p></fieldset>
-}
-
-function Facets({ label, values, selected, onChange, searchable = false, allLabel, showCount = true }: Readonly<{
-  label: string; values: readonly X402DirectoryFacet[]; selected?: string | undefined
-  onChange: (value: string | undefined) => void; searchable?: boolean; allLabel?: string; showCount?: boolean
+function Facets({ label, values, selected, onChange, allLabel, description, formatLabel }: Readonly<{
+  label: string
+  values: readonly X402DirectoryFacet[]
+  selected?: string | undefined
+  onChange: (value: string | undefined) => void
+  allLabel: string
+  description?: string | undefined
+  formatLabel?: (label: string) => string
 }>) {
-  const [query, setQuery] = useState('')
-  const visible = values.filter(item => `${item.label} ${item.key}`.toLowerCase().includes(query.trim().toLowerCase()))
-  const allText = allLabel ?? (label === 'Network' ? 'All networks' : 'All categories')
-  return <fieldset className="min-w-0 flex flex-col gap-3">
-    <legend className="mb-3 text-sm font-medium">{label}</legend>
-    {searchable ? <div className="relative"><SearchIcon className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-muted-foreground" /><Input aria-label={`Find ${label.toLowerCase()}`} value={query} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 pl-8" /></div> : null}
-    <div className="max-h-60 flex flex-col gap-0.5 overflow-y-auto overscroll-contain">
-      <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected === undefined ? discoverFacetSelected : discoverFacetPill)}>{allText}</Button>
-      {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={showCount ? `${item.label} ${item.count.toLocaleString('en-AU')}` : item.label} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-10 w-full justify-between gap-3 px-3 text-xs font-normal', selected === item.key ? discoverFacetSelected : discoverFacetPill)}>
-        <span className="min-w-0 break-words text-left whitespace-normal">{item.label}</span>{showCount ? <span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span> : null}
-      </Button>)}
-      {visible.length === 0 ? <p className="px-2 py-2 text-xs text-muted-foreground">No matching {label.toLowerCase()}.</p> : null}
-      {selected !== undefined && !values.some(item => item.key === selected) ? <Button labelLayout="start" type="button" variant="secondary" className={cn('h-auto min-h-9 w-full justify-start whitespace-normal', discoverFacetSelected)} aria-pressed onClick={() => onChange(undefined)}>{selected}</Button> : null}
-    </div>
-  </fieldset>
+  return <Combobox
+    label={label}
+    options={facetOptions(values, selected, formatLabel)}
+    value={selected ?? ''}
+    onValueChange={value => onChange(value || undefined)}
+    placeholder={allLabel}
+    {...(description === undefined ? {} : { description })}
+    emptyMessage={`No matching ${label.toLowerCase()}.`}
+  />
 }
 
 function ListedPriceFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
   const id = useId()
+  const minimumId = `${id}-minimum`
   const [minimum, setMinimum] = useState(() => search.minUsdPrice?.toString() ?? '')
   const [maximum, setMaximum] = useState(() => search.maxUsdPrice?.toString() ?? '')
   const minimumRef = useRef<HTMLInputElement>(null)
   const [priceError, setPriceError] = useState<string>()
+
   return <form className="flex flex-col gap-3 border-t pt-5" onSubmit={event => {
     event.preventDefault()
     const min = minimum.trim() === '' ? undefined : Number(minimum), max = maximum.trim() === '' ? undefined : Number(maximum)
-    if ((min !== undefined && (!Number.isFinite(min) || min < 0)) || (max !== undefined && (!Number.isFinite(max) || max < 0)) || (min !== undefined && max !== undefined && min > max)) { setPriceError('Enter a valid price range with the minimum no greater than the maximum.'); minimumRef.current?.focus(); return }
-    setPriceError(undefined); onChange({ minUsdPrice: min, maxUsdPrice: max, priceBand: undefined })
+    if ((min !== undefined && (!Number.isFinite(min) || min < 0)) || (max !== undefined && (!Number.isFinite(max) || max < 0)) || (min !== undefined && max !== undefined && min > max)) {
+      setPriceError('Enter a valid price range with the minimum no greater than the maximum.')
+      minimumRef.current?.focus()
+      return
+    }
+    setPriceError(undefined)
+    onChange({ minUsdPrice: min, maxUsdPrice: max, priceBand: undefined })
   }}>
     <p className="text-sm font-medium">Custom Provider-listed price · USDC</p>
-    <FieldGroup className="grid grid-cols-2 gap-2"><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-minimum`}>Min USDC</FieldLabel><Input ref={minimumRef} id={`${id}-minimum`} type="number" min="0" step="any" inputMode="decimal" placeholder="0" value={minimum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMinimum(event.target.value)} /></Field><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-maximum`}>Max USDC</FieldLabel><Input id={`${id}-maximum`} type="number" min="0" step="any" inputMode="decimal" placeholder="Any" value={maximum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMaximum(event.target.value)} /></Field></FieldGroup>
-    <FieldError id={`${id}-price-error`} className="text-xs">{priceError}</FieldError>
-    <p className="text-xs leading-relaxed text-muted-foreground">A Provider-listed USDC range, not your AUD budget. Applying it clears the listed-price band.</p><Button type="submit" variant="secondary" size="sm" className="w-full">Apply price range</Button>
+    <div className="grid grid-cols-2 gap-2">
+      <Input ref={minimumRef} id={minimumId} label="Min USDC" type="number" min="0" step="any" inputMode="decimal" placeholder="0" value={minimum} {...(priceError === undefined ? {} : { error: priceError })} onChange={event => { setMinimum(event.target.value); setPriceError(undefined) }} />
+      <Input id={`${id}-maximum`} label="Max USDC" type="number" min="0" step="any" inputMode="decimal" placeholder="Any" value={maximum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${minimumId}-error`} onChange={event => { setMaximum(event.target.value); setPriceError(undefined) }} />
+    </div>
+    <p className="text-xs leading-relaxed text-muted-foreground">A Provider-listed USDC range, not your AUD budget. Applying it clears the listed-price band.</p>
+    <Button type="submit" variant="secondary" size="sm" className="w-full">Apply price range</Button>
   </form>
 }
 
@@ -126,77 +145,329 @@ function ProviderFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps
   const [provider, setProvider] = useState(search.provider ?? '')
   const providerRef = useRef<HTMLInputElement>(null)
   const [providerError, setProviderError] = useState<string>()
+
   return <form className="flex flex-col gap-3 border-t pt-5" onSubmit={event => {
-      event.preventDefault()
-      const parsed = x402DirectoryFilterSchema.safeParse(provider.trim() === '' ? {} : { provider })
-      if (!parsed.success) { setProviderError('Enter a Provider hostname, such as api.example.com.'); providerRef.current?.focus(); return }
-      setProviderError(undefined); onChange({ provider: parsed.data.provider })
-    }}><Field><FieldLabel htmlFor={`${id}-provider`}>Provider</FieldLabel><Input ref={providerRef} id={`${id}-provider`} value={provider} onChange={event => setProvider(event.target.value)} placeholder="api.example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={providerError !== undefined} aria-describedby={providerError === undefined ? undefined : `${id}-provider-error`} /><FieldError id={`${id}-provider-error`} className="text-xs">{providerError}</FieldError></Field><Button type="submit" variant="secondary" size="sm" className="w-full">Apply Provider</Button></form>
+    event.preventDefault()
+    const parsed = x402DirectoryFilterSchema.safeParse(provider.trim() === '' ? {} : { provider })
+    if (!parsed.success) {
+      setProviderError('Enter a Provider hostname, such as api.example.com.')
+      providerRef.current?.focus()
+      return
+    }
+    setProviderError(undefined)
+    onChange({ provider: parsed.data.provider })
+  }}>
+    <Input ref={providerRef} id={`${id}-provider`} label="Provider" value={provider} onChange={event => { setProvider(event.target.value); setProviderError(undefined) }} placeholder="api.example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} {...(providerError === undefined ? {} : { error: providerError })} />
+    <Button type="submit" variant="secondary" size="sm" className="w-full">Apply Provider</Button>
+  </form>
 }
 
 function PublishedDetailsFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
-  return <fieldset className="flex flex-col gap-3 border-t pt-5"><legend className="sr-only">Published request details</legend><p className="text-sm font-medium">Published details</p>
-      {([{ key: 'hasInputFields', label: 'Request fields' }, { key: 'hasInputSchema', label: 'Request schema' }, { key: 'hasOutputFields', label: 'Output fields' }, { key: 'hasOutputSchema', label: 'Output schema' }, { key: 'hasOutputExample', label: 'Output example' }, { key: 'curatedOnly', label: 'Bazaar curated' }] as const).map(filter => <Label key={filter.key} className="min-h-10 py-1 text-xs font-normal leading-relaxed"><Checkbox checked={search[filter.key] === true} onCheckedChange={checked => onChange({ [filter.key]: checked === true ? true : undefined })} />{filter.label}</Label>)}
-      <p className="text-xs leading-relaxed text-muted-foreground">Provider metadata and source curation.</p>
-    </fieldset>
+  const selected = publishedDetailOptions.filter(option => search[option.value] === true).map(option => option.value)
+
+  function change(values: string[]) {
+    const next = new Set(values)
+    const patch: DirectoryExplorerFilterPatch = {}
+    for (const option of publishedDetailOptions) {
+      const wasSelected = search[option.value] === true
+      const isSelected = next.has(option.value)
+      if (wasSelected !== isSelected) Object.assign(patch, { [option.value]: isSelected ? true : undefined })
+    }
+    if (Object.keys(patch).length > 0) onChange(patch)
+  }
+
+  return <div className="flex flex-col gap-3 border-t pt-5">
+    <p className="text-sm font-medium">Published details</p>
+    <ChipGroup options={[...publishedDetailOptions]} value={selected} onValueChange={change} label="Published details" />
+    <p className="text-xs leading-relaxed text-muted-foreground">Provider metadata and source curation.</p>
+  </div>
+}
+
+function ReviewedProvidersFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
+  return <div className="flex flex-col gap-3 border-t pt-5">
+    <ChipGroup
+      options={[{ value: 'reviewed', label: 'Reviewed providers' }]}
+      value={search.reviewedProvidersOnly === true ? ['reviewed'] : []}
+      onValueChange={values => onChange({ reviewedProvidersOnly: values.length > 0 ? true : undefined })}
+      label="Provider review"
+      multiple={false}
+    />
+    <p className="text-xs leading-relaxed text-muted-foreground">An initial shortlist reviewed against public operator and service evidence. Turn off to browse all providers.</p>
+  </div>
 }
 
 function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
-  return <fieldset className="flex flex-col gap-2 border-t pt-5"><legend className="sr-only">Payer breadth</legend><p className="text-sm font-medium">Payer breadth · 30 days</p>
-      {search.adoptionBand === undefined ? null : <Button labelLayout="between" type="button" variant="secondary" className={cn('h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal', discoverFacetSelected)} aria-label={`Remove payer band: ${adoptionBandLabels[search.adoptionBand]}`} onClick={() => onChange({ adoptionBand: undefined })}>{adoptionBandLabels[search.adoptionBand]}<XIcon className="size-3" /></Button>}
-      {search.maxPayers30d === undefined ? null : <Button labelLayout="between" type="button" variant="secondary" className={cn('h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal', discoverFacetSelected)} aria-label="Remove maximum payer count" onClick={() => onChange({ maxPayers30d: undefined })}>At most {search.maxPayers30d.toLocaleString('en-AU')} paying addresses<XIcon className="size-3" /></Button>}
-      {[{ label: 'Any payer count', value: undefined }, { label: '10+ paying addresses', value: 10 }, { label: '100+ paying addresses', value: 100 }, { label: '1,000+ paying addresses', value: 1000 }].map(option => {
-        const selected = search.minPayers30d === option.value && search.adoptionBand === undefined && search.maxPayers30d === undefined
-        return <Button labelLayout="start" key={option.label} type="button" variant="ghost" aria-pressed={selected} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected ? discoverFacetSelected : discoverFacetPill)} onClick={() => onChange({ minPayers30d: option.value, maxPayers30d: undefined, adoptionBand: undefined })}>{option.label}</Button>
-      })}
-      <p className="text-xs leading-relaxed text-muted-foreground">Distinct paying addresses per Tool, not people or Customers.</p>
-    </fieldset>
+  const selectedBand = search.adoptionBand
+  const selectedMax = search.maxPayers30d
+  const removalFilters: FilterChip[] = [
+    ...(selectedBand === undefined ? [] : [{ id: 'adoptionBand', label: 'payer band', value: adoptionBandLabels[selectedBand] }]),
+    ...(selectedMax === undefined ? [] : [{ id: 'maxPayers30d', label: 'maximum payer count', value: `At most ${selectedMax.toLocaleString('en-AU')} paying addresses` }]),
+  ]
+  const payerOptions = [
+    { value: 'any', label: 'Any payer count' },
+    { value: '10', label: '10+ paying addresses' },
+    { value: '100', label: '100+ paying addresses' },
+    { value: '1000', label: '1,000+ paying addresses' },
+  ]
+  if (search.minPayers30d !== undefined && ![10, 100, 1000].includes(search.minPayers30d)) {
+    payerOptions.push({ value: String(search.minPayers30d), label: `${search.minPayers30d.toLocaleString('en-AU')}+ paying addresses` })
+  }
+  const selectedPayerValue = selectedBand === undefined && selectedMax === undefined
+    ? [search.minPayers30d === undefined ? 'any' : String(search.minPayers30d)]
+    : []
+
+  function change(values: string[]) {
+    const token = values[0]
+    const minPayers30d = token === undefined || token === 'any' ? undefined : Number(token)
+    if (minPayers30d !== undefined && (!Number.isSafeInteger(minPayers30d) || minPayers30d < 0)) return
+    onChange({ minPayers30d, maxPayers30d: undefined, adoptionBand: undefined })
+  }
+
+  return <fieldset className="flex flex-col gap-2 border-t pt-5">
+    <legend className="sr-only">Payer breadth</legend>
+    <p className="text-sm font-medium">Payer breadth · 30 days</p>
+    {removalFilters.length > 0 ? <FilterToolbar
+      filters={removalFilters}
+      label="Existing payer filters"
+      onRemove={id => {
+        if (id === 'adoptionBand') onChange({ adoptionBand: undefined })
+        if (id === 'maxPayers30d') onChange({ maxPayers30d: undefined })
+      }}
+      onClearAll={() => onChange({ adoptionBand: undefined, maxPayers30d: undefined })}
+    /> : null}
+    <ChipGroup options={payerOptions} value={selectedPayerValue} onValueChange={change} label="Payer breadth · 30 days" multiple={false} />
+    <p className="text-xs leading-relaxed text-muted-foreground">Distinct paying addresses per Tool, not people or Customers.</p>
+  </fieldset>
+}
+
+function MultipleFacets({ label, filterKey, values, selected, onChange }: Readonly<{
+  label: 'Tags' | 'Collections'
+  filterKey: 'tags' | 'bundleSlugs'
+  values: readonly X402DirectoryFacet[]
+  selected?: readonly string[] | undefined
+  onChange: (values: string[] | undefined) => void
+}>) {
+  const selectedValues = selected ?? []
+  const selectedKeys = new Set(selectedValues)
+  const singular = label === 'Tags' ? 'tag' : 'collection'
+  const applied = selectedValues.map(value => ({
+    id: `${filterKey}:${encodeURIComponent(value)}`,
+    label: label === 'Tags' ? 'Tag' : 'Collection',
+    value: values.find(item => item.key === value)?.label ?? value,
+  }))
+  const options = values.map(item => ({
+    value: item.key,
+    label: `${item.label} ${item.count.toLocaleString('en-AU')}`,
+    keywords: [item.key, item.label],
+    disabled: selectedKeys.has(item.key),
+  }))
+  const atLimit = selectedValues.length >= 5
+
+  return <fieldset className="flex min-w-0 flex-col gap-3 border-t pt-5">
+    <legend className="sr-only">{label}</legend>
+    <p className="text-sm font-medium">{label}</p>
+    <FilterToolbar
+      filters={applied}
+      label={`Selected ${label.toLowerCase()}`}
+      onRemove={id => {
+        const key = decodeURIComponent(id.slice(`${filterKey}:`.length))
+        const next = selectedValues.filter(value => value !== key)
+        onChange(next.length === 0 ? undefined : next)
+      }}
+      onClearAll={() => onChange(undefined)}
+    >
+      <Combobox
+        label={label}
+        options={options}
+        value=""
+        onValueChange={key => {
+          if (selectedKeys.has(key) || selectedValues.length >= 5 || !values.some(item => item.key === key)) return
+          onChange([...selectedValues, key])
+        }}
+        placeholder={`Add ${singular}`}
+        disabled={atLimit}
+        description={atLimit
+          ? `You can select up to five ${label.toLowerCase()}. Remove a selected ${singular} to add another.`
+          : `Choose up to five ${label.toLowerCase()}; Tools can match any selected ${singular}.`}
+        emptyMessage={`No matching ${label.toLowerCase()}.`}
+        data-filter-trigger=""
+      />
+    </FilterToolbar>
+    <p className="text-xs leading-relaxed text-muted-foreground">These options and counts come from a bounded catalogue sample. Tools can match any selected {singular}.</p>
+  </fieldset>
 }
 
 function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'overview' | 'onChange'>) {
   const facets = overview?.kind === 'ok' ? overview : undefined
   const activeCount = activeAdvancedFilterCount(search)
   const [open, setOpen] = useState(activeCount > 0)
+
   return <Collapsible open={open} onOpenChange={setOpen} className="border-t pt-3">
-      <CollapsibleTrigger render={<Button labelLayout="between" type="button" variant="ghost" className="h-auto min-h-10 w-full justify-between px-2 active:scale-100" aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
-        <span>Advanced filters{activeCount > 0 ? <span className="ml-2 rounded bg-muted px-1.5 text-xs tabular-nums">{activeCount}</span> : null}</span>
-        <ChevronDownIcon className={cn('transition-transform', open && 'rotate-180')} aria-hidden="true" />
-      </Button>} />
-      <CollapsibleContent className="flex flex-col gap-6 pt-4">
-        {facets === undefined ? null : <Facets label="Network" allLabel="All networks" values={facets.networks.map(item => ({ ...item, label: formatPaymentNetwork(item.label) }))} selected={search.network} onChange={network => onChange({ network })} />}
-        <ListedPriceFilter search={search} onChange={onChange} />
-        <ProviderFilter search={search} onChange={onChange} />
-        <PublishedDetailsFilter search={search} onChange={onChange} />
-        <PayerBreadthFilter search={search} onChange={onChange} />
-        {facets?.tags?.length || search.tags?.length ? <MultipleFacets label="Tags" values={facets?.tags ?? []} selected={search.tags} onChange={tags => onChange({ tags })} /> : null}
-        {facets?.bundleSlugs?.length || search.bundleSlugs?.length ? <MultipleFacets label="Collections" values={facets?.bundleSlugs ?? []} selected={search.bundleSlugs} onChange={bundleSlugs => onChange({ bundleSlugs })} /> : null}
-      </CollapsibleContent>
-    </Collapsible>
+    <CollapsibleTrigger render={<Button labelLayout="between" type="button" variant="ghost" className="h-auto min-h-10 w-full justify-between px-2 active:scale-100" aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
+      <span>Advanced filters{activeCount > 0 ? <span className="ml-2 rounded bg-muted px-1.5 text-xs tabular-nums">{activeCount}</span> : null}</span>
+      <ChevronDownIcon className={cn('transition-transform', open && 'rotate-180')} aria-hidden="true" />
+    </Button>} />
+    <CollapsibleContent className="flex flex-col gap-6 pt-4">
+      {facets !== undefined || search.network !== undefined ? <Facets label="Network" allLabel="All networks" values={facets?.networks ?? []} selected={search.network} onChange={network => onChange({ network })} formatLabel={formatPaymentNetwork} /> : null}
+      <ListedPriceFilter search={search} onChange={onChange} />
+      <ProviderFilter search={search} onChange={onChange} />
+      <PublishedDetailsFilter search={search} onChange={onChange} />
+      <PayerBreadthFilter search={search} onChange={onChange} />
+      {facets?.tags?.length || search.tags?.length ? <MultipleFacets label="Tags" filterKey="tags" values={facets?.tags ?? []} selected={search.tags} onChange={tags => onChange({ tags })} /> : null}
+      {facets?.bundleSlugs?.length || search.bundleSlugs?.length ? <MultipleFacets label="Collections" filterKey="bundleSlugs" values={facets?.bundleSlugs ?? []} selected={search.bundleSlugs} onChange={bundleSlugs => onChange({ bundleSlugs })} /> : null}
+    </CollapsibleContent>
+  </Collapsible>
 }
 
-function FilterBody({ search, overview, onChange, onReset, showHeading = true, showQuery = true, jevRecipient }: DirectoryExplorerFiltersProps & Readonly<{ showHeading?: boolean }>) {
+function FilterBody({ search, overview, onChange, jevRecipient, showQuery = true, entity = 'tools' }: DirectoryExplorerFiltersProps) {
   const facets = overview?.kind === 'ok' ? overview : undefined
+
   return <div className="flex flex-col gap-6">
-    {showQuery ? <DirectoryQueryFilter search={search} onChange={onChange} {...(jevRecipient === undefined ? {} : { jevRecipient })} /> : null}
-    {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-medium">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
-    <div className="flex flex-col gap-2">
-      <Label className="min-h-touch gap-2 text-sm"><Checkbox checked={search.reviewedProvidersOnly === true} onCheckedChange={checked => onChange({ reviewedProvidersOnly: checked === true ? true : undefined })} />Reviewed providers</Label>
-      <p className="text-xs leading-relaxed text-muted-foreground">An initial shortlist reviewed against public operator and service evidence. Turn off to browse all providers.</p>
-    </div>
-    {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider" allLabel="All providers" values={facets.providers} selected={search.provider} onChange={provider => onChange({ provider })} searchable /></>}
-    <Facets label="Provider-listed price · USDC" allLabel="Any Provider-listed price" showCount={false} values={DIRECTORY_PRICE_BANDS.map(key => ({ key, label: priceBandLabels[key], count: 0 }))} selected={search.priceBand} onChange={value => {
-      const priceBand = value === undefined ? undefined : DIRECTORY_PRICE_BANDS.find((band): band is DirectoryPriceBand => band === value)
-      if (value !== undefined && priceBand === undefined) return
-      onChange({ priceBand, minUsdPrice: undefined, maxUsdPrice: undefined })
-    }} />
+    {showQuery ? <DirectoryQueryFilter search={search} onChange={onChange} entity={entity} {...(jevRecipient === undefined ? {} : { jevRecipient })} /> : null}
+    {facets !== undefined || search.directoryCategory !== undefined ? <Facets label="Provider category" allLabel="All categories" values={facets?.categories ?? []} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} /> : null}
+    {facets === undefined ? <p className="text-xs text-muted-foreground">Provider and network catalogue samples are unavailable.</p> : <>
+      <p className="text-xs leading-relaxed text-muted-foreground">Provider names and counts come from a bounded catalogue sample.</p>
+    </>}
+    <ReviewedProvidersFilter search={search} onChange={onChange} />
+    {facets !== undefined || search.provider !== undefined ? <Facets label="Providers" allLabel="All providers" values={facets?.providers ?? []} selected={search.provider} onChange={provider => onChange({ provider })} {...(facets === undefined ? {} : { description: 'Select a Provider from the bounded catalogue sample.' })} /> : null}
+    <ChipGroup
+      options={DIRECTORY_PRICE_BANDS.map(key => ({ value: key, label: priceBandLabels[key] }))}
+      value={search.priceBand === undefined ? [] : [search.priceBand]}
+      onValueChange={values => {
+        const value = values[0]
+        const priceBand = value === undefined ? undefined : DIRECTORY_PRICE_BANDS.find((band): band is DirectoryPriceBand => band === value)
+        if (value !== undefined && priceBand === undefined) return
+        onChange({ priceBand, minUsdPrice: undefined, maxUsdPrice: undefined })
+      }}
+      label="Provider-listed price · USDC"
+      multiple={false}
+    />
     <AdvancedFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={onChange} />
-    {facets === undefined ? null : <Facets label="Provider category" allLabel="All categories" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable />}
   </div>
 }
 
 /** Values are passed to the route; the current page is never filtered in the browser. */
-export function DirectoryExplorerFilters(props: DirectoryExplorerFiltersProps) {
-  const count = explorerFilterKeys.filter(key => props.search[key] !== undefined && props.search[key] !== false).length
+export function DirectoryExplorerFilters({ entity = 'tools', ...props }: DirectoryExplorerFiltersProps) {
+  const count = explorerFilterKeys.filter(key => isActive(props.search, key)).length
   const [clearCount, setClearCount] = useState(0)
-  return <Drawer><DrawerTrigger render={<Button labelLayout="between" type="button" variant="secondary" className="h-11 w-40 justify-between px-3 active:scale-100" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span><span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span></Button>} /><DrawerContent side="left" title="Refine Tools" description="Filter the catalogue by price, Provider and published details." className="arc-market-filters"><div className="min-w-0"><FilterBody key={clearCount} {...props} onReset={() => { setClearCount(value => value + 1); props.onReset() }} showHeading={false} /></div><footer className="mt-5 flex flex-row flex-wrap items-stretch gap-3 border-t pt-5"><Button labelLayout="wrap" type="button" variant="secondary" className="min-h-touch flex-1 active:scale-100" onClick={() => { setClearCount(value => value + 1); props.onReset() }}>Clear filters</Button><DrawerClose render={<Button labelLayout="wrap" type="button" className="min-h-touch flex-1 active:scale-100">Show results</Button>} /></footer></DrawerContent></Drawer>
+  const title = entity === 'providers' ? 'Refine Providers' : 'Refine Tools'
+  const description = entity === 'providers'
+    ? 'Filter published Provider listings by category, Provider, price and published details.'
+    : 'Filter Tool listings by category, Provider, price and published details.'
+
+  return <Drawer>
+    <DrawerTrigger render={<Button data-filter-trigger="" labelLayout="between" type="button" variant="secondary" className="h-11 w-40 justify-between px-3 active:scale-100" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}>
+      <span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span>
+      <span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span>
+    </Button>} />
+    <DrawerContent side="left" title={title} description={description} className="arc-market-filters">
+      <div className="min-w-0"><FilterBody key={clearCount} {...props} entity={entity} onReset={() => { setClearCount(value => value + 1); props.onReset() }} /></div>
+      <footer className="mt-5 flex flex-row flex-wrap items-stretch gap-3 border-t pt-5">
+        <Button labelLayout="wrap" type="button" variant="secondary" className="min-h-touch flex-1 active:scale-100" onClick={() => { setClearCount(value => value + 1); props.onReset() }}>Clear filters</Button>
+        <DrawerClose render={<Button labelLayout="wrap" type="button" className="min-h-touch flex-1 active:scale-100">Show results</Button>} />
+      </footer>
+    </DrawerContent>
+  </Drawer>
+}
+
+function categoryOptions(overview: X402DirectoryCatalogueOverview | undefined, selected: string | undefined): ChipOption[] {
+  const categories = overview?.kind === 'ok' ? overview.categories : []
+  const options = categories.slice(0, 8).map(item => ({
+    value: item.key,
+    label: `${item.label} ${item.count.toLocaleString('en-AU')}`,
+  }))
+  if (selected !== undefined && !options.some(option => option.value === selected)) {
+    const known = categories.find(item => item.key === selected)
+    options.push(known === undefined
+      ? { value: selected, label: selected }
+      : { value: known.key, label: `${known.label} ${known.count.toLocaleString('en-AU')}` })
+  }
+  return options
+}
+
+function facetLabel(overview: X402DirectoryCatalogueOverview | undefined, source: 'categories' | 'providers' | 'networks' | 'tags' | 'bundleSlugs', key: string, formatLabel?: (label: string) => string) {
+  if (overview?.kind !== 'ok') return key
+  const item = overview[source]?.find(candidate => candidate.key === key)
+  return item === undefined ? key : formatLabel?.(item.label) ?? item.label
+}
+
+function appliedFilters(search: DirectoryExplorerFilterValues, overview: X402DirectoryCatalogueOverview | undefined): FilterChip[] {
+  const filters: FilterChip[] = []
+  if (search.directoryCategory !== undefined) filters.push({ id: 'directoryCategory', label: 'Provider category', value: facetLabel(overview, 'categories', search.directoryCategory) })
+  if (search.network !== undefined) filters.push({ id: 'network', label: 'Network', value: facetLabel(overview, 'networks', search.network, formatPaymentNetwork) })
+  if (search.provider !== undefined) filters.push({ id: 'provider', label: 'Providers', value: facetLabel(overview, 'providers', search.provider) })
+  if (search.minUsdPrice !== undefined) filters.push({ id: 'minUsdPrice', label: 'Minimum Provider-listed price', value: `${String(search.minUsdPrice)} USDC` })
+  if (search.maxUsdPrice !== undefined) filters.push({ id: 'maxUsdPrice', label: 'Maximum Provider-listed price', value: `${String(search.maxUsdPrice)} USDC` })
+  if (search.minPayers30d !== undefined) filters.push({ id: 'minPayers30d', label: 'Minimum paying addresses', value: `${search.minPayers30d.toLocaleString('en-AU')} or more` })
+  if (search.maxPayers30d !== undefined) filters.push({ id: 'maxPayers30d', label: 'Maximum paying addresses', value: `At most ${search.maxPayers30d.toLocaleString('en-AU')}` })
+  if (search.priceBand !== undefined) filters.push({ id: 'priceBand', label: 'Provider-listed price', value: priceBandLabels[search.priceBand] })
+  if (search.adoptionBand !== undefined) filters.push({ id: 'adoptionBand', label: 'Payer band', value: adoptionBandLabels[search.adoptionBand] })
+  if (search.curatedOnly === true) filters.push({ id: 'curatedOnly', label: 'Bazaar curated' })
+  if (search.reviewedProvidersOnly === true) filters.push({ id: 'reviewedProvidersOnly', label: 'Reviewed providers' })
+  if (search.hasInputFields === true) filters.push({ id: 'hasInputFields', label: 'Request fields' })
+  if (search.hasOutputExample === true) filters.push({ id: 'hasOutputExample', label: 'Output example' })
+  if (search.hasInputSchema === true) filters.push({ id: 'hasInputSchema', label: 'Request schema' })
+  if (search.hasOutputFields === true) filters.push({ id: 'hasOutputFields', label: 'Output fields' })
+  if (search.hasOutputSchema === true) filters.push({ id: 'hasOutputSchema', label: 'Output schema' })
+  if (search.tags?.length) filters.push({ id: 'tags', label: 'Tags', value: search.tags.map(key => facetLabel(overview, 'tags', key)).join(', ') })
+  if (search.bundleSlugs?.length) filters.push({ id: 'bundleSlugs', label: 'Collections', value: search.bundleSlugs.map(key => facetLabel(overview, 'bundleSlugs', key)).join(', ') })
+  return filters
+}
+
+function clearExplorerFilter(key: string, onChange: DirectoryExplorerFiltersProps['onChange']) {
+  if (!explorerFilterKeys.includes(key as ExplorerFilterKey)) return
+  const patch: DirectoryExplorerFilterPatch = { [key]: undefined }
+  onChange(patch)
+}
+
+/** Visible category entry and applied selections; the Drawer remains the editing surface for every facet. */
+export function DirectoryDiscoveryFilters(props: DirectoryExplorerFiltersProps) {
+  const id = useId()
+  const categoriesAvailable = props.overview?.kind === 'ok' && props.overview.categories.length > 0
+  const selectedCategory = props.search.directoryCategory
+  const showCategory = categoriesAvailable || selectedCategory !== undefined
+  const headingId = `${id}-category-heading`
+  const filters = appliedFilters(props.search, props.overview)
+
+  return <div className="arc-market-discovery-filters">
+    {showCategory ? <section className="arc-market-category-entry" aria-labelledby={headingId}>
+      <h2 id={headingId}>Browse by Provider category</h2>
+      <p className="text-xs leading-relaxed text-muted-foreground">Category names and counts come from a bounded catalogue sample, not current search matches.</p>
+      <ChipGroup
+        options={categoryOptions(props.overview, selectedCategory)}
+        value={selectedCategory === undefined ? [] : [selectedCategory]}
+        onValueChange={values => props.onChange({ directoryCategory: values[0] || undefined })}
+        label="Browse by Provider category"
+        maxVisible={6}
+        multiple={false}
+      />
+    </section> : null}
+    <FilterToolbar
+      filters={filters}
+      label="Applied catalogue filters"
+      onRemove={id => clearExplorerFilter(id, props.onChange)}
+      onClearAll={() => props.onChange({
+        directoryCategory: undefined,
+        network: undefined,
+        provider: undefined,
+        minUsdPrice: undefined,
+        maxUsdPrice: undefined,
+        minPayers30d: undefined,
+        maxPayers30d: undefined,
+        priceBand: undefined,
+        adoptionBand: undefined,
+        curatedOnly: undefined,
+        reviewedProvidersOnly: undefined,
+        hasInputFields: undefined,
+        hasOutputExample: undefined,
+        hasInputSchema: undefined,
+        hasOutputFields: undefined,
+        hasOutputSchema: undefined,
+        tags: undefined,
+        bundleSlugs: undefined,
+      })}
+    >
+      <DirectoryExplorerFilters {...props} />
+    </FilterToolbar>
+  </div>
 }

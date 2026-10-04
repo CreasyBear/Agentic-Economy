@@ -1,4 +1,5 @@
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import '../AdminLoadingComposition.css'
 import { ADMIN_METRICS_COPY } from './metrics.contracts'
 
@@ -16,49 +17,49 @@ export function AdminMetricsPageSkeleton() {
       stickyHeader
       pending
     >
-      <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={ADMIN_METRICS_COPY.title}>
+      <div className="arc-market arc-admin-loading" role="status" aria-busy="true" aria-label="Loading metrics">
         <div aria-hidden="true">
           <div className="arc-admin-loading-kpis">
             <div className="arc-admin-loading-kpi">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" data-size="value" />
+              <Skeleton lines={1} />
+              <Skeleton lines={2} />
             </div>
             <div className="arc-admin-loading-kpi">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" data-size="value" />
+              <Skeleton lines={1} />
+              <Skeleton lines={2} />
             </div>
             <div className="arc-admin-loading-kpi">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" data-size="value" />
+              <Skeleton lines={1} />
+              <Skeleton lines={2} />
             </div>
             <div className="arc-admin-loading-kpi">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" data-size="value" />
+              <Skeleton lines={1} />
+              <Skeleton lines={2} />
             </div>
           </div>
         </div>
         <div aria-hidden="true" className="arc-admin-loading-pane">
-          <span className="arc-admin-loading-line" data-size="title" />
-          <div className="arc-admin-loading-chart" />
+          <Skeleton lines={1} />
+          <div className="arc-admin-loading-chart"><Skeleton lines={6} /></div>
         </div>
         <div aria-hidden="true">
           <div className="arc-admin-loading-pane">
-            <span className="arc-admin-loading-line" data-size="title" />
+            <Skeleton lines={1} />
             <div className="arc-admin-loading-row">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" />
+              <Skeleton lines={1} />
+              <Skeleton lines={1} />
             </div>
             <div className="arc-admin-loading-row">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" />
+              <Skeleton lines={1} />
+              <Skeleton lines={1} />
             </div>
             <div className="arc-admin-loading-row">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" />
+              <Skeleton lines={1} />
+              <Skeleton lines={1} />
             </div>
             <div className="arc-admin-loading-row">
-              <span className="arc-admin-loading-line" />
-              <span className="arc-admin-loading-line" />
+              <Skeleton lines={1} />
+              <Skeleton lines={1} />
             </div>
           </div>
         </div>

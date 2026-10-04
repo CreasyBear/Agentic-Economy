@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
 import { MARKET_LINK_STATE, type IndexedPaginationState, type MarketReturnSearch } from './market-return-context'
 import { MarketNavigationProvider, type MarketPath, useMarketPath } from './market-navigation-context'
-import { DirectoryExplorerFilters } from './DirectoryExplorerFilters'
+import { DirectoryDiscoveryFilters } from './DirectoryExplorerFilters'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { DirectoryHero } from './DirectoryHero'
 import { DirectoryHomeDiscovery } from './DirectoryHomeDiscovery'
@@ -340,9 +340,14 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
     void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...filters, view: view === 'providers' ? 'providers' : 'tools' }) })
   }
   function applyExplorerFilters(patch: DirectoryExplorerFilterPatch) {
-    const next = { ...indexedSearch(), ...patch, view: view === 'providers' ? 'providers' as const : 'tools' as const }
-    for (const key of Object.keys(next)) if (next[key as keyof typeof next] === undefined) delete next[key as keyof typeof next]
-    void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, next) })
+    // Independent facet writes can arrive before a loader rerenders. Merge
+    // against the router's current filters, never the previous render's copy.
+    void navigate({ to: marketPath, resetScroll: false, viewTransition: false, search: current => {
+      const { indexCursor: _cursor, offset: _offset, ...filters } = directoryCatalogueSearchValues(current)
+      const next = { ...filters, ...patch, view: current.view === 'providers' ? 'providers' as const : 'tools' as const }
+      for (const key of Object.keys(next)) if (next[key as keyof typeof next] === undefined) delete next[key as keyof typeof next]
+      return carryMarketCompare(current, next)
+    } })
   }
   // Read the router's latest search for every activation: rapid selections must
   // accumulate before a loader rerenders, and Collections stays Collections.
@@ -551,8 +556,8 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
               if (value !== 'table' && value !== 'grid') return
               void navigate({ to: marketPath, resetScroll: false, search: current => ({ ...current, layout: value }) })
             }} /> : null}
-            {indexed || search.query !== undefined ? <DirectoryExplorerFilters search={search} showQuery={false} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           </div>
+          {indexed || search.query !== undefined ? <DirectoryDiscoveryFilters entity={tab} search={search} showQuery={false} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           {search.query === undefined && search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}
           <AeCollectionRail
             title={

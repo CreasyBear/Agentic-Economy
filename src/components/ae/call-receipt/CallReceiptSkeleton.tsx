@@ -1,4 +1,4 @@
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import './ReceiptComposition.css'
 
 const SUMMARY_FACT_ROWS = 6
@@ -6,8 +6,8 @@ const SUMMARY_FACT_ROWS = 6
 function SummaryFactRowSkeleton() {
   return (
     <div className="grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related">
-      <Skeleton className="h-4 w-28" />
-      <Skeleton className="h-4 w-full max-w-md" />
+      <Skeleton lines={1} />
+      <Skeleton lines={1} />
     </div>
   )
 }
@@ -21,16 +21,16 @@ export function CallReceiptSkeleton() {
       aria-label="Loading call receipt"
     >
       <section className="arc-market arc-call-summary" aria-hidden="true">
-        <Skeleton className="h-6 w-32 rounded-full" />
-        <Skeleton className="h-7 w-48 max-w-full" />
-        <Skeleton className="h-4 w-2/3" />
+        <Skeleton lines={1} />
+        <Skeleton lines={1} />
+        <Skeleton lines={1} />
         <div className="grid gap-related">
           {Array.from({ length: SUMMARY_FACT_ROWS }, (_, index) => (
             <SummaryFactRowSkeleton key={index} />
           ))}
           <div className="grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-5 w-24 font-mono" />
+            <Skeleton lines={1} />
+            <Skeleton lines={1} />
           </div>
         </div>
       </section>
@@ -41,22 +41,22 @@ export function CallReceiptSkeleton() {
       >
         {Array.from({ length: 4 }, (_, index) => (
           <div key={index} className="grid gap-intra">
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-4 w-full" />
+            <Skeleton lines={1} />
+            <Skeleton lines={1} />
           </div>
         ))}
-        <Skeleton className="h-10 w-full rounded-card" />
+        <Skeleton lines={1} />
       </section>
 
       <section className="arc-market arc-call-money-comparison" aria-hidden="true">
         {(['Before', 'After'] as const).map((stack) => (
           <div key={stack} className="arc-call-money-group">
-            <Skeleton className="h-5 w-40" />
+            <Skeleton lines={1} />
             <div className="grid gap-related">
               {Array.from({ length: 3 }, (_, index) => (
                 <div key={index} className="grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-5 w-24 font-mono" />
+                  <Skeleton lines={1} />
+                  <Skeleton lines={1} />
                 </div>
               ))}
             </div>
@@ -68,12 +68,12 @@ export function CallReceiptSkeleton() {
         className="arc-market arc-call-recovery"
         aria-hidden="true"
       >
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-10 w-36" />
+        <Skeleton lines={1} />
+        <Skeleton lines={1} />
       </section>
 
       <section className="arc-call-disclosure" aria-hidden="true">
-        <Skeleton className="min-h-touch h-touch w-44" />
+        <Skeleton lines={1} />
       </section>
     </div>
   )
