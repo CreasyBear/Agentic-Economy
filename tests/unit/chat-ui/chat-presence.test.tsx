@@ -28,7 +28,7 @@ import { Chat } from '@/components/ae/chat'
 import { ChatComposer } from '@/components/ae/chat/chat-session/components/ChatComposer'
 import { ChatHistory } from '@/components/ae/chat/chat-session/components/ChatHistory'
 import { SharedChat } from '@/components/ae/chat/SharedChat'
-import { chatComposer, chatHistory } from '@/lib/public/chat-ia'
+import { chatComposer, chatHistory, chatShared } from '@/lib/public/chat-ia'
 import { useQuery } from 'convex/react'
 
 const mockedUseQuery = vi.mocked(useQuery)
@@ -62,8 +62,15 @@ describe('ChatHistory first-load gate', () => {
       />,
     )
 
-    expect(document.querySelector('[aria-busy="true"][aria-label="Conversations"]')).not.toBeNull()
-    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
+    const loadingStatus = screen.getByRole('status', { name: 'Loading chat history' })
+    expect(loadingStatus.getAttribute('aria-busy')).toBe('true')
+    const decorativeFrames = loadingStatus.querySelectorAll('[aria-hidden="true"].h-5')
+    expect(Array.from(decorativeFrames, frame => (frame as HTMLElement).style.width))
+      .toEqual(['44%', '32%', '28%', '64%', '52%'])
+    expect(decorativeFrames).toHaveLength(5)
+    expect(Array.from(decorativeFrames).every(frame => frame.querySelector('[role="status"]') !== null)).toBe(true)
+    expect(screen.queryByText('Your chats will appear here.')).toBeNull()
+    expect(screen.queryByText(chatHistory.empty)).toBeNull()
   })
 
   it('shows the canonical empty state once the list is resolved-empty', () => {
@@ -82,7 +89,7 @@ describe('ChatHistory first-load gate', () => {
       />,
     )
 
-    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+    expect(screen.queryByRole('status', { name: 'Loading chat history' })).toBeNull()
     expect(screen.getByText('Your chats will appear here.')).toBeTruthy()
   })
 
@@ -103,7 +110,7 @@ describe('ChatHistory first-load gate', () => {
     )
 
     expect(screen.getByText('Weather operations')).toBeTruthy()
-    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+    expect(screen.queryByRole('status', { name: 'Loading chat history' })).toBeNull()
     expect(screen.getByText('Today')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Weather operations' }).getAttribute('aria-current')).toBe('page')
     expect(screen.queryByText(chatHistory.empty)).toBeNull()
@@ -130,9 +137,14 @@ describe('ChatTranscript first-page gate', () => {
   it('renders message placeholders for an uncached thread instead of suggestions', () => {
     const { container } = render(<ChatTranscript messages={[]} pending />)
 
-    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull()
-    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
+    const busyRegion = container.querySelector('[aria-busy="true"]')
+    expect(busyRegion).not.toBeNull()
     expect(screen.getByRole('status').textContent).toBe('Loading conversation…')
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    const decorativeFrames = container.querySelectorAll('[aria-hidden="true"].h-16.w-full.max-w-prose')
+    expect(decorativeFrames).toHaveLength(2)
+    expect(Array.from(decorativeFrames).every(frame => frame.querySelector('[role="status"]') !== null)).toBe(true)
+    expect(Array.from(decorativeFrames).some(frame => frame.classList.contains('ml-auto'))).toBe(true)
     expect(screen.queryByText('Search the catalog.')).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
   })
@@ -492,9 +504,16 @@ describe('Chat submission lock', () => {
 
 describe('SharedChat shared-thread gate', () => {
   it('shows message placeholders until the share query has cached a page', () => {
-    render(<SharedChat shareToken="token-1" />)
+    const { container } = render(<SharedChat shareToken="token-1" />)
 
-    expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
+    const busyRegion = container.querySelector('[aria-busy="true"]')
+    expect(busyRegion).not.toBeNull()
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status').textContent).toBe(chatShared.loading)
+    const decorativeFrames = busyRegion?.querySelectorAll('div[aria-hidden="true"]') ?? []
+    expect(decorativeFrames).toHaveLength(3)
+    expect(Array.from(decorativeFrames).every(frame => frame.querySelector('[role="status"]') !== null)).toBe(true)
+    expect(busyRegion?.querySelector('button')).toBeNull()
   })
 
   it('distinguishes resolved-empty shares from pending ones', () => {

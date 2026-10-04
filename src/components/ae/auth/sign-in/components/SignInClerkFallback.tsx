@@ -1,4 +1,4 @@
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import '@/components/ae/website/AuthComposition.css'
 
 export function SignInClerkFallback() {
@@ -8,7 +8,11 @@ export function SignInClerkFallback() {
       className="arc-market arc-auth-loading"
       aria-hidden
     >
-      {[0, 1, 2, 3].map(index => <Skeleton key={index} className="arc-auth-loading-field" />)}
+      {[0, 1, 2, 3].map(index => (
+        <div key={index} className="arc-auth-loading-field" aria-hidden="true">
+          <Skeleton lines={2} />
+        </div>
+      ))}
     </div>
   )
 }

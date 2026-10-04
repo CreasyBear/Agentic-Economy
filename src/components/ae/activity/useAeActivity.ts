@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
 import {
@@ -104,9 +104,11 @@ function initialCallPaginationState(source: CallPage): CallPaginationState {
 
 function useCallPagination(initial: CallPage, periodStartAt: number, periodEndAt: number, principalRef?: string) {
   const [state, setState] = useState(() => initialCallPaginationState(initial))
+  const continuationInFlight = useRef(false)
 
   async function loadNextPage() {
-    if (state.cursor === undefined || state.status === 'loading') return
+    if (state.cursor === undefined || state.status === 'loading' || continuationInFlight.current) return
+    continuationInFlight.current = true
     const source = state.source
     const cursor = state.cursor
     setState((current) => current.source === source && current.cursor === cursor
@@ -127,6 +129,8 @@ function useCallPagination(initial: CallPage, periodStartAt: number, periodEndAt
       setState((current) => current.source === source && current.cursor === cursor
         ? { ...current, status: 'failed' }
         : current)
+    } finally {
+      continuationInFlight.current = false
     }
   }
 

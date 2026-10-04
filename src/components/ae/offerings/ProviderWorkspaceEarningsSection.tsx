@@ -2,7 +2,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/earnings-card/AeSupplyEarningsCard'
 import { Button as ArcButton } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import '../supply/earnings-card/EarningsComposition.css'
 import { UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import {
@@ -26,7 +26,7 @@ export function ProviderWorkspaceEarningsSection({
         <DrawerContent side="right" title="Earnings" description="Source-recorded Provider obligations and Call settlements." className="arc-provider-earnings-drawer">
           <div className="arc-provider-earnings-body">
             {earningsOpen ? (
-              earningsPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div>
+              earningsPending ? <Skeleton label="Loading provider earnings" lines={3} className="h-24 w-full" />
                 : earningsUnavailable || earningsDetail === undefined
                   ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} />
                   : <AeSupplyEarningsCard readback={earningsDetail} />

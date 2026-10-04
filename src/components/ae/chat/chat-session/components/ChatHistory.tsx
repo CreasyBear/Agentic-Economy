@@ -8,7 +8,7 @@ import { Button } from '@/components/arc/button/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { chatDeleteConversation, chatHistory } from '@/lib/public/chat-ia'
 
 import type { ChatHistoryProps, ChatHistoryThread } from '../chat-session.contracts'
@@ -86,8 +86,10 @@ export function ChatHistory({
     newChatLabel={chatHistory.newChat} navLabel={chatHistory.sheetTitle} busyLabel={chatHistory.responding}
     search={<SearchField id={idPrefix + '-history-search'} label={chatHistory.searchLabel}
       value={search} onValueChange={onSearch} placeholder="Search chats" />}
-    status={historyPending && threads.length === 0 ? <div aria-busy="true" aria-label={chatHistory.sheetTitle}>
-      {[44, 32, 28, 64, 52].map(width => <div key={width} className="arc-chat-history-loading-row"><Skeleton className="h-3" style={{ width: `${width}%` }} /></div>)}
+    status={historyPending && threads.length === 0 ? <div role="status" aria-busy="true" aria-label="Loading chat history">
+      {[44, 32, 28, 64, 52].map(width => <div key={width} className="arc-chat-history-loading-row">
+        <div className="h-5" style={{ width: width + '%' }} aria-hidden="true"><Skeleton lines={1} /></div>
+      </div>)}
     </div> : threads.length === 0 ? <p>{search ? chatHistory.empty : 'Your chats will appear here.'}</p> : null}
     pagination={hasMore && onLoadMore !== undefined ? <Button type="button" variant="ghost" disabled={loadingMore}
       aria-busy={loadingMore} onClick={onLoadMore}>{loadingMore ? 'Loading…' : 'Load more chats'}</Button> : null} />

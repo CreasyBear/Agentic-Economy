@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -144,6 +144,25 @@ describe('Tools management disclosure', () => {
     expect(await screen.findByTestId('provider-identity-controls')).toBeTruthy()
   })
 
+  it('announces pending provider identity once, then renders its controls', async () => {
+    let resolveIdentity!: (result: { kind: 'available'; businessId: string; name: string; slug: string; publicStatus: string }) => void
+    calls.identity.mockImplementation(() => new Promise((resolve) => { resolveIdentity = resolve }))
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage provider identity' }))
+    await waitFor(() => expect(calls.identity).toHaveBeenCalledTimes(1))
+    const pending = screen.getByRole('status', { name: 'Loading provider identity' })
+    expect(pending.getAttribute('aria-busy')).toBe('true')
+    expect(screen.queryByText('Provider identity controls unavailable')).toBeNull()
+    expect(screen.queryByText('Provider identity not configured')).toBeNull()
+
+    await act(async () => {
+      resolveIdentity({ kind: 'available', businessId: 'biz:one', name: 'Provider', slug: 'provider', publicStatus: 'published' })
+    })
+    expect(await screen.findByTestId('provider-identity-controls')).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Loading provider identity' })).toBeNull()
+  })
+
   it('retries a failed provider identity detail read in place', async () => {
     calls.identity
       .mockRejectedValueOnce(new Error('private identity outage'))
@@ -179,6 +198,63 @@ describe('Tools management disclosure', () => {
 
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('Set up a Provider profile to view earnings.')).toBeTruthy()
+  })
+
+  it('announces pending earnings once, then renders the source readback', async () => {
+    let resolveEarnings!: (result: {
+      kind: 'available'
+      businessId: string
+      obligations: ReadonlyArray<{
+        obligationRef: string
+        callRef: string
+        toolRef: string
+        currency: 'USDC'
+        exponent: 6
+        amountUnits: string
+        state: 'settled'
+        settlementTransactionRef: string
+        createdAt: number
+        settledAt: number
+      }>
+      truncated: boolean
+      transfers: ReadonlyArray<never>
+      transfersTruncated: boolean
+    }) => void
+    calls.earnings.mockImplementation(() => new Promise((resolve) => { resolveEarnings = resolve }))
+    calls.connect.mockResolvedValue({ kind: 'not_found' })
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
+
+    const earningsSection = screen.getByRole('heading', { name: 'Earnings' }).closest('section')
+    fireEvent.click(within(earningsSection as HTMLElement).getByRole('button', { name: 'View earnings' }))
+    await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
+    const pending = screen.getByRole('status', { name: 'Loading provider earnings' })
+    expect(pending.getAttribute('aria-busy')).toBe('true')
+    expect(screen.queryByText('Earnings source unavailable')).toBeNull()
+    expect(screen.queryByText('Set up a Provider profile to view earnings.')).toBeNull()
+
+    await act(async () => {
+      resolveEarnings({
+        kind: 'available',
+        businessId: 'business:one',
+        obligations: [{
+          obligationRef: 'provider-obligation:call:one',
+          callRef: 'call:one',
+          toolRef: 'tool:one',
+          currency: 'USDC',
+          exponent: 6,
+          amountUnits: '1250000',
+          state: 'settled',
+          settlementTransactionRef: 'formance:settlement:one',
+          createdAt: 1,
+          settledAt: 1,
+        }],
+        truncated: false,
+        transfers: [],
+        transfersTruncated: false,
+      })
+    })
+    expect(await screen.findByText('Settlement transaction: formance:settlement:one')).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Loading provider earnings' })).toBeNull()
   })
 
   it('preserves the exact validated x402 source handoff in the Settings link', async () => {
