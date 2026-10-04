@@ -3916,3 +3916,42 @@ existing pinned AWS provider 6.57.1; no backend is initialized and no cloud plan
 or apply is run. No new archive infrastructure or retention attestation is active.
 Joel's required confirmation for new persistent storage is pending; business
 approval alone is not recorded as proof of that control.
+
+## Stage 61 — funded alpha readiness and deployment transport repair
+
+On 4 October 2026, the normal production treasury observer books the finalized
+9.905153 USDC refill. Native ledger reconciliation reports 9.405153 USDC
+available and the approved 0.500000 USDC buffer. Custody is enabled in the
+production vault, Convex and Vercel with the existing approved limits unchanged.
+The authenticated owner grants AUD 5 promotional test credit through the normal
+MFA-protected action. These facts do not establish payment readiness or a paid
+Call; live testing remains gated until the deployed checks pass.
+
+**Rollout contract.** Requires an explicit boolean decision for each controlled
+Provider rollout. Ensures an intentionally disabled feature is valid deployment
+configuration. Invariant: feature admission still independently checks its
+server-side switch; required secrets, custody checks and money authority are
+unchanged. Missing or malformed decisions remain readiness failures. Remove the
+extra all-switches-enabled predicate: the existing required-field and boolean
+validators already enforce this contract without activating unused features.
+
+**Custody transport contract.** Requires the configured production account,
+policy identities and supported network. Ensures readiness only after the three
+read-only CDP requests verify the existing signing predicate. Invariant: guarded
+DNS, refused redirects, bounded bodies, shared deadline, per-check credentials,
+cancellation and policy comparisons remain intact. On unavailable or invalid
+provider evidence, custody stays unavailable; no signing is attempted.
+
+The native Convex debug bundle exposes dynamically imported Undici through a
+default export. Destructuring its named `Agent` export throws before CDP reads,
+although direct local TypeScript execution succeeds. A split-bundle regression
+reproduces `Agent is not a constructor` with the shared guarded HTTP transport.
+Static imports, already used by that transport, remove the interop failure
+without a wrapper, new dependency, policy change or schema change.
+
+Focused verification passes 246 assertions covering explicit disabled rollouts,
+missing/malformed configuration, retained feature refusals, ready web identity,
+compiled transport setup, policy drift, private DNS, timeouts, cancellation,
+credential isolation and readiness publication. The regression fails before the
+import repair and passes afterward. Full release gate and native deployment
+acceptance are recorded separately; local success is not hosted readiness proof.
