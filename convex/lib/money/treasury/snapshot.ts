@@ -1,5 +1,6 @@
 "use node"
 
+import { isDeepStrictEqual } from 'node:util'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sealTreasurySnapshot, type TreasurySnapshot } from '@/modules/money/treasury-report'
@@ -83,8 +84,11 @@ export async function reconcileTreasurySnapshot(ctx: Context, dependencies: Read
     readSources(ctx, snapshotAt),
     context === undefined ? unavailable('treasury_ledger_configuration_unavailable') : readFormanceTreasuryAudit(context, input),
   ])
-  if (canonicalDigest(base) !== canonicalDigest(afterBase) || canonicalDigest(sources) !== canonicalDigest(afterSources)
-    || canonicalDigest(audit) !== canonicalDigest(afterAudit)) {
+  // Complete, validated histories have their own page/row bounds. Compare their
+  // values without imposing the smaller single-JSON-value digest limit; all
+  // published identity and evidence digests retain their canonical material.
+  if (!isDeepStrictEqual(base, afterBase) || !isDeepStrictEqual(sources, afterSources)
+    || !isDeepStrictEqual(audit, afterAudit)) {
     const changed = unavailable('treasury_sources_changed_during_audit')
     cash = { ...cash, cash: changed, settlements: changed, reservations: changed }
     funding = changed; spending = changed
