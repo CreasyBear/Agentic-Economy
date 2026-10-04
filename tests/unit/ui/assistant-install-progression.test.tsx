@@ -10,7 +10,7 @@ import { AeAgentApprovalsSection } from '@/components/ae/console/AeAgentApproval
 afterEach(cleanup)
 
 describe('Agent connection progression', () => {
-  it('presents one ordered connect, sign-in and authoritative confirmation path', () => {
+  it('presents app selection, setup and authoritative confirmation in order', () => {
     const checkConnection = vi.fn()
     render(
       <AeAssistantInstallFunnel
@@ -19,17 +19,28 @@ describe('Agent connection progression', () => {
       />,
     )
 
-    const progression = screen.getByRole('list', { name: 'Agent connection steps' })
+    const progression = screen.getByRole('navigation', { name: 'Agent connection steps' })
     expect(within(progression).getAllByRole('listitem').map(item => item.textContent)).toEqual([
-      expect.stringContaining('Start the connection'),
-      expect.stringContaining('Approve access in the browser'),
-      expect.stringContaining('Confirm the connection'),
+      expect.stringContaining('Choose your Agent app'),
+      expect.stringContaining('Connect and approve access'),
     ])
-    expect(screen.getByText(/Connection is complete only when it appears in Agents/u)).toBeTruthy()
+    expect(within(progression).getByRole('status').textContent).toContain('Step 1 of 2')
+    const appStep = screen.getByRole('group', { name: 'Choose your Agent app' })
+    fireEvent.click(within(appStep).getByRole('button', { name: 'Codex' }))
+
+    const connectStep = screen.getByRole('group', { name: 'Connect and approve access' })
+    expect(within(progression).getByRole('status').textContent).toContain('Step 2 of 2')
+    expect(within(connectStep).getByRole('region', { name: 'Codex MCP command' }).textContent).toContain('https://ae.example/mcp')
+    expect(within(connectStep).queryByRole('region', { name: 'Claude Code MCP command' })).toBeNull()
+    expect(within(connectStep).queryByRole('region', { name: 'Cursor MCP command' })).toBeNull()
+    expect(screen.getByText(/Your Account balance never grants permission to spend/u)).toBeTruthy()
+    expect(screen.getByText(/Only a delivered Tool result and receipt completes first use/u)).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Open Agents' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Review Spending policy' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Check connection' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check approved access' }))
     expect(checkConnection).toHaveBeenCalledOnce()
+    expect(within(progression).getByRole('status').textContent).toContain('Step 2 of 2')
+    expect(screen.queryByText('Connection complete')).toBeNull()
   })
 
   it('makes an in-progress confirmation explicit and non-repeatable', () => {
@@ -46,16 +57,19 @@ describe('Agent connection progression', () => {
   })
 
   it('keeps selected Tool context visible without claiming setup creates a Call', () => {
+    const checkConnection = vi.fn()
     render(
       <AeAssistantInstallFunnel
         canonicalBaseUrl="https://ae.example/"
         resumeToolRef={`operation:v1:${'a'.repeat(64)}`}
+        onCheckConnection={checkConnection}
       />,
     )
 
     expect(screen.getByText('Selected Tool saved for this setup')).toBeTruthy()
-    expect(screen.getByText(/one return action to that Tool/u)).toBeTruthy()
-    expect(screen.getByText(/No Call is created during setup/u)).toBeTruthy()
+    expect(screen.getByText(/Keep its input in your Agent’s task/u)).toBeTruthy()
+    expect(screen.getByText(/setup creates no Call/u)).toBeTruthy()
+    expect(checkConnection).not.toHaveBeenCalled()
   })
 })
 
