@@ -11,7 +11,7 @@ import {
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type {
@@ -89,9 +89,9 @@ function UnavailableAccountHistory({
 }: Readonly<{ loading: boolean; onRefresh?: () => void | Promise<void> }>) {
   if (loading) {
     return (
-      <div className="grid gap-intra" aria-busy="true" aria-label="Loading credit history">
-        <Skeleton className="h-touch w-full" />
-        <Skeleton className="h-touch w-full" />
+      <div className="grid gap-intra" role="status" aria-busy="true" aria-label="Loading credit history">
+        <div className="h-touch w-full" aria-hidden="true"><Skeleton lines={2} /></div>
+        <div className="h-touch w-full" aria-hidden="true"><Skeleton lines={2} /></div>
       </div>
     )
   }

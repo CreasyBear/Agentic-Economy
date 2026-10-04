@@ -1,6 +1,6 @@
 import { AeMonthlySpendCeilingCard } from '@/components/ae/console/AeMonthlySpendCeilingCard'
 import { SettingsPage, SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton as ArcSkeleton } from '@/components/arc/skeleton/skeleton'
 import { useBillingSpending } from './useBillingSettings'
 
 export function SpendingSettingsPage() {
@@ -10,6 +10,6 @@ export function SpendingSettingsPage() {
       settings={spending.monthlySpendCeilingSettings}
       monthSpend={spending.monthSpend}
       onSave={spending.onSaveMonthlySpendCeiling}
-    /> : <SettingsGroup title="Monthly spending cap"><SettingsRow label="Current limit" description="Loading your workspace limit"><Skeleton role="status" aria-label="Loading monthly spending cap" className="h-10 w-36" /></SettingsRow></SettingsGroup>}
+    /> : <SettingsGroup title="Monthly spending cap"><SettingsRow label="Current limit" description="Loading your workspace limit"><div role="status" aria-busy="true" aria-label="Loading monthly spending cap" className="h-10 w-36 max-w-full"><div aria-hidden="true"><ArcSkeleton lines={1} /></div></div></SettingsRow></SettingsGroup>}
   </SettingsPage>
 }

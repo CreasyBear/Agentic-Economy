@@ -12,7 +12,7 @@ import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { ArcAiChatHeader } from '@/components/arc/blocks/ai-chat/ai-chat'
 import { Button } from '@/components/arc/button/button'
 import './SharedChatComposition.css'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { chatShared } from '@/lib/public/chat-ia'
 
 import { ChatTranscript } from './ChatTranscript'
@@ -96,9 +96,9 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
       {initial === undefined ? (
         <div className={`grid min-h-0 flex-1 content-start ${TRANSCRIPT_COLUMN}`} aria-busy="true">
           <p className="sr-only" role="status">{chatShared.loading}</p>
-          <Skeleton className="h-16 w-full max-w-prose" />
-          <Skeleton className="ml-auto h-16 w-full max-w-prose" />
-          <Skeleton className="h-10 w-2/3 max-w-prose" />
+          <div aria-hidden="true" className="h-16 w-full max-w-prose"><Skeleton lines={2} /></div>
+          <div aria-hidden="true" className="ml-auto h-16 w-full max-w-prose"><Skeleton lines={2} /></div>
+          <div aria-hidden="true" className="h-10 w-2/3 max-w-prose"><Skeleton lines={1} /></div>
         </div>
       ) : messages.length === 0 ? (
         <div className="arc-market arc-chat arc-shared-empty"><AeEmptyState compact title="No shared messages" description={chatShared.empty} /></div>

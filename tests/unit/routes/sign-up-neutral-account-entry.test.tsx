@@ -64,8 +64,8 @@ describe('sign-up account entry', () => {
     expect(routeState.clerkProps?.fallback).toBeTruthy()
     const { container } = render(<>{routeState.clerkProps?.fallback as ReactNode}</>)
     expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')).toBeTruthy()
-    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
     expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')?.getAttribute('aria-hidden')).toBe('true')
+    expect(container.querySelector('button, input, a')).toBeNull()
   })
 
   it('S2: preserves supplier copy and returns to the requested destination', () => {
@@ -106,7 +106,8 @@ describe('sign-up account entry', () => {
     const { container } = render(<SignUpClerkFallback />)
     const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
     expect(fallback?.getAttribute('aria-hidden')).toBe('true')
-    expect(fallback?.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
+    expect(fallback?.querySelector('button, input, a')).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

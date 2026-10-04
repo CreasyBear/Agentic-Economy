@@ -16,7 +16,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from '@/components/ui/message-scroller'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import {
   chatHandoffNotice,
   chatLoadEarlierMessages,
@@ -216,8 +216,12 @@ export function ChatTranscript({
     return (
       <div className={`min-h-0 flex-1 content-start ${TRANSCRIPT_COLUMN}`} aria-busy="true">
         <p className="sr-only" role="status">{chatLoading}</p>
-        <Skeleton className="h-16 w-full max-w-prose" />
-        <Skeleton className="ml-auto h-16 w-full max-w-prose" />
+        <div className="h-16 w-full max-w-prose" aria-hidden="true">
+          <Skeleton lines={2} />
+        </div>
+        <div className="ml-auto h-16 w-full max-w-prose" aria-hidden="true">
+          <Skeleton lines={2} />
+        </div>
       </div>
     )
   }

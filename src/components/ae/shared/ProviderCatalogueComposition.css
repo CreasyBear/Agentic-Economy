@@ -33,7 +33,6 @@
 .arc-provider-json summary svg { width: 16px; height: 16px; flex: none; }
 .arc-provider-json > div { display: grid; gap: var(--space-3); padding-block: var(--space-3); }
 .arc-provider-loading { display: grid; gap: var(--space-4); min-width: 0; }
-.arc-provider-loading [data-slot="skeleton"] { min-width: 0; max-width: 100%; }
 @container provider-catalogue (max-width: 900px) { .arc-provider-layout { grid-template-columns: minmax(0, 1fr); } .arc-provider-aside { position: static; } }
 @container provider-catalogue (max-width: 700px) { .arc-provider-identity, .arc-host-identity { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding: var(--space-5); } .arc-provider-source { padding-inline-start: 0; padding-block-start: var(--space-4); border-inline-start: 0; border-block-start: 1px solid var(--border); } }
 @container provider-catalogue (max-width: 560px) { .arc-provider-gallery { grid-template-columns: minmax(0, 1fr); } }

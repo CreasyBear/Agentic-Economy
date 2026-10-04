@@ -114,12 +114,20 @@ describe('WorkspaceDangerZone (W-14)', () => {
     expect(screen.getByText('Transfer ownership', { selector: 'summary' })).toBeInTheDocument()
   })
 
-  it('U1b: loading eligibility renders reserved skeleton shell', () => {
+  it('U1b: withholds workspace actions until eligibility is available', () => {
     useQuery.mockReturnValue(undefined)
-    const { container } = render(<WorkspaceDangerZone />)
+    const view = render(<WorkspaceDangerZone />)
 
-    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
-    expect(container.querySelector('[data-slot="skeleton"]')).toBeTruthy()
+    expect(screen.getByRole('status', { name: 'Loading workspace actions' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByText('Close workspace', { selector: 'summary' })).toBeNull()
+    expect(screen.queryByText('Transfer ownership', { selector: 'summary' })).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+
+    useQuery.mockReturnValue(ownerEligible)
+    view.rerender(<WorkspaceDangerZone />)
+    expect(screen.queryByRole('status', { name: 'Loading workspace actions' })).toBeNull()
+    expect(screen.getByText('Close workspace', { selector: 'summary' })).toBeInTheDocument()
+    expect(screen.getByText('Transfer ownership', { selector: 'summary' })).toBeInTheDocument()
   })
 
   it('U2: if fences present, displays human reasons and disables close', () => {

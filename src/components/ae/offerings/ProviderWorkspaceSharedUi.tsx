@@ -2,9 +2,9 @@ import { Await } from '@tanstack/react-router'
 import { Suspense, type ReactNode } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { Skeleton as ArcSkeleton } from '@/components/arc/skeleton/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import './ProviderWorkspaceComposition.css'
 
 export function DeferredSection<T>({ promise, loadingLabel, unavailableTitle, children }: Readonly<{
@@ -15,7 +15,10 @@ export function DeferredSection<T>({ promise, loadingLabel, unavailableTitle, ch
 }>) {
   if (promise === undefined) return <UnavailableSummary title={unavailableTitle} />
   return (
-    <Suspense fallback={<div aria-busy="true" aria-label={loadingLabel} className="grid gap-intra"><Skeleton className="h-5 w-40" /><Skeleton className="h-10 w-full" /></div>}>
+    <Suspense fallback={<div role="status" aria-busy="true" aria-label={loadingLabel} className="grid gap-intra">
+      <div className="h-5 w-40"><div aria-hidden="true"><ArcSkeleton lines={1} /></div></div>
+      <div className="h-10 w-full overflow-hidden"><div aria-hidden="true"><ArcSkeleton lines={2} /></div></div>
+    </div>}>
       <Await promise={promise}>{children}</Await>
     </Suspense>
   )

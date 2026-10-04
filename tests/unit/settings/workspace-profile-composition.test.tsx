@@ -5,10 +5,11 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const source = vi.hoisted(() => ({
+  workspacePending: false,
   workspace: { accountRef: 'account:buyer', displayName: 'Buyer workspace', accountRevision: 1, clerkOrgId: null, callerIsOwner: false },
   rename: vi.fn(),
 }))
-vi.mock('convex/react', () => ({ useQuery: () => source.workspace, useMutation: () => source.rename }))
+vi.mock('convex/react', () => ({ useQuery: () => source.workspacePending ? undefined : source.workspace, useMutation: () => source.rename }))
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
   Link: ({ to, ...props }: { to: string; children: ReactNode }) => <a href={to} {...props} />,
@@ -17,9 +18,27 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone', () => ({ WorkspaceDangerZone: () => <p>Workspace closure controls</p> }))
 import { WorkspaceProfileSettings } from '@/components/ae/settings/WorkspaceProfileSettings'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  source.workspacePending = false
+})
 
 describe('workspace settings composition', () => {
+  it('shows one named busy status without workspace controls until the binding loads', () => {
+    source.workspacePending = true
+    const page = render(<WorkspaceProfileSettings identity={{ kind: 'not_applicable' }} status={{ kind: 'not_applicable' }} defaultName={null} />)
+
+    expect(screen.getAllByRole('status', { name: 'Loading workspace name' })).toHaveLength(1)
+    expect(screen.getByRole('status', { name: 'Loading workspace name' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('textbox')).toBeNull()
+
+    source.workspacePending = false
+    page.rerender(<WorkspaceProfileSettings identity={{ kind: 'not_applicable' }} status={{ kind: 'not_applicable' }} defaultName={null} />)
+
+    expect(screen.queryByRole('status', { name: 'Loading workspace name' })).toBeNull()
+    expect(screen.getByText('Buyer workspace')).toBeVisible()
+  })
+
   it('leads with real workspace identity without provider setup noise for a buyer account', () => {
     render(<WorkspaceProfileSettings identity={{ kind: 'not_applicable' }} status={{ kind: 'not_applicable' }} defaultName={null} />)
     expect(screen.getAllByRole('heading', { level: 1 }).map(heading => heading.textContent)).toEqual(['Business profile'])
