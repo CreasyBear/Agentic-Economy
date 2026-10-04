@@ -323,6 +323,36 @@ data "aws_iam_policy_document" "audit_bucket" {
       values   = ["arn:${data.aws_partition.current.partition}:logs:ap-southeast-2:${local.account_id}:*"]
     }
   }
+
+  statement {
+    sid       = "AWSLogDeliveryWrite2"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.audit.arn}/vpc-flow/ae-alpha/AWSLogs/${local.account_id}/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.account_id]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "s3:x-amz-acl"
+      values   = ["bucket-owner-full-control"]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:${data.aws_partition.current.partition}:logs:ap-southeast-2:${local.account_id}:*"]
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "audit" {
@@ -339,6 +369,30 @@ resource "aws_cloudtrail" "audit" {
   enable_logging                = true
   kms_key_id                    = aws_kms_key.audit.arn
   tags                          = local.tags
+
+  advanced_event_selector {
+    name = "All management events"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Management"]
+    }
+  }
+
+  advanced_event_selector {
+    name = "Financial evidence object events"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::S3::Object"]
+    }
+    field_selector {
+      field       = "resources.ARN"
+      starts_with = ["${aws_s3_bucket.financial_evidence.arn}/"]
+    }
+  }
 
   depends_on = [aws_s3_bucket_policy.audit]
 }
