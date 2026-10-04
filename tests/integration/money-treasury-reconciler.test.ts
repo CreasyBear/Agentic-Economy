@@ -7,7 +7,7 @@ import { api, internal } from '../../convex/_generated/api'
 import { reconcileTreasurySnapshot } from '../../convex/lib/money/treasury/snapshot'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/convex'
-import { createFormanceContext, installPackage4FormanceSchema, type FormanceContext } from '@/modules/money/formance'
+import { createFormanceContext, installPackage4FormanceSchema, FORMANCE_SCHEMA_VERSION, type FormanceContext } from '@/modules/money/formance'
 import { bookFormanceTreasuryBatch, readFormanceTreasuryBalances } from '@/modules/money/formance-treasury'
 import { bookFormanceFundingSettlement, reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
   capacityAccount } from '@/modules/money/formance-workflows'
@@ -321,9 +321,11 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
       'https://8.8.8.8/rpc-one', 'https://8.8.8.8/rpc-two']))
     expect(external.intent).toHaveBeenCalledWith('pi_test_native_treasury', { expand: ['latest_charge'] })
     const orphanRef = 'fixture:orphan-treasury-credit'
-    await context.sdk.ledger.v2.createTransaction({ ledger: context.configuration.ledger, idempotencyKey: orphanRef,
-      v2PostTransaction: { reference: orphanRef, metadata: {}, postings: [{ source: 'world',
-        destination: capacityAccount('treasury_usdc', custodyRef, 1), asset: 'USDC/6', amount: 10001n }] } })
+    await context.sdk.ledger.v2.createTransaction({ ledger: context.configuration.ledger, schemaVersion: FORMANCE_SCHEMA_VERSION, idempotencyKey: orphanRef,
+      v2PostTransaction: { reference: orphanRef, metadata: {}, runtime: 'machine',
+        script: { template: 'TREASURY_CAPACITY_SYNCED', vars: {
+          capacity: capacityAccount('treasury_usdc', custodyRef, 1), amount: 'USDC/6 10001',
+        } } } })
     const drift = await publish()
     expect(drift.snapshot).toMatchObject({ rawCashDifferenceUnits: '-10001', checks: { cash: { kind: 'mismatch',
       code: 'treasury_cash_movement_unattributed', evidenceRefs: [orphanRef] } } })

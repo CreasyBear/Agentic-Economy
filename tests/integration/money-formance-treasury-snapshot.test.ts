@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { createFormanceContext, installPackage4FormanceSchema, PROMOTIONAL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/formance'
+import { createFormanceContext, installPackage4FormanceSchema, FORMANCE_SCHEMA_VERSION, PROMOTIONAL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/formance'
 import { readFormanceTreasurySnapshot } from '@/modules/money/formance-treasury-snapshot'
 import { readFormanceTreasuryAudit } from '@/modules/money/formance-treasury-audit'
 
@@ -27,12 +27,18 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
     const promotional = `accounts:${digest('customer')}:promo:${digest('grant')}:available`
     const promotionalReserved = `calls:${digest('reserved-call')}:buyer_promo_reserved`
     const provider = `providers:${digest('provider')}:settlement`
-    const obligation = `obligations:${digest('obligation')}:accrued`
-    const obligationSettled = `obligations:${digest('obligation')}:settled`
-    const post = async (label: string, timestamp: number, postings: { destination: string; asset: string; amount: bigint }[]) =>
-      await context.sdk.ledger.v2.createTransaction({ ledger: context.configuration.ledger, idempotencyKey: label,
-        v2PostTransaction: { reference: `fixture:${label}`, metadata: {}, timestamp: new Date(timestamp),
-          postings: postings.map(posting => ({ source: 'world', ...posting })) } })
+    const obligation = `provider_obligations:${digest('obligation')}:accrued`
+    const obligationSettled = `provider_obligations:${digest('obligation')}:settled`
+    const post = async (label: string, timestamp: number, postings: { destination: string; asset: string; amount: bigint }[]) => {
+      for (const [index, posting] of postings.entries()) {
+        await context.sdk.ledger.v2.createTransaction({ ledger: context.configuration.ledger,
+          schemaVersion: FORMANCE_SCHEMA_VERSION, idempotencyKey: `${label}:${index}`,
+          v2PostTransaction: { reference: `fixture:${label}:${index}`, metadata: {}, timestamp: new Date(timestamp),
+            runtime: 'machine', script: { template: 'TREASURY_CAPACITY_SYNCED', vars: {
+              capacity: posting.destination, amount: `${posting.asset} ${posting.amount}`,
+            } } } })
+      }
+    }
     await post('seed', effectiveNow - 8 * DAY, [
       { destination: available, asset: 'USDC/6', amount: 500n },
       { destination: committed, asset: 'USDC/6', amount: 200n },
@@ -42,8 +48,8 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
       { destination: purchasedReserved, asset: 'AUD/6', amount: 200n },
       { destination: promotional, asset: 'AUD/6', amount: 300n },
       { destination: promotionalReserved, asset: 'AUD/6', amount: 40n },
-      // Other account suffixes and assets cannot inflate customer liability.
-      { destination: `accounts:${digest('customer')}:archive:available`, asset: 'AUD/6', amount: 9000n },
+      // Other admitted account families and assets cannot inflate customer liability.
+      { destination: `agents:${digest('customer')}:budget_available`, asset: 'AUD/6', amount: 9000n },
       { destination: purchased, asset: 'USDC/6', amount: 7000n },
     ])
     const settle = async (label: string, timestamp: number, amount: string) =>
@@ -83,14 +89,16 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
     const audit = await readFormanceTreasuryAudit(context, { custodyRef, custodyGeneration, snapshotAt })
     expect(audit.kind).toBe('available')
     if (audit.kind !== 'available') throw new Error(audit.code)
-    expect(audit.transactions).toHaveLength(18)
+    // Three treasury seeds and two purchased-account credits, plus 17 payouts.
+    expect(audit.transactions).toHaveLength(22)
+    expect(audit.transactions.filter(row => row.commandRef?.startsWith('fixture:seed:'))).toHaveLength(5)
     expect(audit.transactions.filter(row => row.template === 'PROVIDER_SETTLED')).toHaveLength(17)
     expect(audit.transactions.every(row => row.insertedAt <= snapshotAt)).toBe(true)
-    expect(audit.transactions.some(row => row.commandRef === 'fixture:later-funding')).toBe(false)
+    expect(audit.transactions.some(row => row.commandRef?.startsWith('fixture:later-funding:'))).toBe(false)
     expect(audit.transactions.some(row => row.commandRef === `ae-p4:${digest('later-payment')}:settle-provider`)).toBe(false)
     const recentId = recent.v2CreateTransactionResponse?.data.id
     if (recentId === undefined) throw new Error('missing native recent transaction')
-    await context.sdk.ledger.v2.revertTransaction({ ledger: context.configuration.ledger, id: recentId,
+    await context.sdk.ledger.v2.revertTransaction({ ledger: context.configuration.ledger, schemaVersion: FORMANCE_SCHEMA_VERSION, id: recentId,
       idempotencyKey: 'revert-after-cutoff', atEffectiveDate: true })
     // The native row's current revert marker cannot silently erase a payout
     // from the earlier snapshot. Unreconstructable history remains unavailable.
