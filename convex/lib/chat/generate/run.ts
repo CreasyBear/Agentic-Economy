@@ -5,7 +5,7 @@ import { openRouterGatewayConfig, openRouterModel } from '@/modules/model-gatewa
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import { accountRef, membershipRef, ownershipRef, principalRef } from '@/modules/principal-account/public'
 import { components, internal } from '../../../_generated/api'
-import { env, type ActionCtx } from '../../../_generated/server'
+import type { ActionCtx } from '../../../_generated/server'
 import { interactiveAuthorityContextValue } from '../../../interactiveAuthority'
 import type { GenerateArgs } from './contracts'
 import { factsFromSavedTurn } from './completedFacts'
@@ -36,7 +36,14 @@ function interactiveAuthorityContextFromValue(
   })
 }
 
+// Requires: current scheduled authority and an invocation model credential.
+// Ensures: one configuration snapshot is used throughout this generation.
+// Invariant: worker reuse cannot retain a removed key or change an in-flight model.
+// On violation: existing durable failure handling settles the turn before model work.
 export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promise<null> {
+  // Convex's Node executor replaces process.env per invocation; generated env
+  // captures the old object at module load. Snapshot these values before any await.
+  const { OPENROUTER_API_KEY, AE_LLM_MODEL, AE_SITE_URL } = process.env
   let ownerId: string | undefined
   try {
     const authority = args.authority
@@ -60,14 +67,14 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
       : { turnRef: args.turnRef, threadId: args.threadId, promptMessageId: args.promptMessageId }
     const continuation = searchTurn === undefined ? null
       : await ctx.runQuery(internal.chatTurns.readSearchPage, searchTurn)
-    const apiKey = env.OPENROUTER_API_KEY?.trim()
+    const apiKey = OPENROUTER_API_KEY?.trim()
     if (apiKey === undefined || apiKey.length === 0) {
       throw new Error('agent_unavailable')
     }
     const config = openRouterGatewayConfig({
       OPENROUTER_API_KEY: apiKey,
-      ...(env.AE_LLM_MODEL === undefined ? {} : { AE_LLM_MODEL: env.AE_LLM_MODEL }),
-      ...(env.AE_SITE_URL === undefined ? {} : { SITE_URL: env.AE_SITE_URL }),
+      ...(AE_LLM_MODEL === undefined ? {} : { AE_LLM_MODEL }),
+      ...(AE_SITE_URL === undefined ? {} : { SITE_URL: AE_SITE_URL }),
     })
     const clarificationRequested = await streamDurableChatResponse(
       ctx,

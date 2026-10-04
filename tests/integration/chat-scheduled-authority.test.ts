@@ -631,6 +631,38 @@ describe('scheduled chat consequence authority', () => {
     })).resolves.toMatchObject({ busy: false })
   })
 
+  it('uses each invocation environment after a Node worker replaces process.env', async () => {
+    const originalEnvironment = process.env
+    const backend = convexTestWithMarketComponents()
+    const { owner } = await publishedBusinessOwner(backend, 'chat-runtime-environment')
+    try {
+      for (const revision of ['first', 'rotated', 'removed'] as const) {
+        process.env = { ...originalEnvironment }
+        delete process.env.OPENROUTER_API_KEY
+        if (revision !== 'removed') process.env.OPENROUTER_API_KEY = `runtime-${revision}-key`
+        process.env.AE_LLM_MODEL = `test/${revision}`
+        process.env.AE_SITE_URL = `https://${revision}.example.test`
+        const callsBefore = gatewayProbe.modelCalls.mock.calls.length
+        const sent = await owner.mutation(internal.chatMessages.sendMessage, {
+          prompt: `Read the ${revision} runtime configuration`,
+        })
+        await drainExpectedUnavailableGeneration(backend)
+        expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(callsBefore + (revision === 'removed' ? 0 : 1))
+        if (revision !== 'removed') {
+          expect(gatewayProbe.modelCalls).toHaveBeenLastCalledWith(expect.objectContaining({
+            apiKey: `runtime-${revision}-key`, model: `test/${revision}`,
+            siteUrl: `https://${revision}.example.test`,
+          }), `test/${revision}`)
+        }
+        await expect(owner.query(api.chatThreads.getThread, {
+          threadId: sent.threadId, now: Date.now(),
+        })).resolves.toMatchObject({ busy: false })
+      }
+    } finally {
+      process.env = originalEnvironment
+    }
+  })
+
   it('settles a persistently blank Tool turn with one bounded fallback and no duplicate prompt', async () => {
     process.env.OPENROUTER_API_KEY = 'runtime-authority-regression-key'
     // With no declared catalogue environment, exercise the model Tool loop directly.
