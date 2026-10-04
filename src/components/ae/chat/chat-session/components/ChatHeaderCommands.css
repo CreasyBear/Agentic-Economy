@@ -5,7 +5,6 @@
 .arc-chat-header-balance:hover { color: var(--foreground); background: var(--surface-muted); }
 .arc-chat-header-problem { margin: 0; padding: var(--space-3) var(--space-6); color: var(--danger); font-size: var(--text-sm); line-height: 1.5; }
 .arc-chat-share-field { padding: var(--space-3) var(--space-6); border-bottom: 1px solid var(--border-subtle); background: var(--surface); color: var(--foreground); }
-.arc-chat-share-field [data-slot="input-group"] { min-height: 44px; border-radius: var(--radius-control); }
 .arc-chat-history-drawer { width: min(90vw, 26rem); }
 .arc-chat-history-drawer > div:last-child { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
 .arc-chat-history-sheet-main { min-height: 0; flex: 1; overflow: hidden; }

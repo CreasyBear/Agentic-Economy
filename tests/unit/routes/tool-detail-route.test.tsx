@@ -522,6 +522,7 @@ describe('/tools/$toolRef', () => {
   it('discloses provider and release classes before the admitted Tool chat action', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, verifiedBusinessSlug: tool.business.slug })
     const disclosure = screen.getByRole('region', { name: 'Input and recipient before Quote' })
+    expect(within(disclosure).getByText('Your input and its recipient')).toBeTruthy()
     expect(within(disclosure).getByText('Ledger Labs')).toBeTruthy()
     const release = within(disclosure).getByText('/documentUrl').closest('li')
     expect(release?.textContent).toContain('public input')
@@ -529,7 +530,15 @@ describe('/tools/$toolRef', () => {
     expect(release?.textContent).toContain('execution, after Quote approval')
     expect(release?.textContent).toContain('Ledger Labs (selected Provider)')
     expect(disclosure.compareDocumentPosition(screen.getByRole('link', { name: /Try in chat/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(disclosure.compareDocumentPosition(screen.getByRole('region', { name: 'Start' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(disclosure).queryByText(/named recipient/i)).toBeNull()
+  })
+
+  it('retains explicit input guidance when no transfer classes are published', () => {
+    const noTransferClasses = { ...tool, dataUse: [] }
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: noTransferClasses })
+    const disclosure = screen.getByRole('region', { name: 'Input and recipient before Quote' })
+    expect(within(disclosure).getByText('No input transfer classes are declared for this Tool. Inspect its input schema before requesting a Quote.')).toBeTruthy()
   })
 
   it('does not offer a Quote or chat input path when a named recipient has no published identity', () => {

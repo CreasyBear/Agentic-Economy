@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export type AeCollectionRailProps = Readonly<{
-  kicker?: string
   title: string
   titleId?: string
   deck?: string
@@ -14,7 +13,6 @@ export type AeCollectionRailProps = Readonly<{
 
 /** Discover collection header + object well. SoT rails stay in DirectoryHomeDiscovery. */
 export function AeCollectionRail({
-  kicker,
   title,
   titleId,
   deck,
@@ -26,9 +24,6 @@ export function AeCollectionRail({
     <section className={cn('min-w-0', className)} {...(titleId === undefined ? {} : { 'aria-labelledby': titleId })}>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl">
-          {kicker === undefined ? null : (
-            <p className="mb-2 text-caption font-medium uppercase tracking-caption text-muted-foreground">{kicker}</p>
-          )}
           <h2 id={titleId} className="text-title font-medium tracking-tight sm:text-title-lg">
             {title}
           </h2>
