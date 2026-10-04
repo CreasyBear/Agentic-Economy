@@ -392,6 +392,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const searchResults = messages.page.flatMap(message => message.parts.filter(part =>
       part.type === 'tool-registry_tools_search'))
     expect(searchResults).toHaveLength(1)
+    expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim())
+      .map(message => message.text)).toEqual(['The earlier blockchain result is the relevant match.'])
   })
 
   it('settles distinct unsuccessful searches without inventing options', async () => {

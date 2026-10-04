@@ -42,6 +42,9 @@ import {
 } from './status'
 
 const MAX_CALL_BODY_BYTES = 256 * 1024
+// First-use ledger preparation and paid dispatch can exceed an ordinary read.
+// The longer bounded wait does not change admission, retries or Call identity.
+const PURCHASE_REQUEST_TIMEOUT_MS = 60_000
 
 async function readBoundedStdin(stdin: Readable): Promise<string> {
   const chunks: Buffer[] = []
@@ -259,7 +262,7 @@ async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions)
       const apiKey = requireAgentAccessKey('call', options)
       const outcome = await callJson(options.baseUrl, callCommandDescriptor.path, {
         method: callCommandDescriptor.method, headers: { Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(record.command),
-      })
+      }, PURCHASE_REQUEST_TIMEOUT_MS)
       result = parseCallResult(requireOk(outcome, callCommandDescriptor.path))
       record = await observeResult(record, result)
       if (result.kind === 'pending' && options.wait === true) result = await waitForCallResult(options, record, result)
@@ -349,7 +352,7 @@ async function resolveToolQuote(
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(quoteInputData),
-  })
+  }, PURCHASE_REQUEST_TIMEOUT_MS)
   if (quoteOutcome.status === 401) {
     throw new CliFailure('Your AE connection is no longer valid. Reconnect, then repeat the call.', {
       kind: 'UNAUTHENTICATED', code: 'agent_access_key_invalid',

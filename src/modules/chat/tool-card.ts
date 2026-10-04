@@ -274,7 +274,10 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
     ...(provider === undefined ? {} : { provider }),
     ...choicePriceFields(value),
     ...directoryChoiceFields(value),
-    ...(value.access === 'ae_callable' && value.readiness === 'ready' ? { callable: true } : {}),
+    // This legacy flag opens detail/input review; fresh detail and Quote guards establish submission eligibility.
+    ...(value.access === 'ae_callable' && value.readiness === 'ready'
+      || value.source === 'current' && value.access === 'setup_required' && value.readiness === 'unverified'
+      ? { callable: true } : {}),
     ...(readiness === undefined ? {} : { readiness }),
     ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
   }

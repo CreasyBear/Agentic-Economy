@@ -2,7 +2,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import '../../RecordWorkspaceComposition.css'
 import {
@@ -27,7 +27,7 @@ const columns: ColumnDef<AdminProviderRowModel, unknown>[] = [
   {
     accessorKey: 'publicStatusLabel',
     header: PROVIDERS_LIST_COPY.columns.publicStatus,
-    cell: ({ row }) => <Badge variant="outline">{row.original.publicStatusLabel}</Badge>,
+    cell: ({ row }) => <Badge tone="neutral" size="sm">{row.original.publicStatusLabel}</Badge>,
   },
   {
     accessorKey: 'trustTierLabel',

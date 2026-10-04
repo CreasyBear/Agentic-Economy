@@ -29,7 +29,16 @@ function useRovingFocusContext(component: string) {
 }
 
 function getOrderedTabStopIds(items: Map<string, HTMLElement>): string[] {
-  return Array.from(items.keys())
+  // Keyed table rows move without registering again when their sort changes.
+  return Array.from(items.entries())
+    .sort(([, left], [, right]) => {
+      const position = left.compareDocumentPosition(right)
+      if (position & Node.DOCUMENT_POSITION_DISCONNECTED) return 0
+      if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1
+      if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1
+      return 0
+    })
+    .map(([id]) => id)
 }
 
 type RootProps = Omit<React.ComponentProps<"div">, "children"> & {

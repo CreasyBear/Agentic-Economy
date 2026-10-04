@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import type { ReactNode } from 'react'
 import { getFunctionName, type FunctionReference } from 'convex/server'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -111,7 +111,7 @@ describe('admin audit page', () => {
     expect(screen.getByText('Your account does not have the Admin role for this action.')).toBeTruthy()
   })
 
-  it('renders audit events for an allowed admin', () => {
+  it('renders audit events and their details for an allowed admin', async () => {
     mocks.events = [{
       id: 'audit-row-1',
       createdAt: Date.UTC(2026, 8, 22, 8),
@@ -132,8 +132,12 @@ describe('admin audit page', () => {
 
     render(<AdminAuditPage search={{}} onSearchChange={mocks.onSearchChange} />)
 
-    expect(screen.getAllByText('admin.action_denied').length).toBeGreaterThan(0)
-    expect(screen.getByText('policy_violation')).toBeTruthy()
+    expect(screen.queryByText('policy_violation')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^View .+ at / }))
+    const details = await screen.findByRole('dialog', { name: 'Audit event' })
+    expect(within(details).getByText('admin.action_denied')).toBeTruthy()
+    expect(within(details).getByText('policy_violation')).toBeTruthy()
+    expect(within(details).getByText('evidence:ticket-1')).toBeTruthy()
   })
 
   it('renders an event-type chip and clears all URL filters', () => {

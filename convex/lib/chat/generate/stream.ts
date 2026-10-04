@@ -281,7 +281,11 @@ export async function streamDurableChatResponse(
     return await finishFromFacts()
   }
   const resolution = chatSearchResolution(steps)
-  if (steps.every(step => step.toolResults.length === 0) || resolution !== null) {
+  // Requires: a successful earlier search for an answer without new tool work.
+  // Ensures: follow-up answers survive; failed or unsupported searches keep their fallback.
+  // Invariant: no new Tool request is needed solely to preserve an already grounded reply.
+  // On missing evidence: retain the existing no-result answer and recovery actions.
+  if ((!hasPriorSearch && steps.every(step => step.toolResults.length === 0)) || resolution !== null) {
     const assistant = result.savedMessages?.findLast(message => message.message?.role === 'assistant')
     if (assistant?.message === undefined) throw new Error('chat_generation_answer_missing')
     const content = assistant.message.content

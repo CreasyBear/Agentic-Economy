@@ -158,6 +158,48 @@ describe('search result state', () => {
     expect(projectToolCard({ ...stored, recommendation: { toolRef: 'operation:invalid', by: 'Jev' } }))
       .not.toHaveProperty('recommendation')
   })
+  it('opens review for current setup-required unverified choices and preserves that affordance in shared history', () => {
+    const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`
+    const item = { toolRef: TOOL_REF, title: 'Needs setup', source: 'current',
+      access: 'setup_required', readiness: 'unverified' }
+    const card = projectToolCard({
+      type: toolType, state: 'output-available', output: { kind: 'scoped', results: [item] },
+    })
+    expect(card).toMatchObject({
+      kind: 'choices',
+      choices: [{ toolRef: TOOL_REF, readiness: 'unverified', callable: true }],
+    })
+    if (card === null) throw new Error('missing_projected_card')
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+
+    const ineligibleRows = [
+      { id: 'external-listing-one', title: 'External listing', source: 'coinbase',
+        access: 'external_listing', readiness: 'unverified' },
+      { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Unavailable source', source: 'unavailable',
+        access: 'setup_required', readiness: 'unverified' },
+      { toolRef: `operation:v1:${'g'.repeat(64)}`, title: 'Unavailable access', source: 'current',
+        access: 'unavailable', readiness: 'unverified' },
+      { toolRef: `operation:v1:${'d'.repeat(64)}`, title: 'Unknown source', source: 'unknown',
+        access: 'setup_required', readiness: 'unverified' },
+      { toolRef: `operation:v1:${'e'.repeat(64)}`, title: 'Unavailable readiness', source: 'current',
+        access: 'setup_required', readiness: 'unavailable' },
+      { toolRef: `operation:v1:${'f'.repeat(64)}`, title: 'Unknown readiness', source: 'current',
+        access: 'setup_required', readiness: 'unknown' },
+      { title: 'Missing canonical reference', source: 'current', access: 'setup_required', readiness: 'unverified' },
+      { toolRef: 'operation:invalid', title: 'Invalid canonical reference', source: 'current',
+        access: 'setup_required', readiness: 'unverified' },
+    ]
+    for (const row of ineligibleRows) {
+      const ineligible = projectToolCard({
+        type: toolType, state: 'output-available', output: { kind: 'scoped', results: [row] },
+      })
+      if (ineligible === null || ineligible.kind !== 'choices') throw new Error('missing_ineligible_choices')
+      expect(ineligible.choices.some(choice => choice.callable === true)).toBe(false)
+      if (row.title === 'Missing canonical reference' || row.title === 'Invalid canonical reference') {
+        expect(ineligible.choices).toHaveLength(0)
+      }
+    }
+  })
   it('preserves external listing identity and provider price through shared history', () => {
     const output = {
       kind: 'scoped',
