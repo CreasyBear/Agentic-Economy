@@ -4,7 +4,17 @@
 
 ## Progress counter
 
-**Delivered: 96 bounded UI source units.** Latest [PR338](https://github.com/CreasyBear/Agentic-Economy/pull/338) delivers six partial form-control compositions, not six full pages. Receipt amount correction receives no Arc migration credit. Source-first work remains active; hosted visual and external OAuth acceptance are still open.
+**Delivered: 100 bounded UI source units.** Latest [PR342](https://github.com/CreasyBear/Agentic-Economy/pull/342) delivers four Agent onboarding presenter compositions: two actual MultiStepForm regions and two Stepper progress regions. These are not four full pages. Source-first work remains active; hosted visual and external OAuth acceptance are still open.
+
+### Live onboarding rollout, 2026-10-05 Perth
+
+PR342 merges as adfcd1c26fd0a0f1c639f8f75bb3b05769cffbb3. Its complete tree 0d876e87bf81f0e17a69eb8d77800371e046b64b equals frozen gated d1653acc92a9ff522ef2eed4d62a61f0fe9bfbf9. Matching Convex deployment to cautious-zebra-473 succeeds with no deleted indexes and no storage schema or configuration change. The new agentDirectory:findOwnedByCredential query is deployed: an invocation without identity and with empty selector exits zero and returns null (the official CLI omits null output). This establishes registration and fail-closed empty/unauthenticated behavior; authenticated external OAuth remains unverified.
+
+Official Vercel deployment dpl_CxdZx3nhDzw2BsGgf1HxeyVYWf96 in project prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9 is READY and has app.aecon.ai assigned. Provider metadata and /api/v1/release both confirm the merged revision; /api/health returns 200. /api/ready returns 503/payments_unavailable. Exact native moneyReadiness:readInternal readback identifies treasury_reconciliation_required; Base RPC, custody, Formance, policy, reference rate and web configuration checks pass in that snapshot. Financial readiness is a separate current failure, not a healthy-payment claim. Money/treasury/readiness implementation is byte-unchanged from main PR341; no payment control, custody binding, audit/reconciliation mutation, credential or purchase is performed by this rollout.
+
+Final Node 22 / npm 11.5.1 check passes. Full gate exits zero: 8,574 unit / 1 skip; 2,892 integration / 64 gated skips / 3 TODO; 4 type, 75 import, 1 standards, 31 SEO; 16 browser / 18 gated skips; 18 accessibility; public build/release integrity and reproducible CLI SHA256 40ad066274e916f4698473115a7c5f3234573a7ae1a475c238354f58deb56090. JSON suites have zero failures. Final real-block installation parity passes 11 cases and targeted compact/wide pointer/keyboard/clipboard journey passes 6. An incidental combined browser invocation exposed two backendless compact hydration timeouts; the complete prescribed gate then passes all 18 accessibility cases. No production fix or assertion weakening was used for those timeouts.
+
+All 2,809 shared primary dirty paths, content/mode fingerprints, status and staging match the pre-integration snapshot, retaining its local onboarding HEAD 3f0971e96. Incoming paths have zero dirty overlap. Read-only founder-console merge simulation retains 32 existing conflict paths, none added or resolved. Source/action census stays 887 source paths / 539 actions and preserves the prior 664 coverage snapshot bytes before four appended current presenter snapshots (668). The owned onboarding branch is retired after merged-ancestry proof; reuse the active managed checkout on codex/arc-source-continuation. The broad source goal remains active.
 
 ### Agent onboarding block integration, 2026-10-04
 
