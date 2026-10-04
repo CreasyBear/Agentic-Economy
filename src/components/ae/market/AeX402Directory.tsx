@@ -9,6 +9,7 @@ import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/arc/button/button'
 import { ProductListing } from '@/components/arc/market/ProductListing'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import './MarketComposition.css'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { SearchField } from '@/components/arc/search-field/search-field'
@@ -48,6 +49,7 @@ import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-cont
 
 
 type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: MarketReturnSearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<MarketReturnSearch['view']>; pendingView?: NonNullable<MarketReturnSearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; jevRecipient?: string; chatRecipient?: string }>
+type MarketTabView = NonNullable<MarketReturnSearch['view']>
 
 function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined): IndexedPaginationState {
   return indexed && catalogue?.kind === 'ok'
@@ -329,6 +331,11 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
     const { indexCursor: _cursor, offset: _offset, ...filters } = filterValues
     return { ...filters }
   }
+  function marketTabDestination(value: MarketTabView) {
+    return carryMarketCompare(search, value === 'saved' || value === 'discover' ? { view: value } : {
+      ...indexedSearch(), view: value,
+    })
+  }
   function explore(filters: X402DirectoryCatalogueInput) {
     void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...filters, view: view === 'providers' ? 'providers' : 'tools' }) })
   }
@@ -398,7 +405,10 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
 
   function canonicalResults() {
     const result = canonicalSearch.result
-    if (canonicalSearch.loading && result === undefined) return <p role="status" className="py-8 text-sm text-muted-foreground">Searching admitted Tools and Coinbase Bazaar…</p>
+    if (canonicalSearch.loading && result === undefined) return <div role="status" aria-label="Searching admitted Tools and Coinbase Bazaar" aria-busy="true" className="py-8">
+      <p className="text-sm text-muted-foreground">Searching admitted Tools and Coinbase Bazaar…</p>
+      <div aria-hidden="true" className="mt-4"><Skeleton lines={6} /></div>
+    </div>
     if (result === undefined) return <AeEmptyState icon={<SearchIcon />} title="Search is unavailable" description="This search could not complete. Your query is unchanged." action={<Button type="button" variant="secondary" onClick={() => void canonicalSearch.retry()}>Retry search</Button>} />
     const continuation = result.next.find(action => action.action === 'next-page')
     const retry = result.next.find(action => action.action === 'retry')
@@ -479,19 +489,13 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       </DirectoryHero>
       {queryError === undefined ? null : <p id="market-search-error" role="alert" className="text-sm text-destructive">{queryError}</p>}
       <p id="market-search-recipient" className="arc-market-search-hint">{search.reviewedProvidersOnly === true ? 'Search matches published listings from reviewed providers.' : jevRecipient === undefined || search.alternativeTo !== undefined ? 'Search assesses Market Tool listings and published candidate descriptions.' : `Search query and candidate Tool text go to ${jevRecipient}.`}</p>
-      <Tabs value={displayView} animateContent={false} onValueChange={value => {
-        if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
-          void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, value === 'saved' || value === 'discover' ? { view: value } : {
-            ...indexedSearch(), view: value,
-          }) })
-        }
-      }}>
+      <Tabs value={displayView} animateContent={false}>
         <div className="arc-market-navigation grid grid-cols-1 items-center gap-related pb-related sm:grid-cols-[minmax(0,1fr)_auto]">
           <TabsList className="arc-market-tabs" aria-label="Browse the marketplace">
-            <TabsTrigger value="discover" className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
-            <TabsTrigger value="tools"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
-            <TabsTrigger value="providers"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
-            <TabsTrigger value="saved" className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
+            <TabsTrigger value="discover" nativeButton={false} render={<Link to={marketPath} search={marketTabDestination('discover')} resetScroll={false} viewTransition={false} preload="intent" />} className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
+            <TabsTrigger value="tools" nativeButton={false} render={<Link to={marketPath} search={marketTabDestination('tools')} resetScroll={false} viewTransition={false} preload="intent" />}><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
+            <TabsTrigger value="providers" nativeButton={false} render={<Link to={marketPath} search={marketTabDestination('providers')} resetScroll={false} viewTransition={false} preload="intent" />}><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
+            <TabsTrigger value="saved" nativeButton={false} render={<Link to={marketPath} search={marketTabDestination('saved')} resetScroll={false} viewTransition={false} preload="intent" />} className="min-w-0 whitespace-normal px-3 enabled:active:scale-100"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-related justify-end">
             {count === undefined || pendingView !== undefined || displayView === 'saved' ? null : <p className="text-xs text-muted-foreground" role="status" aria-live="polite">{count}</p>}
@@ -513,7 +517,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           />
           {saved.status === 'signed_out'
             ? <AeEmptyState icon={<HeartIcon />} title="Save Tools to your account" description="Sign in to keep Tools across browsers and connected Agents." action={<Link to="/sign-in/$" params={{ _splat: '' }} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>Sign in</Link>} />
-            : saved.status === 'loading' ? <div role="status" aria-label="Loading saved Tools" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map(index => <div key={index} className="h-40 rounded-card border border-border bg-card" />)}</div>
+            : saved.status === 'loading' ? <div role="status" aria-label="Loading saved Tools" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map(index => <div key={index} aria-hidden="true" className="rounded-card border border-border bg-card p-gutter"><Skeleton avatar lines={3} /></div>)}</div>
               : saved.status === 'failed' ? <AeEmptyState icon={<HeartIcon />} title="Saved Tools could not be loaded" description="Your saved identities are unchanged." action={<Button type="button" variant="secondary" onClick={saved.refresh}>Try again</Button>} />
                 : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back from any connected device." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
           {view === 'saved' ? comparisonTray : null}
@@ -610,6 +614,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         })}
         </> : <TabsContent key={`pending-${pendingView}`} value={pendingView} className="pt-5" aria-busy="true">
           <p role="status" className="py-8 text-sm text-muted-foreground">Loading {pendingView === 'discover' ? 'Collections' : pendingView === 'tools' ? 'Tools' : pendingView === 'providers' ? 'Providers' : 'saved Tools'}…</p>
+          <div aria-hidden="true" className="mx-auto max-w-5xl">{pendingView === 'tools' || pendingView === 'providers' ? <Skeleton lines={6} /> : <Skeleton avatar lines={3} />}</div>
         </TabsContent>}
       </Tabs>
       <DirectoryComparison entries={comparisonEntries} open={compareOpen} onOpenChange={setCompareOpen} onCloseAutoFocus={event => {
