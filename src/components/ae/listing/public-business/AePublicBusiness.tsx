@@ -64,7 +64,7 @@ export function ProviderListingPending() {
           </header>
           <div className="arc-provider-layout">
             <div className="arc-provider-gallery">
-              {Array.from({ length: 3 }, (_, index) => <div key={index} className="arc-provider-card h-64 w-full"><Skeleton lines={6} /></div>)}
+              {Array.from({ length: 3 }, (_, index) => <div key={index} className="h-64 w-full"><div className="arc-provider-card"><Skeleton lines={6} /></div></div>)}
             </div>
             <div className="arc-provider-aside h-72 w-full"><Skeleton lines={6} /></div>
           </div>
