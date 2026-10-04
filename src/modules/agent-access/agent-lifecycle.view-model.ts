@@ -11,6 +11,7 @@ export type AgentAccessSearch = Readonly<{
   caller?: string
   resumeTool?: string
   setup?: 'choose' | 'oauth'
+  setupApp?: 'codex' | 'claude-code' | 'cursor'
   callRef?: string
   callInvalid?: true
   grantRef?: string

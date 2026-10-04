@@ -1,10 +1,18 @@
-import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
+import {
+  AeAssistantInstallFunnel,
+  type AeAssistantInstallFunnelProps,
+} from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeSiteFaq } from '@/components/ae/website/AeSiteFaq'
 import { HeroContent } from '@/components/arc/blocks/hero-section/hero-content'
 import { AGENT_PAGE } from '@/content/brand-copy'
 import './AgentDoorComposition.css'
 
-export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string }) {
+type AeAgentDoorPageProps = Readonly<Pick<
+  AeAssistantInstallFunnelProps,
+  'setupApp' | 'onSetupAppChange'
+> & { canonicalBaseUrl: string }>
+
+export function AeAgentDoorPage({ canonicalBaseUrl, setupApp, onSetupAppChange }: AeAgentDoorPageProps) {
   return (
     <div className="arc-market arc-agent-door">
       <HeroContent
@@ -21,7 +29,11 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
             tabIndex={-1}
             className="arc-agent-door-setup"
           >
-            <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
+            <AeAssistantInstallFunnel
+              canonicalBaseUrl={canonicalBaseUrl}
+              {...(setupApp === undefined ? {} : { setupApp })}
+              {...(onSetupAppChange === undefined ? {} : { onSetupAppChange })}
+            />
           </section>
         )}
       />

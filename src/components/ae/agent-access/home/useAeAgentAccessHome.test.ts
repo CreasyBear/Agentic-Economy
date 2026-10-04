@@ -3,6 +3,7 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ClerkRuntimeError } from '@clerk/shared/error'
 import type { AgentOnboardingRequest } from '@/modules/agent-access/public'
+import type { AgentAccessSearch } from '@/modules/agent-access/agent-lifecycle.view-model'
 import type { AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 
 const mocks = vi.hoisted(() => ({
@@ -59,6 +60,123 @@ beforeEach(() => {
   mocks.readDirectory.mockResolvedValue(directory)
 })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.resetAllMocks() })
+
+const setupAppCases = [
+  {
+    setupApp: 'codex',
+    search: { caller: 'prn_agent', resumeTool: 'tool_ref', grantRef: 'grant:one', state: 'grant-state',
+      callRef: 'call_one', setup: 'choose', setupApp: 'claude-code' },
+    expected: { caller: 'prn_agent', resumeTool: 'tool_ref', grantRef: 'grant:one', state: 'grant-state',
+      callRef: 'call_one', setup: 'oauth', setupApp: 'codex' },
+  },
+  {
+    setupApp: 'claude-code',
+    search: { caller: 'prn_agent', resumeTool: 'tool_ref', userCode: 'ABCD-EFGH', state: 'device-state',
+      callRef: 'call_two', setup: 'oauth', setupApp: 'cursor' },
+    expected: { caller: 'prn_agent', resumeTool: 'tool_ref', userCode: 'ABCD-EFGH', state: 'device-state',
+      callRef: 'call_two', setup: 'oauth', setupApp: 'claude-code' },
+  },
+  {
+    setupApp: 'cursor',
+    search: { caller: 'prn_agent', resumeTool: 'tool_ref', setup: 'choose' },
+    expected: { caller: 'prn_agent', resumeTool: 'tool_ref', setup: 'oauth', setupApp: 'cursor' },
+  },
+] as const
+
+describe('Agent setup app choice', () => {
+  it.each(setupAppCases)('selects $setupApp while retaining route context', async ({ setupApp, search, expected }) => {
+    mocks.readRequest.mockResolvedValue({ kind: 'refused', reason: 'not_found' })
+    const { result } = renderHook(() => useAeAgentAccessHome({ canonicalBaseUrl: 'https://ae.example.test',
+      initialDirectory: directory, search }))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    mocks.navigate.mockClear()
+
+    await act(async () => { result.current.onSetupAppChange(setupApp) })
+
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/agent-access', search: expected, replace: true,
+      resetScroll: false, viewTransition: false })
+  })
+
+  it('clears only setupApp while keeping setup open', async () => {
+    const search: AgentAccessSearch = { caller: 'prn_agent', resumeTool: 'tool_ref', grantRef: 'grant:one',
+      state: 'grant-state', callRef: 'call_one', setup: 'choose', setupApp: 'codex' }
+    mocks.readRequest.mockResolvedValue({ kind: 'refused', reason: 'not_found' })
+    const { result } = renderHook(() => useAeAgentAccessHome({ canonicalBaseUrl: 'https://ae.example.test',
+      initialDirectory: directory, search }))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    mocks.navigate.mockClear()
+
+    await act(async () => { result.current.onSetupAppChange(undefined) })
+
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: '/agent-access',
+      search: { caller: 'prn_agent', resumeTool: 'tool_ref', grantRef: 'grant:one', state: 'grant-state', callRef: 'call_one', setup: 'oauth' },
+      replace: true,
+      resetScroll: false,
+      viewTransition: false,
+    })
+  })
+
+  it('preserves setupApp when the existing setup step closes and reopens', async () => {
+    const search: AgentAccessSearch = { caller: 'prn_agent', resumeTool: 'tool_ref', userCode: 'ABCD-EFGH',
+      state: 'device-state', setup: 'oauth', setupApp: 'cursor' }
+    mocks.readRequest.mockResolvedValue({ kind: 'refused', reason: 'not_found' })
+    const { result, rerender } = renderHook(({ currentSearch }) => useAeAgentAccessHome({ canonicalBaseUrl: 'https://ae.example.test',
+      initialDirectory: directory, search: currentSearch }), { initialProps: { currentSearch: search } })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    mocks.navigate.mockClear()
+
+    await act(async () => { result.current.onSetupStep('closed') })
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: '/agent-access',
+      search: { caller: 'prn_agent', resumeTool: 'tool_ref', userCode: 'ABCD-EFGH', state: 'device-state', setupApp: 'cursor' },
+      replace: true,
+    })
+
+    const closedSearch: AgentAccessSearch = { caller: 'prn_agent', resumeTool: 'tool_ref', userCode: 'ABCD-EFGH',
+      state: 'device-state', setupApp: 'cursor' }
+    rerender({ currentSearch: closedSearch })
+    await act(async () => {})
+    mocks.navigate.mockClear()
+    await act(async () => { result.current.onSetupStep('oauth') })
+
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: '/agent-access',
+      search: { ...closedSearch, setup: 'oauth' },
+      replace: false,
+    })
+  })
+
+  it('does not reload account data or issue spending, key or Call mutations when setupApp changes alone', async () => {
+    const search: AgentAccessSearch = { caller: 'prn_agent', grantRef: 'grant:one', state: 'grant-state',
+      callRef: 'call_one', setup: 'oauth', setupApp: 'codex' }
+    mocks.readRequest.mockResolvedValue({ kind: 'refused', reason: 'not_found' })
+    const { result, rerender } = renderHook(({ currentSearch }) => useAeAgentAccessHome({ canonicalBaseUrl: 'https://ae.example.test',
+      initialDirectory: directory, search: currentSearch }), { initialProps: { currentSearch: search } })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    const reads = {
+      directory: mocks.readDirectory.mock.calls.length,
+      approvals: mocks.readApprovals.mock.calls.length,
+      request: mocks.readRequest.mock.calls.length,
+    }
+    expect(reads).toEqual({ directory: 1, approvals: 1, request: 1 })
+    mocks.navigate.mockClear()
+
+    await act(async () => { result.current.onSetupAppChange('cursor') })
+    rerender({ currentSearch: { ...search, setupApp: 'cursor' } })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/agent-access',
+      search: { ...search, setupApp: 'cursor' }, replace: true, resetScroll: false, viewTransition: false })
+    expect(mocks.readDirectory).toHaveBeenCalledTimes(reads.directory)
+    expect(mocks.readApprovals).toHaveBeenCalledTimes(reads.approvals)
+    expect(mocks.readRequest).toHaveBeenCalledTimes(reads.request)
+    expect(mocks.readPolicy).not.toHaveBeenCalled()
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.decide).not.toHaveBeenCalled()
+    expect(mocks.noop).not.toHaveBeenCalled()
+  })
+})
 
 describe('spending MFA client command', () => {
   it('retries the same key and limits after MFA, with no prompt for a completed reduction', async () => {

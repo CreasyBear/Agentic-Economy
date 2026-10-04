@@ -83,6 +83,8 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
               checkingConnection={vm.loading}
               onCheckConnection={vm.onDirectoryRetry}
               {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
+              {...(search.setupApp === undefined ? {} : { setupApp: search.setupApp })}
+              onSetupAppChange={vm.onSetupAppChange}
             />
             {directory.items.length === 0 ? null : (
               <div className="arc-agent-known-connections">

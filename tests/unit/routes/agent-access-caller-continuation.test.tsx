@@ -234,6 +234,31 @@ describe('agent-access caller locator validation', () => {
     expect(validateAgentAccessSearch({ setup: ['oauth'] })).toEqual({})
     expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, setup: 'public' })).toEqual({ caller: PRINCIPAL_ID })
   })
+
+  it('keeps only an exact known setup app without normalizing or echoing malformed values', () => {
+    for (const setupApp of ['codex', 'claude-code', 'cursor'] as const) {
+      expect(validateAgentAccessSearch({ setupApp })).toEqual({ setupApp })
+    }
+
+    const hostileValues: readonly unknown[] = [
+      undefined,
+      null,
+      [],
+      ['codex'],
+      { value: 'codex' },
+      '',
+      ' ',
+      ' codex ',
+      'Codex',
+      'CLAUDE-CODE',
+      'Cursor',
+      'clerk_api_key:private-canary',
+      'ae_buyer_secret_canary_do_not_echo',
+    ]
+    for (const setupApp of hostileValues) {
+      expect(validateAgentAccessSearch({ setupApp })).toEqual({})
+    }
+  })
 })
 
 describe('agent-access caller route continuation', () => {
@@ -275,6 +300,91 @@ describe('agent-access caller route continuation', () => {
       directoryUnavailable: false,
     })
     expect(routeHarness.readDirectory).toHaveBeenCalledOnce()
+  })
+
+  it('keeps setup app selection out of loader dependencies while preserving request and continuation locators', () => {
+    const loaderDeps = AgentAccessRoute.options.loaderDeps
+    if (typeof loaderDeps !== 'function') throw new Error('agent_access_loader_deps_missing')
+
+    expect(loaderDeps({ search: {
+      caller: PRINCIPAL_ID,
+      callRef: 'call:one',
+      grantRef: 'grant:one',
+      userCode: 'user:one',
+      setupApp: 'cursor',
+    } })).toEqual({
+      caller: PRINCIPAL_ID,
+      callRef: 'call:one',
+      grantRef: 'grant:one',
+      userCode: 'user:one',
+    })
+  })
+
+  it('binds setup app choice to route search and preserves continuation when changed or cleared', () => {
+    routeHarness.search = validateAgentAccessSearch({
+      setup: 'oauth',
+      setupApp: 'cursor',
+      caller: PRINCIPAL_ID,
+      resumeTool: TOOL_REF,
+      callRef: 'call:setup-app',
+    })
+    const disconnectAgent = vi.fn()
+    const disconnectConnection = vi.fn()
+    const updateSpendingLimits = vi.fn()
+    const decideApproval = vi.fn(async () => ({ kind: 'denied' }))
+    const { rename } = installServerFns()
+    routeHarness.serverFns.set(routeHarness.disconnectRef, disconnectAgent)
+    routeHarness.serverFns.set(routeHarness.disconnectConnectionRef, disconnectConnection)
+    routeHarness.serverFns.set(routeHarness.updateSpendingLimitsRef, updateSpendingLimits)
+    routeHarness.serverFns.set(routeHarness.decideApprovalRef, decideApproval)
+
+    const Component = AgentAccessRoute.options.component
+    if (Component === undefined) throw new Error('agent_access_route_component_missing')
+    const rendered = render(createElement(Component))
+
+    expect(routeHarness.installProps).toMatchObject({ setupApp: 'cursor', resumeToolRef: TOOL_REF })
+    const onSetupAppChange = routeHarness.installProps?.onSetupAppChange as
+      ((setupApp: 'codex' | 'claude-code' | 'cursor' | undefined) => void) | undefined
+    expect(onSetupAppChange).toBeTypeOf('function')
+    act(() => onSetupAppChange?.('codex'))
+    expect(routeHarness.navigate).toHaveBeenLastCalledWith({
+      to: '/agent-access',
+      search: {
+        setup: 'oauth',
+        caller: PRINCIPAL_ID,
+        resumeTool: TOOL_REF,
+        callRef: 'call:setup-app',
+        setupApp: 'codex',
+      },
+      replace: true,
+      resetScroll: false,
+      viewTransition: false,
+    })
+
+    routeHarness.search = { ...routeHarness.search, setupApp: 'codex' }
+    rendered.rerender(createElement(Component))
+    expect(routeHarness.installProps).toMatchObject({ setupApp: 'codex', resumeToolRef: TOOL_REF })
+
+    const onClearSetupApp = routeHarness.installProps?.onSetupAppChange as
+      ((setupApp: 'codex' | 'claude-code' | 'cursor' | undefined) => void) | undefined
+    act(() => onClearSetupApp?.(undefined))
+    expect(routeHarness.navigate).toHaveBeenLastCalledWith({
+      to: '/agent-access',
+      search: {
+        setup: 'oauth',
+        caller: PRINCIPAL_ID,
+        resumeTool: TOOL_REF,
+        callRef: 'call:setup-app',
+      },
+      replace: true,
+      resetScroll: false,
+      viewTransition: false,
+    })
+    expect(disconnectAgent).not.toHaveBeenCalled()
+    expect(disconnectConnection).not.toHaveBeenCalled()
+    expect(rename).not.toHaveBeenCalled()
+    expect(updateSpendingLimits).not.toHaveBeenCalled()
+    expect(decideApproval).not.toHaveBeenCalled()
   })
 
   it('passes the exact validated locator to client selection but never to the owner read', async () => {

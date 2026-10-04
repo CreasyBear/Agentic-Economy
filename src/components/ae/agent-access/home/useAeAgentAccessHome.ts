@@ -498,6 +498,21 @@ export function useAeAgentAccessHome({
     })
   }, [navigate, search])
 
+  const onSetupAppChange = useCallback((setupApp: NonNullable<AeAgentAccessHomeProps['search']['setupApp']> | undefined) => {
+    const { setupApp: _setupApp, ...continuation } = search
+    void navigate({
+      to: '/agent-access',
+      search: {
+        ...continuation,
+        setup: 'oauth',
+        ...(setupApp === undefined ? {} : { setupApp }),
+      },
+      replace: true,
+      resetScroll: false,
+      viewTransition: false,
+    })
+  }, [navigate, search])
+
   const addAnotherToggleLabel = showSetup ? 'Hide setup' : 'Connect an Agent'
 
   const directoryRetryLabel = loading ? 'Trying again…' : 'Try again'
@@ -545,6 +560,7 @@ export function useAeAgentAccessHome({
     onReadSpendingLimits: readSpendingLimitsHandler,
     onConnectNewAgent: () => onSetupStep('choose'),
     onSetupStep,
+    onSetupAppChange,
     accessUnavailable: directoryError !== undefined && directory.items.length === 0,
     approvals,
     approvalsLoading,
