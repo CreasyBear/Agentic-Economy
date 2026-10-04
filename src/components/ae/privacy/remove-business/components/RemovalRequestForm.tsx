@@ -1,11 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Alert } from '@/components/arc/alert/alert'
 import { Button } from '@/components/arc/button/button'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/spinner'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/arc/input/input'
+import { Select } from '@/components/arc/select/select'
+import { Textarea } from '@/components/arc/textarea/textarea'
 import '../CorrectionComposition.css'
 
 import { removalReasonOptions, removalRequestCopy, type RemovalRequestFormProps } from '../remove-business.contracts'
@@ -21,13 +19,6 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
     evidenceInvalid,
     contactEmailRef,
     evidenceSummaryRef,
-    slugDescriptionId,
-    contactDescriptionId,
-    contactErrorId,
-    evidenceDescriptionId,
-    evidenceErrorId,
-    contactDescribedBy,
-    evidenceDescribedBy,
     onSubmit,
     onSlugChange,
     onContactEmailChange,
@@ -35,113 +26,78 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
     onEvidenceSummaryChange,
   } = props
 
-  const selectedReasonLabel = removalReasonOptions.find((option) => option.value === value.reasonCode)?.label
-
   return (
     <form onSubmit={onSubmit} className="arc-market arc-correction-form" noValidate>
       {error !== undefined && !contactInvalid && !evidenceInvalid ? (
-        <Alert variant="destructive">
-          <AlertTitle>Request needs attention</AlertTitle>
-          <AlertDescription>
-            {error}
-            {outcomeUnknown ? <> <Link to="/support" className="arc-correction-support-link underline underline-offset-4">Open support</Link> with the Provider slug and your contact email.</> : null}
-          </AlertDescription>
+        <Alert tone="danger" role="alert" title="Request needs attention">
+          {error}
+          {outcomeUnknown ? <> <Link to="/support" className="arc-correction-support-link underline underline-offset-4">Open support</Link> with the Provider slug and your contact email.</> : null}
         </Alert>
       ) : null}
       {receipt === undefined ? null : (
-        <Alert role="status">
-          <AlertTitle>Request recorded</AlertTitle>
-          <AlertDescription>
-            <span>{receipt}</span>
-            <span className="block">{removalRequestCopy.referenceSupport}</span>
-          </AlertDescription>
+        <Alert tone="success" role="status" title="Request recorded">
+          <span>{receipt}</span>
+          <span className="block">{removalRequestCopy.referenceSupport}</span>
         </Alert>
       )}
-      <FieldGroup className="arc-correction-fields">
-        <Field className="arc-correction-field">
-          <FieldLabel htmlFor="slug">Provider slug</FieldLabel>
-          <Input
-            id="slug"
-            name="slug"
-            value={value.slug}
-            disabled={pending}
-            aria-describedby={slugDescriptionId}
-            className="arc-correction-input"
-            onChange={(event) => {
-              onSlugChange(event.currentTarget.value)
-            }}
-          />
-          <FieldDescription id={slugDescriptionId}>Shown in the Provider profile URL.</FieldDescription>
-        </Field>
-        <Field className="arc-correction-field" {...(contactInvalid ? { 'data-invalid': true } : {})}>
-          <FieldLabel htmlFor="contactEmail">Your email</FieldLabel>
-          <Input
-            id="contactEmail"
-            name="contactEmail"
-            type="email"
-            autoComplete="email"
-            aria-describedby={contactDescribedBy}
-            aria-invalid={contactInvalid}
-            ref={contactEmailRef}
-            value={value.contactEmail}
-            disabled={pending}
-            className="arc-correction-input"
-            onChange={(event) => {
-              onContactEmailChange(event.currentTarget.value)
-            }}
-          />
-          <FieldDescription id={contactDescriptionId}>Used only to follow up.</FieldDescription>
-          {contactInvalid ? (
-            <FieldError id={contactErrorId}>{error ?? ''}</FieldError>
-          ) : null}
-        </Field>
-        <Field className="arc-correction-field">
-          <FieldLabel htmlFor="reasonCode">Reason</FieldLabel>
-          <input type="hidden" name="reasonCode" value={value.reasonCode} />
-          <Select
-            value={value.reasonCode}
-            disabled={pending}
-            onValueChange={(nextValue) => {
-              if (nextValue != null) {
-                onReasonCodeChange(nextValue)
-              }
-            }}
-          >
-            <SelectTrigger id="reasonCode" className="arc-correction-input">
-              <SelectValue placeholder="Choose one">{selectedReasonLabel}</SelectValue>
-            </SelectTrigger>
-            <SelectContent className="arc-market arc-correction-popup">
-              <SelectGroup>
-                {removalReasonOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="arc-correction-field" {...(evidenceInvalid ? { 'data-invalid': true } : {})}>
-          <FieldLabel htmlFor="evidenceSummary">What should change?</FieldLabel>
-          <Textarea
-            id="evidenceSummary"
-            name="evidenceSummary"
-            aria-describedby={evidenceDescribedBy}
-            aria-invalid={evidenceInvalid}
-            ref={evidenceSummaryRef}
-            value={value.evidenceSummary}
-            disabled={pending}
-            className="arc-correction-textarea"
-            onChange={(event) => {
-              onEvidenceSummaryChange(event.currentTarget.value)
-            }}
-          />
-          <FieldDescription id={evidenceDescriptionId}>A short note is enough.</FieldDescription>
-          {evidenceInvalid ? (
-            <FieldError id={evidenceErrorId}>{error ?? ''}</FieldError>
-          ) : null}
-        </Field>
-      </FieldGroup>
-      <Button type="submit" variant="primary" size="md" disabled={pending || outcomeUnknown} className="arc-correction-submit">
-        {pending ? <Spinner /> : null}
+      <div className="arc-correction-fields">
+        <Input
+          id="slug"
+          name="slug"
+          label="Provider slug"
+          description="Shown in the Provider profile URL."
+          value={value.slug}
+          disabled={pending}
+          onChange={(event) => {
+            onSlugChange(event.currentTarget.value)
+          }}
+        />
+        <Input
+          id="contactEmail"
+          name="contactEmail"
+          label="Your email"
+          description="Used only to follow up."
+          {...(contactInvalid ? { error: error ?? '' } : {})}
+          type="email"
+          autoComplete="email"
+          aria-invalid={contactInvalid}
+          ref={contactEmailRef}
+          value={value.contactEmail}
+          disabled={pending}
+          onChange={(event) => {
+            onContactEmailChange(event.currentTarget.value)
+          }}
+        />
+        <input type="hidden" name="reasonCode" value={value.reasonCode} />
+        <Select
+          label="Reason"
+          options={removalReasonOptions.map((option) => ({ value: option.value, label: option.label }))}
+          id="reasonCode"
+          placeholder="Choose one"
+          value={value.reasonCode}
+          disabled={pending}
+          onValueChange={(nextValue) => {
+            if (nextValue != null) {
+              onReasonCodeChange(nextValue)
+            }
+          }}
+        />
+        <Textarea
+          id="evidenceSummary"
+          name="evidenceSummary"
+          label="What should change?"
+          description="A short note is enough."
+          {...(evidenceInvalid ? { error: error ?? '' } : {})}
+          aria-invalid={evidenceInvalid}
+          ref={evidenceSummaryRef}
+          value={value.evidenceSummary}
+          disabled={pending}
+          onChange={(event) => {
+            onEvidenceSummaryChange(event.currentTarget.value)
+          }}
+        />
+      </div>
+      <Button type="submit" variant="primary" size="md" disabled={pending || outcomeUnknown} loading={pending} className="arc-correction-submit">
         {outcomeUnknown ? 'Outcome not confirmed' : removalRequestCopy.submit}
       </Button>
     </form>

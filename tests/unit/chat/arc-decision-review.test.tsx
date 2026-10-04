@@ -130,11 +130,20 @@ describe('Arc Tool input review', () => {
     const { rerender } = render(<ToolPanelForm view={review} idPrefix="review-form" onInputTextChange={onInputTextChange} />)
     const input = screen.getByRole('textbox', { name: chatToolPanel.jsonLabel })
     expect(input).toHaveValue(review.inputText)
+    const descriptionId = 'review-form-json-description'
+    expect(input.getAttribute('aria-describedby')?.split(/\s+/)).toEqual([descriptionId])
+    expect(document.getElementById(descriptionId)).toHaveTextContent(chatToolPanel.jsonHelp)
     fireEvent.change(input, { target: { value: '{"city":"Perth"}' } })
     expect(onInputTextChange).toHaveBeenCalledExactlyOnceWith('{"city":"Perth"}')
+    rerender(<ToolPanelForm view={{ ...review, incomplete: 'unfinished' }} idPrefix="review-form" onInputTextChange={onInputTextChange} />)
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input.getAttribute('aria-describedby')?.split(/\s+/).sort()).toEqual([descriptionId, 'review-form-incomplete'].sort())
     rerender(<ToolPanelForm view={{ ...review, submission: 'submitting' }} idPrefix="review-form" onInputTextChange={onInputTextChange} />)
     expect(input).toBeDisabled()
     expect(screen.getByRole('group', { name: chatToolPanel.inputLegend })).toHaveAttribute('aria-busy', 'true')
+    rerender(<ToolPanelForm view={{ ...review, submission: 'outcome_unknown' }} idPrefix="review-form" onInputTextChange={onInputTextChange} />)
+    expect(input).toBeDisabled()
+    expect(screen.getByRole('group', { name: chatToolPanel.inputLegend })).toHaveAttribute('aria-busy', 'false')
   })
 
   it('retains the Tool heading focus and makes a closed loading panel inert', () => {
