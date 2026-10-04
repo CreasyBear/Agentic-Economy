@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Doc } from '../../../convex/_generated/dataModel'
 import { convexTestWithMarketComponents, createTestAgentPrincipal } from '../../helpers/convex-fixtures'
-import { api } from '../../../convex/_generated/api'
+import { api, internal } from '../../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 import { CALL_CONTENT_RETENTION_MS, callContentMayExpire, expireCallContent } from '../../../convex/lib/capabilityExecution/contentRetention/callContent'
@@ -13,6 +13,7 @@ import { retentionAttempt, retentionBooking, retentionObservation, retentionObli
 
 const endedAt = 1_000
 const now = endedAt + CALL_CONTENT_RETENTION_MS
+afterEach(() => vi.useRealTimers())
 const call: Omit<Doc<'capabilityCalls'>, '_id' | '_creationTime'> = {
   callRef: 'call:retention', principalId: 'principal:retention', ownerId: 'account:retention',
   credentialId: 'credential:retention', applicationRef: 'application:retention', toolRef: 'tool:retention',
@@ -26,6 +27,44 @@ const call: Omit<Doc<'capabilityCalls'>, '_id' | '_creationTime'> = {
 }
 
 describe('Call content retention boundary', () => {
+  it('rejects an invalid cutoff or a continuation without its cutoff before deleting content', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+    const backend = convexTestWithMarketComponents()
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const id = await backend.run(ctx => ctx.db.insert('capabilityCalls', call))
+    for (const args of [{ asOf: -1 }, { asOf: now + 1 }, { asOf: 1.5 }, { cursor: 'cursor:without-cutoff' }]) {
+      await expect(backend.mutation(internal.workloadCron.expireAlphaContent, args)).rejects.toThrow('content_retention_checkpoint_invalid')
+    }
+    expect((await backend.run(ctx => ctx.db.get(id)))?.inputJson).toBe(call.inputJson)
+  })
+
+  it('finishes scheduled pages using one cutoff while later eligible content waits for the next sweep', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+    const backend = convexTestWithMarketComponents()
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const { result: _result, ...pendingCall } = call
+    const ids = await backend.run(async ctx => ({
+      first: await ctx.db.insert('capabilityCalls', { ...call, callRef: 'call:first' }),
+      pending: await ctx.db.insert('capabilityCalls', { ...pendingCall, callRef: 'call:pending', createdAt: 101, state: 'pending' }),
+      laterPage: await ctx.db.insert('capabilityCalls', { ...call, callRef: 'call:later-page', createdAt: 102 }),
+      boundary: await ctx.db.insert('capabilityCalls', { ...call, callRef: 'call:boundary', createdAt: 103, updatedAt: endedAt + 1 }),
+    }))
+    await backend.mutation(internal.workloadCron.expireAlphaContent, {})
+    vi.setSystemTime(now + 100)
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    const rows = await backend.run(async ctx => ({ first: await ctx.db.get(ids.first), laterPage: await ctx.db.get(ids.laterPage),
+      pending: await ctx.db.get(ids.pending), boundary: await ctx.db.get(ids.boundary) }))
+    expect(rows.first?.contentExpiredAt).toBe(now)
+    expect(rows.laterPage?.contentExpiredAt).toBe(now)
+    expect(rows.pending?.inputJson).toBe(call.inputJson)
+    expect(rows.boundary?.inputJson).toBe(call.inputJson)
+    await backend.mutation(internal.workloadCron.expireAlphaContent, {})
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    expect((await backend.run(ctx => ctx.db.get(ids.boundary)))?.contentExpiredAt).toBe(now + 100)
+  })
+
   it('expires exactly at the boundary, preserves identity and prevents a delayed writer restoring output', async () => {
     const backend = convexTestWithMarketComponents()
     const id = await backend.run(ctx => ctx.db.insert('capabilityCalls', call))

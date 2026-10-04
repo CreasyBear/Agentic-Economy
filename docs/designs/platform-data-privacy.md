@@ -138,6 +138,11 @@ and ledger references; Account and admin-role separation; stale review authority
 and absence of content in feedback, metrics and audit receipts. Verify every
 known active copy, including the native chat component. Run the required project
 checks and full release gate on the final integrated change.
+The native scheduler drill exposed Convex's query-bound cursor requirement:
+all pages now carry the sweep's fixed cutoff, while each transaction checks the
+current purchase state. Content becoming old enough mid-sweep waits for the next
+sweep. Invalid or incomplete checkpoints fail before deleting content. The
+regression advances the clock between scheduled pages and verifies both cases.
 
 **Material risks and cuts.** The greatest risks are secondary payload copies,
 stale workers restoring them, and public copy overstating backup/recipient

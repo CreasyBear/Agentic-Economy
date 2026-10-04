@@ -11,24 +11,31 @@ const phases = ['calls', 'quotes', 'attempts', 'observations', 'procure', 'chat'
 export const contentRetentionArgs = {
   phase: v.optional(v.union(...phases.map(phase => v.literal(phase)))),
   cursor: v.optional(v.union(v.string(), v.null())),
+  asOf: v.optional(v.number()),
 }
 type Phase = typeof phases[number]
 type Batch = { isDone: boolean; continueCursor: string | null }
 export const LEARNING_RETENTION_MS = CALL_FEEDBACK_RETENTION_MS
 
-/** Each bounded transaction re-admits the workload and rechecks finality.
+/** Requires one fixed cutoff for all pages in a sweep: Convex cursors bind the
+ * query range. Reject invalid checkpoints before any deletion. Each bounded
+ * transaction re-admits the workload and rechecks current purchase finality.
  * A repeated or overlapping sweep cannot create a purchase or restore content.
  * Two primary rows plus their bounded joins fit below Convex's byte limits. */
 export async function expireAlphaContentHandler(ctx: MutationCtx, args: {
-  phase?: Phase; cursor?: string | null
+  phase?: Phase; cursor?: string | null; asOf?: number
 }): Promise<null> {
   await admitWorkloadCron(ctx, 'expire alpha content')
+  const currentTime = Date.now()
+  const asOf = args.asOf ?? currentTime
+  if (!Number.isSafeInteger(asOf) || asOf < 0 || asOf > currentTime
+    || (args.cursor != null && args.asOf === undefined)) throw new Error('content_retention_checkpoint_invalid')
   const phase = args.phase ?? 'calls'
   const cursor = args.cursor ?? null
-  const batch = await expireContentBatch(ctx, phase, cursor, Date.now())
+  const batch = await expireContentBatch(ctx, phase, cursor, asOf)
   const next = batch.isDone ? phases[phases.indexOf(phase) + 1] : phase
   if (next !== undefined) await ctx.scheduler.runAfter(0, internal.workloadCron.expireAlphaContent, {
-    phase: next, cursor: batch.isDone ? null : batch.continueCursor,
+    phase: next, cursor: batch.isDone ? null : batch.continueCursor, asOf,
   })
   return null
 }
