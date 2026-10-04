@@ -25,6 +25,22 @@ contracts needs the matching backend release and verification.
 
 ## Latest production acceptance — 4 October 2026
 
+Frontend marketplace update verified on **5 October 2026 Perth**: [PR #347](https://github.com/CreasyBear/Agentic-Economy/pull/347)
+is live on READY deployment `dpl_9wkaceEh9GKEGdDtZyN8h2sRbZ8Q` in project
+`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
+confirm main `355c58184ff4e18c139f6d330be3f947fda30b1e`, whose tree equals the
+gated source. Market and Saved use Arc Product Listing header regions; empty
+Collections offers a native Tools destination, with comparison/display preference
+preserved. Check/full gate pass: 8638 unit cases, 2892 integration cases,
+16 browser journeys, 18 accessibility cases and the existing type/import/SEO/build/CLI
+checks; existing skips/TODOs remain. Health is HTTP 200. Readiness returns
+HTTP 503 / `payments_unavailable` twice, with config and Convex ready. The
+23:34:49 UTC recheck projects quoting unavailable and sellable false.
+This frontend-only change does not deploy backend, identity or financial configuration
+or establish native OAuth/transaction acceptance. Previous READY
+`dpl_ATkTbsJNYKVxu39JKtsdKTNL1pA2` is the rollback boundary. Full source,
+coordination and verification evidence is in the [Arc protocol](../designs/arc-ui-refactor/protocol.md).
+
 Frontend Agent onboarding update verified on **5 October 2026 Perth**: [PR #346](https://github.com/CreasyBear/Agentic-Economy/pull/346)
 is live on READY deployment `dpl_ATkTbsJNYKVxu39JKtsdKTNL1pA2` in project
 `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
