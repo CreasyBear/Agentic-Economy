@@ -54,8 +54,8 @@ export function ActivityMonthlyDraft({returnScope, draftRef}: {returnScope: Acti
   return <BillingHistory title="Monthly usage drafts" description="Account evidence for a closed UTC month. Each revision preserves its source facts and does not issue an invoice or change money.">
     <div className="flex flex-wrap items-end gap-3">
       <Input label="Closed UTC month" type="month" value={month} max={priorMonth()} disabled={pending} onChange={event => {setMonth(event.target.value); selectedDraft.current = undefined; setFrozen(null); setMessage(''); selectDraft(undefined)}} />
-      <Button type="button" variant="secondary" disabled={pending || !monthlyDraftIntentSchema.shape.month.safeParse(month).success} aria-busy={pending || undefined} onClick={() => void create(frozen?.snapshot.revision ?? 1)}>{pending ? 'Preparing…' : frozen === null ? 'Prepare monthly draft' : 'Read same draft'}</Button>
-      {frozen === null ? null : <Button type="button" variant="secondary" disabled={pending || frozen.snapshot.revision >= 100} onClick={() => void create(frozen.snapshot.revision + 1)}>Create supplement</Button>}
+      <Button type="button" variant="secondary" loading={pending} disabled={!monthlyDraftIntentSchema.shape.month.safeParse(month).success} onClick={() => void create(frozen?.snapshot.revision ?? 1)}>{pending ? 'Preparing…' : frozen === null ? 'Prepare monthly draft' : 'Read same draft'}</Button>
+      {frozen === null ? null : <Button type="button" variant="secondary" loading={pending} disabled={frozen.snapshot.revision >= 100} onClick={() => void create(frozen.snapshot.revision + 1)}>Create supplement</Button>}
     </div>
     <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>
     {frozen === null ? null : <>

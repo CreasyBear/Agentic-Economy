@@ -3,11 +3,12 @@ import { MetricsSummary } from '@/components/arc/blocks/metrics-dashboard/metric
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { providerUnitDefinitions, type ProviderUnitEvidence } from '@/modules/capability-execution/provider-service-units'
+import '../activity/components/ActivitySummaryComposition.css'
 export function CallProviderUnits({evidence}: {evidence: ProviderUnitEvidence}) {
   const current = evidence.current
   return <BillingHistory title="Provider receipt quantities" description="Supported quantities from completed Call receipts. Failed, unresolved, unsupported and older attempts remain unknown. These quantities create no financial charge. Source time uses the recorded Call update at first capture; a rebuild can capture a later update.">
     {current === null ? <p className="text-sm text-muted-foreground">Current provider quantities are unknown. {evidence.observations.length === 0 ? 'No supported receipt quantities were recorded.' : 'Historical observations remain available below.'}</p> : <>
-      <MetricsSummary cards={current.units.map(unit => ({label: providerUnitDefinitions[unit.unitDefinitionRef].label, value: unit.state === 'observed' ? unit.quantityUnits ?? 'Unknown' : 'Unknown'}))} />
+      <div className="arc-market arc-activity-monthly-summary"><MetricsSummary cards={current.units.map(unit => ({label: providerUnitDefinitions[unit.unitDefinitionRef].label, value: unit.state === 'observed' ? unit.quantityUnits ?? 'Unknown' : 'Unknown'}))} /></div>
       <AeFactList facts={[{label: 'Requested model', value: current.requestedModel ?? 'Unknown'}, {label: 'Response model field', value: current.responseModel ?? 'Unknown'},
         {label: 'Source coverage', value: `${current.units.filter(unit => unit.state === 'observed').length} of ${current.units.length} quantities reported`},
         {label: 'Attempt / effect generation', value: `${current.attemptNumber} / ${current.effectGeneration}`},

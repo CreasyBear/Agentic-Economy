@@ -21,7 +21,7 @@ function amount(units: string, currency: 'AUD' | 'USDC' = 'AUD') {
 const bridgeLabels = { before_period: 'Calls created before this period', in_period: 'Calls created in this period', after_period: 'Calls created after this period', unattributed: 'Unattributed entries' } as const
 export function ActivityReconciliation({ result, retryPending, onRetry, returnScope, sourceFactsCapturedAt }: { result: UsageReconciliation; retryPending: boolean; onRetry: () => void; returnScope: ActivityReturnScope; sourceFactsCapturedAt?: number }) {
   const columns = useMemo<ColumnDef<Credential, unknown>[]>(() => [
-    { accessorKey: 'credentialRef', header: 'Credential', cell: ({ row }) => <span className="break-all">{row.original.credentialRef}</span> },
+    { accessorKey: 'credentialRef', header: 'Credential', cell: ({ row }) => <span className="block min-w-48 max-w-full whitespace-normal break-all">{row.original.credentialRef}</span> },
     { accessorKey: 'createdCallCountUnits', header: 'Calls created' },
     { accessorKey: 'linkedCallCountUnits', header: 'Calls linked to period entries' },
     { id: 'gross', header: 'Purchased charges', cell: ({ row }) => amount(row.original.totals.grossChargeUnits) },
@@ -38,7 +38,7 @@ export function ActivityReconciliation({ result, retryPending, onRetry, returnSc
     { id: 'call', header: 'Call evidence', cell: ({row}) => row.original.callRef === null ? 'Unattributed' : <Link to="/calls/$callRef" params={{callRef:row.original.callRef}} search={returnScope} aria-label={`View Call for ledger transaction ${row.original.transactionId}`}>View Call</Link> },
     { id: 'status', header: 'Included in measured amounts', cell: ({row}) => row.original.kind === 'unsupported' ? 'No — unsupported entry' : row.original.reverted ? 'No — reverted original' : 'Yes' },
   ], [returnScope])
-  if (result.kind !== 'available') return <AeSection title="Financial reconciliation"><p className="text-sm text-muted-foreground">Financial reconciliation is unavailable. Choose a shorter period or retry the read.</p><Button type="button" variant="secondary" disabled={retryPending} aria-busy={retryPending || undefined} onClick={onRetry}>{retryPending ? 'Refreshing…' : 'Retry reconciliation'}</Button></AeSection>
+  if (result.kind !== 'available') return <AeSection title="Financial reconciliation"><p className="text-sm text-muted-foreground">Financial reconciliation is unavailable. Choose a shorter period or retry the read.</p><Button type="button" variant="secondary" loading={retryPending} onClick={onRetry}>{retryPending ? 'Refreshing…' : 'Retry reconciliation'}</Button></AeSection>
   return <AeSection title="Financial reconciliation" description="Financial entries use ledger effective dates. Call counts and recorded obligations use Call creation dates. All amounts retain six decimal places.">
     <p className="text-xs text-muted-foreground">Ledger snapshot: {formatUtcTimestamp(result.snapshotAt)} UTC. Selected financial period: {formatUtcTimestamp(result.periodStartAt)} to {formatUtcTimestamp(result.periodEndAt)} UTC.</p>
     <div className="arc-market arc-activity-monthly-summary"><MetricsSummary cards={[

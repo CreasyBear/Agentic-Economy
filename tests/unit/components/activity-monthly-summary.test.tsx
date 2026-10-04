@@ -40,7 +40,7 @@ describe('Arc Activity period summary', () => {
     expect(region).not.toHaveTextContent('A$0.00')
     expect(region).not.toHaveTextContent(monthly.spendLabel)
     const refresh = within(region).getByRole('button', { name: 'Refreshing…' })
-    expect(refresh).toBeDisabled()
+    expect(refresh).toHaveAttribute('aria-disabled', 'true')
     fireEvent.click(refresh)
     expect(onRetry).not.toHaveBeenCalled()
     view.rerender(<ActivityMonthlySummary periodStart="Last 30 days" monthly={partial} retryPending={false} onRetry={onRetry} />)

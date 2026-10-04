@@ -61,7 +61,7 @@ describe('actual Arc monthly draft and receipt evidence',()=>{
     let finish!: (result: ReturnType<typeof draft>)=>void
     mocks.read.mockReturnValueOnce(new Promise(resolve=>{finish=resolve})).mockResolvedValueOnce(saved)
     const view=render(<ActivityMonthlyDraft draftRef={saved.draftRef} returnScope={{}} />)
-    expect(screen.getByRole('button',{name:'Preparing…'})).toBeDisabled()
+    expect(screen.getByRole('button',{name:'Preparing…'})).toHaveAttribute('aria-disabled','true')
     view.rerender(<ActivityMonthlyDraft returnScope={{}} />)
     await waitFor(()=>expect(screen.getByRole('button',{name:'Prepare monthly draft'})).toBeEnabled())
     await act(async()=>{finish(saved)})
@@ -77,7 +77,7 @@ describe('actual Arc monthly draft and receipt evidence',()=>{
     const view=render(<ActivityMonthlyDraft draftRef={first.draftRef} returnScope={{}} />)
     await screen.findByText('Monthly draft revision 1 is ready.')
     view.rerender(<ActivityMonthlyDraft draftRef={second.draftRef} returnScope={{}} />)
-    await waitFor(()=>expect(screen.getByRole('button',{name:'Preparing…'})).toBeDisabled())
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Preparing…'})).toHaveAttribute('aria-disabled','true'))
     view.rerender(<ActivityMonthlyDraft draftRef={first.draftRef} returnScope={{}} />)
     await screen.findByText('Monthly draft revision 1 is ready.')
     expect(screen.getByLabelText('Closed UTC month')).toHaveValue('2026-08')

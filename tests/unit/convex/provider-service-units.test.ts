@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { providerUnitMaterial, observationRef, validProviderObservation, type ProviderUnitObservation } from '@/modules/capability-execution/provider-service-units'
 import { createPublicToolRef } from '@/modules/capability-supply/public'
 import { blockrunTool, blockrunChatReceipt, blockrunSpeechReceipt } from '../capability-execution/fixtures/blockrun-service-unit-evidence'
 import { upsertCallProjection } from '../../../convex/lib/capabilityExecution/callLifecycle/dispatchProjection'
@@ -39,6 +40,80 @@ async function fixture(kind: 'chat' | 'speech' = 'chat') {
   return {backend,callId,toolRef,result,project,evidence,support,fingerprint}
 }
 describe('canonical provider quantity observations', () => {
+  it('bounds final export index ranges with populated provider snapshots and fifty-observation histories', async () => {
+    const f = await fixture()
+    const template = await f.backend.run(async ctx => ({ call: (await ctx.db.get(f.callId))!,
+      root: (await ctx.db.query('capabilityServiceUsageRecords').unique())!,
+      projection: (await ctx.db.query('capabilityCallProjections').unique())! }))
+    const tool = blockrunTool()
+    const tables: Record<string, Array<Record<string, unknown>>> = { capabilityCalls: [], capabilityServiceUsageRecords: [],
+      capabilityServiceUsageRevisions: [], capabilityCallProjections: [], capabilityServiceUnitObservations: [] }
+    for (let index = 0; index < 1001; index++) {
+      const ref = `call:bounded:${index}`, attemptRef = `operation-attempt:${ref}:1`
+      const call = { ...template.call, callRef: ref, attemptRef, result: { ...f.result, callRef: ref,
+        output: { ...blockrunChatReceipt, usage: { prompt_tokens: 50, completion_tokens: 8, total_tokens: 58 } } } }
+      const attempt = { attemptRef, attemptNumber: 1, effectGeneration: 1, operationKeyDigest: canonicalDigest({operation: ref}) }
+      const history: ProviderUnitObservation[] = []
+      let previous: string | null = null
+      for (let sequence = 1; sequence <= 50; sequence++) {
+        const material = providerUnitMaterial({ ...call, result: { ...call.result,
+          output: { ...blockrunChatReceipt, usage: { prompt_tokens: sequence, completion_tokens: 8, total_tokens: sequence + 8 } } } }, tool, attempt)!
+        const linkage: Pick<ProviderUnitObservation, 'sourceDigest' | 'previousObservationRef' | 'previousAttemptObservationRef' | 'sequence'> = { sourceDigest: material.sourceDigest, previousObservationRef: previous, previousAttemptObservationRef: previous, sequence }
+        const observation: ProviderUnitObservation = { ...material, ...linkage, observationRef: observationRef(linkage),
+          change: previous === null ? 'initial_attempt' as const : 'support_correction' as const,
+          occurredAt: now - 50, effectiveAt: now - 50 + sequence, observedAt: now + sequence, timeBasis: 'call_updated' as const }
+        expect(validProviderObservation(observation)).toBe(true)
+        history.push(observation)
+        previous = observation.observationRef
+      }
+      const usageRef = `service-usage:${canonicalDigest({callRef: ref, unitDefinitionRef: 'delivered_request:v1'})}`
+      tables.capabilityCalls!.push(call)
+      tables.capabilityServiceUsageRecords!.push({ ...template.root, callRef: ref, usageRef, providerUnitHeadRef: previous })
+      tables.capabilityServiceUnitObservations!.push(...history)
+      tables.capabilityCallProjections!.push({ ...template.projection, callRef: ref, serviceUsageRef: usageRef,
+        measurementRevisionRef: usageRef, providerUnitObservation: history.at(-1)! })
+    }
+    function trackedContext(size: number) {
+      const metrics = { ranges: 0, returnedRows: 0, tables: new Map<string, number>() }
+      return { metrics, ctx: { db: { query(table: string) {
+        const filters: Array<(row: Record<string, unknown>) => boolean> = []
+        type Range = { eq(field: string, value: unknown): Range; gte(field: string, value: number): Range; lt(field: string, value: number): Range }
+        const range: Range = {
+          eq: (field, value) => { filters.push(row => row[field] === value); return range },
+          gte: (field, value) => { filters.push(row => typeof row[field] === 'number' && row[field] >= value); return range },
+          lt: (field, value) => { filters.push(row => typeof row[field] === 'number' && row[field] < value); return range },
+        }
+        const selected = () => (table === 'capabilityCallProjections' ? tables[table]!.slice(0, size) : tables[table] ?? []).filter(row => filters.every(filter => filter(row)))
+        const counted = (rows: Array<Record<string, unknown>>) => { metrics.returnedRows += rows.length; return rows }
+        const chain = {
+          withIndex: (_name: string, apply: (query: Range) => unknown) => { metrics.ranges++; metrics.tables.set(table, (metrics.tables.get(table) ?? 0) + 1); apply(range); return chain },
+          order: () => chain,
+          take: async (count: number) => counted(selected().slice(0, count)),
+          unique: async () => { const rows = selected(); expect(rows.length).toBeLessThanOrEqual(1); return counted(rows)[0] ?? null },
+          first: async () => counted(selected().slice(0, 1))[0] ?? null,
+        }
+        return chain
+      } } } }
+    }
+    const scope = { accountRef, periodStartAt: now - 1000, periodEndAt: now + 86400000, snapshotAt: now + 10000 }
+    const full = trackedContext(1000)
+    expect(await callExportSourceDigest(full.ctx as never, scope)).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(full.metrics.ranges).toBe(3001)
+    expect(full.metrics.returnedRows).toBe(3000)
+    expect(Object.fromEntries(full.metrics.tables)).toEqual({ capabilityCallProjections: 1, capabilityCalls: 1000,
+      capabilityServiceUsageRecords: 1000, capabilityServiceUsageRevisions: 1000 })
+    const overflow = trackedContext(1001)
+    await expect(callExportSourceDigest(overflow.ctx as never, scope)).rejects.toThrow('call_export_window_too_large')
+    expect(overflow.metrics.ranges).toBe(1)
+    expect(Object.fromEntries(overflow.metrics.tables)).toEqual({ capabilityCallProjections: 1 })
+    const control = trackedContext(1000)
+    const evidence = await readProviderUnitEvidence(control.ctx as never, tables.capabilityCalls![0] as never, now + 10000, now + 10000)
+    expect(evidence.observations).toHaveLength(50)
+    expect(evidence.currentSupport).toBe('verified')
+    expect(evidence.current?.sequence).toBe(50)
+    expect(control.metrics.ranges).toBe(2)
+    expect(tables.capabilityServiceUnitObservations).toHaveLength(50050)
+  }, 30000)
   it('captures once, ignores replay and payment-only changes, and redacts source payloads',async()=>{
     const f=await fixture();const before=await f.evidence()
     expect(before).toMatchObject({currentSupport:'verified',current:{units:[{quantityUnits:'12'},{quantityUnits:'8'}],requestedModel:'requested-model',responseModel:'gpt-5.5'},observations:[{sequence:1,change:'initial_attempt'}]})

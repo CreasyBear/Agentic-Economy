@@ -34,7 +34,7 @@ describe('Arc financial reconciliation presentation',()=>{
     cleanup()
     const onRetry=vi.fn(),view=render(<ActivityReconciliation {...props} result={{kind:'unavailable',code:'source_unavailable'}} onRetry={onRetry} retryPending />)
     const pending=screen.getByRole('button',{name:'Refreshing…'})
-    expect(pending).toBeDisabled();fireEvent.click(pending);expect(onRetry).not.toHaveBeenCalled()
+    expect(pending).toHaveAttribute('aria-disabled','true');fireEvent.click(pending);expect(onRetry).not.toHaveBeenCalled()
     view.rerender(<ActivityReconciliation {...props} result={{kind:'unavailable',code:'source_unavailable'}} onRetry={onRetry} />)
     fireEvent.click(screen.getByRole('button',{name:'Retry reconciliation'}));expect(onRetry).toHaveBeenCalledOnce()
     expect(screen.queryByRole('term')).toBeNull()

@@ -26,8 +26,7 @@ export function ActivityMonthlySummary({
             {!monthly.windowTooLarge ? <Button
               type="button"
               variant="secondary"
-              disabled={retryPending}
-              aria-busy={retryPending || undefined}
+              loading={retryPending}
               onClick={onRetry}
             >
               {retryPending ? 'Refreshing…' : 'Refresh summaries'}
@@ -49,7 +48,7 @@ export function ActivityMonthlySummary({
       </div>
       <p className="text-xs text-muted-foreground">{monthly.spendBasis} Call completion does not by itself confirm delivery or settlement.</p>
       <p className="text-xs text-muted-foreground">{monthly.serviceUnitCoverageLabel}</p>
-      {monthly.providerUnitCards?.length ? <MetricsSummary cards={monthly.providerUnitCards.map(card => ({...card}))} /> : null}
+      {monthly.providerUnitCards?.length ? <div className="arc-market arc-activity-monthly-summary"><MetricsSummary cards={monthly.providerUnitCards.map(card => ({...card}))} /></div> : null}
       <p className="text-xs text-muted-foreground">{monthly.providerUnitCoverageLabel}</p>
     </AeSection>
   )
