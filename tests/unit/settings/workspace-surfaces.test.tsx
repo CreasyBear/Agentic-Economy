@@ -35,6 +35,63 @@ describe('owner workspace settings surfaces', () => {
     expect(screen.queryByRole('navigation', { name: 'Settings' })).toBeNull()
   })
 
+  it.each(['unpublished', 'suppressed'] as const)(
+    'shows only authoritative fallback facts for %s identities',
+    (publicStatus) => {
+      const identity = { businessId: 'biz_fallback_1', name: 'Fallback Provider', slug: 'fallback-provider', publicStatus }
+      render(<AeWorkspaceGeneral
+        result={{ kind: 'unavailable', reason: 'source_unavailable', retryable: true }}
+        identity={identity}
+      />)
+
+      expect(screen.getByRole('heading', { name: 'Provider identity' })).toBeTruthy()
+      expect(screen.getByText('The Provider identity that owns these Tools. Publication status is read separately.')).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Name' })).toBeTruthy()
+      expect(screen.getByText(identity.name)).toBeTruthy()
+      expect(screen.getByText('/fallback-provider')).toBeTruthy()
+      expect(screen.getByText(publicStatus)).toBeTruthy()
+      expect(screen.queryByRole('heading', { name: 'Category' })).toBeNull()
+      expect(screen.queryByRole('heading', { name: 'Disposition' })).toBeNull()
+      expect(screen.queryByRole('heading', { name: 'Trust' })).toBeNull()
+      expect(document.body.textContent).not.toContain(identity.businessId)
+    },
+  )
+
+  it('uses the fallback identity for editing and reuses the request key on retry', async () => {
+    const identity = {
+      businessId: 'biz_fallback_edit_1', name: 'Fallback Provider', slug: 'fallback-provider', publicStatus: 'suppressed' as const,
+    }
+    const onRename = vi.fn(async (_input: Readonly<{ businessId: string; name: string; requestKey: string }>) => ({
+      kind: 'refused' as const, code: 'source_unavailable' as const,
+    }))
+    render(<AeWorkspaceGeneral
+      result={{ kind: 'unavailable', reason: 'source_unavailable', retryable: true }}
+      identity={identity}
+      onRename={onRename}
+    />)
+
+    const input = screen.getByRole('textbox', { name: 'Public Provider name' })
+    expect(screen.getByDisplayValue(identity.name)).toBe(input)
+    expect(screen.getByText('This name appears on the Provider listing and every current Tool. Its public path and Provider connection stay unchanged.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Name' })).toBeNull()
+    expect(screen.queryByText(identity.name)).toBeNull()
+
+    const requestedName = 'Fallback Provider Updated'
+    fireEvent.change(input, { target: { value: requestedName } })
+    const save = screen.getByRole('button', { name: 'Save public name' })
+    fireEvent.click(save)
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('existing public name is unchanged'))
+    expect(onRename).toHaveBeenCalledTimes(1)
+    const firstRequest = onRename.mock.calls[0]?.[0]
+    expect(firstRequest).toEqual({ businessId: identity.businessId, name: requestedName, requestKey: expect.any(String) })
+
+    fireEvent.click(save)
+    await waitFor(() => expect(onRename).toHaveBeenCalledTimes(2))
+    const retryRequest = onRename.mock.calls[1]?.[0]
+    expect(retryRequest).toEqual({ businessId: identity.businessId, name: requestedName, requestKey: firstRequest?.requestKey })
+    expect(document.body.textContent).not.toContain(identity.businessId)
+  })
+
   it('saves a changed public provider name explicitly and reports success', async () => {
     const onRename = vi.fn(async () => ({ kind: 'updated' as const, businessId: catalog.businessId, slug: catalog.slug, name: 'Quote Works API' }))
     render(<AeWorkspaceGeneral result={{ kind: 'available', readback: buildPublicOwnerStatusReadback(catalog) }} onRename={onRename} />)

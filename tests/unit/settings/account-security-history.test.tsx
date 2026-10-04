@@ -43,13 +43,31 @@ describe('account security history', () => {
     expect(screen.getByText('This page does not mark the account contained')).toBeTruthy()
     expect(screen.getByText(/Resetting MFA alone does not revoke existing sessions/u)).toBeTruthy()
     expect(screen.getByText(/Opening this checklist does not revoke access/u)).toBeTruthy()
-    expect(screen.getAllByRole('link', { name: 'Review' }).map((link) => link.getAttribute('href')))
-      .toEqual(['/owner/settings/account/security', '/owner/settings/agent-keys', '/owner/settings/integrations'])
-    expect(screen.getByText(/Review wallet-control authority and its generation separately from Tool readiness\./u))
-      .toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Contact support' }).getAttribute('href'))
-      .toBe('/support')
-    expect(document.body.textContent).not.toContain('Contained')
+    expect(screen.getByText('A$0.00 affected. Opening this list does not revoke sessions or Agents.')).toBeTruthy()
+
+    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      'Review and revoke sessions',
+      'Rotate or disconnect Agents',
+      'Revoke or reauthorize Provider connections',
+      'Retain evidence and contact support',
+    ])
+    expect(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['Review', '/owner/settings/account/security'],
+      ['Review', '/owner/settings/agent-keys'],
+      ['Review', '/owner/settings/integrations'],
+      ['Contact support', '/support'],
+    ])
+    expect(screen.getByText('Open Security to revoke unfamiliar devices and review factors and recovery methods.')).toBeTruthy()
+    expect(screen.getByText('Review Agent credentials; compromise rotation revokes the predecessor immediately.')).toBeTruthy()
+    expect(screen.getByText('Review wallet-control authority and its generation separately from Tool readiness.')).toBeTruthy()
+    expect(screen.getByText('Copy durable references from Security history. Never tokens, signatures, recovery factors, or secrets.')).toBeTruthy()
+    expect(document.querySelector('form')).toBeNull()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.queryByText(/(?:steps?|recovery) complete/iu)).toBeNull()
   })
 
   it('opens durable security evidence on demand without exposing raw identity or payloads', () => {

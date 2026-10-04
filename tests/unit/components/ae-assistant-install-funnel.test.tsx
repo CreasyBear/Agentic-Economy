@@ -56,6 +56,29 @@ describe('one Agent connection path', () => {
     fireEvent.click(button)
     expect(check).not.toHaveBeenCalled()
   })
+  it.each([
+    ['without a selected Tool', undefined, '/owner/settings/agent-keys?issue=manual'],
+    [
+      'with a selected Tool',
+      `operation:v1:${'a'.repeat(64)}`,
+      `/owner/settings/agent-keys?issue=manual&resumeTool=${encodeURIComponent(`operation:v1:${'a'.repeat(64)}`)}`,
+    ],
+  ])('offers custom client setup directly from the app step %s', async (_label, resumeToolRef, expectedHref) => {
+    render(<AeAssistantInstallFunnel
+      canonicalBaseUrl="https://ae.example"
+      {...(resumeToolRef === undefined ? {} : { resumeToolRef })}
+    />)
+
+    const customClientLink = screen.getByRole('link', { name: 'Connect another app or script' })
+    await waitFor(() => expect(customClientLink).toBeVisible())
+    expect(customClientLink.getAttribute('href')).toBe(expectedHref)
+    expect(screen.queryByRole('link', { name: 'Issue a manual key' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
+    expect(screen.queryByRole('link', { name: 'Connect another app or script' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Connecting a custom script or another app?' }))
+    expect(screen.getByRole('link', { name: 'Issue a manual key' }).getAttribute('href')).toBe(expectedHref)
+  })
   it('preserves the exact selected Tool through manual setup without private task input', async () => {
     const resumeTool = `operation:v1:${'a'.repeat(64)}`
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example" resumeToolRef={resumeTool} />)

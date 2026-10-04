@@ -31,7 +31,8 @@
 .paneHead :is(h1, h2) { margin: 0; font-family: var(--font-body); font-size: var(--text-lg); font-weight: 500; letter-spacing: -.01em; line-height: 1.4; outline: none; overflow-wrap: anywhere; }
 .paneHead p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; line-height: var(--leading-body); }
 .actions { display: flex; min-width: 0; max-width: 100%; flex-wrap: wrap; align-items: center; gap: 8px; }
-.group { min-width: 0; }
+/* Extracted groups retain the block's responsive rows outside its page frame. */
+.group { container: settings-group / inline-size; min-width: 0; }
 .group + .group { margin-top: 24px; }
 .pane > .group + .group { margin-top: 0; }
 .group header > :is(h2, h3) { margin: 0 0 2px; color: var(--text-secondary); font-size: 13px; font-weight: 500; line-height: var(--leading-body); }

@@ -1,14 +1,13 @@
-/* Arc settings-page rows/fields CSS SHA-256
- * e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc;
- * Arc radio-cards card/control/copy CSS SHA-256
- * 8f3f80726ef946b0665ae033de3eefa3013678c8f59bac57882be15fa03543ba;
- * Arc agent-run approval/result CSS SHA-256
- * 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032.
- * Existing consent controller owns authority, rotation, scope and effects. */
-.arc-market.arc-consent-review { display: flex; min-width: 0; max-height: min(52rem, calc(100dvh - 8rem)); flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--foreground); }
-.arc-market .arc-consent-review-head { flex: none; padding: var(--space-5); border-block-end: 1px solid var(--border-subtle); }
-.arc-market .arc-consent-review-body { min-height: 0; min-width: 0; flex: 1; overflow-y: auto; padding: var(--space-5); scrollbar-width: thin; }
-.arc-market .arc-consent-review-regions { display: grid; min-width: 0; gap: var(--space-6); }
+/* Composition around actual Arc MultiStepForm, RadioCards and SettingsPageGroup/Row.
+ * Existing consent controller owns authority, rotation, scope and effects.
+ * Connection/Tool controls retain their separately assessed native bindings. */
+.arc-market.arc-consent-flow { display: grid; min-width: 0; gap: var(--space-5); }
+.arc-market .arc-consent-flow-regions { display: grid; min-width: 0; gap: var(--space-5); }
+.arc-market .arc-consent-step-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.arc-market .arc-consent-summary-value { display: flex; min-width: 0; max-inline-size: 48ch; flex-wrap: wrap; align-items: center; gap: var(--space-2); overflow-wrap: anywhere; }
+.arc-market .arc-consent-summary-tools { display: grid; min-width: 0; max-inline-size: 48ch; margin: 0; padding: 0; gap: var(--space-1); list-style: none; }
+.arc-market .arc-consent-summary-tools code { font-family: var(--font-mono, ui-monospace, monospace); overflow-wrap: anywhere; word-break: break-all; }
+.arc-market .arc-consent-step-edit { min-height: 44px; }
 .arc-market.arc-consent-fieldset { display: grid; min-width: 0; margin: 0; padding: 0; gap: var(--space-3); border: 0; color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
 .arc-market .arc-consent-fieldset-title { padding: 0; margin-block-end: var(--space-3); font-size: var(--text-base); font-weight: 500; line-height: 1.4; }
 .arc-market .arc-consent-choice-grid { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
@@ -40,7 +39,6 @@
 .arc-market.arc-consent-popup [data-slot="select-item"] { min-height: 44px; padding: 10px var(--space-3); font-size: var(--text-sm); white-space: normal; overflow-wrap: anywhere; }
 .arc-market.arc-consent-page-outcome { display: grid; min-width: 0; gap: var(--space-3); }
 .arc-market .arc-consent-page-outcome-link { justify-self: start; margin-block-start: var(--space-3); }
-.arc-market.arc-consent-page-outcome [data-slot="alert-title"], .arc-market .arc-consent-review-regions [data-slot="alert-title"], .arc-market.arc-consent-fieldset [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; font-size: var(--text-sm); line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
-.arc-market.arc-consent-page-outcome [data-slot="alert-description"], .arc-market .arc-consent-review-regions [data-slot="alert-description"], .arc-market.arc-consent-fieldset [data-slot="alert-description"] { font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
-@media (max-width: 639px) { .arc-market .arc-consent-review-head, .arc-market .arc-consent-review-body { padding: var(--space-4); } }
+.arc-market.arc-consent-page-outcome [data-slot="alert-title"], .arc-market .arc-consent-flow-regions [data-slot="alert-title"], .arc-market.arc-consent-fieldset [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; font-size: var(--text-sm); line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
+.arc-market.arc-consent-page-outcome [data-slot="alert-description"], .arc-market .arc-consent-flow-regions [data-slot="alert-description"], .arc-market.arc-consent-fieldset [data-slot="alert-description"] { font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
 @media (max-width: 559px) { .arc-market .arc-consent-choice-grid { grid-template-columns: minmax(0, 1fr); } .arc-market .arc-consent-search-row { flex-direction: column; align-items: stretch; } .arc-market .arc-consent-search-row > button { align-self: start; } .arc-market .arc-consent-record { flex-wrap: wrap; } }

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import {
   RouterContextProvider,
@@ -75,6 +75,7 @@ describe('/agent-access/authorize consent loading', () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('connection interrupted'))
     vi.stubGlobal('fetch', fetchMock)
     renderComponent()
+    if (decision === 'approve') await continueToReview()
     fireEvent.click(screen.getByRole('button', { name: decision === 'approve' ? 'Connect agent' : 'Decline' }))
     await waitFor(() => expect(screen.getByText('Approval outcome is not confirmed')).toBeTruthy())
     expect(screen.queryByText('This connection request expired')).toBeNull()
@@ -100,6 +101,7 @@ describe('/agent-access/authorize consent loading', () => {
         return property === 'location' ? { assign } : Reflect.get(target, property, target)
       },
     }))
+    if (decision === 'approve') await continueToReview()
     fireEvent.click(screen.getByRole('button', { name: decision === 'approve' ? 'Connect agent' : 'Decline' }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith(redirectTo))
     const submitted = new URLSearchParams(fetchMock.mock.calls[0]?.[1]?.body)
@@ -144,8 +146,9 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
-    const connect = await screen.findByRole('button', { name: 'Connect agent' })
-    expect(connect.hasAttribute('disabled')).toBe(true)
+    const continueButton = await screen.findByRole('button', { name: 'Continue to authority' })
+    expect(continueButton.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Decline' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByText('Existing agent choices could not be verified. Retry before approving this request.')).toBeTruthy()
   })
 
@@ -278,6 +281,7 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
+    await continueToReview()
     const connect = await screen.findByRole('button', { name: 'Connect agent' })
     const decline = screen.getByRole('button', { name: 'Decline' })
     const decisionRegion = screen.getByRole('group', { name: 'Access decision for Test assistant' })
@@ -330,6 +334,7 @@ describe('/agent-access/authorize consent loading', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
+    await continueToReview()
     fireEvent.click(await screen.findByRole('button', { name: 'Connect agent' }))
 
     expect(await screen.findByText('Connection status is temporarily unavailable')).toBeTruthy()
@@ -349,12 +354,13 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
-    expect(await screen.findByText('How much may this Agent do without asking you?')).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Access decision steps' }).textContent).toContain('Choose authority')
     expect(screen.getByText('Test assistant · Production')).toBeTruthy()
     expect(screen.getByText('Maximum daily spend: USD 5.00. Maximum calls per hour: 42.')).toBeTruthy()
     expect(screen.getAllByText(/Access expires 2 hours after issue/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/\$1 each/)).toBeNull()
     expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('aria-checked')).toBe('true')
+    await continueToReview()
     fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -381,13 +387,16 @@ describe('/agent-access/authorize consent loading', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
+    await continueToTools()
     for (const operationRef of refs) {
       expect(screen.getByRole('link', { name: operationRef }).getAttribute('href')).toContain(encodeURIComponent(operationRef))
     }
     const removeButtons = screen.getAllByRole('button', { name: 'Remove' })
     fireEvent.click(removeButtons[0]!)
-    fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
+    await continueToReview()
     expect(screen.queryByText(new RegExp(refs[0]!))).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const body = String(fetchMock.mock.calls[0]?.[1]?.body)
     expect(body).toContain('approved_tool_access=selected_tools')
@@ -407,6 +416,8 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.getByText(/cannot spend buyer credit/)).toBeTruthy()
     expect(screen.queryByRole('radio', { name: /Browse only/ })).toBeNull()
     expect(screen.queryByRole('radio', { name: /New agent/ })).toBeNull()
+    expect(screen.getByRole('navigation', { name: 'Access decision steps' }).textContent).not.toContain('Choose authority')
+    expect(screen.getByRole('navigation', { name: 'Access decision steps' }).textContent).not.toContain('Choose Tools')
     fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -429,13 +440,16 @@ describe('/agent-access/authorize consent loading', () => {
 
     const replace = await screen.findByRole('radio', { name: /Replace credential/ })
     fireEvent.click(replace)
-    const replaceButton = screen.getByRole('button', { name: 'Replace credential' })
-    expect(replaceButton.hasAttribute('disabled')).toBe(false)
-    fireEvent.click(replaceButton)
+    const continueButton = screen.getByRole('button', { name: 'Continue to authority' })
+    expect(continueButton.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(continueButton)
     expect(document.activeElement).toBe(document.getElementById('replacement-agent'))
+    expect(screen.getByRole('navigation', { name: 'Access decision steps' }).querySelector('[aria-current="step"]')?.textContent).toContain('Choose a connection')
     fireEvent.click(screen.getByRole('combobox', { name: 'Agent' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Research agent · prn_agent_a' }))
-    expect(replaceButton.hasAttribute('disabled')).toBe(false)
+    expect(continueButton.hasAttribute('disabled')).toBe(false)
+    await continueToReview()
+    const replaceButton = screen.getByRole('button', { name: 'Replace credential' })
     fireEvent.click(replaceButton)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -483,7 +497,7 @@ describe('/agent-access/authorize consent loading', () => {
     renderComponent()
 
     expect((await screen.findByRole('radio', { name: /Replace credential/ })).getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Continue to authority' }).hasAttribute('disabled')).toBe(false)
   })
 
   it('makes compromise replacement explicit and binds it into the approval request', async () => {
@@ -501,6 +515,7 @@ describe('/agent-access/authorize consent loading', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Research agent · prn_agent_a' }))
     fireEvent.click(screen.getByRole('radio', { name: /Suspected compromise/ }))
     expect(screen.getByText(/current authority is revoked first and is never reactivated/)).toBeTruthy()
+    await continueToReview()
     const replaceButton = screen.getByRole('button', { name: 'Revoke and replace credential' })
     expect(replaceButton.className.split(' ')).toContain(arcButton.danger)
     fireEvent.click(replaceButton)
@@ -509,12 +524,73 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('replacement_mode=compromise')
   })
 
+  it('preserves selected values across Back and Edit while showing the exact final choices', async () => {
+    const target = { principalRef: 'prn_agent_a', principalRevision: 3, displayName: 'Research agent' }
+    const [removedRef, approvedRef] = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
+    mockConsent({
+      userCode: 'EDIT-BACK', grantRef: 'grant-edit-back', clientName: 'Agent CLI', mode: 'spending_policy',
+      agentTargets: [target], toolAccess: 'selected_tools', toolRefs: [removedRef!, approvedRef!],
+    })
+
+    renderComponent()
+    fireEvent.click(await screen.findByRole('radio', { name: /Replace credential/ }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Agent' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Research agent · prn_agent_a' }))
+    fireEvent.click(screen.getByRole('radio', { name: /Suspected compromise/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to authority' }))
+    fireEvent.click(screen.getByRole('radio', { name: /Ask each time/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to Tools' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
+
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Review access'))
+    const choices = screen.getByRole('region', { name: 'Your choices' })
+    expect(within(choices).getByText('Research agent · prn_agent_a')).toBeTruthy()
+    expect(within(choices).getByText('Suspected compromise. The current authority is revoked first and is never reactivated.')).toBeTruthy()
+    expect(within(choices).getByText('Ask each time')).toBeTruthy()
+    expect(within(choices).getByText('1 selected Tool')).toBeTruthy()
+    expect(within(choices).getByText(approvedRef!)).toBeTruthy()
+    expect(within(choices).queryByText(removedRef!)).toBeNull()
+    expect(screen.getByText('Retention and review details').getAttribute('href')).toBe('/privacy#alpha-learning')
+    expect(screen.getByText(/Call inputs and results are kept for 30 days after resolution and may be reviewed by the founder/u)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Authority' }))
+    expect(screen.getByRole('radio', { name: /Ask each time/ }).getAttribute('aria-checked')).toBe('true')
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Choose authority'))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('radio', { name: /Replace credential/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('combobox', { name: 'Agent' }).textContent).toContain('Research agent')
+    expect(screen.getByRole('radio', { name: /Suspected compromise/ }).getAttribute('aria-checked')).toBe('true')
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Choose a connection'))
+
+    await continueToReview()
+    const finalChoices = screen.getByRole('region', { name: 'Your choices' })
+    expect(within(finalChoices).getByText(approvedRef!)).toBeTruthy()
+    expect(within(finalChoices).getByText('Ask each time')).toBeTruthy()
+  })
+
+  it('keeps an empty selected Tool scope on Tools and focuses its existing alert', async () => {
+    mockConsent({
+      userCode: 'EMPTY-TOOLS', grantRef: 'grant-empty-tools', clientName: 'Agent CLI', mode: 'read_only',
+      toolAccess: 'selected_tools', toolRefs: [toolRefA],
+    })
+    renderComponent()
+    await continueToTools()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
+
+    expect(document.activeElement).toBe(document.getElementById('tool-selection-empty'))
+    expect(screen.getByRole('navigation', { name: 'Access decision steps' }).querySelector('[aria-current="step"]')?.textContent).toContain('Choose Tools')
+    expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
+  })
+
   it('retains the exact choice and restores focus when Clerk reverification is cancelled', async () => {
     mockConsent({ userCode: 'CANCEL-1', grantRef: 'grant-cancel', clientName: 'Test assistant', mode: 'spending_policy' })
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
     serverMocks.reverifyMode = 'cancel'
     renderComponent()
+    await continueToReview()
 
     const approveButton = await screen.findByRole('button', { name: 'Connect agent' })
     approveButton.focus()
@@ -522,7 +598,7 @@ describe('/agent-access/authorize consent loading', () => {
 
     await waitFor(() => expect(approveButton.hasAttribute('disabled')).toBe(false))
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('aria-checked')).toBe('true')
+    expect(within(screen.getByRole('region', { name: 'Your choices' })).getByText('Work within limits')).toBeTruthy()
     await waitFor(() => expect(document.activeElement).toBe(approveButton))
   })
 
@@ -534,6 +610,7 @@ describe('/agent-access/authorize consent loading', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
     renderComponent()
+    await continueToReview()
 
     const connect = await screen.findByRole('button', { name: 'Connect agent' })
     fireEvent.click(connect)
@@ -541,6 +618,70 @@ describe('/agent-access/authorize consent loading', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
     resolveResponse?.(Response.json({ kind: 'approved', grantRef: 'grant-double' }))
     expect(await screen.findByText('Access approved for Test assistant')).toBeTruthy()
+  })
+
+  it('resets the chosen mode and review stage when the same grant receives a new revision', async () => {
+    mockConsent({ userCode: 'REV-ISION', grantRef: 'grant-revision', clientName: 'Revision CLI', mode: 'spending_policy', grantRevision: 1 })
+    const { rerender } = renderComponentWithUpdates()
+    fireEvent.click(screen.getByRole('radio', { name: /Ask each time/ }))
+    await continueToReview()
+    expect(screen.getByRole('button', { name: 'Connect agent' })).toBeTruthy()
+
+    mockConsent({ userCode: 'REV-ISION', grantRef: 'grant-revision', clientName: 'Revision CLI', mode: 'read_only', grantRevision: 2 })
+    rerender()
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /Browse only/ }).getAttribute('aria-checked')).toBe('true')
+      expect(screen.getByRole('navigation', { name: 'Access decision steps' }).querySelector('[aria-current="step"]')?.textContent).toContain('Choose authority')
+    })
+    expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Technical details' }))
+    expect(screen.getByText('Request revision').parentElement?.parentElement?.textContent).toContain('2')
+  })
+
+  it('leaves an empty valid agent list usable after an unavailable-target retry', async () => {
+    mockConsent({
+      userCode: 'RETRY-EMPTY', grantRef: 'grant-retry-empty', clientName: 'Retry CLI',
+      mode: 'read_only', agentTargetsUnavailable: true,
+    })
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(
+      '<main data-ae-consent data-grant-ref="grant-retry-empty" data-grant-revision="1" data-flow="device_code" data-client-name="Retry CLI" data-authority-mode="read_only" data-agent-targets="%5B%5D" data-agent-targets-unavailable="false"></main>',
+      { status: 200 },
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+    renderComponent()
+
+    expect(screen.getByRole('button', { name: 'Continue to authority' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry agent list' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Continue to authority' })).toBeNull()
+      expect(screen.getByRole('navigation', { name: 'Access decision steps' }).querySelector('[aria-current="step"]')?.textContent).toContain('Choose authority')
+    })
+    expect(screen.getByRole('button', { name: 'Decline' }).hasAttribute('disabled')).toBe(false)
+    await continueToReview()
+    expect(screen.getByRole('button', { name: 'Connect agent' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Decline' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('shows neutral pending feedback and disables navigation/edit controls during a denial', async () => {
+    const targets = [{ principalRef: 'prn_agent_a', principalRevision: 3, displayName: 'Research agent' }]
+    mockConsent({
+      userCode: 'PENDING-DENY', grantRef: 'grant-pending-deny', clientName: 'Pending CLI', mode: 'read_only',
+      agentTargets: targets,
+    })
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => await new Promise<Response>(() => {}))
+    vi.stubGlobal('fetch', fetchMock)
+    renderComponent()
+    await continueToTools()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+    const submitting = await screen.findByText('Submitting your access decision…')
+    expect(submitting.getAttribute('role')).toBe('status')
+    expect(submitting.getAttribute('aria-live')).toBe('polite')
+    for (const name of ['Back', 'Review access', 'Decline', 'Edit Choose a connection', 'Edit Choose authority']) {
+      expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(true)
+    }
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('retains loaded choices when the next replacement-target page fails and retries it', async () => {
@@ -596,6 +737,7 @@ function mockConsent(input: Readonly<{
   environment?: 'sandbox' | 'production'
   expiresInSeconds?: number
   accessSummary?: string
+  grantRevision?: number
   toolAccess?: 'all_admitted' | 'selected_tools'
   toolRefs?: readonly string[]
   reconnectPrincipalRef?: string
@@ -614,7 +756,7 @@ function mockConsent(input: Readonly<{
     details: {
       state: 'ready',
       grantRef: input.grantRef,
-      grantRevision: 1,
+      grantRevision: input.grantRevision ?? 1,
       flow: input.flow ?? 'device_code',
       clientName: input.clientName,
       mode: input.mode,
@@ -636,6 +778,10 @@ function mockConsent(input: Readonly<{
 }
 
 function renderComponent(component: ComponentType = Component) {
+  return renderComponentWithUpdates(component).view
+}
+
+function renderComponentWithUpdates(component: ComponentType = Component) {
   vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({} as never)
   const Target = component
   const rootRoute = createRootRoute()
@@ -647,9 +793,36 @@ function renderComponent(component: ComponentType = Component) {
     history: createMemoryHistory({ initialEntries: ['/agent-access/authorize'] }),
   })
 
-  return render(
+  const element = () => (
     <RouterContextProvider router={router}>
       <Target />
-    </RouterContextProvider>,
+    </RouterContextProvider>
   )
+  const view = render(element())
+  return { view, rerender: () => view.rerender(element()) }
+}
+
+async function continueToTools() {
+  const navigation = screen.getByRole('navigation', { name: 'Access decision steps' })
+  if (!navigation.textContent?.includes('Choose Tools')) return
+  const connection = screen.queryByRole('button', { name: 'Continue to authority' })
+  if (connection) fireEvent.click(connection)
+  const authority = screen.queryByRole('button', { name: 'Continue to Tools' })
+  if (authority) fireEvent.click(authority)
+  await waitFor(() => {
+    const current = screen.getByRole('navigation', { name: 'Access decision steps' }).querySelector('[aria-current="step"]')
+    expect(current?.textContent).toContain('Choose Tools')
+  })
+}
+
+async function continueToReview() {
+  const current = screen.getByRole('navigation', { name: 'Access decision steps' }).querySelector('[aria-current="step"]')
+  if (current?.textContent?.includes('Review access')) return
+  await continueToTools()
+  const continueButton = screen.queryByRole('button', { name: 'Review access' })
+  if (continueButton) fireEvent.click(continueButton)
+  await waitFor(() => {
+    const current = screen.getByRole('navigation', { name: 'Access decision steps' }).querySelector('[aria-current="step"]')
+    expect(current?.textContent).toContain('Review access')
+  })
 }

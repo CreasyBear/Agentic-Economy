@@ -73,14 +73,23 @@ export function AeAssistantInstallFunnel({
         >
           <div className="arc-agent-install-step-body">
           {client === undefined ? (
-            <div className="arc-agent-client-choices" role="group" aria-label="Agent app">
-              {NATIVE_MCP_CLIENTS.map(option => (
-                <Button key={option.id} type="button" variant="secondary" disabled={!clientMounted}
-                  onClick={() => chooseClient(option.id)}>
-                  {option.displayName}
-                </Button>
-              ))}
-            </div>
+            <>
+              <div className="arc-agent-client-choices" role="group" aria-label="Agent app">
+                {NATIVE_MCP_CLIENTS.map(option => (
+                  <Button key={option.id} type="button" variant="secondary" disabled={!clientMounted}
+                    onClick={() => chooseClient(option.id)}>
+                    {option.displayName}
+                  </Button>
+                ))}
+              </div>
+              <Link
+                to="/owner/settings/agent-keys"
+                search={{ issue: 'manual', ...(resumeToolRef === undefined ? {} : { resumeTool: resumeToolRef }) }}
+                className="arc-agent-install-help-link"
+              >
+                Connect another app or script
+              </Link>
+            </>
           ) : <>
               <AeCopyCommand key={client.id} label={`${client.displayName} MCP command`} code={client.setupCommand(baseUrl)} comfortable actionLabel="Copy setup commands" />
               <p className="arc-agent-install-copy">{client.authenticationInstruction}</p>

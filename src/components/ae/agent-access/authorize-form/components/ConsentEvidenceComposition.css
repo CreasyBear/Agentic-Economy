@@ -1,17 +1,21 @@
-/* Arc agent-run technical disclosure (.details/.detailBody), source SHA-256:
- * 8de4bd7261a85a25a0ee5195bc9d231cd783d5ef805e5a6f9155e91b50a10032.
- * Arc settings-page continuous rows (.rows), source SHA-256:
- * e2aaca75264c652b8a6a039c03ecf6bf025dee6b56867edba8e7d6390cc9cdfc.
- */
+/* Layout around actual Arc SettingsPageGroup/Row and the retained technical disclosure.
+ * Outcome and recorded access history retain their existing source-owned semantics. */
 .arc-market.arc-consent-request-facts {
   display: grid;
   min-width: 0;
   gap: var(--space-3);
 }
 
-.arc-market.arc-consent-request-facts > .arc-facts-list {
-  width: 100%;
+.arc-market .arc-consent-fact-value {
+  display: block;
   min-width: 0;
+  max-inline-size: 48ch;
+  overflow-wrap: anywhere;
+}
+
+.arc-market .arc-consent-fact-reference {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  word-break: break-all;
 }
 
 .arc-market.arc-consent-request-facts .arc-consent-technical-trigger {
@@ -26,17 +30,6 @@
 .arc-market.arc-consent-request-facts .arc-consent-technical-content {
   overflow: hidden;
   padding: 2px var(--space-1) var(--space-3);
-}
-
-.arc-market.arc-consent-request-facts .arc-consent-technical-detail-body {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-2);
-}
-
-.arc-market.arc-consent-request-facts .arc-consent-technical-detail-body > .arc-facts-list {
-  width: 100%;
-  min-width: 0;
 }
 
 .arc-market.arc-consent-outcome {

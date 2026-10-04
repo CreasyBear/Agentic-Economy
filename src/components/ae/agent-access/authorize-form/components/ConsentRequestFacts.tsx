@@ -1,4 +1,4 @@
-import { AeFactList } from '@/components/ae/data/AeFactList'
+import { SettingsPageGroup, SettingsPageRow } from '@/components/arc/blocks/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
@@ -17,6 +17,7 @@ function returnSiteFact(props: Pick<ConsentRequestFactsProps, 'flow' | 'redirect
 }
 
 export function ConsentRequestFacts({
+  presentation = 'review',
   clientName,
   environment,
   toolSelectionSummary,
@@ -31,13 +32,21 @@ export function ConsentRequestFacts({
 }: ConsentRequestFactsProps) {
   return (
     <div className="arc-market arc-consent-request-facts">
-      <AeFactList facts={[
-        { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
-        returnSiteFact({ flow, ...(redirectDisposition === undefined ? {} : { redirectDisposition }), ...(redirectOrigin === undefined ? {} : { redirectOrigin }) }),
-        { label: 'Tools', value: toolSelectionSummary },
-        { label: 'Approved limits', value: accessSummary },
-        { label: 'Connection', value: `Stays signed in for ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` },
-      ]} />
+      <SettingsPageGroup title="Request details" headingLevel={2}>
+        {[
+          { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
+          returnSiteFact({ flow, ...(redirectDisposition === undefined ? {} : { redirectDisposition }), ...(redirectOrigin === undefined ? {} : { redirectOrigin }) }),
+          ...(presentation === 'review' ? [{ label: 'Tools', value: toolSelectionSummary }] : []),
+          ...(presentation === 'context' ? [] : [{ label: 'Requested limits', value: accessSummary }]),
+          ...(presentation === 'review' ? [{ label: 'Connection', value: `Stays signed in for ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` }] : []),
+        ].map(fact => (
+          <SettingsPageRow key={fact.label} label={fact.label} headingLevel={3}>
+            {'mono' in fact && fact.mono
+              ? <code className="arc-consent-fact-value arc-consent-fact-reference">{fact.value}</code>
+              : <span className="arc-consent-fact-value">{fact.value}</span>}
+          </SettingsPageRow>
+        ))}
+      </SettingsPageGroup>
       <Collapsible>
         <CollapsibleTrigger
           render={
@@ -47,14 +56,20 @@ export function ConsentRequestFacts({
           }
         />
         <CollapsibleContent className="arc-consent-technical-content">
-          <div className="arc-consent-technical-detail-body">
-            <AeFactList density="compact" facts={[
+          <SettingsPageGroup title="Technical request details" headingLevel={2}>
+            {[
               { label: 'Request revision', value: String(grantRevision), mono: true },
               { label: 'Requested environment', value: environment === 'sandbox' ? 'Sandbox' : 'Production' },
               { label: 'Tool references', value: toolRefs.length === 0 ? 'All admitted Tools' : toolRefs.join(', '), mono: true },
               { label: 'Request reference', value: grantRef, mono: true },
-            ]} />
-          </div>
+            ].map(fact => (
+              <SettingsPageRow key={fact.label} label={fact.label} headingLevel={3}>
+                {'mono' in fact && fact.mono
+                  ? <code className="arc-consent-fact-value arc-consent-fact-reference">{fact.value}</code>
+                  : <span className="arc-consent-fact-value">{fact.value}</span>}
+              </SettingsPageRow>
+            ))}
+          </SettingsPageGroup>
         </CollapsibleContent>
       </Collapsible>
       <p id="consent-expiry" className="sr-only">Access expires {formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.</p>
