@@ -1,0 +1,51 @@
+import type { Doc } from '../../../_generated/dataModel'
+import type { MutationCtx } from '../../../_generated/server'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { CallDispatchProjectionShape } from './contracts'
+
+/** A delivered request is a measured Call, not customer usefulness or a new charge.
+ * Write in the same transaction as its projection; retries/refunds retain one fact.
+ * No public caller may supply quantities, Account attribution or financial amounts. */
+export async function recordDeliveredRequest(
+  ctx: MutationCtx,
+  row: Doc<'capabilityCalls'>,
+  projection: CallDispatchProjectionShape,
+  providerRef: string,
+  fallbackPriceDigest: string,
+  terminalAt: number,
+): Promise<{ serviceUsageRef: string; deliveredRequestUnits: string } | undefined> {
+  const receipt = projection.result !== undefined && 'receipt' in projection.result ? projection.result.receipt : undefined
+  const priceDigest = receipt?.priceDigest ?? projection.usage?.priceDigest ?? fallbackPriceDigest
+  const usageRef = `service-usage:${canonicalDigest({ callRef: row.callRef, unitDefinitionRef: 'delivered_request:v1' })}`
+  const existing = await ctx.db.query('capabilityServiceUsageRecords')
+    .withIndex('by_usageRef', (index) => index.eq('usageRef', usageRef)).unique()
+  if (existing !== null) {
+    if (existing.accountRef !== row.ownerId || existing.callRef !== row.callRef
+      || existing.toolRef !== row.toolRef || existing.credentialRef !== row.credentialId
+      || existing.quoteRef !== row.quoteRef || existing.principalRef !== row.principalId
+      || existing.applicationRef !== row.applicationRef || existing.providerRef !== providerRef
+      || existing.environment !== row.environment || existing.priceDigest !== priceDigest) {
+      throw new Error('service_usage_identity_conflict')
+    }
+    return { serviceUsageRef: usageRef, deliveredRequestUnits: existing.quantityUnits }
+  }
+  if (projection.state !== 'completed' || projection.result?.kind !== 'completed') return undefined
+  const receiptAt = receipt === undefined ? Number.NaN : Date.parse(receipt.issuedAt)
+  const receiptTimeAvailable = Number.isSafeInteger(receiptAt) && receiptAt >= row.createdAt && receiptAt <= Date.now()
+  const sourceEvidenceHash = projection.evidenceHash ?? projection.result.evidenceHash
+  await ctx.db.insert('capabilityServiceUsageRecords', {
+    usageRef, callRef: row.callRef,
+    ...(row.quoteRef === undefined ? {} : { quoteRef: row.quoteRef }),
+    accountRef: row.ownerId, principalRef: row.principalId, credentialRef: row.credentialId,
+    applicationRef: row.applicationRef, toolRef: row.toolRef, providerRef,
+    environment: row.environment,
+    unitDefinitionRef: 'delivered_request:v1', quantityUnits: '1', quantityExponent: 0,
+    source: 'validated_call_result', priceDigest,
+    ...(sourceEvidenceHash === undefined ? {} : { sourceEvidenceHash }),
+    ...(receipt?.receiptRef === undefined ? {} : { receiptRef: receipt.receiptRef }),
+    timeBasis: receiptTimeAvailable ? 'receipt_issued' : 'call_updated',
+    callCreatedAt: row.createdAt, occurredAt: receiptTimeAvailable ? receiptAt : terminalAt,
+    observedAt: Date.now(),
+  })
+  return { serviceUsageRef: usageRef, deliveredRequestUnits: '1' }
+}

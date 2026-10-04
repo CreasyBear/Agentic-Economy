@@ -2,6 +2,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import type { CallDispatchProjectionShape } from './contracts'
+import { recordDeliveredRequest } from './serviceUsage'
 
 type CallRow = Doc<'capabilityCalls'>
 
@@ -75,6 +76,7 @@ export async function upsertCallProjection(
     ? 'outcome_unknown' as const
     : projection.state
   const providerFields = await providerObligationProjectionFields(ctx, row.callRef)
+  const serviceUsage = await recordDeliveredRequest(ctx, row, projection, operation.identity.businessId, operation.priceDigest, now)
   const fields = {
     accountRef: row.ownerId,
     principalRef: row.principalId,
@@ -87,11 +89,13 @@ export async function upsertCallProjection(
     deliveryState: projectedDeliveryState(projection.state),
     paymentState: projectedPaymentState(accountReceipt),
     ...providerFields,
+    ...serviceUsage,
     ...(audAmountUnits === undefined ? {} : { audAmountUnits }),
     ...(receipt?.receiptRef === undefined ? {} : { receiptRef: receipt.receiptRef }),
     ...(projection.state === 'reconciliation_required' ? { recoveryRef: row.callRef } : {}),
     latencyMs: Math.max(0, now - row.createdAt),
     updatedAt: now,
+    observedAt: Date.now(),
   }
   const existing = await ctx.db.query('capabilityCallProjections')
     .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef))

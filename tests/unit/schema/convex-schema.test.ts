@@ -83,6 +83,7 @@ const durableTables = [
   'capabilityContractDocuments',
   'capabilityOfferings',
   'capabilityCallProjections',
+  'capabilityServiceUsageRecords',
   'purchaseResolutionRecords',
   'capabilityQuotes',
   'capabilityCalls',
@@ -310,6 +311,7 @@ const requiredIndexes = {
     'by_toolRef_and_createdAt',
     'by_accountRef_and_applicationRef_and_createdAt',
   ],
+  capabilityServiceUsageRecords: ['by_usageRef', 'by_callRef', 'by_accountRef_and_callCreatedAt'],
   purchaseResolutionRecords: [
     'by_callRef',
     'by_accountRef_and_resolvedAt',

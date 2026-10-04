@@ -41,10 +41,12 @@ export function ActivityMonthlySummary({
           { label: 'Completed', value: monthly.completedLabel },
           { label: 'Refused', value: monthly.refusedLabel },
           { label: 'Outcome unknown', value: monthly.attentionLabel },
+          { label: 'Recorded delivered requests', value: monthly.deliveredRequestLabel },
           { label: monthly.spendTitle, value: monthly.spendLabel },
         ]} />
       </div>
       <p className="text-xs text-muted-foreground">{monthly.spendBasis} Call completion does not by itself confirm delivery or settlement.</p>
+      <p className="text-xs text-muted-foreground">{monthly.serviceUnitCoverageLabel}</p>
     </AeSection>
   )
 }

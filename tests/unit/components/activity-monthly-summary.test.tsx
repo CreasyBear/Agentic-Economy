@@ -10,6 +10,7 @@ const monthly: ActivityMonthlySummaryView = {
   unavailable: false, callCountLabel: '1,004', completedLabel: '1,000', refusedLabel: '3', attentionLabel: '1',
   spendLabel: 'A$9,007,199,254,740,993.01', spendTitle: 'Gross settled charges',
   spendBasis: 'Recorded AUD account charges.', scopeLabel: 'Account', windowTooLarge: false,
+  deliveredRequestLabel: '999', serviceUnitCoverageLabel: 'Historical measurement coverage is incomplete.',
 }
 afterEach(cleanup)
 
@@ -18,13 +19,14 @@ describe('Arc Activity period summary', () => {
     render(<ActivityMonthlySummary periodStart="1 October to 3 October 2026" monthly={monthly} retryPending={false} onRetry={vi.fn()} />)
     const region = screen.getByRole('region', { name: 'Period totals' })
     const terms = within(region).getAllByRole('term')
-    expect(terms.map(term => term.textContent)).toEqual(['Calls', 'Completed', 'Refused', 'Outcome unknown', 'Gross settled charges'])
-    expect(terms.map(term => within(term.parentElement!).getByRole('definition').textContent)).toEqual(['1,004', '1,000', '3', '1', monthly.spendLabel])
+    expect(terms.map(term => term.textContent)).toEqual(['Calls', 'Completed', 'Refused', 'Outcome unknown', 'Recorded delivered requests', 'Gross settled charges'])
+    expect(terms.map(term => within(term.parentElement!).getByRole('definition').textContent)).toEqual(['1,004', '1,000', '3', '1', '999', monthly.spendLabel])
     expect(region).toHaveTextContent('Account. 1 October to 3 October 2026.')
     expect(region).toHaveTextContent('Recorded AUD account charges. Call completion does not by itself confirm delivery or settlement.')
     expect(within(region).queryByRole('img')).toBeNull()
     expect(within(region).queryByRole('button')).toBeNull()
     expect(region).not.toHaveTextContent('No prior comparison')
+    expect(region).toHaveTextContent(monthly.serviceUnitCoverageLabel)
   })
 
   it('retains available counts and an unknown Agent amount through a blocked and retried refresh', () => {

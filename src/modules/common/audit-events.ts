@@ -153,6 +153,7 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
   'billing.monthly_spend_ceiling_configured',
+  'billing.call_usage_export_requested',
   ...Package3AuditEventTypeValues,
 ] as const
 

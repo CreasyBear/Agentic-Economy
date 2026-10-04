@@ -116,6 +116,7 @@ export const AUDIT_EVENT_LABELS = {
   'billing.reconciliation_repaired': 'Billing reconciliation repaired',
   'billing.no_repair_marked': 'Billing no repair marked',
   'billing.monthly_spend_ceiling_configured': 'Billing monthly spend ceiling configured',
+  'billing.call_usage_export_requested': 'Call usage export requested',
   'money.promotional_credit_requested': 'Promotional credit requested',
   'money.promotional_credit_granted': 'Promotional credit granted',
   'money.promotional_credit_expired': 'Promotional credit expired',

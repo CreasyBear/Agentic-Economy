@@ -130,7 +130,7 @@ function AeActivityAvailable({
               onClick={vm.exportCsv}
             >
               <Download className="size-3.5 shrink-0" aria-hidden="true" />
-              CSV
+              Loaded CSV
             </Button>
             <Button
               type="button"
@@ -139,7 +139,15 @@ function AeActivityAvailable({
               onClick={vm.exportJson}
             >
               <Download className="size-3.5 shrink-0" aria-hidden="true" />
-              JSON
+              Loaded JSON
+            </Button>
+            <Button type="button" variant="secondary" disabled={vm.periodExportDisabled}
+              aria-busy={vm.periodExportPending || undefined} onClick={() => void vm.exportPeriod('CSV')}>
+              {vm.periodExportPending ? 'Preparing period…' : 'Full period CSV'}
+            </Button>
+            <Button type="button" variant="secondary" disabled={vm.periodExportDisabled}
+              onClick={() => void vm.exportPeriod('JSON')}>
+              Full period JSON
             </Button>
           </div>
         ) : null}
@@ -177,7 +185,7 @@ function AeActivityAvailable({
           </>
         ) : null}
         <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
-        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Status filters, sorting and exports apply to loaded rows. Pages contain up to 50 Calls.</p>
+        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Full-period exports read all pages for the selected period, Agent and status, up to 10,000 scanned Calls and 366 days.</p>
       </div>
     </AeOperatorPage>
   )

@@ -1,9 +1,23 @@
-import { internalMutation, internalQuery, query } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { listOwnerCallsArgs, listOwnerCallsHandler, listOwnerCallsResult } from './lib/capabilityExecution/callProjection/history'
 import { readOwnerAgentReadbackArgs, readOwnerAgentReadbackHandler, readOwnerAgentReadbackResult } from './lib/capabilityExecution/callProjection/ownerAgentReadback'
 import { readOwnerUsageArgs, readOwnerUsageHandler, readOwnerUsageResult } from './lib/capabilityExecution/callProjection/usage'
 import { prepareOwnerSpendReadArgs, prepareOwnerSpendReadHandler, prepareOwnerSpendReadResult } from './lib/capabilityExecution/callProjection/spendAdmission'
 import { rebuildArgs, rebuildHandler, rebuildResult } from './lib/capabilityExecution/callProjection/rebuild'
+import { callExportPageArgs, callExportPageHandler, callExportPageResult } from './lib/capabilityExecution/callProjection/exportPage'
+import { beginCallExportArgs, beginCallExportHandler, beginCallExportResult } from './lib/capabilityExecution/callProjection/exportAudit'
+
+export const beginOwnerCallExport = mutation({
+  args: beginCallExportArgs,
+  returns: beginCallExportResult,
+  handler: beginCallExportHandler,
+})
+
+export const readOwnerCallExportPage = query({
+  args: callExportPageArgs,
+  returns: callExportPageResult,
+  handler: callExportPageHandler,
+})
 
 export const listOwnerCalls = query({
   args: listOwnerCallsArgs,

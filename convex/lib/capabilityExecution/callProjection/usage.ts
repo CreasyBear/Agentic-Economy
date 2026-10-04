@@ -22,6 +22,9 @@ const usageResult = v.union(
     callCountUnits: v.string(),
     completedCountUnits: v.string(),
     outcomeUnknownCountUnits: v.string(),
+    deliveredRequestUnits: v.string(),
+    serviceUnitCoverage: v.union(v.literal('complete'), v.literal('incomplete')),
+    serviceUnitDefinitionRef: v.literal('delivered_request:v1'),
     settledSpendUnits: v.optional(v.string()),
     amountCoverage: v.union(v.literal('complete'), v.literal('incomplete')),
     updatedAt: v.number(),
@@ -101,10 +104,14 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
   let completed = 0n
   let outcomeUnknown = 0n
   let updatedAt = 0
+  let deliveredRequests = 0n
+  let serviceUnitCoverage: 'complete' | 'incomplete' = 'complete'
   for (const row of rows) {
     if (row.state === 'completed') completed += 1n
     if (row.state === 'outcome_unknown') outcomeUnknown += 1n
     updatedAt = Math.max(updatedAt, row.updatedAt)
+    if (row.serviceUsageRef !== undefined && row.deliveredRequestUnits === '1') deliveredRequests += 1n
+    else if (row.deliveryState !== 'not_delivered') serviceUnitCoverage = 'incomplete'
   }
   return {
     kind: 'available' as const,
@@ -115,6 +122,9 @@ export async function readOwnerUsageHandler(ctx: QueryCtx, args: ObjectType<type
     callCountUnits: BigInt(rows.length).toString(),
     completedCountUnits: completed.toString(),
     outcomeUnknownCountUnits: outcomeUnknown.toString(),
+    deliveredRequestUnits: deliveredRequests.toString(),
+    serviceUnitCoverage,
+    serviceUnitDefinitionRef: 'delivered_request:v1' as const,
     ...settledChargeSummary(rows),
     updatedAt,
     source: 'convex_call_evidence' as const,

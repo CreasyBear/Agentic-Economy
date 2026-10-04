@@ -126,8 +126,24 @@ describe('Account Call projection', () => {
       audAmountUnits: '2500000',
       receiptRef: 'receipt:call-projection',
       latencyMs: 250,
+      deliveredRequestUnits: '1',
     })
-
+    const measured = await backend.run(async (ctx) => await ctx.db.query('capabilityServiceUsageRecords')
+      .withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique())
+    expect(measured).toMatchObject({ callRef, quantityUnits: '1', quantityExponent: 0,
+      unitDefinitionRef: 'delivered_request:v1', occurredAt: now, timeBasis: 'receipt_issued',
+      accountRef: 'account:projection', credentialRef: 'credential:projection', environment: 'sandbox' })
+    await backend.run(async (ctx) => {
+      const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique()
+      if (call === null) throw new Error('fixture Call missing')
+      await ctx.db.patch(call._id, { result: { ...result, receipt: { ...result.receipt, state: 'refunded' } }, updatedAt: now + 86_400_000 })
+    })
+    await backend.mutation(internal.capabilityCallProjections.rebuild, { paginationOpts: { numItems: 100, cursor: null } })
+    expect(await backend.run(async (ctx) => await ctx.db.query('capabilityServiceUsageRecords')
+      .withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique())).toEqual(measured)
+    expect(await backend.run(async (ctx) => await ctx.db.query('capabilityCallProjections')
+      .withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique()))
+      .toMatchObject({ paymentState: 'released', deliveredRequestUnits: '1', serviceUsageRef: measured?.usageRef })
   })
 
   it('reads owner Agent Calls for the created UTC period and keeps settled spend evidence explicit', async () => {
@@ -299,6 +315,8 @@ describe('Account Call projection', () => {
     })
     const agent = await fixture.owner.query(agentQuery, { principalRef: 'principal:no-charge', periodStartAt: 0, periodEndAt: 100,
       paginationOpts: { numItems: 50, cursor: null } })
+    expect(usage).toMatchObject({ deliveredRequestUnits: '0',
+      serviceUnitCoverage: deliveryState === 'not_delivered' ? 'complete' : 'incomplete' })
     for (const result of [usage, agent.usage]) {
       expect(result).toMatchObject({ kind: 'available', callCountUnits: '1', amountCoverage })
       if (amountCoverage === 'complete') expect(result.settledSpendUnits).toBe('0')

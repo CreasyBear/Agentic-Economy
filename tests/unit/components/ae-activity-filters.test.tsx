@@ -9,7 +9,8 @@ import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 
 afterEach(cleanup)
 
-const routerMocks = vi.hoisted(() => ({ navigate: vi.fn().mockResolvedValue(undefined) }))
+const routerMocks = vi.hoisted(() => ({ navigate: vi.fn().mockResolvedValue(undefined), exportPeriod: vi.fn() }))
+vi.mock('@/lib/server/call-usage-export.functions', () => ({ exportOwnerCallUsageServer: routerMocks.exportPeriod }))
 
 vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -121,6 +122,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
   }
 
   beforeEach(() => {
+    routerMocks.exportPeriod.mockReset()
     routerMocks.navigate.mockClear()
     vi.mocked(downloadCsv).mockClear()
     vi.mocked(downloadJson).mockClear()
@@ -206,7 +208,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     fireEvent.keyDown(completed, { key: 'End' })
     const attention = within(status).getByRole('button', { name: /Outcome unknown\s+0/u })
     expect(document.activeElement).toBe(attention)
-    expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /^Loaded CSV$/u })).toHaveProperty('disabled', true)
     fireEvent.keyDown(attention, { key: 'ArrowRight' })
     expect(document.activeElement).toBe(all)
     expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(1)
@@ -259,7 +261,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
   it('exports usage CSV with seven columns and no unproven tax fields, tool labels, and count-aware success toast', () => {
     renderActivity()
 
-    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded CSV$/u }))
 
     expect(downloadCsv).toHaveBeenCalledTimes(1)
     expect(toast.success).toHaveBeenCalledWith('Exported 2 records to CSV')
@@ -277,7 +279,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
   it('exports JSON with export document and count-aware success toast', () => {
     renderActivity()
 
-    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded JSON$/u }))
 
     expect(downloadJson).toHaveBeenCalledTimes(1)
     expect(toast.success).toHaveBeenCalledWith('Exported 2 records to JSON')
@@ -302,11 +304,11 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
     expect(screen.getByText('Gross settled charges').parentElement?.textContent).toContain('A$0.01')
     expect(screen.getAllByText('A$0.01').length).toBeGreaterThan(1)
-    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded CSV$/u }))
     const csv = vi.mocked(downloadCsv).mock.calls[0]?.[1]
     expect(csv).toContain('call:1,Australian Tax Calculator,prov:1,agent:alpha,0.000006,')
 
-    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded JSON$/u }))
     const document = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
       records: readonly { costAud: string }[]
     }
@@ -327,7 +329,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     }
     render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
       spend: sampleSpend, periodStart: '2026-09', ...windowScope }} />)
-    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded JSON$/u }))
     const document = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
       records: readonly { callRef: string; costAud: string }[]
     }
@@ -339,7 +341,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(BigInt(booked.costAud.replace('.', ''))).toBe(9007199254740993n)
     expect(booked).not.toHaveProperty('gstAud')
     expect(booked).not.toHaveProperty('netAud')
-    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded CSV$/u }))
     const csv = vi.mocked(downloadCsv).mock.calls[0]?.[1]
     expect(csv).toContain('9007199254.740993')
     expect(csv).toContain('call:unknown,Postal Address Lookup,prov:2,agent:beta,Not confirmed,')
@@ -350,8 +352,8 @@ describe('ActivityPage & Filtering (W-38)', () => {
     const calls = { ...sampleCalls, page: [{ ...sampleCalls.page[0]!, audAmountUnits: 'not-a-number' }] }
     render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
       spend: sampleSpend, periodStart: '2026-09', ...windowScope }} />)
-    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
-    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded CSV$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded JSON$/u }))
     expect(downloadCsv).not.toHaveBeenCalled()
     expect(downloadJson).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledTimes(2)
@@ -368,7 +370,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(within(completed).getByText('Not confirmed')).toBeTruthy()
     const refused = screen.getByRole('row', { name: /Postal Address Lookup/u })
     expect(within(refused).getByText('No charge')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^Loaded JSON$/u }))
     const exported = vi.mocked(downloadJson).mock.calls[0]?.[1] as { records: readonly { costAud: string }[] }
     expect(exported.records.map(({ costAud }) => costAud)).toEqual(['Not confirmed', '0.000000'])
   })
@@ -378,8 +380,8 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Outcome unknown\s+0/u }))
 
-    expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: /^JSON$/u })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /^Loaded CSV$/u })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /^Loaded JSON$/u })).toHaveProperty('disabled', true)
   })
 
   it('shows loaded-only preview when more history is available', () => {
@@ -457,5 +459,21 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(within(screen.getByText(/Agent ·/u).parentElement as HTMLElement).getByText('agent:alpha')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Clear agent filter' }))
     expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: '30d' } })
+  })
+
+  it('requests the full filtered period and never simulates a download after a source failure', async () => {
+    routerMocks.exportPeriod.mockRejectedValueOnce(new Error('call_export_source_changed'))
+    renderActivity({ filteredAgent: 'agent:alpha' })
+    fireEvent.click(screen.getByRole('button', { name: /Completed\s+1/u }))
+    fireEvent.click(screen.getByRole('button', { name: 'Full period JSON' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not export the full period.', expect.any(Object)))
+    expect(routerMocks.exportPeriod).toHaveBeenCalledWith({ data: {
+      periodStartAt: windowScope.periodStartAt, periodEndAt: windowScope.periodEndAt,
+      status: 'completed', principalRef: 'agent:alpha',
+    } })
+    expect(downloadJson).not.toHaveBeenCalled()
+    expect(downloadCsv).not.toHaveBeenCalled()
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Full period JSON' })).not.toHaveProperty('disabled', true)
   })
 })

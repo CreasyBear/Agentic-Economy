@@ -32,6 +32,9 @@ const listOwnerCallsQuery = sourceQuery<{
     audAmountUnits?: string
     receiptRef?: string
     recoveryRef?: string
+    serviceUsageRef?: string
+    deliveredRequestUnits?: string
+    observedAt?: number
     latencyMs: number
     createdAt: number
     updatedAt: number
@@ -68,6 +71,9 @@ const usageResult = z.union([
     callCountUnits: countUnits,
     completedCountUnits: countUnits,
     outcomeUnknownCountUnits: countUnits,
+    deliveredRequestUnits: countUnits.optional(),
+    serviceUnitCoverage: z.enum(['complete', 'incomplete']).optional(),
+    serviceUnitDefinitionRef: z.literal('delivered_request:v1').optional(),
     settledSpendUnits: z.string().regex(/^(?:0|[1-9]\d*)$/u).optional(),
     amountCoverage: z.enum(['complete', 'incomplete']).optional(),
     updatedAt: z.number(),

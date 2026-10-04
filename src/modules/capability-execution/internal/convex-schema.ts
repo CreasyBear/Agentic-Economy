@@ -234,6 +234,32 @@ export const capabilityCallTables = {
     .index('by_accountRef_and_resolvedAt', ['accountRef', 'resolvedAt'])
     .index('by_customerRef_and_resolvedAt', ['customerRef', 'resolvedAt'])
     .index('by_resolvedAt', ['resolvedAt']),
+  capabilityServiceUsageRecords: defineTable({
+    usageRef: v.string(),
+    callRef: v.string(),
+    quoteRef: v.optional(v.string()),
+    accountRef: v.string(),
+    principalRef: v.string(),
+    credentialRef: v.string(),
+    applicationRef: v.string(),
+    toolRef: v.string(),
+    providerRef: v.string(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    unitDefinitionRef: v.literal('delivered_request:v1'),
+    quantityUnits: v.literal('1'),
+    quantityExponent: v.literal(0),
+    source: v.literal('validated_call_result'),
+    sourceEvidenceHash: v.optional(v.string()),
+    receiptRef: v.optional(v.string()),
+    priceDigest: v.string(),
+    timeBasis: v.union(v.literal('receipt_issued'), v.literal('call_updated')),
+    callCreatedAt: v.number(),
+    occurredAt: v.number(),
+    observedAt: v.number(),
+  })
+    .index('by_usageRef', ['usageRef'])
+    .index('by_callRef', ['callRef'])
+    .index('by_accountRef_and_callCreatedAt', ['accountRef', 'callCreatedAt']),
   capabilityCallProjections: defineTable({
     callRef: v.string(),
     accountRef: v.string(),
@@ -262,6 +288,9 @@ export const capabilityCallTables = {
     audAmountUnits: v.optional(v.string()),
     receiptRef: v.optional(v.string()),
     recoveryRef: v.optional(v.string()),
+    serviceUsageRef: v.optional(v.string()),
+    deliveredRequestUnits: v.optional(v.string()),
+    observedAt: v.optional(v.number()),
     latencyMs: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -6,6 +6,8 @@ import {
   type BuyerCallSummaryFacts,
 } from '@/modules/capability-execution/call-receipt-view'
 import { readOwnerCallsServer } from '@/lib/server/call-history.functions'
+import { exportOwnerCallUsageServer } from '@/lib/server/call-usage-export.functions'
+import { generateCallUsageExportCsv } from '@/lib/export/call-usage-export'
 import { formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -225,6 +227,7 @@ export function useAeActivity({
   const [summaryRetryPending, setSummaryRetryPending] = useState(false)
   const { state: pagination, loadNextPage } = useCallPagination(initial, periodStartAt, periodEndAt, filteredAgent)
   const [datePending, setDatePending] = useState(false)
+  const [periodExportPending, setPeriodExportPending] = useState(false)
   const dateFilteredItems = pagination.items
 
   function navigateScope(range: ActivityDateRangeFilter, agent: string | undefined) {
@@ -316,8 +319,35 @@ export function useAeActivity({
           : usage.kind === 'available' ? 'Amount coverage incomplete' : '—',
     scopeLabel: filteredAgent === undefined ? 'All Agents in this Account' : `Agent ${filteredAgent}`,
     spendBasis: filteredAgent === undefined
-      ? 'Gross charges use ledger settlement dates in this period. Refunds are recorded separately and are not deducted here.'
+      ? 'Gross charges use ledger transaction dates in this period. Refunds are recorded separately and are not deducted here.'
       : 'Agent charges use current Call payment records for Calls created in this period. They are not an account ledger balance or a refund total.',
+    deliveredRequestLabel: usage.kind === 'available' ? usage.deliveredRequestUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
+    serviceUnitCoverageLabel: usage.kind === 'empty' ? 'No Calls in this period.'
+      : usage.kind === 'available' && usage.serviceUnitCoverage === 'complete'
+        ? 'Delivered-request units are recorded once per Call; refunds do not erase measured usage.'
+        : 'Service-unit coverage is incomplete. Calls with missing or uncertain measurement evidence are not treated as zero.',
+  }
+
+  async function exportPeriod(format: 'CSV' | 'JSON') {
+    if (periodExportPending) return
+    setPeriodExportPending(true)
+    try {
+      const document = await exportOwnerCallUsageServer({ data: {
+        periodStartAt, periodEndAt, status: statusFilter,
+        ...(filteredAgent === undefined ? {} : { principalRef: filteredAgent }),
+      } })
+      const filename = `call-usage-period-${new Date().toISOString().slice(0, 10)}`
+      if (format === 'CSV') downloadCsv(`${filename}.csv`, generateCallUsageExportCsv(document))
+      else downloadJson(`${filename}.json`, document)
+      toast.success(`Exported ${document.recordCountUnits} Calls for the full filtered period to ${format}`)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      toast.error('Could not export the full period.', {
+        description: 'No partial file was downloaded. Records may have changed or the period may be too large. Retry or choose a shorter period.',
+      })
+    } finally {
+      setPeriodExportPending(false)
+    }
   }
 
   function resetFilters() {
@@ -388,6 +418,9 @@ export function useAeActivity({
     exportDisabled: filteredItems.length === 0,
     exportCsv,
     exportJson,
+    exportPeriod,
+    periodExportPending,
+    periodExportDisabled: periodExportPending || datePending || periodEndAt - periodStartAt > 366 * 86_400_000,
     showFilterBar: true,
     showEmptyNoCalls: pagination.items.length === 0 && pagination.cursor === undefined,
     showEmptyNoMatch: filteredItems.length === 0 && !(pagination.items.length === 0 && pagination.cursor === undefined),

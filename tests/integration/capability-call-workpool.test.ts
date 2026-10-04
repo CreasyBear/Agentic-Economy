@@ -2306,6 +2306,7 @@ describe('capability Call Workpool lifecycle', () => {
       state: 'completed',
       deliveryState: 'delivered',
       paymentState: 'not_applicable',
+      deliveredRequestUnits: '1',
     })
     expect(historyObservedDuringProvider).toEqual([
       'claim_before_effect',
@@ -2321,6 +2322,11 @@ describe('capability Call Workpool lifecycle', () => {
     expect(replayed.call?.workId).toBe(workId)
     expect(replayed.history).toHaveLength(3)
     expect(replayed.call).toEqual(completed.call)
+    const measuredRequests = await backend.run(async ctx => await ctx.db.query('capabilityServiceUsageRecords')
+      .withIndex('by_callRef', index => index.eq('callRef', successfulCallRef)).collect())
+    expect(measuredRequests).toHaveLength(1)
+    expect(measuredRequests[0]).toMatchObject({ callRef: successfulCallRef, accountRef: first.principal.ownerId,
+      credentialRef: first.principal.credentialId, unitDefinitionRef: 'delivered_request:v1', quantityUnits: '1' })
     expect(providerFetch).toHaveBeenCalledTimes(1)
 
     await backend.run(async (ctx) => {

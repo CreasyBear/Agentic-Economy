@@ -80,6 +80,11 @@ export function formatCsvRow(fields: readonly (string | number | null | undefine
   return fields.map(escapeCsvField).join(',')
 }
 
+export function escapeSpreadsheetText(value: string | undefined): string {
+  const text = value ?? ''
+  return /^[\s\u0000-\u001f]*[=+\-@]/u.test(text) ? `'${text}` : text
+}
+
 export const ACTIVITY_CSV_HEADERS: readonly string[] = [
   'Date',
   'Call ID',
@@ -95,12 +100,12 @@ export function generateCallsCsv(rows: readonly ActivityExportRow[]): string {
   const dataLines = rows.map((row) =>
     formatCsvRow([
       row.date,
-      row.callRef,
-      row.toolName,
-      row.provider,
-      row.agentName,
+      escapeSpreadsheetText(row.callRef),
+      escapeSpreadsheetText(row.toolName),
+      escapeSpreadsheetText(row.provider),
+      escapeSpreadsheetText(row.agentName),
       row.costAud,
-      row.status,
+      escapeSpreadsheetText(row.status),
     ])
   )
   return [headerLine, ...dataLines].join('\r\n')

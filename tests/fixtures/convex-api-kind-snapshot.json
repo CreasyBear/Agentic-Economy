@@ -428,6 +428,12 @@
   {
     "visibility": "public",
     "module": "capabilityCallProjections",
+    "method": "beginOwnerCallExport",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
     "method": "listOwnerCalls",
     "kind": "query"
   },
@@ -441,6 +447,12 @@
     "visibility": "public",
     "module": "capabilityCallProjections",
     "method": "readOwnerAgentReadback",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerCallExportPage",
     "kind": "query"
   },
   {
