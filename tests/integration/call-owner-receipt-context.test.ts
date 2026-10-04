@@ -56,6 +56,7 @@ describe('owner receipt context', () => {
     expect(context).toEqual({
       attemptEvidence: { kind: 'not_recorded' },
       purpose: null,
+      recordedTariff:{basis:'call_snapshot',pricingConfig:tool.pricingConfig,priceDigest:tool.priceDigest},
       agent: { principalRef: principalId, applicationRef, currentDisplayName: 'Research assistant' },
       recordedTool: { kind: 'available', basis: 'call_snapshot', name: tool.contract.name, providerRef: tool.identity.businessId, providerName: null },
       reconciliation: { canSubmitEvidence: true, permissionBasis: 'account_owner', requiresVerifiedEvidence: true },

@@ -119,6 +119,7 @@ export const AUDIT_EVENT_LABELS = {
   'billing.monthly_spend_ceiling_configured': 'Billing monthly spend ceiling configured',
   'billing.call_usage_export_requested': 'Call usage export requested',
   'billing.usage_reporting_configured':'Usage reporting configured',
+  'billing.usage_alert_policy_configured':'Usage alert policy configured',
   'billing.monthly_usage_close_requested':'Monthly usage close requested',
   'money.promotional_credit_requested': 'Promotional credit requested',
   'money.promotional_credit_granted': 'Promotional credit granted',

@@ -1,3 +1,5 @@
+import {enqueueMoneyAlertEvaluation} from '../../principalAccount/notifications/usageAlerts'
+import {degradeBackend} from '@/lib/observability/degrade-backend'
 import { Triggers } from 'convex-helpers/server/triggers'
 import type { DataModel, Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
@@ -20,7 +22,13 @@ async function changedCalls(ctx:MutationCtx, before:Doc<'capabilityCalls'>|null,
   }
   for(const scope of scopes.values()) await advance(ctx,scope.accountRef,scope.month,scope.shard)
 }
-usageSourceTriggers.register('capabilityCalls',async(ctx,change)=>changedCalls({...ctx,db:ctx.innerDb},change.oldDoc,change.newDoc))
+usageSourceTriggers.register('capabilityCalls',async(ctx,change)=>{
+  const inner={...ctx,db:ctx.innerDb}
+  await changedCalls(inner,change.oldDoc,change.newDoc)
+  if(change.newDoc?.state==='completed'&&(change.oldDoc?.state!=='completed'||change.oldDoc.usage?.transactionRef!==change.newDoc.usage?.transactionRef)){
+    try{await enqueueMoneyAlertEvaluation(inner,change.newDoc.ownerId,true)}catch{degradeBackend(new Error('usage_alert_enqueue_unavailable'),undefined,{site:'usageAlertEvaluation',reason:'source_unavailable'})}
+  }
+})
 usageSourceTriggers.register('capabilityCallProjections',async(ctx,change)=>{
   const scopes=new Map<string,{accountRef:string;month:string;shard:number}>()
   for(const row of [change.oldDoc,change.newDoc]) if(row !== null){

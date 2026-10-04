@@ -1,3 +1,4 @@
+import {enqueueReportUsageAlerts,enqueueMoneyAlertEvaluation} from '../../principalAccount/notifications/usageAlerts'
 import type { Infer, ObjectType } from 'convex/values'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
@@ -51,7 +52,7 @@ export async function captureUsageReportPageHandler(ctx:MutationCtx,args:ObjectT
   const records:CallUsageExportRow[]=[]
   for(const {_id,_creationTime,...row} of page.page){
     if(_creationTime>report.snapshotAt) continue
-    if((row.observedAt ?? row.updatedAt)>report.snapshotAt) throw new Error('call_export_source_changed')
+    if(row.createdAt>report.snapshotAt||(row.observedAt ?? row.updatedAt)>report.snapshotAt) throw new Error('call_export_source_changed')
     if(report.status !== 'all' && report.status !== row.state) continue
     const support=await readProjectedSupport(ctx,row)
     records.push(callUsageExportRowSchema.parse({...row,currentDeliveredRequestUnits:support.quantityUnits,currentSupportVerified:support.verified,providerUnitSupportVerified:support.providerUnitObservation !== null}))
@@ -78,7 +79,7 @@ export async function captureUsageReportPageHandler(ctx:MutationCtx,args:ObjectT
   const workId=page.isDone ? report.workId : await enqueueUsageReportPage(ctx,report.reportRef,pageCount)
   await ctx.db.patch(report._id,{pageCount,partCount,scannedCountUnits:(BigInt(report.scannedCountUnits)+BigInt(page.page.length)).toString(),recordCountUnits:summary.recordCountUnits,recordsChainDigest,summaryJson:JSON.stringify(summary),nextCursor:page.continueCursor,
     ...(workId === undefined ? {} : {workId}),...(page.isDone ? {state:'complete' as const,completedAt:Date.now()} : {})})
-  if(page.isDone)await enqueueLinkedMonthlyClose(ctx,report.reportRef)
+  if(page.isDone){await enqueueLinkedMonthlyClose(ctx,report.reportRef);await enqueueReportUsageAlerts(ctx,report.reportRef);await enqueueMoneyAlertEvaluation(ctx,report.accountRef)}
   return {kind:'advanced' as const}
 }
 

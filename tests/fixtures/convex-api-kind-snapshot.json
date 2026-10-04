@@ -3554,6 +3554,24 @@
   {
     "visibility": "internal",
     "module": "notifications",
+    "method": "enqueueMoneyUsageAlerts",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "evaluateUsageMoneyAlerts",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "hasCurrentUsageAlertConsent",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
     "method": "readNotificationContext",
     "kind": "query"
   },
@@ -3562,6 +3580,18 @@
     "module": "notifications",
     "method": "readPreferences",
     "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "notifications",
+    "method": "readUsageAlertHistory",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "requestUsageAlertReport",
+    "kind": "mutation"
   },
   {
     "visibility": "public",

@@ -1,3 +1,4 @@
+import {readUsageDeliveryContext} from './usageAlerts'
 import { v, type Infer } from 'convex/values'
 import { vOnCompleteArgs } from '@convex-dev/workpool'
 
@@ -32,6 +33,7 @@ export async function readNotificationContextHandler(
   args: { deliveryId: Id<'notificationDeliveries'> },
 ): Promise<NotificationContext> {
   const delivery = await ctx.db.get(args.deliveryId)
+  if(delivery!==null&&delivery.state==='pending'&&delivery.usageEvidenceJson!==undefined)return await readUsageDeliveryContext(ctx,delivery)
   if (delivery === null || delivery.state !== 'pending' || delivery.eventKind !== 'agent_approval_requested') {
     return { kind: 'skip', code: 'approval_no_longer_pending' }
   }

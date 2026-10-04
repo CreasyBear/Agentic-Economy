@@ -1,3 +1,4 @@
+import {CallRecordedTariff} from './CallRecordedTariff'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeFactList } from '@/components/ae/data/AeFactList'
@@ -43,6 +44,7 @@ export function CallTechnicalRecord({ result, view }: Readonly<{ result: FoundCa
           ]),
         ]} />
         <CallMoneyFacts view={view} />
+        <CallRecordedTariff tariff={ownerContext?.recordedTariff} />
       {ownerContext?.serviceUsageEvidence === undefined ? null : <CallMeasurementEvidence evidence={ownerContext.serviceUsageEvidence} />}
       {ownerContext?.attemptEvidence === undefined ? null : <CallAttemptEvidence evidence={ownerContext.attemptEvidence} />}
       {ownerContext?.providerUnitEvidence === undefined ? null : <CallProviderUnits evidence={ownerContext.providerUnitEvidence} />}

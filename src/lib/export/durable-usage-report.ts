@@ -37,7 +37,7 @@ export async function assembleUsageReport(manifest:UsageReportManifest,readPage:
     || BigInt(manifest.scannedCountUnits)>BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('usage_report_incomplete')
   const document=createCallUsageExport(manifest,records,manifest.snapshotAt,Number(manifest.scannedCountUnits),manifest.accountRef,manifest.reportRef)
   const expected=usageReportSummarySchema.parse(JSON.parse(manifest.summaryJson))
-  const actual=appendUsageReportSummary(emptyUsageReportSummary(),document,false)
+  const actual=appendUsageReportSummary(emptyUsageReportSummary(expected.refusedCallCountUnits!==undefined&&expected.uncertainCallCountUnits!==undefined),document,false)
   if(canonicalDigest(actual) !== canonicalDigest(expected)) throw new Error('usage_report_summary_changed')
   return {...document,reportManifest:manifest}
 }

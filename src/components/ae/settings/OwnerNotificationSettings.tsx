@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import {UsageAlertHistory} from './UsageAlertHistory'
+import { UsageAlertSettings } from './UsageAlertSettings'
+import { useRef,useState } from 'react'
 
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Switch } from '@base-ui/react/switch'
@@ -49,10 +51,13 @@ export function OwnerNotificationSettings({
   disabled = false,
   onUpdate,
 }: OwnerNotificationSettingsProps) {
+  const inFlight=useRef(false)
   const [pending, setPending] = useState(false)
   const [updateDiagnostic, setUpdateDiagnostic] = useState<NotificationUpdateDiagnostic | undefined>()
 
   const applyPatch = async (patch: NotificationPreferencePatch) => {
+    if(inFlight.current)return
+    inFlight.current=true
     setUpdateDiagnostic(undefined)
     setPending(true)
     try {
@@ -65,6 +70,7 @@ export function OwnerNotificationSettings({
         description: 'Please check your connection and try again.',
       })
     } finally {
+      inFlight.current=false
       setPending(false)
     }
   }
@@ -72,6 +78,7 @@ export function OwnerNotificationSettings({
   const controlsDisabled = disabled || pending
   return (
     <div className="arc-market arc-notification-settings">
+      <UsageAlertSettings key={`${preferences.revision}`} policy={preferences.usageAlertPolicy} disabled={controlsDisabled} revision={preferences.revision} onUpdate={applyPatch} />
       {PREFERENCE_SWITCHES.length > 0 ? (
         <SettingsGroup title="Email alerts" description="Sent to the primary email verified in your Profile.">
           {PREFERENCE_SWITCHES.map(({ key, label, description }) => (
@@ -92,6 +99,7 @@ export function OwnerNotificationSettings({
           ))}
         </SettingsGroup>
       ) : null}
+      <UsageAlertHistory />
       <div className="arc-notification-status" role="status" aria-live="polite">
         {updateDiagnostic ? (
           <div className="arc-notification-diagnostic">

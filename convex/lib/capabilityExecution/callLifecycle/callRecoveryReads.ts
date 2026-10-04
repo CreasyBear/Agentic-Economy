@@ -1,3 +1,4 @@
+import {pricingConfigDigest} from '@/modules/money/public'
 import { v, type Infer } from 'convex/values'
 import { paginationOptsValidator, type PaginationOptions } from 'convex/server'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
@@ -177,6 +178,7 @@ export async function readOwnerReceiptContextHandler(
     attemptEvidence: await readCallAttemptEvidence(ctx, row),
     agent: { principalRef: row.principalId, applicationRef: row.applicationRef, currentDisplayName },
     recordedTool: recordedReceiptTool(row),
+    ...recordedTariff(row),
     reconciliation: { canSubmitEvidence: true, permissionBasis: 'account_owner', requiresVerifiedEvidence: true },
   }
 }
@@ -228,4 +230,11 @@ export async function readOwnerRecoveryHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
   return row === null ? null : projectRecoveryRow(row)
+}
+
+function recordedTariff(row:CallRow):Pick<OwnerCallContext,'recordedTariff'>{
+  if(recordedReceiptTool(row).kind!=='available'||row.toolJson===undefined)return {}
+  const tool=parsePublishedToolSnapshot(row.toolJson)
+  if(tool===undefined||pricingConfigDigest(tool.pricingConfig)!==tool.priceDigest)return {}
+  return {recordedTariff:{basis:'call_snapshot',pricingConfig:tool.pricingConfig,priceDigest:tool.priceDigest}}
 }

@@ -1,3 +1,4 @@
+import {pricingConfigSchema} from '@/modules/money/public'
 import { z } from 'zod'
 import type { JsonValue } from '@/modules/capability-contract/public'
 
@@ -44,6 +45,7 @@ export type CallStatusState = z.infer<typeof callStatusStateSchema>
 /** Owner UI metadata only; never part of the public Call status protocol. */
 export const ownerCallContextSchema = z.strictObject({
   purpose: z.null(),
+  recordedTariff:z.strictObject({basis:z.literal('call_snapshot'),pricingConfig:pricingConfigSchema,priceDigest:z.string().regex(/^sha256:[a-f0-9]{64}$/u)}).exactOptional(),
   serviceUsageEvidence: serviceUsageEvidenceSchema.exactOptional(),
   providerUnitEvidence: providerUnitEvidenceSchema.exactOptional(),
   attemptEvidence: callAttemptEvidenceSchema.exactOptional(),

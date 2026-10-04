@@ -1,3 +1,5 @@
+import { ActivityUsageForecast } from './ActivityUsageForecast'
+import { requestOwnerUsageReportServer } from '@/lib/server/durable-usage-report.functions'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/arc/button/button'
 import { BillingHistory } from '@/components/arc/blocks/billing-overview/billing-overview'
@@ -48,6 +50,18 @@ export function ActivityUsageReports({request}:{request?:{reportRef:string;forma
     }catch{if(current===generation.current)setMessage('Report status could not be read. Retry the same report.')}
     finally{inFlight.current=false;setPending(false)}
   }
+  async function prepareForecast(){
+    if(inFlight.current)return
+    inFlight.current=true;setPending(true);const current=++generation.current
+    const now=new Date(),periodStartAt=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1),periodEndAt=Date.UTC(now.getUTCFullYear(),now.getUTCMonth()+1,1),reportRef=`call-usage-export:${crypto.randomUUID()}`
+    try{const result=await requestOwnerUsageReportServer({data:{reportRef,periodStartAt,periodEndAt,status:'all'}})
+      const read=await readOwnerUsageReportServer({data:{reportRef:result.reportRef}})
+      if(current!==generation.current)return
+      if(read.kind==='available'){setSelected(read.report);setMessage('Current-month history is being captured. Refresh the selected report when ready.')}
+      else setMessage('The forecast report is unavailable for this account.')
+    }catch{if(current===generation.current)setMessage('A complete forecast report could not be prepared. No estimate is shown from loaded rows.')}
+    finally{inFlight.current=false;setPending(false)}
+  }
   async function download(format:'CSV'|'JSON'){
     if(inFlight.current||selected===null||selected.state!=='complete')return
     inFlight.current=true;setPending(true);setMessage('Verifying all report pages…')
@@ -62,7 +76,7 @@ export function ActivityUsageReports({request}:{request?:{reportRef:string;forma
     finally{inFlight.current=false;setPending(false)}
   }
   return <BillingHistory title="Saved full-period reports" description="Complete Call history captured at a fixed time. Downloads include service units and financial evidence; these reports do not issue invoices.">
-    <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={pending} onClick={()=>void list(null)}>{failed?'Retry saved reports':'Refresh saved reports'}</Button>
+    <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={pending} onClick={()=>void prepareForecast()}>Prepare current-month forecast</Button><Button type="button" variant="secondary" disabled={pending} onClick={()=>void list(null)}>{failed?'Retry saved reports':'Refresh saved reports'}</Button>
       {cursor===null?null:<Button type="button" variant="secondary" disabled={pending} onClick={()=>void list(cursor)}>Older reports</Button>}
       {selected===null?null:<Button type="button" variant="secondary" disabled={pending} onClick={()=>void read(selected.reportRef)}>Refresh selected report</Button>}
       {selected===null&&request!==undefined?<Button type="button" variant="secondary" disabled={pending} onClick={()=>void read(request.reportRef)}>Read requested report</Button>:null}
@@ -70,6 +84,7 @@ export function ActivityUsageReports({request}:{request?:{reportRef:string;forma
     <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>
     {reports.length===0?<p className="text-sm text-muted-foreground">{failed?'Saved report history is unavailable.':'No saved reports are currently shown.'}</p>:<ul className="grid gap-2">{reports.map(report=><li key={report.reportRef}><Button type="button" variant="ghost" disabled={pending} onClick={()=>void read(report.reportRef)}>{formatUtcTimestamp(report.createdAt)} · {report.state} · {report.recordCountUnits} Calls</Button></li>)}</ul>}
     {selected===null?null:<>
+      <ActivityUsageForecast report={selected} />
       <AeFactList facts={[{label:'State',value:selected.state},{label:'Period starts (UTC)',value:formatUtcTimestamp(selected.periodStartAt)},{label:'Period ends, exclusive (UTC)',value:formatUtcTimestamp(selected.periodEndAt)},
         {label:'Scope',value:`${selected.principalRef??'All Agents'} · ${selected.status}`},{label:'Captured through (UTC)',value:formatUtcTimestamp(selected.snapshotAt)},
         {label:'Calls / scanned records',value:`${selected.recordCountUnits} / ${selected.scannedCountUnits}`},{label:'Failure',value:selected.failureCode??'None'},

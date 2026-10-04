@@ -1,3 +1,4 @@
+import {pricingConfigValue} from '@/modules/capability-supply/public'
 import type { Doc } from '../../../_generated/dataModel'
 import { paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
@@ -17,6 +18,7 @@ import { callAttemptEvidenceValue } from './attemptEvidenceContracts'
 export const environment = v.union(v.literal('sandbox'), v.literal('production'))
 export const ownerCallContextValue = v.object({
   purpose: v.null(),
+  recordedTariff:v.optional(v.object({basis:v.literal('call_snapshot'),pricingConfig:pricingConfigValue,priceDigest:v.string()})),
   serviceUsageEvidence: v.optional(serviceUsageEvidenceValue),
   providerUnitEvidence: v.optional(providerUnitEvidenceValue),
   attemptEvidence: v.optional(callAttemptEvidenceValue),
