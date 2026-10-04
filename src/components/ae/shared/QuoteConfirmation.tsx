@@ -5,6 +5,7 @@ import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { QuoteConfirmationView } from './object-family.contracts'
+import { AlphaLearningNotice } from './AlphaLearningNotice'
 
 export type QuoteConfirmationProps = Readonly<{
   view: QuoteConfirmationView
@@ -38,6 +39,7 @@ export function QuoteConfirmation({ view, onApprove, onDeny, onFreshQuote }: Quo
           { label: 'Quote reference', value: <span className="break-all font-mono text-xs">{view.quoteRef}</span> },
           ...(view.quoteAmount.currency === 'AUD' ? [] : [{ label: 'Source amount', value: formatCurrencyAmount(view.quoteAmount) }]),
         ]} />
+        <AlphaLearningNotice />
       </div>
       <div className="arc-decision-actions">
         {view.expired || priceUnavailable ? (

@@ -1166,7 +1166,7 @@ describe('capability Call Workpool lifecycle', () => {
     const after = await readEvidence(backend, pending.callRef)
     expect(after.call).toMatchObject({ state: 'completed', formanceFinancialState: 'released',
       formanceSettlementRefs: original!.formanceSettlementRefs,
-      result: { kind: 'completed', output: original!.result!.kind === 'completed' ? original!.result!.output : null,
+      result: { kind: 'completed', output: original!.result!.kind === 'completed' && 'output' in original!.result! ? original!.result!.output : null,
         receipt: { state: 'refunded', refundState: 'released' } }, usage: { chargeState: 'refunded' } })
     expect(after.projection).toMatchObject({ state: 'completed', deliveryState: 'delivered', paymentState: 'released', providerObligationState: 'settled' })
     const evidence = await backend.run(async ctx => ({
@@ -2112,6 +2112,7 @@ describe('capability Call Workpool lifecycle', () => {
       'terminal_returned',
     ])
     expect(completed.history.map((row) => row.executionVersion)).toEqual([1, 2, 3])
+    if (!('output' in completedResult)) throw new Error('completed_output_missing')
     expect(completedResult.output).toEqual(providerOutput)
     const statusArgs = await statusQueryArgs(first.principal, successfulCallRef, 'status-owner')
     const stateCounts = async () => await backend.run(async (ctx) => ({

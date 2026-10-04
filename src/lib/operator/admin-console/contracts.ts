@@ -47,6 +47,7 @@ export type AdminParseResult =
   | { kind: 'malformed'; code: AdminParseErrorCode }
 
 export type AdminCommandAction =
+  | 'review_call_content'
   | 'set_business_suppression'
   | 'close_removal_dispute'
   | 'grant_admin_membership'
@@ -58,6 +59,7 @@ export type AdminCommandAction =
   | 'change_treasury_thresholds'
 
 export const ADMIN_ACTION_PERMISSION = {
+  review_call_content: 'review_call_content',
   set_business_suppression: 'suppress_business',
   close_removal_dispute: 'close_dispute',
   grant_admin_membership: 'manage_admin_membership',
@@ -78,6 +80,7 @@ export type AdminProposableAction =
   | 'grant_promotional_credit'
 
 export type AdminReasonCodeByAction = {
+  review_call_content: 'alpha_quality' | 'failure_investigation'
   set_business_suppression:
     | 'policy_violation'
     | 'legal_notice'
@@ -95,6 +98,7 @@ export type AdminReasonCodeByAction = {
 }
 
 export type AdminActionInput = {
+  review_call_content: { callRef: string }
   set_payments_paused: { environment: 'sandbox' | 'production'; paused: boolean }
   change_treasury_thresholds: { environment: 'sandbox' | 'production'; lowWaterUnits: string; targetFloatUnits: string }
   set_business_suppression: {
@@ -144,6 +148,7 @@ export type AdminActionInput = {
 }
 
 export type AdminSuccessCodeByAction = {
+  review_call_content: 'call_content_reviewed'
   set_payments_paused: 'payments_paused' | 'payments_resumed'
   change_treasury_thresholds: 'treasury_thresholds_changed'
   set_business_suppression: 'business_suppressed' | 'business_unsuppressed'
@@ -171,6 +176,7 @@ export type SharedAdminRefusalCode =
   | 'admin_missing_evidence'
 
 export type AdminActionRefusalCodes = {
+  review_call_content: 'call_not_found' | 'content_expired' | 'review_expired'
   set_payments_paused: 'environment_mismatch' | 'payments_not_ready' | import('@/modules/money/treasury-report').TreasuryResumeRefusalCode
   change_treasury_thresholds: 'environment_mismatch' | 'treasury_thresholds_invalid'
   set_business_suppression: 'business_not_found' | 'suppression_unchanged'

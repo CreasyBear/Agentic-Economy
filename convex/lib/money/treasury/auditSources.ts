@@ -34,7 +34,7 @@ export type TreasuryBatchSourcesResult = Infer<typeof treasuryBatchSourcesReturn
 const attemptMaterialValue = v.object({
   dispatchRef: v.string(), attemptRef: v.string(), effectGeneration: v.number(),
   toolRef: v.optional(v.string()), inputDigest: v.optional(v.string()), paymentIdentifier: v.string(),
-  challengeDigest: v.string(), selectedRequirementJson: v.string(), scheme: v.string(),
+  challengeDigest: v.string(), scheme: v.string(),
   network: v.string(), asset: v.string(), payTo: v.string(), amountUnits: v.string(), currency: v.string(), exponent: v.number(),
   custodyRef: v.string(), custodyBudgetRef: v.optional(v.string()), custodyGeneration: v.optional(v.number()),
   authorizationDigest: v.string(), reservationRef: v.optional(v.string()), spendReservationRef: v.optional(v.string()),

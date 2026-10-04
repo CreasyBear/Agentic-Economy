@@ -9,6 +9,7 @@
  */
 
 import type * as actionExecutionControl from "../actionExecutionControl.js";
+import type * as adminCallContent from "../adminCallContent.js";
 import type * as adminConsoleAudit from "../adminConsoleAudit.js";
 import type * as adminConsoleExceptions from "../adminConsoleExceptions.js";
 import type * as adminConsoleMetrics from "../adminConsoleMetrics.js";
@@ -27,6 +28,7 @@ import type * as agentSpendingPolicy from "../agentSpendingPolicy.js";
 import type * as authorityBoundary from "../authorityBoundary.js";
 import type * as authz from "../authz.js";
 import type * as businesses from "../businesses.js";
+import type * as capabilityCallFeedback from "../capabilityCallFeedback.js";
 import type * as capabilityCallIdentity from "../capabilityCallIdentity.js";
 import type * as capabilityCallLiveX402 from "../capabilityCallLiveX402.js";
 import type * as capabilityCallProjection from "../capabilityCallProjection.js";
@@ -101,6 +103,7 @@ import type * as lib_actionExecution_control_reads from "../lib/actionExecution/
 import type * as lib_actionExecution_control_transaction from "../lib/actionExecution/control/transaction.js";
 import type * as lib_adminConsole_actions_adminMembership from "../lib/adminConsole/actions/adminMembership.js";
 import type * as lib_adminConsole_actions_businessSuppression from "../lib/adminConsole/actions/businessSuppression.js";
+import type * as lib_adminConsole_actions_callContent from "../lib/adminConsole/actions/callContent.js";
 import type * as lib_adminConsole_actions_commercialPolicy from "../lib/adminConsole/actions/commercialPolicy.js";
 import type * as lib_adminConsole_actions_promotionalCredit from "../lib/adminConsole/actions/promotionalCredit.js";
 import type * as lib_adminConsole_actions_removalDispute from "../lib/adminConsole/actions/removalDispute.js";
@@ -117,6 +120,7 @@ import type * as lib_adminConsole_metrics_dayWindow from "../lib/adminConsole/me
 import type * as lib_adminConsole_metrics_read from "../lib/adminConsole/metrics/read.js";
 import type * as lib_adminConsole_metrics_write from "../lib/adminConsole/metrics/write.js";
 import type * as lib_adminConsole_reads_agent from "../lib/adminConsole/reads/agent.js";
+import type * as lib_adminConsole_reads_alphaLearning from "../lib/adminConsole/reads/alphaLearning.js";
 import type * as lib_adminConsole_reads_audit from "../lib/adminConsole/reads/audit.js";
 import type * as lib_adminConsole_reads_auditHandlers from "../lib/adminConsole/reads/auditHandlers.js";
 import type * as lib_adminConsole_reads_call from "../lib/adminConsole/reads/call.js";
@@ -181,6 +185,7 @@ import type * as lib_authority_consequence_publication from "../lib/authority/co
 import type * as lib_authority_delegation_persistence from "../lib/authority/delegation/persistence.js";
 import type * as lib_capabilityContract_documents_reads from "../lib/capabilityContract/documents/reads.js";
 import type * as lib_capabilityContract_documents_registration from "../lib/capabilityContract/documents/registration.js";
+import type * as lib_capabilityExecution_callFeedback from "../lib/capabilityExecution/callFeedback.js";
 import type * as lib_capabilityExecution_callLifecycle_admission from "../lib/capabilityExecution/callLifecycle/admission.js";
 import type * as lib_capabilityExecution_callLifecycle_admissionApproval from "../lib/capabilityExecution/callLifecycle/admissionApproval.js";
 import type * as lib_capabilityExecution_callLifecycle_admissionApprovals from "../lib/capabilityExecution/callLifecycle/admissionApprovals.js";
@@ -234,6 +239,9 @@ import type * as lib_capabilityExecution_callWorker_preClaimRefund from "../lib/
 import type * as lib_capabilityExecution_callWorker_reconcileScheduled from "../lib/capabilityExecution/callWorker/reconcileScheduled.js";
 import type * as lib_capabilityExecution_callWorker_recover from "../lib/capabilityExecution/callWorker/recover.js";
 import type * as lib_capabilityExecution_callWorker_run from "../lib/capabilityExecution/callWorker/run.js";
+import type * as lib_capabilityExecution_contentRetention_cachedContent from "../lib/capabilityExecution/contentRetention/cachedContent.js";
+import type * as lib_capabilityExecution_contentRetention_callContent from "../lib/capabilityExecution/contentRetention/callContent.js";
+import type * as lib_capabilityExecution_contentRetention_cleanup from "../lib/capabilityExecution/contentRetention/cleanup.js";
 import type * as lib_capabilityExecution_liveX402Requirement_requirementRef from "../lib/capabilityExecution/liveX402Requirement/requirementRef.js";
 import type * as lib_capabilityExecution_paidCallReports_admission from "../lib/capabilityExecution/paidCallReports/admission.js";
 import type * as lib_capabilityExecution_paidCallReports_lifecycle from "../lib/capabilityExecution/paidCallReports/lifecycle.js";
@@ -417,6 +425,7 @@ import type * as lib_chat_tools_read from "../lib/chat/tools/read.js";
 import type * as lib_chat_tools_search from "../lib/chat/tools/search.js";
 import type * as lib_chat_tools_step from "../lib/chat/tools/step.js";
 import type * as lib_chat_tools_suitability from "../lib/chat/tools/suitability.js";
+import type * as lib_chat_turns_contentRetention from "../lib/chat/turns/contentRetention.js";
 import type * as lib_chat_turns_contracts from "../lib/chat/turns/contracts.js";
 import type * as lib_chat_turns_errors from "../lib/chat/turns/errors.js";
 import type * as lib_chat_turns_handlers from "../lib/chat/turns/handlers.js";
@@ -743,6 +752,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   actionExecutionControl: typeof actionExecutionControl;
+  adminCallContent: typeof adminCallContent;
   adminConsoleAudit: typeof adminConsoleAudit;
   adminConsoleExceptions: typeof adminConsoleExceptions;
   adminConsoleMetrics: typeof adminConsoleMetrics;
@@ -761,6 +771,7 @@ declare const fullApi: ApiFromModules<{
   authorityBoundary: typeof authorityBoundary;
   authz: typeof authz;
   businesses: typeof businesses;
+  capabilityCallFeedback: typeof capabilityCallFeedback;
   capabilityCallIdentity: typeof capabilityCallIdentity;
   capabilityCallLiveX402: typeof capabilityCallLiveX402;
   capabilityCallProjection: typeof capabilityCallProjection;
@@ -835,6 +846,7 @@ declare const fullApi: ApiFromModules<{
   "lib/actionExecution/control/transaction": typeof lib_actionExecution_control_transaction;
   "lib/adminConsole/actions/adminMembership": typeof lib_adminConsole_actions_adminMembership;
   "lib/adminConsole/actions/businessSuppression": typeof lib_adminConsole_actions_businessSuppression;
+  "lib/adminConsole/actions/callContent": typeof lib_adminConsole_actions_callContent;
   "lib/adminConsole/actions/commercialPolicy": typeof lib_adminConsole_actions_commercialPolicy;
   "lib/adminConsole/actions/promotionalCredit": typeof lib_adminConsole_actions_promotionalCredit;
   "lib/adminConsole/actions/removalDispute": typeof lib_adminConsole_actions_removalDispute;
@@ -851,6 +863,7 @@ declare const fullApi: ApiFromModules<{
   "lib/adminConsole/metrics/read": typeof lib_adminConsole_metrics_read;
   "lib/adminConsole/metrics/write": typeof lib_adminConsole_metrics_write;
   "lib/adminConsole/reads/agent": typeof lib_adminConsole_reads_agent;
+  "lib/adminConsole/reads/alphaLearning": typeof lib_adminConsole_reads_alphaLearning;
   "lib/adminConsole/reads/audit": typeof lib_adminConsole_reads_audit;
   "lib/adminConsole/reads/auditHandlers": typeof lib_adminConsole_reads_auditHandlers;
   "lib/adminConsole/reads/call": typeof lib_adminConsole_reads_call;
@@ -915,6 +928,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authority/delegation/persistence": typeof lib_authority_delegation_persistence;
   "lib/capabilityContract/documents/reads": typeof lib_capabilityContract_documents_reads;
   "lib/capabilityContract/documents/registration": typeof lib_capabilityContract_documents_registration;
+  "lib/capabilityExecution/callFeedback": typeof lib_capabilityExecution_callFeedback;
   "lib/capabilityExecution/callLifecycle/admission": typeof lib_capabilityExecution_callLifecycle_admission;
   "lib/capabilityExecution/callLifecycle/admissionApproval": typeof lib_capabilityExecution_callLifecycle_admissionApproval;
   "lib/capabilityExecution/callLifecycle/admissionApprovals": typeof lib_capabilityExecution_callLifecycle_admissionApprovals;
@@ -968,6 +982,9 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/callWorker/reconcileScheduled": typeof lib_capabilityExecution_callWorker_reconcileScheduled;
   "lib/capabilityExecution/callWorker/recover": typeof lib_capabilityExecution_callWorker_recover;
   "lib/capabilityExecution/callWorker/run": typeof lib_capabilityExecution_callWorker_run;
+  "lib/capabilityExecution/contentRetention/cachedContent": typeof lib_capabilityExecution_contentRetention_cachedContent;
+  "lib/capabilityExecution/contentRetention/callContent": typeof lib_capabilityExecution_contentRetention_callContent;
+  "lib/capabilityExecution/contentRetention/cleanup": typeof lib_capabilityExecution_contentRetention_cleanup;
   "lib/capabilityExecution/liveX402Requirement/requirementRef": typeof lib_capabilityExecution_liveX402Requirement_requirementRef;
   "lib/capabilityExecution/paidCallReports/admission": typeof lib_capabilityExecution_paidCallReports_admission;
   "lib/capabilityExecution/paidCallReports/lifecycle": typeof lib_capabilityExecution_paidCallReports_lifecycle;
@@ -1151,6 +1168,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/tools/search": typeof lib_chat_tools_search;
   "lib/chat/tools/step": typeof lib_chat_tools_step;
   "lib/chat/tools/suitability": typeof lib_chat_tools_suitability;
+  "lib/chat/turns/contentRetention": typeof lib_chat_turns_contentRetention;
   "lib/chat/turns/contracts": typeof lib_chat_turns_contracts;
   "lib/chat/turns/errors": typeof lib_chat_turns_errors;
   "lib/chat/turns/handlers": typeof lib_chat_turns_handlers;

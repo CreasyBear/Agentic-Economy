@@ -26,6 +26,20 @@ export const toolProcureInputSchema = z.discriminatedUnion('kind', [
 
 export type ToolProcureInput = z.infer<typeof toolProcureInputSchema>
 
+const quoteSnapshotFields = {
+  quoteRef: z.string().min(1),
+  price: z.strictObject({ currency: z.literal('AUD'), units: z.string(), exponent: z.number() }),
+  toolRef: z.string(),
+  toolName: z.string().optional(),
+  routingLatencyMs: z.number(),
+} as const
+
+/** An internal procurement checkpoint keeps its Quote identity after input expiry. */
+export const procureQuoteSnapshotSchema = z.union([
+  z.strictObject({ ...quoteSnapshotFields, input: z.record(z.string(), jsonValueSchema), endpoint: z.string().optional() }),
+  z.strictObject({ ...quoteSnapshotFields, contentExpiredAt: z.number().int().nonnegative() }),
+])
+
 export const diagnosticTripletSchema = z.strictObject({
   whatHappened: z.string(),
   financialImpact: z.string(),
@@ -42,28 +56,36 @@ const committedResult = {
   callRef: z.string().min(1),
 } as const
 
-export const toolProcureResultSchema = z.discriminatedUnion('status', [
-  z.strictObject({
+const deliveredResultFields = {
     ...committedResult,
     kind: z.literal('delivered'),
     status: z.literal('delivered'),
     toolRef: z.string(),
     toolName: z.string().optional(),
     quoteRef: z.string().min(1),
-    endpoint: z.string().optional(),
     price: z.strictObject({
       totalAud: z.string(),
       netAud: z.string(),
       gstAud: z.string(),
     }),
-    input: z.record(z.string(), jsonValueSchema),
-    output: z.unknown(),
     audit: z.strictObject({
       routingLatencyMs: z.number(),
       executionLatencyMs: z.number(),
       totalLatencyMs: z.number(),
       jevDecisionsCostAud: z.string(),
     }),
+} as const
+
+export const toolProcureResultSchema = z.union([
+  z.strictObject({
+    ...deliveredResultFields,
+    endpoint: z.string().optional(),
+    input: z.record(z.string(), jsonValueSchema),
+    output: z.unknown(),
+  }),
+  z.strictObject({
+    ...deliveredResultFields,
+    contentExpiredAt: z.number().int().nonnegative(),
   }),
   z.strictObject({
     schemaVersion: z.literal('tool.procure:v1'),
@@ -133,3 +155,20 @@ export const toolProcureResultSchema = z.discriminatedUnion('status', [
 ])
 
 export type ToolProcureResult = z.infer<typeof toolProcureResultSchema>
+
+/** Retain the purchase outcome while removing content-bearing result fields. */
+export function expireProcureResultContent(result: ToolProcureResult, expiredAt: number): ToolProcureResult | null {
+  if (result.kind === 'delivered') {
+    if (!('input' in result)) return result
+    const { input: _input, output: _output, endpoint: _endpoint, ...purchase } = result
+    return { ...purchase, contentExpiredAt: expiredAt }
+  }
+  if (result.kind === 'refused' || result.kind === 'refused_after_dispatch') {
+    return { ...result, detail: 'Original diagnostic content expired.' }
+  }
+  if (result.kind === 'remedied') return { ...result, diagnostic: {
+    whatHappened: 'Original diagnostic content expired.', financialImpact: `Refund recorded: ${result.refundedAmountAud}`,
+    nextStep: 'The purchase record remains available.',
+  } }
+  return null
+}

@@ -93,6 +93,27 @@ const reconcile = (reconcileX402PaymentAttempt as unknown as HandlerExport)._han
 const listExpiredPrepared = (listExpiredPreparedX402PaymentAttempts as unknown as HandlerExport)._handler
 const queueExpired = (queueExpiredX402Authorization as unknown as HandlerExport)._handler
 describe('money x402 payment authorization attempt', () => {
+  it('keeps expired payment identities while refusing content reads and late response restoration', async () => {
+    const db = memoryDbWithPayment({ ...attempt(), toolRef: 'operation:test', inputDigest: 'sha256:input',
+      state: 'observed', settlementStatus: 'settled', contentExpiredAt: 3_000,
+      challengeJson: undefined, selectedRequirementJson: undefined, providerEndpoint: undefined,
+      quarantinedResponseDigest, quarantinedOutputJson: undefined })
+    const before = structuredClone(db.rows('moneyX402PaymentAttempts'))
+    await expect(read({ db }, readArgs())).resolves.toBeNull()
+    await expect(readByDigest({ db }, readArgs())).resolves.toBeNull()
+    await expect(readAttempt({ db }, { dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1 })).resolves.toBeNull()
+    const observation = paymentObservationArgs({ settlementStatus: 'settled', quarantinedResponseDigest, quarantinedOutputJson })
+    await expect(recordObservation({ db }, observation)).rejects.toThrow('x402_payment_content_expired')
+    await expect(checkpointResponse({ db }, {
+      dispatchRef: observation.dispatchRef, attemptRef: observation.attemptRef, effectGeneration: observation.effectGeneration,
+      toolRef: observation.toolRef, inputDigest: observation.inputDigest, paymentIdentifier: observation.paymentIdentifier,
+      responseStatus: 200, responseDigest: quarantinedResponseDigest, outputJson: quarantinedOutputJson,
+      requestDigest: canonicalDigest('request'),
+    })).rejects.toThrow('x402_payment_content_expired')
+    expect(db.rows('moneyX402PaymentAttempts')).toEqual(before)
+    expect(db.patchCalls).toHaveLength(0)
+  })
+
   it('rejects sandbox chain material when production environment is declared', async () => {
     const db = new MemoryDb()
     await expect(prepare({ db }, prepareArgs({

@@ -9,6 +9,7 @@ export const AdminMembershipStateValues = ['active', 'revoked', 'suspended'] as 
 export type AdminMembershipState = (typeof AdminMembershipStateValues)[number]
 
 export const AdminActionValues = [
+  'review_call_content',
   'read_admin_readbacks',
   'annotate_triage',
   'manage_admin_membership',

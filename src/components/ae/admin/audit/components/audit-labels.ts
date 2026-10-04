@@ -50,6 +50,7 @@ export const AUDIT_EVENT_LABELS = {
   'discovery.degraded': 'Discovery degraded',
   'discovery.unavailable': 'Discovery unavailable',
   'admin.membership_bootstrapped': 'Admin membership bootstrapped',
+  'admin.call_content_reviewed': 'Call content reviewed',
   'admin.membership_granted': 'Admin membership granted',
   'admin.membership_revoked': 'Admin membership revoked',
   'admin.break_glass_used': 'Admin break glass used',

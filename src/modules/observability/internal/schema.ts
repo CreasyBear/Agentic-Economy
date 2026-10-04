@@ -66,12 +66,16 @@ export const observabilityTables = {
     status: literalUnion(OperationKeyStatusValues),
     resultHash: v.optional(v.string()),
     resultJson: v.optional(v.string()),
+    // For tool.procure only: resultHash retains the original completion digest;
+    // resultJson becomes a content-free replay result after this timestamp.
+    contentExpiredAt: v.optional(v.number()),
     effectRefs: v.array(v.string()),
     retryAfter: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index('by_actor_operation_key', ['actorRef', 'operationName', 'key'])
+    .index('by_operationName_contentExpiredAt_createdAt', ['operationName', 'contentExpiredAt', 'createdAt'])
     .index('by_scope_key', ['scope', 'key']),
 
   marketplaceMetricDays: defineTable({

@@ -27,7 +27,8 @@ export async function completeProviderConsequenceHandler(
   const observationJson = stableStringify(observation as StableHashValue)
   const observationDigest = canonicalDigest(observation as StableHashValue)
   if (row.state === 'completed') {
-    return row.observationDigest === observationDigest && row.observationJson === observationJson
+    return row.observationDigest === observationDigest
+      && (row.contentExpiredAt !== undefined || row.observationJson === observationJson)
       ? { kind: 'completed' as const }
       : { kind: 'unavailable' as const }
   }

@@ -23,6 +23,7 @@ import { CallOutputSection, CallRequestSection, CallTechnicalRecord } from './Ca
 import { CallReuseActions } from './CallReuseActions'
 import { CallSummarySection } from './CallSummarySection'
 import { PaidCallReportControl } from './PaidCallReportControl'
+import { CallFeedbackControl } from './CallFeedbackControl'
 import { machineLabel } from './call-receipt-format'
 import './ReceiptComposition.css'
 
@@ -115,6 +116,8 @@ export function CallStatusFoundView({
       <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
       <CallRequestSection input={result.previousInput} />
       {result.result === undefined ? null : <CallOutputSection result={result.result} />}
+      {result.ownerContext != null && result.result?.kind === 'completed'
+        ? <CallFeedbackControl key={result.callRef} callRef={result.callRef} /> : null}
       {receiptView.complete ? (
         <CallReuseActions
           key={receiptView.callRef}

@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 const clerkAuth = vi.hoisted(() => ({ orgId: null as string | null, isLoaded: true }))
+const reviewAccess = vi.hoisted(() => ({ error: null as Error | null }))
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof ClerkModule>()),
@@ -18,6 +19,10 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   useAuth: () => clerkAuth,
 }))
 vi.mock('@/components/ae/command-panel', () => ({ AeCommandPanel: () => null }))
+vi.mock('convex/react', () => ({ useQuery: () => {
+  if (reviewAccess.error !== null) throw reviewAccess.error
+  return { kind: 'allowed', role: 'support' }
+} }))
 vi.mock('@/components/ae/layout/AeNetworkHealthIndicator', () => ({
   AeNetworkHealthBanner: () => null,
   AeNetworkHealthIndicator: () => null,
@@ -44,6 +49,7 @@ import {
 import type { AdminCallView } from '@/lib/operator/admin-console/views'
 
 afterEach(() => {
+  reviewAccess.error = null
   cleanup()
   clerkAuth.orgId = null
   clerkAuth.isLoaded = true
@@ -114,6 +120,16 @@ function renderCallPage(view: AdminCallView = uncertainView) {
 }
 
 describe('/admin/calls/$callRef', () => {
+  it('preserves the Call receipt after a review access failure and retries only review access', () => {
+    reviewAccess.error = new Error('injected_review_access_rejection')
+    renderCallPage()
+    expect(screen.getByText('Content review access is unavailable.')).toBeTruthy()
+    expect(screen.getAllByText(callRefText).length).toBeGreaterThan(0)
+    reviewAccess.error = null
+    fireEvent.click(screen.getByRole('button', { name: 'Retry content review access' }))
+    expect(screen.queryByText('Content review access is unavailable.')).toBeNull()
+    expect(screen.getAllByText(callRefText).length).toBeGreaterThan(0)
+  })
   it('shows the whole answer subtotal and its unpriced Jev request separately from Call money', () => {
     const requests = [
       { requestRef: 'sdk:one:0', source: 'openrouter' as const, purpose: 'initial' as const, requestedModel: 'test/model', model: 'test/actual',

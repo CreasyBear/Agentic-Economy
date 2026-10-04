@@ -6,6 +6,7 @@ import '../../setup/jsdom-platform'
 
 import { CallOutputSection } from '@/components/ae/call-receipt/CallTechnicalRecord'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
+import type { JsonValue } from '@/modules/capability-contract/public'
 import { CallReceiptIssue } from '@/components/ae/call-receipt/CallReceiptPrimitives'
 import type { CallIssueView } from '@/modules/capability-execution/call-receipt-view'
 
@@ -34,7 +35,7 @@ describe('CallReceiptIssue financial evidence', () => {
 
 
 describe('Call output reuse', () => {
-  const completed = (output: Extract<CallResult, { kind: 'completed' }>['output']): CallResult => ({
+  const completed = (output: JsonValue): CallResult => ({
     kind: 'completed', callRef: 'call:output', toolRef: 'tool:output', evidenceHash: 'sha256:output', output,
     usage: { usageRef: 'usage:output', observedAt: 1, chargeState: 'paid', amount: { currency: 'AUD', units: '1', exponent: 2 }, priceDigest: 'sha256:price' },
   })

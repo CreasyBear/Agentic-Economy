@@ -85,6 +85,7 @@ export type ReceiptViewProps = Readonly<{
 }>
 
 export const ADMIN_ACTION_COPY = {
+  review_call_content: 'Review Call content',
   set_business_suppression: 'Change Business suppression',
   close_removal_dispute: 'Close removal dispute',
   grant_admin_membership: 'Grant Admin membership',
@@ -97,6 +98,7 @@ export const ADMIN_ACTION_COPY = {
 } satisfies Record<AdminCommandAction, string>
 
 export const ADMIN_REASON_OPTIONS = {
+  review_call_content: ['alpha_quality', 'failure_investigation'],
   set_business_suppression: ['policy_violation', 'legal_notice', 'provider_request', 'fraud_suspected', 'suppression_lifted_after_review'],
   close_removal_dispute: ['upheld', 'refused', 'withdrawn_by_requester'],
   grant_admin_membership: ['onboarding', 'role_change'],
@@ -108,6 +110,8 @@ export const ADMIN_REASON_OPTIONS = {
   change_treasury_thresholds: ['threshold_update', 'correction'],
 } as const satisfies { [A in AdminCommandAction]: readonly AdminReasonCodeByAction[A][] }
 export const ADMIN_REASON_LABELS: Record<AdminReasonCodeByAction[AdminCommandAction], string> = {
+  alpha_quality: 'Improve alpha quality',
+  failure_investigation: 'Investigate a failure',
   policy_violation: 'Policy violation',
   legal_notice: 'Legal notice',
   provider_request: 'Provider request',
@@ -153,6 +157,7 @@ const sharedCommand = {
 }
 
 export const adminCommandRequestSchema = z.discriminatedUnion('action', [
+  z.strictObject({ ...sharedCommand, action: z.literal('review_call_content'), input: z.strictObject({ callRef: z.string().min(1).max(256) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.review_call_content) }),
   z.strictObject({ ...sharedCommand, expectedStateDigest: z.string().min(1), action: z.literal('set_payments_paused'), input: z.strictObject({ environment: z.enum(['sandbox', 'production']), paused: z.boolean() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.set_payments_paused) }),
   z.strictObject({ ...sharedCommand, expectedStateDigest: z.string().min(1), action: z.literal('change_treasury_thresholds'), input: z.strictObject({ environment: z.enum(['sandbox', 'production']), lowWaterUnits: z.string(), targetFloatUnits: z.string() }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.change_treasury_thresholds) }),
   z.strictObject({ ...sharedCommand, action: z.literal('set_business_suppression'), input: z.strictObject({ businessId: z.string().min(1), intent: z.enum(['suppress', 'unsuppress']) }), reasonCode: z.enum(ADMIN_REASON_OPTIONS.set_business_suppression) }),
@@ -190,6 +195,7 @@ export function parseAdminProposalCommand(action: AdminCommandAction, commandJso
 }
 
 export const ADMIN_SUCCESS_COPY = {
+  call_content_reviewed: 'Call content review recorded.',
   business_suppressed: 'Business suppressed',
   business_unsuppressed: 'Business suppression lifted',
   dispute_closed: 'Removal dispute closed',

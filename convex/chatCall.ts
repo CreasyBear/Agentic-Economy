@@ -88,6 +88,7 @@ export const readOwnerChatCards = query({
           const quote = await ctx.db.query('capabilityQuotes')
             .withIndex('by_quoteRef', q => q.eq('quoteRef', quoteRef)).unique()
           if (quote === null || quote.state !== 'consumed' || quote.consumedCallRef !== callRef
+            || quote.contentExpiredAt !== undefined || quote.normalizedInputJson === undefined
             || quote.accountRef !== call.ownerId || quote.principalId !== call.principalId
             || quote.credentialId !== call.credentialId || quote.grantRef !== call.grantRef
             || quote.grantGeneration !== call.grantGeneration
@@ -135,7 +136,8 @@ export const readOwnerChatCards = query({
               : call.result?.kind === 'refused' && call.result.code === 'authority_denied' ? 'failed' : 'pending'
           result.push({
             kind: 'result', turnRef: turn.turnRef, callRef, status: call.state,
-            detail: call.result?.kind === 'completed' ? JSON.stringify(call.result.output)
+            detail: call.result?.kind === 'completed' ? ('output' in call.result
+              ? JSON.stringify(call.result.output) : 'Call content has expired. The purchase record remains available.')
               : call.result?.kind === 'refused' ? call.result.code
                 : call.state === 'reconciliation_required' ? 'Payment or delivery remains uncertain. Check Call status before retrying.'
                   : 'The Call is awaiting a confirmed result.',
