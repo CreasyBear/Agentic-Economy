@@ -3971,3 +3971,69 @@ keeps the public readiness response generic. A logging failure cannot change
 the refusal. This uses the existing host logs and adds no diagnostic endpoint,
 access grant, dependency or storage service. The regression proves private
 values stay out of both outputs and invalid configuration never starts a probe.
+
+## Stage 62 — deployed alpha learning and bounded content retention
+
+Joel approved 30-day content retention with disclosed founder review, usefulness
+feedback and 90-day content-free metrics on 4 October 2026. The implemented
+contracts and design decisions are in
+[platform data privacy](designs/platform-data-privacy.md). Eligible Call inputs
+and outputs expire after final resolution; unresolved delivery, money, reports
+and Provider obligations hold the required content. Chat and secondary copies
+have bounded cleanup. Original financial identities, digests and records survive
+expiry, and an expired completed Call replays without making another purchase.
+
+Founder review uses the existing signed admin command and MFA, restricts access
+to owner-admin membership, audits the selected Call and closes after ten minutes.
+Payloads stay out of command receipts and audit records. Owner feedback captures
+usefulness and a structured reason without free text. The existing Admin
+overview samples recent feedback, failed Calls and selection failures, states
+its sample limits and isolates learning-panel errors from operational records.
+Chat, Call approval, Tool input disclosure, Agent connection and Privacy explain
+the alpha policy before content is supplied. Application cleanup does not claim
+to expire backup copies or independently held Provider data.
+
+[PR #330](https://github.com/CreasyBear/Agentic-Economy/pull/330) merges as
+`be3583ed9fdc51302966d403cae38d098392b2d7`, with an identical tree to tested head
+`ded4955113554927f9d392debb288db80f21a748`. `npm run check` and `npm run gate`
+pass under Node 22/npm 11.5.1. The gate includes 8,442 unit tests, 2,884
+integration tests, type/import/SEO proofs, 16 browser journeys, 18 accessibility
+cases, public build and reproducible CLI packaging. Existing skips and todos
+remain outside this proof. Focused behavior verifies unresolved holds,
+late-worker restoration refusal, concurrent feedback, Account and role
+separation, audited replay, and learning-panel failure/retry isolation.
+
+The isolated native Convex drill passes with 25 scheduled batches across initial
+and repeat sweeps. It removes aged Call and Quote payloads, x402 and Provider
+observations, procurement cache copies, chat prompts, five 420 KB replies and
+agent embeddings. Current messages and pending Calls remain; Purchase resolution
+and Provider obligation JSON remain byte-for-byte unchanged. A native cursor
+failure found during the drill is fixed by preserving the original cutoff across
+continuations. A clock-advancing regression protects this behavior, and the
+repeated native sweep leaves the result unchanged.
+
+Production backend deployment completes at 08:43:53 UTC. Vercel Production
+`dpl_FcnktcyKyPpBRLPCES3SaeYHznF7` serves the same merged revision, confirmed
+through `/api/v1/release`. Platform workload identities are provisioned through
+their existing command. Native readback at 08:49:17 UTC confirms every scheduled
+retention continuation succeeded with a stable cutoff. The before/after census
+has no eligible old content and preserves one chat thread and two recent turns;
+Quotes, Calls, x402 attempts, Provider observations, usefulness feedback and
+selection events remain zero. The production run proves scheduler admission and
+continuation, while actual deletion is proved by the isolated drill.
+
+Ordered treasury observation, reconciliation and payment readiness refresh
+produce HTTP 200 from `/api/ready`; the signed-in Admin page reports Ready and
+successfully refreshes its empty Alpha learning sample. Chat and Privacy show
+the deployed disclosure. Screening remains explicitly deferred under the
+approved alpha policy. The catalogue indicator remains stale. An earlier
+temporary treasury-evidence expiry refused readiness; the successful refresh is
+point-in-time evidence, not a claim of continuous availability.
+
+The production model credential `OPENROUTER_API_KEY` is absent. The two attempted
+chat turns therefore do not establish paid delivery, and the native census
+confirms zero production purchases. The authorized 20-Call exercise, paid
+failure/replay drills, financial reconciliation and founder review/feedback on
+a real production Call remain open. No synthetic production Call is created to
+claim those checks. Backup retention, independent Provider retention and launch
+approval remain separately scoped and unverified by this release.
