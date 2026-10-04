@@ -443,7 +443,44 @@ describe('agent-access caller route continuation', () => {
     expect(validateAgentAccessSearch({ grantRef: 'grant:one', userCode: [] })).toEqual({ requestInvalid: true })
     expect(validateAgentAccessSearch({ grantRef: '   ' })).toEqual({ requestInvalid: true })
     expect(validateAgentAccessSearch({ callRef: ['call:one'] })).toEqual({ callInvalid: true })
+    expect(validateAgentAccessSearch({ callRef: 'call:bare' })).toEqual({ callRef: 'call:bare', callInvalid: true })
+    expect(validateAgentAccessSearch({ caller: 'not-a-principal', callRef: 'call:malformed-caller' }))
+      .toEqual({ callRef: 'call:malformed-caller', callInvalid: true })
+    expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, callRef: 'call:caller' }))
+      .toEqual({ caller: PRINCIPAL_ID, callRef: 'call:caller' })
+    expect(validateAgentAccessSearch({ grantRef: 'grant:one', callRef: 'call:grant', state: 'opaque' }))
+      .toEqual({ grantRef: 'grant:one', callRef: 'call:grant', state: 'opaque' })
+    expect(validateAgentAccessSearch({ caller: 'not-a-principal', grantRef: 'grant:one', callRef: 'call:request' }))
+      .toEqual({ callRef: 'call:request', grantRef: 'grant:one' })
+    expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, grantRef: 'grant:one', callRef: 'call:caller-and-request' }))
+      .toEqual({ caller: PRINCIPAL_ID, callRef: 'call:caller-and-request', grantRef: 'grant:one' })
+    expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, grantRef: 'grant:one', userCode: 'user:two', callRef: 'call:conflict' }))
+      .toEqual({ caller: PRINCIPAL_ID, callRef: 'call:conflict', callInvalid: true, requestInvalid: true })
     expect(validateAgentAccessSearch({ grantRef: 'grant:one', callRef: 'call:one', state: 'opaque' })).toEqual({ grantRef: 'grant:one', callRef: 'call:one', state: 'opaque' })
+  })
+
+  it('blocks an incomplete Call link without selecting another Call or offering new actions', () => {
+    const active: AgentCredentialSource = { ...caller, key: { ...caller.key, authorityMode: 'approval_required' },
+      grant: { ...caller.grant!, authorityMode: 'approval_required' } }
+    const canonical = canonicalAgentRecord([active])
+    const otherCall = { callRef: 'call:other', credentialRef: KEY_ID, toolRef: TOOL_REF, createdAt: 1, updatedAt: 2 }
+    const directoryWithOtherCall = projectAgentDirectory([active], [canonical], [], [{ principalRef: PRINCIPAL_ID,
+      dataState: 'source', activityIsDone: true, liveCalls: [{ ...otherCall, phase: 'running' }], activity: [] }])
+    const readDirectory = vi.fn(async () => directoryWithOtherCall)
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory: directoryWithOtherCall }
+    routeHarness.search = validateAgentAccessSearch({ callRef: 'call:original' })
+    installServerFns(readDirectory)
+
+    renderRoute()
+
+    expect(screen.getByText('This Call link is incomplete or invalid. Open the original link from your Agent. Another Call will not be selected.')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'View live Call' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Return to selected Tool' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /connect|purchase|buy/iu })).toBeNull()
+    expect(screen.queryByTestId('agent-install')).toBeNull()
+    expect(screen.queryByTestId('agent-console')).toBeNull()
+    expect(readDirectory).not.toHaveBeenCalled()
+    expect(routeHarness.navigate).not.toHaveBeenCalled()
   })
 
   it('keeps a pending request and consent independent of the Agent directory', async () => {

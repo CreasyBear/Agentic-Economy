@@ -5,6 +5,7 @@ import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/arc/button/button'
+import { MultiStepForm } from '@/components/arc/blocks/multi-step-form/multi-step-form'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import {
   NATIVE_MCP_CLIENTS,
@@ -31,8 +32,19 @@ export function AeAssistantInstallFunnel({
   const baseUrl = trimTrailingSlashes(canonicalBaseUrl)
   const clientMounted = useClientMounted()
   const [clientId, setClientId] = useState<NativeMcpClientId>()
-  const commandHeading = useRef<HTMLHeadingElement>(null)
+  const stepHeading = useRef<HTMLDivElement>(null)
   const client = clientId === undefined ? undefined : nativeMcpClient(clientId)
+
+  // Requires an explicit local app selection. Ensures only that choice is
+  // marked complete; setup instructions never prove approval or authentication.
+  // The existing optional check observes access and never completes this form.
+  const chooseClient = (id: NativeMcpClientId | undefined) => {
+    setClientId(id)
+    requestAnimationFrame(() => {
+      const legend = stepHeading.current?.querySelector('legend')
+      if (legend) { legend.tabIndex = -1; legend.focus() }
+    })
+  }
 
   return (
     <AeSection
@@ -46,37 +58,34 @@ export function AeAssistantInstallFunnel({
           <p className="arc-agent-install-copy">Your Tool stays selected through setup. Keep its input in your Agent’s task; setup creates no Call.</p>
         </div>
       )}
-      <ol aria-label="Agent connection steps" className="arc-agent-install-steps">
-        <li className="arc-agent-install-step">
-          <span className="arc-agent-install-number" aria-hidden="true">1</span>
+      <div ref={stepHeading}>
+        <MultiStepForm
+          progressLabel="Agent connection steps"
+          activeStep={client === undefined ? 'app' : 'connect'}
+          steps={[
+            { id: 'app', title: 'Choose your Agent app', description: 'Use your existing app. No new Agent or task needs to be created here.' },
+            { id: 'connect', title: 'Connect and approve access', description: 'Run the setup commands in your app, then follow its approval link.' },
+          ]}
+          completedSteps={client === undefined ? [] : [{
+            id: 'app', title: 'Agent app', detail: client.displayName,
+            disabled: !clientMounted, onEdit: () => chooseClient(undefined),
+          }]}
+        >
           <div className="arc-agent-install-step-body">
-            <h3 className="arc-agent-install-title">Choose your Agent app</h3>
+          {client === undefined ? (
             <div className="arc-agent-client-choices" role="group" aria-label="Agent app">
               {NATIVE_MCP_CLIENTS.map(option => (
-                <Button key={option.id} type="button" variant="secondary" disabled={!clientMounted} aria-pressed={clientId === option.id}
-                  onClick={() => { setClientId(option.id); requestAnimationFrame(() => commandHeading.current?.focus()) }}>
+                <Button key={option.id} type="button" variant="secondary" disabled={!clientMounted}
+                  onClick={() => chooseClient(option.id)}>
                   {option.displayName}
                 </Button>
               ))}
             </div>
-            <p className="arc-agent-install-copy">Use your existing app. No new Agent or task needs to be created here.</p>
-          </div>
-        </li>
-        <li className="arc-agent-install-step">
-          <span className="arc-agent-install-number" aria-hidden="true">2</span>
-          <div className="arc-agent-install-step-body">
-            <h3 ref={commandHeading} tabIndex={-1} className="arc-agent-install-title">Connect and approve access</h3>
-            {client === undefined ? <p className="arc-agent-install-copy">Choose an app above to see its exact setup command.</p> : <>
+          ) : <>
               <AeCopyCommand key={client.id} label={`${client.displayName} MCP command`} code={client.setupCommand(baseUrl)} comfortable actionLabel="Copy setup commands" />
               <p className="arc-agent-install-copy">{client.authenticationInstruction}</p>
               <p className="arc-agent-install-copy">In the approval page, choose Browse only, Ask each time, or Work within limits. Your Account balance never grants permission to spend.</p>
             </>}
-          </div>
-        </li>
-        <li className="arc-agent-install-step">
-          <span className="arc-agent-install-number" aria-hidden="true">3</span>
-          <div className="arc-agent-install-step-body">
-            <h3 className="arc-agent-install-title">Confirm the connection</h3>
             <p className="arc-agent-install-copy">
               {onCheckConnection === undefined
                 ? 'After approval, open Agents to follow live service progress while you continue in your existing task.'
@@ -94,8 +103,8 @@ export function AeAssistantInstallFunnel({
               </Button>
             ) : <Link to="/agent-access" search={resumeToolRef === undefined ? {} : { resumeTool: resumeToolRef }} className="arc-agent-install-help-link">Continue after approval</Link>}
           </div>
-        </li>
-      </ol>
+        </MultiStepForm>
+      </div>
       <Accordion type="single" collapsible className="arc-agent-install-alternatives">
         <AccordionItem value="manual">
           <AccordionTrigger>Connecting a custom script or another app?</AccordionTrigger>

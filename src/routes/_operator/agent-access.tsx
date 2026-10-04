@@ -15,6 +15,7 @@ const canonicalToolRefPattern = /^operation:v1:[0-9a-f]{64}$/u
 
 export function validateAgentAccessSearch(search: Record<string, unknown>): AgentAccessSearch {
   const caller = typeof search.caller === 'string' ? search.caller.trim() : undefined
+  const callerValid = caller !== undefined && canonicalPrincipalIdPattern.test(caller)
   const resumeTool = typeof search.resumeTool === 'string' ? search.resumeTool.trim() : undefined
   const setup = search.setup === 'choose' || search.setup === 'oauth' ? search.setup : undefined
   const grantRef = typeof search.grantRef === 'string' && search.grantRef.trim().length >= 3 && search.grantRef.length <= 160 ? search.grantRef.trim() : undefined
@@ -22,12 +23,15 @@ export function validateAgentAccessSearch(search: Record<string, unknown>): Agen
   const requestInvalid = search.grantRef !== undefined && search.userCode !== undefined
     || search.grantRef !== undefined && grantRef === undefined || search.userCode !== undefined && userCode === undefined
   const callRef = typeof search.callRef === 'string' && /^[a-zA-Z0-9_:.-]{1,500}$/u.test(search.callRef) ? search.callRef : undefined
+  const hasExactlyOneValidOnboardingLocator = (grantRef !== undefined) !== (userCode !== undefined)
+  const hasValidCallLocator = !requestInvalid && (callerValid || hasExactlyOneValidOnboardingLocator)
+  const callInvalid = search.callRef !== undefined && (callRef === undefined || !hasValidCallLocator)
   return {
-    ...(caller !== undefined && canonicalPrincipalIdPattern.test(caller) ? { caller } : {}),
+    ...(callerValid ? { caller } : {}),
     ...(resumeTool !== undefined && canonicalToolRefPattern.test(resumeTool) ? { resumeTool } : {}),
     ...(setup === undefined ? {} : { setup }),
     ...(callRef === undefined ? {} : { callRef }),
-    ...(search.callRef !== undefined && callRef === undefined ? { callInvalid: true as const } : {}),
+    ...(callInvalid ? { callInvalid: true as const } : {}),
     ...(requestInvalid ? { requestInvalid: true as const } : {
       ...(grantRef === undefined ? {} : { grantRef }), ...(userCode === undefined ? {} : { userCode }),
       ...((grantRef !== undefined || userCode !== undefined) && typeof search.state === 'string' && search.state.length <= 2048 ? { state: search.state } : {}),

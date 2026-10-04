@@ -37,11 +37,12 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
   }
   const chooseConnection = () => moveSetup('oauth')
   const hasRequest = search.grantRef !== undefined || search.userCode !== undefined || search.requestInvalid === true
-  const requestBlocked = search.requestInvalid === true || vm.onboarding?.kind === 'refused' && vm.onboarding.reason !== 'not_found'
+  const callBlocked = search.callInvalid === true
+  const requestBlocked = callBlocked || search.requestInvalid === true || vm.onboarding?.kind === 'refused' && vm.onboarding.reason !== 'not_found'
   const requestAgent = vm.onboarding?.kind === 'request' ? vm.onboarding.principalRef : search.caller
   const requestFinished = vm.onboarding?.kind === 'request' && (vm.onboarding.phase === 'expired' || vm.onboarding.phase === 'denied')
   const showProgress = !requestBlocked && (!hasRequest || requestAgent !== undefined) && (!requestFinished || 'call' in vm.firstUse)
-  const showInstall = connectMode !== 'closed' || (!hasRequest && directory.items.length === 0 && search.caller === undefined)
+  const showInstall = !callBlocked && (connectMode !== 'closed' || (!hasRequest && directory.items.length === 0 && search.caller === undefined))
 
   return (
     <AeOperatorPage
@@ -54,7 +55,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
         <p className="arc-agent-live-status" role="status" data-delayed={vm.liveUpdates === 'delayed' || undefined}>
           {vm.liveUpdates === 'delayed' ? 'Updates are delayed. Last confirmed progress is retained; checking again automatically.' : 'Live service updates every few seconds. Keep working in your Agent; this page follows recorded access and Calls.'}
         </p>
-        {search.callInvalid ? <p className="arc-agent-first-use-fact" role="status">This Call reference is invalid. Open the original Call link from your Agent. Another Call will not be selected.</p> : null}
+        {callBlocked ? <p className="arc-agent-first-use-fact" role="status">This Call link is incomplete or invalid. Open the original link from your Agent. Another Call will not be selected.</p> : null}
         {directory.details.some(detail => detail.usageUnavailable) ? <p className="arc-agent-first-use-fact">Monthly usage is unavailable for this reporting window. Access and the selected Call continue to update.</p> : null}
         {vm.directoryError === undefined ? null : (
           <HomeDirectoryRecoveryAlert
@@ -73,7 +74,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
             onRetry={vm.onLifecycleRetry}
           />
         )}
-        {hasRequest ? <HomeOnboardingRequestSection search={search} onCheck={vm.onDirectoryRetry} checking={vm.loading}
+        {hasRequest && !callBlocked ? <HomeOnboardingRequestSection search={search} onCheck={vm.onDirectoryRetry} checking={vm.loading}
           {...(vm.onboarding === undefined ? {} : { request: vm.onboarding })} /> : null}
         {showInstall ? (
           <div ref={setupRef} tabIndex={-1} className="arc-market arc-agent-install-region" aria-label="OAuth and MCP connection steps">
@@ -135,7 +136,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
             onLoadMore={vm.loadMore}
           />
         )}
-        {directory.items.length === 0 || showInstall ? null : (
+        {callBlocked || directory.items.length === 0 || showInstall ? null : (
           <HomeAddAnotherAgent showSetup={false} toggleLabel="Connect an Agent" onToggle={chooseConnection} installPanel={null} />
         )}
         <div className="arc-agent-home-actions"><Link to="/owner/settings/agent-keys" className="arc-agent-install-help-link">Manage Agent keys</Link></div>

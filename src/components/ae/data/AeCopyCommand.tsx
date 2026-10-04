@@ -24,6 +24,16 @@ type AeCopyCommandProps = Readonly<{
   actionLabel?: string
 }>
 
+/** Resolve labels only; the secret getter and clipboard operation stay lazy. */
+function commandPresentation(label: string, actionLabel: string | undefined, copiedHint: string | undefined, status: ReturnType<typeof useClipboardCopy>['status'], copied: boolean) {
+  return {
+    copiedMessage: copied ? (copiedHint ?? `${label} copied.`) : status === 'failed' ? 'Copy failed. Select the command and copy it manually.' : '',
+    buttonVariant: actionLabel === undefined ? 'ghost' as const : 'primary' as const,
+    buttonLabel: copied ? `${label} copied` : actionLabel ?? `Copy ${label}`,
+    actionText: actionLabel === undefined ? undefined : copied ? 'Copied' : actionLabel,
+  }
+}
+
 /** Product-level command treatment. `$ORIGIN` resolves only when the user copies. */
 export function AeCopyCommand({
   label,
@@ -46,11 +56,7 @@ export function AeCopyCommand({
     timeout: copyTimeout,
   })
 
-  const copiedMessage = copied
-    ? (copiedHint ?? `${label} copied.`)
-    : status === 'failed'
-      ? 'Copy failed. Select the command and copy it manually.'
-      : ''
+  const presentation = commandPresentation(label, actionLabel, copiedHint, status, copied)
 
   return (
     <div className={cn('arc-market arc-copy-command', className)}>
@@ -59,11 +65,11 @@ export function AeCopyCommand({
           <span className="arc-copy-command-file"><FileCode2Icon size={16} aria-hidden="true" />{label}</span>
         <Button
           type="button"
-          variant={actionLabel === undefined ? 'ghost' : 'primary'}
+          variant={presentation.buttonVariant}
           size="md"
           className="arc-copy-command-action"
           data-with-label={actionLabel !== undefined || undefined}
-          aria-label={copied ? `${label} copied` : actionLabel ?? `Copy ${label}`}
+          aria-label={presentation.buttonLabel}
           onClick={() => { void copy() }}
         >
           <span className="relative size-4">
@@ -82,7 +88,7 @@ export function AeCopyCommand({
               )}
             />
           </span>
-          {actionLabel === undefined ? null : <span>{copied ? 'Copied' : actionLabel}</span>}
+          {presentation.actionText === undefined ? null : <span>{presentation.actionText}</span>}
         </Button>
         </header>
         <div className="arc-copy-command-viewport" data-prompt={comfortable && prompt || undefined}>
@@ -91,7 +97,7 @@ export function AeCopyCommand({
         </div>
       </section>
       <p role="status" aria-live="polite" className={cn('min-h-4 text-xs', status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}>
-        {copiedMessage}
+        {presentation.copiedMessage}
       </p>
     </div>
   )

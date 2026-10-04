@@ -12,7 +12,7 @@ import type { AgentKeyDraft } from './agent-key-draft'
 
 import { AgentNameField } from './components/AgentNameField'
 import { AuthorityModeRadioCards } from './components/AuthorityModeRadioCards'
-import type { ConnectAgentEnvironment, ConnectAgentIssuePhase } from './connect-agent-wizard.contracts'
+import type { ConnectAgentEnvironment, ConnectAgentIssuePhase, ConnectAgentWizardViewState } from './connect-agent-wizard.contracts'
 import {
   CONNECT_AGENT_WIZARD_LIMIT_IDS,
   CONNECT_AGENT_WIZARD_LIMIT_PLACEHOLDERS,
@@ -31,6 +31,18 @@ export interface AeConnectAgentWizardDialogProps {
   onSuccess?: (reveal: IssuedAgentAccessReveal) => void
   initialDraft?: AgentKeyDraft
   onDraftChange?: (draft: AgentKeyDraft) => void
+}
+
+/** Draft presentation only. Exact draft strings, validation, issuance and
+ * confirmation remain in the existing wizard; this mapper creates no access. */
+function wizardPresentation(view: ConnectAgentWizardViewState, step: 'access' | 'review') {
+  return {
+    pending: view.isSubmitting || view.awaitingConfirmation,
+    authorityLabel: view.authorityMode === 'read_only' ? 'Browse only' : view.authorityMode === 'approval_required' ? 'Ask each time' : 'Work within limits',
+    environmentLabel: view.environment === 'sandbox' ? 'Sandbox' : 'Production',
+    spendingLabel: view.environment === 'sandbox' ? 'A$1.00 per Call · A$5.00 daily · A$20.00 monthly' : `A$${view.perCallAmount.trim()} per Call · A$${view.dailyAmount.trim()} daily · A$${view.monthlyAmount.trim()} monthly`,
+    submitLabel: view.isSubmitting ? 'Issuing key…' : view.awaitingConfirmation ? 'Confirm this issuance' : step === 'access' ? 'Review access' : 'Issue key',
+  }
 }
 
 export function AeConnectAgentWizardDialog({
@@ -58,7 +70,7 @@ export function AeConnectAgentWizardDialog({
   const reviewHeading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { if (!open) setStep('access') }, [open])
   useEffect(() => { if (step === 'review') reviewHeading.current?.focus() }, [step])
-  const authorityLabel = view.authorityMode === 'read_only' ? 'Browse only' : view.authorityMode === 'approval_required' ? 'Ask each time' : 'Work within limits'
+  const presentation = wizardPresentation(view, step)
 
   return (
     <Drawer
@@ -103,7 +115,7 @@ export function AeConnectAgentWizardDialog({
 
             {step === 'access' ? <><AgentNameField
               value={view.name}
-              disabled={view.isSubmitting || view.awaitingConfirmation}
+              disabled={presentation.pending}
               invalid={view.nameInvalid}
               inputRef={wizard.nameInputRef}
               onChange={wizard.handleNameChange}
@@ -111,7 +123,7 @@ export function AeConnectAgentWizardDialog({
 
             <AuthorityModeRadioCards
               value={view.authorityMode}
-              disabled={view.isSubmitting || view.awaitingConfirmation}
+              disabled={presentation.pending}
               onChange={wizard.setAuthorityMode}
             />
 
@@ -124,7 +136,7 @@ export function AeConnectAgentWizardDialog({
                   daily: view.dailyAmount,
                   monthly: view.monthlyAmount,
                 }}
-                disabled={view.isSubmitting || view.awaitingConfirmation}
+                disabled={presentation.pending}
                 className="arc-connect-agent-limit-grid"
                 placeholders={CONNECT_AGENT_WIZARD_LIMIT_PLACEHOLDERS}
                 sandboxDisplay={CONNECT_AGENT_WIZARD_SANDBOX_DISPLAY}
@@ -139,9 +151,9 @@ export function AeConnectAgentWizardDialog({
             </> : <div className="arc-connect-agent-review">
               <h3 ref={reviewHeading} tabIndex={-1}>Review access for {view.name.trim()}</h3>
               <dl>
-                <div><dt>Environment</dt><dd>{view.environment === 'sandbox' ? 'Sandbox' : 'Production'}</dd></div>
-                <div><dt>Authority</dt><dd>{authorityLabel}</dd></div>
-                <div><dt>Spending ceiling</dt><dd>{view.environment === 'sandbox' ? 'A$1.00 per Call · A$5.00 daily · A$20.00 monthly' : `A$${view.perCallAmount.trim()} per Call · A$${view.dailyAmount.trim()} daily · A$${view.monthlyAmount.trim()} monthly`}</dd></div>
+                <div><dt>Environment</dt><dd>{presentation.environmentLabel}</dd></div>
+                <div><dt>Authority</dt><dd>{presentation.authorityLabel}</dd></div>
+                <div><dt>Spending ceiling</dt><dd>{presentation.spendingLabel}</dd></div>
               </dl>
               <p>Issuing a key creates access. It makes no purchase and does not confirm that your Agent has authenticated. Save the secret next, then return to your task.</p>
             </div>}
@@ -153,12 +165,12 @@ export function AeConnectAgentWizardDialog({
               type="button"
               variant="secondary"
               size="md"
-              disabled={view.isSubmitting || view.awaitingConfirmation}
+              disabled={presentation.pending}
               onClick={() => wizard.handleOpenChange(false)}
             >
               Cancel
             </Button>
-            {step === 'review' ? <Button type="button" variant="secondary" disabled={view.isSubmitting || view.awaitingConfirmation} onClick={() => { setStep('access'); requestAnimationFrame(() => wizard.nameInputRef.current?.focus()) }}>Edit access</Button> : null}
+            {step === 'review' ? <Button type="button" variant="secondary" disabled={presentation.pending} onClick={() => { setStep('access'); requestAnimationFrame(() => wizard.nameInputRef.current?.focus()) }}>Edit access</Button> : null}
             <Button
               type="submit"
               variant="primary"
@@ -166,7 +178,7 @@ export function AeConnectAgentWizardDialog({
               disabled={view.isSubmitting}
               aria-busy={view.isSubmitting || undefined}
             >
-              {view.isSubmitting ? 'Issuing key…' : view.awaitingConfirmation ? 'Confirm this issuance' : step === 'access' ? 'Review access' : 'Issue key'}
+              {presentation.submitLabel}
             </Button>
           </footer>
         </form>

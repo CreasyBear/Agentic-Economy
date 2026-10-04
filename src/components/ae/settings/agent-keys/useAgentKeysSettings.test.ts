@@ -200,7 +200,7 @@ describe('Agent keys settings revocation', () => {
     const view = render(createElement(AeAgentAccessHome, {
       canonicalBaseUrl: 'https://example.test', initialDirectory: directory, search: {},
     }))
-    expect(screen.getAllByRole('list', { name: 'Agent connection steps' })).toHaveLength(1)
+    expect(screen.getAllByRole('navigation', { name: 'Agent connection steps' })).toHaveLength(1)
     for (const name of ['Codex', 'Claude Code', 'Cursor']) expect(screen.getByRole('button', { name })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Connecting a custom script or another app?' }))
     const manual = await screen.findByRole('link', { name: 'Issue a manual key' })
@@ -213,7 +213,7 @@ describe('Agent keys settings revocation', () => {
     }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Connect an Agent' })[0]!)
     expect(calls.setup).toHaveBeenCalledWith('oauth')
-    expect(screen.getAllByRole('list', { name: 'Agent connection steps' })).toHaveLength(1)
+    expect(screen.getAllByRole('navigation', { name: 'Agent connection steps' })).toHaveLength(1)
     expect(document.activeElement?.getAttribute('aria-label')).toBe('OAuth and MCP connection steps')
     view.unmount()
   })

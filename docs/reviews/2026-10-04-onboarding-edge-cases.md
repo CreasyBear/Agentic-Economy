@@ -166,3 +166,13 @@ NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npm test -- \
   tests/unit/observability/private-route-safety.test.ts \
   --no-file-parallelism
 ```
+
+## Coordinator integration and genuine Arc presenter review
+
+The managed follow-up branch integrates this commit with current main PR341. The original findings above are retained as history. Actual MultiStepForm now composes the app/install and manual-key decision regions; actual Stepper composes recorded request/first-use stages. Stock Agent Run, integrations and webhooks demos are not bound to onboarding because their simulated actions are not these domain facts. The new block adoption is recorded in the existing source/action/coverage inventories.
+
+Additional reviewed fixes: a Call reference without a valid caller or one valid request locator blocks the whole continuation; a valid caller plus request locator remains supported. Raw OAuth state is scrubbed in telemetry fields and assignments without treating it as a fragment access key. The recorded grant is the consent authority; the untrusted raw consent body enters only the reservation digest.
+
+The final boundary requires server ownership and exact selectors, ensures original-Call continuity and observed facts only, keeps funding/authority/delivery/receipt distinct, and refuses invalid identity rather than substituting another Call. Observational retries issue no credential and purchase nothing. Existing issuance CAS and original-Call replay protections remain intact. Same-file pure presentation projections and one choice/Stepper region remove new render complexity without moving async behavior or adding a service/controller.
+
+Focused coordinator suite:22 files/377 cases pass. Real Stepper14-case phase/error matrix,6-case installation command/focus matrix and45-case final first-use parity pass. React Doctor full equal-path comparison69→64 retains five purposeful/false-positive reset/finally heuristics; new render complexity is fixed, no diagnostic is suppressed. Whole gate and exact web/backend deployment evidence belong to the following release record. Hosted Codex/Claude Code/Cursor OAuth and visual/responsive acceptance remain open.

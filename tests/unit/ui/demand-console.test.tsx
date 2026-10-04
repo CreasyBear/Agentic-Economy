@@ -865,17 +865,19 @@ describe('assistant access components', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example/" />)
 
-    expect(screen.getByRole('heading', { name: 'Choose your Agent app' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Choose your Agent app' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
     expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
     expect(document.body.textContent).toContain('codex mcp login agentic-economy')
     expect(screen.getByText(/Only a delivered Tool result and receipt completes first use/u)).toBeTruthy()
     expect(screen.queryByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeNull()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Agent app' }))
     fireEvent.click(screen.getByRole('button', { name: 'Claude Code' }))
     expect(screen.getByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeTruthy()
     expect(screen.getByText(/open \/mcp, select agentic-economy, then choose Authenticate/u)).toBeTruthy()
     expect(screen.queryByText('codex mcp login agentic-economy')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Agent app' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cursor' }))
     expect(screen.getByText('cursor --add-mcp \'{"name":"agentic-economy","url":"https://ae.example/mcp"}\'')).toBeTruthy()
     expect(screen.getByText(/follow its OAuth prompt/u)).toBeTruthy()
@@ -883,6 +885,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('button', { name: 'Create agent access key' })).toBeNull()
     expect(document.body.textContent).not.toMatch(/npm install|ae doctor|ae connect|AE_API_KEY=/u)
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Agent app' }))
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
     const copyButton = screen.getByRole('button', { name: 'Copy setup commands' })
     fireEvent.click(copyButton)
@@ -902,6 +905,7 @@ describe('assistant access components', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
     expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://AE.Example:443/mcp"')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Agent app' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cursor' }))
     fireEvent.click(screen.getByRole('button', { name: 'Copy setup commands' }))
     expect(writeText).toHaveBeenCalledWith('cursor --add-mcp \'{"name":"agentic-economy","url":"https://AE.Example:443/mcp"}\'')

@@ -52,6 +52,25 @@ function operationApprovalErrorCopy(
   return 'This operation could not be verified. Refresh the list before deciding.'
 }
 
+function projectHomeFirstUse({ search, onboarding, directory, tracked, accessUnconfirmed }: {
+  search: AeAgentAccessHomeProps['search']
+  onboarding: AgentOnboardingRequest | undefined
+  directory: AgentDirectoryProjection
+  tracked: Readonly<{ caller: string; callRef: string }> | undefined
+  accessUnconfirmed: boolean
+}) {
+  const hasRequest = search.grantRef !== undefined || search.userCode !== undefined || search.requestInvalid === true
+  const caller = onboarding?.kind === 'request' ? onboarding.principalRef : search.caller
+  const blocked = search.callInvalid === true || search.requestInvalid === true || onboarding?.kind === 'refused' && onboarding.reason !== 'not_found'
+  const selectedCallRef = search.callRef ?? (tracked !== undefined && tracked.caller === caller ? tracked.callRef : undefined)
+  const firstUse = projectAgentFirstUse({ directory: blocked ? { items: [], details: [] } : directory, unavailable: accessUnconfirmed || search.callInvalid === true,
+    ...(caller === undefined ? {} : { caller }),
+    ...(selectedCallRef === undefined ? {} : { callRef: selectedCallRef }),
+    ...(search.resumeTool === undefined ? {} : { toolRef: search.resumeTool }),
+  })
+  return { hasRequest, caller, blocked, firstUse }
+}
+
 export function useAeAgentAccessHome({
   canonicalBaseUrl,
   initialDirectory,
@@ -99,11 +118,9 @@ export function useAeAgentAccessHome({
   const requestRef = useRef(onboarding)
   useEffect(() => { requestRef.current = onboarding }, [onboarding])
   const [tracked, setTracked] = useState<Readonly<{ caller: string; callRef: string }> | undefined>()
+  const { hasRequest, caller, blocked, firstUse } = projectHomeFirstUse({ search, onboarding, directory, tracked, accessUnconfirmed })
   const trackedCall = useRef(tracked)
   useEffect(() => { trackedCall.current = tracked }, [tracked])
-  const hasRequest = search.grantRef !== undefined || search.userCode !== undefined || search.requestInvalid === true
-  const caller = onboarding?.kind === 'request' ? onboarding.principalRef : search.caller
-  const blocked = search.callInvalid === true || search.requestInvalid === true || onboarding?.kind === 'refused' && onboarding.reason !== 'not_found'
   useEffect(() => { setTracked(undefined) }, [requestLocator])
   const directoryReadInFlight = useRef(false)
   const directoryPageInFlight = useRef(false)
@@ -122,12 +139,6 @@ export function useAeAgentAccessHome({
   const [approvalStatus, setApprovalStatus] = useState<string>()
   const showSetup = search.setup === 'oauth'
 
-  const selectedCallRef = search.callRef ?? (tracked !== undefined && tracked.caller === caller ? tracked.callRef : undefined)
-  const firstUse = projectAgentFirstUse({ directory: blocked ? { items: [], details: [] } : directory, unavailable: accessUnconfirmed || search.callInvalid === true,
-    ...(caller === undefined ? {} : { caller }),
-    ...(selectedCallRef === undefined ? {} : { callRef: selectedCallRef }),
-    ...(search.resumeTool === undefined ? {} : { toolRef: search.resumeTool }),
-  })
   // Requires an owner read and the exact intended Agent when selected.
   // Ensures observations only; refresh never issues access, buys or retries.
   // Invariant: one read in flight, loaded Agents retained, no stale-target apply.

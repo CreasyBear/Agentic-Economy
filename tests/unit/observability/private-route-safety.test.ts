@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  decodePrivateRecordFragment,
   encodePrivateRecordFragment,
   isTelemetryAllowedForCurrentRoute,
   readPrivateRecordAccessKey,
@@ -130,12 +131,24 @@ describe('private inquiry record telemetry safety', () => {
 describe('onboarding locator telemetry', () => {
   it('filters verification and grant locators without erasing business status', () => {
     expect(sanitizeTelemetryValue({ userCode: 'ABCD-EFGH', user_code: 'ABCD-EFGH', grantRef: 'authorization:private',
-      grant_ref: 'authorization:private', device_code: 'device-private', authorizationCode: 'code-private', oauthState: 'state-private', phase: 'pending' }))
+      grant_ref: 'authorization:private', device_code: 'device-private', authorizationCode: 'code-private', oauthState: 'state-private',
+      state: 'oauth-state-private', State: 'mixed-case-state-private', nested: { state: 'nested-state-private' }, phase: 'pending' }))
       .toEqual({ userCode: '[Filtered]', user_code: '[Filtered]', grantRef: '[Filtered]', grant_ref: '[Filtered]',
-        device_code: '[Filtered]', authorizationCode: '[Filtered]', oauthState: '[Filtered]', phase: 'pending' })
-    const error = sanitizeTelemetryError(new Error('userCode=ABCD-EFGH grant_ref=authorization:private oauthState=state-private'))
+        device_code: '[Filtered]', authorizationCode: '[Filtered]', oauthState: '[Filtered]', state: '[Filtered]', State: '[Filtered]',
+        nested: { state: '[Filtered]' }, phase: 'pending' })
+    const error = sanitizeTelemetryError(new Error(
+      'userCode=ABCD-EFGH grant_ref=authorization:private oauthState=state-private state=state-equals-private "State": "state-colon-private"',
+    ))
     expect(error.message).not.toContain('ABCD-EFGH')
     expect(error.message).not.toContain('authorization:private')
     expect(error.message).not.toContain('state-private')
+    expect(error.message).not.toContain('state-equals-private')
+    expect(error.message).not.toContain('state-colon-private')
+
+    expect(sanitizeTelemetryValue({
+      url: 'https://example.test/tools/ordinary?source=notification',
+      path: '/tools/ordinary?source=notification',
+    })).toEqual({ url: '/tools/ordinary', path: '/tools/ordinary' })
+    expect(decodePrivateRecordFragment('#record&state=oauth-private')).toBeUndefined()
   })
 })
