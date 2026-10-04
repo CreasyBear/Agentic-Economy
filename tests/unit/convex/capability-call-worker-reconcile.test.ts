@@ -136,6 +136,12 @@ class MemoryDb {
 
   public constructor(public readonly rows: Row[]) {}
 
+  normalizeId(_table: string, _id: string): null { return null }
+
+  async get(tableOrId: string, explicitId?: string): Promise<Row | null> {
+    return this.rows.find(row=>row._id===(explicitId??tableOrId))??null
+  }
+
   public query(_table: string): MemoryQuery {
     return new MemoryQuery(this.rows, this.indexes)
   }

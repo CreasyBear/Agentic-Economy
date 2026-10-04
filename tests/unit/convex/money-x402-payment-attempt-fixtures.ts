@@ -628,7 +628,11 @@ export class MemoryDb implements Db {
     return id
   }
 
-  async get(id: string): Promise<Row | null> {
+  // Synthetic IDs are not Convex table IDs; indexed behavior is tested here.
+  normalizeId(_table: string, _id: string): null { return null }
+
+  async get(tableOrId: string, explicitId?: string): Promise<Row | null> {
+    const id = explicitId ?? tableOrId
     for (const rows of this.tables.values()) {
       const row = rows.find((candidate) => candidate._id === id)
       if (row !== undefined) return row
