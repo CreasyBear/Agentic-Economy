@@ -5,7 +5,7 @@ import { AdminActionSheet } from '../actions/AdminActionSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/arc/input/input'
 import { Label } from '@/components/ui/label'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { COMMERCIAL_POLICY_FAMILIES, type CommercialPolicyEnvironment, type CommercialPolicyFamily } from '@/modules/money/public'
@@ -108,7 +108,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
   </AeSection>
 }
 function TextField({ name, label, value, onChange, type = 'text', hint }: { name: string; label: string; value: string; onChange: (value: string) => void; type?: 'text' | 'datetime-local'; hint?: string }) {
-  return <div className="grid gap-intra"><Label htmlFor={`policy-${name}`}>{label}</Label><Input id={`policy-${name}`} value={value} onChange={event => onChange(event.target.value)} type={type} inputMode={type === 'text' ? 'decimal' : undefined} autoComplete="off" {...(hint === undefined ? {} : { 'aria-describedby': `policy-${name}-hint` })} />{hint === undefined ? null : <p id={`policy-${name}-hint`} className="text-xs text-muted-foreground">{hint}</p>}</div>
+  return <div className="grid gap-intra"><Label htmlFor={`policy-${name}`}>{label}</Label><Input label={label} labelMode="external" id={`policy-${name}`} value={value} onChange={event => onChange(event.target.value)} type={type} inputMode={type === 'text' ? 'decimal' : undefined} autoComplete="off" {...(hint === undefined ? {} : { 'aria-describedby': `policy-${name}-hint` })} />{hint === undefined ? null : <p id={`policy-${name}-hint`} className="text-xs text-muted-foreground">{hint}</p>}</div>
 }
 function PolicyBusinessFields({ family, fields, change }: { family: CommercialPolicyFamily; fields: PolicyFields; change: <K extends keyof PolicyFields>(key: K, value: PolicyFields[K]) => void }) {
   const text = (name: keyof Pick<PolicyFields, 'serviceFeeTax' | 'callTax' | 'minimumFunding' | 'maximumFunding' | 'fundingIncrement' | 'customerMaximum' | 'retentionDays' | 'minimumBuffer' | 'rpoMinutes' | 'rtoMinutes' | 'serviceFee' | 'pricingMargin' | 'commitmentSeconds' | 'reportsPerDay'>, label: string, hint?: string) => <TextField name={name} label={label} value={fields[name]} onChange={value => change(name, value)} {...(hint === undefined ? {} : { hint })} />

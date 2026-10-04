@@ -1,8 +1,8 @@
 import { PencilIcon } from 'lucide-react'
 import { useId, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/arc/button/button'
+import { Input } from '@/components/arc/input/input'
 import { degrade } from '@/lib/observability/degrade'
 
 /** Editor state while an inline edit session is open. `null` means display mode. */
@@ -85,12 +85,13 @@ export function InlineEditField({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="sm"
             className="min-h-touch min-w-touch shrink-0 opacity-100 lg:opacity-0 lg:group-hover/inline-edit:opacity-100 lg:group-focus-within/inline-edit:opacity-100"
+            style={{ paddingInline: 0 }}
             aria-label={label}
             onClick={startEdit}
           >
-            <PencilIcon aria-hidden="true" />
+            <PencilIcon aria-hidden="true" className="size-4" />
           </Button>
         </span>
       </div>
@@ -176,6 +177,8 @@ function InlineEditEditor({
     >
       <Input
         id={inputId}
+        label={label}
+        labelMode="external"
         aria-label={label}
         aria-invalid={session.error !== null}
         aria-describedby={session.error === null ? undefined : errorId}

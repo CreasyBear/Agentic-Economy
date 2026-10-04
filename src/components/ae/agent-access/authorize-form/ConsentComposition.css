@@ -26,7 +26,9 @@
 .arc-market .arc-consent-input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 10px var(--space-3); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-sm); }
 .arc-market .arc-consent-input:focus-visible, .arc-market .arc-consent-record-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .arc-market .arc-consent-input[aria-invalid="true"] { border-color: var(--danger); }
-.arc-market .arc-consent-search-row { display: flex; min-width: 0; align-items: start; gap: var(--space-2); }
+.arc-market .arc-consent-search-row { display: flex; min-width: 0; align-items: end; gap: var(--space-2); }
+.arc-market .arc-consent-search-row > div { flex: 1; min-width: 0; }
+.arc-market .arc-consent-search-row > div > div:has(input[aria-invalid="true"]) { border-color: var(--danger); }
 .arc-market .arc-consent-search-row input { flex: 1; }
 .arc-market .arc-consent-records { display: grid; min-width: 0; margin: 0; padding: 0; list-style: none; }
 .arc-market .arc-consent-record { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: var(--space-3); padding-block: 14px; border-block-end: 1px solid var(--border-subtle); }
@@ -41,4 +43,4 @@
 .arc-market.arc-consent-page-outcome [data-slot="alert-title"], .arc-market .arc-consent-review-regions [data-slot="alert-title"], .arc-market.arc-consent-fieldset [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; font-size: var(--text-sm); line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
 .arc-market.arc-consent-page-outcome [data-slot="alert-description"], .arc-market .arc-consent-review-regions [data-slot="alert-description"], .arc-market.arc-consent-fieldset [data-slot="alert-description"] { font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
 @media (max-width: 639px) { .arc-market .arc-consent-review-head, .arc-market .arc-consent-review-body { padding: var(--space-4); } }
-@media (max-width: 559px) { .arc-market .arc-consent-choice-grid { grid-template-columns: minmax(0, 1fr); } .arc-market .arc-consent-search-row { flex-direction: column; } .arc-market .arc-consent-record { flex-wrap: wrap; } }
+@media (max-width: 559px) { .arc-market .arc-consent-choice-grid { grid-template-columns: minmax(0, 1fr); } .arc-market .arc-consent-search-row { flex-direction: column; align-items: stretch; } .arc-market .arc-consent-search-row > button { align-self: start; } .arc-market .arc-consent-record { flex-wrap: wrap; } }
