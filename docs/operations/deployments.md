@@ -54,8 +54,8 @@ for the final nine Calls.
 The live pause drill passes after owner MFA: new Quotes refuse and completed-key
 replay returns the original receipt. The saved resume audience is `admins`;
 resume is awaiting the owner's fresh MFA. No alpha invitations or audience
-expansion are authorized by this record. Agent limits remain AUD 1 per Call,
-AUD 5 daily and AUD 20 monthly; custody limits remain unchanged.
+expansion are authorized by this record. The test Agent retains AUD 1 per Call,
+AUD 5 daily and AUD 20 monthly authority; custody limits remain unchanged.
 
 Protected founder review, manual close and usefulness feedback are proved on
 a real paid Call with native audit readback. Nine failure scenarios pass against
