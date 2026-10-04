@@ -26,6 +26,12 @@ const home: X402MarketplaceHome = {
 const noop = () => false
 const compareRef = 'https://saved.example.com/one'
 const initialSearch = `?view=providers&query=invoice&provider=old.example.com&maxUsdPrice=25&sort=relevance&compare=${encodeURIComponent(compareRef)}&layout=grid`
+const emptyCollections: ReadonlyArray<Readonly<{ label: string; home: X402MarketplaceHome; marketPath: MarketPath }>> = [
+  { label: 'no supplied rails at /market', home: { ...home, rails: [] }, marketPath: '/market' },
+  { label: 'no supplied rails at /owner/market', home: { ...home, rails: [] }, marketPath: '/owner/market' },
+  { label: 'supplied empty rails at /market', home: { ...home, rails: home.rails.map(rail => ({ ...rail, items: [] })) }, marketPath: '/market' },
+  { label: 'supplied empty rails at /owner/market', home: { ...home, rails: home.rails.map(rail => ({ ...rail, items: [] })) }, marketPath: '/owner/market' },
+]
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} })
@@ -99,6 +105,43 @@ it('omits empty evidence rails', async () => {
   expect(screen.queryByRole('heading', { name: 'Repeat buyers' })).toBeNull()
   expect(screen.queryByRole('link', { name: 'See all Repeat buyers' })).toBeNull()
   expect(screen.getByRole('heading', { name: 'Most used this month' })).toBeTruthy()
+})
+it.each(emptyCollections)('shows truthful empty Collections and a native browse destination for $label', async ({ home: emptyHome, marketPath }) => {
+  const { save, compare, router } = await show(emptyHome, { marketPath })
+  const browse = screen.getByRole('link', { name: 'Browse Tools' })
+  const url = new URL(browse.getAttribute('href') ?? '/', 'https://aecon.ai')
+
+  expect(screen.getByRole('heading', { name: 'Collections are taking shape' })).toBeTruthy()
+  expect(screen.getAllByRole('heading')).toHaveLength(1)
+  for (const rail of ['Most used this month', 'Recently paid', 'Repeat buyers', 'Cheapest proven']) {
+    expect(screen.queryByText(rail)).toBeNull()
+  }
+  expect(screen.queryByRole('link', { name: /See all/ })).toBeNull()
+  expect(screen.queryByText(/\b\d[\d,]*\s+(?:Tools|Providers|items?)\b/i)).toBeNull()
+  expect(screen.getAllByRole('link')).toEqual([browse])
+  expect(screen.queryByRole('button', { name: /save|compare/i })).toBeNull()
+
+  expect(url.pathname).toBe(marketPath)
+  expect(url.searchParams.get('view')).toBe('tools')
+  expect(url.searchParams.get('compare')).toBe(compareRef)
+  expect(url.searchParams.get('layout')).toBe('grid')
+  for (const filter of ['query', 'provider', 'maxUsdPrice', 'sort']) expect(url.searchParams.has(filter)).toBe(false)
+
+  const original = Object.getOwnPropertyDescriptor(document, 'startViewTransition')
+  const startViewTransition = vi.fn((update: () => Promise<void>) => ({ updateCallbackDone: update() }))
+  Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
+  try {
+    fireEvent.click(browse)
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ view: 'tools', compare: compareRef, layout: 'grid' }))
+    expect(router.state.location.pathname).toBe(marketPath)
+    for (const filter of ['query', 'provider', 'maxUsdPrice', 'sort']) expect(router.state.location.search).not.toHaveProperty(filter)
+    expect(startViewTransition).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+    expect(compare).not.toHaveBeenCalled()
+  } finally {
+    if (original === undefined) Reflect.deleteProperty(document, 'startViewTransition')
+    else Object.defineProperty(document, 'startViewTransition', original)
+  }
 })
 it('limits each rendered shelf to eight Tools', async () => {
   const items = Array.from({ length: 10 }, (_, index) => ({

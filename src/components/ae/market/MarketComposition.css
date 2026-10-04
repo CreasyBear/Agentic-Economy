@@ -29,7 +29,7 @@
 /* Compose the authored Arc controls into one compact catalogue toolbar. */
 .arc-market-search-form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
 .arc-market-search-form > div { flex: 1 1 15rem; min-width: 0; }
-.arc-market-hero .arc-market-hero-tools { flex: 1 1 32rem; }
+.arc-market-page > .arc-listing-header .arc-listing-tools { flex: 1 1 32rem; }
 .arc-market-search-form { flex: 1 1 24rem; }
 .arc-market-search-hint { margin: var(--space-2) 0 var(--space-4); color: var(--text-secondary); font-size: var(--text-xs); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .arc-market-result-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-4); min-width: 0; }
@@ -37,7 +37,7 @@
 .arc-market-tabs svg { width: 16px; height: 16px; }
 .arc-provider-source-facts { display: grid; gap: var(--space-1); color: var(--text-secondary); font-size: var(--text-xs); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .arc-provider-source-facts p { margin: 0; }
-@media (max-width: 639px) { .arc-market-hero .arc-market-hero-tools { justify-content: flex-start; } }
+@media (max-width: 639px) { .arc-market-page > .arc-listing-header .arc-listing-tools { justify-content: flex-start; } }
 
 /* Categories are entry points; applied selections stay beside the result list. */
 .arc-market-discovery-filters { display: grid; min-width: 0; gap: var(--space-4); margin-bottom: var(--space-6); }
