@@ -4,7 +4,15 @@
 
 ## Progress counter
 
-**Delivered: 100 bounded UI source units.** Latest [PR342](https://github.com/CreasyBear/Agentic-Economy/pull/342) delivers four Agent onboarding presenter compositions: two actual MultiStepForm regions and two Stepper progress regions. These are not four full pages. Source-first work remains active; hosted visual and external OAuth acceptance are still open.
+**Delivered: 106 bounded UI source units.** Latest [PR343](https://github.com/CreasyBear/Agentic-Economy/pull/343) delivers six bounded improvements: Provider identity and independent recovery rows, visible custom-client entry, actual Arc access-review composition, authority RadioCards and request-facts rows. Source-first work remains active; retaining app choice across refresh/remount is the next onboarding candidate, and hosted visual/external OAuth acceptance remain open.
+
+### Access review release, 2026-10-05 Perth
+
+[PR343](https://github.com/CreasyBear/Agentic-Economy/pull/343) is merged and live. Gated source `dbacd1dce972d7638fb70bb094658af3b3e04c0d` and merge `c10cb257b1afc899be576d70fe2182120cbfd2ac` share the exact tree `e69fdbd85d080a55127c2b5f8442a32c8a2686dc`. Node 22/npm 11.5.1 `npm run check` and `npm run gate` pass: 8,584 unit / one skip; 2,892 integration / 64 gated skips / three TODO; four type, 75 import, one standards and 31 SEO assertions; 16 browser journeys / 18 gated skips; 18 accessibility journeys; public build/release integrity and reproducible CLI package `40ad066274e916f4698473115a7c5f3234573a7ae1a475c238354f58deb56090`. The 80 focused controller/composition cases cover the changed request, choice, retry and concurrency boundary separately.
+
+Official Vercel readback verifies production project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, READY deployment `dpl_FdLPCJgNiYMVyga5MJ2f9n9cXvdo`, the exact merge Git source and `app.aecon.ai` alias; the application release endpoint agrees. Post-deploy health is HTTP 200. Readiness remains HTTP 503 / `payments_unavailable`, with config/Convex ready and configured origin `cautious-zebra-473`. No backend registration, payment/custody configuration or decision-payload schema changes. This proves frontend delivery, not complete financial or native OAuth acceptance.
+
+Fresh preservation proof keeps the shared primary head, status, staging, all 2,809 dirty-path contents and modes exactly unchanged; 27 incoming paths have zero overlap. The founder-console branch has the same 32 pre-existing conflict paths against main and this source, with none added by the batch. The existing managed checkout continues the source goal from merged main; no new worktree is created. The implementation notes below record the preceding source-verification state before this delivery. Five-width/theme/motion rendering and hosted Clerk/OAuth acceptance remain unverified under the source-first direction.
 
 ### Access review composition, 2026-10-05 Perth — source verified, delivery pending
 
