@@ -28,7 +28,9 @@ describe('ConsentOutcomeView', () => {
         authorizeRecoverySearch={{ grant_ref: 'grant-1' }}
       />,
     )
-    expect(screen.getByText('Connected to Test assistant')).toBeTruthy()
+    expect(screen.getByText('Access approved for Test assistant')).toBeTruthy()
+    expect(screen.queryByText('Connected to Test assistant')).toBeNull()
+    expect(screen.getByText(/Check the Agents page for authenticated access and Tool results/)).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Check approval status' })).toBeNull()
   })
 })

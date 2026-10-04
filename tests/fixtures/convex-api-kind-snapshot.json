@@ -350,6 +350,12 @@
   {
     "visibility": "public",
     "module": "agentDirectory",
+    "method": "findOwnedByCredential",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentDirectory",
     "method": "listOwned",
     "kind": "query"
   },

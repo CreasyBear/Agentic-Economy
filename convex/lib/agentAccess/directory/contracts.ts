@@ -34,5 +34,5 @@ export const directoryRecord = v.object({
 
 export const listOwnedArgs = { now: v.number() }
 export const listOwnedResult = v.array(directoryRecord)
-export const listOwnedPageArgs = { now: v.number(), paginationOpts: paginationOptsValidator }
+export const listOwnedPageArgs = { now: v.number(), principalRef: v.optional(v.string()), paginationOpts: paginationOptsValidator }
 export const listOwnedPageResult = paginationResultValidator(directoryRecord)

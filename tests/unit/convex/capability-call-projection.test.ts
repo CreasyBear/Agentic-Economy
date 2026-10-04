@@ -4,7 +4,7 @@ import { anyApi } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
-import { internal } from '../../../convex/_generated/api'
+import { api, internal } from '../../../convex/_generated/api'
 import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 
@@ -14,6 +14,64 @@ const convexModules = Object.fromEntries(
 )
 
 describe('Account Call projection', () => {
+  it('observes pending work before a terminal projection, without exposing private input or another Account', async () => {
+    const backend = convexTestWithMarketComponents()
+    const owner = await publishedBusinessOwner(backend, 'live-call-owner')
+    const stranger = await publishedBusinessOwner(backend, 'live-call-stranger')
+    const now = Date.now()
+    const principalRef = 'principal:live-call'
+    const row = {
+      quoteRef: 'quote:live', callRef: 'call:live', principalId: principalRef, ownerId: owner.canonicalAccountRef,
+      credentialId: 'credential:live', applicationRef: 'agentic-economy', toolRef: 'tool:live', idempotencyKey: 'live-purchase', environment: 'sandbox' as const,
+      grantRef: 'grant:live', grantGeneration: 1, policyDigest: 'sha256:policy', grantExpiresAt: now + 60_000,
+      toolJson: '{}', inputJson: '{"private":"must stay private"}', inputDigest: 'sha256:input', requestDigest: 'sha256:request',
+      state: 'pending' as const, dispatchState: 'enqueued' as const, createdAt: now - 10, updatedAt: now,
+    }
+    const id = await backend.run(async ctx => {
+      await ctx.db.insert('capabilityCalls', { ...row, callRef: 'call:foreign', ownerId: stranger.canonicalAccountRef, createdAt: now })
+      return await ctx.db.insert('capabilityCalls', row)
+    })
+    const read = async () => await owner.owner.query(api.capabilityCallProjections.readOwnerAgentReadback, {
+      principalRef, periodStartAt: now - 1_000, periodEndAt: now + 1_000, paginationOpts: { numItems: 50, cursor: null },
+    })
+    expect(await read()).toMatchObject({ activity: { page: [] }, liveCalls: [{ callRef: row.callRef, phase: 'queued' }] })
+    await backend.run(async ctx => { await ctx.db.patch('capabilityCalls', id, { dispatchState: 'running' }) })
+    const running = await read()
+    expect(running.liveCalls).toEqual([{ callRef: row.callRef, credentialRef: row.credentialId, toolRef: row.toolRef,
+      phase: 'running', createdAt: row.createdAt, updatedAt: row.updatedAt }])
+    expect(JSON.stringify(running)).not.toContain('must stay private')
+    expect(JSON.stringify(running)).not.toContain('call:foreign')
+    await backend.run(async ctx => { await ctx.db.patch('capabilityCalls', id, { result: {
+      kind: 'needs_authority', callRef: row.callRef, toolRef: row.toolRef,
+      authorityRequest: { kind: 'approval_required', toolRef: row.toolRef, consequence: 'read_only', retryClass: 'replayable', dataFields: [] },
+    } }) })
+    expect((await read()).liveCalls).toMatchObject([{ callRef: row.callRef, phase: 'awaiting_authority' }])
+    await backend.run(async ctx => { await ctx.db.patch('capabilityCalls', id, { state: 'reconciliation_required' }) })
+    expect((await read()).liveCalls).toMatchObject([{ callRef: row.callRef, phase: 'recovery_required' }])
+    // Newer completed Calls cannot displace older unresolved work.
+    await backend.run(async ctx => {
+      for (let i = 0; i < 60; i++) await ctx.db.insert('capabilityCalls', { ...row, callRef: `call:newer:${i}`, state: 'completed', createdAt: now + i })
+    })
+    expect((await read()).liveCalls).toEqual(expect.arrayContaining([expect.objectContaining({ callRef: row.callRef, phase: 'recovery_required' })]))
+    const older = now - 40 * 24 * 60 * 60 * 1_000
+    await backend.run(async ctx => {
+      await ctx.db.patch('capabilityCalls', id, { state: 'completed', createdAt: older })
+      await ctx.db.insert('capabilityCallProjections', { callRef: row.callRef, accountRef: owner.canonicalAccountRef, principalRef,
+        credentialRef: row.credentialId, applicationRef: row.applicationRef, toolRef: row.toolRef, toolLabel: 'Delivered lookup', providerRef: 'provider:lookup',
+        state: 'completed', deliveryState: 'delivered', paymentState: 'settled', receiptRef: 'receipt:previous-month', latencyMs: 1, createdAt: older, updatedAt: now })
+    })
+    const watchedArgs = { principalRef, callRef: row.callRef, periodStartAt: now - 1_000, periodEndAt: now + 1_000, paginationOpts: { numItems: 50, cursor: null } }
+    const watched = await owner.owner.query(api.capabilityCallProjections.readOwnerAgentReadback, watchedArgs)
+    expect(watched.activity.page).toEqual([])
+    expect(watched.watchedCall).toMatchObject({ kind: 'observed', live: { callRef: row.callRef, phase: 'finished' }, activity: { receiptRef: 'receipt:previous-month' } })
+    expect(JSON.stringify(watched)).not.toContain('must stay private')
+    expect((await stranger.owner.query(api.capabilityCallProjections.readOwnerAgentReadback, watchedArgs)).watchedCall).toEqual({ kind: 'missing' })
+    expect((await owner.owner.query(api.capabilityCallProjections.readOwnerAgentReadback, { ...watchedArgs, principalRef: 'principal:other' })).watchedCall).toEqual({ kind: 'missing' })
+    await expect(backend.query(api.capabilityCallProjections.readOwnerAgentReadback, {
+      principalRef, periodStartAt: now - 1_000, periodEndAt: now + 1_000, paginationOpts: { numItems: 50, cursor: null },
+    })).rejects.toThrow('call_history_authentication_required')
+  })
+
   it('rebuilds a terminal managed Call exactly once from authoritative invocation evidence', async () => {
     const backend = convexTest(schema, convexModules)
     const operation = buildDevelopmentPublishedToolEvidence().tool

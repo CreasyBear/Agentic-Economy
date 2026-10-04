@@ -33,6 +33,53 @@ describe('useConnectAgentWizard', () => {
     vi.clearAllMocks()
   })
 
+
+  it('reviews access without issuing and defaults to explicit approval for paid work', () => {
+    const onIssue = vi.fn()
+    const { result } = renderHook(() => useConnectAgentWizard({ deploymentEnvironment: 'sandbox', onOpenChange: vi.fn(), onIssue }))
+    act(() => result.current.handleNameChange('Review Agent'))
+    act(() => expect(result.current.canReviewDraft()).toBe(true))
+    expect(result.current.view.authorityMode).toBe('approval_required')
+    expect(onIssue).not.toHaveBeenCalled()
+  })
+
+  it('admits one concurrent issuance and preserves the exact request after lost acknowledgement', async () => {
+    let fail!: (cause: Error) => void
+    const interrupted = new Promise((_, reject) => { fail = reject })
+    const onIssue = vi.fn().mockReturnValueOnce(interrupted).mockResolvedValueOnce({ kind: 'replayed', keyId: 'key_one', secret: 'secret_one' })
+    const onOpenChange = vi.fn()
+    const onSuccess = vi.fn()
+    const { result } = renderHook(() => useConnectAgentWizard({ deploymentEnvironment: 'sandbox', onOpenChange, onIssue, onSuccess }))
+    act(() => result.current.handleNameChange('Recovery Agent'))
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.handleSubmit({ preventDefault: vi.fn() })
+      duplicate = result.current.handleSubmit({ preventDefault: vi.fn() })
+    })
+    expect(onIssue).toHaveBeenCalledTimes(1)
+    await act(async () => { fail(new Error('acknowledgement lost')); await Promise.all([first, duplicate]) })
+    expect(result.current.view.awaitingConfirmation).toBe(true)
+    act(() => result.current.handleOpenChange(false))
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(onSuccess).not.toHaveBeenCalled()
+    await submitHook(result)
+    expect(onIssue.mock.calls[0]?.[0]).toEqual(onIssue.mock.calls[1]?.[0])
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+    expect(result.current.view.awaitingConfirmation).toBe(false)
+  })
+
+  it('refuses changed material while an original issuance remains unconfirmed', async () => {
+    const onIssue = vi.fn().mockRejectedValueOnce(new Error('lost acknowledgement'))
+    const { result } = renderHook(() => useConnectAgentWizard({ deploymentEnvironment: 'sandbox', onOpenChange: vi.fn(), onIssue }))
+    act(() => result.current.handleNameChange('Original Agent'))
+    await submitHook(result)
+    act(() => result.current.handleNameChange('Different Agent'))
+    await submitHook(result)
+    expect(onIssue).toHaveBeenCalledTimes(1)
+    expect(result.current.view.awaitingConfirmation).toBe(true)
+  })
+
   it('defaults to sandbox static spending presentation', () => {
     const { result } = renderHook(() =>
       useConnectAgentWizard({
@@ -182,7 +229,7 @@ describe('useConnectAgentWizard', () => {
 
     expect(result.current.view.name).toBe('')
     expect(result.current.view.environment).toBe('production')
-    expect(result.current.view.authorityMode).toBe('spending_policy')
+    expect(result.current.view.authorityMode).toBe('approval_required')
   })
 
   it('keeps production through a tampered initial draft, close, and reopen', () => {

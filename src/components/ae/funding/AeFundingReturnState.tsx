@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
+import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import {
   fundingReturnCopy,
   type FundingReturnPageState,
@@ -12,6 +13,7 @@ import type { FundingReturnViewState } from '@/modules/money/funding-return.view
 
 export type AeFundingReturnStateProps = Readonly<{
   pageState: FundingReturnViewState
+  fundingSessionId: string
   onCheck: () => Promise<void>
 }>
 
@@ -22,7 +24,7 @@ const OPEN_CREDIT_ACTION = (
 )
 
 const OPEN_AGENTS_ACTION = (
-  <Link to="/agent-access" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
+  <Link to="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
     {fundingReturnCopy.openAgentsAction}
   </Link>
 )
@@ -30,6 +32,7 @@ const OPEN_AGENTS_ACTION = (
 function deriveFundingReturnPageState(
   pageState: FundingReturnViewState,
   onCheck: () => Promise<void>,
+  fundingSessionId: string,
 ): FundingReturnPageState {
   if (pageState.kind === 'checking') {
     return {
@@ -81,7 +84,11 @@ function deriveFundingReturnPageState(
         tone: 'positive',
         title: fundingReturnCopy.paid.title,
         description: fundingReturnCopy.paid.description(amount, funding.agentName),
-        action: OPEN_AGENTS_ACTION,
+        action: <div className="arc-market arc-recovery-actions">
+          <AeCopyCommand label="Continue after funding" code={fundingReturnCopy.paid.instruction(fundingSessionId)}
+            prompt={false} comfortable resolveOrigin={false} actionLabel="Copy instruction for your Agent" className="arc-copy-command-instruction" />
+          <div className="arc-recovery-action-row">{OPEN_AGENTS_ACTION}</div>
+        </div>,
       }
     case 'processing':
       return {
@@ -125,8 +132,9 @@ function deriveFundingReturnPageState(
 export function AeFundingReturnState({
   pageState,
   onCheck,
+  fundingSessionId,
 }: AeFundingReturnStateProps) {
-  const derived = deriveFundingReturnPageState(pageState, onCheck)
+  const derived = deriveFundingReturnPageState(pageState, onCheck, fundingSessionId)
   return (
     <AePageState
       tone={derived.tone}

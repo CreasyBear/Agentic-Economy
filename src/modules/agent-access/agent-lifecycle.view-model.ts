@@ -11,6 +11,12 @@ export type AgentAccessSearch = Readonly<{
   caller?: string
   resumeTool?: string
   setup?: 'choose' | 'oauth'
+  callRef?: string
+  callInvalid?: true
+  grantRef?: string
+  userCode?: string
+  state?: string
+  requestInvalid?: true
 }>
 
 export type LifecycleCommand =

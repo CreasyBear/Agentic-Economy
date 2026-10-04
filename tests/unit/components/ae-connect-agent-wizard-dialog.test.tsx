@@ -19,8 +19,8 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
       />,
     )
 
-    expect(screen.getByRole('dialog', { name: /connect an agent/i })).toBeInTheDocument()
-    expect(screen.getByText(/step 1 of 2 · set policy/i)).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /issue a manual agent key/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Form progress' })).toBeInTheDocument()
     expect(screen.getByLabelText(/agent name/i)).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /sandbox/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /production/i })).not.toBeInTheDocument()
@@ -28,7 +28,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByRole('radio', { name: /browse only/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /ask each time/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /work within limits/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /connect an agent/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /review access/i })).toBeInTheDocument()
   })
 
   it('restores an unissued draft without storing a secret', () => {
@@ -68,7 +68,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
       />,
     )
 
-    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
+    const submitBtn = screen.getByRole('button', { name: /review access/i })
     expect(submitBtn).toBeEnabled()
     fireEvent.click(submitBtn)
     expect(screen.getByLabelText(/agent name/i)).toHaveAttribute('aria-invalid', 'true')
@@ -111,8 +111,10 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     const nameInput = screen.getByLabelText(/agent name/i)
     fireEvent.change(nameInput, { target: { value: 'Test Assistant' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
+    const submitBtn = screen.getByRole('button', { name: /review access/i })
     fireEvent.click(submitBtn)
+    expect(onIssue).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
     await waitFor(() => {
       expect(onIssue).toHaveBeenCalledTimes(1)
@@ -122,7 +124,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(payload).toMatchObject({
       name: 'Test Assistant',
       environment: 'sandbox',
-      authorityMode: 'spending_policy',
+      authorityMode: 'approval_required',
     })
     expect(payload.idempotencyKey).toMatch(/^agent-issue-[A-Za-z0-9_-]+$/)
     expect(payload).not.toHaveProperty('maximumSpendPerCall')
@@ -158,8 +160,10 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(dailyInput, { target: { value: '25.00' } })
     fireEvent.change(monthlyInput, { target: { value: '100.00' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
+    const submitBtn = screen.getByRole('button', { name: /review access/i })
     fireEvent.click(submitBtn)
+    expect(onIssue).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
     await waitFor(() => {
       expect(onIssue).toHaveBeenCalledTimes(1)
@@ -169,7 +173,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(payload).toMatchObject({
       name: 'Prod Worker',
       environment: 'production',
-      authorityMode: 'spending_policy',
+      authorityMode: 'approval_required',
       maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '5000000' },
       maximumDailySpend: { currency: 'AUD', exponent: 6, units: '25000000' },
       maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '100000000' },
@@ -199,7 +203,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(dailyInput, { target: { value: '20.00' } })
     fireEvent.change(monthlyInput, { target: { value: '100.00' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
+    const submitBtn = screen.getByRole('button', { name: /review access/i })
     fireEvent.click(submitBtn)
 
     expect(screen.getByText(/per-call limit cannot exceed daily limit/i)).toBeInTheDocument()
@@ -221,7 +225,8 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Observer' } })
     fireEvent.click(screen.getByRole('radio', { name: /browse only/i }))
 
-    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /review access/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
     await waitFor(() => {
       expect(onIssue).toHaveBeenCalledTimes(1)
@@ -250,7 +255,8 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'My Agent' } })
-    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /review access/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledTimes(1)
@@ -285,13 +291,14 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Faulty Agent' } })
-    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /review access/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
     await waitFor(() => {
       expect(screen.getByText(/could not connect agent/i)).toBeInTheDocument()
     })
 
-    expect(screen.getByText(/A\$0\.00 deducted — your balance is safe/i)).toBeInTheDocument()
+    expect(screen.getByText('Key setup makes no Tool purchase. Your Balance is unaffected.')).toBeInTheDocument()
     expect(screen.queryByText(/invalid_input/i)).not.toBeInTheDocument()
 
     expect(onSuccess).not.toHaveBeenCalled()
@@ -316,21 +323,22 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Retry Agent' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
+    const submitBtn = screen.getByRole('button', { name: /review access/i })
 
-    // First attempt -> retryable failure
+    // Review does not issue a credential.
     fireEvent.click(submitBtn)
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
     await waitFor(() => expect(onIssue).toHaveBeenCalledTimes(1))
     const firstKey = onIssue.mock.calls[0]![0].data.idempotencyKey
 
-    // Second attempt -> should REUSE firstKey because previous was retryable
-    fireEvent.click(submitBtn)
+    // Second attempt retains the uncertain issuance identity.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm this issuance' }))
     await waitFor(() => expect(onIssue).toHaveBeenCalledTimes(2))
     const secondKey = onIssue.mock.calls[1]![0].data.idempotencyKey
     expect(secondKey).toBe(firstKey)
 
-    // Third attempt -> should ROTATE to new key because previous was idempotency_conflict
-    fireEvent.click(submitBtn)
+    // The explicit permanent refusal permits a fresh request.
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
     await waitFor(() => expect(onIssue).toHaveBeenCalledTimes(3))
     const thirdKey = onIssue.mock.calls[2]![0].data.idempotencyKey
     expect(thirdKey).not.toBe(firstKey)
@@ -354,10 +362,11 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'In Flight Agent' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
+    const submitBtn = screen.getByRole('button', { name: /review access/i })
     fireEvent.click(submitBtn)
 
-    expect(screen.getByRole('button', { name: /connecting/i })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
+    expect(screen.getByRole('button', { name: 'Issuing key…' })).toBeDisabled()
 
     resolvePromise({ kind: 'created', keyId: 'k1', secret: 's1' })
     await waitFor(() => {
@@ -365,7 +374,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     })
   })
 
-  it('T11: unexpected issuance failures state that the Agent was not connected or charged', async () => {
+  it('T11: an unexpected response leaves issuance uncertain and keeps its identity', async () => {
     const onIssue = vi.fn().mockResolvedValue(undefined)
     render(
       <AeConnectAgentWizardDialog
@@ -377,9 +386,10 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Unexpected Agent' } })
-    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /review access/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
-    expect(await screen.findByText('The Agent could not be connected. Nothing was charged.')).toBeInTheDocument()
+    expect(await screen.findByText('Key issuance returned no confirmation')).toBeInTheDocument()
   })
 
   it('T12: adheres to zero-handroll directive without local secret generation or hashing', async () => {

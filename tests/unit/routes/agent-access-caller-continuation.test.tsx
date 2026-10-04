@@ -9,14 +9,14 @@ import { projectAgentDirectory } from '@/modules/agent-access/agent-access-conso
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const routeHarness = vi.hoisted(() => ({
-  search: {} as Readonly<{ caller?: string; resumeTool?: string }>,
+  search: {} as import('@/modules/agent-access/agent-lifecycle.view-model').AgentAccessSearch,
   location: { pathname: '/agent-access', hash: '' },
   navigate: vi.fn(),
   consoleProps: undefined as Record<string, unknown> | undefined,
   installProps: undefined as Record<string, unknown> | undefined,
   loaderData: undefined as unknown as Readonly<{ canonicalBaseUrl: string; directory: AgentDirectoryProjection }>,
   serverFns: new Map<unknown, (...args: never[]) => Promise<unknown>>(),
-  readDirectory: vi.fn(),
+  readRequest: vi.fn(), readDirectory: vi.fn(),
   readCanonicalBaseUrl: vi.fn(),
   disconnectRef: Symbol('disconnect'),
   disconnectConnectionRef: Symbol('disconnect-connection'),
@@ -28,9 +28,11 @@ const routeHarness = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, params, children }: { to: string; params?: Record<string, string>; children?: ReactNode }) => (
-    <a href={params?.toolRef === undefined ? to : to.replace('$toolRef', encodeURIComponent(params.toolRef))}>{children}</a>
-  ),
+  Link: ({ to, params, search, children }: { to: string; params?: Record<string, string>; search?: Record<string, string>; children?: ReactNode }) => {
+    const path = Object.entries(params ?? {}).reduce((value, [name, parameter]) => value.replace(`$${name}`, encodeURIComponent(parameter)), to)
+    const query = new URLSearchParams(search).toString()
+    return <a href={`${path}${query ? `?${query}` : ''}`}>{children}</a>
+  },
   Outlet: () => null,
   createFileRoute: () => (options: Record<string, unknown>) => {
     const route = {
@@ -82,6 +84,7 @@ vi.mock('@/lib/server/canonical-url.functions', () => ({
   readCanonicalBaseUrlServer: routeHarness.readCanonicalBaseUrl,
 }))
 
+vi.mock('@/lib/server/agent-access-consent.functions', () => ({ readAgentOnboardingRequestServer: routeHarness.readRequest }))
 vi.mock('@/lib/server/agent-access-console.functions', () => ({
   readAgentDirectoryServer: routeHarness.readDirectory,
   readAgentDirectoryPageServer: routeHarness.readDirectory,
@@ -159,6 +162,7 @@ function installServerFns(readDirectory: () => Promise<AgentDirectoryProjection>
     revision: 2,
     correlationRef: 'agent:rename-safe',
   }))
+  routeHarness.serverFns.set(routeHarness.readRequest, routeHarness.readRequest)
   routeHarness.serverFns.set(routeHarness.readDirectory, readDirectory)
   routeHarness.serverFns.set(routeHarness.renameRef, rename)
   routeHarness.serverFns.set(routeHarness.readApprovalsRef, async () => [])
@@ -174,6 +178,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   routeHarness.search = {}
   routeHarness.location = { pathname: '/agent-access', hash: '' }
   routeHarness.navigate.mockReset()
@@ -232,13 +237,42 @@ describe('agent-access caller locator validation', () => {
 })
 
 describe('agent-access caller route continuation', () => {
+  it('shows the Agent-initiated Call and receipt automatically on the same owner page', async () => {
+    vi.useFakeTimers()
+    const active: AgentCredentialSource = { ...caller, key: { ...caller.key, authorityMode: 'approval_required' },
+      grant: { ...caller.grant!, authorityMode: 'approval_required' } }
+    const canonical = canonicalAgentRecord([active])
+    const initial = projectAgentDirectory([active], [canonical])
+    const identity = { callRef: 'call:live-route', credentialRef: KEY_ID, toolRef: TOOL_REF, createdAt: 1, updatedAt: 2 }
+    const running = projectAgentDirectory([active], [canonical], [], [{ principalRef: PRINCIPAL_ID, activity: [], dataState: 'source',
+      activityIsDone: true, liveCalls: [{ ...identity, phase: 'running' }] }])
+    const delivered = projectAgentDirectory([active], [canonical], [], [{ principalRef: PRINCIPAL_ID, dataState: 'source', activityIsDone: true,
+      liveCalls: [{ ...identity, phase: 'finished' }], activity: [{ ...identity, toolLabel: 'Research', providerRef: 'provider:route',
+        state: 'completed', deliveryState: 'delivered', paymentState: 'settled', receiptRef: 'receipt:route' }] }])
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory: initial }
+    routeHarness.search = { caller: PRINCIPAL_ID, resumeTool: TOOL_REF }
+    installServerFns(vi.fn().mockResolvedValueOnce(running).mockResolvedValue(delivered))
+    renderRoute()
+    expect(screen.getByRole('heading', { name: 'Access approved; waiting for your Agent' })).toBeTruthy()
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(screen.getByRole('heading', { name: 'The Tool is running' })).toBeTruthy()
+    const callHref = `/calls/${encodeURIComponent(identity.callRef)}`
+    expect(screen.getByRole('link', { name: 'View live Call' }).getAttribute('href')).toBe(callHref)
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(screen.getByRole('heading', { name: 'A Tool result is recorded' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'View Tool result and receipt' }).getAttribute('href')).toBe(callHref)
+    expect(screen.queryByRole('button', { name: 'Copy instruction for your Agent' })).toBeNull()
+  })
+
   it('loads the directory before rendering the route', async () => {
     const loader = AgentAccessRoute.options.loader
     if (typeof loader !== 'function') throw new Error('agent_access_loader_missing')
 
-    await expect(loader({} as never)).resolves.toEqual({
+    await expect(loader({ deps: {}, location: { pathname: '/agent-access' } } as never)).resolves.toEqual({
       canonicalBaseUrl: 'https://market.example',
       directory,
+      onboarding: undefined,
+      directoryUnavailable: false,
     })
     expect(routeHarness.readDirectory).toHaveBeenCalledOnce()
   })
@@ -328,7 +362,7 @@ describe('agent-access caller route continuation', () => {
     act(() => checkConnection?.())
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('Known Balance information is unaffected')
+    expect(alert.textContent).toContain('Last confirmed Call records are retained')
     expect(alert.className).not.toContain('text-destructive')
     expect(routeHarness.installProps).toBeTruthy()
   })
@@ -342,7 +376,6 @@ describe('agent-access caller route continuation', () => {
     expect(consoleView.compareDocumentPosition(addAgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Connect with OAuth / MCP' }))
     const checkConnection = routeHarness.installProps?.onCheckConnection as (() => void) | undefined
     act(() => checkConnection?.())
 
@@ -392,4 +425,46 @@ describe('agent-access caller route continuation', () => {
       replace: true,
     })
   })
+  it('shows the exact request before any Agent exists and preserves its review callback', async () => {
+    routeHarness.search = { grantRef: 'grant:codex', state: 'callback-state' }
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory: { items: [], details: [] } }
+    routeHarness.readRequest.mockResolvedValue({ kind: 'request', grantRef: 'grant:codex', revision: 1, phase: 'pending',
+      clientName: 'Codex', environment: 'sandbox', flow: 'authorization_code', createdAt: 1, expiresAt: 999 })
+    installServerFns()
+    renderRoute()
+    expect(await screen.findByRole('heading', { name: 'Your Agent is asking for access' })).toBeTruthy()
+    expect(screen.getByText('Codex · Sandbox')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Review access request' }).getAttribute('href')).toBe('/agent-access/authorize?grant_ref=grant%3Acodex&state=callback-state')
+    expect(screen.queryByTestId('agent-install')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Access approved; waiting for your Agent' })).toBeNull()
+    expect(routeHarness.readRequest).toHaveBeenCalledWith({ data: { grantRef: 'grant:codex' } })
+  })
+  it('rejects ambiguous or malformed progress locators without selecting another attempt', () => {
+    expect(validateAgentAccessSearch({ grantRef: 'grant:one', userCode: [] })).toEqual({ requestInvalid: true })
+    expect(validateAgentAccessSearch({ grantRef: '   ' })).toEqual({ requestInvalid: true })
+    expect(validateAgentAccessSearch({ callRef: ['call:one'] })).toEqual({ callInvalid: true })
+    expect(validateAgentAccessSearch({ grantRef: 'grant:one', callRef: 'call:one', state: 'opaque' })).toEqual({ grantRef: 'grant:one', callRef: 'call:one', state: 'opaque' })
+  })
+
+  it('keeps a pending request and consent independent of the Agent directory', async () => {
+    const loader = AgentAccessRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('loader_missing')
+    const pending = { kind: 'request', grantRef: 'grant:pending', revision: 1, phase: 'pending', clientName: 'Codex',
+      environment: 'sandbox', flow: 'authorization_code', createdAt: 1, expiresAt: 999 }
+    routeHarness.readRequest.mockResolvedValue(pending)
+    routeHarness.readDirectory.mockRejectedValue(new Error('directory unavailable'))
+    await expect(loader({ deps: { grantRef: 'grant:pending' }, location: { pathname: '/agent-access' } } as never))
+      .resolves.toMatchObject({ directory: { items: [], details: [] }, onboarding: pending })
+    await expect(loader({ deps: {}, location: { pathname: '/agent-access/authorize' } } as never)).resolves.toMatchObject({ directory: { items: [], details: [] } })
+    expect(routeHarness.readDirectory).not.toHaveBeenCalled()
+  })
+  it('renders a recoverable initial source outage without losing the Call locator', async () => {
+    const loader = AgentAccessRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('loader_missing')
+    routeHarness.readDirectory.mockRejectedValue(new Error('directory unavailable'))
+    await expect(loader({ deps: { caller: PRINCIPAL_ID, callRef: 'call:original' }, location: { pathname: '/agent-access' } } as never))
+      .resolves.toMatchObject({ directoryUnavailable: true, directory: { items: [], details: [] } })
+    expect(routeHarness.readDirectory).toHaveBeenCalledWith({ data: { principalRef: PRINCIPAL_ID, callRef: 'call:original' } })
+  })
+
 })

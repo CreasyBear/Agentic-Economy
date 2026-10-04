@@ -12,6 +12,9 @@ const privateAccessParameterNames = new Set([
   'password',
   'email',
   'phone',
+  'grantref', 'grant_ref', 'usercode', 'user_code',
+  'devicecode', 'device_code', 'authorizationcode', 'authorization_code',
+  'oauthstate', 'oauth_state',
 ])
 
 const accessKeysByThreadId = new Map<string, string>()
@@ -27,7 +30,7 @@ const privateKeyPemPattern = /-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----[\s\S]*?---
 const authorizationPattern = /(\bAuthorization\b\s*["']?\s*[:=]\s*)(["']?)(Bearer|Basic)\s+([^"'`,;\s]+)\2/giu
 const cookieHeaderPattern = /(\b(?:Cookie|Set-Cookie)\b\s*["']?\s*[:=]\s*)[^\r\n]*/giu
 const urlUserInfoPattern = /(\bhttps?:\/\/)[^/\s?#@]+(?::[^/\s?#@]*)?@/giu
-const secretAssignmentPattern = /(\b(?:[A-Za-z0-9]+[_-])*(?:key|token|secret|password|api[_-]?key|access[_-]?(?:key|token)|client[_-]?secret)\b\s*["']?\s*[:=]\s*)(["']?)([^"'`\s,;&}\]]+)\2/giu
+const secretAssignmentPattern = /(\b(?:[A-Za-z0-9]+[_-])*(?:key|token|secret|password|api[_-]?key|access[_-]?(?:key|token)|client[_-]?secret|user[_-]?code|device[_-]?code|authorization[_-]?code|grant[_-]?ref|oauth[_-]?state)\b\s*["']?\s*[:=]\s*)(["']?)([^"'`\s,;&}\]]+)\2/giu
 const relativeUrlQueryPattern = /(^|\s)(\/[^\s?#]*)[?#][^\s"'`]*/giu
 
 /**

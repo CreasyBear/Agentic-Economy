@@ -34,8 +34,8 @@ export function ConsentOutcomeView({
   if (phase === 'approved') {
     return (
       <Alert className="arc-market arc-consent-outcome">
-        <AlertTitle id="consent-outcome-heading" tabIndex={-1}>Connected to {clientName}</AlertTitle>
-        <AlertDescription className="arc-consent-outcome-body">Return there to continue. This connection remains signed in until it expires or you disconnect it.</AlertDescription>
+        <AlertTitle id="consent-outcome-heading" tabIndex={-1}>Access approved for {clientName}</AlertTitle>
+        <AlertDescription className="arc-consent-outcome-body">Return there to continue. Check the Agents page for authenticated access and Tool results.</AlertDescription>
       </Alert>
     )
   }

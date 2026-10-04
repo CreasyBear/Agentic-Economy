@@ -21,6 +21,7 @@ type AeCopyCommandProps = Readonly<{
   prompt?: boolean
   /** Custom copied status text; also extends revert timeout to 2000ms. */
   copiedHint?: string
+  actionLabel?: string
 }>
 
 /** Product-level command treatment. `$ORIGIN` resolves only when the user copies. */
@@ -34,6 +35,7 @@ export function AeCopyCommand({
   comfortable = false,
   prompt = true,
   copiedHint,
+  actionLabel,
 }: AeCopyCommandProps) {
   const resolveCopyText = useCallback(
     () => resolveCommandCopyText(copyText, resolveOrigin),
@@ -57,10 +59,11 @@ export function AeCopyCommand({
           <span className="arc-copy-command-file"><FileCode2Icon size={16} aria-hidden="true" />{label}</span>
         <Button
           type="button"
-          variant="ghost"
+          variant={actionLabel === undefined ? 'ghost' : 'primary'}
           size="md"
           className="arc-copy-command-action"
-          aria-label={copied ? `${label} copied` : `Copy ${label}`}
+          data-with-label={actionLabel !== undefined || undefined}
+          aria-label={copied ? `${label} copied` : actionLabel ?? `Copy ${label}`}
           onClick={() => { void copy() }}
         >
           <span className="relative size-4">
@@ -79,6 +82,7 @@ export function AeCopyCommand({
               )}
             />
           </span>
+          {actionLabel === undefined ? null : <span>{copied ? 'Copied' : actionLabel}</span>}
         </Button>
         </header>
         <div className="arc-copy-command-viewport" data-prompt={comfortable && prompt || undefined}>

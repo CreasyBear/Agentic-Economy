@@ -20,6 +20,20 @@ export type AgentActivityView = Readonly<{
   updatedAt: number
 }>
 
+/** Owner-only observations of the existing Call lifecycle, without task input. */
+export type AgentLiveCallView = Readonly<{
+  callRef: string
+  credentialRef: string
+  toolRef: string
+  phase: 'awaiting_authority' | 'queued' | 'running' | 'recovery_required' | 'finished'
+  createdAt: number
+  updatedAt: number
+}>
+
+export type AgentWatchedCall =
+  | Readonly<{ kind: 'missing' }>
+  | Readonly<{ kind: 'observed'; live: AgentLiveCallView; activity?: AgentActivityView }>
+
 export type AgentUsageSummary = Readonly<{
   periodStartAt: number
   periodEndAt: number
@@ -34,6 +48,9 @@ export type AgentUsageSummary = Readonly<{
 export type AgentOwnerReadback = Readonly<{
   principalRef: string
   activity: readonly AgentActivityView[]
+  liveCalls?: readonly AgentLiveCallView[]
+  watchedCall?: AgentWatchedCall
+  usageUnavailable?: true
   activityIsDone: boolean
   activityContinueCursor?: string
   usage?: AgentUsageSummary
@@ -110,7 +127,10 @@ export type AgentDetail = Readonly<{
   grant?: AgentAccessOwnerGrantReadback
   spendingPolicy: AgentSpendingPolicyState
   activity: readonly AgentActivityView[]
+  liveCalls?: readonly AgentLiveCallView[]
   usage?: AgentUsageSummary
+  watchedCall?: AgentWatchedCall
+  usageUnavailable?: true
   dataState: 'source' | 'empty' | 'partial' | 'unavailable'
   credentialHistoryTruncated?: boolean
   activityTruncated?: boolean

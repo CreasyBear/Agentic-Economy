@@ -2053,3 +2053,63 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
 
 })
+
+describe('single canonical AE OAuth resource', () => {
+  const canonicalBaseUrl = 'https://ae.example'
+  const optionsFor = (store: ReturnType<typeof storeFixture>) => ({ store, canonicalBaseUrl, now: () => 2_000,
+    authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) })
+  const authorizeUrl = (resource: string) => {
+    const url = new URL('https://untrusted-host.example/oauth/authorize')
+    url.search = new URLSearchParams({ client_id: 'client-local', redirect_uri: 'http://localhost/callback',
+      response_type: 'code', state: 'opaque-state', code_challenge: 'a'.repeat(43), code_challenge_method: 'S256', resource }).toString()
+    return url
+  }
+  it.each(['https://foreign.example', 'https://ae.example/mcp', 'https://ae.example/#fragment', 'https://user@ae.example/', ''])('refuses unsupported resource %s before grant insertion or token delivery', async resource => {
+      const store = storeFixture()
+      await store.insertClient(defaultOAuthClientFixture('client-local', { grantTypes: ['authorization_code', 'urn:ietf:params:oauth:grant-type:device_code', 'refresh_token'] }))
+      const getSecret = vi.fn(async () => ({ secret: 'must-not-deliver' }))
+      const options = { ...optionsFor(store), getSecret }
+      const authorize = await handleOAuthAuthorizeGet(new Request(authorizeUrl(resource)), options)
+      const device = await handleDeviceAuthorizationPost(formRequest('https://untrusted-host.example/oauth/device_authorization', { client_id: 'client-local', resource }), options)
+      for (const grant_type of ['authorization_code', 'urn:ietf:params:oauth:grant-type:device_code', 'refresh_token']) {
+        const token = await handleOAuthTokenPost(formRequest('https://untrusted-host.example/oauth/token', { grant_type, client_id: 'client-local', resource }), options)
+        expect(token.status).toBe(400)
+        expect(await token.json()).toMatchObject({ error: 'invalid_target' })
+      }
+      expect(authorize.status).toBe(400)
+      expect(device.status).toBe(400)
+      expect(store.grants.size).toBe(0)
+      expect(store.updates).toEqual([])
+      expect(getSecret).not.toHaveBeenCalled()
+    })
+  it.each(['https://ae.example', 'https://ae.example/'])('accepts the advertised resource and normal URL serialization: %s', async resource => {
+    const store = storeFixture()
+    await store.insertClient(defaultOAuthClientFixture('client-local', { grantTypes: ['authorization_code'] }))
+    const response = await handleOAuthAuthorizeGet(new Request(authorizeUrl(resource)), optionsFor(store))
+    expect(response.status).toBe(302)
+    expect(new URL(response.headers.get('location')!).origin).toBe(canonicalBaseUrl)
+    expect(store.grants.size).toBe(1)
+  })
+  it('rejects duplicate indicators before changing an existing grant', async () => {
+    const store = storeFixture()
+    await store.insertGrant(defaultOAuthGrantFixture('device:existing', { status: 'approved', ownerId: 'user_local', keyId: 'key-existing' }))
+    const before = [...store.grants.values()]
+    const url = authorizeUrl(canonicalBaseUrl)
+    url.searchParams.append('resource', canonicalBaseUrl)
+    expect((await handleOAuthAuthorizeGet(new Request(url), optionsFor(store))).status).toBe(400)
+    const body = new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: 'd-code', resource: canonicalBaseUrl })
+    body.append('resource', 'https://foreign.example')
+    const token = await handleOAuthTokenPost(new Request('https://ae.example/oauth/token', { method: 'POST', body }), optionsFor(store))
+    expect(await token.json()).toMatchObject({ error: 'invalid_target' })
+    expect([...store.grants.values()]).toEqual(before)
+    expect(store.updates).toEqual([])
+  })
+  it('retains the exact device request through sign-in', async () => {
+    const response = await handleOAuthAuthorizeGet(new Request('https://ae.example/oauth/authorize?user_code=ABCD-EFGH'), {
+      canonicalBaseUrl, authenticateOwner: async () => ({ isAuthenticated: false, userId: null }),
+    })
+    const login = new URL(response.headers.get('location')!)
+    expect(login.searchParams.get('redirect')).toBe('/oauth/authorize?user_code=ABCD-EFGH')
+    expect(login.origin).toBe(canonicalBaseUrl)
+  })
+})

@@ -11,7 +11,7 @@
 .arc-market .arc-agent-install-step { display: grid; min-width: 0; grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: var(--space-3); padding: var(--space-5); border-block-start: 1px solid var(--border); }
 .arc-market .arc-agent-install-number { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .arc-market .arc-agent-install-step-body { display: grid; min-width: 0; justify-items: stretch; gap: var(--space-3); }
-.arc-market .arc-agent-install-check { justify-self: start; max-width: 100%; }
+.arc-market .arc-agent-install-check { justify-self: start; min-height: 44px; max-width: 100%; }
 .arc-market .arc-agent-install-alternatives { min-width: 0; border-block-start: 1px solid var(--border); padding-inline: var(--space-5); }
 .arc-market .arc-agent-install-alternatives [data-slot="accordion-trigger"] { min-height: 44px; align-items: center; border-radius: 0; box-shadow: none; font-size: var(--text-sm); font-weight: 500; line-height: 1.55; }
 .arc-market .arc-agent-install-alternatives [data-slot="accordion-trigger"]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
@@ -22,4 +22,9 @@
 .arc-market .arc-agent-install-help p { margin: 0; overflow-wrap: anywhere; }
 .arc-market .arc-agent-install-help-link { display: inline-flex; min-height: 44px; min-width: 0; justify-self: start; align-items: center; color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
 .arc-market .arc-agent-install-help-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.arc-market .arc-agent-client-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); min-width: 0; }
+.arc-market .arc-agent-client-choices button { min-height: 44px; white-space: normal; }
+.arc-market .arc-agent-client-choices [aria-pressed="true"] { border-color: var(--control-on); background: var(--surface-muted); }
+.arc-market .arc-agent-install-title:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+@media (max-width: 479px) { .arc-market .arc-agent-client-choices { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 559px) { .arc-market.arc-agent-install > .arc-section-header, .arc-market .arc-agent-install-saved, .arc-market .arc-agent-install-step { padding: var(--space-4) var(--space-3); } .arc-market .arc-agent-install-alternatives { padding-inline: var(--space-3); } .arc-market .arc-agent-install-step { gap: var(--space-2); } }

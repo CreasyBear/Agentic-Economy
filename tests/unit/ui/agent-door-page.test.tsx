@@ -40,10 +40,12 @@ describe('agent door page', () => {
     expect(screen.getByRole('region', { name: 'Agent connection' }).getAttribute('id')).toBe('agent-setup')
     expect(screen.getByRole('region', { name: 'Agent connection' }).getAttribute('tabindex')).toBe('-1')
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Choose your Agent app' })).toBeTruthy()
     const connectAgent = screen.getByRole('link', { name: 'Start setup' })
     expect(connectAgent.getAttribute('href')).toBe('#agent-setup')
-    expect(screen.getByRole('button', { name: 'Copy Codex MCP command' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Copy setup commands' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
+    expect(screen.getByRole('button', { name: 'Copy setup commands' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Copy Claude Code MCP command' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy Cursor MCP command' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Six-step agent quickstart' })).toBeNull()
@@ -55,10 +57,14 @@ describe('agent door page', () => {
     expect(screen.getByRole('heading', { name: AGENT_PAGE.faqHeading })).toBeTruthy()
     expect(screen.getByRole('button', { name: AGENT_PAGE.faqQuestions[0].question })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Codex MCP command' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Use Claude Code or Cursor' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Claude Code MCP command' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Cursor MCP command' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy setup commands' }))
+    await screen.findByText('Codex MCP command copied.')
+    fireEvent.click(screen.getByRole('button', { name: 'Claude Code' }))
+    expect(screen.queryByText('Claude Code MCP command copied.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy setup commands' }))
+    await screen.findByText('Claude Code MCP command copied.')
+    fireEvent.click(screen.getByRole('button', { name: 'Cursor' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy setup commands' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(3))
     expect(writeText).toHaveBeenNthCalledWith(1, [
       'codex mcp add agentic-economy --url "https://ae.example/mcp"',
@@ -69,7 +75,7 @@ describe('agent door page', () => {
 
     const pageText = document.body.textContent ?? ''
     expect(pageText).not.toContain('browse Tools before connecting')
-    expect(pageText).toContain('Account connection does not set a Spending policy')
+    expect(pageText).toContain('Your Account balance never grants permission to spend')
     expect(pageText).toContain('Enable agentic-economy in Cursor, then follow its OAuth prompt.')
     expect(pageText).not.toMatch(/whoami|Agent Principal|token exchange|bearer|api key|ae connect|npm install|add-mcp@/iu)
   })

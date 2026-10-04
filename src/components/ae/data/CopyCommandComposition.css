@@ -12,7 +12,11 @@
 .arc-copy-command-prompt { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.7; }
 .arc-copy-command-source { min-width: 0; max-width: 100%; margin: 0; overflow: auto; color: var(--foreground); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.7; tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; }
 .arc-copy-command-source code { font: inherit; }
+.arc-copy-command-instruction pre { font-family: var(--font-body); }
 .arc-copy-command-block:has(.arc-copy-command-source:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .arc-copy-command-block[data-comfortable] .arc-copy-command-viewport { padding: var(--space-6); }
 .arc-copy-command-block[data-compact] .arc-copy-command-viewport { padding: var(--space-3); }
 @media (max-width: 479px) { .arc-copy-command-block[data-comfortable] .arc-copy-command-viewport { padding: var(--space-4); } }
+
+.arc-copy-command-header:has([data-with-label]) { flex-wrap: wrap; }
+.arc-copy-command-action[data-with-label] { width: auto; max-width: 100%; min-height: 44px; height: auto; padding: var(--space-2) var(--space-3); white-space: normal; }

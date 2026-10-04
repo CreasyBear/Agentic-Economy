@@ -59,7 +59,7 @@ vi.mock('@/components/ae/agent-access/home/useAeAgentAccessHome', () => ({
     canonicalBaseUrl: string; initialDirectory: AgentDirectoryProjection; search: object
   }) => ({
     canonicalBaseUrl, directory: initialDirectory, search,
-    loading: false, onDirectoryRetry: vi.fn(), onConnectNewAgent: calls.connect,
+    firstUse: { kind: 'connection_required' }, loading: false, onDirectoryRetry: vi.fn(), onConnectNewAgent: calls.connect,
     onSetupStep: calls.setup,
     showSetup: false,
   }),
@@ -180,13 +180,14 @@ describe('Agent keys settings revocation', () => {
     }))
 
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Research bot' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
     await waitFor(() => expect(clerkMocks.prompts).toBe(1))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect an Agent' }).hasAttribute('disabled')).toBe(false))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm this issuance' }).hasAttribute('disabled')).toBe(false))
     expect(calls.issue).toHaveBeenCalledTimes(2)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm this issuance' }))
 
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Save your secret key' })).toBeTruthy())
     expect(clerkMocks.prompts).toBe(2)
@@ -195,25 +196,24 @@ describe('Agent keys settings revocation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show secret' }))
     expect(screen.getByText('secret')).toBeTruthy()
   })
-  it('offers both direct connection paths and focuses existing OAuth steps', () => {
+  it('offers the client recipes once, with manual setup disclosed separately', async () => {
     const view = render(createElement(AeAgentAccessHome, {
       canonicalBaseUrl: 'https://example.test', initialDirectory: directory, search: {},
     }))
-    fireEvent.click(screen.getByRole('button', { name: 'Choose how to connect' }))
-    const manual = screen.getByRole('link', { name: 'Issue a manual key' })
+    expect(screen.getAllByRole('list', { name: 'Agent connection steps' })).toHaveLength(1)
+    for (const name of ['Codex', 'Claude Code', 'Cursor']) expect(screen.getByRole('button', { name })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connecting a custom script or another app?' }))
+    const manual = await screen.findByRole('link', { name: 'Issue a manual key' })
     expect(manual.getAttribute('href')).toBe('/owner/settings/agent-keys?issue=manual')
-    fireEvent.click(screen.getByRole('button', { name: 'Connect with OAuth / MCP' }))
-    expect(calls.setup).toHaveBeenCalledWith('oauth')
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('OAuth and MCP connection steps')
     view.unmount()
   })
-  it('opens OAuth setup for a removed caller with an empty directory', () => {
+  it('opens setup directly for a removed caller without a second choice screen', () => {
     const view = render(createElement(AeAgentAccessHome, {
       canonicalBaseUrl: 'https://example.test', initialDirectory: directory, search: { caller: 'agent:removed' },
     }))
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Connect with OAuth / MCP' }))
-    expect(screen.getByRole('list', { name: 'Agent connection steps' })).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Connect an Agent' })[0]!)
+    expect(calls.setup).toHaveBeenCalledWith('oauth')
+    expect(screen.getAllByRole('list', { name: 'Agent connection steps' })).toHaveLength(1)
     expect(document.activeElement?.getAttribute('aria-label')).toBe('OAuth and MCP connection steps')
     view.unmount()
   })

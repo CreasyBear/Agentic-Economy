@@ -7,7 +7,8 @@ import {
 } from '@/modules/agent-access/agent-access-console'
 
 export const readAgentDirectoryServer = createServerFn({ method: 'GET' })
-  .handler(async () => loadAgentDirectoryReadback())
+  .validator((data) => z.strictObject({ principalRef: z.string().regex(/^prn_[0-9a-f]{32}$/u).optional(), callRef: z.string().min(1).max(500).optional() }).parse(data ?? {}))
+  .handler(async ({ data }) => loadAgentDirectoryReadback(null, data.principalRef, data.principalRef === undefined ? undefined : data.callRef))
 
 export const readAgentAccessEnvironmentServer = createServerFn({ method: 'GET' })
   .handler(async () => {

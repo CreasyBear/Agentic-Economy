@@ -46,10 +46,13 @@ describe('buildAgentAccessConfigSnippets (W-27)', () => {
     expect(snippets.claude).toContain(`--header "Authorization: Bearer ${secret}"`)
   })
 
-  it('T5: python snippet imports AgenticEconomy and instantiates client with api_key and base_url', () => {
+  it('T5: Python verifies the real account endpoint with no unshipped SDK or purchase', () => {
     const snippets = buildAgentAccessConfigSnippets({ secret, canonicalBaseUrl })
-    expect(snippets.python).toContain('from agentic_economy import AgenticEconomy')
-    expect(snippets.python).toContain(`client = AgenticEconomy(api_key="${secret}", base_url="https://market.example.com")`)
+    expect(snippets.python).toContain('from urllib.request import Request, urlopen')
+    expect(snippets.python).toContain('https://market.example.com/api/v1/account')
+    expect(snippets.python).toContain(`Bearer ${secret}`)
+    expect(snippets.python).not.toContain('agentic_economy')
+    expect(snippets.python).not.toContain('/api/v1/tools/call')
   })
 
   it('T6: curl snippet targets /api/v1/account whoami endpoint with Bearer authorization and does not make purchase calls', () => {

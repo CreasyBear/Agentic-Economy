@@ -11,12 +11,19 @@ async function expectInitialHitTarget(page: Page, button: Locator) {
   expect(await button.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), center)).toBe(true)
 }
 
-test('native setup copy and alternatives work by pointer and keyboard', async ({ context, page }) => {
+test('native setup choice and copy work by pointer and keyboard', async ({ context, page }) => {
 
   await page.goto('/for-agents')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
 
-  const manifestCopyButton = page.getByRole('button', { name: 'Copy Codex MCP command' })
+  await expect(page.getByRole('button', { name: 'Copy setup commands' })).toHaveCount(0)
+  const codexChoice = page.getByRole('button', { name: 'Codex', exact: true })
+  await codexChoice.scrollIntoViewIfNeeded()
+  await expectInitialHitTarget(page, codexChoice)
+  await codexChoice.click()
+  await expect(codexChoice).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('heading', { name: 'Connect and approve access', exact: true })).toBeFocused()
+  const manifestCopyButton = page.getByRole('region', { name: 'Codex MCP command', exact: true }).getByRole('button')
 
   await expect(page.getByRole('link', { name: 'Start setup', exact: true })).toHaveAttribute('href', '#agent-setup')
   await manifestCopyButton.scrollIntoViewIfNeeded()
@@ -34,12 +41,21 @@ test('native setup copy and alternatives work by pointer and keyboard', async ({
   await expect(manifestCopyButton).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('status').filter({ hasText: 'Codex MCP command copied.' })).toBeVisible()
-  const alternatives = page.getByRole('button', { name: 'Use Claude Code or Cursor' })
-  await expect(alternatives).toHaveAttribute('aria-expanded', 'false')
-  await alternatives.focus()
+  const alternative = page.getByRole('button', { name: 'Claude Code', exact: true })
+  await alternative.focus()
   await page.keyboard.press('Enter')
-  await expect(alternatives).toHaveAttribute('aria-expanded', 'true')
-  await expect(page.getByRole('button', { name: 'Copy Claude Code MCP command' })).toBeVisible()
+  await expect(alternative).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('region', { name: 'Codex MCP command', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: 'Claude Code MCP command copied.' })).toHaveCount(0)
+  const alternativeCopy = page.getByRole('region', { name: 'Claude Code MCP command', exact: true }).getByRole('button')
+  await alternativeCopy.scrollIntoViewIfNeeded()
+  await expectInitialHitTarget(page, alternativeCopy)
+  const box = await alternativeCopy.boundingBox()
+  expect(box?.height).toBeGreaterThanOrEqual(44)
+  await alternativeCopy.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('status').filter({ hasText: 'Claude Code MCP command copied.' })).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('claude mcp add --transport http --scope user agentic-economy')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })
 
