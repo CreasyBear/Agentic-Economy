@@ -10,6 +10,8 @@ import { createPublicToolRef } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { blockrunTool, blockrunChatReceipt } from '../capability-execution/fixtures/blockrun-service-unit-evidence'
 import { upsertCallProjection } from '../../../convex/lib/capabilityExecution/callLifecycle/dispatchProjection'
+import { CALL_CONTENT_RETENTION_MS, expireCallContent } from '../../../convex/lib/capabilityExecution/contentRetention/callContent'
+import { retentionResolution } from './content-retention-fixtures'
 const ledger = vi.hoisted(() => ({ listTransactions: vi.fn(), createTransaction: vi.fn(), revertTransaction: vi.fn() }))
 vi.mock('@/modules/money/formance', async original => ({ ...await original<typeof import('@/modules/money/formance')>(),
   readFormanceConfiguration: () => ({ kind: 'configured', configuration: { ledger: process.env.AE_FORMANCE_LEDGER, environment: process.env.AE_FORMANCE_ENVIRONMENT, gatewayUrl: new URL(process.env.AE_FORMANCE_GATEWAY_URL!).origin } }),
@@ -75,6 +77,37 @@ describe('read-only monthly draft boundary', () => {
     const supplemented=readFrozenMonthlyDraft(next.snapshotJson,next.snapshotDigest)
     expect(supplemented.snapshot.providerUnitEvidence?.[0]?.evidence.current).toMatchObject({units:[{quantityUnits:'14'},{quantityUnits:'8'}],occurredAt})
     expect(supplemented.reconciliation.totals.grossChargeUnits).toBe('10001')
+    const supplementScope = {month, revision: 3}
+    const exportArgs = {periodStartAt:Date.UTC(2026,8,1),periodEndAt:Date.UTC(2026,9,1),status:'all' as const,
+      exportRef:'call-usage-export:00000000-0000-4000-8000-000000000031'}
+    vi.setSystemTime(now + CALL_CONTENT_RETENTION_MS + 1000)
+    const admitted = await f.owner.owner.mutation(api.capabilityCallProjections.beginOwnerCallExport,exportArgs)
+    const beforeExpiry = await f.owner.owner.query(api.capabilityCallProjections.readOwnerCallExportPage,
+      {...exportArgs,snapshotAt:admitted.snapshotAt,paginationOpts:{numItems:50,cursor:null}})
+    expect(beforeExpiry.page[0]).toMatchObject({providerUnitSupportVerified:true})
+    await f.backend.run(async ctx => {
+      await ctx.db.insert('purchaseResolutionRecords',{...retentionResolution,callRef,accountRef:f.owner.canonicalAccountRef,
+        agentPrincipalRef:f.owner.canonicalPrincipalRef,resolvedAt:now+1000,createdAt:now+1000})
+      expect(await expireCallContent(ctx,(await ctx.db.get(f.id))!,Date.now())).toBe(true)
+    })
+    await expect(f.owner.owner.query(api.capabilityCallProjections.readOwnerCallExportPage,
+      {...exportArgs,snapshotAt:admitted.snapshotAt,paginationOpts:{numItems:50,cursor:null}})).rejects.toThrow('call_export_source_changed')
+    expect(await f.owner.owner.query(api.moneyMonthlyUsageDraft.readOwnerDraft,{draftRef:first.draftRef})).toEqual(first)
+    expect(await f.owner.owner.query(api.moneyMonthlyUsageDraft.readOwnerDraft,{draftRef:next.draftRef})).toEqual(next)
+    expect(await f.owner.owner.action(api.moneyMonthlyUsageDraft.createOwnerDraft,{month,revision:1})).toEqual(first)
+    expect(await f.owner.owner.action(api.moneyMonthlyUsageDraft.createOwnerDraft,{month,revision:2})).toEqual(next)
+    const postExpiry = await f.owner.owner.action(api.moneyMonthlyUsageDraft.createOwnerDraft,supplementScope)
+    if(postExpiry.kind!=='available')throw new Error(postExpiry.code)
+    const current = readFrozenMonthlyDraft(postExpiry.snapshotJson,postExpiry.snapshotDigest)
+    expect(current.snapshot.providerUnitEvidence?.[0]?.evidence).toMatchObject({current:null,currentSupport:'unknown',observations:[{sequence:1},{sequence:2}]})
+    expect(current.reconciliation.totals.grossChargeUnits).toBe('10001')
+    for(const draft of [first,next,postExpiry])for(const privateValue of ['SYNTHETIC_PRIVATE_OUTPUT','inputJson','"output":'])expect(draft.snapshotJson).not.toContain(privateValue)
+    vi.setSystemTime(Date.now()+1000)
+    const freshScope = {...exportArgs,exportRef:'call-usage-export:00000000-0000-4000-8000-000000000032'}
+    const fresh = await f.owner.owner.mutation(api.capabilityCallProjections.beginOwnerCallExport,freshScope)
+    const exported = await f.owner.owner.query(api.capabilityCallProjections.readOwnerCallExportPage,
+      {...freshScope,snapshotAt:fresh.snapshotAt,paginationOpts:{numItems:50,cursor:null}})
+    expect(exported).toMatchObject({isDone:true,page:[{currentDeliveredRequestUnits:'1',currentSupportVerified:true,providerUnitSupportVerified:false}]})
     expect(ledger.createTransaction).not.toHaveBeenCalled();expect(ledger.revertTransaction).not.toHaveBeenCalled()
   })
   it('preserves all admitted sources across retry, next-day replay and canonical correction; explicit supplement sees later facts', async () => {

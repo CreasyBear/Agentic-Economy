@@ -12,6 +12,9 @@ import { readProjectedSupport } from '../../../convex/lib/capabilityExecution/se
 import { callExportSourceDigest } from '../../../convex/lib/capabilityExecution/callProjection/exportSnapshot'
 import { readOwnerReceiptContextHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryReads'
 import { createCallUsageExport, generateCallUsageExportCsv, callUsageExportRowSchema } from '@/lib/export/call-usage-export'
+import { CALL_CONTENT_RETENTION_MS, expireCallContent } from '../../../convex/lib/capabilityExecution/contentRetention/callContent'
+import { recordHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryProjection'
+import { retentionObligation, retentionResolution } from './content-retention-fixtures'
 
 const modules = Object.fromEntries(Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}')).map(([path,load]) => [path.replace('../../../convex/','./'),load]))
 const now = Date.UTC(2026,8,15), accountRef = 'account:synthetic', callRef = 'call:synthetic-unit', hash = canonicalDigest('synthetic-response')
@@ -40,6 +43,74 @@ async function fixture(kind: 'chat' | 'speech' = 'chat') {
   return {backend,callId,toolRef,result,project,evidence,support,fingerprint}
 }
 describe('canonical provider quantity observations', () => {
+  it('fingerprints authorised expiry without restoring payloads or treating historical provider units as current', async () => {
+    const f = await fixture(), original = await f.backend.run(ctx => ctx.db.get(f.callId))
+    const before = await f.evidence(), fingerprint = await f.fingerprint(), support = await f.support()
+    expect(support.fingerprint).toBe('sha256:ca90dc599cfaf9e4358f7cd555937ff6023e0ff696eb27afc8908cbf05acdf91')
+    const expiredAt = now + CALL_CONTENT_RETENTION_MS
+    await f.backend.run(ctx => ctx.db.insert('purchaseResolutionRecords', { ...retentionResolution,
+      callRef, accountRef, agentPrincipalRef: 'principal:synthetic', resolvedAt: now, createdAt: now }))
+    vi.setSystemTime(expiredAt)
+    expect(await f.backend.run(async ctx => expireCallContent(ctx, (await ctx.db.get(f.callId))!, expiredAt))).toBe(true)
+    const expired = await f.backend.run(ctx => ctx.db.get(f.callId))
+    expect(expired).toMatchObject({ inputDigest: original!.inputDigest, requestDigest: original!.requestDigest,
+      evidenceHash: hash, updatedAt: now, usage: original!.usage, contentExpiredAt: expiredAt,
+      result: { kind: 'completed', evidenceHash: hash, contentExpiredAt: expiredAt } })
+    expect(expired).not.toHaveProperty('inputJson'); expect(expired?.result).not.toHaveProperty('output')
+    expect(await f.support()).toMatchObject({ verified: true, quantityUnits: '1', providerUnitObservation: null })
+    const expiredEvidence = await f.evidence()
+    expect(expiredEvidence).toMatchObject({ observations: before.observations, current: null, currentSupport: 'unknown' })
+    expect(expiredEvidence.evidenceDigest).not.toBe(before.evidenceDigest)
+    const expiredFingerprint = await f.fingerprint()
+    expect(expiredFingerprint).not.toBe(fingerprint); expect(await f.fingerprint()).toBe(expiredFingerprint)
+    await f.backend.run(ctx => recordHandler(ctx, { callRef, principalId: 'principal:synthetic', state: 'completed', result: f.result, now: expiredAt + 1 }))
+    expect(await f.backend.run(ctx => ctx.db.get(f.callId))).toEqual(expired)
+    await f.project(); await f.project()
+    expect(await f.evidence()).toEqual(expiredEvidence)
+    expect(await f.support()).toMatchObject({ verified: true, quantityUnits: '1', providerUnitObservation: null })
+    const projection = await f.backend.run(async ctx => {
+      const {_id,_creationTime,...row} = (await ctx.db.query('capabilityCallProjections').unique())!
+      return row
+    })
+    const document = createCallUsageExport({periodStartAt:now-1000,periodEndAt:now+86400000,status:'all'},
+      [callUsageExportRowSchema.parse({...projection,currentSupportVerified:true,providerUnitSupportVerified:false})],expiredAt,1,accountRef)
+    expect(document.providerUnitReceiptCallCountUnits).toBe('0')
+    expect(document.providerUnitUnknownCallCountUnits).toBe('1')
+    expect(document.providerUnits).toMatchObject([{observedQuantityUnits:'0',unknownReceiptCountUnits:'1',coverage:'incomplete'},
+      {observedQuantityUnits:'0',unknownReceiptCountUnits:'1',coverage:'incomplete'}])
+    expect(await f.backend.run(async ctx => expireCallContent(ctx, (await ctx.db.get(f.callId))!, expiredAt + 1))).toBe(false)
+  })
+  it('preserves source evidence and exact fingerprints while financial obligations or reversals remain active', async () => {
+    const f = await fixture(), before = await f.fingerprint(), original = await f.backend.run(ctx => ctx.db.get(f.callId))
+    const expiredAt = now + CALL_CONTENT_RETENTION_MS
+    vi.setSystemTime(expiredAt)
+    const expire = () => f.backend.run(async ctx => expireCallContent(ctx, (await ctx.db.get(f.callId))!, expiredAt))
+    expect(await expire()).toBe(false) // A paid attempt without final resolution cannot expire.
+    const obligationId = await f.backend.run(async ctx => {
+      await ctx.db.insert('purchaseResolutionRecords', {...retentionResolution,callRef,accountRef,resolvedAt:now,createdAt:now})
+      return await ctx.db.insert('moneyProviderObligations', {...retentionObligation,callRef,toolRef:f.toolRef,buyerAccountRef:accountRef,state:'held',createdAt:now-100,updatedAt:now})
+    })
+    expect(await expire()).toBe(false)
+    await f.backend.run(ctx => ctx.db.patch(obligationId,{state:'settled',reversalState:'pending'}))
+    expect(await expire()).toBe(false)
+    await f.backend.run(ctx => ctx.db.patch(obligationId,{reversalState:'outcome_unknown'}))
+    expect(await expire()).toBe(false)
+    expect(await f.backend.run(ctx => ctx.db.get(f.callId))).toEqual(original)
+    expect(await f.fingerprint()).toBe(before)
+    expect(await f.support()).toMatchObject({providerUnitObservation:{units:[{quantityUnits:'12'},{quantityUnits:'8'}]}})
+    await f.backend.run(ctx => ctx.db.patch(obligationId,{reversalState:undefined}))
+    expect(await expire()).toBe(true)
+    expect(await f.support()).toMatchObject({verified:true,quantityUnits:'1',providerUnitObservation:null})
+    expect((await f.evidence()).observations).toHaveLength(1)
+    // A later financial hold cannot make deleted content available again.
+    await f.backend.run(ctx => ctx.db.patch(obligationId,{state:'held',reversalState:'pending',updatedAt:expiredAt+1}))
+    const expiredFingerprint = await f.fingerprint()
+    expect(await expire()).toBe(false)
+    expect(await f.fingerprint()).toBe(expiredFingerprint)
+    expect(await f.evidence()).toMatchObject({current:null,currentSupport:'unknown',observations:[{sequence:1}]})
+    const expired = await f.backend.run(ctx => ctx.db.get(f.callId))
+    expect(expired).not.toHaveProperty('inputJson'); expect(expired?.result).not.toHaveProperty('output')
+  })
   it('bounds final export index ranges with populated provider snapshots and fifty-observation histories', async () => {
     const f = await fixture()
     const template = await f.backend.run(async ctx => ({ call: (await ctx.db.get(f.callId))!,
