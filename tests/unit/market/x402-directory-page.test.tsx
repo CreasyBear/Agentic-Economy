@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
+import { Route as ProductionMarketRoute } from '@/routes/market'
 import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
@@ -23,7 +24,8 @@ vi.mock('@/modules/market-demand/market-demand.functions', async importOriginal 
   recordOwnerMarketDemand,
 }))
 vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ isLoaded: true, isSignedIn: owner.userId !== null, userId: owner.userId }) }))
-vi.mock('@/modules/market/market.functions', () => ({
+vi.mock('@/modules/market/market.functions', async importOriginal => ({
+  ...await importOriginal<typeof import('@/modules/market/market.functions')>(),
   listSavedToolsForOwner,
   saveToolForOwner,
   removeToolForOwner: vi.fn(),
@@ -49,16 +51,27 @@ const entries: X402DirectoryEntry[] = Array.from({ length: 20 }, (_, i) => ({
   protocol: i === 19 ? 'mcp' : 'http', provider: 'example.com', prices: [], metadataJson: '{}', slug: `tool-${i}`,
 }))
 type Props = ComponentProps<typeof AeX402Directory>
+type MarketRouteLoader = (deps: ReturnType<typeof marketLoaderDeps>) => unknown | Promise<unknown>
 // Mirrors the route: the URL's search is what the page receives, so URL-held
 // state (Compare selection) follows navigations exactly as in production.
 function Directory({ search: _search, ...rest }: Props) {
   const urlSearch = useRouterState({ select: (state) => state.location.search }) as Props['search']
   return <AeX402Directory {...rest} search={urlSearch} />
 }
-function show(search: Props['search'] = { offset: 20 }, items = entries, extra: Partial<Omit<Props, 'search'>> = {}) {
+function show(search: Props['search'] = { offset: 20 }, items = entries, extra: Partial<Omit<Props, 'search'>> = {}, routeLoader?: MarketRouteLoader) {
   const root = createRootRoute()
-  const router = createRouter({ routeTree: root.addChildren([
-    createRoute({ getParentRoute: () => root, path: '/market', validateSearch: validateMarketSearch }),
+  const marketRouteBase = { getParentRoute: () => root, path: '/market' as const, validateSearch: validateMarketSearch }
+  const marketRoute = routeLoader === undefined
+    ? createRoute(marketRouteBase)
+    : createRoute({
+      ...marketRouteBase,
+      loaderDeps: ({ search }) => marketLoaderDeps(search),
+      loader: ({ deps }) => routeLoader(deps),
+      ...(ProductionMarketRoute.options.staleTime === undefined ? {} : { staleTime: ProductionMarketRoute.options.staleTime }),
+      ...(ProductionMarketRoute.options.preloadStaleTime === undefined ? {} : { preloadStaleTime: ProductionMarketRoute.options.preloadStaleTime }),
+    })
+  const router = createRouter({ defaultViewTransition: true, routeTree: root.addChildren([
+    marketRoute,
     createRoute({ getParentRoute: () => root, path: '/t/new' }),
     createRoute({ getParentRoute: () => root, path: '/owner/market', validateSearch: validateMarketSearch }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
@@ -136,6 +149,117 @@ describe('native x402 catalogue', () => {
       observe.mockRestore()
     }
   })
+  it('uses real tab links with scoped owner-market destinations and reads Saved once across tab changes', async () => {
+    listSavedToolsForOwner.mockReturnValue(new Promise(() => {}))
+    const compare = entries[0]!.resource
+    const search = { view: 'tools' as const, provider: 'example.com', network: 'eip155:8453', maxUsdPrice: 0.005, layout: 'grid' as const, compare }
+    const { router } = show(search, entries, { marketPath: '/owner/market' })
+    const tabUrl = (name: string | RegExp) => {
+      const tab = screen.getByRole('tab', { name })
+      expect(tab.tagName).toBe('A')
+      return new URL((tab as HTMLAnchorElement).href)
+    }
+
+    const discover = tabUrl('Collections')
+    expect(discover.pathname).toBe('/owner/market')
+    expect(discover.searchParams.get('view')).toBe('discover')
+    expect(discover.searchParams.get('compare')).toBe(compare)
+    expect(discover.searchParams.get('layout')).toBe('grid')
+    expect(discover.searchParams.has('provider')).toBe(false)
+    expect(discover.searchParams.has('network')).toBe(false)
+
+    const tools = tabUrl('Tools')
+    expect(tools.pathname).toBe('/owner/market')
+    expect(tools.searchParams.get('view')).toBe('tools')
+    expect(tools.searchParams.get('provider')).toBe('example.com')
+    expect(tools.searchParams.get('network')).toBe('eip155:8453')
+    expect(tools.searchParams.get('maxUsdPrice')).toBe('0.005')
+    expect(tools.searchParams.get('compare')).toBe(compare)
+    expect(tools.searchParams.get('layout')).toBe('grid')
+
+    const providers = tabUrl('Providers')
+    expect(providers.pathname).toBe('/owner/market')
+    expect(providers.searchParams.get('view')).toBe('providers')
+    expect(providers.searchParams.get('provider')).toBe('example.com')
+    expect(providers.searchParams.get('network')).toBe('eip155:8453')
+    expect(providers.searchParams.get('maxUsdPrice')).toBe('0.005')
+    expect(providers.searchParams.get('compare')).toBe(compare)
+
+    const saved = tabUrl(/Saved/)
+    expect(saved.pathname).toBe('/owner/market')
+    expect(saved.searchParams.get('view')).toBe('saved')
+    expect(saved.searchParams.get('compare')).toBe(compare)
+    expect(saved.searchParams.get('layout')).toBe('grid')
+    expect(saved.searchParams.has('provider')).toBe(false)
+    expect(saved.searchParams.has('network')).toBe(false)
+
+    await waitFor(() => expect(listSavedToolsForOwner).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('tab', { name: /Saved/ }), { button: 0, ctrlKey: true })
+    expect(router.state.location.pathname).toBe('/owner/market')
+    expect(router.state.location.search.view).toBe('tools')
+
+    fireEvent.click(screen.getByRole('tab', { name: /Saved/ }))
+    await waitFor(() => expect(router.state.location.search.view).toBe('saved'))
+    const savedLoading = screen.getByRole('status', { name: 'Loading saved Tools' })
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(Array.from(savedLoading.children).filter(child => child.getAttribute('aria-hidden') === 'true')).toHaveLength(3)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Providers' }))
+    await waitFor(() => expect(router.state.location.search.view).toBe('providers'))
+    fireEvent.click(screen.getByRole('tab', { name: /Saved/ }))
+    await waitFor(() => expect(router.state.location.search.view).toBe('saved'))
+    expect(listSavedToolsForOwner).toHaveBeenCalledTimes(1)
+  })
+  it('preloads the Market loader once on hover and arrow focus, reuses it on Enter or Space, and skips whole-page transitions', async () => {
+    expect(ProductionMarketRoute.options.staleTime).toBe(30_000)
+    expect(ProductionMarketRoute.options.preloadStaleTime).toBe(30_000)
+    const originalTransitionDescriptor = Object.getOwnPropertyDescriptor(document, 'startViewTransition')
+    const startViewTransition = vi.fn((callback: () => void) => {
+      callback()
+      return { finished: Promise.resolve() }
+    })
+    Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
+    try {
+      const routeLoader = vi.fn((_deps: ReturnType<typeof marketLoaderDeps>) => undefined)
+      const { router } = show({ view: 'tools' }, entries, {}, routeLoader)
+      await router.load()
+      expect(routeLoader).toHaveBeenCalledTimes(1)
+      routeLoader.mockClear()
+      startViewTransition.mockClear()
+
+      const toolsTab = screen.getByRole('tab', { name: 'Tools' })
+      const providersTab = screen.getByRole('tab', { name: 'Providers' })
+      fireEvent.mouseEnter(providersTab)
+      await waitFor(() => expect(routeLoader).toHaveBeenCalledTimes(1))
+      toolsTab.focus()
+      fireEvent.keyDown(toolsTab, { key: 'ArrowRight' })
+      await waitFor(() => expect(document.activeElement).toBe(providersTab))
+      expect(toolsTab.getAttribute('aria-selected')).toBe('true')
+      expect(router.state.location.search.view).toBe('tools')
+      expect(routeLoader).toHaveBeenCalledTimes(1)
+
+      fireEvent.keyDown(providersTab, { key: 'Enter' })
+      // JSDOM does not synthesize the native anchor click that a browser fires for Enter.
+      fireEvent.click(providersTab)
+      await waitFor(() => expect(router.state.location.search.view).toBe('providers'))
+      expect(routeLoader).toHaveBeenCalledTimes(1)
+      expect(startViewTransition).not.toHaveBeenCalled()
+
+      const savedTab = screen.getByRole('tab', { name: /Saved/ })
+      fireEvent.keyDown(providersTab, { key: 'ArrowRight' })
+      await waitFor(() => expect(document.activeElement).toBe(savedTab))
+      expect(providersTab.getAttribute('aria-selected')).toBe('true')
+      expect(router.state.location.search.view).toBe('providers')
+      await waitFor(() => expect(routeLoader).toHaveBeenCalledTimes(2))
+      fireEvent.keyDown(savedTab, { key: ' ' })
+      await waitFor(() => expect(router.state.location.search.view).toBe('saved'))
+      expect(routeLoader).toHaveBeenCalledTimes(2)
+      expect(startViewTransition).not.toHaveBeenCalled()
+    } finally {
+      if (originalTransitionDescriptor === undefined) Reflect.deleteProperty(document, 'startViewTransition')
+      else Object.defineProperty(document, 'startViewTransition', originalTransitionDescriptor)
+    }
+  })
   it('keeps BaseUI manual keyboard activation and replaces rapid pending views with their loaded data', async () => {
     const { rerender, router } = show({ view: 'discover' }, entries, { pendingView: 'tools' })
     const renderRoute = (search: Props['search'], pendingView?: Props['pendingView']) => rerender(
@@ -148,6 +272,8 @@ describe('native x402 catalogue', () => {
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
     expect(screen.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true')
     expect(screen.getByRole('status').textContent).toBe('Loading Tools…')
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('tabpanel').querySelector('[aria-hidden="true"]')).toBeTruthy()
     expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
     expect(screen.queryByText('14,455 Tools')).toBeNull()
     expect(searchMarketToolsServer).not.toHaveBeenCalled()
@@ -158,6 +284,7 @@ describe('native x402 catalogue', () => {
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
     expect(screen.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true')
     expect(screen.getByRole('status').textContent).toBe('Loading Providers…')
+    expect(screen.getAllByRole('status')).toHaveLength(1)
     expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'View Tools from example.com' })).toBeNull()
     expect(searchMarketToolsServer).not.toHaveBeenCalled()
@@ -167,12 +294,14 @@ describe('native x402 catalogue', () => {
     expect(screen.getByRole('tab', { name: 'Collections' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
     expect(screen.getByRole('status').textContent).toBe('Loading Collections…')
+    expect(screen.getAllByRole('status')).toHaveLength(1)
     expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
 
     renderRoute({ view: 'discover' }, 'saved')
     expect(screen.getByRole('tab', { name: /Saved/ }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
     expect(screen.getByRole('status').textContent).toBe('Loading saved Tools…')
+    expect(screen.getAllByRole('status')).toHaveLength(1)
     expect(screen.queryByRole('table', { name: 'Tools' })).toBeNull()
 
     renderRoute({ view: 'discover' }, 'providers')
@@ -758,6 +887,14 @@ const searchMeta = {
 } satisfies Pick<Extract<ToolChoiceSearchOutput, { kind: 'match' }>, 'schemaVersion' | 'query' | 'partialResults' | 'assessed' | 'pagination' | 'next'>
 
 describe('canonical Market search', () => {
+  it('keeps the initial canonical-search skeleton decorative inside its named status', () => {
+    searchMarketToolsServer.mockReturnValue(new Promise(() => {}))
+    show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    const status = screen.getByRole('status', { name: 'Searching admitted Tools and Coinbase Bazaar' })
+    expect(status.textContent).toContain('Searching admitted Tools and Coinbase Bazaar…')
+    expect(status.querySelector('[aria-hidden="true"]')).toBeTruthy()
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
   it('replaces directory results with one mixed page, uses exact detail links, row-source freshness and an executable filtered cursor', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
     const second = { ...searchMeta, kind: 'scoped', results: [searchRows[1]!], reason: 'More catalogue entries remain.', pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }] } satisfies ToolChoiceSearchOutput

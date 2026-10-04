@@ -79,6 +79,7 @@ function hostsBefore(pages: readonly ProviderPage[], index: number): Set<string>
 export function useProviderCataloguePages(enabled: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput, requestedPage = 1) {
   const filtersRef = useRef(filters)
   const generation = useRef(0)
+  const lastCompleted = useRef<ProviderPagesState | undefined>(undefined)
   const [state, setState] = useState(() => initialProviderPages(enabled, catalogue))
   useEffect(() => { filtersRef.current = filters }, [filters])
 
@@ -95,7 +96,10 @@ export function useProviderCataloguePages(enabled: boolean, catalogue: X402Direc
   useEffect(() => {
     const nextGeneration = generation.current + 1
     generation.current = nextGeneration
-    const started = initialProviderPages(enabled, catalogue)
+    const cached = lastCompleted.current
+    const started = enabled && cached !== undefined && cached.source === catalogue
+      ? { ...cached, index: Math.max(0, Math.min(requestedPage - 1, cached.pages.length - 1)) }
+      : initialProviderPages(enabled, catalogue)
     setState(started)
     if (started.status !== 'loading') return
     let cancelled = false
@@ -122,7 +126,18 @@ export function useProviderCataloguePages(enabled: boolean, catalogue: X402Direc
       setState(current => current.source === started.source && current.status === 'loading' ? { ...current, status: 'failed' } : current)
     })
     return () => { cancelled = true }
+    // Page-only changes stay on the existing walkTarget path; this reset reads the latest requested page on source/enable changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, catalogue])
+
+  useEffect(() => {
+    if (
+      enabled && state.pages.length > 0 && state.source === catalogue &&
+      catalogue?.kind === 'ok' && catalogue.source === 'index' && state.status === 'idle'
+    ) {
+      lastCompleted.current = state
+    }
+  }, [enabled, state, catalogue])
 
   function showPreviousPage() {
     setState(current => current.index === 0 || current.status === 'loading' ? current : { ...current, index: current.index - 1, status: 'idle' })
@@ -178,7 +193,7 @@ export function useProviderCataloguePages(enabled: boolean, catalogue: X402Direc
   useEffect(() => {
     if (!enabled) return
     const target = walkTarget - 1
-    if (target < 0 || state.status === 'loading' || target < state.pages.length) return
+    if (target < 0 || state.pages.length === 0 || state.status === 'loading' || target < state.pages.length) return
     if (state.status === 'failed' || state.pages.at(-1)?.isDone === true) return
     void loadNextPage()
   }, [enabled, walkTarget, state.pages, state.status, loadNextPage])
