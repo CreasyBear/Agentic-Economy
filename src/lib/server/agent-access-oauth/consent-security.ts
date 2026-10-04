@@ -88,7 +88,10 @@ export async function locatedConsentResponse(
   if (limited !== undefined) return limited
   const owner = await ownerIdentity(options)
   if (!owner.isAuthenticated || owner.userId === null) {
-    return redirectTo(new URL('/sign-in', baseUrl(request, options)))
+    const login = new URL('/sign-in', baseUrl(request, options))
+    const requested = new URL(request.url)
+    login.searchParams.set('redirect', `${requested.pathname}${requested.search}`)
+    return redirectTo(login)
   }
   let result: Awaited<ReturnType<typeof readGrantForConsent>>
   try {

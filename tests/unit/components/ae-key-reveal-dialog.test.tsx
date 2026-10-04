@@ -75,7 +75,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
     )
 
     expect(screen.getByRole('dialog', { name: /save your secret key/i })).toBeInTheDocument()
-    expect(screen.getByText(/step 2 of 2 · save & install/i)).toBeInTheDocument()
+    expect(screen.getByText('Save the one-time secret and configure your client.')).toBeInTheDocument()
     expect(screen.getByText('Research Bot')).toBeInTheDocument()
     expect(screen.getByText('Sandbox')).toBeInTheDocument()
     expect(
@@ -111,7 +111,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(writeTextMock).toHaveBeenCalledWith(baseReveal.secret)
     await waitFor(() => {
       expect(mockToast.success).toHaveBeenCalledWith(
-        'Copied to clipboard — save this secret; it will not be shown again.',
+        'Copied to clipboard. Save this secret; it will not be shown again.',
       )
     })
   })
@@ -396,7 +396,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /download mcp\.json/i }))
 
-    const successMessage = 'Downloaded mcp.json — drop it into .cursor/mcp.json'
+    const successMessage = 'Downloaded mcp.json. Save it as .cursor/mcp.json'
     await waitFor(() => {
       expect(mockToast.success).toHaveBeenCalledWith(successMessage)
       expect(screen.getByText(successMessage)).toBeInTheDocument()
@@ -426,7 +426,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /download \.env/i }))
 
-    const successMessage = 'Downloaded .env — add it to your project root'
+    const successMessage = 'Downloaded .env. Add it to your project root'
     await waitFor(() => {
       expect(mockToast.success).toHaveBeenCalledWith(successMessage)
     })
@@ -456,44 +456,38 @@ describe('AeKeyRevealDialog (W-27)', () => {
     })
   })
 
-  it('T18: waiting connectionStatus shows amber radar copy for display name', () => {
+  it('reports issuance without implying authentication or a Tool Call', () => {
     render(
       <AeKeyRevealDialog
         open={true}
         reveal={baseReveal}
         onOpenChange={vi.fn()}
         canonicalBaseUrl={canonicalBaseUrl}
-        connectionStatus="waiting"
       />,
     )
 
     expect(
-      screen.getByText(`Waiting for first Call from ${baseReveal.displayName}...`),
+      screen.getByText(`Key issued for ${baseReveal.displayName}.`),
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Run the cURL command above or launch your agent to complete verification.',
+        'Configure your client securely. The cURL account check verifies authentication; it makes no Tool Call. Continue in Agents to check first-use progress.',
       ),
     ).toBeInTheDocument()
   })
 
-  it('T19: verified connectionStatus shows success radar copy', () => {
-    render(
-      <AeKeyRevealDialog
-        open={true}
-        reveal={baseReveal}
-        onOpenChange={vi.fn()}
-        canonicalBaseUrl={canonicalBaseUrl}
-        connectionStatus="verified"
-      />,
-    )
-
-    expect(
-      screen.getByText(`First request received from ${baseReveal.displayName}.`),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('You can save the secret and close this dialog.'),
-    ).toBeInTheDocument()
+  it('only continues setup after the one-time secret is acknowledged', () => {
+    const onContinueSetup = vi.fn()
+    const onOpenChange = vi.fn()
+    render(<AeKeyRevealDialog open reveal={baseReveal} onOpenChange={onOpenChange} onContinueSetup={onContinueSetup} canonicalBaseUrl={canonicalBaseUrl} />)
+    const continueButton = screen.getByRole('button', { name: 'Continue in Agents' })
+    expect(continueButton).toBeDisabled()
+    fireEvent.click(continueButton)
+    expect(onContinueSetup).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I have saved my secret key securely' }))
+    fireEvent.click(continueButton)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(onContinueSetup).toHaveBeenCalledTimes(1)
   })
 
   it('T20: download failure shows Rule 4 triplet in status and toast.error', async () => {
@@ -516,7 +510,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
     fireEvent.click(screen.getByRole('button', { name: /download mcp\.json/i }))
 
     const triplet =
-      'Could not save the file to your computer. A$0.00 deducted — your balance is safe. Copy the snippet instead, or try Download again.'
+      'Could not save the file to your computer. Downloading a setup file makes no purchase. Your Balance is unaffected. Copy the snippet instead, or try Download again.'
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith(triplet)
       expect(screen.getByText(triplet)).toBeInTheDocument()

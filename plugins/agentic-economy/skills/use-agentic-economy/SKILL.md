@@ -5,6 +5,24 @@ description: Find and acquire a bounded outside service through Agentic Economy 
 
 # Use Agentic Economy
 
+## First use and returning to the task
+
+Keep the user's need, selected Tool and intended input in the current harness.
+Both a website-selected Tool and an Agent-discovered Tool follow the same
+Quote → authorized Call → result and receipt path. Refresh tools/list after
+connection and follow its pagination. Setup, browser return, key issuance and
+an authenticated account read are progress, not completed Tool use. For Browse
+only access, finish discovery without purchasing; explain the approval needed
+if the user chooses to proceed. If a prior Call exists, recover it before
+starting another purchase. Report unavailable supply, refused authority or an
+uncertain result honestly rather than presenting a demonstration as delivery.
+Share the exact verification link when authorization starts. Its **Follow live onboarding** link observes that request before credential issuance.
+Once authenticated, use `/agent-access?caller=<principalRef>` on the connected
+server, with the `principalRef` from `ae_agentAccess_whoami`, to follow this Agent. Once a Call is accepted, add `callRef=<original Call reference>` to follow that exact attempt through renewal, delivery and recovery.
+Add `resumeTool=<toolRef>` for a selected Tool. The page follows recorded access,
+authentication and Calls while the task stays here. Keep credentials and private
+input out of that URL; unrecorded host planning is not a platform event.
+
 ## Find a suitable Tool
 
 Use the installed server's tools/list before calling a tool. Public discovery has

@@ -366,7 +366,9 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('connection_target=new_agent')
     expect(String(request?.body)).toContain('approved_tool_access=all_admitted')
     expect(String(request?.body)).not.toContain('approved_tool_ref=')
-    expect(await screen.findByText('Connected to Test assistant')).toBeTruthy()
+    expect(await screen.findByText('Access approved for Test assistant')).toBeTruthy()
+    expect(screen.queryByText('Connected to Test assistant')).toBeNull()
+    expect(screen.getByText(/Check the Agents page for authenticated access and Tool results/)).toBeTruthy()
   })
 
   it('lets the owner narrow caller-requested Tools and posts the exact approved subset', async () => {
@@ -410,7 +412,7 @@ describe('/agent-access/authorize consent loading', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
     expect(String(request?.body)).toContain('authority_mode=spending_policy')
-    expect(await screen.findByText('Connected to Provider CLI')).toBeTruthy()
+    expect(await screen.findByText('Access approved for Provider CLI')).toBeTruthy()
   })
 
   it('requires an explicit existing agent before credential replacement can be approved', async () => {
@@ -538,7 +540,7 @@ describe('/agent-access/authorize consent loading', () => {
     fireEvent.click(connect)
     expect(fetchMock).toHaveBeenCalledOnce()
     resolveResponse?.(Response.json({ kind: 'approved', grantRef: 'grant-double' }))
-    expect(await screen.findByText('Connected to Test assistant')).toBeTruthy()
+    expect(await screen.findByText('Access approved for Test assistant')).toBeTruthy()
   })
 
   it('retains loaded choices when the next replacement-target page fails and retries it', async () => {

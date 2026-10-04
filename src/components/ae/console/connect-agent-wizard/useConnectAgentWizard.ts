@@ -17,6 +17,7 @@ import { createRuntimeId } from '@/modules/common/runtime-id'
 
 import type {
   ConnectAgentAuthorityMode,
+  ConnectAgentIssuePhase,
   ConnectAgentWizardDraft,
   ConnectAgentWizardPorts,
   ConnectAgentWizardViewState,
@@ -65,7 +66,7 @@ function resetWizardFields(
   }>,
 ): void {
   setters.setName('')
-  setters.setAuthorityMode('spending_policy')
+  setters.setAuthorityMode(AGENT_KEY_DRAFT_DEFAULTS.authorityMode)
   setters.setPerCallAmount(DEFAULT_PER_CALL)
   setters.setDailyAmount(DEFAULT_DAILY)
   setters.setMonthlyAmount(DEFAULT_MONTHLY)
@@ -77,23 +78,29 @@ export function useConnectAgentWizard({
   open = true,
   onOpenChange,
   onIssue,
+  onIssuePhaseChange,
   onSuccess,
   initialDraft,
   onDraftChange,
 }: ConnectAgentWizardPorts) {
   const [name, setName] = useState(initialDraft?.name ?? '')
   const [authorityMode, setAuthorityMode] =
-    useState<ConnectAgentAuthorityMode>(initialDraft?.authorityMode ?? 'spending_policy')
+    useState<ConnectAgentAuthorityMode>(initialDraft?.authorityMode ?? AGENT_KEY_DRAFT_DEFAULTS.authorityMode)
 
   const [perCallAmount, setPerCallAmount] = useState(initialDraft?.perCallAmount ?? DEFAULT_PER_CALL)
   const [dailyAmount, setDailyAmount] = useState(initialDraft?.dailyAmount ?? DEFAULT_DAILY)
   const [monthlyAmount, setMonthlyAmount] = useState(initialDraft?.monthlyAmount ?? DEFAULT_MONTHLY)
 
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [issuePhase, setIssuePhase] = useState<ConnectAgentIssuePhase>('editing')
+  const isSubmitting = issuePhase === 'issuing'
+  const awaitingConfirmation = issuePhase === 'confirmation_required'
+  const changeIssuePhase = (phase: ConnectAgentIssuePhase) => { setIssuePhase(phase); onIssuePhaseChange?.(phase) }
   const [nameInvalid, setNameInvalid] = useState(false)
 
   const idempotencyKeyRef = useRef<string | undefined>(undefined)
+  const issueInFlight = useRef(false)
+  const issueMaterial = useRef<string | undefined>(undefined)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const draftRef = useRef({
     name,
@@ -126,7 +133,11 @@ export function useConnectAgentWizard({
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
-      if (!nextOpen && !isSubmitting) {
+      if (!nextOpen && awaitingConfirmation) {
+        setDiagnostic(mapNetworkDiagnostic())
+        return
+      }
+      if (!nextOpen && !isSubmitting && !issueInFlight.current) {
         resetWizardFields({
           setName,
           setAuthorityMode,
@@ -139,11 +150,11 @@ export function useConnectAgentWizard({
         draftRef.current = { ...AGENT_KEY_DRAFT_DEFAULTS, environment }
         idempotencyKeyRef.current = undefined
       }
-      if (!isSubmitting) {
+      if (!isSubmitting && !issueInFlight.current) {
         onOpenChange(nextOpen)
       }
     },
-    [isSubmitting, onOpenChange, environment],
+    [isSubmitting, awaitingConfirmation, onOpenChange, environment],
   )
 
   const handleNameChange = useCallback(
@@ -178,8 +189,7 @@ export function useConnectAgentWizard({
     publishDraft({ monthlyAmount: value })
   }, [publishDraft])
 
-  const handleSubmit = async (e: Pick<FormEvent, 'preventDefault'>) => {
-    e.preventDefault()
+  const prepareIssue = (): Record<string, unknown> | undefined => {
     setDiagnostic(null)
 
     const trimmedName = name.trim()
@@ -240,36 +250,48 @@ export function useConnectAgentWizard({
       }
     }
 
-    if (idempotencyKeyRef.current === undefined) {
-      idempotencyKeyRef.current = createRuntimeId('agent-issue')
-    }
-
-    const payload: Record<string, unknown> = {
-      name: trimmedName,
-      idempotencyKey: idempotencyKeyRef.current,
-      environment,
-      authorityMode,
-    }
-
+    const payload: Record<string, unknown> = { name: trimmedName, environment, authorityMode }
     if (environment === 'production') {
       payload.maximumSpendPerCall = perCallExact
       payload.maximumDailySpend = dailyExact
       payload.maximumMonthlySpend = monthlyExact
     }
+    return payload
+  }
 
-    setIsSubmitting(true)
+  // Reviewing creates no credential. Concurrent activation shares one attempt;
+  // cancelled step-up and lost acknowledgements retain its retry identity.
+  const handleSubmit = async (e: Pick<FormEvent, 'preventDefault'>) => {
+    e.preventDefault()
+    if (issueInFlight.current) return
+    const material = prepareIssue()
+    if (material === undefined) return
+    const serializedMaterial = JSON.stringify(material)
+    if (issueMaterial.current !== serializedMaterial) {
+      if (awaitingConfirmation) {
+        setDiagnostic(mapNetworkDiagnostic())
+        return
+      }
+      idempotencyKeyRef.current = undefined
+      issueMaterial.current = serializedMaterial
+    }
+    if (idempotencyKeyRef.current === undefined) idempotencyKeyRef.current = createRuntimeId('agent-issue')
+    const payload = { ...material, idempotencyKey: idempotencyKeyRef.current }
+    issueInFlight.current = true
+    changeIssuePhase('issuing')
+    let confirmationRequired = false
 
     try {
       const result = await onIssue({ data: payload }) as AgentAccessKeyIssueResult | undefined
 
       if (result?.kind === 'created' || result?.kind === 'replayed') {
         idempotencyKeyRef.current = undefined
-        setIsSubmitting(false)
+        changeIssuePhase('editing')
         onOpenChange(false)
         onSuccess?.({
           keyId: result.keyId,
           secret: result.secret,
-          displayName: trimmedName,
+          displayName: name.trim(),
           environment,
         })
         return
@@ -277,6 +299,7 @@ export function useConnectAgentWizard({
 
       if (result?.kind === 'error') {
         if (result.retryable) {
+          confirmationRequired = true
           toast.error('Issuance temporarily unavailable. Please retry.')
         } else {
           idempotencyKeyRef.current = undefined
@@ -286,20 +309,22 @@ export function useConnectAgentWizard({
             toast.error('Could not connect agent. Please check your inputs.')
           }
         }
-        setDiagnostic(mapIssueErrorDiagnostic(result.code))
+        setDiagnostic(result.retryable ? mapNetworkDiagnostic() : mapIssueErrorDiagnostic(result.code))
       } else {
-        idempotencyKeyRef.current = undefined
+        confirmationRequired = true
         setDiagnostic(mapUnexpectedDiagnostic())
       }
     } catch (cause) {
-      if (isReverificationCancelledError(cause)) return
+      if (isReverificationCancelledError(cause)) { confirmationRequired = awaitingConfirmation; return }
+      confirmationRequired = true
       degrade(cause, undefined, {
         site: 'AeConnectAgentWizardDialog.submit',
         reason: 'source_unavailable',
       })
       setDiagnostic(mapNetworkDiagnostic())
     } finally {
-      setIsSubmitting(false)
+      issueInFlight.current = false
+      changeIssuePhase(confirmationRequired ? 'confirmation_required' : 'editing')
     }
   }
 
@@ -318,6 +343,7 @@ export function useConnectAgentWizard({
     monthlyAmount,
     diagnostic,
     isSubmitting,
+    awaitingConfirmation,
     spendingPresentation: environment === 'sandbox' ? 'sandbox-static' : 'editable',
   }
 
@@ -326,6 +352,7 @@ export function useConnectAgentWizard({
     nameInputRef,
     handleOpenChange,
     handleSubmit,
+    canReviewDraft: () => prepareIssue() !== undefined,
     handleNameChange,
     setAuthorityMode: handleAuthorityChange,
     setPerCallAmount: handlePerCallAmountChange,

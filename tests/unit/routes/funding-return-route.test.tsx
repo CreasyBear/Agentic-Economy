@@ -69,12 +69,29 @@ describe('public funding return', () => {
 
     expect(await screen.findByRole('heading', { name: 'Credit added' })).toBeTruthy()
     expect(screen.getByText(/^Paid\. A\$10\.00 is now available/u)).toBeTruthy()
+    expect(screen.getByText(/Credit does not grant spending authority/u)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/v1/account/funding-sessions/public/cs_agent_one',
       '/api/v1/account/funding-sessions/public/cs_agent_one',
     ])
+  })
+
+  it('hands confirmed funding back to the original task without duplicating payment or purchase', async () => {
+    fetchMock.mockResolvedValueOnce(found('ready'))
+    const writeText = vi.fn(async (_text: string) => undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderFundingReturn()
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy instruction for your Agent' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const instruction = writeText.mock.calls[0]?.[0]
+    expect(instruction).toContain('funding.handoff.status for fundingSessionId "cs_agent_one"')
+    expect(instruction).toContain('check that same Call')
+    expect(instruction).toContain('fresh Quote')
+    expect(instruction).toContain('Check current authority')
+    expect(instruction).toContain('Do not start another payment')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the same observed payment visible and blocks another native check while pending', async () => {

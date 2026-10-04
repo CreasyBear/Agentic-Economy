@@ -1,18 +1,26 @@
 import type { fetch as UndiciFetch } from 'undici'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { Response as UndiciResponse } from 'undici'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { decodePaymentSignatureHeader, encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { eip3009ABI } from '@x402/evm'
 import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, type Hex } from 'viem'
 
-import { components, internal } from '../../convex/_generated/api'
+import { api, components, internal } from '../../convex/_generated/api'
 import { prepareFundedSandboxBuyer, readEvidence, registerRotatingBuyer,
   type PrepareBuyerOptions } from './capability-call-workpool-harness'
+import { publishedBusinessOwner } from '../helpers/convex-fixtures'
 import { setPublicSourceTransportForTests, type ConvexSourceTransport } from '@/lib/server/convex-source'
 import { handleToolQuotePost, handleToolCallPost, handleCallStatusGet, handleCallCancelPost } from '@/lib/server/call-api'
+import { handleMcpRequest } from '@/lib/server/mcp-api'
 import { callMachineResultSchema } from '@/modules/capability-execution/call-contracts'
 import { callStatusResultSchema, callRecoveryResultSchema } from '@/modules/capability-execution/call-recovery.actions'
 import { toolQuoteAction } from '@/modules/capability-execution/quote.actions'
+import { isRecord } from '@/modules/common/is-record'
+import { currentUtcMonthBounds } from '@/modules/common/freshness'
+import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
+import { projectAgentFirstUse } from '@/modules/agent-access/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { readFormanceAccount, readFormanceTransactionByReference, type FormanceReferenceReadResult } from '@/modules/money/formance'
 import { formanceAccountMetadataDigest, readFormanceSpendingPeriod } from '@/modules/money/formance-workflows'
@@ -421,6 +429,104 @@ afterEach(() => {
 
 describe('native nine-row money contract matrix', () => {
   const native = it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')
+
+  native('MCP first use retains the purchase across connection, delivery and a client restart', async () => {
+    let observer!: Awaited<ReturnType<typeof registerRotatingBuyer>>['owner']
+    const buyer = await prepare({ buyerSetup: async backend => {
+      const registered = await registerRotatingBuyer(backend, '5000000', '5000000', 2, '5000000')
+      observer = registered.owner
+      return registered
+    } })
+    const provider = programProvider(buyer)
+    let watchedCallRef: string | undefined
+    const readLive = async () => await observer.query(api.capabilityCallProjections.readOwnerAgentReadback, {
+      principalRef: buyer.buyer.principal.principalId, ...(watchedCallRef === undefined ? {} : { callRef: watchedCallRef }), ...currentUtcMonthBounds(Date.now()), paginationOpts: { numItems: 50, cursor: null },
+    })
+    const owned = await observer.query(api.agentDirectory.listOwnedPage, {
+      now: Date.now(), principalRef: buyer.buyer.principal.principalId, paginationOpts: { numItems: 25, cursor: null },
+    })
+    expect(owned.page.map(agent => agent.principalRef)).toEqual([buyer.buyer.principal.principalId])
+    const foreignOwner = await publishedBusinessOwner(buyer.backend, 'first-use-foreign-observer')
+    const watchArgs = { now: Date.now(), principalRef: buyer.buyer.principal.principalId, paginationOpts: { numItems: 25, cursor: null } }
+    expect((await foreignOwner.owner.query(api.agentDirectory.listOwnedPage, watchArgs)).page).toEqual([])
+    expect((await buyer.backend.query(api.agentDirectory.listOwnedPage, watchArgs)).page).toEqual([])
+    const firstUse = async () => {
+      const live = await readLive()
+      const directory = projectAgentDirectory([], owned.page, [], [{ principalRef: buyer.buyer.principal.principalId,
+        activity: live.activity.page, ...(live.watchedCall === undefined ? {} : { watchedCall: live.watchedCall }), ...(live.liveCalls === undefined ? {} : { liveCalls: live.liveCalls }), activityIsDone: live.activity.isDone, dataState: 'source' }])
+      return projectAgentFirstUse({ directory, caller: buyer.buyer.principal.principalId, ...(watchedCallRef === undefined ? {} : { callRef: watchedCallRef }) })
+    }
+    const connect = async (authenticated: boolean) => {
+      const client = new Client({ name: 'ae-first-use-proof', version: '1.0.0' })
+      const transport = new StreamableHTTPClientTransport(new URL('https://ae.example/mcp'), {
+        ...(authenticated ? { requestInit: { headers: { authorization: 'Bearer first-use-owner-approved' } } } : {}),
+        fetch: async (input, init) => await handleMcpRequest(new Request(input, init), {
+          authenticate: async () => ({ isAuthenticated: true, tokenType: 'api_key', id: buyer.buyer.principal.credentialId,
+            subject: 'user_native_matrix', scopes: buyer.buyer.principal.scopes, claims: { aeEnvironment: 'sandbox' } }),
+          resolvePrincipal: async () => buyer.buyer.principal,
+        }),
+      })
+      await client.connect(transport as unknown as Parameters<Client['connect']>[0])
+      return client
+    }
+    const publicClient = await connect(false)
+    try {
+      expect(publicClient.getInstructions()).toContain('share its exact verification link')
+      const tools = await publicClient.listTools()
+      expect(tools.tools.map(tool => tool.name)).toContain('ae_registry_tools_describe')
+      expect(tools.tools.map(tool => tool.name)).not.toContain('ae_tool_call')
+      const described = await publicClient.callTool({ name: 'ae_registry_tools_describe', arguments: { toolRef: buyer.published.toolRef } })
+      expect(described.isError).not.toBe(true)
+      expect(described.structuredContent).toMatchObject({ result: { kind: 'found', tool: { toolRef: buyer.published.toolRef } } })
+    } finally { await publicClient.close() }
+
+    const connected = await connect(true)
+    let quoteRef: string
+    let callRef: string
+    const idempotencyKey = 'first-use:one-purchase'
+    try {
+      expect(connected.getInstructions()).toContain('A lost response is not permission to buy again')
+      expect(connected.getInstructions()).toContain('/agent-access?caller=<principalRef')
+      const tools = await connected.listTools()
+      expect(tools.tools.map(tool => tool.name)).toContain('ae_tool_quote')
+      const identity = await connected.callTool({ name: 'ae_agentAccess_whoami', arguments: {} })
+      expect(identity.structuredContent).toMatchObject({ result: { kind: 'authenticated', principalRef: buyer.buyer.principal.principalId, accountRef: buyer.buyer.principal.ownerId } })
+      const quoted = await connected.callTool({ name: 'ae_tool_quote', arguments: { toolRef: buyer.published.toolRef, input: buyer.input } })
+      const quote = toolQuoteAction.outputSchema.parse(isRecord(quoted.structuredContent) ? quoted.structuredContent.result : undefined)
+      expect(quote.kind).toBe('committed')
+      if (quote.kind !== 'committed') throw new Error('first_use_quote_not_committed')
+      quoteRef = quote.quoteRef
+      const called = await connected.callTool({ name: 'ae_tool_call', arguments: { quoteRef, idempotencyKey } })
+      const pending = callMachineResultSchema.parse(isRecord(called.structuredContent) ? called.structuredContent.result : undefined)
+      expect(pending.kind).toBe('pending')
+      if (pending.kind !== 'pending') throw new Error('first_use_call_not_pending')
+      callRef = pending.callRef
+      watchedCallRef = callRef
+      expect(called.structuredContent).toMatchObject({ next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } } }] })
+      expect((await readLive()).liveCalls).toEqual(expect.arrayContaining([expect.objectContaining({
+        callRef, credentialRef: buyer.buyer.principal.credentialId, phase: 'queued',
+      })]))
+      expect(await firstUse()).toMatchObject({ kind: 'running', call: { callRef } })
+    } finally { await connected.close() }
+
+    await drain(buyer)
+    const resumed = await connect(true)
+    try {
+      await resumed.listTools()
+      const recovered = await resumed.callTool({ name: 'ae_call_status', arguments: { callRef } })
+      expect(recovered.structuredContent).toMatchObject({ result: { kind: 'found', callRef, state: 'terminal',
+        result: { kind: 'completed', output: { result: 'native matrix result' }, receipt: { state: 'settled' } } }, next: [] })
+      const live = await readLive()
+      expect(live.liveCalls).toEqual(expect.arrayContaining([expect.objectContaining({ callRef, phase: 'finished' })]))
+      expect(live.activity.page).toEqual(expect.arrayContaining([expect.objectContaining({ callRef, deliveryState: 'delivered', receiptRef: expect.any(String) })]))
+      expect(await firstUse()).toMatchObject({ kind: 'delivered', call: { callRef, receiptRef: expect.any(String) } })
+      const replay = await resumed.callTool({ name: 'ae_tool_call', arguments: { quoteRef, idempotencyKey } })
+      expect(replay.structuredContent).toMatchObject({ result: { kind: 'completed', callRef } })
+      await assertTerminal(buyer, callRef, 'settled')
+      assertHits(buyer, provider, 3, 1)
+      expect(await buyer.readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
+    } finally { await resumed.close() }
+  }, 120_000)
 
   native('1: settled 2xx captures once, including an invalid delivered shape', async () => {
     const buyer = await prepare()

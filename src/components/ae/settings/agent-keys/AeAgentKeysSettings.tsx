@@ -15,7 +15,7 @@ import { issueAgentAccessKeyServer } from '@/modules/agent-access/agent-access.f
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type { AgentKeyDraft } from '@/components/ae/console/connect-agent-wizard/agent-key-draft'
-import type { ConnectAgentEnvironment } from '@/components/ae/console/connect-agent-wizard/connect-agent-wizard.contracts'
+import type { ConnectAgentEnvironment, ConnectAgentIssuePhase } from '@/components/ae/console/connect-agent-wizard/connect-agent-wizard.contracts'
 import { useAgentKeysSettings } from './useAgentKeysSettings'
 import { ApiKeys } from '@/components/arc/blocks/api-keys/api-keys'
 
@@ -27,6 +27,9 @@ export type AeAgentKeysSettingsProps = Readonly<{
   draft?: AgentKeyDraft
   onDraftChange?: (draft: AgentKeyDraft) => void
   onWizardOpenChange?: (open: boolean) => void
+  resumeTool?: string
+  onContinueSetup?: () => void
+  onIssuePhaseChange?: (phase: ConnectAgentIssuePhase) => void
 }>
 
 export function AeAgentKeysSettings({
@@ -37,6 +40,9 @@ export function AeAgentKeysSettings({
   draft,
   onDraftChange,
   onWizardOpenChange,
+  resumeTool,
+  onContinueSetup,
+  onIssuePhaseChange,
 }: AeAgentKeysSettingsProps) {
   const vm = useAgentKeysSettings(initialDirectory)
   const issueRequest = useServerFn(issueAgentAccessKeyServer)
@@ -64,6 +70,7 @@ export function AeAgentKeysSettings({
     title="Agent keys"
     description="Create and revoke the keys your Agents use to connect."
   >
+    {resumeTool === undefined ? null : <p>Your selected Tool is saved. After securing the key, return to your Agent’s task for a fresh Quote and first Call.</p>}
     {vm.error && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
       {vm.error}<Button type="button" variant="secondary" className="min-h-touch" disabled={vm.loading} onClick={() => void vm.refresh()}>Refresh keys</Button>
     </div>}
@@ -102,11 +109,13 @@ export function AeAgentKeysSettings({
       open={wizardOpen}
       onOpenChange={setWizardOpen}
       onIssue={issueKey}
+      {...(onIssuePhaseChange === undefined ? {} : { onIssuePhaseChange })}
       onSuccess={(issued) => { setReveal(issued); void vm.refresh() }}
       {...(draft === undefined ? {} : { initialDraft: draft })}
       {...(onDraftChange === undefined ? {} : { onDraftChange })}
     />
-    <AeKeyRevealDialog reveal={reveal} open={reveal !== undefined} onOpenChange={(open) => { if (!open) setReveal(undefined) }} canonicalBaseUrl={canonicalBaseUrl} />
+    <AeKeyRevealDialog reveal={reveal} open={reveal !== undefined} onOpenChange={(open) => { if (!open) setReveal(undefined) }} canonicalBaseUrl={canonicalBaseUrl}
+      {...(onContinueSetup === undefined ? {} : { onContinueSetup })} />
     <AeConfirmDialog
       open={vm.revokeTarget !== undefined}
       onOpenChange={vm.closeRevoke}

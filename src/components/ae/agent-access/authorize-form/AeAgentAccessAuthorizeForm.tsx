@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { Link } from '@tanstack/react-router'
+import buttonStyles from '@/components/arc/button/button.module.css'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
@@ -145,6 +147,10 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
               : {})}
           />
         )}
+        <Link to="/agent-access" search={{ grantRef: vm.grantRef, ...(oauthState === undefined ? {} : { state: oauthState }) }}
+          target="_blank" rel="noopener" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+          Follow live onboarding
+        </Link>
       </AeSettingsStack>
     </AeOperatorPage>
   )

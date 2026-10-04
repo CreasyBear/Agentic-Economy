@@ -12,10 +12,11 @@ import type { AgentAccessAuthorizeLoaded } from './authorize.contracts'
 
 export type AeAgentAccessAuthorizePageProps = Readonly<{ loaded: AgentAccessAuthorizeLoaded }>
 
-function OpenAgentsLink() {
+function OpenAgentsLink({ grantRef, state }: Readonly<{ grantRef?: string; state?: string }>) {
   return (
     <Link
       to="/agent-access"
+      search={grantRef === undefined ? {} : { grantRef, ...(state === undefined ? {} : { state }) }}
       className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-consent-page-outcome-link`}
     >
       Open Agents
@@ -41,7 +42,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
             <AlertDescription>
               <p>The approval may have completed. Do not submit it again.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
-              <OpenAgentsLink />
+              <OpenAgentsLink grantRef={loaded.grantRef} {...(loaded.oauthState === undefined ? {} : { state: loaded.oauthState })} />
             </AlertDescription>
           </Alert>
         </AeSettingsStack>
@@ -57,7 +58,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
             <AlertDescription>
               <p>This approval has completed. Open Agents for the current credential status.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
-              <OpenAgentsLink />
+              <OpenAgentsLink grantRef={loaded.grantRef} {...(loaded.oauthState === undefined ? {} : { state: loaded.oauthState })} />
             </AlertDescription>
           </Alert>
         </AeSettingsStack>

@@ -207,7 +207,7 @@ async function connectNewAgent(page: Page, name: string): Promise<ConnectedAgent
   await expect(page.getByRole('heading', { name: `Connect ${name}`, exact: true })).toBeVisible()
   issuedAgentNames.push(name)
   await submitAgentApproval(page, 'Connect agent')
-  await expect(page.getByText(`Connected to ${name}`)).toBeVisible()
+  await expect(page.getByText(`Access approved for ${name}`)).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
 }
 
@@ -237,7 +237,7 @@ async function replaceAgentCredential(page: Page, name: string, targetName: stri
     await loadNextConsentPage(page)
   }
   await submitAgentApproval(page, 'Replace credential')
-  await expect(page.getByText(`Connected to ${name}`)).toBeVisible()
+  await expect(page.getByText(`Access approved for ${name}`)).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
 }
 

@@ -49,7 +49,7 @@ export function AeFundingReturnPage({ fundingSessionId }: AeFundingReturnPagePro
     return () => controller.abort()
   }, [checkFunding])
 
-  return <AeFundingReturnState pageState={pageState} onCheck={checkFunding} />
+  return <AeFundingReturnState pageState={pageState} onCheck={checkFunding} fundingSessionId={fundingSessionId} />
 }
 
 function fundingPageReducer(state: FundingReturnViewState, event: FundingPageEvent): FundingReturnViewState {

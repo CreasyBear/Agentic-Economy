@@ -8,10 +8,14 @@ import type {
 } from '@/modules/agent-access/spending-policy-update'
 import type { ExactAmount } from '@/modules/money/public'
 import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
+import type { AgentFirstUseState } from '@/modules/agent-access/public'
+import type { AgentOnboardingRequest } from '@/modules/agent-access/public'
 
 export type AeAgentAccessHomeProps = Readonly<{
   canonicalBaseUrl: string
   initialDirectory: AgentDirectoryProjection
+  initialDirectoryUnavailable?: boolean
+  initialOnboarding?: AgentOnboardingRequest
   search: AgentAccessSearch
 }>
 
@@ -33,9 +37,9 @@ export type AeAgentAccessHomeView = Readonly<{
   lifecycleRetryLabel: string
   load: () => Promise<void>
   loadMore: () => void
-  hasConnectedAgent: boolean
-  resumeSectionTitle: string
-  resumeSectionDescription: string
+  firstUse: AgentFirstUseState
+  onboarding: AgentOnboardingRequest | undefined
+  liveUpdates: 'current' | 'delayed'
   getAgentHref: (principalId: string) => string
   clearSelectedPrincipal: () => void
   onDisconnectAgent: (principalRef: string) => void | Promise<void>
@@ -91,10 +95,13 @@ export type HomeEmptyInstallPanelProps = Readonly<{
 }>
 
 export type HomeResumeToolSectionProps = Readonly<{
-  title: string
-  description: string
-  resumeTool: string
-  showReturnLink: boolean
+  search?: AgentAccessSearch
+  firstUse: AgentFirstUseState
+  liveUpdates: 'current' | 'delayed'
+  resumeTool?: string
+  onConnect: () => void
+  onCheck: () => void
+  checking: boolean
 }>
 
 export type HomeDirectoryPaginationProps = Readonly<{

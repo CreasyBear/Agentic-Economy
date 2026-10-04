@@ -41,10 +41,10 @@ export async function loadAgentAccessAuthorize(
   }
   const details = readAgentConsentDetails(response.html)
   if (details.state === 'outcome_unknown' && details.grantRef !== undefined) {
-    return { kind: 'outcome_unknown' as const, grantRef: details.grantRef }
+    return { kind: 'outcome_unknown' as const, grantRef: details.grantRef, ...(deps.state === undefined ? {} : { oauthState: deps.state }) }
   }
   if (details.state === 'succeeded' && details.grantRef !== undefined) {
-    return { kind: 'succeeded' as const, grantRef: details.grantRef }
+    return { kind: 'succeeded' as const, grantRef: details.grantRef, ...(deps.state === undefined ? {} : { oauthState: deps.state }) }
   }
   if (details.grantRef === undefined
     || details.grantRevision === undefined
