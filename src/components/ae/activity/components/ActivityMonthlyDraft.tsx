@@ -17,11 +17,14 @@ export function ActivityMonthlyDraft({returnScope, draftRef}: {returnScope: Acti
   const requestGeneration = useRef(0), selectedDraft = useRef<string | undefined>(undefined)
   const [month, setMonth] = useState(priorMonth), [pending, setPending] = useState(false)
   const [frozen, setFrozen] = useState<ReturnType<typeof readFrozenMonthlyDraft> | null>(null), [message, setMessage] = useState('')
+  useEffect(() => { const generationRef = requestGeneration; return () => {generationRef.current++} }, [])
   function selectDraft(next: string | undefined) {
     void router.navigate({to: '/activity', search: {...activityReturnSearch(returnScope), draftRef: next}, replace: true})
   }
   useEffect(() => {
-    if (draftRef === undefined || selectedDraft.current === draftRef) return
+    if (draftRef === undefined) {requestGeneration.current++; selectedDraft.current = undefined; setFrozen(null); setPending(false); setMessage(''); return}
+    if (selectedDraft.current === draftRef) return
+    selectedDraft.current = undefined
     const generation = ++requestGeneration.current
     let active = true
     setPending(true); setMessage('Reading frozen monthly draft…'); setFrozen(null)
@@ -36,14 +39,16 @@ export function ActivityMonthlyDraft({returnScope, draftRef}: {returnScope: Acti
   }, [draftRef])
   async function create(revision: number) {
     if (pending || !monthlyDraftIntentSchema.safeParse({month, revision}).success) return
+    const generation = ++requestGeneration.current
     setPending(true); setMessage('Preparing monthly draft…')
     try {
       const result = await createOwnerMonthlyUsageDraftServer({data: {month, revision}})
+      if (requestGeneration.current !== generation) return
       if (result.kind !== 'available') { setMessage('The monthly draft is unavailable. Retry the same revision, or choose a smaller supported month.'); return }
       const next = readFrozenMonthlyDraft(result.snapshotJson, result.snapshotDigest)
       selectedDraft.current = next.snapshot.draftRef; setFrozen(next); selectDraft(next.snapshot.draftRef); setMessage(`Monthly draft revision ${next.snapshot.revision} is ready.`)
-    } catch { setMessage('The monthly draft could not be read. Retry the same revision.') }
-    finally { setPending(false) }
+    } catch { if (requestGeneration.current === generation) setMessage('The monthly draft could not be read. Retry the same revision.') }
+    finally { if (requestGeneration.current === generation) setPending(false) }
   }
   return <BillingHistory title="Monthly usage drafts" description="Account evidence for a closed UTC month. Each revision preserves its source facts and does not issue an invoice or change money.">
     <div className="flex flex-wrap items-end gap-3">

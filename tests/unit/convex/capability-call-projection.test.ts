@@ -475,12 +475,12 @@ describe('Account Call projection', () => {
     await expect(fixture.owner.query(readOwnerUsage, {
       dimensionKind: 'account',
       periodStartAt: 0,
-      periodEndAt: 10_001,
+      periodEndAt: 2_000,
     })).resolves.toMatchObject({
       kind: 'available',
       dimensionRef: fixture.canonicalAccountRef,
-      callCountUnits: '5000',
-      completedCountUnits: '5000',
+      callCountUnits: '1000',
+      completedCountUnits: '1000',
       outcomeUnknownCountUnits: '0',
       source: 'convex_call_evidence',
     })
@@ -488,10 +488,10 @@ describe('Account Call projection', () => {
       dimensionKind: 'agent',
       dimensionRef: 'principal:selected',
       periodStartAt: 0,
-      periodEndAt: 10_001,
+      periodEndAt: 2_000,
     })).resolves.toMatchObject({
       kind: 'available',
-      callCountUnits: '2500',
+      callCountUnits: '500',
     })
 
     await backend.run(async (ctx) => {

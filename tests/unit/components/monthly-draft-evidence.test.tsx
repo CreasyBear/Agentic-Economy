@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import '../../setup/jsdom-platform'
@@ -55,6 +55,61 @@ describe('actual Arc monthly draft and receipt evidence',()=>{
     await waitFor(()=>expect(screen.getByRole('button',{name:'Prepare monthly draft'})).toBeEnabled())
     expect(screen.queryByRole('button',{name:'Download frozen evidence JSON'})).toBeNull()
     expect(mocks.create).not.toHaveBeenCalled()
+  })
+  it('cancels removed draft reads and rechecks the same identity on reentry',async()=>{
+    const saved=draft('2026-08',1)
+    let finish!: (result: ReturnType<typeof draft>)=>void
+    mocks.read.mockReturnValueOnce(new Promise(resolve=>{finish=resolve})).mockResolvedValueOnce(saved)
+    const view=render(<ActivityMonthlyDraft draftRef={saved.draftRef} returnScope={{}} />)
+    expect(screen.getByRole('button',{name:'Preparing…'})).toBeDisabled()
+    view.rerender(<ActivityMonthlyDraft returnScope={{}} />)
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Prepare monthly draft'})).toBeEnabled())
+    await act(async()=>{finish(saved)})
+    await waitFor(()=>expect(screen.queryByText('Monthly draft revision 1 is ready.')).toBeNull())
+    view.rerender(<ActivityMonthlyDraft draftRef={saved.draftRef} returnScope={{}} />)
+    await screen.findByText('Monthly draft revision 1 is ready.')
+    expect(mocks.read).toHaveBeenCalledTimes(2)
+  })
+  it('restores the earlier draft through an interrupted different draft read',async()=>{
+    const first=draft('2026-08',1),second=draft('2026-07',1)
+    let finish!: (result: ReturnType<typeof draft>)=>void
+    mocks.read.mockResolvedValueOnce(first).mockReturnValueOnce(new Promise(resolve=>{finish=resolve})).mockResolvedValueOnce(first)
+    const view=render(<ActivityMonthlyDraft draftRef={first.draftRef} returnScope={{}} />)
+    await screen.findByText('Monthly draft revision 1 is ready.')
+    view.rerender(<ActivityMonthlyDraft draftRef={second.draftRef} returnScope={{}} />)
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Preparing…'})).toBeDisabled())
+    view.rerender(<ActivityMonthlyDraft draftRef={first.draftRef} returnScope={{}} />)
+    await screen.findByText('Monthly draft revision 1 is ready.')
+    expect(screen.getByLabelText('Closed UTC month')).toHaveValue('2026-08')
+    await act(async()=>{finish(second)})
+    await waitFor(()=>expect(screen.getByLabelText('Closed UTC month')).toHaveValue('2026-08'))
+    expect(mocks.read).toHaveBeenCalledTimes(3)
+    expect(screen.getByRole('button',{name:'Read same draft'})).toBeEnabled()
+  })
+  it('does not publish an older creation after navigating to another frozen draft',async()=>{
+    const saved=draft('2026-07',1)
+    let finish!: (result: ReturnType<typeof draft>)=>void
+    mocks.create.mockReturnValueOnce(new Promise(resolve=>{finish=resolve}));mocks.read.mockResolvedValue(saved)
+    const view=render(<ActivityMonthlyDraft returnScope={{}} />)
+    fireEvent.change(screen.getByLabelText('Closed UTC month'),{target:{value:'2026-08'}})
+    mocks.navigate.mockClear()
+    fireEvent.click(screen.getByRole('button',{name:'Prepare monthly draft'}))
+    view.rerender(<ActivityMonthlyDraft draftRef={saved.draftRef} returnScope={{}} />)
+    await screen.findByText('Monthly draft revision 1 is ready.')
+    await act(async()=>{finish(draft('2026-08',1))})
+    await waitFor(()=>expect(screen.getByLabelText('Closed UTC month')).toHaveValue('2026-07'))
+    expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+  it('never navigates from a draft creation result after the presenter unmounts',async()=>{
+    let finish!: (result: ReturnType<typeof draft>)=>void
+    mocks.create.mockReturnValueOnce(new Promise(resolve=>{finish=resolve}))
+    const view=render(<ActivityMonthlyDraft returnScope={{}} />)
+    fireEvent.change(screen.getByLabelText('Closed UTC month'),{target:{value:'2026-08'}})
+    mocks.navigate.mockClear()
+    fireEvent.click(screen.getByRole('button',{name:'Prepare monthly draft'}))
+    view.unmount()
+    await act(async()=>{finish(draft('2026-08',1))})
+    expect(mocks.navigate).not.toHaveBeenCalled()
   })
   it('discloses actual durable attempt versions without equating release with settlement',()=>{
     render(<CallAttemptEvidence evidence={{kind:'available',source:'durable_action_execution',complete:true,authoritativeForConsequences:false,
