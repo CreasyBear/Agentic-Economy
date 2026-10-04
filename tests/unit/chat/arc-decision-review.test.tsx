@@ -154,8 +154,12 @@ describe('Arc Tool input review', () => {
     const panel = document.getElementById('weather-review')!
     expect(panel).toHaveAttribute('aria-labelledby', heading.id)
     expect(panel).toHaveAttribute('aria-busy', 'true')
+    const pending = within(panel).getByRole('status', { name: chatToolPanel.loading })
+    expect(within(pending).queryByRole('button')).toBeNull()
+    expect(within(pending).queryByRole('textbox')).toBeNull()
     rerender(<ToolPanel {...props} open={false} />)
     expect(panel).toHaveAttribute('aria-hidden', 'true')
     expect(panel).toHaveAttribute('inert')
+    expect(screen.queryByRole('status', { name: chatToolPanel.loading })).toBeNull()
   })
 })

@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 
 import { Button } from '@/components/arc/button/button'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/lib/ui/toast'
 import { formatDisplayAmount } from '@/modules/money/public'
@@ -142,15 +142,15 @@ export function AeAccountFundingPanel({
           </AlertDescription>
         </Alert>
       ) : null}
-      {constraintsLoading && port !== undefined ? (
-        <div className="arc-funding-loading" aria-busy="true" aria-label="Loading funding amounts">
+      {constraintsLoading && port !== undefined && constraints?.kind !== 'available' ? (
+        <div className="arc-funding-loading" role="status" aria-busy="true" aria-label="Loading funding amounts">
           <div className="arc-funding-loading-options">
-            <Skeleton className="arc-funding-skeleton-chip" />
-            <Skeleton className="arc-funding-skeleton-chip" />
-            <Skeleton className="arc-funding-skeleton-chip" />
+            <div className="arc-funding-skeleton-chip" aria-hidden="true"><Skeleton lines={1} /></div>
+            <div className="arc-funding-skeleton-chip" aria-hidden="true"><Skeleton lines={1} /></div>
+            <div className="arc-funding-skeleton-chip" aria-hidden="true"><Skeleton lines={1} /></div>
           </div>
-          <Skeleton className="arc-funding-skeleton-input" />
-          <Skeleton className="arc-funding-skeleton-summary" />
+          <div className="arc-funding-skeleton-input" aria-hidden="true"><Skeleton lines={2} /></div>
+          <div className="arc-funding-skeleton-summary" aria-hidden="true"><Skeleton lines={3} /></div>
         </div>
       ) : null}
       {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (

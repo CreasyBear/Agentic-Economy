@@ -8,11 +8,11 @@ import { WorkspaceDangerZone } from '@/components/ae/settings/workspace-danger-z
 import {
   SettingsDangerZone, SettingsEmptyState, SettingsGroup, SettingsPage, SettingsRow,
 } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { Skeleton as ArcSkeleton } from '@/components/arc/skeleton/skeleton'
 import type {
   ProviderWorkspaceIdentityDetailResult, ProviderWorkspacePublicStatusResult,
 } from '@/components/ae/offerings/provider-workspace.functions'
 import buttonStyles from '@/components/arc/button/button.module.css'
-import { Skeleton } from '@/components/ui/skeleton'
 import { renameProviderDisplayNameServer } from '@/lib/server/owner-workspace.functions'
 import type { WorkspaceOrganizationBinding } from '@/lib/server/workspace-profile.functions'
 
@@ -39,7 +39,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
     action={provider ? <Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>View Tools</Link> : undefined}>
     <SettingsGroup title="Workspace" description="The name used for your team and receipts; distinct from your public provider name.">
       <SettingsRow label="Workspace name" description="The name members see when working in this workspace.">
-        {workspace === undefined ? <Skeleton className="h-10 w-64 max-w-full" aria-busy="true" />
+        {workspace === undefined ? <div role="status" aria-busy="true" aria-label="Loading workspace name" className="h-10 w-64 max-w-full"><div aria-hidden="true"><ArcSkeleton lines={1} /></div></div>
           : <WorkspaceNameEditor key={workspace.accountRef}
               name={workspace.clerkOrgId === null && workspace.displayName.startsWith('user_')
                 ? defaultName ?? 'Your workspace' : workspace.displayName}

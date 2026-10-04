@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest'
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { WorkspaceDangerZoneSkeleton } from './WorkspaceDangerZoneSkeleton'
 
 describe('WorkspaceDangerZoneSkeleton', () => {
-  it('renders reserved loading shell with skeleton slots', () => {
-    const { container } = render(<WorkspaceDangerZoneSkeleton />)
-    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
-    expect(container.querySelector('[data-slot="skeleton"]')).toBeTruthy()
+  it('announces one busy loading region without exposing actions', () => {
+    render(<WorkspaceDangerZoneSkeleton />)
+    expect(screen.getAllByRole('status', { name: 'Loading workspace actions' })).toHaveLength(1)
+    expect(screen.getByRole('status', { name: 'Loading workspace actions' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
   })
 })

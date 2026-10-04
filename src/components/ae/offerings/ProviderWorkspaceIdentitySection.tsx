@@ -5,7 +5,7 @@ import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
 import buttonStyles from '@/components/arc/button/button.module.css'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { appDestination } from '@/lib/navigation/app-navigation'
 import { OwnershipConflict, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import type {
@@ -35,7 +35,7 @@ export function ProviderWorkspaceIdentitySection({
   return (
     <AeSection id="provider-identity" title="Provider identity" description="The public provider identity that owns these Tools.">
       <SummaryCard title="Provider details" detail={providerName} action="Manage provider identity" onAction={onOpenIdentity} />
-      {identityOpen ? identityPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div> : identityDetail?.kind === 'available' ? (
+      {identityOpen ? identityPending ? <Skeleton label="Loading provider identity" lines={3} className="h-24 w-full" /> : identityDetail?.kind === 'available' ? (
         <IdentityManagement
           identity={identityDetail}
           publicStatus={publicStatus}
@@ -65,7 +65,7 @@ function IdentityManagement({ identity, publicStatus, onRename }: Readonly<{
     return <AeWorkspaceGeneral result={{ kind: 'unavailable', reason: 'source_unavailable', retryable: true }} identity={identity} onRename={onRename} />
   }
   return (
-    <Suspense fallback={<div aria-busy="true"><Skeleton className="h-24 w-full" /></div>}>
+    <Suspense fallback={<Skeleton label="Loading provider identity" lines={3} className="h-24 w-full" />}>
       <Await promise={publicStatus}>{(result) => (
         result.kind === 'conflict'
           ? <OwnershipConflict title="Provider identity ownership conflict" />
