@@ -3,6 +3,7 @@ import { FileQuestionIcon } from 'lucide-react'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import {
   getAeUiStatePresentation,
   type AeUiState,
@@ -91,14 +92,14 @@ type AePageSkeletonProps = {
 export function AePageSkeleton({ title, description, shape = 'list' }: AePageSkeletonProps) {
   return (
     <AePublicPage>
-      <div className="arc-market arc-route-loading arc-public-loading ae-rail" aria-busy="true" aria-label={title}>
+      <div className="arc-market arc-route-loading arc-public-loading ae-rail" role="status" aria-busy="true" aria-label={title}>
         <div className="arc-loading-intro">
           {description === undefined ? null : (
-            <p className="text-sm text-muted-foreground" role="status">
+            <p className="text-sm text-muted-foreground">
               {description}
             </p>
           )}
-          <span className="arc-loading-line arc-loading-heading" aria-hidden="true" />
+          <div aria-hidden="true"><Skeleton lines={1} className="arc-loading-heading" /></div>
         </div>
         {shape === 'detail' ? <DetailSkeleton /> : shape === 'market' ? <MarketSkeleton /> : <ListSkeleton />}
       </div>
@@ -111,8 +112,7 @@ function ListSkeleton() {
     <div className="arc-loading-rows" aria-hidden="true">
       {Array.from({ length: 3 }, (_, index) => (
         <div key={index} className="arc-loading-record">
-          <span className="arc-loading-line arc-loading-label" />
-          <span className="arc-loading-line" />
+          <Skeleton lines={2} />
         </div>
       ))}
     </div>
@@ -123,11 +123,11 @@ function DetailSkeleton() {
   return (
     <div className="arc-loading-detail" aria-hidden="true">
       <div className="arc-loading-stack">
-        <div className="arc-loading-pane"><span className="arc-loading-line arc-loading-heading" /><span className="arc-loading-line" /></div>
-        <div className="arc-loading-well" />
-        <div className="arc-loading-pane"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /></div>
+        <div className="arc-loading-pane"><Skeleton lines={2} /></div>
+        <div className="arc-loading-well"><Skeleton lines={6} /></div>
+        <div className="arc-loading-pane"><Skeleton lines={2} /></div>
       </div>
-      <div className="arc-loading-pane"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /><span className="arc-loading-line arc-loading-field" /></div>
+      <div className="arc-loading-pane"><Skeleton lines={3} /></div>
     </div>
   )
 }
@@ -135,15 +135,15 @@ function DetailSkeleton() {
 function MarketSkeleton() {
   return (
     <div className="arc-loading-stack" aria-hidden="true">
-      <span className="arc-loading-line arc-loading-field" />
+      <Skeleton lines={1} className="arc-loading-field" />
       <div className="arc-loading-metrics">
         {Array.from({ length: 3 }, (_, index) => (
-          <span key={index} className="arc-loading-line arc-loading-field" />
+          <Skeleton key={index} lines={1} className="arc-loading-field" />
         ))}
       </div>
       <div className="arc-loading-rows">
         {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="arc-loading-record"><span className="arc-loading-line arc-loading-label" /><span className="arc-loading-line" /></div>
+          <div key={index} className="arc-loading-record"><Skeleton lines={2} /></div>
         ))}
       </div>
     </div>

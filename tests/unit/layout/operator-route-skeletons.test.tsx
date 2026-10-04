@@ -134,6 +134,9 @@ describe('OperatorRoutePending skeleton presets (S-02)', () => {
       const root = skeletonRoot()
       expect(root.getAttribute('aria-busy')).toBe('true')
       expect(root.getAttribute('data-skeleton-preset')).toBe(preset)
+      expect(screen.getAllByRole('status')).toHaveLength(1)
+      expect(screen.getByRole('status', { name: 'Loading workspace' })).toBe(root)
+      expect(root.querySelector('.arc-loading-line')).toBeNull()
     })
   }
 

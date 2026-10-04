@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -10,7 +10,9 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
 
+import { AePageSkeleton } from '@/components/ae/layout/AePageState'
 import {
   RouteError,
   RoutePending,
@@ -21,6 +23,15 @@ import { getRouter } from '@/router'
 afterEach(cleanup)
 
 describe('public route containment', () => {
+  it.each(['list', 'detail', 'market'] as const)('exposes one named loading state for the %s shape', shape => {
+    const { container } = renderAt(<AePageSkeleton title="Loading services" description="Fetching the current catalogue." shape={shape} />)
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status', { name: 'Loading services' }).getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByText('Fetching the current catalogue.')).toBeTruthy()
+    expect(within(screen.getByRole('status', { name: 'Loading services' })).queryByRole('button')).toBeNull()
+    expect(container.querySelector('.arc-loading-line')).toBeNull()
+  })
+
   it('installs shared pending, error, and not-found defaults', () => {
     const router = getRouter()
     expect(router.options.defaultPendingComponent).toBe(RoutePending)

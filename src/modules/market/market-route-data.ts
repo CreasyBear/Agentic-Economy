@@ -266,7 +266,7 @@ export async function loadMarketRouteData(deps: MarketSearch) {
   const [loadedCatalogue, home, loadedOverview, compareEntries] = await Promise.all([
     showHome
       ? Promise.resolve(undefined)
-      : !marketUsesCanonicalSearch(catalogueInput)
+      : view === 'providers' || !marketUsesCanonicalSearch(catalogueInput)
       ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: 'adoption' as const }) } }).catch((cause: unknown) => {
           console.error('[market] directory catalogue unavailable', { cause })
           return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }

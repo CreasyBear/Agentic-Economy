@@ -238,7 +238,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const view = activeView ?? search.view ?? (home === undefined ? 'tools' : 'discover')
   const displayView = pendingView ?? view
   const { query, offset, network, provider, maxUsdPrice } = search
-  const canonicalSearchEnabled = marketUsesCanonicalSearch(search) && (view === 'tools' || view === 'providers')
+  const canonicalSearchEnabled = marketUsesCanonicalSearch(search) && view === 'tools'
   const canonicalSearch = useCanonicalMarketSearch(search, canonicalSearchEnabled)
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
@@ -478,9 +478,9 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             return
           }
           setQueryError(undefined)
-          go({ ...indexedSearch(), view: 'tools', query: query || undefined, sort: query ? 'relevance' : undefined })
+          go({ ...indexedSearch(), view: displayView === 'providers' ? 'providers' : 'tools', query: query || undefined, sort: query ? 'relevance' : undefined })
         }}>
-          <SearchField ref={queryRef} label="Search Tools" value={draftQuery} onValueChange={value => { setDraftQuery(value); setQueryError(undefined) }} placeholder="Weather forecasts, document analysis…" enterKeyHint="search" aria-invalid={queryError !== undefined} aria-describedby={queryError === undefined ? 'market-search-recipient' : 'market-search-error market-search-recipient'} />
+          <SearchField ref={queryRef} label={displayView === 'providers' ? 'Search Providers' : 'Search Tools'} value={draftQuery} onValueChange={value => { setDraftQuery(value); setQueryError(undefined) }} placeholder={displayView === 'providers' ? 'Provider name or service…' : 'Weather forecasts, document analysis…'} enterKeyHint="search" aria-invalid={queryError !== undefined} aria-describedby={queryError === undefined ? 'market-search-recipient' : 'market-search-error market-search-recipient'} />
           <Button type="submit" variant="secondary">Search<SearchIcon aria-hidden="true" /></Button>
         </form>
         <Link to="/t/new" className={cn(buttonStyles.button, buttonStyles.ghost, buttonStyles.md)} onClick={event => {
@@ -488,7 +488,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         }}><MessageSquareIcon aria-hidden="true" />Ask an Agent</Link>
       </DirectoryHero>
       {queryError === undefined ? null : <p id="market-search-error" role="alert" className="text-sm text-destructive">{queryError}</p>}
-      <p id="market-search-recipient" className="arc-market-search-hint">{search.reviewedProvidersOnly === true ? 'Search matches published listings from reviewed providers.' : jevRecipient === undefined || search.alternativeTo !== undefined ? 'Search assesses Market Tool listings and published candidate descriptions.' : `Search query and candidate Tool text go to ${jevRecipient}.`}</p>
+      <p id="market-search-recipient" className="arc-market-search-hint">{displayView === 'providers' ? 'Search matches Provider names and published service descriptions in the catalogue.' : search.reviewedProvidersOnly === true ? 'Search matches published listings from reviewed providers.' : jevRecipient === undefined || search.alternativeTo !== undefined ? 'Search assesses Market Tool listings and published candidate descriptions.' : `Search query and candidate Tool text go to ${jevRecipient}.`}</p>
       <Tabs value={displayView} animateContent={false}>
         <div className="arc-market-navigation grid grid-cols-1 items-center gap-related pb-related sm:grid-cols-[minmax(0,1fr)_auto]">
           <TabsList className="arc-market-tabs" aria-label="Browse the marketplace">
@@ -528,7 +528,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         // `tabItems`; the `[]` fallback here only satisfies the type.)
         const activePages = tab === 'providers' ? providerPages : loadMore
         const tabItems: readonly X402DirectoryEntry[] = (tab === 'tools' || tab === 'providers') && indexed ? activePages.items : page.kind === 'ok' ? page.items : []
-        const railDeck = search.alternativeTo !== undefined ? 'Currently callable AE Tools other than the selected Tool' : search.query !== undefined ? search.reviewedProvidersOnly === true ? 'Published listings from reviewed providers' : 'AE-admitted Tools and Coinbase Bazaar listings' : [
+        const railDeck = search.alternativeTo !== undefined ? 'Currently callable AE Tools other than the selected Tool' : search.query !== undefined ? tab === 'providers' ? 'Matching published listings, grouped by Provider.' : search.reviewedProvidersOnly === true ? 'Published listings from reviewed providers' : 'AE-admitted Tools and Coinbase Bazaar listings' : [
           page.kind === 'ok' && tabItems.length > 0
             ? tab === 'providers'
               ? `${new Set(tabItems.map(entry => entry.provider)).size.toLocaleString()} Providers on this page`
@@ -541,7 +541,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         ].filter((line): line is string => line !== undefined).join(' · ') || undefined
         return <TabsContent key={tab} value={tab} className="pt-5">
           <div className="min-w-0">
-          <section className="min-w-0" aria-label="Tool results">
+          <section className="min-w-0" aria-label={tab === 'providers' ? 'Provider results' : 'Tool results'}>
           <div className="arc-market-result-controls" role="group" aria-label="Catalogue ordering and display">
             {search.query !== undefined ? <p className="text-sm text-muted-foreground">Search relevance</p> : indexed ? <Select label="Sort results" value={search.sort ?? 'adoption'} options={[...DIRECTORY_SORT_OPTIONS]} onValueChange={value => {
               if (!DIRECTORY_SORT_OPTIONS.some(option => option.value === value)) return
@@ -559,7 +559,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
               search.alternativeTo !== undefined
                 ? `Callable alternatives for “${search.query}”`
                 : search.query !== undefined
-                  ? `Results for “${search.query}”`
+                  ? tab === 'providers' ? `Providers matching “${search.query}”` : `Results for “${search.query}”`
                 : search.provider !== undefined
                   ? 'Tools from this Provider'
                   : tab === 'providers'
@@ -582,7 +582,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             action={<Link to={marketPath} reloadDocument search={carryMarketCompare(search, search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab })} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
             {search.alternativeTo !== undefined && catalogue?.kind === 'ok' ? <p role="status" className="mb-4 text-sm text-muted-foreground">{activePages.isDone ? 'Current callable alternatives assessed.' : 'Callable alternatives assessed on this page; more results remain to check.'}</p> : null}
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
-            {tabItems.length === 0 ? <AeEmptyState title={search.alternativeTo !== undefined ? activePages.isDone ? 'No other callable Tool in the assessed catalogue' : 'No callable alternative on this page' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={search.alternativeTo !== undefined ? activePages.isDone ? 'Try a different capability or broaden the search.' : 'Continue to the next page to assess more Tools.' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
+            {tabItems.length === 0 ? <AeEmptyState title={search.alternativeTo !== undefined ? activePages.isDone ? 'No other callable Tool in the assessed catalogue' : 'No callable alternative on this page' : indexed && !activePages.isDone ? 'More of the catalogue remains' : tab === 'providers' ? 'No matching Providers' : 'No matching Tools'} description={search.alternativeTo !== undefined ? activePages.isDone ? 'Try a different capability or broaden the search.' : 'Continue to the next page to assess more Tools.' : indexed && !activePages.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
               ? <DirectoryProviderList layout={layout} entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: 'tools', provider }) }) }} />
               : <DirectoryToolList layout={layout} items={tabItems.map(entry => ({ entry, search: sourceInput }))} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} saveUnknown={authLoaded && isSignedIn && saved.status === 'failed'} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
             {tab === 'tools' && view === 'tools' ? comparisonTray : null}

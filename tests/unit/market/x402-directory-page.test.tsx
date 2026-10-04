@@ -546,6 +546,75 @@ const indexedPage = { kind: 'ok' as const, items: entries.slice(0, 2), offset: 0
 const indexedCatalogue = { kind: 'ok' as const, source: 'index' as const, page: indexedPage, coverage, searchMethod: 'native_index' as const, indexCursor: 'generation-1:next/page+cursor', isDone: false }
 const overview = { kind: 'ok' as const, coverage, categories: [{ key: 'research', label: 'Research', count: 201 }, { key: 'media', label: 'Media', count: 405 }], providers: [], networks: [{ key: 'eip155:8453', label: 'Base', count: 14455 }], popular: [], recentlyUpdated: [] }
 const nativeFilters = { view: 'tools' as const, network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.005, directoryCategory: 'research' }
+
+it('loads Provider keyword results from the indexed catalogue with their refinements', async () => {
+  readX402DirectoryCatalogueServer.mockResolvedValue(indexedCatalogue)
+  readX402DirectoryCatalogueOverviewServer.mockResolvedValue(overview)
+  const search = validateMarketSearch({ ...nativeFilters, view: 'providers', query: 'research', sort: 'relevance', layout: 'grid' })
+  const result = await loadMarketRouteData(marketLoaderDeps(search))
+  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: {
+    network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.005, directoryCategory: 'research', query: 'research', sort: 'relevance',
+  } })
+  expect(result.catalogue).toBe(indexedCatalogue)
+  expect(result.page).toBe(indexedPage)
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+})
+
+it('presents Provider keyword matches as Providers and explains the indexed search', async () => {
+  show({ view: 'providers', query: 'research', sort: 'relevance' }, [], {
+    page: indexedPage, catalogue: { ...indexedCatalogue, isDone: true }, overview, jevRecipient: 'TypeSafe (api.typesafe.ai)',
+  })
+  expect(await screen.findByRole('button', { name: 'View Tools from example.com' })).toBeTruthy()
+  expect(screen.getByRole('region', { name: 'Provider results' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Providers matching “research”' })).toBeTruthy()
+  expect(screen.getByText('Matching published listings, grouped by Provider.')).toBeTruthy()
+  expect(screen.getByText('Search matches Provider names and published service descriptions in the catalogue.')).toBeTruthy()
+  expect(screen.queryByText(/go to TypeSafe/)).toBeNull()
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+})
+
+it.each([false, true])('submits Provider search to the selected view, including a pending view: %s', async pending => {
+  const compare = entries[0]!.resource
+  const { router } = show({ view: pending ? 'tools' : 'providers', network: 'eip155:8453', compare, layout: 'grid' }, [], {
+    ...(pending ? { pendingView: 'providers' } : {}),
+    page: indexedPage, catalogue: { ...indexedCatalogue, isDone: true }, overview,
+  })
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search Providers' }), { target: { value: '  research  ' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Search the Tool market' }))
+  await waitFor(() => expect(router.state.location.search).toMatchObject({
+    view: 'providers', query: 'research', sort: 'relevance', network: 'eip155:8453', compare, layout: 'grid',
+  }))
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+})
+
+it('continues an empty Provider keyword page with the same filters before declaring no matches', async () => {
+  const emptyPage = { ...indexedPage, items: [] }
+  readX402DirectoryCatalogueServer.mockResolvedValueOnce({ ...indexedCatalogue, page: emptyPage, indexCursor: 'generation-1:empty-1' })
+  readX402DirectoryCatalogueServer.mockResolvedValue({ ...indexedCatalogue, page: indexedPage, isDone: true })
+  show({ view: 'providers', query: 'research', sort: 'relevance', network: 'eip155:8453' }, [], {
+    page: emptyPage, catalogue: { ...indexedCatalogue, page: emptyPage }, overview,
+  })
+  expect(screen.getByText('More of the catalogue remains')).toBeTruthy()
+  expect(screen.queryByText('No matching Providers')).toBeNull()
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+  expect(await screen.findByRole('button', { name: 'View Tools from example.com' })).toBeTruthy()
+  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: {
+    query: 'research', sort: 'relevance', network: 'eip155:8453', indexCursor: 'generation-1:empty-1',
+  } })
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+})
+
+it('declares no matching Providers only after the indexed search is complete', () => {
+  const page = { ...indexedPage, items: [] }
+  show({ view: 'providers', query: 'research', sort: 'relevance' }, [], {
+    page, catalogue: { ...indexedCatalogue, page, isDone: true }, overview,
+  })
+  expect(screen.getByText('No matching Providers')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+})
+
 function pageLinkSearch(name: string) { return new URL(screen.getByRole('link', { name }).getAttribute('href')!, 'https://aecon.ai').searchParams }
 function expectNativeFilters(search: URLSearchParams) {
   for (const [key, value] of Object.entries(nativeFilters)) expect(search.get(key)).toBe(String(value))

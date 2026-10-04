@@ -7,8 +7,8 @@ import { Link } from '@tanstack/react-router'
 import { SettingsEmptyState, SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { UsageBillingInvoices, type UsageBillingInvoice } from '@/components/arc/blocks/usage-billing/usage-billing'
 import { Button } from '@/components/arc/button/button'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import buttonStyles from '@/components/arc/button/button.module.css'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   downloadCsv, downloadJson, EXPORT_ERROR_IMPACT, EXPORT_ERROR_WHAT,
   formatExportSuccessToast, generateInvoicesCsv, toExportDocument,
@@ -154,7 +154,7 @@ export function ReceiptsSettings({
         <p className="sr-only" role="status" aria-live="polite">{receiptsStatus}</p>
         {invoiceHistoryLoading ? <div aria-busy="true" className="grid gap-4 py-4">
         {[0, 1, 2].map(index => <div key={index} className="grid gap-2 border-b border-border pb-4 last:border-b-0">
-          <Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-4 w-28 max-w-full" />
+          <div aria-hidden="true"><Skeleton lines={2} /></div>
         </div>)}
       </div> : rows.length === 0 && !invoiceHistoryHasMore && !invoiceHistoryLoadingMore ? <SettingsEmptyState
         title="No top-up receipts yet"
