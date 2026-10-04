@@ -35,6 +35,9 @@ export const Route = createFileRoute('/$slug')({
     }
     return result
   },
+  // Public browsing shares Market's short freshness window; purchase authority is read separately.
+  staleTime: 30_000,
+  preloadStaleTime: 30_000,
   head: ({ loaderData }) => buildPublicBusinessPageHead(loaderData),
   pendingComponent: ProviderListingPending,
   errorComponent: ProviderListingError,

@@ -21,6 +21,9 @@ export const Route = createFileRoute('/tools/$toolRef')({
     const evidence = result.kind === 'found' ? result.evidence : undefined
     return { result, evidence }
   },
+  // Public browsing shares Market's short freshness window; Quote/Call authority is fetched separately.
+  staleTime: 30_000,
+  preloadStaleTime: 30_000,
   head: ({ loaderData }) => {
     if (loaderData?.result.kind !== 'found') {
       return { meta: [

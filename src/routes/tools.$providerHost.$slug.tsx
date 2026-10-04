@@ -20,6 +20,9 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
     }
     return { metadata, referenceRate }
   },
+  // Public browsing shares Market's short freshness window; Quote/Call authority is fetched separately.
+  staleTime: 30_000,
+  preloadStaleTime: 30_000,
   head: ({ params, loaderData }) => {
     if (loaderData?.metadata.kind !== 'found' && loaderData?.metadata.kind !== 'found_upstream') {
       return { meta: [{ title: 'Tool unavailable | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }

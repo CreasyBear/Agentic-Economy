@@ -20,6 +20,9 @@ export const Route = createFileRoute('/providers/$providerHost')({
     const catalogue = await readX402DirectoryCatalogueServer({ data: { provider: params.providerHost, sort: 'popular' } })
     return { kind: 'found' as const, catalogue }
   },
+  // Public browsing shares Market's short freshness window; Quote/Call authority is fetched separately.
+  staleTime: 30_000,
+  preloadStaleTime: 30_000,
   head: ({ params }) => ({ meta: [{ title: `${params.providerHost} · directory Host | Agentic Economy` }, { name: 'description', content: `Directory listings from ${params.providerHost}. This Host is not a verified Provider identity.` }] }),
   pendingComponent: () => <AePageSkeleton title="Loading directory Host…" description="Loading sourced listings…" shape="detail" />,
   errorComponent: HostError,
