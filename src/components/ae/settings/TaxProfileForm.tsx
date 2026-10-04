@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type FormEvent, type ReactElement } from '
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import './TaxProfileComposition.css'
-import { Checkbox } from '@/components/ui/checkbox'
 
+import { Alert } from '@/components/arc/alert/alert'
 import { Button } from '@/components/arc/button/button'
+import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Input } from '@/components/arc/input/input'
 import { toast } from '@/lib/ui/toast'
 import { formatAbnDisplay, isValidAbn, normalizeAbn } from '@/modules/money/public'
 import {
@@ -201,8 +203,8 @@ export function TaxProfileForm({
         </Button>}>
         <SettingsGroup title="Business details" description="These details identify your legal entity for tax purposes.">
           <SettingsRow label="Legal business name" description="The registered name used on billing documents.">
-            <input ref={legalNameRef} id="tax-profile-legal-name" aria-label="Legal business name" type="text"
-              autoComplete="organization" spellCheck={false} value={legalName}
+            <Input ref={legalNameRef} id="tax-profile-legal-name" label="Legal business name" labelMode="external"
+              aria-label="Legal business name" type="text" autoComplete="organization" spellCheck={false} value={legalName}
               aria-invalid={invalidField === 'legalName' || undefined}
               aria-describedby={invalidField === 'legalName' ? describedBy : undefined}
               onChange={(event) => {
@@ -212,8 +214,9 @@ export function TaxProfileForm({
               }} className="arc-tax-input" />
           </SettingsRow>
           <SettingsRow label="ABN" description="Your 11-digit Australian Business Number.">
-            <input ref={abnRef} id="tax-profile-abn" aria-label="ABN" type="text" inputMode="numeric"
-              value={abn} placeholder="51 824 753 556" className="arc-tax-input arc-tax-abn"
+            <Input ref={abnRef} id="tax-profile-abn" label="ABN" labelMode="external" aria-label="ABN"
+              type="text" inputMode="numeric" value={abn} placeholder="51 824 753 556"
+              className="arc-tax-input arc-tax-abn"
               aria-invalid={invalidField === 'abn' || undefined}
               aria-describedby={invalidField === 'abn' ? describedBy : undefined}
               onChange={(event) => {
@@ -223,17 +226,14 @@ export function TaxProfileForm({
               }} />
           </SettingsRow>
           <SettingsRow label="GST registration" description="Controls whether tax invoices can be issued for this business.">
-            <label className="arc-tax-gst-target">
-              <Checkbox aria-label="GST registered" checked={gstRegistered}
-                onCheckedChange={(checked) => setGstRegistered(checked === true)} />
-              <span>{gstRegistered ? 'Registered' : 'Not registered'}</span>
-            </label>
+            <Checkbox label={gstRegistered ? 'Registered' : 'Not registered'} aria-label="GST registered"
+              checked={gstRegistered} onCheckedChange={(checked) => setGstRegistered(checked === true)} />
           </SettingsRow>
         </SettingsGroup>
         <SettingsGroup title="Billing address" description="The Australian address used on billing documents.">
           <SettingsRow label="Address" description="Street address of the legal entity.">
-            <input ref={addressRef} id="tax-profile-address" aria-label="Address" autoComplete="address-line1"
-              value={addressLine1} className="arc-tax-input"
+            <Input ref={addressRef} id="tax-profile-address" label="Address" labelMode="external"
+              aria-label="Address" autoComplete="address-line1" value={addressLine1} className="arc-tax-input"
               aria-invalid={invalidField === 'address' || undefined}
               aria-describedby={invalidField === 'address' ? describedBy : undefined}
               onChange={(event) => {
@@ -243,13 +243,14 @@ export function TaxProfileForm({
               }} />
           </SettingsRow>
           <SettingsRow label="Address line 2" description="Optional suite, unit, or level.">
-            <input id="tax-profile-address-2" aria-label="Address line 2 (optional)" autoComplete="address-line2"
-              value={addressLine2} className="arc-tax-input"
+            <Input id="tax-profile-address-2" label="Address line 2 (optional)" labelMode="external"
+              aria-label="Address line 2 (optional)" autoComplete="address-line2" value={addressLine2}
+              className="arc-tax-input"
               onChange={(event) => { setAddressLine2(event.target.value); setSubmitDiagnostic(null) }} />
           </SettingsRow>
           <SettingsRow label="City/Locality" description="Your billing locality.">
-            <input id="tax-profile-city" aria-label="City/Locality" autoComplete="address-level2"
-              value={locality} className="arc-tax-input"
+            <Input id="tax-profile-city" label="City/Locality" labelMode="external" aria-label="City/Locality"
+              autoComplete="address-level2" value={locality} className="arc-tax-input"
               onChange={(event) => {
                 setLocality(event.target.value)
                 setSubmitDiagnostic(null)
@@ -257,13 +258,13 @@ export function TaxProfileForm({
               }} />
           </SettingsRow>
           <SettingsRow label="State/Region" description="Australian state or territory.">
-            <input id="tax-profile-state" aria-label="State/Region" autoComplete="address-level1"
-              value={region} className="arc-tax-input"
+            <Input id="tax-profile-state" label="State/Region" labelMode="external" aria-label="State/Region"
+              autoComplete="address-level1" value={region} className="arc-tax-input"
               onChange={(event) => { setRegion(event.target.value); setSubmitDiagnostic(null) }} />
           </SettingsRow>
           <SettingsRow label="Postal code" description="Four-digit Australian postcode.">
-            <input id="tax-profile-postal-code" aria-label="Postal code" autoComplete="postal-code" inputMode="numeric"
-              value={postalCode} className="arc-tax-input"
+            <Input id="tax-profile-postal-code" label="Postal code" labelMode="external" aria-label="Postal code"
+              autoComplete="postal-code" inputMode="numeric" value={postalCode} className="arc-tax-input"
               aria-invalid={invalidField === 'address' || undefined}
               aria-describedby={invalidField === 'address' ? describedBy : undefined}
               onChange={(event) => {
@@ -273,16 +274,16 @@ export function TaxProfileForm({
               }} />
           </SettingsRow>
           <SettingsRow label="Country" description="This tax profile is currently Australian.">
-            <input id="tax-profile-country" aria-label="Country" value="AU" readOnly
-              className="arc-tax-input arc-tax-country" />
+            <Input id="tax-profile-country" label="Country" labelMode="external" aria-label="Country" value="AU"
+              readOnly className="arc-tax-input arc-tax-country" />
           </SettingsRow>
         </SettingsGroup>
         <div id={TAX_PROFILE_DIAGNOSTIC_ID} role="status" aria-live="polite">
-          {activeDiagnostic ? <div className="grid gap-1 text-sm text-muted-foreground">
-            <p><strong>What happened:</strong> {activeDiagnostic.whatHappened}</p>
+          {activeDiagnostic ? <Alert tone="warning" role="presentation"
+            title={`What happened: ${activeDiagnostic.whatHappened}`}>
             <p className="font-mono text-xs tabular-nums"><strong>Financial impact:</strong> {activeDiagnostic.financialImpact}</p>
             <p><strong>Next step:</strong> {activeDiagnostic.nextStep}</p>
-          </div> : null}
+          </Alert> : null}
         </div>
       </SettingsPage>
     </form>

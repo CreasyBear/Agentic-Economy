@@ -142,41 +142,6 @@
   outline-offset: 3px;
 }
 
-.arc-market .arc-publication-check-row {
-  box-sizing: border-box;
-  display: flex;
-  min-width: 0;
-  min-height: 44px;
-  align-items: flex-start;
-  gap: var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
-  padding-block: var(--space-3);
-  color: var(--foreground);
-  font-size: var(--text-sm);
-  font-weight: 400;
-  line-height: var(--leading-body);
-  cursor: pointer;
-}
-
-.arc-market .arc-publication-check-row > [data-slot="checkbox"] {
-  flex: none;
-  margin-top: 2px;
-}
-
-.arc-market .arc-publication-check-row:has([data-disabled]) {
-  color: var(--text-muted);
-  cursor: not-allowed;
-}
-
-.arc-market .arc-publication-check-row:has(:focus-visible) {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 3px;
-}
-
-.arc-publication-region [data-slot="field"] > div:has(> .arc-publication-check-row) {
-  gap: 0;
-}
-
 .arc-market .arc-publication-action {
   justify-self: start;
   max-width: 100%;

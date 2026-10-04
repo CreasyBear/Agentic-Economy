@@ -8,22 +8,8 @@
 .arc-market .arc-tax-profile-placeholder { display: grid; min-width: 0; gap: var(--space-3); padding-block: var(--space-4); border-block-end: 1px solid var(--border-subtle); }
 
 .arc-tax-profile .arc-tax-input {
-  box-sizing: border-box;
   width: min(100%, 384px);
   min-width: 0;
-  min-height: 44px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  padding: var(--space-3);
-  background: var(--surface);
-  color: var(--foreground);
-  font: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-}
-
-.arc-tax-profile .arc-tax-input[aria-invalid='true'] {
-  border-color: var(--danger);
 }
 
 .arc-tax-profile .arc-tax-input[readonly] {
@@ -37,15 +23,6 @@
 
 .arc-tax-profile .arc-tax-country {
   width: min(100%, 120px);
-}
-
-.arc-tax-profile .arc-tax-gst-target {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--foreground);
-  font-size: var(--text-sm);
 }
 
 .arc-tax-profile .arc-tax-save {
