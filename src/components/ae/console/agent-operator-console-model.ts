@@ -1,7 +1,7 @@
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { aeStatusPresentation, getStatusPresentation } from '@/lib/ui/status-presentation'
-import { formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount, readExactAmount, type ExactAmount } from '@/modules/money/public'
 import type {
   AgentDetail,
   AgentDirectoryItem,
@@ -227,18 +227,29 @@ export function monthlySpendLabel(item: AgentDirectoryItem): string {
   return `${charges} / ${limit}`
 }
 
-export function monthlyUtilizationPercent(item: AgentDirectoryItem): number | undefined {
+export function monthlyUtilization(item: AgentDirectoryItem): Readonly<{
+  percent: number
+  limitState: 'under' | 'at' | 'over'
+}> | undefined {
   if (item.spendingPolicy.kind !== 'known' || item.monthlySpendCoverage !== 'complete') return undefined
-  if (item.monthlySettledSpend === undefined) return undefined
+  const spend = item.monthlySettledSpend
+  if (spend === undefined) return undefined
   const ceiling = item.spendingPolicy.maximumMonthlySpend
-  if (ceiling.currency !== item.monthlySettledSpend.currency) return undefined
-  const spendUnits = BigInt(item.monthlySettledSpend.units)
+  if (ceiling.currency !== spend.currency) return undefined
+  if (readExactAmount(spend) === undefined || readExactAmount(ceiling) === undefined) return undefined
+
+  const spendUnits = BigInt(spend.units)
   const ceilingUnits = BigInt(ceiling.units)
-  if (ceilingUnits <= 0n) return spendUnits > 0n ? 100 : 0
-  const basisPoints = (spendUnits * 10_000n) / ceilingUnits
-  const wholePercent = Number(basisPoints / 100n)
-  const fraction = Number(basisPoints % 100n)
-  return fraction >= 50 ? Math.min(100, wholePercent + 1) : Math.min(100, wholePercent)
+  if (ceilingUnits <= 0n || spendUnits < 0n) return undefined
+
+  const numerator = spendUnits * 10n ** BigInt(ceiling.exponent)
+  const denominator = ceilingUnits * 10n ** BigInt(spend.exponent)
+  const basisPoints = numerator * 10_000n / denominator
+  const rounded = (basisPoints + 50n) / 100n
+  const bounded = rounded < 0n ? 0n : rounded > 100n ? 100n : rounded
+  const limitState = numerator < denominator ? 'under' : numerator === denominator ? 'at' : 'over'
+
+  return { percent: Number(bounded), limitState }
 }
 
 export function agentRecoveryCopy(detail: AgentDetail): string | undefined {

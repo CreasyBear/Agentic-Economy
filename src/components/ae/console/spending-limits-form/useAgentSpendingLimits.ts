@@ -329,7 +329,7 @@ export function useAgentSpendingLimits({
     dailyStr,
     monthlyStr,
     selectedPresetId,
-    quota: { label: quotaRaw.label, toneClass: quotaRaw.toneClass, progressValue: quotaRaw.progressValue, progressAriaLabel: quotaRaw.progressAriaLabel, ...(quotaRaw.approachingCopy !== undefined ? { approachingCopy: quotaRaw.approachingCopy } : {}) },
+    quota: quotaRaw,
     readout: {
       perCallDisplay: known === undefined ? '—' : formatDisplayAmount(known.maximumSpendPerCall),
       dailyDisplay: known === undefined ? '—' : formatDisplayAmount(known.maximumDailySpend),
