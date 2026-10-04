@@ -107,7 +107,7 @@ export function generateCallUsageExportCsv(document: CallUsageExport): string {
     'Receipt Ref', 'Recovery Ref', 'Period start UTC', 'Period end UTC', 'Snapshot UTC',
     'Record count', 'Records digest', 'Records digest format', 'Service unit coverage', 'Charge coverage', 'Export Ref', 'Account Ref',
     'Current supported request units', 'Measurement revision Ref', 'Provider unit support',
-    'BlockRun input tokens', 'BlockRun output tokens', 'ElevenLabs reported character credits', 'Provider unit observation Ref']
+    'BlockRun input tokens', 'BlockRun output tokens', 'ElevenLabs reported character credits', 'Provider unit observation Ref', 'Declared service units JSON']
   return [formatCsvRow(headers), ...document.records.map((row) => formatCsvRow([
     new Date(row.createdAt).toISOString(), csvText(row.callRef), csvText(row.toolLabel), csvText(row.providerRef),
     csvText(row.principalRef), csvText(row.credentialRef), csvText(row.applicationRef), row.state,
@@ -130,5 +130,6 @@ export function generateCallUsageExportCsv(document: CallUsageExport): string {
       return row.providerUnitSupportVerified === true && unit?.state === 'observed' ? unit.quantityUnits ?? 'unknown' : 'unknown'
     }),
     csvText(row.providerUnitObservation?.observationRef),
+    csvText(JSON.stringify(row.providerUnitObservation?.units.filter(unit => unit.definition !== undefined).map(unit => ({unitDefinitionRef: unit.unitDefinitionRef, definition: unit.definition, quantityUnits: row.providerUnitSupportVerified === true ? unit.quantityUnits : null, quantityExponent: unit.quantityExponent, state: row.providerUnitSupportVerified === true ? unit.state : 'unknown'})) ?? [])),
   ]))].join('\r\n')
 }

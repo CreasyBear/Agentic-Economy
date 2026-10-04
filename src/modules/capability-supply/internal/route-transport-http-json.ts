@@ -9,6 +9,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseBoundedJson } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
 import { readJsonPointer } from '@/modules/common/json-pointer'
+import { completedStreamingChatReceipt, isChatCompletionStreamRequest } from './streaming-chat-receipt'
 import type { BoundedRequestBody } from '@/lib/server/bounded-request-body'
 import {
   cancelResponseBody,
@@ -262,6 +263,7 @@ export async function normalizeJsonResponse(
   expectedStatus?: number,
   expectedContentType?: string,
   sensitiveValues: readonly string[] = [],
+  streamingChat = false,
 ): Promise<RouteTransportObservation> {
   const responseHeaders = toHeaderRecord(response)
   const responseStatus = Number.isInteger(response.status) &&
@@ -324,13 +326,14 @@ export async function normalizeJsonResponse(
       releaseStarted,
       'response_unreadable',
     ))
-  const output = parseBoundedJson(text)
+  const eventStream = normalizeResponseMediaType(responseHeaders['content-type'] ?? '') === 'text/event-stream'
+  const output = eventStream && streamingChat ? await completedStreamingChatReceipt(text) : eventStream ? undefined : parseBoundedJson(text)
   if (output === undefined)
     return withStatus(unknown(
       transport,
       requestDigest,
       releaseStarted,
-      'response_json_invalid',
+      eventStream ? 'response_stream_incomplete' : 'response_json_invalid',
     ))
   const providerReceipt = optionalHeader(
     responseHeaders,
@@ -427,6 +430,7 @@ export async function invokeHttp(
       configuration.responseStatus,
       configuration.responseContentType,
       outboundSensitiveValues(invocation, credential),
+      configuration.method === 'POST' && isChatCompletionStreamRequest(endpoint, invocation.inputJson),
     )
   } catch (error) {
     return unknown('http', requestDigest, true, `network_${errorName(error)}`)

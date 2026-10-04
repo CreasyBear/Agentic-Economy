@@ -8,8 +8,18 @@ import { directoryFacets } from './lib/market/directoryIndex/facets'
 import { listingIdentityDigest } from './lib/market/directoryIndex/listingDigest'
 import { directoryState, storedDirectoryEntry } from './lib/market/directoryIndex/rows'
 import schema from './schema'
+import { rebuildCallProjection } from './lib/capabilityExecution/callProjection/rebuild'
 
 export const migrations = new Migrations(components.migrations, { schema })
+
+/** Explicitly invoked, resumable source-only backfill. Never performs a Call,
+ * provider request, accounting posting or payment. The existing rebuild owns
+ * lineage/idempotency; absent or expired receipts cannot invent quantities. */
+export const backfillCallMeasurements = migrations.define({
+  table: 'capabilityCalls',
+  batchSize: 25,
+  migrateOne: async (ctx, doc) => { await rebuildCallProjection(ctx, doc) },
+})
 
 /**
  * C14 (Well 4, D7): capabilityOfferings.presentation.price is being retired.
