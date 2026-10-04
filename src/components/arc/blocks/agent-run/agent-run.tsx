@@ -1,9 +1,9 @@
 /* Adapted from Arc UI Pro agent-run source. Upstream SHA-256: 1218e845025b2f2ed54b315a024fadd96fa2005bc35ce5de96c987115b17388a. */
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
-import { Check, ChevronDown, LoaderCircle, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, CircleCheck, LoaderCircle, TriangleAlert } from "lucide-react";
 
 import { motionTokens } from "../../lib/motion-tokens";
 import styles from "./agent-run.module.css";
@@ -22,6 +22,64 @@ const phaseIcon = {
   complete: Check,
   attention: TriangleAlert,
 } as const;
+
+/** The licensed request/status/result regions, driven by caller-owned evidence.
+ * Requires an observed run; ensures no demo clock, approval or retry side effect.
+ * A delayed observation is labelled in the supplied announcement, never advanced.
+ */
+export function AgentRun({
+  title,
+  description,
+  byline,
+  status,
+  facts = [],
+  children,
+  actions,
+}: Readonly<{
+  title: string;
+  description: string;
+  byline: ReactNode;
+  status: Readonly<{
+    phase: "running" | "waiting" | "done" | "stopped";
+    label: string;
+    announcement: string;
+  }>;
+  facts?: readonly Readonly<{ label: string; value: string }>[];
+  children?: ReactNode;
+  actions: ReactNode;
+}>) {
+  const id = useId();
+  const ResultIcon = status.phase === "done" ? CircleCheck
+    : status.phase === "waiting" || status.phase === "stopped" ? TriangleAlert : LoaderCircle;
+
+  return (
+    <section className={`arc-market ${styles.root} ${styles.runFrame}`} aria-labelledby={`${id}-title`}>
+      <header className={styles.request}>
+        <div className={styles.byline}>{byline}</div>
+      </header>
+      <div className={styles.toolbar}>
+        <span className={styles.runStatus} data-phase={status.phase}>
+          <span className={styles.dot} aria-hidden="true" />
+          <span>{status.label}</span>
+        </span>
+      </div>
+      <div className={styles.run}>
+        <div className={styles.result} data-tone={status.phase === "done" ? "success" : status.phase === "stopped" || status.phase === "waiting" ? "warning" : undefined}>
+          <h2 className={styles.resultTitle} id={`${id}-title`}>
+            <ResultIcon size={20} strokeWidth={1.75} aria-hidden="true" />{title}
+          </h2>
+          <p className={styles.resultBody}>{description}</p>
+          {facts.length === 0 ? null : <dl className={styles.facts}>
+            {facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd title={fact.value}>{fact.value}</dd></div>)}
+          </dl>}
+          {children}
+          <div className={styles.actions}>{actions}</div>
+        </div>
+      </div>
+      <p className={styles.srOnly} role="status" aria-atomic="true">{status.announcement}</p>
+    </section>
+  );
+}
 
 export function ArcAgentRunTimeline({
   summary,
