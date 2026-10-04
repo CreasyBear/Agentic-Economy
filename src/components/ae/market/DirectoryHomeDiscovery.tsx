@@ -1,7 +1,10 @@
 import { ArrowUpRight } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
+import { AeEmptyState } from '../feedback/AeEmptyState'
+import buttonStyles from '@/components/arc/button/button.module.css'
 import { ProductListingShelf } from '@/components/arc/market/ProductListing'
+import { cn } from '@/lib/utils'
 import { carryMarketCompare } from '@/modules/market/market-route-data'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
@@ -24,6 +27,9 @@ type DirectoryHomeDiscoveryProps = Readonly<{
 export function DirectoryHomeDiscovery({ home, onSave, isSaved, saveDisabled, saveUnknown = false, onCompare, isComparing, compareDisabled }: DirectoryHomeDiscoveryProps) {
   const marketPath = useMarketPath()
   const rails = home.rails.filter(rail => rail.items.length > 0)
+  if (rails.length === 0) {
+    return <AeEmptyState title="Collections are taking shape" description="There are no activity-based collections to show yet. Browse Tools or search for a service above." action={<Link to={marketPath} search={previous => carryMarketCompare(previous, { view: 'tools' })} preload="intent" viewTransition={false} resetScroll={false} className={cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md)}>Browse Tools</Link>} />
+  }
   return <div className="arc-market grid min-w-0 gap-12 pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px)+2rem)] md:pb-8 sm:gap-16">
     {rails.map(rail => <ProductListingShelf key={rail.id} title={rail.title} description={rail.subtitle} label={`${rail.title} Tools`} previousLabel={`Previous ${rail.title} Tools`} nextLabel={`Next ${rail.title} Tools`} action={<Link to={marketPath} search={previous => carryMarketCompare(previous, { view: 'tools', sort: rail.sort })} preload="intent" viewTransition={false} aria-label={`See all ${rail.title}`} className="arc-listing-all">See all<ArrowUpRight size={16} aria-hidden="true" /></Link>}>
       {rail.items.slice(0, 8).map(entry => {

@@ -10,7 +10,7 @@ describe('compact Arc Market header', () => {
     render(<DirectoryHero><form aria-label="Search the Tool market"><label>Search Tools<input type="search" /></label><button type="submit">Search</button></form><a href="/t/new">Ask an Agent</a></DirectoryHero>)
     expect(screen.getAllByRole('heading')).toHaveLength(1)
     expect(screen.getByRole('heading', { level: 1, name: 'Tool market' })).toBeTruthy()
-    expect(screen.getByText('Find a useful contribution.')).toBeTruthy()
+    expect(screen.getByText('Search for a service, compare Tools, or browse the Providers behind them.')).toBeTruthy()
     expect(screen.getByRole('searchbox', { name: 'Search Tools' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ask an Agent' }).getAttribute('href')).toBe('/t/new')
   })

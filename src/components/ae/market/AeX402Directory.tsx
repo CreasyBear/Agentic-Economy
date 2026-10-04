@@ -8,7 +8,7 @@ import { degrade } from '@/lib/observability/degrade'
 import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/arc/button/button'
-import { ProductListing } from '@/components/arc/market/ProductListing'
+import { ProductListing, ProductListingHeader } from '@/components/arc/market/ProductListing'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import './MarketComposition.css'
 import buttonStyles from '@/components/arc/button/button.module.css'
@@ -486,7 +486,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           go({ ...indexedSearch(), view: displayView === 'providers' ? 'providers' : 'tools', query: query || undefined, sort: query ? 'relevance' : undefined })
         }}>
           <SearchField ref={queryRef} label={displayView === 'providers' ? 'Search Providers' : 'Search Tools'} value={draftQuery} onValueChange={value => { setDraftQuery(value); setQueryError(undefined) }} placeholder={displayView === 'providers' ? 'Provider name or service…' : 'Weather forecasts, document analysis…'} enterKeyHint="search" aria-invalid={queryError !== undefined} aria-describedby={queryError === undefined ? 'market-search-recipient' : 'market-search-error market-search-recipient'} />
-          <Button type="submit" variant="secondary">Search<SearchIcon aria-hidden="true" /></Button>
+          <Button type="submit" variant="primary">Search<SearchIcon aria-hidden="true" /></Button>
         </form>
         <Link to="/t/new" className={cn(buttonStyles.button, buttonStyles.ghost, buttonStyles.md)} onClick={event => {
           if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) prepareNewChat()
@@ -515,16 +515,12 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           {view === 'discover' ? comparisonTray : null}
         </TabsContent>
         <TabsContent value="saved" className="pt-5">
-          <AeCollectionRail
-            title="Your saved Tools"
-            action={<p className="max-w-xs text-right text-xs text-muted-foreground">Saved to your account · Current details and AUD estimates on each visit</p>}
-            className="mb-5"
-          />
+          <ProductListingHeader title="Saved Tools and listings" description="Keep possibilities together, then check current access and prices before choosing." />
           {saved.status === 'signed_out'
-            ? <AeEmptyState icon={<HeartIcon />} title="Save Tools to your account" description="Sign in to keep Tools across browsers and connected Agents." action={<Link to="/sign-in/$" params={{ _splat: '' }} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>Sign in</Link>} />
+            ? <AeEmptyState icon={<HeartIcon />} title="Save Tools and listings to your account" description="Sign in to keep possibilities across browsers and connected Agents." action={<Link to="/sign-in/$" params={{ _splat: '' }} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>Sign in</Link>} />
             : saved.status === 'loading' ? <div role="status" aria-label="Loading saved Tools" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map(index => <div key={index} aria-hidden="true" className="rounded-card border border-border bg-card p-gutter"><Skeleton avatar lines={3} /></div>)}</div>
               : saved.status === 'failed' ? <AeEmptyState icon={<HeartIcon />} title="Saved Tools could not be loaded" description="Your saved identities are unchanged." action={<Button type="button" variant="secondary" onClick={saved.refresh}>Try again</Button>} />
-                : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back from any connected device." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
+                : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool or external listing, then come back from any connected device." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
           {view === 'saved' ? comparisonTray : null}
         </TabsContent>
         {(['tools', 'providers'] as const).map(tab => {

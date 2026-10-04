@@ -25,6 +25,24 @@ export type ProductListingCardProps = Readonly<{
   compareDisabled?: boolean
 }>
 
+/** Licensed top, heading and tools regions; controls are caller-owned, with no demo count or cart. */
+export function ProductListingHeader({ title, description, headingLevel = 2, children }: Readonly<{
+  title: string
+  description?: string
+  headingLevel?: 1 | 2
+  children?: ReactNode
+}>) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h2'
+
+  return <header className="arc-market arc-listing-top arc-listing-header">
+    <div className="arc-listing-heading">
+      <Heading>{title}</Heading>
+      {description === undefined ? null : <p>{description}</p>}
+    </div>
+    {children === undefined ? null : <div className="arc-listing-tools">{children}</div>}
+  </header>
+}
+
 /** The parent owns filters, sorting and cursor paging. This block only composes results. */
 export function ProductListing({ children, className = '' }: Readonly<{ children: ReactNode; className?: string }>) {
   return <div className={`arc-market arc-listing ${className}`}><div className="arc-listing-frame"><div className="arc-listing-results"><ul className="arc-listing-grid">{children}</ul></div></div></div>
