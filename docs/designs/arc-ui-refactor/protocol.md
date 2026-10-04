@@ -4,6 +4,16 @@
 
 ## Progress counter
 
+**Delivered: 96 bounded UI source units.** Latest [PR338](https://github.com/CreasyBear/Agentic-Economy/pull/338) delivers six partial form-control compositions, not six full pages. Receipt amount correction receives no Arc migration credit. Source-first work remains active; hosted visual and external OAuth acceptance are still open.
+
+### Live form-control rollout, 2026-10-04
+
+PR338 merged as84979de0a23e6fdcd36cc016ab8ed6d79b1951b7. Its tree exactly matches frozen gated5e8b3bbd5c1b10dd0b3f213f18c6d9c452ee6727. Verified Vercel projectprj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9 deploymentdpl_3KDVwVBqEwGRabRdSBRSREirN8Ry is READY with app.aecon.ai assigned; its provider metadata and release endpoint confirm the merge revision, health returns200. Readiness returns503/payments_unavailable while the independent launch worker runs the authorized payment pause and treasury audit repair; this is not a healthy-payment claim. No coordinator financial/configuration/Convex deployment occurred. The later independent PR339 release owns that repair.
+
+Combined check and the13-file103-case focused run pass. The complete source gate exits zero with explicit local declarations AE_DEPLOYMENT_ENVIRONMENT=development, AE_FORMANCE_ENVIRONMENT=sandbox and browser port3047:8512 unit/1skip;2887 integration/63 gated skips/3TODO;4 type,75 import,1 standards,31 SEO;16 browser/18 gated skips;18 accessibility;public build/release integrity and reproducible CLI SHA256da2b49832e3317a956ded2de102edaae133770c8208ac4efc1fe70cb627a2b5c. Two initial attempts stopped at environment validation before tests; no gate/configuration bypass occurred. Final nine-file Doctor comparisons remain90/100 with four identical preexisting warnings. The staged advisory hook's two native select-label findings are high-confidence false positives: Label renders a native label and matches both select IDs; no suppression was added. Receipt source contract is independently covered by16 direct cases in the focused run rather than inferred from gate totals. This record uses actual reports; an intermediate2899 integration estimate was corrected before merge.
+
+All2809 shared primary dirty fingerprints, status and staging remain identical, including its unmerged onboarding HEAD3f0971e96cce917885eaa53f2b2a657541d6db66. UI incoming paths have zero dirty overlap. Fresh read-only merge-tree against Founder PR290's7ab74 head has32 conflict paths before/after, zero added or removed. The merged owned local/remote arc-form-controls branch is retired; reuse the attached managed checkout on codex/arc-onboarding-block-followup. Primary is neither reset nor fast-forwarded, and no other worker's branch/worktree/browser was changed. Census stays886 sources/531 actions/664 preserved coverage snapshots. The source goal is not complete merely because route/view dispositions are recorded.
+
 
 
 ### Compact audit record details, 2026-10-04
