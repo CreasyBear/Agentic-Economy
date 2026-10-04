@@ -18,7 +18,12 @@ export type CapabilityPublicationQualityRefusal = Readonly<{
   next: readonly [CapabilityPublicationQualityNext]
 }>
 
-/** Examples clarify open maps, but cannot define the callable children of a required object. */
+/**
+ * Requires a schema-admitted contract. Ensures a closed, satisfiable empty
+ * object needs no example; open maps still need documented callable input.
+ * Invariant: no schema or example is changed. On violation return the existing
+ * opaque-input refusal at the offending pointer.
+ */
 export function publicationInputQuality(
   contract: CapabilityContractDocument,
 ): CapabilityPublicationQualityRefusal | undefined {
@@ -46,6 +51,8 @@ function findOpaqueInput(
   if (schema.type !== 'object') return undefined
   const properties = isRecord(schema.properties) ? schema.properties : {}
   if (Object.keys(properties).length === 0 && schema.const === undefined && schema.enum === undefined) {
+    if (schema.additionalProperties === false && schema.patternProperties === undefined
+      && validateJsonSchema(schema, {})) return undefined
     const hasDeclaredChildren = isRecord(schema.additionalProperties)
       || (isRecord(schema.patternProperties) && Object.keys(schema.patternProperties).length > 0)
       || ['allOf', 'anyOf', 'oneOf'].some((key) => Array.isArray(schema[key]) && schema[key].length > 0)
