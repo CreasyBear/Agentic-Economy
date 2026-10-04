@@ -18,6 +18,7 @@ beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter tool.call', () => {
   it('authenticates tool.call and delegates the same registered action', async () => {
+    const record=vi.fn()
     const resolvedScopes: Array<readonly string[]> = []
     const resolvedResources: string[] = []
     const executor = {
@@ -68,13 +69,14 @@ describe('MCP host adapter tool.call', () => {
           ownerId: 'acc_00000000000040008000000000000044',
         }
       },
-      callService: executor,
+      callService: executor, timing:{record},
     })
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     expect((body.result?.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({ kind: 'completed', toolRef: currentToolRef })
     expect(resolvedScopes).toEqual([['market_tools:call']])
     expect(resolvedResources).toEqual(['surface:mcp:tool.call'])
+    expect(record).toHaveBeenCalledWith('gateway.operation',expect.any(Number),expect.objectContaining({transport:'mcp',operation:'call',stage:'execution',credentialId:'key:test',outcome:'completed',invocationRef:'invocation:test',operationRef:currentToolRef}))
     expect(executor.callTool).toHaveBeenCalledOnce()
     expect(executor.callTool).toHaveBeenCalledWith(expect.objectContaining({
       input: { quoteRef, idempotencyKey: 'mcp-key-1' },

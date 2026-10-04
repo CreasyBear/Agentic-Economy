@@ -1,5 +1,6 @@
 import type { ActionTimingSink } from '@/modules/common/action'
 import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
+import { gatewayObservabilitySink } from './gateway-observability'
 
 export type GatewayPricingClass = 'free' | 'paid' | 'unknown'
 export type GatewayOutcome =
@@ -22,7 +23,10 @@ export type GatewayTelemetryEvent = Readonly<{
   invocationRef?: string
   operationRef?: string
   pricing?: GatewayPricingClass
+  /** Compatibility field: customer charge, never provider cost. */
   costUnits?: string
+  chargeCurrency?: string
+  chargeExponent?: number
   durationMs: number
   outcome: GatewayOutcome
   refusalCode?: string
@@ -31,6 +35,9 @@ export type GatewayTelemetryEvent = Readonly<{
   approval?: GatewayApprovalState
   rateLimited?: boolean
   concurrencyLimited?: boolean
+  transport?:'http'|'mcp'
+  operation?:'quote'|'call'|'status'|'list'|'cancel'|'reconcile'|'admission'
+  stage?:'pre_admission'|'execution'|'recovery'
 }>
 
 
@@ -48,7 +55,6 @@ export function recordGatewayTelemetry(
   sink: ActionTimingSink | undefined,
   event: GatewayTelemetryEvent,
 ): void {
-  if (sink === undefined) return
   const correlationId = event.correlationId ?? currentRequestCorrelationId()
   const durationMs = Number.isFinite(event.durationMs)
     ? Math.min(MAX_DURATION_MS, Math.max(0, Math.round(event.durationMs)))
@@ -57,6 +63,9 @@ export function recordGatewayTelemetry(
     count: 1,
     durationMs,
     outcome: event.outcome,
+    ...(event.transport===undefined?{}:{transport:event.transport}),
+    ...(event.operation===undefined?{}:{operation:event.operation}),
+    ...(event.stage===undefined?{}:{stage:event.stage}),
     ...(correlationId !== undefined && IDENTIFIER_PATTERN.test(correlationId) ? { correlationId } : {}),
     ...(event.credentialId !== undefined && IDENTIFIER_PATTERN.test(event.credentialId)
       ? { credentialId: event.credentialId }
@@ -75,7 +84,7 @@ export function recordGatewayTelemetry(
       : {}),
     ...(event.pricing === undefined ? {} : { pricing: event.pricing }),
     ...(event.costUnits !== undefined && COST_UNITS_PATTERN.test(event.costUnits) && event.costUnits.length <= MAX_COST_UNITS_LENGTH
-      ? { costUnits: event.costUnits }
+      ? { costUnits: event.costUnits, customerChargeUnits:event.costUnits, ...(event.chargeCurrency!==undefined&&/^[A-Z]{3}$/u.test(event.chargeCurrency)?{chargeCurrency:event.chargeCurrency}:{}),...(event.chargeExponent!==undefined&&Number.isInteger(event.chargeExponent)&&event.chargeExponent>=0&&event.chargeExponent<=18?{chargeExponent:event.chargeExponent}:{}) }
       : {}),
     ...(event.refusalCode !== undefined && IDENTIFIER_PATTERN.test(event.refusalCode)
       ? { refusalCode: event.refusalCode }
@@ -86,5 +95,5 @@ export function recordGatewayTelemetry(
     ...(event.rateLimited === undefined ? {} : { rateLimited: event.rateLimited }),
     ...(event.concurrencyLimited === undefined ? {} : { concurrencyLimited: event.concurrencyLimited }),
   }
-  sink.record('gateway.operation', durationMs, metadata)
+  try{(sink??gatewayObservabilitySink).record('gateway.operation', durationMs, metadata)}catch{/* A reporting outage cannot alter Call behavior. */}
 }

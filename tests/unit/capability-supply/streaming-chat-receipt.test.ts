@@ -23,6 +23,12 @@ describe('SDK parsed bounded streaming completion receipts',()=>{
     expect(output).toBeDefined()
     expect(decodeProviderUnits('blockrun_chat:v1',output).units.every(unit=>unit.quantityUnits === null)).toBe(true)
   })
+  it('preserves documented static metadata and null logprobs; refuses fields that lack a lossless adapter',async()=>{
+    const text=chunk([{index:0,delta:{content:'hello'},finish_reason:'stop',logprobs:null}],{system_fingerprint:'fp_fixture',service_tier:'default'})+'data: [DONE]\n\n'
+    expect(await completedStreamingChatReceipt(text)).toMatchObject({system_fingerprint:'fp_fixture',service_tier:'default',choices:[{logprobs:null}]})
+    expect(await completedStreamingChatReceipt(chunk([{index:0,delta:{content:'hello'},finish_reason:'stop'}],{unsupported_metadata:{content:'must retain'}})+'data: [DONE]\n\n')).toBeUndefined()
+    expect(await completedStreamingChatReceipt(chunk([{index:0,delta:{tool_calls:[{index:0,id:'call-fixture',type:'function',function:{name:'test',arguments:'{}',unsupported:'must retain'}}]},finish_reason:'tool_calls'}])+'data: [DONE]\n\n')).toBeUndefined()
+  })
   it('accepts the documented OpenRouter final usage choice repeating the finish reason without counting another completion',async()=>{
     const text=first+last+chunk([{index:0,delta:{},finish_reason:'stop'}],{usage:{prompt_tokens:12,completion_tokens:8,total_tokens:20}})+'data: [DONE]\n\n'
     expect(await completedStreamingChatReceipt(text)).toMatchObject({choices:[{message:{content:'Hello world'},finish_reason:'stop'}],usage:{total_tokens:20}})

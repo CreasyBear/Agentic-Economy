@@ -20,6 +20,7 @@ import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallMeasurementEvidence } from './CallMeasurementEvidence'
 import { CallAttemptEvidence } from './CallAttemptEvidence'
 import { CallProviderUnits } from './CallProviderUnits'
+import { CallTraceDownload } from './CallTraceDownload'
 import { CallReceiptFact, CallReceiptRef } from './CallReceiptPrimitives'
 import './ReceiptComposition.css'
 
@@ -49,6 +50,7 @@ export function CallTechnicalRecord({ result, view }: Readonly<{ result: FoundCa
         {result.result === undefined ? null : <ResultDetails result={result.result} />}
         <CallSuggestedNextAction result={result} />
         <MachineReadableReceipt view={view} />
+        <CallTraceDownload result={result}/>
       </div>
     </details>
   )

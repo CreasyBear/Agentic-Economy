@@ -5,8 +5,8 @@ import { isRecord } from '@/modules/common/is-record'
 
 const chunkSchema = z.object({id:z.string().min(1).max(200),object:z.literal('chat.completion.chunk'),created:z.number().int().nonnegative().safe(),model:z.string().min(1).max(200),
   choices:z.array(z.object({index:z.number().int().min(0).max(15),delta:z.object({role:z.literal('assistant').optional(),content:z.string().nullable().optional(),
-    tool_calls:z.array(z.object({index:z.number().int().min(0).max(15),id:z.string().min(1).max(200).optional(),type:z.literal('function').optional(),function:z.object({name:z.string().max(200).optional(),arguments:z.string().optional()}).optional()})).max(16).optional()}).passthrough(),
-    finish_reason:z.string().min(1).max(50).nullable().optional()}).passthrough()).max(16),usage:z.unknown().optional()}).passthrough()
+    tool_calls:z.array(z.strictObject({index:z.number().int().min(0).max(15),id:z.string().min(1).max(200).optional(),type:z.literal('function').optional(),function:z.strictObject({name:z.string().max(200).optional(),arguments:z.string().optional()}).optional()})).max(16).optional()}).passthrough(),
+    finish_reason:z.string().min(1).max(50).nullable().optional(),logprobs:z.null().optional()}).passthrough()).max(16),usage:z.unknown().optional(),system_fingerprint:z.string().max(200).nullable().optional(),service_tier:z.string().max(50).nullable().optional()}).strict()
 
 function parsePrivateJson(text:string):unknown|undefined {
   try {const value:unknown=secureJsonParse(text);return isBoundedJsonValue(value)?value:undefined} catch {return undefined}
@@ -28,6 +28,8 @@ export async function completedStreamingChatReceipt(text: string): Promise<unkno
   type Choice={index:number;content:string;finishReason:string|null;tools:Array<{id:string;type:'function';function:{name:string;arguments:string}}>;tracker:StreamingToolCallTracker}
   const choices=new Map<number,Choice>()
   let identity: {id:string;model:string;created:number}|undefined, usage:unknown, usageSeen=false, done=false, count=0
+  const metadata:{system_fingerprint?:string|null;service_tier?:string|null}={}
+  const nullLogprobs=new Set<number>()
   try {
     for (;;) {
       const item=await events.read()
@@ -37,6 +39,8 @@ export async function completedStreamingChatReceipt(text: string): Promise<unkno
       const parsed=chunkSchema.safeParse(parsePrivateJson(item.value.data))
       if(!parsed.success || 'error' in parsed.data) return undefined
       const chunk=parsed.data
+      for(const key of ['system_fingerprint','service_tier'] as const){const value=chunk[key];if(value===undefined)continue
+        if(metadata[key]!==undefined&&metadata[key]!==value)return undefined;metadata[key]=value}
       const hasUsage=chunk.usage !== null && chunk.usage !== undefined
       if(usageSeen) return undefined
       if(identity === undefined) identity={id:chunk.id,model:chunk.model,created:chunk.created}
@@ -47,7 +51,8 @@ export async function completedStreamingChatReceipt(text: string): Promise<unkno
         usage=chunk.usage;usageSeen=true
       }
       for(const delta of chunk.choices){
-        if(Object.keys(delta).some(key=>!['index','delta','finish_reason'].includes(key))) return undefined
+        if(Object.keys(delta).some(key=>!['index','delta','finish_reason','logprobs'].includes(key))) return undefined
+        if(delta.logprobs===null)nullLogprobs.add(delta.index)
         let choice=choices.get(delta.index)
         if(choice === undefined){
           const tools:Choice['tools']=[]
@@ -72,8 +77,8 @@ export async function completedStreamingChatReceipt(text: string): Promise<unkno
       }
     }
     if(!done || identity === undefined || choices.size === 0 || [...choices.values()].some(choice=>choice.finishReason === null)) return undefined
-    return {...identity,object:'chat.completion',choices:[...choices.values()].sort((a,b)=>a.index-b.index).map(choice=>({index:choice.index,
-      message:{role:'assistant',content:choice.content,...(choice.tools.length === 0 ? {} : {tool_calls:choice.tools})},finish_reason:choice.finishReason})),
+    return {...identity,...metadata,object:'chat.completion',choices:[...choices.values()].sort((a,b)=>a.index-b.index).map(choice=>({index:choice.index,
+      message:{role:'assistant',content:choice.content,...(choice.tools.length === 0 ? {} : {tool_calls:choice.tools})},finish_reason:choice.finishReason,...(nullLogprobs.has(choice.index)?{logprobs:null}:{})})),
       ...(usageSeen ? {usage} : {})}
   } catch { return undefined } finally {await events.cancel().catch(()=>undefined);events.releaseLock()}
 }

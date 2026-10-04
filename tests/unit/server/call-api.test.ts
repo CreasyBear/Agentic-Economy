@@ -80,6 +80,14 @@ function invokeBody(idempotencyKey = 'key-12345') {
 }
 
 describe('operation.invoke HTTP adapter', () => {
+  it('records authentication and quote validation refusals before any service effect',async()=>{
+    const record=vi.fn(),executor=service({kind:'completed'})
+    await handleToolQuotePost(post({Authorization:'sk-SENTINEL'},'/api/v1/tools/quote'),{authenticate:async()=>({isAuthenticated:false,tokenType:null,id:null,subject:null,scopes:null}),timing:{record},callService:executor})
+    expect(record).toHaveBeenCalledWith('gateway.operation',expect.any(Number),expect.objectContaining({transport:'http',stage:'pre_admission',refusalCode:'authentication_required'}))
+    await handleToolQuotePost(post({Authorization:'sk-SENTINEL'},'/api/v1/tools/quote'),{authenticate:()=>authenticate(),resolvePrincipal:resolveCanonicalPrincipal,timing:{record},callService:executor})
+    expect(record).toHaveBeenCalledWith('gateway.operation',expect.any(Number),expect.objectContaining({operation:'quote',stage:'pre_admission',refusalCode:'invalid_request'}))
+    expect(JSON.stringify(record.mock.calls)).not.toContain('sk-SENTINEL');expect(executor.quoteTool).not.toHaveBeenCalled()
+  })
   it('refuses production Quote and Call before an injected service when money configuration is incomplete', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
