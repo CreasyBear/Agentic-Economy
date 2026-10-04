@@ -311,7 +311,6 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (paymentEnvironment !== undefined) validateProductionFormanceConfiguration(environment, add, paymentEnvironment)
   if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
-  if (production) validatePackage5Rollout(environment, add)
   if (production) validateProductionSentryConfiguration(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
   const screeningPolicy = present(environment, 'AE_X402_PAYEE_SCREENING_POLICY')
@@ -400,17 +399,6 @@ function requireGroup(environment: DeploymentEnvironmentInput, group: Requiremen
     return
   }
   for (const name of missing) add('missing', group.code, [name], group.scope)
-}
-function validatePackage5Rollout(
-  environment: DeploymentEnvironmentInput,
-  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
-): void {
-  for (const name of package5ControlledRequirements[0]!.names) {
-    const value = present(environment, name)
-    if (value !== undefined && value !== 'true') {
-      add('malformed', 'package5_rollout_not_enabled', [name], 'package5-rollout')
-    }
-  }
 }
 function validateSourceWriteAuthority(
   environment: DeploymentEnvironmentInput,
