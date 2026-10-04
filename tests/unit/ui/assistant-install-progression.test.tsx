@@ -60,6 +60,19 @@ describe('Agent connection progression', () => {
 })
 
 describe('scoped Agent read failures', () => {
+  it('announces the initial approvals load without inventing decisions, then clears when empty', () => {
+    const onDecide = vi.fn()
+    const view = render(<AeAgentApprovalsSection approvals={[]} loading onRetry={() => undefined} onDecide={onDecide} />)
+
+    expect(screen.getByRole('status', { name: 'Loading waiting approvals' }).getAttribute('aria-busy')).toBe('true')
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    view.rerender(<AeAgentApprovalsSection approvals={[]} loading={false} onRetry={() => undefined} onDecide={onDecide} />)
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Waiting for approval' })).toBeNull()
+    expect(onDecide).not.toHaveBeenCalled()
+  })
+
   it('keeps an unavailable approvals read neutral and exactly retryable', () => {
     const onRetry = vi.fn()
     render(<AeAgentApprovalsSection

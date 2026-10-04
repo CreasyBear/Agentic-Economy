@@ -77,9 +77,9 @@ describe('sign-in site stage', () => {
 
     expect(routeState.signInProps?.fallback).toBeTruthy()
     const { container } = render(<>{routeState.signInProps?.fallback as ReactNode}</>)
-    expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')).toBeTruthy()
-    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
-    expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')?.getAttribute('aria-hidden')).toBe('true')
+    const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
+    expect(fallback?.getAttribute('aria-hidden')).toBe('true')
+    expect(container.querySelector('button, input, a')).toBeNull()
   })
 
   it('names the preserved destination and uses Market only when that is the return', () => {
@@ -158,11 +158,12 @@ describe('sign-in site stage', () => {
     expect(document.activeElement).toBe(document.body)
   })
 
-  it('exports hidden sign-in loading placeholders without actions', () => {
+  it('exports decorative sign-in loading placeholders without accessible auth controls', () => {
     const { container } = render(<SignInClerkFallback />)
     const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
     expect(fallback?.getAttribute('aria-hidden')).toBe('true')
-    expect(fallback?.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4)
+    expect(screen.queryByRole('status')).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('textbox')).toBeNull()
   })
 })

@@ -2,7 +2,7 @@ import { makeFunctionReference } from 'convex/server'
 import { useMutation, useQuery } from 'convex/react'
 import { useRef } from 'react'
 
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 
 import { TaxProfileForm } from '@/components/ae/settings/TaxProfileForm'
@@ -33,9 +33,10 @@ export function TaxProfileFormSection() {
 
   if (facts === undefined) {
     return <SettingsPage title="Tax" description="Keep your Australian business and billing details current.">
-      <div className="arc-market arc-tax-profile-loading" aria-busy="true">
+      <div className="arc-market arc-tax-profile-loading" role="status" aria-label="Loading tax details" aria-busy="true">
         {[0, 1, 2, 3].map(index => <div key={index} className="arc-tax-profile-placeholder" aria-hidden="true">
-          <Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-11 w-full max-w-96" />
+          <div className="h-4 w-40 max-w-full overflow-hidden"><Skeleton lines={1} /></div>
+          <div className="h-11 w-full max-w-96"><Skeleton lines={2} /></div>
         </div>)}
       </div>
     </SettingsPage>

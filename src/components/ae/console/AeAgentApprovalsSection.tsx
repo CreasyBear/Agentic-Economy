@@ -4,7 +4,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
 import './AgentApprovalComposition.css'
 import { approvalCanApprove, approvalFacts, approvalToolDescription, approvalToolName } from './agent-operator-console-model'
@@ -30,9 +30,8 @@ export function AeAgentApprovalsSection({
     <AeSection title="Waiting for approval" description="Review the exact Tool before allowing it to run once.">
       <div className="arc-market arc-agent-approvals">
         {loading && approvals.length === 0 ? (
-          <div className="arc-agent-approvals__loading" aria-busy="true" aria-label="Loading waiting approvals">
-            <Skeleton aria-hidden="true" className="h-touch w-full arc-agent-approvals__skeleton" />
-            <Skeleton aria-hidden="true" className="h-touch w-full arc-agent-approvals__skeleton" />
+          <div className="arc-agent-approvals__loading" role="status" aria-busy="true" aria-label="Loading waiting approvals">
+            {[0, 1].map(index => <div key={index} aria-hidden="true" className="h-touch w-full arc-agent-approvals__skeleton"><Skeleton lines={2} /></div>)}
           </div>
         ) : null}
         {error === undefined ? null : (
