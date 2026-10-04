@@ -1,6 +1,6 @@
 import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import {
   PROVIDER_OBJECT_COPY,
   type ProviderPublicationRow,
@@ -37,7 +37,7 @@ const columns: DataColumn<ProviderPublicationRow>[] = [
     key: 'disposition',
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.disposition,
-    render: (_value, row) => <Badge variant="outline">{providerStatusLabel(row.disposition)}</Badge>,
+    render: (_value, row) => <Badge tone="neutral" size="sm">{providerStatusLabel(row.disposition)}</Badge>,
   },
   {
     key: 'sourceAuthorityState',
