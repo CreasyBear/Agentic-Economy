@@ -12,7 +12,7 @@ export function canSelectPublicAuthority(value: PublicAuthorityMode, ceiling: Ag
 export const authorityOptions = [
   { value: 'read_only', label: 'Browse only', description: 'Discover, compare, and run free read-only Tools.' },
   { value: 'approval_required', label: 'Ask each time', description: 'Paid or consequential work comes back to you first.' },
-  { value: 'spending_policy', label: 'Work within limits', description: 'Paid work stays within the exact limits shown below.' },
+  { value: 'spending_policy', label: 'Work within limits', description: 'Paid work stays within the exact requested limits.' },
 ] as const
 
 export type ConsentConnectionFieldsetProps = Readonly<{
@@ -76,6 +76,7 @@ export type ConsentDecisionBarProps = Readonly<{
 export type ConsentRequestFact = Readonly<{ label: string; value: string; mono?: boolean }>
 
 export type ConsentRequestFactsProps = Readonly<{
+  presentation?: 'context' | 'authority' | 'review'
   clientName: string
   environment: 'sandbox' | 'production'
   toolSelectionSummary: string

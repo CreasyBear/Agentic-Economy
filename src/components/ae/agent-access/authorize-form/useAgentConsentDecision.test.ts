@@ -288,9 +288,9 @@ describe('useAgentConsentDecision', () => {
     expect(assign).toHaveBeenCalledWith(redirectTo)
   })
 
-  it('does not fetch when reverification is cancelled', async () => {
+  it('releases approval after reverification cancellation and preserves choices for retry', async () => {
     clerkMocks.reverifyMode = 'cancel'
-    const fetchMock = vi.fn()
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ kind: 'approved', grantRef: 'grant-hook' }))
     vi.stubGlobal('fetch', fetchMock)
 
     const { result } = renderHook(() => useAgentConsentDecision({
@@ -298,9 +298,25 @@ describe('useAgentConsentDecision', () => {
       details: baseDetails,
     }))
 
+    act(() => {
+      result.current.dispatch({ kind: 'select_mode', value: 'approval_required' })
+      result.current.setApprovedToolAccess('selected_tools')
+      result.current.addApprovedTool(callableRef)
+    })
     await act(async () => { await result.current.approve() })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(result.current.decision).toEqual({ phase: 'idle' })
+    expect(result.current.selectedMode).toBe('approval_required')
+    expect(result.current.approvedToolAccess).toBe('selected_tools')
+    expect(result.current.approvedToolRefs).toEqual([callableRef])
+
+    clerkMocks.reverifyMode = 'pass'
+    await act(async () => { await result.current.approve() })
+    expect(fetchMock).toHaveBeenCalledWith('/oauth/authorize', expect.objectContaining({
+      method: 'POST',
+      body: `grant_ref=grant-hook&expected_grant_revision=2&expected_target_revision=2&decision=approve&authority_mode=approval_required&approved_tool_access=selected_tools&connection_target=new_agent&approved_tool_ref=${encodeURIComponent(callableRef)}`,
+    }))
+    expect(result.current.decision).toEqual({ phase: 'approved' })
   })
 
   it('dispatches only one approve while in flight', async () => {
@@ -321,6 +337,115 @@ describe('useAgentConsentDecision', () => {
     })
     expect(submitApproval).toHaveBeenCalledOnce()
     await act(async () => { resolveApproval?.({ kind: 'approved', grantRef: 'grant-hook' }) })
+  })
+
+  it('dispatches one deny and keeps the decision closed after an unknown outcome', async () => {
+    const pendingResponses: Array<(response: Response) => void> = []
+    const fetchMock = vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+      pendingResponses.push(resolve)
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' },
+      details: baseDetails,
+    }))
+    let denyAttempts: Promise<void>[] = []
+
+    await act(async () => {
+      denyAttempts = [result.current.deny(), result.current.deny()]
+    })
+    const requestCount = fetchMock.mock.calls.length
+    await act(async () => {
+      pendingResponses.forEach(resolve => resolve(new Response('bad', { status: 500 })))
+      await Promise.all(denyAttempts)
+    })
+
+    expect(requestCount).toBe(1)
+    expect(fetchMock).toHaveBeenCalledWith('/oauth/authorize', expect.objectContaining({
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_ref=grant-hook&decision=deny',
+    }))
+    expect(result.current.decision).toEqual({ phase: 'outcome_unknown' })
+
+    await act(async () => { await result.current.deny() })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('admits approve before a same-turn deny and posts only the approval body', async () => {
+    const pendingResponses: Array<(response: Response) => void> = []
+    const fetchMock = vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+      pendingResponses.push(resolve)
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' },
+      details: baseDetails,
+    }))
+    let decisionAttempts: Promise<void>[] = []
+
+    await act(async () => {
+      decisionAttempts = [result.current.approve(), result.current.deny()]
+    })
+    const requestCount = fetchMock.mock.calls.length
+    await act(async () => {
+      pendingResponses.forEach((resolve, index) => {
+        const body = String(fetchMock.mock.calls[index]?.[1]?.body)
+        resolve(body.includes('decision=approve')
+          ? Response.json({ kind: 'approved', grantRef: 'grant-hook' })
+          : Response.json({ kind: 'denied', grantRef: 'grant-hook' }))
+      })
+      await Promise.all(decisionAttempts)
+    })
+
+    expect(requestCount).toBe(1)
+    expect(fetchMock).toHaveBeenCalledWith('/oauth/authorize', expect.objectContaining({
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_ref=grant-hook&expected_grant_revision=2&expected_target_revision=2&decision=approve&authority_mode=read_only&approved_tool_access=all_admitted&connection_target=new_agent',
+    }))
+    expect(result.current.decision).toEqual({ phase: 'approved' })
+  })
+
+  it('admits deny before a same-turn approve and posts only the denial body', async () => {
+    const pendingResponses: Array<(response: Response) => void> = []
+    const fetchMock = vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+      pendingResponses.push(resolve)
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' },
+      details: baseDetails,
+    }))
+    let decisionAttempts: Promise<void>[] = []
+
+    await act(async () => {
+      decisionAttempts = [result.current.deny(), result.current.approve()]
+    })
+    const requestCount = fetchMock.mock.calls.length
+    await act(async () => {
+      pendingResponses.forEach((resolve, index) => {
+        const body = String(fetchMock.mock.calls[index]?.[1]?.body)
+        resolve(body.includes('decision=approve')
+          ? Response.json({ kind: 'approved', grantRef: 'grant-hook' })
+          : Response.json({ kind: 'denied', grantRef: 'grant-hook' }))
+      })
+      await Promise.all(decisionAttempts)
+    })
+
+    expect(requestCount).toBe(1)
+    expect(fetchMock).toHaveBeenCalledWith('/oauth/authorize', expect.objectContaining({
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_ref=grant-hook&decision=deny',
+    }))
+    expect(result.current.decision).toEqual({ phase: 'denied' })
   })
 
   it('renders executable scoped next-page action without offering an external ToolRef', () => {

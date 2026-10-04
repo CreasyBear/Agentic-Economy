@@ -186,7 +186,7 @@ export function useAgentConsentDecision({
   const [toolQuery, setToolQuery] = useState('')
   const [toolSearch, setToolSearch] = useState<ConsentToolSearchView>({ pending: false })
   const approveButtonRef = useRef<HTMLButtonElement>(null)
-  const approvalInFlightRef = useRef(false)
+  const decisionInFlightRef = useRef(false)
 
   const defaultSubmitApproval = useReverification(async (body: string) => await fetch('/oauth/authorize', {
     method: 'POST',
@@ -298,7 +298,7 @@ export function useAgentConsentDecision({
   }
 
   async function approve() {
-    if (approvalInFlightRef.current || agentTargetsUnavailable) return
+    if (decisionInFlightRef.current || agentTargetsUnavailable) return
     if (approvedToolAccess === 'selected_tools' && approvedToolRefs.length === 0) {
       const emptyField = document.getElementById('tool-search') ?? document.getElementById('tool-selection-empty')
       emptyField?.focus()
@@ -310,7 +310,7 @@ export function useAgentConsentDecision({
     }
     const body = approvalBody()
     if (body === undefined) return
-    approvalInFlightRef.current = true
+    decisionInFlightRef.current = true
     dispatch({ kind: 'decision_started' })
     try {
       const result = await submitApproval(body)
@@ -322,7 +322,7 @@ export function useAgentConsentDecision({
       dispatch({ kind: 'decision_finished', decision: mapConsentActionResultToDecision(result) })
     } catch (error) {
       if (isReverificationCancelledError(error)) {
-        approvalInFlightRef.current = false
+        decisionInFlightRef.current = false
         dispatch({ kind: 'decision_finished', decision: { phase: 'idle' } })
         setTimeout(() => approveButtonRef.current?.focus(), 0)
         return
@@ -332,6 +332,8 @@ export function useAgentConsentDecision({
   }
 
   async function deny() {
+    if (decisionInFlightRef.current) return
+    decisionInFlightRef.current = true
     dispatch({ kind: 'decision_started' })
     try {
       const result = await fetch('/oauth/authorize', {

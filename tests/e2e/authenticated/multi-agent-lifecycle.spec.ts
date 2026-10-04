@@ -204,7 +204,8 @@ async function refreshOwnerProof(page: Page, ownerEmail: string): Promise<void> 
 async function connectNewAgent(page: Page, name: string): Promise<ConnectedAgent> {
   const grant = await beginDeviceGrant(page.request, name)
   await page.goto(grant.verificationUri)
-  await expect(page.getByRole('heading', { name: `Connect ${name}`, exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Review Agent access', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Request details' }).getByText(name, { exact: false })).toBeVisible()
   issuedAgentNames.push(name)
   await submitAgentApproval(page, 'Connect agent')
   await expect(page.getByText(`Access approved for ${name}`)).toBeVisible()
@@ -214,7 +215,8 @@ async function connectNewAgent(page: Page, name: string): Promise<ConnectedAgent
 async function replaceAgentCredential(page: Page, name: string, targetName: string): Promise<ConnectedAgent> {
   const grant = await beginDeviceGrant(page.request, name)
   await page.goto(grant.verificationUri)
-  await expect(page.getByRole('heading', { name: `Connect ${name}`, exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Review Agent access', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Request details' }).getByText(name, { exact: false })).toBeVisible()
   const replace = page.getByRole('radio', { name: /Replace credential/ })
   for (let pageNumber = 0; await replace.isDisabled(); pageNumber += 1) {
     if (pageNumber >= 50) throw new Error('replacement_agent_page_limit_exceeded')
@@ -253,7 +255,17 @@ async function loadNextConsentPage(page: Page): Promise<void> {
   ])
 }
 
+async function reviewAgentAccess(page: Page): Promise<void> {
+  await expect(page.getByRole('navigation', { name: 'Access decision steps' })).toBeVisible()
+  const connection = page.getByRole('button', { name: 'Continue to authority', exact: true })
+  if (await connection.count() > 0) await connection.click()
+  await page.getByRole('button', { name: 'Continue to Tools', exact: true }).click()
+  await page.getByRole('button', { name: 'Review access', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Your choices' })).toBeVisible()
+}
+
 async function submitAgentApproval(page: Page, actionName: 'Connect agent' | 'Replace credential' | 'Revoke and replace credential'): Promise<void> {
+  await reviewAgentAccess(page)
   const responsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return url.pathname === '/oauth/authorize' && response.request().method() === 'POST'
@@ -268,6 +280,7 @@ async function submitAgentApprovalRedirect(page: Page, callback: string): Promis
   await page.route(`${callback}?**`, (route) => route.fulfill({
     status: 200, contentType: 'text/plain', body: 'Authorization response received.',
   }))
+  await reviewAgentAccess(page)
   const redirected = page.waitForURL((url) => `${url.origin}${url.pathname}` === callback)
   await page.getByRole('button', { name: 'Connect agent', exact: true }).click()
   await redirected
