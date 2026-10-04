@@ -1,4 +1,4 @@
-import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import './SecurityHistoryComposition.css'
@@ -6,7 +6,7 @@ import './SecurityHistoryComposition.css'
 const recoveryChecks: ReadonlyArray<{
   title: string
   description: string
-  href?: string
+  href: string
 }> = [
   {
     title: 'Review and revoke sessions',
@@ -26,7 +26,7 @@ const recoveryChecks: ReadonlyArray<{
   {
     title: 'Retain evidence and contact support',
     description:
-      'Copy durable references from Security history — never tokens, signatures, recovery factors, or secrets.',
+      'Copy durable references from Security history. Never tokens, signatures, recovery factors, or secrets.',
     href: '/support',
   },
 ]
@@ -44,28 +44,17 @@ export function AeCompromiseRecoveryChecklist() {
             Resetting MFA alone does not revoke existing sessions, Agent credentials,
             Provider connection authority.
             <p className="arc-security-financial-impact">
-              A$0.00 affected — opening this list does not revoke sessions or Agents.
+              A$0.00 affected. Opening this list does not revoke sessions or Agents.
             </p>
           </AlertDescription>
         </Alert>
-        <ol aria-label="Compromise recovery checks" className="arc-security-recovery-list">
-          {recoveryChecks.map((check, index) => (
-            <li key={check.title} className="arc-security-check">
-              <span className="arc-security-check-number" aria-hidden="true">{index + 1}</span>
-              <div className="arc-security-check-copy">
-                <h3>{check.title}</h3>
-                <p>{check.description}</p>
-              </div>
-              <div className="arc-security-check-action">
-                {check.href ? (
-                  <a href={check.href} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-security-review-link`}>
-                    {check.href === '/support' ? 'Contact support' : 'Review'}
-                  </a>
-                ) : <span className="arc-security-review-separately">Review separately</span>}
-              </div>
-            </li>
-          ))}
-        </ol>
+        {recoveryChecks.map((check) => (
+          <SettingsRow key={check.title} label={check.title} description={check.description}>
+            <a href={check.href} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-security-review-link`}>
+              {check.href === '/support' ? 'Contact support' : 'Review'}
+            </a>
+          </SettingsRow>
+        ))}
       </SettingsGroup>
     </div>
   )
