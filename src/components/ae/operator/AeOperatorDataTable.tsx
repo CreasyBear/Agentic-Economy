@@ -30,7 +30,7 @@ import { Button } from '@/components/arc/button/button'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { SortableDataTable, SortableDataTableHeader, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 import './RecordTable.css'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Checkbox } from '@/components/arc/checkbox/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
 
 
@@ -393,7 +393,7 @@ function SelectionCheckbox({
   return (
     <div className="arc-record-selection-hit">
       <Checkbox
-        className="size-4"
+        compact
         checked={checked}
         disabled={disabled}
         onCheckedChange={(value) => onCheckedChange(value === true)}

@@ -3,9 +3,9 @@ import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
+import { Checkbox } from '@/components/arc/checkbox/checkbox'
 import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -366,5 +366,5 @@ function AttestationField({ values, disabled, invalid = false, describedBy, onCh
 }
 
 function CheckRow({ id, label, checked, disabled = false, onChange }: Readonly<{ id: string; label: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }>) {
-  return <Label htmlFor={id} className="arc-publication-check-row"><Checkbox id={id} checked={checked} disabled={disabled} onCheckedChange={(value) => onChange(value === true)} />{label}</Label>
+  return <Checkbox id={id} label={label} checked={checked} disabled={disabled} onCheckedChange={(value) => onChange(value === true)} />
 }

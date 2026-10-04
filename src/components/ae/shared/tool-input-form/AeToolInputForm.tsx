@@ -2,6 +2,11 @@
 import Form from '@rjsf/shadcn'
 import type { RJSFSchema, UiSchema } from '@rjsf/utils'
 
+import {
+  AeToolBaseInputTemplate,
+  AeToolCheckboxWidget,
+  AeToolTextareaWidget,
+} from './AeToolInputWidgets'
 import { toolInputValidator } from './tool-input-form'
 
 export type AeToolInputFormProps = Readonly<{
@@ -14,6 +19,8 @@ export type AeToolInputFormProps = Readonly<{
 
 export function AeToolInputForm({ idPrefix, schema, value, uiSchema, onChange }: AeToolInputFormProps) {
   return <Form idPrefix={idPrefix} schema={schema} validator={toolInputValidator} formData={value}
+    templates={{ BaseInputTemplate: AeToolBaseInputTemplate }}
+    widgets={{ TextareaWidget: AeToolTextareaWidget, CheckboxWidget: AeToolCheckboxWidget }}
     onChange={event => onChange(event.formData)}
     uiSchema={{ 'ui:submitButtonOptions': { norender: true }, ...uiSchema }}
     experimental_defaultFormStateBehavior={{ emptyObjectFields: 'skipDefaults', arrayMinItems: { populate: 'never' }, constAsDefaults: 'never' }}

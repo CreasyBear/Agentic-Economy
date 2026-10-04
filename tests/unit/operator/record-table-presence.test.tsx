@@ -269,7 +269,6 @@ describe('AeRecordTable interaction composition', () => {
     expect(screen.getByRole('checkbox', { name: 'Select weather.lookup' }).closest('tr')?.getAttribute('data-state')).toBe('selected')
     const selectAll = screen.getByRole('checkbox', { name: 'Select all Operations' })
     expect(selectAll.getAttribute('aria-checked')).toBe('mixed')
-    expect(selectAll.querySelector('.lucide-minus')).not.toBeNull()
     expect(screen.getByRole('status').textContent).toBe('1 of 2 selected')
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select fx.convert' }))
