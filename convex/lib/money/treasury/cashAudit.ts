@@ -226,18 +226,34 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
   // Above the alpha readback bound, retain native attribution but never claim a full audit.
   const receiptDeadline = Date.now() + 120_000
   let receiptBudgetExceeded = candidateAttempts.length > 250
+  let receiptReads = 0
   // Each payment already fans out to both RPC providers. Keep historical reads
   // sequential and inspect current confirmations rather than polling for a block.
   for (const source of candidateAttempts) {
-    receiptBudgetExceeded ||= Date.now() >= receiptDeadline
+    receiptBudgetExceeded ||= Date.now() >= receiptDeadline || receiptReads >= 250
     const hashes = transactionHashes(source)
     const hash = hashes[0]
     let receipt: X402EvmReceipt | undefined
     if (!receiptBudgetExceeded && source.joinIssues.length === 0 && source.native.kind === 'available'
       && hash !== undefined && hashes.length === 1 && source.material.paymentNonce !== undefined && source.material.paymentPayer !== undefined) {
-      try { receipt = await readReceipt(source.material, hash) }
-      catch (cause) { receipt = degradeBackend(boundaryCauseKind(cause), undefined,
-        { site: 'treasuryPaymentReceipt', reason: 'source_unavailable' }) }
+      // One read outage need not close payments until the next 15-minute audit.
+      // Retry only missing evidence, sequentially, within the same total budget.
+      // A returned receipt still undergoes all attribution/finality checks below.
+      for (let read = 0; read < 2; read += 1) {
+        if (Date.now() >= receiptDeadline || receiptReads >= 250) {
+          receiptBudgetExceeded = true
+          break
+        }
+        try { receiptReads += 1; receipt = await readReceipt(source.material, hash) }
+        catch (cause) { receipt = degradeBackend(boundaryCauseKind(cause), undefined,
+          { site: 'treasuryPaymentReceipt', reason: 'source_unavailable' }) }
+        if (receipt !== undefined || read === 1) break
+        if (receiptReads >= 250 || Date.now() + 250 >= receiptDeadline) {
+          receiptBudgetExceeded = true
+          break
+        }
+        await new Promise<void>(resolve => setTimeout(resolve, 250))
+      }
     }
     const attempt = source.material
     if (source.joinIssues.length > 0 || source.native.kind !== 'available' || transactionHashes(source).length > 1) {
