@@ -34,7 +34,8 @@ export async function seedPaymentReadiness(
  * preserve so missing/stale/foreign observations remain unavailable at admission.
  */
 export async function seedTreasuryReadinessFacts(backend: ConvexFixtureBackend, options: {
-  observation: 'create' | 'preserve'; snapshotAt?: number; cashCheck?: TreasuryCheck; availableUnits?: string; chainBlockTimestamp?: number
+  observation: 'create' | 'preserve'; snapshotAt?: number; observationAt?: number; chainObservedAt?: number
+  cashCheck?: TreasuryCheck; availableUnits?: string; chainBlockTimestamp?: number
 }): Promise<TreasurySnapshot> {
   const now = options.snapshotAt ?? Date.now()
   const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: now })
@@ -43,7 +44,8 @@ export async function seedTreasuryReadinessFacts(backend: ConvexFixtureBackend, 
   const availableUnits = options.availableUnits ?? '100000000'
   const totalUnits = (BigInt(availableUnits) + BigInt(identity.bufferTargetUnits)).toString()
   if (options.observation === 'create') {
-    const evidenceDigest = canonicalDigest({ identity, now, totalUnits })
+    const observedAt = options.observationAt ?? now
+    const evidenceDigest = canonicalDigest({ identity, now: observedAt, totalUnits })
     const observationRef = `readiness-observation:${evidenceDigest}`
     await backend.run(async ctx => {
       const existing = await ctx.db.query('moneyTreasuryObservations').withIndex('by_observationRef', q => q.eq('observationRef', observationRef)).unique()
@@ -51,7 +53,7 @@ export async function seedTreasuryReadinessFacts(backend: ConvexFixtureBackend, 
       await ctx.db.insert('moneyTreasuryObservations', { observationRef, environment: identity.environment,
         custodyRef: identity.custodyRef, custodyGeneration: identity.custodyGeneration, network: identity.network,
         asset: 'USDC', exponent: 6, totalUnits, bufferUnits: identity.bufferTargetUnits,
-        evidenceRef: observationRef, evidenceDigest, observedAt: now, recordedAt: now })
+        evidenceRef: observationRef, evidenceDigest, observedAt, recordedAt: Date.now() })
     })
   }
   const zero = { kind: 'matched' as const, checkedCount: 0, expectedUnits: '0', observedUnits: '0', differenceUnits: '0' }
@@ -61,7 +63,7 @@ export async function seedTreasuryReadinessFacts(backend: ConvexFixtureBackend, 
     ledger: { kind: 'available', observedAt: now, availableUnits, committedUnits: '0', bufferUnits: identity.bufferTargetUnits,
       payments24hUnits: '0', payments7dUnits: '0', paymentBasis: 'gross_provider_payments',
       purchasedAvailableAudUnits: '0', purchasedReservedAudUnits: '0', promotionalAvailableAudUnits: '0', promotionalReservedAudUnits: '0' },
-    chain: { kind: 'available', observedAt: now, blockTimestamp: options.chainBlockTimestamp ?? now, blockNumber: '100',
+    chain: { kind: 'available', observedAt: options.chainObservedAt ?? now, blockTimestamp: options.chainBlockTimestamp ?? now, blockNumber: '100',
       blockHash: `0x${'a'.repeat(64)}`, totalUnits: cash.kind === 'mismatch' ? cash.observedUnits : totalUnits, caughtUp: true },
     referenceRate: { kind: 'unavailable', code: 'not_needed_for_payment_resume' },
     spending: { kind: 'available', observedAt: now, windowStartsAt: Math.max(0, now - 86_400_000),
