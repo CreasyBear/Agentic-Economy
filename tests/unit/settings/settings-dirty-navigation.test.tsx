@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   Link,
   Outlet,
@@ -64,5 +64,30 @@ describe('dirty settings navigation', () => {
     fireEvent.change(screen.getByLabelText(/legal business name/i), { target: { value: 'Acme Pty Ltd' } })
     fireEvent.click(screen.getByRole('link', { name: 'Open Tax' }))
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('Leave without saving tax details?')
+  })
+
+  it.each([true, false])('resumes a departure after tax save only when no later draft remains (later edit: %s)', async laterEdit => {
+    let finishSave!: () => void
+    const onSubmit = vi.fn(() => new Promise<void>(resolve => { finishSave = resolve }))
+    await renderRoute(() => <>
+      <Link to="/market">Open Tax</Link>
+      <TaxProfileForm initialData={{ kind: 'available', revision: 2, legalName: 'Acme Pty Ltd', abn: '51824753556', addressLine1: '1 Market Street', locality: 'Sydney', postalCode: '2000', country: 'AU' }} onSubmit={onSubmit} />
+    </>)
+    fireEvent.change(screen.getByLabelText('Legal business name'), { target: { value: 'Submitted Pty Ltd' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    if (laterEdit) fireEvent.change(screen.getByLabelText('Legal business name'), { target: { value: 'Later draft Pty Ltd' } })
+    fireEvent.click(screen.getByRole('link', { name: 'Open Tax' }))
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('Tax details are still saving')
+    await act(async () => { finishSave(); await Promise.resolve() })
+    if (laterEdit) {
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+      expect(window.location.pathname).toBe('/edit')
+      expect(screen.getByLabelText('Legal business name')).toHaveValue('Later draft Pty Ltd')
+      expect(screen.getByRole('group', { name: 'Unsaved changes' })).toHaveTextContent('1 unsaved change')
+    } else {
+      await waitFor(() => expect(window.location.pathname).toBe('/market'))
+      expect(screen.queryByLabelText('Legal business name')).toBeNull()
+    }
   })
 })

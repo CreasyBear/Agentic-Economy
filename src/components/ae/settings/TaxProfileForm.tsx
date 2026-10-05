@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactElement } from 'react'
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
+import { SettingsSaveBar } from '@/components/arc/blocks/settings-page/settings-page'
 import './TaxProfileComposition.css'
 
 import { Alert } from '@/components/arc/alert/alert'
@@ -45,6 +46,15 @@ function taxProfileSnapshot(value: Readonly<{
     region: value.region.trim(),
     postalCode: value.postalCode.trim(),
   })
+}
+
+function changedTaxProfileFieldCount(currentSnapshot: string, baselineSnapshot: string): number {
+  const current = JSON.parse(currentSnapshot) as Record<string, string | boolean>
+  const baseline = JSON.parse(baselineSnapshot) as Record<string, string | boolean>
+  return Object.keys(current).reduce(
+    (count, field) => count + (current[field] === baseline[field] ? 0 : 1),
+    0,
+  )
 }
 
 export function TaxProfileForm({
@@ -158,7 +168,8 @@ export function TaxProfileForm({
     setInternalSubmitting(true)
     setSubmitDiagnostic(null)
 
-    void Promise.resolve(onSubmit(payload))
+    void Promise.resolve()
+      .then(() => onSubmit(payload))
       .then(() => {
         setConfirmedSnapshot(taxProfileSnapshot({
           legalName, abn, gstRegistered, addressLine1, addressLine2, locality, region, postalCode,
@@ -181,10 +192,13 @@ export function TaxProfileForm({
   )
   const describedBy = showValidationDiagnostic ? TAX_PROFILE_DIAGNOSTIC_ID : undefined
 
-  const baseline = confirmedSnapshot ?? initialSnapshot
-  const dirty = taxProfileSnapshot({
+  const currentSnapshot = taxProfileSnapshot({
     legalName, abn, gstRegistered, addressLine1, addressLine2, locality, region, postalCode,
-  }) !== baseline
+  })
+  const baseline = confirmedSnapshot ?? initialSnapshot
+  const changedFieldCount = changedTaxProfileFieldCount(currentSnapshot, baseline)
+  const dirty = changedFieldCount > 0
+  const saveBarState = submitting ? 'saving' : dirty ? 'edit' : saveOutcome === 'saved' ? 'saved' : null
 
   return (
     <AeNavigationSafetyBoundary
@@ -197,10 +211,7 @@ export function TaxProfileForm({
       headingRef={headingRef}
     >
     <form onSubmit={handleSubmit} className="arc-market arc-tax-profile">
-      <SettingsPage title="Tax" description="Keep your Australian business and billing details current." headingRef={headingRef}
-        action={<Button variant="primary" size="md" ref={saveRef} type="submit" disabled={submitting} aria-busy={submitting || undefined} className="arc-tax-save">
-          {submitting ? 'Saving…' : 'Save'}
-        </Button>}>
+      <SettingsPage title="Tax" description="Keep your Australian business and billing details current." headingRef={headingRef}>
         <SettingsGroup title="Business details" description="These details identify your legal entity for tax purposes.">
           <SettingsRow label="Legal business name" description="The registered name used on billing documents.">
             <Input ref={legalNameRef} id="tax-profile-legal-name" label="Legal business name" labelMode="external"
@@ -286,6 +297,17 @@ export function TaxProfileForm({
           </Alert> : null}
         </div>
       </SettingsPage>
+      <SettingsSaveBar
+        state={saveBarState}
+        count={changedFieldCount}
+        savedLabel="Tax details saved"
+        focusReturnRef={headingRef}
+        placement="sticky"
+      >
+        <Button variant="primary" size="md" ref={saveRef} type="submit" disabled={submitting} aria-busy={submitting || undefined} className="arc-tax-save">
+          {submitting ? 'Saving…' : 'Save'}
+        </Button>
+      </SettingsSaveBar>
     </form>
     </AeNavigationSafetyBoundary>
   )
