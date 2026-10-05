@@ -6,7 +6,7 @@ import {
 } from '@/modules/agent-access/oauth-state'
 
 export const AE_CLI_VERSION = cliPackage.version
-export const AE_CLI_ARCHIVE_FILENAME = `aecon-cli-${AE_CLI_VERSION}.tgz`
+export const AE_CLI_ARCHIVE_FILENAME = `${cliPackage.name.replace(/^@/, '').replace('/', '-')}-${AE_CLI_VERSION}.tgz`
 
 export type NativeMcpClientId = 'codex' | 'claude-code' | 'cursor'
 export type AeMcpHarness = NativeMcpClientId

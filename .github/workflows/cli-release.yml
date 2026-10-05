@@ -60,15 +60,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/cli-pack" "$RUNNER_TEMP/cli-release"
-          npm pack --workspace @aecon/cli --json --pack-destination "$RUNNER_TEMP/cli-pack" > "$RUNNER_TEMP/cli-pack.json"
+          npm pack --workspace @agentic-economy/cli --json --pack-destination "$RUNNER_TEMP/cli-pack" > "$RUNNER_TEMP/cli-pack.json"
           jq -e --arg version "$VERSION" \
-            'length == 1 and .[0].name == "@aecon/cli" and .[0].version == $version and .[0].filename == "aecon-cli-\($version).tgz"' \
+            'length == 1 and .[0].name == "@agentic-economy/cli" and .[0].version == $version and .[0].filename == "agentic-economy-cli-\($version).tgz"' \
             "$RUNNER_TEMP/cli-pack.json"
-          mv "$RUNNER_TEMP/cli-pack/aecon-cli-$VERSION.tgz" "$RUNNER_TEMP/cli-release/aecon-cli-$VERSION.tgz"
+          mv "$RUNNER_TEMP/cli-pack/agentic-economy-cli-$VERSION.tgz" "$RUNNER_TEMP/cli-release/agentic-economy-cli-$VERSION.tgz"
           cd "$RUNNER_TEMP/cli-release"
-          sha256sum "aecon-cli-$VERSION.tgz" > SHA256SUMS
-          AE_CLI_PACKAGE_TARBALL="$PWD/aecon-cli-$VERSION.tgz" \
-            AE_CLI_PACKAGE_EXPECTED_SHA256="$(sha256sum "aecon-cli-$VERSION.tgz" | cut -d ' ' -f1)" \
+          sha256sum "agentic-economy-cli-$VERSION.tgz" > SHA256SUMS
+          AE_CLI_PACKAGE_TARBALL="$PWD/agentic-economy-cli-$VERSION.tgz" \
+            AE_CLI_PACKAGE_EXPECTED_SHA256="$(sha256sum "agentic-economy-cli-$VERSION.tgz" | cut -d ' ' -f1)" \
             npm --prefix "$GITHUB_WORKSPACE" run test:cli-package
           sha256sum --check SHA256SUMS
 
@@ -81,9 +81,9 @@ jobs:
           SIGNING_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/cli-release.yml@${{ github.ref }}
         working-directory: ${{ runner.temp }}/cli-release
         run: |
-          cosign sign-blob --yes --bundle "aecon-cli-$VERSION.tgz.sigstore.json" "aecon-cli-$VERSION.tgz"
-          cosign verify-blob "aecon-cli-$VERSION.tgz" \
-            --bundle "aecon-cli-$VERSION.tgz.sigstore.json" \
+          cosign sign-blob --yes --bundle "agentic-economy-cli-$VERSION.tgz.sigstore.json" "agentic-economy-cli-$VERSION.tgz"
+          cosign verify-blob "agentic-economy-cli-$VERSION.tgz" \
+            --bundle "agentic-economy-cli-$VERSION.tgz.sigstore.json" \
             --certificate-identity "$SIGNING_IDENTITY" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
@@ -102,9 +102,9 @@ jobs:
             exit 1
           fi
           gh release create "v$VERSION" \
-            "$RUNNER_TEMP/cli-release/aecon-cli-$VERSION.tgz" \
+            "$RUNNER_TEMP/cli-release/agentic-economy-cli-$VERSION.tgz" \
             "$RUNNER_TEMP/cli-release/SHA256SUMS" \
-            "$RUNNER_TEMP/cli-release/aecon-cli-$VERSION.tgz.sigstore.json" \
+            "$RUNNER_TEMP/cli-release/agentic-economy-cli-$VERSION.tgz.sigstore.json" \
             --repo CreasyBear/aecon-cli \
             --target main \
             --title "aecon CLI v$VERSION" \

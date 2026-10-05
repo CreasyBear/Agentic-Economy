@@ -85,8 +85,10 @@ explicit opt-in operations; implementation does not activate them.
 - `/mcp`, `/llms.txt` and `/SKILL.md` are the accepted source discovery/plugin
   surfaces. The deployment map identifies their current hosted release.
 - The CLI source supports search, `describe`, `call`, `history`, status, wait,
-  cancel and `recover`. The packaged CLI is locally verified; npm publication
-  is pending, so `npx -y @aecon/cli` is not yet an external install path.
+  cancel and `recover`. The npm package is `@agentic-economy/cli`, with `ae` as
+  its command. See [CLI installation](./packages/cli/README.md) for versioned
+  npm installation and verified signed archives; a registry 404 means the
+  selected npm version has not been published yet.
 - `/for-providers` admits and publishes Provider Tools in source.
 
 Chat is a thin entrance to the same Tool market and controlled purchase plane.

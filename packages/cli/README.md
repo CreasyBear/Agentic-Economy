@@ -2,16 +2,27 @@
 
 `ae` finds public Tools, describes their input contracts, obtains a caller-specific Quote, makes a deliberate Call, and reads the durable result. The package ships one compiled executable, requires Node.js 20 or newer, and does not require this source repository at runtime. Its supported interface is the `ae` binary, not JavaScript imports.
 
-## Install a verified versioned release
+## Install from npm
 
-**No public release has been published yet.** The [CreasyBear/aecon-cli releases](https://github.com/CreasyBear/aecon-cli/releases) repository is currently empty. Do not treat the commands below as a working download until the first tagged release and its three assets appear. `@aecon/cli` has not been published to npm; `npm install @aecon/cli` is not the installation path.
+The npm package is `@agentic-economy/cli`; its installed command is `ae`. For a published version:
+
+```sh
+npm install --global @agentic-economy/cli@0.2.1
+ae --help
+```
+
+Check `npm view @agentic-economy/cli@0.2.1 version` before installing. A 404 means that version is not published yet. Node.js 20 or newer is required.
+
+## Install a verified signed archive
+
+Signed archives are distributed through [CreasyBear/aecon-cli releases](https://github.com/CreasyBear/aecon-cli/releases). Use these commands only when the selected tagged release and its three assets exist.
 
 For an *existing* version, install `curl`, `jq`, `cosign`, npm, and a SHA-256 checker (`shasum` on macOS), then download all three assets **from the same tag**. The example is for version `0.2.1`; substitute the actual published version if different:
 
 ```sh
 VERSION=0.2.1
 BASE="https://github.com/CreasyBear/aecon-cli/releases/download/v${VERSION}"
-ARCHIVE="aecon-cli-${VERSION}.tgz"
+ARCHIVE="agentic-economy-cli-${VERSION}.tgz"
 curl --fail --location --remote-name "${BASE}/${ARCHIVE}"
 curl --fail --location --remote-name "${BASE}/SHA256SUMS"
 curl --fail --location --remote-name "${BASE}/${ARCHIVE}.sigstore.json"
