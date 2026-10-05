@@ -133,6 +133,51 @@ describe('registered treasury snapshot publication and control behavior', () => 
     expect(treasuryAlerts(snapshot, context).some(alert => alert.code === 'reconciliation_stale')).toBe(age >= 60 * 60_000)
   })
 
+  it.each([20 * 60_000 - 1, 20 * 60_000, 25 * 60_000])('keeps missed chain observation age %i visible despite fresh balance and reconciliation clocks', async age => {
+    const backend = convexTestWithMarketComponents()
+    await seedObservation(backend)
+    const base = report()
+    if (base.chain.kind !== 'available') throw new Error('fixture_chain_missing')
+    const snapshot = reseal(base, { chain: { ...base.chain, observedAt: NOW - age } })
+    await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+      .toMatchObject({ treasury: age < 20 * 60_000
+        ? { kind: 'passed', validUntil: NOW + 1 }
+        : { kind: 'failed', code: 'treasury_reconciliation_required' } })
+    const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    if (context.kind !== 'available') throw new Error('fixture_snapshot_context_missing')
+    expect(treasuryAlerts(snapshot, context).some(alert => alert.code === 'reconciliation_stale')).toBe(age >= 20 * 60_000)
+  })
+
+  it('deduplicates audit-collision alerts, rejects late healthy reports and resolves only after new matched proof', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedObservation(backend)
+    const changed = { kind: 'unavailable' as const, code: 'treasury_sources_changed_during_audit' }
+    const collision = (at: number) => reseal(report(at), {
+      checks: { cash: changed, settlements: changed, funding: changed, reservations: changed }, spending: changed,
+      alerts: [{ code: 'reconciliation_unavailable', severity: 'warning', evidenceRefs: [] }],
+    })
+    expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: collision(NOW) }))
+      .toMatchObject({ kind: 'published', replayed: false, newAlertRefs: [expect.any(String)] })
+    clock = NOW + 1
+    expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: collision(clock) }))
+      .toEqual({ kind: 'published', replayed: false, newAlertRefs: [] })
+    const before = await stored(backend)
+    expect(before.alerts).toMatchObject([{ code: 'reconciliation_unavailable', state: 'open',
+      firstSeenAt: NOW, lastSeenAt: NOW + 1 }])
+    expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: report(NOW - 1) }))
+      .toEqual({ kind: 'unavailable', code: 'treasury_snapshot_superseded' })
+    expect(await stored(backend)).toEqual(before)
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+      .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } })
+    clock = NOW + 2
+    await seedObservation(backend)
+    await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: report(clock) })
+    expect((await stored(backend)).alerts).toMatchObject([{ code: 'reconciliation_unavailable', state: 'resolved', resolvedAt: clock }])
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+      .toMatchObject({ treasury: { kind: 'passed', validUntil: clock + 10 * 60_000 } })
+  })
+
   it('readiness preserves the original FX and wallet evidence expiry', async () => {
     const backend = convexTestWithMarketComponents()
     await seedObservation(backend, NOW - 120_000)

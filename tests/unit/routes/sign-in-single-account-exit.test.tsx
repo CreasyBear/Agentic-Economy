@@ -75,12 +75,12 @@ describe('sign-in account exit', () => {
     expect(screen.getByRole('heading', { name: 'Sign in to manage Tools' })).toBeTruthy()
     expect(screen.getByText(/return to your Provider Workspace/)).toBeTruthy()
     expect(screen.getAllByText(/Don’t have an account/)).toHaveLength(1)
-    expect(screen.getByRole('link', { name: 'Sign up' }).getAttribute('href')).toBe('/sign-up')
+    expect(screen.getByRole('link', { name: 'Sign up' }).getAttribute('href')).toBe('/sign-up?redirect=%2Fowner%2Fsupply')
     expect(screen.queryByRole('link', { name: 'Create one' })).toBeNull()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/supply',
       signUpFallbackRedirectUrl: '/owner/supply',
-      signUpUrl: '/sign-up',
+      signUpUrl: '/sign-up?redirect=%2Fowner%2Fsupply',
     })
   })
 
@@ -96,7 +96,7 @@ describe('sign-in account exit', () => {
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/agent-access',
       signUpFallbackRedirectUrl: '/agent-access',
-      signUpUrl: '/sign-up',
+      signUpUrl: '/sign-up?redirect=%2Fagent-access',
     })
   })
 })

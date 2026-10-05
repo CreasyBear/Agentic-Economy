@@ -15,8 +15,8 @@ owner handoff is required before incorporating their unfinished work.
 
 | Remaining branch / checkout | Disposition and dependency | Owner |
 | --- | --- | --- |
-| `codex/aecon-consolidation-2026-10-05` | Integrate and release in bounded batches; repair/admin gate passed on #349; include merged #350 and rerun the combined gate before release. Exact production backend credential handoff remains required. | Consolidation coordinator |
-| `codex/first-user-readiness-2026-10-05` (independent clone) | Integrate released signup/readiness changes into the one integration branch; await terminal gate/handoff. | First-user remediation |
+| `codex/aecon-consolidation-2026-10-05` | Repair/admin full gate passed on #350; released signup work is integrated with targeted tests. Await the minimal treasury race fix, then run the combined gate and release with the exact production backend credential. | Consolidation coordinator |
+| `codex/first-user-readiness-2026-10-05` (independent clone) | Released signup work at `d105eb59` is incorporated; await the minimal treasury cutoff/cursor race fix and final owner handoff. Preserve the clone. | First-user remediation |
 | `codex/usage-metering` (independent clone) | Released at `c5f2b7356`; integrate foundations and completion after the minimal release, then run combined regression. Backfill and financial effects require separate review. | Consolidation coordinator; metering owner released |
 | `codex/admin-console-authority-config` | PR #239 adapted into candidate; retire only after verified landing and PR disposition. | Consolidation coordinator |
 | `codex/integration-repairs`, `codex/aecon-consolidation-2026-10-02` | Incorporated into candidate; recoverable checkout retirement follows verified landing and runtime/file census. | Consolidation coordinator |

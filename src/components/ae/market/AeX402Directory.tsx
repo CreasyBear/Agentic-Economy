@@ -9,6 +9,8 @@ import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/arc/button/button'
 import { ProductListing, ProductListingHeader } from '@/components/arc/market/ProductListing'
+import { MarketUseGuide } from './MarketUseGuide'
+import { recordProductJourney } from '@/lib/observability/product-journey'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import './MarketComposition.css'
 import buttonStyles from '@/components/arc/button/button.module.css'
@@ -150,6 +152,7 @@ function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) 
     try {
       const result = await searchMarketToolsServer({ data: input })
       if (generation.current !== requestGeneration || snapshot.current.query !== key) return
+      recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
       if (result.kind === 'unavailable' && retained) {
         publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'search' } })
         return
@@ -157,6 +160,7 @@ function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) 
       publish({ query: key, pages: [result], index: 0, receivedAt: result.kind === 'unavailable' ? null : Date.now(), request: { kind: 'idle' } })
     } catch (cause) {
       if (generation.current !== requestGeneration || snapshot.current.query !== key) return
+      recordProductJourney({ action: 'search_observed', phase: 'failed', surface: 'market', queryLength: input.query.length })
       degrade(cause, undefined, { site: reason === 'initial' ? 'useCanonicalMarketSearch.initial' : 'useCanonicalMarketSearch.retry', reason: 'source_unavailable' })
       publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'search' } })
     }
@@ -494,6 +498,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             return
           }
           setQueryError(undefined)
+          recordProductJourney({ action: 'search_requested', phase: 'attempted', surface: 'market', queryLength: query.length })
           go({ ...indexedSearch(), view: displayView === 'providers' ? 'providers' : 'tools', query: query || undefined, sort: query ? 'relevance' : undefined })
         }}>
           <SearchField ref={queryRef} label={displayView === 'providers' ? 'Search Providers' : 'Search Tools'} value={draftQuery} onValueChange={value => { setDraftQuery(value); setQueryError(undefined) }} placeholder={displayView === 'providers' ? 'Provider name or service…' : 'Weather forecasts, document analysis…'} enterKeyHint="search" aria-invalid={queryError !== undefined} aria-describedby={queryError === undefined ? 'market-search-recipient' : 'market-search-error market-search-recipient'} />
@@ -503,6 +508,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) prepareNewChat()
         }}><MessageSquareIcon aria-hidden="true" />Ask an Agent</Link>
       </DirectoryHero>
+      <MarketUseGuide />
       {queryError === undefined ? null : <p id="market-search-error" role="alert" className="text-sm text-destructive">{queryError}</p>}
       <p id="market-search-recipient" className="arc-market-search-hint">{displayView === 'providers' ? 'Search matches Provider names and published service descriptions in the catalogue.' : search.reviewedProvidersOnly === true ? 'Search matches published listings from reviewed providers.' : jevRecipient === undefined || search.alternativeTo !== undefined ? 'Search assesses Market Tool listings and published candidate descriptions.' : `Search query and candidate Tool text go to ${jevRecipient}.`}</p>
       <Tabs value={displayView} animateContent={false}>

@@ -241,6 +241,87 @@ describe('independent treasury cash reconciliation behavior', () => {
       cash: { kind: 'unavailable', code: 'treasury_payment_attribution_required' } })
   })
 
+  it.each(['missing', 'throwing'])('recovers one transient %s receipt read with exact verified evidence', async first => {
+    const f = fixture()
+    const reader = vi.fn<NonNullable<Parameters<typeof auditTreasuryCash>[1]>>()
+    if (first === 'throwing') reader.mockRejectedValueOnce(Error('fixture RPC outage'))
+    else reader.mockResolvedValueOnce(undefined)
+    reader.mockResolvedValueOnce(receipt(f.attempt.material, hash(1)))
+    const result = await auditTreasuryCash(f.input, reader)
+    expect(reader).toHaveBeenCalledTimes(2)
+    expect(result).toMatchObject({ cash: { kind: 'matched' }, settlements: { kind: 'matched' } })
+  })
+
+  it('retains unavailable after two missing reads and never retries conflicting returned evidence', async () => {
+    const f = fixture()
+    const missing = vi.fn(async () => undefined)
+    expect((await auditTreasuryCash(f.input, missing)).settlements).toMatchObject({
+      kind: 'unavailable', code: 'treasury_payment_receipt_unavailable',
+    })
+    expect(missing).toHaveBeenCalledTimes(2)
+    const conflict = vi.fn(async () => ({ ...receipt(f.attempt.material, hash(1)), status: 'reverted' as const }))
+    expect((await auditTreasuryCash(f.input, conflict)).settlements.kind).toBe('mismatch')
+    expect(conflict).toHaveBeenCalledOnce()
+  })
+
+  it('does not start a retry after the overall receipt deadline', async () => {
+    const f = fixture()
+    let now = NOW
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const reader = vi.fn(async () => { now += 120_000; return undefined })
+    const result = await auditTreasuryCash(f.input, reader).finally(() => clock.mockRestore())
+    expect(reader).toHaveBeenCalledOnce()
+    expect(result.settlements).toMatchObject({ kind: 'unavailable', code: 'treasury_payment_readback_incomplete' })
+  })
+
+  it('rechecks the deadline after a delayed retry timer resumes', async () => {
+    vi.useFakeTimers()
+    let now = NOW
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    try {
+      const f = fixture()
+      const reader = vi.fn(async () => undefined)
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.advanceTimersByTimeAsync(0)
+      now += 120_000
+      await vi.advanceTimersByTimeAsync(250)
+      const result = await pending
+      expect(reader).toHaveBeenCalledOnce()
+      expect(result.settlements).toMatchObject({ kind: 'unavailable', code: 'treasury_payment_readback_incomplete' })
+    } finally { clock.mockRestore(); vi.useRealTimers() }
+  })
+
+  it('charges retries against the same 250-read audit cap', async () => {
+    vi.useFakeTimers()
+    try {
+      const fixtures = Array.from({ length: 127 }, (_, index) => {
+        const value = fixture('settled', { suffix: `retry-cap-${index}` })
+        value.attempt.material.evidenceRefs = [`chain:${NETWORK}:${hash(1_000 + index)}`]
+        value.attempt.material.paymentNonce = hash(2_000 + index)
+        return value
+      })
+      const opening = batch(undefined, '1000000000')
+      const range = batch(opening, '365000000', fixtures.map((_, index) => transfer(hash(1_000 + index))))
+      const seen = new Set<string>()
+      const reader = vi.fn(async (material: AttemptSource['material'], tx: string) => {
+        if (!seen.has(tx)) { seen.add(tx); return undefined }
+        return receipt(material, tx)
+      })
+      const pending = auditTreasuryCash({ identity, snapshotAt: NOW,
+        progress: { kind: 'ready', identity, checkpoint: range.observation.checkpoint, blockTimestamp: range.observation.blockTimestamp, bufferUnits: '1000000' },
+        batches: [opening, range], calls: fixtures.map(value => value.call), attempts: fixtures.map(value => value.attempt),
+        reservations: fixtures.map(value => value.reservation), ledger: ledger('364000000', '0'),
+        transactions: [...openingNative(opening), ...fixtures.flatMap(value => value.transactions.slice(2))]
+          .map((row, index) => ({ ...row, id: String(index + 1) })),
+      }, reader)
+      await vi.runAllTimersAsync()
+      const result = await pending
+      expect(reader).toHaveBeenCalledTimes(250)
+      expect(result.settlements).toMatchObject({ kind: 'unavailable', code: 'treasury_payment_readback_incomplete' })
+      expect(result.cash.kind).toBe('unavailable')
+    } finally { vi.useRealTimers() }
+  })
+
   it.each([false, true])('respects RPC concurrency and total readback budget with elapsed deadline=%s', async deadlineExpires => {
     const fixtures = Array.from({ length: 6 }, (_, index) => {
       const value = fixture('settled', { suffix: `serial-${index}` })

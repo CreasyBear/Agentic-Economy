@@ -16,6 +16,8 @@ import type * as DemandFunctions from '@/modules/market-demand/market-demand.fun
 // that graph so this file's capture mock observes the real degrade calls.
 vi.hoisted(() => vi.resetModules())
 const owner = vi.hoisted(() => ({ userId: 'alice' as string | null }))
+const recordProductJourney = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/observability/product-journey', () => ({ recordProductJourney }))
 const listSavedToolsForOwner = vi.hoisted(() => vi.fn())
 const saveToolForOwner = vi.hoisted(() => vi.fn())
 const recordOwnerMarketDemand = vi.hoisted(() => vi.fn())
@@ -100,7 +102,7 @@ function toolOpener(title: string) {
 }
 function toolHref(link: HTMLElement) { return new URL(link.getAttribute('href')!, 'https://aecon.ai') }
 beforeEach(() => { listSavedToolsForOwner.mockResolvedValue({ kind: 'available', items: [] }) })
-afterEach(() => { cleanup(); owner.userId = 'alice'; listSavedToolsForOwner.mockReset(); saveToolForOwner.mockReset(); recordOwnerMarketDemand.mockReset(); readX402DirectoryCatalogueServer.mockReset(); readX402DirectoryCatalogueOverviewServer.mockReset(); searchMarketToolsServer.mockReset(); captureRouteException.mockReset() })
+afterEach(() => { cleanup(); owner.userId = 'alice'; listSavedToolsForOwner.mockReset(); saveToolForOwner.mockReset(); recordOwnerMarketDemand.mockReset(); recordProductJourney.mockReset(); readX402DirectoryCatalogueServer.mockReset(); readX402DirectoryCatalogueOverviewServer.mockReset(); searchMarketToolsServer.mockReset(); captureRouteException.mockReset() })
 describe('native x402 catalogue', () => {
   it('shows the complete upstream page and pagination, linking every Tool to its canonical detail page', () => {
     show()
@@ -992,6 +994,9 @@ describe('canonical Market search', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true'))
     expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
     expect(searchMarketToolsServer).toHaveBeenCalledTimes(1)
+    expect(recordProductJourney.mock.calls.filter(([event]) => event.action === 'search_observed')).toEqual([
+      [{ action: 'search_observed', phase: 'observed', surface: 'market', queryLength: 7, resultCount: searchRows.length }],
+    ])
   })
   it('reuses a still-pending initial query across a Providers tab round trip', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
@@ -1026,6 +1031,7 @@ describe('canonical Market search', () => {
     expect(captureRouteException).not.toHaveBeenCalled()
     expect(screen.queryByRole('link', { name: 'Weather Forecast' })).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
+    expect(recordProductJourney.mock.calls.filter(([event]) => event.action === 'search_observed')).toEqual([])
   })
   it('restores the second loaded search page after a fresh tab round trip without another fetch', async () => {
     const first = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput

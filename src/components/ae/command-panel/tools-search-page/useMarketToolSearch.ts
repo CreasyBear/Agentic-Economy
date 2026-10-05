@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { recordProductJourney } from '@/lib/observability/product-journey'
 import {
   Activity,
   CheckCircle2,
@@ -131,8 +132,10 @@ export function useMarketToolSearch({
             limit: TOOL_SEARCH_RESULT_LIMIT,
             ...(activePage === undefined ? {} : { cursor: activePage.cursor }),
           }
+          recordProductJourney({ action: 'search_requested', phase: 'attempted', surface: 'command_search', queryLength: trimmed.length })
           const result = await searchTools(searchInput)
           if (!current) return
+          recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'command_search', queryLength: trimmed.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
           const next = result.next.find((action) => action.action === 'next-page')
           const nextPage = next?.action === 'next-page'
             ? { query: next.args.query, cursor: next.args.cursor }
@@ -182,6 +185,7 @@ export function useMarketToolSearch({
           })
         } catch (error) {
           if (!current) return
+          recordProductJourney({ action: 'search_observed', phase: 'failed', surface: 'command_search', queryLength: trimmed.length })
           setStatus({
             kind: 'error',
             query: trimmed,

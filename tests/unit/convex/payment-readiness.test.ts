@@ -10,6 +10,7 @@ import { backendPaymentReadinessDigest, failedPaymentReadinessChecks, paymentRea
   type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import type { PublishPaymentReadinessResult } from '../../../convex/lib/money/readiness/store'
 import schema from '../../../convex/schema'
+import { internal } from '../../../convex/_generated/api'
 import { seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -109,6 +110,47 @@ describe('payment readiness evidence publication and admission view', () => {
     expect(await view(backend, NOW + 2)).toEqual({ kind: 'ready', environment: 'production',
       checkedAt: late.completedAt, expiresAt: late.expiresAt, code: null, checks: late.checks })
     expect(await storedRows(backend)).toEqual(before)
+  })
+
+  it('expires at the original chain observation deadline despite a fresh matched report and balance', async () => {
+    const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create', chainObservedAt: NOW - 20 * 60_000 + 1_000 })
+    const evidence = snapshot()
+    await backend.mutation(publish, { snapshot: evidence })
+    const before = await storedRows(backend)
+    expect(await view(backend)).toMatchObject({ kind: 'ready', expiresAt: NOW + 1_000,
+      checks: { treasury: { kind: 'passed', validUntil: NOW + 1_000 } } })
+    vi.mocked(Date.now).mockReturnValue(NOW + 1_000)
+    expect(await view(backend, NOW + 1_000)).toMatchObject({ kind: 'not_ready', code: 'treasury_reconciliation_required' })
+    expect(await storedRows(backend)).toEqual(before)
+  })
+
+  it('requires a new readiness publication after delayed chain recovery and refuses out-of-order green workers', async () => {
+    const backend = convexTest(schema, modules)
+    // Synthetic replay of a fifteen-minute report containing a ten-minute-old
+    // chain observation. A later balance read cannot refresh that chain fact.
+    await seedTreasuryReadinessFacts(backend, { observation: 'create', observationAt: NOW,
+      snapshotAt: NOW - 15 * 60_000, chainObservedAt: NOW - 25 * 60_000 })
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: NOW }))
+      .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } })
+    const red = snapshot({ checks: { ...passedChecks(), treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } } })
+    await backend.mutation(publish, { snapshot: red })
+    const storedRed = await storedRows(backend)
+    vi.mocked(Date.now).mockReturnValue(NOW + 1_000)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: NOW + 1_000 }))
+      .toMatchObject({ treasury: { kind: 'passed' } })
+    expect(await view(backend, NOW + 1_000)).toMatchObject({ kind: 'not_ready', code: 'treasury_reconciliation_required' })
+    const late = snapshot({ startedAt: NOW - 2_000, completedAt: NOW + 1_000 })
+    expect(await backend.mutation(publish, { snapshot: late })).toEqual({ kind: 'refused', code: 'readiness_snapshot_superseded' })
+    expect(await storedRows(backend)).toEqual(storedRed)
+    const recovered = snapshot({ startedAt: NOW + 1_000, completedAt: NOW + 1_000 })
+    expect(await backend.mutation(publish, { snapshot: recovered })).toEqual({ kind: 'published', replayed: false })
+    expect(await view(backend, NOW + 1_000)).toMatchObject({ kind: 'ready', checkedAt: NOW + 1_000, expiresAt: NOW + 120_000 })
+    // Even another healthy treasury report cannot extend the provider seal.
+    vi.mocked(Date.now).mockReturnValue(NOW + 120_000)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    expect(await view(backend, NOW + 120_000)).toMatchObject({ kind: 'not_ready', code: 'readiness_expired' })
   })
 
   it.each(['unavailable', 'old_report', 'old_observation', 'capacity', 'foreign_wallet'] as const)(

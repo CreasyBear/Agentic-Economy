@@ -286,4 +286,37 @@ describe('registered treasury audit source behavior', () => {
       .resolves.toMatchObject({ kind: 'available', referenceRate: { kind: 'unavailable', code: 'reference_rate_stale' },
         observation: { totalUnits: '100' } })
   })
+
+  it('exposes live cursor advancement at a fixed audit cutoff even when retained batch sources are unchanged', async () => {
+    const backend = convexTestWithMarketComponents()
+    const checkpoint = (blockNumber: string) => ({ blockNumber, blockHash: hash(Number(blockNumber)), balanceUnits: '0' })
+    const open = checkpoint('100')
+    vi.mocked(Date.now).mockReturnValue(NOW - 10)
+    const opening = await backend.mutation(internal.moneyTreasuryReconciliation.beginBatch, { previousCheckpoint: null,
+      observation: { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
+        fromBlock: '100', checkpoint: open, observedAt: NOW - 10, blockTimestamp: NOW - 1_000, transfers: [], caughtUp: true } })
+    if (opening.kind !== 'pending') throw new Error('fixture_opening_batch_missing')
+    vi.mocked(Date.now).mockReturnValue(NOW - 9)
+    expect(await backend.mutation(internal.moneyTreasuryReconciliation.finishBatch, { batchRef: opening.batch.batchRef, transactionRefs: [] }))
+      .toEqual({ kind: 'completed', replayed: false })
+    vi.mocked(Date.now).mockReturnValue(NOW)
+    const before = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    const retained = await backend.query(internal.moneyTreasuryReconciliation.readBatchSources, { cutoffAt: NOW })
+    expect(before).toMatchObject({ kind: 'available', progress: { kind: 'ready', checkpoint: open } })
+    // A normal observer completes after reconciliation has chosen its cutoff.
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    const advanced = checkpoint('110')
+    const pending = await backend.mutation(internal.moneyTreasuryReconciliation.beginBatch, { previousCheckpoint: open,
+      observation: { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
+        fromBlock: '101', checkpoint: advanced, observedAt: NOW + 1, blockTimestamp: NOW - 1_000, transfers: [], caughtUp: true } })
+    if (pending.kind !== 'pending') throw new Error('fixture_advanced_batch_missing')
+    vi.mocked(Date.now).mockReturnValue(NOW + 2)
+    await backend.mutation(internal.moneyTreasuryReconciliation.finishBatch, { batchRef: pending.batch.batchRef, transactionRefs: [] })
+    expect(await backend.query(internal.moneyTreasuryReconciliation.readBatchSources, { cutoffAt: NOW })).toEqual(retained)
+    const after = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    expect(after).toMatchObject({ kind: 'available', progress: { kind: 'ready', checkpoint: advanced } })
+    expect(after).not.toEqual(before)
+    expect(await backend.query(internal.moneyTreasuryReconciliation.readBatchSources, { cutoffAt: NOW + 2 }))
+      .toMatchObject({ kind: 'available', rows: [expect.any(Object), { observation: { checkpoint: advanced } }] })
+  })
 })
