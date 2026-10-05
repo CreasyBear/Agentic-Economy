@@ -1,4 +1,5 @@
 import type { MutationCtx } from '../../../_generated/server'
+import { resolveAdminAuthority } from '../../../authz'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   RecoveryError,
@@ -22,6 +23,10 @@ export async function resolveRecoveryOperator(
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null || typeof identity.tokenIdentifier !== 'string'
     || identity.tokenIdentifier.length === 0) {
+    throw new RecoveryError('recovery_approval_unavailable')
+  }
+  const adminAuthority = await resolveAdminAuthority(ctx, 'use_break_glass')
+  if (adminAuthority.kind !== 'allowed') {
     throw new RecoveryError('recovery_approval_unavailable')
   }
   const selected = accountRef(selectedAccountRef)

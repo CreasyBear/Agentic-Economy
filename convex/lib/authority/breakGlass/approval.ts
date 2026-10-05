@@ -15,8 +15,8 @@ export async function submitRecoveryApprovalHandler(
   intent: RecoveryApprovalIntent,
 ): Promise<VerifiedBreakGlassApproval> {
   const now = Date.now()
-  const facts = await resolveRecoveryAccountFacts(ctx, intent.accountRef)
   const operator = await resolveRecoveryOperator(ctx, intent.accountRef, now)
+  const facts = await resolveRecoveryAccountFacts(ctx, intent.accountRef)
   return await new ProductionRecoveryService({
     persistence: createConvexRecoveryPersistence(ctx),
     accountFacts: { resolve: async () => facts },
