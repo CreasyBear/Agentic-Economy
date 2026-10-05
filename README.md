@@ -15,8 +15,8 @@ Read [PRODUCT.md](./PRODUCT.md) for the active direction,
 [CONTEXT.md](./CONTEXT.md) for familiar product terms, source contracts and
 compatibility names, and the [Australian whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
 for the institutional thesis. New to the vocabulary? Start with the
-[glossary](./docs/glossary.md). For current Well 7 scope, see the
-[Simple user expectations scoreboard — what a buyer, provider, operator and newcomer can expect today](./docs/workflow/simple-user-expectations.md).
+[glossary](./docs/glossary.md). Use the [documentation index](./docs/README.md)
+for current work, maintained contracts, operations and historical evidence.
 
 ## The product loop
 
@@ -43,8 +43,9 @@ and balance are optional reads. Agents do not coordinate treasury, calculate
 foreign exchange, write ledger entries or guess whether payment can be retried.
 
 The production application and backend are deployed. The authenticated CLI has
-completed the recorded 20-payment mainnet acceptance. Public npm publication and
-the separate paid development chat journey remain open; see the deployment map.
+completed the recorded 20-payment mainnet acceptance. The public npm package
+`@agentic-economy/cli` is published at 0.2.1. The separate paid development chat
+journey remains open; see the deployment map.
 
 ## Current stage
 
@@ -105,7 +106,7 @@ admits and publishes it.
 - [AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
   explains why the institution should exist.
 - [CONTEXT.md](./CONTEXT.md) defines the shared language.
-- [START_LINE.md](./START_LINE.md) defines the next proof.
+- [START_LINE.md](./START_LINE.md) defines the complete managed-Call commercial proof.
 - [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) defines the delivery
   sequence to the mature platform.
 - [Agent operating contract](./docs/designs/agent-operating-contract.md) defines
@@ -256,8 +257,8 @@ Do not treat an origin, archive, `/mcp`, `/llms.txt` or `/SKILL.md` read as host
 
 ## Project documents
 
-Use [PRODUCT.md](PRODUCT.md) for product direction, [CONTEXT.md](CONTEXT.md) for
-language and [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) for delivery.
+Use [PRODUCT.md](./PRODUCT.md) for product direction, [CONTEXT.md](./CONTEXT.md) for
+language and [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) for delivery.
 [TODOS.md](TODOS.md) is the concise admin/follow-up queue. Dated studies are in
 [research](research/README.md). The [documentation index](docs/README.md) lists
 the retained records. Earlier planning snapshots do not define a parallel

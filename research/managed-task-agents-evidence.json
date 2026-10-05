@@ -1,0 +1,1578 @@
+{
+  "study_date": "2026-10-01",
+  "status": "Desk research and provisional specification. No live runtime, billing, extraction or isolation proof performed.",
+  "purpose": "One maintained research program for Provider-created bounded services, optional managed operation, direct/market distribution and a prospective Provider-as-Seller fiat lane; current AE principal-reseller entry preserved.",
+  "openmuse_commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933",
+  "evidence_rules": {
+    "vendor-published": "First-party statement; not independently observed.",
+    "documented": "Published technical/pricing/terms contract; behavior not exercised.",
+    "source-inspected": "Specific source code examined at commit or installed dependency; not executed.",
+    "observed": "Requires recorded live input/output; none in this study."
+  },
+  "sources": [
+    {
+      "id": "S01",
+      "title": "Automat Ace",
+      "url": "https://runautomat.com/blog/meet-ace-from-automat",
+      "locator": "Meet Ace; published 2026-09-30",
+      "level": "vendor-published; search-indexed only",
+      "checked": "2026-10-01",
+      "finding": "Own computer and persistent identity; FDE setup and maintenance. Full page fetch unavailable; infrastructure unknown."
+    },
+    {
+      "id": "S02",
+      "title": "Meta Muse launch",
+      "url": "https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/amp/",
+      "locator": "Dedicated VM; Sentinel; privacy",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Per-person computer and approval authority. Confidential VM protections are described as future work."
+    },
+    {
+      "id": "S03",
+      "title": "Muse security architecture",
+      "url": "https://research.meta.ai/blog/security-and-safety-for-ai-agents-our-approach-with-muse",
+      "locator": "Runtime cell; privsep; hatch-authd; Sentinel; capabilities; browser broker",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Credential and durable state domains are separate from the agent runtime. Host-side approval and egress checks cover concrete requests."
+    },
+    {
+      "id": "S04",
+      "title": "Muse product design",
+      "url": "https://introducing.muse.ai/",
+      "locator": "Agent experience; approvals",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Persistent personal context; structured UI for consent and credentials."
+    },
+    {
+      "id": "S05",
+      "title": "Grok Bot overview",
+      "url": "https://docs.x.ai/grok-bot/overview",
+      "locator": "Your bots and their shared computer",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "A user\u2019s bots share the same computer, files, browser sessions and app logins."
+    },
+    {
+      "id": "S06",
+      "title": "Grok Bot security",
+      "url": "https://docs.x.ai/grok-bot/security",
+      "locator": "Updated 2026-09-28; enterprise policies; credentials; deletion; residency",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Enterprise controls differ from self-serve Teams. Bot deletion does not delete shared computer state. Connector credentials stay outside the computer."
+    },
+    {
+      "id": "S07",
+      "title": "OpenAI Dots launch",
+      "url": "https://openai.com/index/introducing-dots/",
+      "locator": "Personal dots and organizational specialist dots",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Always-on assistants plus focused organizational pilots, including invoice/procurement workflows. A public ephemeral deployment API was not established."
+    },
+    {
+      "id": "S08",
+      "title": "Dots safety architecture",
+      "url": "https://openai.com/index/how-we-build-safety-security-and-privacy-into-dots/",
+      "locator": "Action checks; isolated workspaces; sign-in",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Layered action checks and controlled workspaces; not a public description of the complete infrastructure stack."
+    },
+    {
+      "id": "S09",
+      "title": "Instinct product",
+      "url": "https://instinct.com/",
+      "locator": "Personal agent capabilities",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Proactive personal assistant across phone, computer and personal channels; broad persistent context."
+    },
+    {
+      "id": "S10",
+      "title": "Instinct privacy",
+      "url": "https://instinct.com/privacy-policy",
+      "locator": "AI training; opt-out; safety exceptions; deletion",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Training opt-out has exceptions; disconnecting an integration is distinct from deleting previously stored information."
+    },
+    {
+      "id": "S11",
+      "title": "Instinct terms",
+      "url": "https://instinct.com/terms",
+      "locator": "Actions; appointment; Materials; account use",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Broad authority to perform actions and bind third-party agreements; unsuitable as the default authority model for a bounded task service."
+    },
+    {
+      "id": "S12",
+      "title": "OpenMuse README",
+      "url": "https://github.com/CopilotKit/openmuse/blob/d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933/README.md#L150",
+      "locator": "L68 runtime setup; L150 single owner; L174 isolation; L182 retries; L186 dependencies; L223 adapter",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Single-owner reference application, MIT source. Persistent browser/workspace; CopilotKit service dependency; OpenBot bridge described as unfinished.",
+      "commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933"
+    },
+    {
+      "id": "S13",
+      "title": "OpenMuse authentication",
+      "url": "https://github.com/CopilotKit/openmuse/blob/d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933/apps/server/src/auth.ts#L23",
+      "locator": "L23-59 sessions and signed file access",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Expiring hashed session tokens and signed file access; owner identity is not tenant-isolation proof.",
+      "commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933"
+    },
+    {
+      "id": "S14",
+      "title": "OpenMuse action execution",
+      "url": "https://github.com/CopilotKit/openmuse/blob/d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933/apps/server/src/actions.ts#L40",
+      "locator": "L40-95 proposal; L103-150 approval/claim; L169-188 outcome",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Stable action identity, connection-version approval checks, atomic execution claim and explicit uncertain outcomes.",
+      "commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933"
+    },
+    {
+      "id": "S15",
+      "title": "OpenMuse task worker",
+      "url": "https://github.com/CopilotKit/openmuse/blob/d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933/apps/server/src/engine/worker.ts#L118",
+      "locator": "L118-150 leases/CAS; L170-174 heartbeat; L196 checkpoint",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Lease and compare-and-swap state updates fence stale workers and persist checkpoints.",
+      "commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933"
+    },
+    {
+      "id": "S16",
+      "title": "OpenMuse computer isolation",
+      "url": "https://github.com/CopilotKit/openmuse/blob/d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933/apps/server/src/computer.ts#L263",
+      "locator": "L113-123 owner/deployment identity; L263-286 configuration checks",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Rejects mismatched container networking, mounts and resource configuration. Not a demonstrated multi-tenant VM security boundary.",
+      "commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933"
+    },
+    {
+      "id": "S17",
+      "title": "OpenMuse browser worker limits",
+      "url": "https://github.com/CopilotKit/openmuse/blob/d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933/apps/worker/README.md#L53",
+      "locator": "L3 worker token; L53 session limits; L64 browser/security caveats",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Worker token remains server-side; application network checks are not a kernel firewall, and browser sandbox limitations are acknowledged.",
+      "commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933"
+    },
+    {
+      "id": "S18",
+      "title": "OpenMuse OpenBot adapter",
+      "url": "https://github.com/CopilotKit/openmuse/blob/d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933/packages/backends/src/openbot.ts",
+      "locator": "Authenticated transport and disabled adapter contract",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Per-person transport and upstream authority checks; not evidence of a production-ready bridge.",
+      "commit": "d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933"
+    },
+    {
+      "id": "S19",
+      "title": "E2B pricing",
+      "url": "https://e2b.dev/pricing",
+      "locator": "Pro subscription; concurrency extensions; CPU and RAM rates",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Running compute metered by CPU/RAM seconds; Pro subscription and capacity extensions are additional. Listed $ currency treated as USD pending confirmation."
+    },
+    {
+      "id": "S20",
+      "title": "E2B billing and quotas",
+      "url": "https://docs.e2b.dev/billing",
+      "locator": "Running usage; create rate; Pro limits",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Running time is billable; paused/killed compute stops. Pro creation quota is 5/s per project; admission must handle 429 responses."
+    },
+    {
+      "id": "S21",
+      "title": "E2B persistence",
+      "url": "https://docs.e2b.dev/sandbox/persistence",
+      "locator": "Pause/resume; timeout; snapshot failures; pause/resume performance; paused retention",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Full pause preserves disk/RAM; docs estimate ~4 seconds/GiB to pause and ~1 second to resume. Paused state persists until explicit deletion. API latency is not a measured billed duration."
+    },
+    {
+      "id": "S22",
+      "title": "E2B network access",
+      "url": "https://docs.e2b.dev/network/internet-access",
+      "locator": "Default access; allowlists; DNS exception; shared domains; updateNetwork",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Network defaults require restriction. Domain policies involve DNS exceptions and shared destinations; changing policy can widen access."
+    },
+    {
+      "id": "S23",
+      "title": "E2B external proxy",
+      "url": "https://docs.e2b.dev/network/byop",
+      "locator": "Private beta; host TCP enforcement; DNS path",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Host proxy can restrict TCP and fail closed, but documented DNS traffic uses a separate path. Requires testing, not a claimed exploit."
+    },
+    {
+      "id": "S24",
+      "title": "E2B workload identity",
+      "url": "https://docs.e2b.dev/iam/workload-identity",
+      "locator": "Private beta; JWT-SVID; scopes and audiences",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Workload identity is promising for a job gateway but is private beta and cannot be a required GA dependency yet."
+    },
+    {
+      "id": "S25",
+      "title": "E2B volumes limitations",
+      "url": "https://docs.e2b.dev/faq/volumes-beta-limitations",
+      "locator": "Private beta; read-only mounts; permissions; regions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Volume limitations do not support assuming a read-only per-folder boundary. External artifact storage is the proposed baseline."
+    },
+    {
+      "id": "S26",
+      "title": "E2B terms",
+      "url": "https://e2b.dev/terms",
+      "locator": "Restrictions; modified 2024-12-04",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Providing access/resale is restricted absent written authorization. Embedded commercial job execution needs contractual clarification."
+    },
+    {
+      "id": "S27",
+      "title": "Composio pricing",
+      "url": "https://composio.dev/pricing",
+      "locator": "New accounts from 2026-08-15; own OAuth; Pro credits; ZDR add-on",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Own OAuth has free tool-call allowance; Pro is a credit commitment. Managed OAuth, triggers and optional features have different meters."
+    },
+    {
+      "id": "S28",
+      "title": "Composio sessions",
+      "url": "https://docs.composio.dev/docs/configuring-sessions",
+      "locator": "Toolkit/tool allowlists; metatools; connected accounts",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "A session needs explicit allowlists and account selection. Tool catalog narrowing does not itself enforce business argument constraints."
+    },
+    {
+      "id": "S29",
+      "title": "Composio Xero toolkit",
+      "url": "https://docs.composio.dev/toolkits/xero",
+      "locator": "Authentication and supported actions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Xero requires the developer\u2019s own OAuth configuration. Raw create-invoice tools are broader than the proposed draft-bill action."
+    },
+    {
+      "id": "S30",
+      "title": "Composio ZDR scope",
+      "url": "https://docs.composio.dev/docs/security/zero-data-retention",
+      "locator": "Covered requests; excluded files, triggers, sandbox and search; enablement",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "ZDR does not cover staged files, retained trigger payloads or certain offloaded responses. Own OAuth and explicit project enablement matter."
+    },
+    {
+      "id": "S31",
+      "title": "Composio terms",
+      "url": "https://composio.dev/terms",
+      "locator": "Section 3 License Grant; Section 8 content; Section 13 co-marketing",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Commercial-use grant conflicts with restrictive resale/commercial-use wording. Embedded use and data license need written clarification."
+    },
+    {
+      "id": "S32",
+      "title": "Nango tool calling",
+      "url": "https://nango.dev/docs/getting-started/use-cases/tool-calling",
+      "locator": "Actions; credentials; selected tool functions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Auth and server-side integration functions can back a typed action gateway. Do not expose a general API proxy to the guest."
+    },
+    {
+      "id": "S33",
+      "title": "Nango security",
+      "url": "https://nango.dev/docs/guides/platform/security",
+      "locator": "Encryption; deletion; logs; retention",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Vaulted credentials; deletion and log retention are separate. Immediate inaccessibility is distinct from subsequent hard deletion."
+    },
+    {
+      "id": "S34",
+      "title": "Nango pricing",
+      "url": "https://nango.dev/pricing",
+      "locator": "PAYG commitment; connections; compute; egress",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "PAYG commitment includes credits, with separate connection, compute and transfer rates. Conservative model does not assume free-tier allowances carry over."
+    },
+    {
+      "id": "S35",
+      "title": "Nango terms and DPA",
+      "url": "https://nango.dev/terms/",
+      "locator": "Sections 3, 5, 8, 12; DPA",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Product-integration purpose, USD fees and customer-data processing license; access-transfer restrictions remain a service-order question."
+    },
+    {
+      "id": "S36",
+      "title": "Convex pricing",
+      "url": "https://www.convex.dev/pricing",
+      "locator": "Professional resource table; US East 1.0x",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Seats plus resource overages: functions, action compute, storage, database I/O and data egress. Regional multiplier must be confirmed."
+    },
+    {
+      "id": "S37",
+      "title": "Convex regions",
+      "url": "https://docs.convex.dev/production/regions",
+      "locator": "Available regions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Sydney is currently available. Database location alone does not locate sandboxes, model inference or connector subprocessors."
+    },
+    {
+      "id": "S38",
+      "title": "Convex file authorization",
+      "url": "https://docs.convex.dev/file-storage/serve-files",
+      "locator": "Storage URLs and HTTP actions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Direct file URLs grant access to their holder; use an authorization check for each protected download rather than assume URL secrecy is revocation."
+    },
+    {
+      "id": "S39",
+      "title": "Installed Convex workflow contract",
+      "url": "../node_modules/@convex-dev/workflow/README.md",
+      "locator": "Cancellation; determinism; events; workpool; payload limits",
+      "level": "source-inspected local dependency",
+      "checked": "2026-10-01",
+      "finding": "Cancellation cannot undo an already-running action. Live workflow changes require versioning; durable waits allow releasing runtime compute.",
+      "dependency_version": "@convex-dev/workflow@0.4.6"
+    },
+    {
+      "id": "S40",
+      "title": "OpenRouter model price snapshot",
+      "url": "https://openrouter.ai/api/v1/models",
+      "locator": "data entries openai/gpt-6-luna and openai/gpt-6.1-sol; pricing.prompt/completion",
+      "level": "documented API snapshot",
+      "checked": "2026-10-01",
+      "finding": "Per-token prices read 2026-10-01; no extraction-quality tests. Mutable model IDs are not immutable model-weight pins."
+    },
+    {
+      "id": "S41",
+      "title": "OpenRouter retention controls",
+      "url": "https://openrouter.ai/docs/guides/features/zdr",
+      "locator": "Provider eligibility; inference-only scope",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Route only to eligible inference providers; tool/search providers have separate retention policies."
+    },
+    {
+      "id": "S42",
+      "title": "OpenRouter Business and fees",
+      "url": "https://openrouter.ai/business",
+      "locator": "Credit fees; regional routing; DPA; exclusions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Standard credit fee 5.5%, Business 8%. Business region routing supports US/EU; no suitable provider fails instead of leaving region."
+    },
+    {
+      "id": "S43",
+      "title": "Stripe Australia pricing",
+      "url": "https://stripe.com/au/pricing",
+      "locator": "Domestic cards; Billing pay-as-you-go",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Domestic card pricing and subscription Billing are separate charges; model assumes monthly domestic-card collection, excluding GST."
+    },
+    {
+      "id": "S44",
+      "title": "Xero developer FAQ",
+      "url": "https://developer.xero.com/faq",
+      "locator": "2026 API tiers; granular scopes; egress; AI and automation restrictions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "API subscription depends on connected organizations. Training on API data is prohibited; approved API workflow is the proposed access path."
+    },
+    {
+      "id": "S45",
+      "title": "Xero idempotent requests",
+      "url": "https://developer.xero.com/documentation/guides/idempotent-requests/idempotency/",
+      "locator": "Idempotency-Key documentation; six-minute lifetime; key re-use and failure behavior",
+      "level": "documented; partial page coverage",
+      "checked": "2026-10-01",
+      "finding": "Xero documents idempotency-key expiry six minutes after first request. Endpoint coverage and late-resume reconciliation require live tests; a new key after an uncertain write risks duplicates."
+    },
+    {
+      "id": "S46",
+      "title": "ACCC small-business contracts",
+      "url": "https://www.accc.gov.au/business/selling-products-and-services/contracts",
+      "locator": "Unfair contract terms; small-business coverage",
+      "level": "documented regulatory guidance",
+      "checked": "2026-10-01",
+      "finding": "Standard-form business contracts may have unfair-terms protections; counsel must review one-sided risk allocation."
+    },
+    {
+      "id": "S47",
+      "title": "ACCC service guarantees",
+      "url": "https://www.accc.gov.au/business/selling-products-and-services/consumer-rights-and-guarantees",
+      "locator": "Services; due care; fitness; timing",
+      "level": "documented regulatory guidance",
+      "checked": "2026-10-01",
+      "finding": "Applicable guarantees can constrain blanket disclaimers. No legal determination of this proposed offering has been made."
+    },
+    {
+      "id": "S48",
+      "title": "OAIC overseas personal information",
+      "url": "https://www.oaic.gov.au/privacy/privacy-guidance-for-organisations-and-government-agencies/handling-personal-information/sending-personal-information-overseas",
+      "locator": "APP 8; use versus disclosure; accountability",
+      "level": "documented regulatory guidance",
+      "checked": "2026-10-01",
+      "finding": "Assess the whole processing chain and contractual control, not just primary database residency."
+    },
+    {
+      "id": "S49",
+      "title": "Google Workspace developer data policy",
+      "url": "https://developers.google.com/workspace/workspace-api-user-data-developer-policy",
+      "locator": "Limited Use and restricted-scope developer policy",
+      "level": "documented; limited page coverage",
+      "checked": "2026-10-01",
+      "finding": "OAuth verification and permitted downstream data uses need task-specific review. This study does not assert application approval."
+    },
+    {
+      "id": "S50",
+      "title": "Tasklet guide",
+      "url": "https://tasklet.ai/learn/guide",
+      "locator": "Agent folders and workspace behavior; prior dated research",
+      "level": "documented via existing research",
+      "checked": "2026-10-01",
+      "finding": "Packaging reference for workflow setup. Not relied on for embedded runtime API availability or current price."
+    },
+    {
+      "id": "S51",
+      "title": "Pickaxe actions",
+      "url": "https://pickaxe.co/learn/actions",
+      "locator": "Connections and end-user accounts; prior dated comparison archive",
+      "level": "documented via existing research",
+      "checked": "2026-10-01",
+      "finding": "Packaging reference for connecting user accounts. No claim of task-level isolation from an action picker."
+    },
+    {
+      "id": "S52",
+      "title": "Superlayer product and beta pricing",
+      "url": "https://www.superlayer.dev/",
+      "locator": "Realtime database, built-in features, pricing and open source",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Backend on the InstantDB engine; listed $25/month beta pricing shares usage across unlimited apps. It is not documented here as a VM execution service."
+    },
+    {
+      "id": "S53",
+      "title": "Superlayer platform provisioning",
+      "url": "https://www.superlayer.dev/docs/platform-api",
+      "locator": "Temporary apps; long-lived apps; token scoping",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Programmatic app/schema/permission provisioning; temporary apps expire after two weeks. App-scoped admin tokens can change that app\u2019s permissions and remain too powerful for a task worker."
+    },
+    {
+      "id": "S54",
+      "title": "Superlayer permissions",
+      "url": "https://www.superlayer.dev/docs/permissions",
+      "locator": "Namespaces; default permissions; attrs; newData",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Ordinary data permissions default to allow unless overridden. Explicit default-deny and schema-change restrictions are required for a bounded-worker design."
+    },
+    {
+      "id": "S55",
+      "title": "Superlayer backend SDK",
+      "url": "https://www.superlayer.dev/docs/backend",
+      "locator": "Admin SDK; impersonation; permissions",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Admin queries/writes bypass permission checks; asUser applies user rules. Keep admin credentials outside the guest and validate service operations separately."
+    },
+    {
+      "id": "S56",
+      "title": "Superlayer streams",
+      "url": "https://www.superlayer.dev/docs/streams",
+      "locator": "How Streams work; permissions; serverless waitUntil",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Streams are storage-backed and do not expire automatically; stream permissions default deny. Persisted streams are not proof of durable job or side-effect execution."
+    },
+    {
+      "id": "S57",
+      "title": "Superlayer webhooks",
+      "url": "https://www.superlayer.dev/docs/webhooks",
+      "locator": "Signature; idempotency keys; delivery and retries",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Signed notifications have stable redelivery keys, retries, a 15-second delivery timeout and failure disablement. Acknowledge after durable admission rather than run a task in the handler."
+    },
+    {
+      "id": "S58",
+      "title": "Superlayer transaction semantics",
+      "url": "https://www.superlayer.dev/docs/superml",
+      "locator": "Transacts are atomic; typesafety",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Atomic multi-operation commits are documented. Conditional lease/budget admission and fencing under contention were not established by the pages reviewed."
+    },
+    {
+      "id": "S59",
+      "title": "E2B auto-resume policy",
+      "url": "https://docs.e2b.dev/sandbox/auto-resume",
+      "locator": "Supported wake operations; Cleanup",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "File/command/service activity can wake a paused sandbox. Each auto-resume uses a timeout of at least five minutes; this is not a minimum billable duration if explicitly paused sooner."
+    },
+    {
+      "id": "S60",
+      "title": "E2B filesystem-only standby",
+      "url": "https://docs.e2b.dev/sandbox/filesystem-only-snapshots",
+      "locator": "Full vs filesystem-only; resume behavior; validation",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Disk-only snapshots discard RAM and restart processes on resume. Published qualitative performance is faster/lighter, not a measured latency in this study."
+    },
+    {
+      "id": "S61",
+      "title": "E2B fork behavior",
+      "url": "https://docs.e2b.dev/sandbox/fork",
+      "locator": "Fork flow and state preservation",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Fork copies disk and memory into independent sandboxes. Customer data, running processes and stale job capabilities may also be copied; cross-tenant golden images must be clean."
+    },
+    {
+      "id": "S62",
+      "title": "E2B secured controller access",
+      "url": "https://docs.e2b.dev/sandbox/secured-access",
+      "locator": "Secured access; X-Access-Token",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Controller calls require a sandbox access token when secured access is enabled. This does not establish authorization-before-wake behavior for every exposed service route."
+    },
+    {
+      "id": "S63",
+      "title": "Superlayer permission rate limits",
+      "url": "https://www.superlayer.dev/docs/rate-limits",
+      "locator": "Token bucket; per entity limits",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "access_method": "Public HTML read directly; web index/fetch unavailable for Superlayer",
+      "finding": "Permission rules can apply keyed rate limits. These are not a replacement for monetary reservations or runtime/provider capacity admission."
+    },
+    {
+      "id": "S64",
+      "title": "Cloudflare agent lifecycle",
+      "url": "https://developers.cloudflare.com/agents/concepts/agentic-patterns/long-running-agents/",
+      "locator": "What survives; recovery; asynchronous operations",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Durable identity, SQL, schedules and checkpoints survive hibernation; RAM variables and open requests do not. This is not E2B memory-snapshot semantics."
+    },
+    {
+      "id": "S65",
+      "title": "Cloudflare current sandbox environments",
+      "url": "https://developers.cloudflare.com/sandbox/",
+      "locator": "Overview; Containers; Dynamic Workers; updated 2026-09-30",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Linux Container instances are dedicated microVMs; Durable Object scheduling is public beta. Dynamic Workers isolate generated code and expose only supplied methods/data. Current docs distinguish SDK 1.0 from 0.x."
+    },
+    {
+      "id": "S66",
+      "title": "Cloudflare sandbox credential boundary",
+      "url": "https://developers.cloudflare.com/sandbox/network/",
+      "locator": "Credentials and network access; updated 2026-09-30",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Keep tokens in host Worker. Containers with Internet disabled reach intercepted hostnames; Dynamic Workers with globalOutbound null cannot make their own network requests. Application-specific method/body/resource authorization remains our responsibility."
+    },
+    {
+      "id": "S67",
+      "title": "Cloudflare Container pricing",
+      "url": "https://developers.cloudflare.com/containers/platform/pricing/",
+      "locator": "vCPU, memory, disk; instance types; egress; Workers/DO/log charges",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "US$5 paid plan has allowances. CPU billed on active usage; memory/disk on provisioned resources while running. Additional Workers, Durable Objects, logs and regional egress charges; not an apples-to-apples E2B replacement."
+    },
+    {
+      "id": "S68",
+      "title": "Cloudflare Workflow pricing",
+      "url": "https://developers.cloudflare.com/workflows/reference/pricing/",
+      "locator": "Pricing dimensions; steps and storage billing; updated 2026-09-21",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "CPU, invocations, steps and retained state are metered. Idle/waiting does not incur Workflow CPU; completed and waiting state still counts as storage. Current step/storage billing began 2026-08-10."
+    },
+    {
+      "id": "S69",
+      "title": "Cloudflare Durable Object transaction boundary",
+      "url": "https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/",
+      "locator": "SQL transactions; transactionSync; private per-object storage",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "SQLite-backed objects support synchronous atomic transactions with rollback on thrown errors. This is a local object transaction, not a cross-object or remote-SaaS transaction."
+    },
+    {
+      "id": "S70",
+      "title": "Cloudflare Outbound Worker coverage",
+      "url": "https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/configuration/outbound-workers/",
+      "locator": "Use Outbound Workers; final Note",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Outbound Workers mediate user-Worker fetches and disable its connect API, but do not intercept fetches from Durable Objects or mTLS bindings. Documented exclusion; no exploit observed."
+    },
+    {
+      "id": "S71",
+      "title": "Cloudflare Web Bot Auth",
+      "url": "https://developers.cloudflare.com/bots/reference/bot-verification/web-bot-auth/",
+      "locator": "Request component selection; section 4.3 nonce limitation; transitive trust; checked 2026-10-01",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Signs selected request components. Cloudflare currently does not validate nonce or track seen nonces for replay protection; it recommends short expiry. Operator/end-user Forwarded trust is experimental. Our mutation boundary needs its own payload binding and durable deduplication."
+    },
+    {
+      "id": "S72",
+      "title": "A2A v1 protocol trust responsibilities",
+      "url": "https://a2a-protocol.org/latest/specification/",
+      "locator": "Sections 7.5; 7.6.4; 8.4; 13.1; v1 overview checked 2026-10-01",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Per-request authorization is server responsibility; in-task authorization does not define scope, representation, validity or revocation semantics. Agent Card signatures are optional. A task completion report does not independently verify our service contract."
+    },
+    {
+      "id": "S73",
+      "title": "MCP current security best practices",
+      "url": "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices",
+      "locator": "Confused deputy; token passthrough; SSRF; state-handle hijacking",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Validate intended token audience and caller-owned state handles, avoid token passthrough, and protect discovery/outbound URLs against SSRF. A state handle or tool description does not establish authority."
+    },
+    {
+      "id": "S74",
+      "title": "OAuth token exchange and actor identity",
+      "url": "https://www.rfc-editor.org/info/rfc8693/",
+      "locator": "Sections 1; 2; 4.1 act claim",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Token exchange supports delegation and target audience/resource. Current actor and top-level claims govern authorization; nested prior act claims are informational, not inherited access rights."
+    },
+    {
+      "id": "S75",
+      "title": "OAuth Rich Authorization Requests",
+      "url": "https://www.rfc-editor.org/info/rfc9396/",
+      "locator": "Sections 1; 2; authorization_details",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Structured authorization_details can describe fine-grained actions/resources; authorization and resource servers must implement/enforce the profile. It is not universally supported by connected SaaS apps."
+    },
+    {
+      "id": "S76",
+      "title": "Auth0 Token Vault",
+      "url": "https://auth0.com/features/token-vault",
+      "locator": "FAQ: user flow; token security; access-token retrieval",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Manages third-party consent, storage, refresh and token retrieval. Its described flow returns a short-lived access token to the calling application/agent; our design must keep that token in trusted action code rather than assume vaulting alone contains it."
+    },
+    {
+      "id": "S77",
+      "title": "AP2 current payment authorization specification",
+      "url": "https://ap2-protocol.org/ap2/specification/",
+      "locator": "Mandates; modes; deterministic verification; extension points",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Checkout and payment mandates bind authorization to purchase/payment facts with deterministic verification. Execution permissions and service output validation remain separate. Current terminology differs from older Intent/Cart summaries."
+    },
+    {
+      "id": "S78",
+      "title": "AP2 security threat model",
+      "url": "https://ap2-protocol.org/ap2/security_and_privacy_considerations/",
+      "locator": "Security considerations; manipulated checkout",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "The protocol assumes preventing prompt injection is infeasible and includes agents/LLMs as potential attackers; mandate binding prevents substitution. This is a useful containment premise, not proof of our implementation."
+    },
+    {
+      "id": "S79",
+      "title": "Visa Trusted Agent Protocol",
+      "url": "https://developer.visa.com/capabilities/trusted-agent-protocol/trusted-agent-protocol-specifications/",
+      "locator": "Introduction; trust model; agent recognition signature",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Participating merchants can recognize approved agent traffic and consumer/payment context with signatures. Merchants may not adopt it. Program recognition does not independently establish our business-service obligations or delivery quality."
+    },
+    {
+      "id": "S80",
+      "title": "ABN Lookup verification limits",
+      "url": "https://abr.business.gov.au/FAQ/ABNLookup",
+      "locator": "Active/cancelled ABN; update frequency; contact details",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Public registration status and entity information are available, but accuracy/currency/completeness are not guaranteed. Proposed controller/key verification and task-quality checks are separate from registration lookup."
+    },
+    {
+      "id": "S81",
+      "title": "OAIC APP 8 contractor disclosure",
+      "url": "https://www.oaic.gov.au/privacy/australian-privacy-principles/australian-privacy-principles-guidelines/chapter-8-app-8-cross-border-disclosure-of-personal-information",
+      "locator": "Paragraphs 8.12-8.17; contractor/subcontractor and contractual safeguards",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "For applicable APP entities, overseas contractor access is usually disclosure, with limited use exceptions. Guidance describes enforceable contractual safeguards and circumstance-dependent accountability. Actual offer applicability needs legal assessment."
+    },
+    {
+      "id": "S82",
+      "title": "ACCC business purchases and consumer guarantees",
+      "url": "https://www.accc.gov.au/consumers/buying-products-and-services/consumer-rights-and-guarantees",
+      "locator": "When consumer rights apply; Business use",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Businesses can qualify as consumers, including qualifying purchases below A$100,000 including GST, with exceptions. B2B labeling does not by itself remove applicable guarantees; actual arrangement needs review."
+    },
+    {
+      "id": "S83",
+      "title": "Cloudflare current sandbox lifetime",
+      "url": "https://developers.cloudflare.com/sandbox/concepts/lifetime/",
+      "locator": "Stopped Container; keeping files; updated current SDK docs",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Container filesystem is transient unless explicitly snapshotted; Container stop and Durable Object hibernation are different lifecycles. No snapshot/deletion/billing behavior exercised."
+    },
+    {
+      "id": "S84",
+      "title": "Toyo current product site",
+      "url": "https://toyo.ai/",
+      "locator": "Executive assistant; integrations; data-location FAQ",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Messaging/voice executive assistant with connected business apps. Current public site does not disclose a complete runtime design or a reproducible 1000x cost benchmark."
+    },
+    {
+      "id": "S85",
+      "title": "Toyo organizational environment terms",
+      "url": "https://toyo.ai/terms",
+      "locator": "Updated 6 May 2026; sections 1, 2, 3.3 and 4",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Published terms describe a shared organizational VM/workspace and agents acting on the Customer behalf. This wording does not establish the topology of the later Worker-based architecture claim or fit our independent Provider obligations."
+    },
+    {
+      "id": "S86",
+      "title": "Cloudflare experimental shell package",
+      "url": "https://github.com/cloudflare/agents/blob/6e1c3467338b092da04a058594cd47fca13556db/packages/shell/README.md",
+      "locator": "Experimental notice; What it is; What it is not; durable Workspace example",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Typed JavaScript filesystem operations with SQLite/optional R2 durability. Not Bash or Linux process execution. Repository package metadata says 0.4.3; no package installation or runtime test performed."
+    },
+    {
+      "id": "S87",
+      "title": "Cloudflare workspace storage implementation",
+      "url": "https://github.com/cloudflare/agents/blob/6e1c3467338b092da04a058594cd47fca13556db/packages/shell/src/filesystem.ts",
+      "locator": "WorkspaceOptions lines 96-115; constructor 236-298; R2 prefix/key 377-390; writeFile 728-825; writeFileStream 906-934",
+      "level": "source-inspected",
+      "checked": "2026-10-01",
+      "finding": "Inline default 1,500,000 bytes. R2 prefix falls back to name and throws when unavailable; global uniqueness remains application responsibility. Large writes put R2 content before SQL metadata and attempt cleanup on SQL failure. Stream writes buffer content; no runtime or concurrency proof."
+    },
+    {
+      "id": "S88",
+      "title": "Cloudflare Dynamic Worker billing",
+      "url": "https://developers.cloudflare.com/dynamic-workers/pricing/",
+      "locator": "Daily creation identity; rates; invocation and startup CPU accounting",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Daily distinct code/ID combinations incur creation charges beyond the monthly allowance; no-ID load counts per invocation. Stable get IDs reduce repeated counts. CPU includes startup; Workers allowances are shared. Published rates only."
+    },
+    {
+      "id": "S89",
+      "title": "Cloudflare R2 storage and operation pricing",
+      "url": "https://developers.cloudflare.com/r2/pricing/",
+      "locator": "Updated 1 October 2026; Standard rates; free tier; rounding",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Standard storage and operation charges persist independently of running compute; direct R2 egress is free. Free monthly allowances and billable-unit rounding apply. Not a zero-total-idle-cost guarantee."
+    },
+    {
+      "id": "S90",
+      "title": "Dynamic Worker application assets",
+      "url": "https://developers.cloudflare.com/dynamic-workers/usage/static-assets/",
+      "locator": "Runtime assets; loader-side binding; buildAssetManifest",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "A Dynamic Worker can serve generated application code and static assets supplied through host bindings backed by KV/R2. This does not imply Linux process compatibility or a continuously running server."
+    },
+    {
+      "id": "S91",
+      "title": "Dynamic Worker network and binding boundary",
+      "url": "https://developers.cloudflare.com/dynamic-workers/usage/egress-control/",
+      "locator": "Updated 29 September 2026; block outbound; bindings; host gateway",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "globalOutbound null blocks guest fetch/connect; explicitly passed bindings remain accessible. Our scoped file and business-action authorization must constrain those bindings. Not exercised."
+    },
+    {
+      "id": "S92",
+      "title": "Stripe Australia Connect pricing",
+      "url": "https://stripe.com/au/connect/pricing",
+      "locator": "Stripe handles pricing vs platform handles pricing",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Direct model can place processing fees with connected business; platform-priced model adds A$2 per active account-month and 0.25% plus A$0.25 per payout. Do not apply these to every Call or assume partner revenue share."
+    },
+    {
+      "id": "S93",
+      "title": "Stripe Connect risk ownership",
+      "url": "https://docs.stripe.com/connect/risk-management",
+      "locator": "Direct and indirect charges; negative balances",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Direct charge connected account is merchant of record in Stripe terminology; indirect charges expose platform balances. Connected-account losses depend on configuration; platform retains its own losses and non-payment obligations."
+    },
+    {
+      "id": "S94",
+      "title": "Stripe direct charges",
+      "url": "https://docs.stripe.com/connect/direct-charges",
+      "locator": "Connected-account scope; application-fee refunds",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Charge and payment objects are connected-account scoped. Refunding a charge does not automatically refund application fees; explicitly return the agreed fee and reconcile async events."
+    },
+    {
+      "id": "S95",
+      "title": "Stripe machine payments",
+      "url": "https://docs.stripe.com/payments/machine",
+      "locator": "MPP, x402; payment methods; availability",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "MPP supports shared-payment-token cards and stablecoins; x402 is a stablecoin option. Card SPT minimum US$0.50; stablecoin minimum USDC0.01. Eligibility and session settlement differ by method and country."
+    },
+    {
+      "id": "S96",
+      "title": "Stripe shared payment tokens seller availability",
+      "url": "https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens.md?agent-seller=seller",
+      "locator": "Supported countries; scoped grant; preview terms",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Listed US, Canada and selected European countries omit Australia on study date. Grant binds seller profile, amount/currency and expiry; no Australian SPT launch availability assumed."
+    },
+    {
+      "id": "S97",
+      "title": "Stripe MPP integration",
+      "url": "https://docs.stripe.com/payments/machine/mpp",
+      "locator": "PaymentIntent; card and stablecoin paths; Connect fee payer",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "MPP is a protocol, Tempo a separate stablecoin-chain route. Stripe hosted fee-payer sponsorship does not support Connect; qualified payment method and commercial topology are still required."
+    },
+    {
+      "id": "S98",
+      "title": "Stripe authorization holds",
+      "url": "https://docs.stripe.com/payments/place-a-hold-on-a-payment-method",
+      "locator": "capture_before; card validity windows",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Holds expire; common online windows are five/seven days with exact deadline reported on the charge. Not an indefinite escrow or guarantee of service acceptance."
+    },
+    {
+      "id": "S99",
+      "title": "Stripe refunds",
+      "url": "https://docs.stripe.com/refunds",
+      "locator": "Original processing fees; pending/failed refunds; events",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Original processing fees are retained on refunds. Insufficient balances can leave card refunds pending, other methods can fail. Refund requested is not refund succeeded."
+    },
+    {
+      "id": "S100",
+      "title": "Airwallex Payments for Platforms",
+      "url": "https://www.airwallex.com/docs/payments-for-platforms/understanding-payments-for-platforms",
+      "locator": "Connected accounts; gateway or PSP agnostic; split and reconciliation",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Actual embedded collection/payout product, distinct from AgentOS. Product capabilities and commercial approval depend on platform fund flow; no applicable embedded quote obtained."
+    },
+    {
+      "id": "S101",
+      "title": "Airwallex split settlement",
+      "url": "https://www.airwallex.com/docs/payments-for-platforms/airwallex-gateway/manage-funds-split",
+      "locator": "Standard settlement; manual release; reverse splits",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Manual release documented for platform-owned and connected-account-owned payments; refunds/chargebacks can require reverse split. Not treated as licensed escrow or automatic transfer of service liability."
+    },
+    {
+      "id": "S102",
+      "title": "Airwallex AgentOS",
+      "url": "https://www.airwallex.com/docs/developer-tools/ai/agentos",
+      "locator": "OAuth MCP; read/write scope; money-out defaults; injection guidance",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Financial account operations rather than service-commerce contract. Production MCP has no money-out by default; client authorization, write approvals and prompt-injection concerns remain."
+    },
+    {
+      "id": "S103",
+      "title": "Airwallex connected account regions",
+      "url": "https://www.airwallex.com/docs/connected-accounts/supported-regions",
+      "locator": "Country table; onboarding vs capability coverage",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Indexed first-party documentation lists Australia and distinguishes onboarding from capabilities. Current page fetch empty; actual platform approval, jurisdiction and products remain unresolved."
+    },
+    {
+      "id": "S104",
+      "title": "ASIC non-cash payment relief 2026",
+      "url": "https://www.asic.gov.au/about-asic/news-centre/news-items/asic-remakes-non-cash-payment-facilities-instrument",
+      "locator": "Instrument 2026/167; relief through April 2031",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Current conditional relief replaces 2016/211. Does not establish AE licensing exemption; actual facility and payment reforms require qualified assessment."
+    },
+    {
+      "id": "S105",
+      "title": "ATO crypto assets used in business",
+      "url": "https://www.ato.gov.au/api/public/content/0-5849db46-e794-42d2-b4f8-15527fde95ea",
+      "locator": "Trading stock or investment",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Ordinary-course business exchange and investment holdings have different tax treatment. A universal CGT-event-per-Call claim is not supported."
+    },
+    {
+      "id": "S106",
+      "title": "ATO GST Australian consumer classification",
+      "url": "https://www.ato.gov.au/law/view/document?LocID=%22GST%2FGSTR20171%2FNAT%2FATO%2Ffp26%22&PiT=20231109000001",
+      "locator": "Paragraphs 10\u201312 and 93; business recipient declarations",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "GST-registered enterprise acquisitions differ from Australian consumer acquisitions for inbound intangibles. EDP classification and invoice/credit entitlement require actual attributed facts."
+    },
+    {
+      "id": "S107",
+      "title": "Harvey Spaces",
+      "url": "https://www.harvey.ai/platform/spaces",
+      "locator": "Self-serve AI delivery; workflows into client Spaces",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Firms can deploy workflows/playbooks to clients. Adjacent Provider enablement already exists; no open cross-harness purchasing or economics observed."
+    },
+    {
+      "id": "S108",
+      "title": "Thomson Reuters CoCounsel in Claude",
+      "url": "https://www.thomsonreuters.com/en/press-releases/2026/may/thomson-reuters-and-anthropic-expand-partnership-to-connect-claude-with-cocounsel-legal",
+      "locator": "12 May 2026 partnership announcement",
+      "level": "vendor-published",
+      "checked": "2026-10-01",
+      "finding": "Specialist professional capabilities reach a buyer harness through an integration. Cross-harness specialist supply is contested, not an uncontested AE category."
+    },
+    {
+      "id": "S109",
+      "title": "Stripe payment sharing across direct-charge sellers",
+      "url": "https://docs.stripe.com/connect/direct-charges-multiple-accounts",
+      "locator": "SetupIntent; clone supported types; country authentication; updates",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Payment methods are not automatically shared across sellers. Cards and US bank accounts can be cloned; country/SCA setup and independent copies need handling. No generic PayTo cloning assumed."
+    },
+    {
+      "id": "S110",
+      "title": "Stripe Accounts v2 configuration",
+      "url": "https://docs.stripe.com/connect/accounts-v2/connected-account-configuration",
+      "locator": "Merchant configuration; fees_collector; losses_collector; dashboard",
+      "level": "documented",
+      "checked": "2026-10-01",
+      "finding": "Configure commercial responsibilities explicitly; some settings cannot be changed later. Full dashboard and Stripe fee/loss collection are the provisional direct-charge choice; capabilities must be checked."
+    },
+    {
+      "id": "S111",
+      "title": "The Bid Agency tender and bid reviews",
+      "url": "https://www.thebidagency.com.au/tender-and-bid-reviews/",
+      "locator": "Review process; Pricing Guide",
+      "level": "first-party documented offer; no transaction or demand verification",
+      "checked": "2026-10-01",
+      "finding": "Supplier advertises criterion/compliance/evidence review, marked-up PDF and written findings; small-tender guide starts A$1,500 ex GST and includes meetings. Establishes an existing paid service category, not demand for our narrower offer or platform."
+    },
+    {
+      "id": "S112",
+      "title": "TenderWise tender review service",
+      "url": "https://www.tenderwise.com.au/tender-review-service",
+      "locator": "Free initial high-level review; detailed paid review",
+      "level": "first-party documented offer; no transaction verification",
+      "checked": "2026-10-01",
+      "finding": "Free initial high-level review competes with shallow screening; detailed assessment is a paid fixed-fee offer. Selected pilot must provide a substantive scoped review rather than charge for a generic summary."
+    },
+    {
+      "id": "S113",
+      "title": "Public Tenders Australia review offer",
+      "url": "https://www.publictenders.com.au/",
+      "locator": "Search-indexed engagement snapshot and BidCaddy portal description",
+      "level": "first-party search-indexed only; full open returned no body",
+      "checked": "2026-10-01",
+      "finding": "Advertises fixed-scope specialist review, 48-hour turnaround and own client portal. Evidence of an adjacent operating alternative, not a measured product benchmark or known infrastructure."
+    },
+    {
+      "id": "S114",
+      "title": "Stripe PayTo payment method and Connect support",
+      "url": "https://docs.stripe.com/payments/payto",
+      "locator": "Connect; payment properties; transaction limits and business-account coverage",
+      "level": "official documentation; actual merchant/bank availability untested",
+      "checked": "2026-10-01",
+      "finding": "PayTo supports direct Connect charges, advance collection and full/partial refunds but not manual capture. Additional verification and bank mandate authorization apply; business-account coverage is relatively low, so retain card fallback. Final disputes cannot be appealed."
+    }
+  ],
+  "rates": {
+    "e2b": {
+      "source_id": "S19",
+      "quota_source_id": "S20",
+      "currency": "USD assumed; listed $ not independently confirmed",
+      "pro_base_month": 150,
+      "vcpu_second": 1.4e-05,
+      "gib_second": 4.5e-06,
+      "pro_creates_per_second": 5,
+      "pro_capacity_options": [
+        {
+          "concurrency": 100,
+          "addon_month": 0
+        },
+        {
+          "concurrency": 600,
+          "addon_month": 500
+        },
+        {
+          "concurrency": 1100,
+          "addon_month": 1000
+        }
+      ],
+      "pause_latency_seconds_per_gib_published": 4,
+      "resume_latency_seconds_published": 1,
+      "auto_resume_timeout_floor_seconds": 300,
+      "lifecycle_source_ids": [
+        "S21",
+        "S59"
+      ]
+    },
+    "composio": {
+      "source_id": "S27",
+      "currency": "USD planning interpretation of listed $",
+      "monthly_credit_commitment": 29,
+      "own_oauth_free_calls": 100000,
+      "own_oauth_call_rate": 0.0003,
+      "zdr_call_addon": 0.0001,
+      "credit_eligibility": "Assumes selected ZDR add-on can consume Pro credits; verify invoice. Own OAuth strict Sessions; no trigger/file staging/managed OAuth charges included."
+    },
+    "convex": {
+      "source_id": "S36",
+      "currency": "USD planning interpretation; US East 1.0x resource table",
+      "developer_seat_month": 25,
+      "function_calls": {
+        "included": 25000000,
+        "overage_rate": 2e-06
+      },
+      "action_gibh": {
+        "included": 250,
+        "overage_rate": 0.3
+      },
+      "db_storage_gb": {
+        "included": 50,
+        "overage_rate": 0.2
+      },
+      "file_storage_gb": {
+        "included": 100,
+        "overage_rate": 0.03
+      },
+      "db_io_gb": {
+        "included": 50,
+        "overage_rate": 0.2
+      },
+      "data_egress_gb": {
+        "included": 50,
+        "overage_rate": 0.12
+      }
+    },
+    "models": {
+      "economy": {
+        "source_id": "S40",
+        "model_id": "openai/gpt-6-luna",
+        "currency": "USD",
+        "input_per_million": 0.1,
+        "output_per_million": 0.5,
+        "qualification": "Catalog rate; accuracy and eligible retention/region route unverified"
+      },
+      "premium": {
+        "source_id": "S40",
+        "model_id": "openai/gpt-6.1-sol",
+        "currency": "USD",
+        "input_per_million": 2.0,
+        "output_per_million": 10.0,
+        "qualification": "Catalog rate; accuracy and eligible retention/region route unverified"
+      }
+    },
+    "openrouter": {
+      "source_id": "S42",
+      "minimum_fee_source_url": "https://openrouter.ai/blog/insights/governing-team-ai-spend/",
+      "currency": "USD",
+      "standard_credit_fee_fraction": 0.055,
+      "business_credit_fee_fraction": 0.08,
+      "minimum_card_credit_fee_usd": 0.8
+    },
+    "nango": {
+      "source_id": "S34",
+      "currency": "USD confirmed by terms S35",
+      "monthly_credit_commitment": 50,
+      "connection_month": 0.29,
+      "compute_hour": 0.72,
+      "egress_gb": 0.5
+    },
+    "xero": {
+      "source_id": "S44",
+      "currency": "AUD ex tax",
+      "tiers": [
+        {
+          "name": "Starter",
+          "connections": 5,
+          "monthly_aud": 0,
+          "egress_gb": 0
+        },
+        {
+          "name": "Core",
+          "connections": 50,
+          "monthly_aud": 35,
+          "egress_gb": 10
+        },
+        {
+          "name": "Plus",
+          "connections": 1000,
+          "monthly_aud": 245,
+          "egress_gb": 50
+        },
+        {
+          "name": "Advanced",
+          "connections": 10000,
+          "monthly_aud": 1445,
+          "egress_gb": 250
+        }
+      ],
+      "egress_aud_per_gb": 2.4,
+      "note": "Starter egress allowance not used in displayed scenarios; set to zero conservatively pending confirmation."
+    },
+    "stripe_au": {
+      "source_id": "S43",
+      "currency": "AUD",
+      "domestic_card_fraction": 0.017,
+      "domestic_card_fixed_aud": 0.3,
+      "billing_fraction": 0.007,
+      "checked": "2026-10-01",
+      "domestic_card_effective": "2026-10-01",
+      "fees_include_gst": true,
+      "payto_fraction": 0.01,
+      "payto_fixed_aud": 0.3,
+      "payto_cap_aud": 3.5,
+      "dispute_received_aud": 25,
+      "international_rate": "Not modeled: displayed future rate effective 2027-04-01 is not applied to study date"
+    },
+    "superlayer": {
+      "source_id": "S52",
+      "currency": "Listed $; USD assumed pending confirmation",
+      "beta_month": 25,
+      "scaling_quote_status": "Shared usage allowances/overage rates, SLA, residency and complete commercial terms not established. Not substituted for Convex in baseline."
+    }
+  },
+  "assumptions": {
+    "classification": "All values in this section are proposed planning assumptions, not measured usage, market willingness to pay or vendor promises.",
+    "days_per_month": 30,
+    "jobs_per_customer_per_month": 300,
+    "price_aud_per_month_ex_gst": 49,
+    "aud_per_usd": 1.5,
+    "vcpus": 2,
+    "ram_gib": 4,
+    "bootstrap_seconds": 5,
+    "peak_to_average_factor": 10,
+    "target_capacity_utilization": 0.7,
+    "short_job": {
+      "work_seconds": 120,
+      "attempt_multiplier": 1.1,
+      "input_tokens": 12000,
+      "output_tokens": 1500,
+      "control_action_seconds": 40,
+      "support_minutes": 5
+    },
+    "heavy_job": {
+      "work_seconds": 600,
+      "attempt_multiplier": 1.15,
+      "input_tokens": 100000,
+      "output_tokens": 10000,
+      "control_action_seconds": 80,
+      "support_minutes": 10
+    },
+    "connector_calls_per_attempt": 5,
+    "control_action_gib": 1,
+    "control_calls_per_attempt": 25,
+    "file_mb_per_job": 2.2,
+    "file_retention_days": 30,
+    "metadata_kb_per_job": 20,
+    "metadata_retention_days": 90,
+    "db_io_mb_per_attempt": 0.5,
+    "control_egress_mb_per_attempt": 6,
+    "developer_seats": 2,
+    "control_region_price_factor": 1,
+    "xero_orgs_per_customer": 1,
+    "xero_egress_kb_per_attempt": 50,
+    "connections_per_customer": 2,
+    "nango_seconds_per_call": 1,
+    "nango_egress_mb_per_job": 2,
+    "platform_fixed_usd": 100,
+    "platform_per_customer_usd": 0.25,
+    "support_job_fraction": 0.01,
+    "support_hourly_usd": 60,
+    "remedy_revenue_fraction": 0.01,
+    "currency_note": "1 USD = 1.5 AUD is a scenario input, not an exchange-rate quote. Vendor currency/FX/tax needs confirmation.",
+    "cost_note": "Charged tokens aggregate repeated context and estimated image/reasoning usage. Runtime excludes human waits; attempts conservatively repeat the full job. No cache discounts, annual discounts or promotional credits.",
+    "microtask_lifecycle": {
+      "classification": "Runtime-only sensitivity; not an end-to-end invoice benchmark. Pause API latency does not establish billed seconds. Fresh bootstrap and cold-create fraction are assumptions.",
+      "work_seconds": 5,
+      "fresh_bootstrap_seconds": 5,
+      "resume_seconds": 1,
+      "memory_pause_billable_seconds_low": 0,
+      "memory_pause_billable_seconds_high": 16,
+      "cold_create_fraction_when_reusing": 0.01,
+      "standby_retention_hours_proposed": 168
+    }
+  },
+  "exclusions": [
+    "Engineering payroll and initial build",
+    "Sales, CAC, churn and corporate overhead",
+    "Insurance and legal/OAuth/security verification fees",
+    "Taxes, FX spreads and international cards",
+    "Unquoted enterprise capacity/rate upgrades",
+    "Region premiums and negotiated vendor pricing",
+    "Browser licensing, premium models and additional connector features unless in explicit scenario"
+  ],
+  "open_questions": [
+    "Written E2B embedded commercial use authorization",
+    "Composio embedded-use license and credit eligibility",
+    "Private-beta dependencies and enforceable egress boundary",
+    "Xero app review and production scopes",
+    "AU-wide data processing constraints across all providers",
+    "Measured model accuracy, intervention rates, cold start, deletion and effective vendor bill",
+    "Measured memory/disk pause billing, RAM retention, wake races and credentials revalidation",
+    "Auto-resume authorization ordering, resume quotas and paused inventory limits",
+    "Superlayer conditional admission/fencing, tenant isolation, beta usage allowances and production terms",
+    "First Provider business cohort and customer service, measured paid repeat use and Provider onboarding burden",
+    "Verified entity/controller/key binding and authority to accept service terms; contractual allocation of Provider and Seller remedies",
+    "Customer-side enforcement across independently administered parties, exact communication authority and late response handling",
+    "Cloudflare current SDK/beta configuration qualification, local authority-owner contention, isolation/egress bypass tests and complete billed cost",
+    "Per-service Provider margin and platform net revenue after rework, remedy, verification, connection and dispute costs",
+    "Toyo reproducible runtime-cost baseline; scoped virtual workspace path/symlink and R2-key isolation; file-size bounds; content/metadata recovery; Dynamic Worker daily-creation identity and live billing reconciliation",
+    "Stripe AU Connect merchant acceptance, actual fee/loss allocation, refund and professional-service eligibility",
+    "AU shared-payment-token eligibility currently unsupported in published seller list; optional future adapter only",
+    "Airwallex embedded platform quote, approved funds flow, seller/loss responsibility and method capabilities",
+    "Provider license permits automated client delivery; actual buyer demand and rights to retain/evaluate outputs"
+  ],
+  "user_refinement": "Businesses tailor and sell their own bounded services, with optional on-demand managed delivery and marketplace distribution. Provider-owned expertise, licensed information or operational access supplies external value; Customer-system writes/communication remain separate permission tests.",
+  "product_frame": {
+    "selected": "Provider-created bounded services, optional managed delivery, direct distribution and marketplace acquisition",
+    "buyer": "Customer business through its authorized Agent",
+    "performer": "Identifiable Provider business through its enrolled service agent and per-Call worker",
+    "commercial_boundary": "Existing AE Tool/Quote/Call, delivery/remedy/purchase-resolution chain; supported principal-reseller Seller and Provider remain separate",
+    "runtime_boundary": "AE market remains canonical in Convex; optional Provider execution deployment in Cloudflare; existing endpoints can publish without hosting",
+    "evidence_status": "Requirements only; two independently controlled parties have not been exercised",
+    "baseline_cost_scope": "Default calculator retains earlier workflow subscription; --marketplace separates GMV, platform revenue, Provider margin and hypothetical cohort economics",
+    "new_commercial_lane": "Provisional Provider-as-Seller fiat direct charges; separate from existing AE principal-reseller x402 lane"
+  },
+  "alternative_stack_meters": {
+    "scope": "Published Cloudflare meters only; excluded from current calculator baseline. No live quote, CPU utilization, full-stack price or marketplace economics measured.",
+    "containers": {
+      "source_id": "S67",
+      "currency": "USD",
+      "paid_plan_monthly_minimum": 5,
+      "meter_quantum_seconds": 0.01,
+      "active_vcpu_second_overage": 2e-05,
+      "provisioned_gib_second_overage": 2.5e-06,
+      "provisioned_disk_gb_second_overage": 7e-08,
+      "included_vcpu_minutes_monthly": 375,
+      "included_gib_hours_monthly": 25,
+      "included_disk_gb_hours_monthly": 200,
+      "egress_usd_per_gb": {
+        "north_america_europe": 0.025,
+        "oceania_korea_taiwan": 0.05,
+        "elsewhere": 0.04
+      },
+      "excludes": [
+        "Workers and Durable Objects",
+        "logs",
+        "snapshots/storage",
+        "model and connector costs",
+        "support/remedies",
+        "enterprise quotas and region arrangements"
+      ]
+    },
+    "workflows": {
+      "source_id": "S68",
+      "currency": "USD",
+      "request_million_overage": 0.3,
+      "cpu_million_ms_overage": 0.02,
+      "storage_gb_month_overage": 0.2,
+      "steps_100k_overage": 0.8,
+      "paid_included_requests_monthly": 10000000,
+      "paid_included_cpu_ms_monthly": 30000000,
+      "paid_included_storage_gb_month": 1,
+      "paid_included_steps_monthly": 500000,
+      "allowance_note": "Worker request/CPU allowances are shared; do not double count. Retained waiting/completed state consumes storage; idle waiting does not consume Workflow CPU."
+    },
+    "dynamic_workers": {
+      "source_id": "S88",
+      "currency": "USD",
+      "daily_distinct_worker_creation_overage": 0.002,
+      "included_daily_distinct_creations_monthly": 1000,
+      "request_million_overage": 0.3,
+      "cpu_million_ms_overage": 0.02,
+      "paid_included_requests_monthly": 10000000,
+      "paid_included_cpu_ms_monthly": 30000000,
+      "identity_note": "Distinct Worker ID and code per day; either change creates another billable identity. No-ID load counts each invocation. Stable get does not authorize state or credential reuse.",
+      "allowance_note": "Request/CPU allowances shared with Workers Standard; startup CPU included; paid plan required. No live bill measured."
+    },
+    "r2_standard": {
+      "source_id": "S89",
+      "currency": "USD",
+      "storage_gb_month": 0.015,
+      "class_a_million_operations": 4.5,
+      "class_b_million_operations": 0.36,
+      "included_storage_gb_month": 10,
+      "included_class_a_operations_monthly": 1000000,
+      "included_class_b_operations_monthly": 10000000,
+      "direct_egress_gb": 0,
+      "billing_note": "Standard storage only. GB-month and million-operation billable quantities round up; stored data still costs while compute is absent. DO storage is separate."
+    }
+  },
+  "cloudflare_workspace_commit": "6e1c3467338b092da04a058594cd47fca13556db",
+  "user_supplied_runtime_claim": {
+    "material": "Attached screenshot attributed to Damien C. Tanner (@dctanner), 28 September 2026, 5:17 PM; no original post URL supplied.",
+    "claim": "Toyo reduced cost 1000x using Cloudflare Workers; per-agent S3/R2 virtual filesystem; zero idle cost.",
+    "status": "User-supplied vendor statement; attribution, implementation and savings not independently verified.",
+    "missing_evidence": [
+      "Baseline VM lifecycle and resource shape",
+      "Equivalent workload, models and output quality",
+      "Actual billed costs including storage, creation, connections, review and remedies"
+    ],
+    "research_implication": "Qualify durable scoped workspace plus on-demand compute; do not apply the multiplier to total service economics."
+  },
+  "marketplace_assumptions": {
+    "classification": "Superseded percentage-fee packaging sensitivity; retained for comparison, not preferred launch pricing or forecast",
+    "currency": "AUD",
+    "sale_gst_fraction": 0.1,
+    "platform_plan_aud_ex_gst": 199,
+    "own_customer_take_fraction": 0.05,
+    "marketplace_take_fraction": 0.15,
+    "marketplace_share": 0.25,
+    "refund_fraction": 0.02,
+    "dispute_fee_frequency": 0.002,
+    "platform_exception_fraction": 0.01,
+    "platform_exception_minutes": 5,
+    "platform_hourly_aud": 60,
+    "provider_hourly_aud": 90,
+    "provider_monthly_support_aud": 75,
+    "platform_fixed_allocation_per_provider_aud": 30,
+    "provider_onboarding_hours": 4,
+    "onboarding_hourly_aud": 90,
+    "provider_cac_aud": 1500,
+    "services": [
+      {
+        "name": "Licensed specialist lookup",
+        "price_aud_inc_gst": 29,
+        "provider_license_aud": 3,
+        "provider_review_minutes": 0,
+        "provider_exception_fraction": 0.03,
+        "provider_exception_minutes": 5,
+        "execution_aud": 0.3,
+        "active_seconds": 10,
+        "mix_fraction": 0.8
+      },
+      {
+        "name": "Provider-reviewed specialist report",
+        "price_aud_inc_gst": 249,
+        "provider_license_aud": 10,
+        "provider_review_minutes": 20,
+        "provider_exception_fraction": 0.1,
+        "provider_exception_minutes": 30,
+        "execution_aud": 1.2,
+        "active_seconds": 90,
+        "mix_fraction": 0.2
+      },
+      {
+        "name": "Tiny paid lookup stress case",
+        "price_aud_inc_gst": 0.5,
+        "provider_license_aud": 0.05,
+        "provider_review_minutes": 0,
+        "provider_exception_fraction": 0,
+        "provider_exception_minutes": 0,
+        "execution_aud": 0.1,
+        "active_seconds": 5,
+        "mix_fraction": 0
+      }
+    ],
+    "cohorts": [
+      {
+        "providers": 5,
+        "jobs_per_provider": 50,
+        "company_fixed_month_aud": 15000
+      },
+      {
+        "providers": 50,
+        "jobs_per_provider": 100,
+        "company_fixed_month_aud": 40000
+      },
+      {
+        "providers": 500,
+        "jobs_per_provider": 200,
+        "company_fixed_month_aud": 180000
+      }
+    ],
+    "cost_scope": "Execution budgets include models, connectors, compute, storage and retry allowance provisionally; not vendor-rate-derived Cloudflare totals. Provider review is Provider cost; platform exception support is separate. Monthly plan charged with domestic card and Billing rate. Platform fee refunded proportionately. Original card fees retained. No GST credit netting, additional refund/counter-dispute fees, insurance, fraud beyond modeled refunds, taxes/FX or unquoted embedded terms."
+  },
+  "packaging_decisions": {
+    "supply": "One Provider business can publish multiple independently qualified Tools; one runtime can deliver multiple Tools only through per-Call isolated authority",
+    "first_commercial_proof": "First template: a substantive source-cited tender compliance/evidence review sold by an existing specialist firm. One Provider, five existing recurring buyers; then a second independent Provider on the same template. Broader market direction unchanged.",
+    "progression": "Measure end-to-end shaping and equal-scope delivery advantage; full-price operating renewal; second Provider reuse; an external buyer agent; then unattributed-to-founder discovery/comparison and retained marketplace purchases.",
+    "contract_layers": [
+      "Provider-platform operating agreement",
+      "buyer-Provider service offer and remedies",
+      "per-Call purchase and resource authority"
+    ],
+    "payment_choice": "For invited existing clients, retain qualified Provider-issued invoice/on-account terms rather than force a new payment rail; record exact Seller credit/collection evidence. For new marketplace buyers, Stripe Connect direct AUD advance card/eligible PayTo checkout candidate. No platform trade-credit facility or multi-Provider wallet; MPP/SPT optional and geography-qualified.",
+    "not_proven": [
+      "Unassisted provider activation",
+      "Paid repeat demand",
+      "Cross-Provider acquisition",
+      "Execution containment",
+      "Processor and embedded-use approval",
+      "Applicable tax/licensing/privacy/professional liability"
+    ],
+    "preferred_pricing": "Hosted A$199/month + A$5/admitted bounded review Call, ex GST; direct-client commission 0%. Existing endpoints may publish with no operating subscription, earning market-originated purchases at 15% first /5% later on-platform, disclosed at Quote. Existing direct customers stay on their existing endpoint/rail unless a separate operating benefit is demonstrated. No no-bypass tax. All pricing hypotheses, not enabled offers.",
+    "rejected_shortcuts": [
+      "Public marketplace demand credited before independently acquired buyers",
+      "Provider margin excluding operating plan and setup",
+      "Self-service clock beginning after uncounted template preparation",
+      "Grant revocation silently cancelling an already accepted payment obligation",
+      "Universal hosted compute included for every external endpoint",
+      "Paid external-endpoint operating tier credited with automation it already has"
+    ]
+  },
+  "exclusions_scope": "Legacy workflow baseline exclusions below. --marketplace separately includes illustrative CAC/onboarding/company costs; its own exclusions are in marketplace_assumptions.cost_scope.",
+  "operating_assumptions": {
+    "classification": "Owner-selected launch hypothesis, not an enabled offer, observed cost, demand forecast or tax determination",
+    "currency": "AUD",
+    "sale_gst_fraction": 0.1,
+    "reference_service": {
+      "name": "Provider-reviewed tender compliance and evidence review",
+      "price_aud_inc_gst": 990,
+      "provider_hourly_aud": 90,
+      "provider_license_aud": 0,
+      "baseline_refund_fraction": 0.02,
+      "provider_preparation_minutes": 15,
+      "provider_review_minutes": 60,
+      "provider_exception_fraction": 0.1,
+      "provider_exception_minutes": 30,
+      "provider_monthly_admin_minutes": 30,
+      "provider_onboarding_minutes": 90,
+      "baseline_payment_cost_aud_per_call": 0,
+      "baseline_payment_admin_minutes_per_call": 0
+    },
+    "modes": {
+      "hosted": {
+        "plan_aud_ex_gst": 199,
+        "meter_aud_ex_gst_per_admitted_call": 5,
+        "execution_cost_aud_per_call": 1.2,
+        "platform_support_aud_per_provider_month": 35,
+        "platform_fixed_allocation_aud_per_provider_month": 10,
+        "platform_make_good_fraction": 0.001,
+        "provider_cac_aud": 500,
+        "platform_onboarding_minutes": 60,
+        "baseline_total_minutes": 120,
+        "baseline_execution_aud_per_call": 0
+      },
+      "provider_endpoint": {
+        "plan_aud_ex_gst": 0,
+        "meter_aud_ex_gst_per_admitted_call": 0,
+        "execution_cost_aud_per_call": 0.1,
+        "platform_support_aud_per_provider_month": 5,
+        "platform_fixed_allocation_aud_per_provider_month": 5,
+        "platform_make_good_fraction": 0.0001,
+        "provider_cac_aud": 100,
+        "platform_onboarding_minutes": 15,
+        "baseline_total_minutes": 78,
+        "baseline_execution_aud_per_call": 1.2
+      }
+    },
+    "direct_distribution_take_fraction": 0,
+    "market_first_take_fraction": 0.15,
+    "market_repeat_take_fraction": 0.05,
+    "buyer_cac_aud": 60,
+    "buyer_purchases_per_relationship": 3,
+    "buyer_repeat_retention_fraction": 0.6,
+    "refund_fraction": 0.02,
+    "meter_credit_fraction": 0.005,
+    "dispute_fee_frequency": 0.002,
+    "platform_exception_fraction": 0.01,
+    "platform_exception_minutes": 5,
+    "platform_hourly_aud": 60,
+    "platform_onboarding_hourly_aud": 90,
+    "provider_churn_month_fraction": 0.03,
+    "net_provider_growth_month_fraction": 0.05,
+    "cohorts": [
+      {
+        "providers": 5,
+        "calls_per_provider_month": 10,
+        "company_fixed_month_aud": 15000
+      },
+      {
+        "providers": 100,
+        "calls_per_provider_month": 20,
+        "company_fixed_month_aud": 40000
+      },
+      {
+        "providers": 1000,
+        "calls_per_provider_month": 30,
+        "company_fixed_month_aud": 180000
+      }
+    ],
+    "cost_scope": "Monthly B2B plan and meter aggregated into one card/Billing collection. Execution/profile budgets provisional; no live runtime bill. Provider pays buyer card fees, review, rework, plan, meter, marketplace fee and modeled disputes. Platform pays execution, exception handling, per-Provider support/fixed allocation, company overhead, replacement CAC/onboarding, market buyer CAC and a gross-sale-sized expected make-good reserve. Hosted 0.1% and external-endpoint 0.01% gross-sale make-good, and 0.5% meter credit are independent hypothetical frequencies, not legal liability caps or observed failure rates. Provider benefit compares equal-volume/equal-scope existing delivery; no assumed incremental buyer demand. Net growth acquisition shown separately; all-new first month does not also pay steady-state replacement CAC. Excludes actual insurance premiums, unmodeled fraud, negotiated fees, extra dispute/refund charges and tax/FX. GST applied hypothetically; no processor tax-credit netting. Provider-owned endpoint execution is paid separately by Provider, using the same provisional execution budget conservatively; no hidden zero cost. External-endpoint acquisition/onboarding are lower hypothetical self-service costs; this is a distribution/integration complement, not the initial standalone operating business. Status-quo payment fee and payment administration are explicit zero-cost conservative assumptions, not observed bank prices. Existing endpoints receive no AE-attributed automation savings: use their existing 78-minute labor and execution on both sides. Marketplace figures normalize expected relationship purchases in steady state; no first-month buyer cash calendar is implied. Make-good reserve is not credited as Provider income before actual settlement. Endpoint mode is now free publication with market-only Calls; it cannot model direct operating sales or claim time savings. The rejected A$99 endpoint operating tier has no demonstrated incremental value and is not a launch SKU. Private invited clients may retain Provider-issued invoicing/on-account terms, with Seller-owned trade credit, confirmation and collection. Invoice sensitivity adds 0.5% bad debt after modeled refunds; no first-month Seller cash timing is implied. Zero baseline payment cost is a conservative comparison, not a free bank-transfer guarantee. Provider operating/commission expenses are ex-GST contribution inputs for a hypothetical GST-registered Provider; actual eligibility and GST cash/working-capital timing remain unqualified. Processor fees are conservatively counted at full cash amounts.",
+    "provider_invoice_bad_debt_fraction": 0.005
+  }
+}

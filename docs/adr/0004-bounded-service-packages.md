@@ -304,7 +304,7 @@ and authorised data-use envelope.
 
 | Existing evidence | Reuse | Required extension |
 | --- | --- | --- |
-| [Quote contract](../../src/modules/capability-execution/quote.ts), [quote action](../../convex/lib/capabilityQuotes/quoteAction.ts) | Tool input, authority/financial preparation, current live requirement inspection | Package preparation, immutable plan binding and versioned commitment handling. |
+| [Quote contract](../../src/modules/capability-execution/quote.ts), [quote action](https://github.com/CreasyBear/Agentic-Economy/blob/2057ace1489fc695df13d54eae161997b27f3728/convex/lib/capabilityQuotes/quoteAction.ts) | Tool input, authority/financial preparation, current live requirement inspection | Package preparation, immutable plan binding and versioned commitment handling. |
 | [Call material](../../src/modules/capability-execution/call-material.ts), [admission](../../src/modules/capability-execution/call-admit.ts) | Material digests, idempotency, admission controls | Bind and verify package execution material without changing existing identifier semantics. |
 | [Call contract](../../src/modules/capability-execution/call-contracts.ts) | Parent Call result/recovery vocabulary and one-package purchase | Current account-AUD receipt has one Provider obligation/settlement; it is not an ingredient cost ledger. |
 | [Provider consequence boundary](../../src/modules/capability-execution/provider-consequence-runtime.ts) | Existing payment/journal/recovery concepts | Review its single-target assumptions before reuse for separately funded ingredient attempts; do not import private helpers across boundaries. |

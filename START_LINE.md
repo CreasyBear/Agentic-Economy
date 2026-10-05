@@ -1,36 +1,27 @@
-# Managed x402 Call start line
+# Managed Call commercial proof
 
-**Status:** active product milestone
+**Status:** maintained acceptance contract · **Reconciled:** 5 October 2026
 
-**Revised:** 2026-09-02
+Prove that an Australian business can fund AUD credit, buy an admitted x402 Tool,
+and receive its result and complete commercial record without operating a crypto
+wallet. [PRODUCT.md](PRODUCT.md) defines the product; the [roadmap](IMPLEMENTATION_ROADMAP.md)
+places this proof inside Package 4.
 
-**Purpose:** prove that an Australian business can fund an AUD prepaid balance,
-buy one x402 service through Agentic Economy and receive both the result and a
-complete Call record without operating a crypto wallet
+## What is proved and what remains
 
-## Decision
+The [readiness record](docs/production-readiness-plan.md) records 20 production
+mainnet payments through the authenticated CLI, exact reconciliation and bounded
+recovery evidence. This establishes the paid execution foundation. It does not
+complete every requirement below: the full principal-reseller record, the
+separate paid development chat journey and open-beta qualification remain open.
+Current release provenance and payment audience belong in the
+[deployment map](docs/operations/deployments.md); next actions belong in
+[TODOS.md](TODOS.md).
 
-Agentic Economy will enter as the managed commercial and payment boundary for
-one admitted x402 Tool.
-
-The Customer funds an AUD prepaid balance. Agentic Economy is the
-buyer-facing Seller, Calls the Tool and settles its separate upstream
-obligation from a pooled corporate USDC treasury. The Customer does not acquire
-USD, USDC, a wallet, an address or a right to direct the upstream transfer.
-
-Every paid Call is funded before execution. An x402 payment challenge is the
-last pricing input: Agentic Economy validates it, locks one all-in AUD quote,
-reserves that amount, pays the Provider from corporate USDC and then captures,
-releases or retains the reservation according to the observed outcome.
-
-The product presents the result through familiar Logs, Usage and Spend views.
-Internally, one Call remains the stable identity for the purchase. Attempts,
-AUD postings, x402 settlement evidence, delivery, recovery and invoice lines
-remain separate records linked to that Call.
-
-This start line changes the implementation sequence, not the whitepaper's
-institutional thesis. Reconstructing purchases made outside Agentic Economy
-remains a later evidence adapter. It is not the first release gate.
+The earlier [start-line plan](docs/archive/2026-10-05/root/START_LINE.md) preserves
+its original approval questions, campaign limits and sequencing. Those dated
+limits are historical evidence, not a fresh spending authorization. Current
+versioned policy and an explicit approved scope govern consequential actions.
 
 ## Proof contract
 
@@ -133,114 +124,32 @@ rebuilt from postings, if credential rotation resets an Agent's
 limits, if the agent must coordinate money or treasury subsystems, or if AUD and
 USDC are netted into one monetary leg.
 
-## Australian production boundary
+## Commercial and operating boundaries
 
-**Launch scope authorized — 20 September 2026.** Joel requires the full alpha
-to reach real x402 purchases using test USDC on Base Sepolia and real USDC on
-Base mainnet. This start-line proof is an intermediate milestone. The launch
-goal includes closing the production prerequisites below, controlled live AUD
-funding and mainnet settlement, usable delivery, exact records and recovery;
-it cannot finish on source or sandbox evidence alone. The
-[alpha maturity register](docs/operations/alpha-maturity-register.md) owns the
-launch acceptance and records transaction exposure limits before live execution.
-Authorization to pursue launch does not itself establish adviser approval.
+The Customer owns the objective and delegates authority. The Agent acts through
+an Account and spending policy. The Provider performs the Tool. For supported
+principal-reseller purchases, AE is the buyer-facing Seller; payee identity and
+the separate Provider obligation must not be inferred from a wallet or receipt.
 
-The production activation package is **NOT VERIFIED** until attributable
-approval evidence exists for the legal/AML/CTF, tax and banking questions below
-and the infrastructure production gate passes. Record the approver, scope,
-decision, conditions, evidence reference and effective date; do not infer an
-approval from launch authorization, source behavior or a configured provider.
+Keep available and reserved AUD credit distinct from corporate USDC cash,
+commitments and settlement. Customer credit carries no cash-out, transfer,
+yield or crypto entitlement. Supported remedies and refunds do not create a
+general withdrawal facility. Every paid Call is funded before execution.
 
-The first live execution is bounded by all of these operational controls:
+Uncertainty retains the original Call and financial references until evidence
+supports capture, release or remedy. A new request is never a blind recovery
+retry. Credential rotation cannot reset Agent limits.
 
-- at most **A$25 cumulative live customer funding, including every fee and tax**;
-- at most **USDC 5 cumulative Provider payments** across Base Sepolia and Base
-  mainnet where the asset has real value;
-- at most **0.001 ETH cumulative mainnet gas**;
-- no automatic replenishment and no automatic limit increase; and
-- before each effect, read back the exact environment, chain, asset, recipient,
-  Tool/Quote/Call, amount and recovery reference, then retain the transaction
-  hash and reconciled AUD/USDC records.
+The complete record must attribute Seller, Provider obligation, tax facts,
+business-document evidence and purchase resolution to the same purchase while
+preserving their distinct states. Legal, tax, banking and processor approval
+must identify scope, approver, conditions and effective date. Alpha exceptions
+are explicit; source behavior does not supply approval.
 
-Accepted obligations and uncertain submissions consume the remaining campaign
-cap until reconciled. Refunds do not automatically restore the test budget. Any
-target mismatch, missing approval, unavailable readback or uncertain prior
-submission stops a new payment; recovery must reconcile the same durable Call.
-Changing these limits requires a new explicit decision recorded before execution.
-These are launch-validation controls, not a customer-facing budget feature, and
-they do not change the existing USD 400 monthly AWS ceiling.
+## Deferred scope
 
-The complete flow may be built and exercised with sandbox funding and one
-controlled x402 testnet transaction. Production funding and production USDC
-settlement remain disabled until named Australian advisers approve:
-
-- the AFSL/non-cash-payment and purchased-payment-facility position;
-- the AML/CTF stored-value, remittance and virtual-asset position;
-- GST timing, tax-invoice, adjustment and service-fee treatment; and
-- the operating-account, safeguarding or client-money treatment.
-
-Production policy is immutable and versioned. Funding, reservation and treasury
-decisions record the policy version that admitted them. Balance and aggregate
-limits remain configurable controls backed by a cited policy; they are not
-presented as automatic legal safe harbours.
-
-The working product boundary remains:
-
-- Australian business customers only;
-- Agentic Economy is the sole buyer-facing Seller; the payment recipient is
-  recorded separately and may differ from either commercial role;
-- credit pays only Agentic Economy for admitted Tools;
-- no customer cash-out, transfer, assignment, yield or crypto entitlement;
-- no postpaid or negative-balance Calls;
-- Agentic Economy owns and controls the pooled upstream USDC treasury; and
-- customer refunds and remedies remain available where contract or law
-  requires them, without creating a general withdrawal facility.
-
-The detailed perimeter and unresolved advice questions are recorded in
-[Package 4: Australian prepaid balance and settlement perimeter](./research/PACKAGE-4-AUSTRALIAN-PREPAID-LEDGER-REGULATORY-PERIMETER.md).
-
-## In scope now
-
-- One Australian Customer and Account with a shared AUD balance, one durable
-  Agent, replaceable credentials and hard per-Agent limits.
-- One supported AUD funding method and one separately disclosed top-up service
-  fee policy.
-- One AUD prepaid balance with available and reserved positions.
-- One admitted x402 Tool and one managed corporate USDC custody pool.
-- One all-in AUD quote, one controlled paid Call and explicit success, release
-  and unknown-outcome recovery paths.
-- One Customer Call surface with Logs, Usage and Spend views.
-- One compact, versioned agent contract across self-inspection, balance,
-  Tool Quote, Call, status, cancel, reconcile and bounded outcome
-  reporting, with executable safe continuations.
-- One invoice-ready period projection and reconciliation view.
-- Deterministic tests for all money paths plus one external x402 testnet canary.
-- Operator-approved USDC replenishment with automated coverage monitoring,
-  reconciliation, warnings and Call admission.
-
-## Deferred from the start-line release
-
-- Automated AUD-to-USDC acquisition or treasury trading.
-- Sharded treasury spending pools before measured contention requires them.
-- Customer crypto wallets, token balances, withdrawal, transfer or redemption.
-- Postpaid credit, loans or unfunded Calls.
-- Production Peppol delivery or a general tax engine.
-- External OTLP, CloudEvents, invoice, card and bank acquisition reconstruction.
-- General marketplace brokerage where Agentic Economy is not the stated Seller.
-- Multi-asset customer balances and general payment-network acceptance.
-
-These are not removed from the mature roadmap. They are sequenced after the
-managed Call proves the commercial and financial spine.
-
-## Relationship to the product
-
-[PRODUCT.md](./PRODUCT.md) defines the product. This document defines the first
-commercial proof. The
-[whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md) explains why just-in-time
-service procurement requires commercial closure and why Australia is the first
-worked institutional environment.
-
-The first release deliberately begins in the Resell mode for one narrow class of
-admitted x402 Tools. Observe, Control, Broker and Resell remain progressive
-responsibility modes across the mature platform; they are not a mandatory
-chronological funnel for every implementation.
+Automated treasury acquisition/trading, premature sharding, customer crypto,
+postpaid credit, general tax or Peppol infrastructure, external acquisition
+reconstruction and new payment rails remain outside this first proof. The
+prospective Provider-as-Seller fiat lane has its own qualification in the
+[roadmap](IMPLEMENTATION_ROADMAP.md#provider-created-service-supply-and-fiat-purchasing--prospective-extension).

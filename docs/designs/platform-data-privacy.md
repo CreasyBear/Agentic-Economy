@@ -33,7 +33,7 @@ Saved recipient and data limits; regional or private processing options; a histo
 
 ## AEcon decision
 
-**Status:** design authority, not a claim about deployment. **Reviewed:** 25 September 2026. This document governs data release, access and retention across the buyer and Provider journeys in [PRODUCT.md](../../PRODUCT.md#core-market-journeys). [The routing strategy](./2026-09-25-tool-market-routing-and-data-strategy.md) owns market choices; the [public Privacy Policy](../../src/components/ae/legal/privacy/privacy.contracts.ts) is the customer-facing statement.
+**Status:** design authority, not a claim about deployment. **Reviewed:** 25 September 2026. This document governs data release, access and retention across the buyer and Provider journeys in [PRODUCT.md](../../PRODUCT.md#core-market-journeys). [The dated routing proposal](../archive/2026-10-05/designs/2026-09-25-tool-market-routing-and-data-strategy.md) retains market-choice research; PRODUCT.md owns product direction and the [public Privacy Policy](../../src/components/ae/legal/privacy/privacy.contracts.ts) is the customer-facing statement.
 
 **An Agent can find and buy a Tool without giving AE the Customer's whole task.** The Customer sets standing limits; the Agent can narrow them. Before each external send, AE checks the intended recipient, purpose and exact fields against those limits. AE records what was actually sent and separates content from purchase evidence. Normal permitted work requires no repeated privacy click.
 
