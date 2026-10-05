@@ -49,7 +49,9 @@ describe('owner capability publication admission', () => {
         lastAttemptAt: 1, lastAttemptStatus: 'complete',
       })
     })
-    const fixture = await seedPaidX402Publication(backend, 'published-search-proof', { publisher: 'agent' })
+    const fixture = await seedPaidX402Publication(backend, 'published-search-proof', {
+      publisher: 'agent', environment: 'sandbox',
+    })
     const canonical = await backend.run(async ctx => ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', fixture.published.publicationRef).eq('revision', fixture.published.publicationRevision)).unique())
     expect(canonical?.disposition).toBe('current')
@@ -59,9 +61,12 @@ describe('owner capability publication admission', () => {
     const providerRows = await backend.run(async ctx => ctx.db.query('marketDirectorySearchEntries').collect())
     expect(providerRows.map(row => row.network).sort()).toEqual(['*', sourceNetwork])
     const result = await backend.query(api.x402DirectoryIndex.searchCompact, {
-      query: 'Owner lookup', network: 'eip155:84532', paginationOpts: { cursor: null, numItems: 8 },
+      query: 'Owner lookup', access: 'ae_callable', network: 'eip155:84532', paginationOpts: { cursor: null, numItems: 8 },
     })
-    expect(result).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Owner lookup' }] })
+    expect(result).toMatchObject({ kind: 'ok', page: [{
+      source: 'provider', title: 'Owner lookup', toolRef: fixture.published.toolRef,
+      choice: { access: 'ae_callable' },
+    }] })
   })
 
   it.each(['owner', 'agent'] as const)(

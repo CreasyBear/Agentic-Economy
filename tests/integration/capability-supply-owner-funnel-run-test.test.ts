@@ -169,5 +169,11 @@ describe('owner supply test', () => {
       step: 'test',
       state: 'refused',
     })
+    await expect(
+      backend.run(async ctx => ({
+        calls: await ctx.db.query('capabilityCalls').collect(),
+        payments: await ctx.db.query('moneyX402PaymentAttempts').collect(),
+      })),
+    ).resolves.toEqual({ calls: [], payments: [] })
   })
 })

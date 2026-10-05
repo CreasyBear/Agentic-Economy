@@ -147,7 +147,9 @@ export async function retrieveImmediateTools(
     const cursor = page.pagination.nextCursor
     if (searchTurn === undefined || cursor === undefined || !page.pagination.hasMore) return page
     const token = await ctx.runMutation(internal.chatTurns.issueSearchPage, {
-      ...searchTurn, query: trimmed, cursor, inputJson: JSON.stringify({ source: 'all', limit: 8 }),
+      // Search input omits source to combine the catalogue and directory;
+      // "all" belongs only to the output's assessed-coverage vocabulary.
+      ...searchTurn, query: trimmed, cursor, inputJson: JSON.stringify({ limit: 8 }),
     })
     return {
       ...page,

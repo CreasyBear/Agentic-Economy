@@ -48,6 +48,12 @@ describe('Provider connection attempts', () => {
   it('lets the Business owner cancel a credential-free OAuth handoff before late callbacks', async () => {
     const backend = convexTest(schema, modules)
     const fixture = await createPublishedBusinessOwner(backend, 'provider-owner-oauth-attempt')
+    const sourceDescriptorJson = stableStringify({
+      environment: 'production',
+      kind: 'mcp',
+      registryName: 'example/provider',
+      remoteRef: `sha256:${'6'.repeat(64)}`,
+    })
     const command = {
       businessId: fixture.businessId,
       sourceKind: 'mcp_oauth' as const,
@@ -60,6 +66,17 @@ describe('Provider connection attempts', () => {
       correlationId: 'provider-owner-oauth-attempt:one',
     }
 
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.reserveOwner,
+      await withSourceWrite('catalog_publish', { ...command, sourceDescriptorJson }),
+    )).resolves.toEqual({ kind: 'refused', code: 'invalid_source' })
+    await expect(backend.run(async ctx => ({
+      attempts: await ctx.db.query('capabilityProviderConnectionAttempts').collect(),
+      drafts: await ctx.db.query('capabilitySupplySourceDrafts').collect(),
+    }))).resolves.toEqual({ attempts: [], drafts: [] })
+
+    // Existing credential handoffs remain cancellable; retired source selection
+    // cannot create a new MCP publishing draft.
     const reserved = await fixture.owner.mutation(
       api.capabilityProviderConnectionAttempts.reserveOwner,
       await withSourceWrite('catalog_publish', command),
@@ -83,6 +100,7 @@ describe('Provider connection attempts', () => {
       sourceKind: 'mcp_oauth',
       lifecycle: 'pending',
     })
+    expect(row).not.toHaveProperty('sourceDescriptorJson')
     expect(row).not.toHaveProperty('draftRef')
     await expect(backend.run((ctx) => ctx.db.query('capabilitySupplySourceDrafts').collect()))
       .resolves.toEqual([])
