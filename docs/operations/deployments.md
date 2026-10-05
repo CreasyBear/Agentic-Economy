@@ -25,6 +25,27 @@ contracts needs the matching backend release and verification.
 
 ## Latest production acceptance — 4 October 2026
 
+Frontend settings save-region update verified on **5 October 2026 Perth**: [PR #349](https://github.com/CreasyBear/Agentic-Economy/pull/349)
+is live on READY deployment `dpl_3o4f5exsbt8mQCJhp4Gm2VugNWPX`, project
+`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. Alias and release readback confirm main
+`41680924dcb4dc9d54dffaef807695017bf4048e`; its tree equals the gated source.
+Tax and business-profile edits use the licensed Arc SaveBar with native submission,
+retry-preserved drafts and authoritative confirmation. Later Tax edits cannot be
+discarded by an earlier completed save; accepted workspace renames permit explicit
+departure while canonical readback catches up. Check/full gate pass: 8687 unit,
+2892 integration, 16 browser and 18 accessibility cases plus type/import/SEO/build/CLI
+proofs; existing gated skips/TODOs remain. An earlier reranker abort unit failure
+passed in isolation; the fresh full gate after the separate workspace fix passed,
+with no reranker source, timeout or configuration changes.
+At 02:35:02 UTC health/readiness are HTTP 200, config/Convex/payments ready,
+catalogue stale, quoting ready and sellable true. Readiness was HTTP 503 with
+`payments_unavailable` at 02:09:35 UTC before this release; recovery is not
+attributed to the UI change. This batch did not deploy or reverify backend,
+identity or financial configuration and proves no native OAuth or transaction
+acceptance. Previous READY `dpl_AhCcsubFqsoCiC9AxCrPmLpziTjj` is the rollback
+boundary. Exact source, preservation and evidence are recorded in the
+[Arc protocol](../designs/arc-ui-refactor/protocol.md).
+
 Frontend credit-table and Agent onboarding update verified on **5 October 2026 Perth**: [PR #348](https://github.com/CreasyBear/Agentic-Economy/pull/348)
 is live on READY deployment `dpl_AhCcsubFqsoCiC9AxCrPmLpziTjj` in project
 `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The alias and release endpoint confirm
