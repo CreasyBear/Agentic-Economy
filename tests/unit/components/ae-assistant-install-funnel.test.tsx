@@ -131,13 +131,13 @@ describe('one Agent connection path', () => {
       {...(resumeToolRef === undefined ? {} : { resumeToolRef })}
     />)
 
-    const customClientLink = screen.getByRole('link', { name: 'Connect another app or script' })
+    const customClientLink = screen.getByRole('link', { name: 'Connect an app or script with a manual key' })
     await waitFor(() => expect(customClientLink).toBeVisible())
     expect(customClientLink.getAttribute('href')).toBe(expectedHref)
     expect(screen.queryByRole('link', { name: 'Issue a manual key' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
-    expect(screen.queryByRole('link', { name: 'Connect another app or script' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Connect an app or script with a manual key' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Connecting a custom script or another app?' }))
     expect(screen.getByRole('link', { name: 'Issue a manual key' }).getAttribute('href')).toBe(expectedHref)
   })

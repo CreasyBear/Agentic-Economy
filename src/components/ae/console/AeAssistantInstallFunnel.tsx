@@ -106,7 +106,7 @@ export function AeAssistantInstallFunnel({
                 search={{ issue: 'manual', ...(resumeToolRef === undefined ? {} : { resumeTool: resumeToolRef }) }}
                 className="arc-agent-install-help-link"
               >
-                Connect another app or script
+                Connect an app or script with a manual key
               </Link>
             </>
           ) : <>

@@ -41,11 +41,11 @@ import { isExhaustiveMarketNoMatch, recordOwnerMarketDemand } from '@/modules/ma
 import type { SavedDirectoryTool, SavedToolListItem } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import { DirectoryToolList } from './DirectoryToolList'
+import { CanonicalSearchResults } from './CanonicalSearchResults'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
 import { MARKET_COMPARE_MISSING_LABEL, MARKET_COMPARE_PENDING_LABEL } from './compare/compare.contracts'
 import { useMarketCompare } from './compare/useMarketCompare'
 import { searchMarketToolsServer } from '@/modules/market/market-tool-search.functions'
-import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 
 
 type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: MarketReturnSearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<MarketReturnSearch['view']>; pendingView?: NonNullable<MarketReturnSearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; jevRecipient?: string; chatRecipient?: string }>
@@ -127,76 +127,102 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
   }
 }
 
+const CANONICAL_SEARCH_FRESH_MS = 30_000
+
 function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) {
   const { query, directoryCategory, provider, network, priceBand } = search
   const input = useMemo(() => marketToolSearchInput({ query, directoryCategory, provider, network, priceBand }), [query, directoryCategory, provider, network, priceBand])
   const key = JSON.stringify(input)
-  const [state, setState] = useState<MarketToolSearchState>({ query: '', pages: [], index: 0, status: 'loading' })
-  useEffect(() => {
-    if (!enabled || query === undefined) return
-    let cancelled = false
-    setState({ query: key, pages: [], index: 0, status: 'loading' })
-    void searchMarketToolsServer({ data: input }).then(result => {
-      if (!cancelled) setState({ query: key, pages: [result], index: 0, status: 'idle' })
-    }).catch(cause => {
-      if (!cancelled) {
-        degrade(cause, undefined, { site: 'useCanonicalMarketSearch.initial', reason: 'source_unavailable' })
-        setState({ query: key, pages: [], index: 0, status: 'failed' })
-      }
-    })
-    return () => { cancelled = true }
-  }, [enabled, key, query, input])
-  const current = enabled && state.query === key ? state.pages[state.index] : undefined
-  async function nextPage(cursor: string, query: string) {
-    if (!enabled || state.status === 'loading' || query !== input.query) return
-    if (state.index + 1 < state.pages.length) {
-      setState(previous => previous.query === key ? { ...previous, index: previous.index + 1, status: 'idle' } : previous)
-      return
-    }
-    const index = state.index
-    setState(previous => previous.query === key && previous.index === index ? { ...previous, status: 'loading' } : previous)
-    try {
-      const result = await searchMarketToolsServer({ data: { ...input, query, cursor } })
-      if (result.kind === 'unavailable') {
-        setState(previous => previous.query === key && previous.index === index ? { ...previous, status: 'failed' } : previous)
-        return
-      }
-      setState(previous => previous.query === key && previous.index === index
-        ? { query: key, pages: [...previous.pages, result], index: previous.pages.length, status: 'idle' } : previous)
-    } catch (cause) {
-      degrade(cause, undefined, { site: 'useCanonicalMarketSearch.nextPage', reason: 'source_unavailable' })
-      setState(previous => previous.query === key && previous.index === index ? { ...previous, status: 'failed' } : previous)
-    }
-  }
-  async function retry() {
-    if (!enabled || state.status === 'loading') return
-    setState({ query: key, pages: [], index: 0, status: 'loading' })
+  const [state, setState] = useState<MarketToolSearchState>({ query: '', pages: [], index: 0, receivedAt: null, request: { kind: 'idle' } })
+  const snapshot = useRef(state)
+  const generation = useRef(0)
+  const publish = useCallback((next: MarketToolSearchState) => {
+    snapshot.current = next
+    setState(next)
+  }, [])
+  useEffect(() => () => { generation.current += 1 }, [])
+
+  const loadFirstPage = useCallback(async (reason: 'initial' | 'retry') => {
+    const previous = snapshot.current
+    const retained = previous.query === key && previous.receivedAt !== null
+    const requestGeneration = ++generation.current
+    publish({ query: key, pages: retained ? previous.pages : [], index: retained ? previous.index : 0, receivedAt: retained ? previous.receivedAt : null, request: { kind: 'loading', purpose: 'search', generation: requestGeneration } })
     try {
       const result = await searchMarketToolsServer({ data: input })
-      setState(previous => previous.query === key ? { query: key, pages: [result], index: 0, status: 'idle' } : previous)
+      if (generation.current !== requestGeneration || snapshot.current.query !== key) return
+      if (result.kind === 'unavailable' && retained) {
+        publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'search' } })
+        return
+      }
+      publish({ query: key, pages: [result], index: 0, receivedAt: result.kind === 'unavailable' ? null : Date.now(), request: { kind: 'idle' } })
     } catch (cause) {
-      degrade(cause, undefined, { site: 'useCanonicalMarketSearch.retry', reason: 'source_unavailable' })
-      setState(previous => previous.query === key ? { query: key, pages: [], index: 0, status: 'failed' } : previous)
+      if (generation.current !== requestGeneration || snapshot.current.query !== key) return
+      degrade(cause, undefined, { site: reason === 'initial' ? 'useCanonicalMarketSearch.initial' : 'useCanonicalMarketSearch.retry', reason: 'source_unavailable' })
+      publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'search' } })
     }
+  }, [input, key, publish])
+
+  useEffect(() => {
+    if (!enabled || query === undefined) return
+    const previous = snapshot.current
+    if (previous.query === key) {
+      // A same-query public request can finish while its result tab is inactive.
+      const pending = previous.request.kind === 'loading' && previous.request.generation === generation.current
+      if (pending && previous.request.purpose === 'search') return
+      const fresh = previous.receivedAt !== null && Date.now() - previous.receivedAt < CANONICAL_SEARCH_FRESH_MS
+      if (fresh && (previous.request.kind !== 'loading' || pending)) return
+    }
+    void loadFirstPage('initial')
+  }, [enabled, key, query, loadFirstPage])
+
+  const current = enabled && state.query === key ? state.pages[state.index] : undefined
+  async function nextPage(cursor: string, query: string) {
+    const previous = snapshot.current
+    if (!enabled || previous.query !== key || previous.request.kind === 'loading' || query !== input.query) return
+    const continuation = previous.pages[previous.index]?.next.find(action => action.action === 'next-page')
+    if (continuation === undefined || continuation.args.cursor !== cursor || continuation.args.query !== query) return
+    if (previous.index + 1 < previous.pages.length) {
+      publish({ ...previous, index: previous.index + 1, request: { kind: 'idle' } })
+      return
+    }
+    const index = previous.index
+    const requestGeneration = ++generation.current
+    publish({ ...previous, request: { kind: 'loading', purpose: 'page', generation: requestGeneration } })
+    try {
+      const result = await searchMarketToolsServer({ data: { ...input, query, cursor } })
+      if (generation.current !== requestGeneration || snapshot.current.query !== key || snapshot.current.index !== index) return
+      if (result.kind === 'unavailable') {
+        publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'page' } })
+        return
+      }
+      publish({ ...snapshot.current, pages: [...snapshot.current.pages, result], index: snapshot.current.pages.length, request: { kind: 'idle' } })
+    } catch (cause) {
+      if (generation.current !== requestGeneration || snapshot.current.query !== key || snapshot.current.index !== index) return
+      degrade(cause, undefined, { site: 'useCanonicalMarketSearch.nextPage', reason: 'source_unavailable' })
+      publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'page' } })
+    }
+  }
+  function retry() {
+    if (!enabled || snapshot.current.request.kind === 'loading') return
+    return loadFirstPage('retry')
+  }
+  function previous() {
+    const previous = snapshot.current
+    if (previous.query !== key || previous.index === 0 || previous.request.kind === 'loading') return
+    publish({ ...previous, index: previous.index - 1, request: { kind: 'idle' } })
   }
   return {
     result: current,
-    loading: state.query !== key || state.status === 'loading',
-    failed: state.query === key && state.status === 'failed',
+    loading: state.query !== key || state.request.kind === 'loading',
+    failed: state.query === key && state.request.kind === 'failed' && state.request.purpose === 'page',
+    refreshing: current !== undefined && state.request.kind === 'loading' && state.request.purpose === 'search',
+    refreshFailed: current !== undefined && state.request.kind === 'failed' && state.request.purpose === 'search',
     hasPrevious: state.index > 0,
     pageNumber: state.index + 1,
-    previous: () => setState(previous => previous.query === key && previous.index > 0 ? { ...previous, index: previous.index - 1, status: 'idle' } : previous),
+    previous,
     nextPage,
     retry,
   }
-}
-
-function marketSearchFreshness(result: ToolChoiceSearchOutput['results'][number]): string {
-  const freshness = result.freshness
-  const source = result.source === 'coinbase' ? 'Coinbase Bazaar index' : 'AE supply projection'
-  if (freshness === undefined) return `${source} · freshness unavailable`
-  const date = freshness.completedAt === undefined ? 'completion unavailable' : `refreshed ${directoryDate(new Date(freshness.completedAt).toISOString())}`
-  return `${source} · ${freshness.state} · ${date}`
 }
 
 export function AeX402Directory(props: AeX402DirectoryProps) {
@@ -433,38 +459,23 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       </div> : null}
       {result.kind === 'unavailable' ? <p className="text-sm text-muted-foreground">The search could not complete. No recommendation was made.</p> : null}
       {marketHasBrowseOnlyFilters(search) ? <p className="text-sm text-muted-foreground">Price caps, adoption, curation and published-detail filters apply in catalogue browse only; they are not applied to this search.</p> : null}
-      {result.results.length === 0 ? null : <ul className="arc-search-results">
-        {result.results.map(item => {
-          const identity = item.toolRef !== undefined && item.access !== 'external_listing'
-            ? { kind: 'ae_callable' as const, toolRef: item.toolRef }
-            : { kind: 'external_listing' as const, id: item.id }
-          return <li key={item.id} className="arc-search-result">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              {item.toolRef !== undefined && item.access !== 'external_listing'
-                ? <Link to="/tools/$toolRef" params={{ toolRef: item.toolRef }} state={{ fromMarket: true }} className="font-medium underline-offset-4 hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring">{item.title}</Link>
-                : <a href={item.detailRef} className="font-medium underline-offset-4 hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring">{item.title}</a>}
-              <p className="text-sm text-muted-foreground">{item.provider} · {item.summary}</p>
-            </div>
-            <Badge variant="secondary">{item.access === 'ae_callable' ? `AE-callable · ${item.readiness}` : item.access === 'setup_required' ? 'Connect to call' : item.access === 'unavailable' ? 'Currently unavailable · inspect' : 'External listing · not AE-callable'}</Badge>
-            {authLoaded && isSignedIn
-              ? <Button type="button" variant="secondary" size="sm" disabled={saved.status !== 'ready' || saved.pending(identity)} aria-busy={saved.pending(identity)} {...(saved.status === 'failed' ? {} : { 'aria-pressed': saved.isSavedIdentity(identity) })} onClick={() => saved.toggleIdentity(identity)}>{saved.status === 'failed' ? 'Saved status unavailable' : saved.isSavedIdentity(identity) ? 'Remove saved Tool' : 'Save Tool'}</Button>
-              : <Link to="/sign-in/$" params={{ _splat: '' }} className={cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.sm)}>Sign in to save</Link>}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {item.price.kind === 'indicative' ? <span>{item.price.label.startsWith('A$') ? `Indicative AUD · ${item.price.label}` : `Provider price · ${item.price.label}`}</span> : null}
-            {item.sourcePrice === undefined ? null : <span>Provider-listed source · {item.sourcePrice}</span>}
-            <span>{marketSearchFreshness(item)}</span>
-          </div>
-        </li>})}
-      </ul>}
+      {canonicalSearch.refreshing ? <p role="status" aria-label="Refreshing search results" className="text-sm text-muted-foreground">Refreshing search results…</p> : null}
+      {result.results.length === 0 ? null : <CanonicalSearchResults results={result.results} renderActions={item => {
+        const identity = item.toolRef !== undefined && item.access !== 'external_listing'
+          ? { kind: 'ae_callable' as const, toolRef: item.toolRef }
+          : { kind: 'external_listing' as const, id: item.id }
+        return authLoaded && isSignedIn
+          ? <Button type="button" variant="secondary" size="sm" disabled={saved.status !== 'ready' || saved.pending(identity)} aria-busy={saved.pending(identity)} {...(saved.status === 'failed' ? {} : { 'aria-pressed': saved.isSavedIdentity(identity) })} onClick={() => saved.toggleIdentity(identity)}>{saved.status === 'failed' ? 'Saved status unavailable' : saved.isSavedIdentity(identity) ? 'Remove saved Tool' : 'Save Tool'}</Button>
+          : <Link to="/sign-in/$" params={{ _splat: '' }} className={cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.sm)}>Sign in to save</Link>
+      }} />}
       <nav aria-label="Search pages" className="flex items-center justify-between gap-3 border-t border-border pt-4">
         {canonicalSearch.hasPrevious ? <Button type="button" variant="secondary" onClick={canonicalSearch.previous} disabled={canonicalSearch.loading}><ArrowLeftIcon />Previous page</Button> : <span />}
         <span className="text-sm text-muted-foreground">Page {canonicalSearch.pageNumber}</span>
         {continuation === undefined ? <span /> : <Button type="button" variant="secondary" onClick={() => void canonicalSearch.nextPage(continuation.args.cursor, continuation.args.query)} disabled={canonicalSearch.loading} aria-label={canonicalSearch.failed ? 'Next page. Retry' : 'Next page'}>Next page<ArrowRightIcon /></Button>}
       </nav>
       {canonicalSearch.failed && result !== undefined ? <p role="alert" className="text-sm text-destructive">The next page could not load; this page is unchanged. Try Next page again.</p> : null}
-      {retry === undefined ? null : <Button type="button" variant="secondary" onClick={() => void canonicalSearch.retry()} disabled={canonicalSearch.loading}>Retry search</Button>}
+      {canonicalSearch.refreshFailed ? <p role="alert" className="text-sm text-destructive">Search results could not refresh; known results are unchanged. Retry search to update them.</p> : null}
+      {retry === undefined && !canonicalSearch.refreshFailed ? null : <Button type="button" variant="secondary" onClick={() => void canonicalSearch.retry()} disabled={canonicalSearch.loading}>Retry search</Button>}
       {broaden === undefined ? null : <Button type="button" variant="secondary" onClick={() => go(search.directoryCategory !== undefined || search.provider !== undefined || search.network !== undefined || search.priceBand !== undefined || marketHasBrowseOnlyFilters(search)
         ? { view: 'tools', query: broaden.args.query, sort: 'relevance' }
         : { view: 'tools' })}>{search.directoryCategory !== undefined || search.provider !== undefined || search.network !== undefined || search.priceBand !== undefined || marketHasBrowseOnlyFilters(search) ? 'Broaden search' : 'Browse all Tools'}</Button>}

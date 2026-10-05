@@ -28,7 +28,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByRole('radio', { name: /browse only/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /ask each time/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /work within limits/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /review access/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /set spending limits/i })).toBeInTheDocument()
   })
 
   it('restores an unissued draft without storing a secret', () => {
@@ -68,7 +68,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
       />,
     )
 
-    const submitBtn = screen.getByRole('button', { name: /review access/i })
+    const submitBtn = screen.getByRole('button', { name: /set spending limits/i })
     expect(submitBtn).toBeEnabled()
     fireEvent.click(submitBtn)
     expect(screen.getByLabelText(/agent name/i)).toHaveAttribute('aria-invalid', 'true')
@@ -103,13 +103,14 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
       />,
     )
 
+    const nameInput = screen.getByLabelText(/agent name/i)
+    fireEvent.change(nameInput, { target: { value: 'Test Assistant' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
+
     expect(screen.getByText(/A\$1\.00 \/ call/i)).toBeInTheDocument()
     expect(screen.getByText(/A\$5\.00 \/ day/i)).toBeInTheDocument()
     expect(screen.getByText(/A\$20\.00 \/ month/i)).toBeInTheDocument()
     expect(screen.getByText(/per-call ≤ daily ≤ monthly/i)).toBeInTheDocument()
-
-    const nameInput = screen.getByLabelText(/agent name/i)
-    fireEvent.change(nameInput, { target: { value: 'Test Assistant' } })
 
     const submitBtn = screen.getByRole('button', { name: /review access/i })
     fireEvent.click(submitBtn)
@@ -152,6 +153,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(nameInput, { target: { value: 'Prod Worker' } })
 
 
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     const perCallInput = screen.getByLabelText(/max spend per call/i)
     const dailyInput = screen.getByLabelText(/daily spend limit/i)
     const monthlyInput = screen.getByLabelText(/monthly spend limit/i)
@@ -194,6 +196,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Prod Worker' } })
 
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     const perCallInput = screen.getByLabelText(/max spend per call/i)
     const dailyInput = screen.getByLabelText(/daily spend limit/i)
     const monthlyInput = screen.getByLabelText(/monthly spend limit/i)
@@ -225,6 +228,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Observer' } })
     fireEvent.click(screen.getByRole('radio', { name: /browse only/i }))
 
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     fireEvent.click(screen.getByRole('button', { name: /review access/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
@@ -255,6 +259,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'My Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     fireEvent.click(screen.getByRole('button', { name: /review access/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
@@ -291,6 +296,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Faulty Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     fireEvent.click(screen.getByRole('button', { name: /review access/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
@@ -323,6 +329,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Retry Agent' } })
 
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     const submitBtn = screen.getByRole('button', { name: /review access/i })
 
     // Review does not issue a credential.
@@ -362,6 +369,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'In Flight Agent' } })
 
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     const submitBtn = screen.getByRole('button', { name: /review access/i })
     fireEvent.click(submitBtn)
 
@@ -386,6 +394,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Unexpected Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     fireEvent.click(screen.getByRole('button', { name: /review access/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
@@ -406,5 +415,141 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(sourceCode).not.toContain('ae_live_')
     expect(sourceCode).not.toContain('createHash')
     expect(sourceCode).not.toContain('sha256')
+  })
+
+  it('T13: separates identity and authority from spending limits and preserves the exact draft on Back', async () => {
+    const onIssue = vi.fn()
+
+    render(
+      <AeConnectAgentWizardDialog
+        deploymentEnvironment="production"
+        open={true}
+        onOpenChange={vi.fn()}
+        onIssue={onIssue}
+      />,
+    )
+
+    const nameInput = screen.getByLabelText(/agent name/i)
+    const workWithinLimits = screen.getByRole('radio', { name: /work within limits/i })
+    fireEvent.change(nameInput, { target: { value: 'Limit Agent' } })
+    fireEvent.click(workWithinLimits)
+
+    expect(screen.queryByLabelText(/max spend per call/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/daily spend limit/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/monthly spend limit/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Set spending limits for Limit Agent' })).toHaveFocus())
+
+    const perCallInput = screen.getByLabelText(/max spend per call/i)
+    const dailyInput = screen.getByLabelText(/daily spend limit/i)
+    const monthlyInput = screen.getByLabelText(/monthly spend limit/i)
+    fireEvent.change(perCallInput, { target: { value: '5.0000' } })
+    fireEvent.change(dailyInput, { target: { value: '25.0000' } })
+    fireEvent.change(monthlyInput, { target: { value: '100.0000' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to name and authority' }))
+    await waitFor(() => expect(screen.getByLabelText(/agent name/i)).toHaveFocus())
+    expect(screen.getByLabelText(/agent name/i)).toHaveValue('Limit Agent')
+    expect(screen.getByRole('radio', { name: /work within limits/i })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByLabelText(/max spend per call/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Set spending limits for Limit Agent' })).toHaveFocus())
+    expect(screen.getByLabelText(/max spend per call/i)).toHaveValue('5.0000')
+    expect(screen.getByLabelText(/daily spend limit/i)).toHaveValue('25.0000')
+    expect(screen.getByLabelText(/monthly spend limit/i)).toHaveValue('100.0000')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Review access for Limit Agent' })).toHaveFocus())
+    expect(onIssue).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit spending limits' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Set spending limits for Limit Agent' })).toHaveFocus())
+    expect(screen.getByLabelText(/max spend per call/i)).toHaveValue('5.0000')
+    expect(screen.getByLabelText(/daily spend limit/i)).toHaveValue('25.0000')
+    expect(screen.getByLabelText(/monthly spend limit/i)).toHaveValue('100.0000')
+    expect(onIssue).not.toHaveBeenCalled()
+  })
+
+  it('T14: invalid names remain on the identity step without exposing spending limits', () => {
+    const onIssue = vi.fn()
+    render(
+      <AeConnectAgentWizardDialog
+        deploymentEnvironment="production"
+        open={true}
+        onOpenChange={vi.fn()}
+        onIssue={onIssue}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
+
+    expect(screen.getByLabelText(/agent name/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByLabelText(/max spend per call/i)).not.toBeInTheDocument()
+    expect(onIssue).not.toHaveBeenCalled()
+  })
+
+  it('T15: invalid limits remain on the limits step and cannot reach review or issue', () => {
+    const onIssue = vi.fn()
+    render(
+      <AeConnectAgentWizardDialog
+        deploymentEnvironment="production"
+        open={true}
+        onOpenChange={vi.fn()}
+        onIssue={onIssue}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Prod Worker' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
+    fireEvent.change(screen.getByLabelText(/max spend per call/i), { target: { value: '50.00' } })
+    fireEvent.change(screen.getByLabelText(/daily spend limit/i), { target: { value: '20.00' } })
+    fireEvent.change(screen.getByLabelText(/monthly spend limit/i), { target: { value: '100.00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
+
+    expect(screen.getByText(/per-call limit cannot exceed daily limit/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/max spend per call/i)).toHaveValue('50.00')
+    expect(screen.queryByRole('heading', { name: 'Review access for Prod Worker' })).not.toBeInTheDocument()
+    expect(onIssue).not.toHaveBeenCalled()
+  })
+
+  it('T16: shows the exact review before final-only issuance', async () => {
+    const onIssue = vi.fn().mockResolvedValue({ kind: 'created', keyId: 'key_prod_2', secret: 'sek_live_789' })
+    render(
+      <AeConnectAgentWizardDialog
+        deploymentEnvironment="production"
+        open={true}
+        onOpenChange={vi.fn()}
+        onIssue={onIssue}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Prod Worker' } })
+    fireEvent.click(screen.getByRole('radio', { name: /ask each time/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
+    fireEvent.change(screen.getByLabelText(/max spend per call/i), { target: { value: '5.00' } })
+    fireEvent.change(screen.getByLabelText(/daily spend limit/i), { target: { value: '25.00' } })
+    fireEvent.change(screen.getByLabelText(/monthly spend limit/i), { target: { value: '100.00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
+
+    expect(onIssue).not.toHaveBeenCalled()
+    const reviewHeading = screen.getByRole('heading', { name: 'Review access for Prod Worker' })
+    expect(reviewHeading).toBeInTheDocument()
+    await waitFor(() => expect(reviewHeading).toHaveFocus())
+    expect(screen.getByText('Production')).toBeInTheDocument()
+    expect(screen.getByText('Ask each time')).toBeInTheDocument()
+    expect(screen.getByText('A$5.00 per Call · A$25.00 daily · A$100.00 monthly')).toBeInTheDocument()
+    expect(screen.getByText(/makes no purchase and does not confirm that your Agent has authenticated/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
+    await waitFor(() => expect(onIssue).toHaveBeenCalledTimes(1))
+    expect(onIssue.mock.calls[0]![0].data).toMatchObject({
+      name: 'Prod Worker',
+      environment: 'production',
+      authorityMode: 'approval_required',
+      maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '5000000' },
+      maximumDailySpend: { currency: 'AUD', exponent: 6, units: '25000000' },
+      maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '100000000' },
+    })
   })
 })
