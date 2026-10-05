@@ -42,6 +42,40 @@ async function navigateHeaderToMarket(page: Page) {
 }
 
 test.describe('app shell persistence', () => {
+  test('Tool search stays on one line after the compact header expands', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/market')
+    await page.locator('[data-shell="app-header"][data-hydrated="true"]').waitFor()
+
+    const trigger = page.getByRole('button', { name: 'Find Tools' })
+    const label = trigger.getByText('Find Tools', { exact: true })
+    for (const width of [375, 1440, 639, 640, 375, 1440]) {
+      await page.setViewportSize({ width, height: 812 })
+      if (width < 640) {
+        await expect(label).toBeHidden()
+        await expect.poll(() => trigger.evaluate(node => node.getBoundingClientRect().width)).toBeLessThanOrEqual(64)
+      } else {
+        await expect(label).toBeVisible()
+        await expect.poll(() => trigger.evaluate(node => {
+          const button = node.getBoundingClientRect()
+          const content = Array.from(node.querySelectorAll('svg, .arc-command-trigger-label, kbd'))
+          return content.every(element => {
+            const rect = element.getBoundingClientRect()
+            const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight)
+            return rect.left >= button.left && rect.right <= button.right
+              && (element.tagName.toLowerCase() === 'svg' || rect.height <= lineHeight + 1)
+          })
+        })).toBe(true)
+      }
+      await expect.poll(() => trigger.evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(48)
+    }
+
+    await trigger.click()
+    await expect(page.getByRole('dialog', { name: 'Command console' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(trigger).toBeFocused()
+  })
+
   test('header node survives market -> for-providers -> market', async ({ page }) => {
     const hydrationErrors: string[] = []
     page.on('console', (message) => {

@@ -69,6 +69,7 @@ export function AeCommandPanel({
             type="button"
             variant="secondary"
             size="md"
+            labelLayout="start"
             className="arc-market arc-command-trigger"
             aria-label="Find Tools"
             aria-controls={PANEL_CONTENT_ID}
