@@ -37,6 +37,92 @@ export async function readTreasuryProgress(ctx: Pick<QueryCtx, 'db'>): Promise<T
 }
 
 /**
+ * Historical audits use the same cutoff as their native insertion/PIT reads.
+ * Validate the live cursor and every intervening range before projecting the
+ * retained checkpoint. A later observer cannot refresh that checkpoint's clock.
+ * A retained range completed after the cutoff remains unavailable: its mutable
+ * pending state cannot be reconstructed as proven historical posting evidence.
+ * Read cost is three indexed reads and at most 25 post-cutoff ranges. Longer or
+ * broken bridges fail closed; the auditor still validates the complete retained
+ * history and every native posting independently.
+ */
+export async function readTreasuryProgressAtCutoff(ctx: Pick<QueryCtx, 'db'>, cutoffAt: number): Promise<TreasuryProgress> {
+  if (!Number.isSafeInteger(cutoffAt) || cutoffAt < 0) return unavailable('treasury_snapshot_cutoff_invalid')
+  const identity = configuredTreasuryIdentity()
+  if (identity === undefined) return unavailable('treasury_configuration_unavailable')
+  const [cursor, retained, advanced] = await Promise.all([
+    readCursor(ctx, identity),
+    ctx.db.query('moneyTreasuryBatches').withIndex('by_custody_and_createdAt', q =>
+      q.eq('custodyRef', identity.custodyRef).lte('createdAt', cutoffAt)).order('desc').first(),
+    ctx.db.query('moneyTreasuryBatches').withIndex('by_custody_and_createdAt', q =>
+      q.eq('custodyRef', identity.custodyRef).gt('createdAt', cutoffAt)).order('desc').take(26),
+  ])
+  if (advanced.length > 25) return unavailable('treasury_source_history_incomplete')
+  const latest = advanced[0] ?? retained
+  if (cursor === null) return latest === null ? { kind: 'empty', identity } : unavailable('treasury_cursor_conflict')
+  if (!cursorIdentityMatches(cursor, identity)) return unavailable('treasury_custody_cutover_required')
+  if (!Number.isSafeInteger(cursor.createdAt) || cursor.createdAt < 0
+    || !Number.isSafeInteger(cursor.updatedAt) || cursor.updatedAt < cursor.createdAt) return unavailable('treasury_cursor_conflict')
+  if (latest === null || !validSavedBatch(latest, identity)) return unavailable('treasury_cursor_conflict')
+  if (cursor.state.kind === 'ready') {
+    if (latest.state.kind !== 'booked' || cursor.updatedAt !== latest.state.completedAt
+      || canonicalDigest(cursor.state.checkpoint) !== canonicalDigest(latest.observation.checkpoint)
+      || cursor.state.blockTimestamp !== latest.observation.blockTimestamp
+      || cursor.bufferUnits !== batchBufferUnits(latest)) return unavailable('treasury_cursor_conflict')
+  } else if (latest.state.kind !== 'pending' || cursor.state.batchRef !== latest.batchRef
+    || cursor.updatedAt !== latest.createdAt || cursor.bufferUnits !== latest.previousBufferUnits
+    || (cursor.state.kind === 'opening' ? latest.previousCheckpoint !== null
+      : canonicalDigest(cursor.state.checkpoint) !== canonicalDigest(latest.previousCheckpoint))) {
+    return unavailable('treasury_cursor_conflict')
+  }
+  if (cursor.state.kind === 'applying' && latest.createdAt > cutoffAt
+    && cursor.state.blockTimestamp !== (advanced[1] ?? retained)?.observation.blockTimestamp) {
+    return unavailable('treasury_cursor_conflict')
+  }
+  // Prove that the cursor moved forward from the historical checkpoint, rather
+  // than dropping the cursor comparison or accepting an unrelated latest row.
+  for (const [index, batch] of advanced.entries()) {
+    const previous = advanced[index + 1] ?? retained
+    if (!validSavedBatch(batch, identity) || (index > 0 && batch.state.kind !== 'booked')
+      || (previous !== null && (!validSavedBatch(previous, identity) || previous.state.kind !== 'booked'
+        || previous.state.completedAt > batch.createdAt))
+      || canonicalDigest(batch.previousCheckpoint) !== canonicalDigest(previous?.observation.checkpoint ?? null)
+      || batch.previousBufferUnits !== (previous === null ? '0' : batchBufferUnits(previous))) {
+      return unavailable('treasury_chain_history_incomplete')
+    }
+  }
+  if (retained === null) return { kind: 'empty', identity }
+  if (!validSavedBatch(retained, identity)) return unavailable('treasury_chain_history_incomplete')
+  if (retained.observation.observedAt > cutoffAt
+    || (retained.state.kind === 'booked' && retained.state.completedAt > cutoffAt)) {
+    return unavailable('treasury_source_cutoff_changed')
+  }
+  return retained.state.kind === 'pending' ? { kind: 'pending', identity, batch: projectBatch(retained) }
+    : { kind: 'ready', identity, checkpoint: retained.observation.checkpoint,
+        blockTimestamp: retained.observation.blockTimestamp, bufferUnits: batchBufferUnits(retained) }
+}
+
+function validSavedBatch(batch: TreasuryBatch, identity: TreasuryIdentity): boolean {
+  const observation = batch.observation
+  return batch.custodyRef === identity.custodyRef && batch.custodyGeneration === identity.custodyGeneration
+    && observation.environment === identity.environment && observation.network === identity.network
+    && observation.asset === identity.asset && observation.address === identity.address
+    && validCheckpoint(observation.checkpoint) && (batch.previousCheckpoint === null || validCheckpoint(batch.previousCheckpoint))
+    && safeUnits(batch.previousBufferUnits) && safeUnits(batch.bufferIncreaseUnits)
+    && BigInt(batch.previousBufferUnits) + BigInt(batch.bufferIncreaseUnits) <= BigInt(identity.bufferTargetUnits)
+    && Number.isSafeInteger(batch.createdAt) && batch.createdAt >= 0
+    && Number.isSafeInteger(observation.observedAt) && observation.observedAt >= 0 && observation.observedAt <= batch.createdAt
+    && Number.isSafeInteger(observation.blockTimestamp) && observation.blockTimestamp >= 0
+    && validObservation(identity, batch.previousCheckpoint, observation, batch.createdAt)
+    && batch.batchRef === canonicalDigest({ kind: 'ae.treasury-batch:v1', identity, previous: batch.previousCheckpoint,
+      checkpoint: observation.checkpoint, transfers: observation.transfers })
+    && (batch.state.kind === 'pending' || (Number.isSafeInteger(batch.state.completedAt) && batch.state.completedAt >= batch.createdAt))
+}
+function batchBufferUnits(batch: TreasuryBatch): string {
+  return (BigInt(batch.previousBufferUnits) + BigInt(batch.bufferIncreaseUnits)).toString()
+}
+
+/**
  * Requires agreeing chain evidence and the exact predecessor. Ensures one pending
  * range wins concurrent observers before any ledger write. Retry returns that
  * immutable range. A wallet's cursor survives credential-generation changes;

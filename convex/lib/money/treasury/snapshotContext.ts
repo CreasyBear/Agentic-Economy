@@ -4,7 +4,7 @@ import { treasuryReferenceRateValue } from '@/modules/money/treasury-report'
 import { x402SpendPolicyFromEnvironment } from '@/modules/money/x402-spend-admission'
 import { env, type QueryCtx } from '../../../_generated/server'
 import { readReferenceRate } from '../referenceRate/store'
-import { configuredTreasuryIdentity, readTreasuryProgress } from './progress'
+import { configuredTreasuryIdentity, readTreasuryProgressAtCutoff } from './progress'
 
 export const treasurySnapshotContextValue = v.union(
   v.object({ kind: v.literal('unavailable'), code: v.string() }),
@@ -16,12 +16,12 @@ export const treasurySnapshotContextValue = v.union(
 )
 export type TreasurySnapshotContext = Infer<typeof treasurySnapshotContextValue>
 
-/** One transactional read of current configuration and cutoff-bounded display evidence; no query clock. */
+/** One transactional read of current configuration and cutoff-bounded treasury evidence; no query clock. */
 export async function readTreasurySnapshotContext(ctx: QueryCtx, args: { cutoffAt: number }): Promise<TreasurySnapshotContext> {
   const identity = configuredTreasuryIdentity()
   if (identity === undefined) return { kind: 'unavailable', code: 'treasury_configuration_unavailable' }
   const [progress, settings, observation, rate] = await Promise.all([
-    readTreasuryProgress(ctx),
+    readTreasuryProgressAtCutoff(ctx, args.cutoffAt),
     ctx.db.query('moneyTreasurySettings').withIndex('by_environment', q => q.eq('environment', identity.environment)).unique(),
     ctx.db.query('moneyTreasuryObservations').withIndex('by_custody_and_observedAt', q => q
       .eq('environment', identity.environment).eq('custodyRef', identity.custodyRef)
