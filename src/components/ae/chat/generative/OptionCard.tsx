@@ -49,7 +49,7 @@ export function OptionCard({ option, recommended, compared, selected, multipleOp
           ) : null}
           {selectionActions ? <>
             {!option.quoteable && onSelect !== undefined ? <Button type="button" size="sm" variant="secondary" onClick={() => onSelect(option.id)} disabled={!option.selectable}>Ask about this Tool</Button> : null}
-            {multipleOptions && option.selectable ? <Button type="button" size="sm" variant="ghost" onClick={() => onCompare?.(option.id)} disabled={onCompare === undefined} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button> : null}
+            {multipleOptions && option.selectable ? <Button type="button" size="sm" variant="ghost" onClick={() => onCompare?.(option.id)} disabled={onCompare === undefined} aria-pressed={compared} aria-label={compared ? 'Remove from compare' : 'Compare'}>{compared ? 'Compared' : 'Compare'}</Button> : null}
           </> : null}
         </div>}
       </div>

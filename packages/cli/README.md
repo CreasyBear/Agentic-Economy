@@ -6,10 +6,10 @@
 
 **No public release has been published yet.** The [CreasyBear/aecon-cli releases](https://github.com/CreasyBear/aecon-cli/releases) repository is currently empty. Do not treat the commands below as a working download until the first tagged release and its three assets appear. `@aecon/cli` has not been published to npm; `npm install @aecon/cli` is not the installation path.
 
-For an *existing* version, install `curl`, `jq`, `cosign`, npm, and a SHA-256 checker (`shasum` on macOS), then download all three assets **from the same tag**. The example is for version `0.2.0`; substitute the actual published version if different:
+For an *existing* version, install `curl`, `jq`, `cosign`, npm, and a SHA-256 checker (`shasum` on macOS), then download all three assets **from the same tag**. The example is for version `0.2.1`; substitute the actual published version if different:
 
 ```sh
-VERSION=0.2.0
+VERSION=0.2.1
 BASE="https://github.com/CreasyBear/aecon-cli/releases/download/v${VERSION}"
 ARCHIVE="aecon-cli-${VERSION}.tgz"
 curl --fail --location --remote-name "${BASE}/${ARCHIVE}"

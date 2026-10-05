@@ -2,7 +2,7 @@ import { globSync } from 'node:fs'
 import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
-import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
+import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 
 import { describeActionForAgent, findAction } from '@/modules/actions'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
@@ -216,8 +216,8 @@ describe('Site discovery manifest', () => {
       mcp: {
         endpoint: `${origin}/mcp`,
         callTool: 'ae_tool_call',
-        protocolVersion: LATEST_PROTOCOL_VERSION,
-        lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],
+        protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
+        lifecycle: ['server/discover', 'tools/list', 'tools/call', 'close'],
         inputFields: expect.arrayContaining(['quoteRef', 'idempotencyKey']),
       },
       executionModes: {

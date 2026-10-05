@@ -42,7 +42,7 @@ export function saveChatDraft(storage: Storage | null, value: string): void {
 }
 
 export function toTransportMessages(messages: readonly TranscriptMessage[]): UIMessage[] {
-  return projectAnonymousTranscript(messages).map((message, index) => ({
+  return projectAnonymousTranscript(messages, true).map((message, index) => ({
     id: `anonymous-transport-${index}`,
     role: message.role,
     parts: [{ type: 'text', text: message.content }],

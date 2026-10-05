@@ -254,6 +254,7 @@ export function oauthAuthorizationServerMetadata(canonicalBaseUrl: string): Read
   const base = trimTrailingSlashes(canonicalBaseUrl)
   return {
     issuer: base,
+    authorization_response_iss_parameter_supported: true,
     authorization_endpoint: `${base}${AGENT_ACCESS_OAUTH_PATHS.authorize}`,
     token_endpoint: `${base}${AGENT_ACCESS_OAUTH_PATHS.token}`,
     registration_endpoint: `${base}${AGENT_ACCESS_OAUTH_PATHS.register}`,

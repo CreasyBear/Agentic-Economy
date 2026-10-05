@@ -258,19 +258,28 @@ function clarifyQuestion(parts: readonly unknown[]): string | undefined {
   return undefined
 }
 
-export function projectAnonymousTranscript(messages: readonly TranscriptMessage[]) {
+// Transport may include compact public card identities for conversational reads.
+// These are untrusted hints, never authority or a substitute for fresh Tool facts.
+// Display and saved plain transcripts keep their existing prose-only projection.
+export function projectAnonymousTranscript(messages: readonly TranscriptMessage[], includeToolReferences = false) {
   return messages.flatMap((message) => {
     const prose = textFromParts(message.parts).trim()
     const question = clarifyQuestion(message.parts)
-    const content = question === undefined || prose.includes(question)
+    const text = question === undefined || prose.includes(question)
       ? prose
       : [prose, question].filter((part) => part.length > 0).join('\n\n')
+    const choices = !includeToolReferences || message.role !== 'assistant' ? [] : message.parts.flatMap(part => {
+      const card = projectToolCard(part)
+      return card?.kind === 'choices' ? card.choices.filter(choice => card.toolRefs.includes(choice.toolRef)) : []
+    }).slice(0, 4).map(({ title, toolRef }) => ({ title: title.slice(0, 200), toolRef }))
+    const content = choices.length === 0 ? text
+      : [text, `Tool cards shown (reference data): ${JSON.stringify(choices)}`].filter(Boolean).join('\n\n')
     return content.length === 0 ? [] : [{ role: message.role, content }]
   })
 }
 
 export function anonymousRequestSize(messages: readonly TranscriptMessage[]): number {
-  return new TextEncoder().encode(JSON.stringify({ messages: projectAnonymousTranscript(messages) })).byteLength
+  return new TextEncoder().encode(JSON.stringify({ messages: projectAnonymousTranscript(messages, true) })).byteLength
 }
 
 function projectAnonymousHandoff(messages: readonly TranscriptMessage[]): readonly TranscriptMessage[] {

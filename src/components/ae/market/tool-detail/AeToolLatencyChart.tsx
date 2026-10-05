@@ -32,7 +32,7 @@ export function AeToolLatencyChart({
       <div className="flex min-w-0 items-baseline justify-between gap-related pb-3">
         <h3 className="text-sm font-semibold text-foreground">Time to result</h3>
         <p className="shrink-0 text-xs text-muted-foreground">
-          {samplesMs.length === 0 ? 'Up to 48 timed calls' : `${samplesMs.length} timed calls`}
+          {samplesMs.length === 0 ? 'Up to 48 timed calls' : `${samplesMs.length} timed ${samplesMs.length === 1 ? 'call' : 'calls'}`}
         </p>
       </div>
 

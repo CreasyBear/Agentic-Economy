@@ -124,7 +124,7 @@ export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): strin
     '',
     '## MCP lifecycle',
     '',
-    `Use the installed official MCP SDK with protocol \`${MCP_LATEST_PROTOCOL_VERSION}\` at \`${base}/mcp\`. Client connect performs initialization. This server is stateless and may omit \`Mcp-Session-Id\`; call \`tools/list\` before \`tools/call\`, then close the client transport. Malformed JSON-RPC requests return protocol errors; valid tool calls with invalid tool arguments return \`isError\` tool results.`,
+    `Use the installed official MCP SDK with protocol \`${MCP_LATEST_PROTOCOL_VERSION}\` at \`${base}/mcp\`. Client connect uses per-request metadata and \`server/discover\`. Legacy clients may initialize with a supported 2025 revision. This server is stateless and does not require \`Mcp-Session-Id\`; call \`tools/list\` before \`tools/call\`, then close the client transport. Malformed JSON-RPC requests return protocol errors; valid tool calls with invalid tool arguments return \`isError\` tool results.`,
     '',
     '## Search, describe, call, receipt',
     '',

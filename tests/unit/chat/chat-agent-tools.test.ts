@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, type ChatToolId } from '@/modules/chat/tool-card'
 import { createChatAgent } from '../../../convex/lib/chat/tools/agent'
 import { retrieveImmediateTools } from '../../../convex/lib/chat/tools/immediate'
+import { readChatSearchPage } from '../../../convex/lib/chat/tools/search'
 import {
   chatNoMatchSearchCount,
   chatSearchResolution,
@@ -97,6 +98,24 @@ function toolCtx(input: Readonly<{
     runMutation: input.runMutation ?? vi.fn(),
   } as unknown as ToolCtx
 }
+
+it('does not begin a cancelled page read or return a page after cancellation', async () => {
+  const controller = new AbortController()
+  const runAction = vi.fn(async () => noCandidates)
+  controller.abort(new Error('page_cancelled'))
+  await expect(readChatSearchPage(toolCtx({ runAction }), { query: 'weather', cursor: 'next' }, undefined,
+    controller.signal)).rejects.toThrow('page_cancelled')
+  expect(runAction).not.toHaveBeenCalled()
+
+  const duringRead = new AbortController()
+  runAction.mockImplementation(async () => {
+    duringRead.abort(new Error('page_cancelled_during_read'))
+    return noCandidates
+  })
+  await expect(readChatSearchPage(toolCtx({ runAction }), { query: 'weather', cursor: 'next' }, undefined,
+    duringRead.signal)).rejects.toThrow('page_cancelled_during_read')
+  expect(runAction).toHaveBeenCalledOnce()
+})
 
 async function invokeTool(
   agent: ReturnType<typeof createChatAgent>,

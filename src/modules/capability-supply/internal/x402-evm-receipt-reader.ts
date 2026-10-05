@@ -48,6 +48,12 @@ async function readGuardedRpcResult(
   return { kind: 'result', value: payload.result }
 }
 
+/**
+ * Requires an exact supported payment identity and bounded confirmation wait.
+ * Ensures transaction and head evidence are read after receipt confirmation.
+ * Identity, block and authorization checks remain mandatory; unavailable or
+ * inconsistent evidence returns undefined without financial side effects.
+ */
 export async function readGuardedX402EvmReceipt(input: Readonly<{
   target: URL
   aeEnvironment: X402AeEnvironment
@@ -100,15 +106,15 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
           confirmations: minimumConfirmations,
           timeout: input.confirmationTimeoutMs,
         })
-    const [receipt, transaction] = await Promise.all([
-      receiptPromise,
+    const receipt = await receiptPromise
+    // A transaction captured while pending stays pending in memory even after
+    // its receipt is confirmed. Read both snapshots after the wait completes.
+    const [transaction, latestBlock] = await Promise.all([
       client.getTransaction({
         hash: input.transactionHash as Hex,
       }),
+      client.getBlock(),
     ])
-    // Read the head after the confirmation wait. A head captured before that
-    // wait makes a confirmed payment appear to have too few confirmations.
-    const latestBlock = await client.getBlock()
     if (
       latestBlock.number === null
       || latestBlock.number < receipt.blockNumber

@@ -148,7 +148,7 @@ export type SiteDiscoveryManifestContract = Readonly<{
     }>
     mcp: Readonly<{
       protocolVersion: typeof MCP_LATEST_PROTOCOL_VERSION
-      lifecycle: readonly ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close']
+      lifecycle: readonly ['server/discover', 'tools/list', 'tools/call', 'close']
       endpoint: string
       callTool: string
       inputFields: readonly string[]
@@ -275,7 +275,7 @@ export function buildSiteDiscoveryManifest(
         endpoint: `${origin}${MCP_HTTP_ENDPOINT_PATH}`,
         callTool: callTool.name,
         protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
-        lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],
+        lifecycle: ['server/discover', 'tools/list', 'tools/call', 'close'],
         inputFields: Object.keys(callDescriptor.inputJsonSchema?.properties ?? {}),
       },
       executionModes: {
@@ -354,7 +354,7 @@ export function projectCompactSiteDiscoveryManifest(
         endpoint: manifest.toolGateway.mcp.endpoint,
         protocolVersion: manifest.toolGateway.mcp.protocolVersion,
         callTool: manifest.toolGateway.mcp.callTool,
-        lifecycle: 'The official MCP client performs initialize and close; this endpoint is session-optional.',
+        lifecycle: 'Current MCP clients use server/discover and per-request metadata; legacy 2025 clients may initialize. This endpoint is stateless.',
       },
       access: {
         anonymous: {

@@ -36,6 +36,23 @@ request. A malformed model response containing control syntax is not a completed
 answer: preserve actual Tool evidence, replace the invalid prose and settle the
 turn through existing failure recovery when no usable evidence remains.
 
+The guest follow-up walkthrough also found that every message entered the initial
+search shortcut, while the guest transport discarded the card identities. Restrict
+that shortcut to the initial discovery turn. Carry at most four bounded public Tool
+titles and references as untrusted lookup hints in the existing guest transcript;
+fresh detail reads remain authoritative, and persisted display prose stays clean.
+Write one explanation after the cards, including when the model falls back to
+catalogue facts. Signed-in history already retains its Tool context. All final
+answer instructions must agree that cards own the catalogue and comparison table.
+Next page uses the admitted continuation directly through the existing search
+tool, with no model tool-call generation. Guest admission and saved-turn ownership
+still validate their respective cursors; output bounds and next-cursor signing
+remain in one implementation. The cost is one bounded adapter in the existing
+search file and one output branch per transport. Keep it: it removes an observed
+model failure from a deterministic button without duplicating catalogue logic.
+Source failures retain the prior page and fail through existing turn recovery;
+aborted reads cannot save a completed new page.
+
 **Cost and decision.** Reuse Arc cards, existing projections, Convex Agent and the
 current retry fence. No new component framework, storage table or payment path.
 Add only a bounded optional summary to the existing card projection. Keep exact

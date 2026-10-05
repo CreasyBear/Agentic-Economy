@@ -86,6 +86,50 @@ const admitHttp = makeFunctionReference<'mutation', {
 }, Readonly<{ ok: boolean; retryAfter?: number }>>('rateLimit:admitHttp')
 
 describe('anonymous operation chat transport', () => {
+  it('reads the named Tool on a follow-up instead of replacing it with another search', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTestWithMarketComponents()
+    const { toolRef } = await admitDiscoveredToolFixture(backend)
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'follow-up-detail', toolName: 'registry_tools_describe',
+        input: JSON.stringify({ toolRef }) }],
+      [{ type: 'text', text: '**Timezone Converter** converts between timezones. Next: review its inputs.' }],
+    ] })
+    const calls = vi.spyOn(model, 'doStream')
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx, [
+        { role: 'user', content: 'Find a timezone converter' },
+        { role: 'assistant', content: `Tool cards shown: ${JSON.stringify([{ title: 'Timezone Converter', toolRef }])}` },
+        { role: 'user', content: 'Tell me more about Timezone Converter' },
+      ], model)
+      return await response.text()
+    })
+    expect(calls.mock.calls[0]?.[0].tools).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'registry_tools_describe' }),
+    ]))
+    expect(body).toContain('follow-up-detail')
+    expect(body).toContain('Timezone')
+    expect(body).not.toContain('immediate-search')
+    expect(body).not.toContain('tool_quote')
+    expect(body).not.toContain('tool_call')
+  })
+
+  it('writes only one explanation after the immediate search cards', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTestWithMarketComponents()
+    await admitDiscoveredToolFixture(backend)
+    const answer = '**Timezone Converter** may fit this request. Next: review its inputs.'
+    const model = mockModel({ content: [{ type: 'text', text: answer }] })
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx,
+        [{ role: 'user', content: 'Find a timezone converter' }], model)
+      return await response.text()
+    })
+    expect(body.match(/"type":"text-start"/gu)).toHaveLength(1)
+    expect(body).toContain(answer)
+    expect(body).toContain('immediate-search')
+  })
+
   it('does not turn unsupported lookup results into a verified Tool recommendation', async () => {
     // Exercise model-led recovery when immediate catalogue lookup cannot run.
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
@@ -122,7 +166,7 @@ describe('anonymous operation chat transport', () => {
     expect(body).not.toContain(inventedRef)
     expect(body).toContain('registry_tools_search')
   })
-  it('forces a guest next-page search with no model-supplied query or cursor', async () => {
+  it('reads a guest next page without a model-supplied query or cursor', async () => {
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       [{ type: 'tool-call', toolCallId: 'next-page', toolName: 'registry_tools_search', input: '{}' }],
@@ -135,9 +179,7 @@ describe('anonymous operation chat transport', () => {
         model, undefined, { kind: 'search_next_page', query: 'weather in Sydney', cursor: 'x402:' })
       return await response.text()
     })
-    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({
-      type: 'tool', toolName: 'registry_tools_search',
-    })
+    expect(calls).not.toHaveBeenCalled()
     expect(body).toContain('registry_tools_search')
     expect(body).not.toContain('chat_tool_refused')
     expect(body).not.toContain('x402:')

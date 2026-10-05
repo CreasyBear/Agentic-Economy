@@ -9,6 +9,8 @@ import { CHAT_UNFINISHED_ANSWER, containsChatProtocolMarkup } from '@/modules/ch
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { createChatAgent } from '../tools/agent'
+import { readChatSearchPage } from '../tools/search'
+import { catalogueFact, immediateSearchToolName } from '../tools/immediate'
 import { streamImmediateCatalogue } from './immediateTurn'
 import { quoteThenCallFromCard } from '../tools/purchase'
 import { parseRunRequest } from '@/modules/chat/run-request'
@@ -43,6 +45,21 @@ export async function streamDurableChatResponse(
   languageModel: LanguageModelV4,
 ): Promise<boolean> {
   const abortSignal = chatGenerationSignal(args.deadlineAt)
+  if (args.continuation !== undefined) {
+    const page = await readChatSearchPage(ctx, args.continuation, args.searchTurn, abortSignal)
+    const toolName = immediateSearchToolName()
+    await saveMessages(ctx, components.agent, {
+      threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+      messages: [
+        { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'continuation-search', toolName, input: {} }] },
+        { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'continuation-search', toolName,
+          output: { type: 'json', value: page as JSONValue } }] },
+        { role: 'assistant', content: catalogueFact(page) },
+      ],
+      agentName: 'Agentic Economy Tool Market',
+    })
+    return false
+  }
   const searchOutputs = new Map<string, unknown>()
   const agent = createChatAgent(
     languageModel, args.continuation === undefined ? args.trustedChatAuthority : undefined,
@@ -122,14 +139,9 @@ export async function streamDurableChatResponse(
       onStart: modelCost.onStart,
       prepareStep: async options => {
         await modelCost.prepareStep(options)
-        return args.continuation === undefined
-        ? options.stepNumber === 0 && hasPriorSearch
+        return options.stepNumber === 0 && hasPriorSearch
           ? { toolChoice: 'auto' as const }
           : prepareChatToolStep(options)
-        : options.stepNumber === 0
-          ? { toolChoice: { type: 'tool' as const,
-            toolName: CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'] } }
-          : { toolChoice: 'none' as const }
       },
       timeout: { stepMs: 15_000 },
       maxRetries: 0,
@@ -327,7 +339,7 @@ export async function streamDurableChatResponse(
         timeout: { totalMs: 12_000 },
         maxRetries: 0,
         ...(abortSignal === undefined ? {} : { abortSignal }),
-        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer, use bullets for one Tool and a table only for two to four distinct Tools, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
+        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
       }, {
         storageOptions: { saveMessages: 'promptAndOutput' },
         saveStreamDeltas: { chunking: 'word', throttleMs: 100 },

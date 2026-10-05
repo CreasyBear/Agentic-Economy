@@ -93,7 +93,7 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
             ? <p>Performance history is unavailable right now.</p>
             : <>
               <AeToolLatencyChart latency={latency} />
-              <p>{latency.kind === 'measured' ? `Median ${latency.display}, p95 ${formatToolDuration(latency.p95Ms)} across ${latency.sampleSize} completed Calls.` : `${latency.sampleSize} completed Calls; median and p95 appear after ${latency.minimumSampleSize}.`}</p>
+              <p>{latency.kind === 'measured' ? `Median ${latency.display}, p95 ${formatToolDuration(latency.p95Ms)} across ${latency.sampleSize} completed Calls.` : `${latency.sampleSize} completed ${latency.sampleSize === 1 ? 'Call' : 'Calls'}; median and p95 appear after ${latency.minimumSampleSize}.`}</p>
               <p>{latency.definition}</p>
             </> },
           { id: 'technical', title: 'Technical · operation IDs, schemas and terms', content: <AeToolTechnicalContract tool={tool} /> },

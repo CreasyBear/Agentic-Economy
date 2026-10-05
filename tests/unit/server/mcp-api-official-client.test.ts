@@ -1,3 +1,5 @@
+import { Client as CurrentClient, StreamableHTTPClientTransport as CurrentTransport } from '@modelcontextprotocol/client'
+import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,20 +13,18 @@ import {
 
 const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
 
-function officialClient(
+type ClientMode = 'legacy' | 'auto' | 'current'
+const clientModes = ['legacy', 'auto', 'current'] as const
+
+async function connectOfficialClient(
   service: CallService,
   scopes: readonly string[] | null = ['market_tools:call'],
-): Readonly<{
-  client: Client
-  transport: StreamableHTTPClientTransport
-}> {
-  const client = new Client({ name: 'ae-official-client-test', version: '1.0.0' })
-  const transport = new StreamableHTTPClientTransport(new URL('https://ae.example/mcp'), {
+  mode: ClientMode = 'legacy',
+): Promise<Client | CurrentClient> {
+  const options = {
     ...(scopes === null ? {} : { requestInit: { headers: { authorization: 'Bearer official-client-test' } } }),
-    fetch: async (input, init) => {
-      const request = input instanceof Request
-        ? new Request(input, init)
-        : new Request(input, init)
+    fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init)
       return await handleMcpRequest(request, {
         authenticate: async () => ({
           isAuthenticated: true,
@@ -42,25 +42,25 @@ function officialClient(
         callService: service,
       })
     },
+  }
+  if (mode === 'legacy') {
+    const client = new Client({ name: 'ae-official-client-test', version: '1.0.0' })
+    const transport = new StreamableHTTPClientTransport(new URL('https://ae.example/mcp'), options)
+    // SDK 1.30.0's emitted transport declarations disagree on optional sessionId.
+    await client.connect(transport as unknown as Parameters<Client['connect']>[0])
+    return client
+  }
+  const client = new CurrentClient({ name: 'ae-official-client-test', version: '1.0.0' }, {
+    versionNegotiation: { mode: mode === 'auto' ? 'auto' : { pin: MCP_LATEST_PROTOCOL_VERSION } },
   })
-  return { client, transport }
-}
-
-async function connectOfficialClient(
-  service: CallService,
-  scopes?: readonly string[] | null,
-): Promise<Client> {
-  const { client, transport } = officialClient(service, scopes)
-  // SDK 1.30.0's emitted transport declarations disagree only on whether the
-  // optional sessionId property is spelled `?: string` or `string | undefined`.
-  await client.connect(transport as unknown as Parameters<Client['connect']>[0])
+  await client.connect(new CurrentTransport(new URL('https://ae.example/mcp'), options))
   return client
 }
 
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter with the official client', () => {
-  it('compiles every admitted tool contract while removing repeated schema bytes', async () => {
+  it.each(clientModes)('compiles every admitted tool contract in %s mode while removing repeated schema bytes', async (mode) => {
     const service: CallService = {
       callTool: vi.fn(),
       readCallStatus: vi.fn(),
@@ -70,7 +70,7 @@ describe('MCP host adapter with the official client', () => {
     const client = await connectOfficialClient(service, [
       'market_tools:call',
       'market_supply:manage',
-    ])
+    ], mode)
     const listed = await client.listTools()
     await client.close()
 
@@ -108,7 +108,7 @@ describe('MCP host adapter with the official client', () => {
     expect(outputSchemaBytes).toBeGreaterThan(0)
     expect(outputSchemaBytes).toBeLessThan(preCompactManifest.outputSchemaBytes / 4)
     expect(inputSchemaBytes).toBeLessThanOrEqual(expectedActions.length * 800)
-    const publicClient = await connectOfficialClient(service, null)
+    const publicClient = await connectOfficialClient(service, null, mode)
     const publicTools = await publicClient.listTools()
     await publicClient.close()
     expect(publicTools.tools.map((tool) => tool.name)).toEqual([
@@ -122,7 +122,7 @@ describe('MCP host adapter with the official client', () => {
     })
   })
 
-  it('retains Call identity across a fresh client and reads the terminal structured result', async () => {
+  it.each(clientModes)('retains Call identity across a fresh %s client and reads the terminal structured result', async (mode) => {
     const completed = {
       kind: 'completed' as const,
       callRef,
@@ -208,7 +208,7 @@ describe('MCP host adapter with the official client', () => {
       reconcileCall: vi.fn(),
     }
 
-    const invokeClient = await connectOfficialClient(service)
+    const invokeClient = await connectOfficialClient(service, undefined, mode)
     await invokeClient.listTools()
     const quoted = await invokeClient.callTool({
       name: 'ae_tool_quote',
@@ -235,7 +235,7 @@ describe('MCP host adapter with the official client', () => {
     })
     expect(JSON.stringify(called.content)).not.toContain(callRef)
 
-    const recoveryClient = await connectOfficialClient(service)
+    const recoveryClient = await connectOfficialClient(service, undefined, mode)
     await recoveryClient.listTools()
     const recovered = await recoveryClient.callTool({
       name: 'ae_call_status',

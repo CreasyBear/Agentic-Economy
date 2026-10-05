@@ -14,7 +14,7 @@ describe('backup import guardrail', () => {
       expect(violations.map((violation) => violation.rule)).toEqual(
         expect.arrayContaining(['backup-import', 'forbidden-handshake-import']),
       )
-      expect(violations.filter((violation) => violation.rule === 'forbidden-handshake-import')).toHaveLength(13)
+      expect(violations.filter((violation) => violation.rule === 'forbidden-handshake-import')).toHaveLength(14)
       return
     }
 

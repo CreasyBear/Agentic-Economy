@@ -1,6 +1,6 @@
 {
   "name": "@aecon/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Compiled Agentic Economy Tool discovery, Call, and receipt client.",
   "type": "module",
   "exports": {},

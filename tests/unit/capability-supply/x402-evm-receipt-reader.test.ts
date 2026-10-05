@@ -114,7 +114,7 @@ describe('guarded x402 EVM receipt reader', () => {
     mocks.isPublicHttpTarget.mockClear()
   })
 
-  it('reads the confirmation head after the receipt wait completes', async () => {
+  it('reads mined transaction evidence and the confirmation head after the receipt wait completes', async () => {
     installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
     const respond = mocks.fetch.getMockImplementation()!
     let receiptReturned = false
@@ -125,6 +125,10 @@ describe('guarded x402 EVM receipt reader', () => {
         receiptReturned = true
       }
       const response = await respond(target, init) as Response
+      if (request.method === 'eth_getTransactionByHash' && !receiptReturned) {
+        const body = await response.json() as { result: Record<string, unknown> }
+        return rpcResult({ ...body.result, blockHash: null, blockNumber: null, transactionIndex: null })
+      }
       if (request.method === 'eth_getBlockByNumber' && !receiptReturned) {
         const body = await response.json() as { result: Record<string, unknown> }
         return rpcResult({ ...body.result, number: '0x64' })
@@ -137,6 +141,27 @@ describe('guarded x402 EVM receipt reader', () => {
       transactionHash, payer, nonce, dispatcher: {} as never,
       minimumConfirmations: 12, confirmationTimeoutMs: 1_000,
     })).resolves.toMatchObject({ confirmations: 13n, authorizationState: true })
+  })
+
+  it.each([
+    ['still pending', { blockHash: null, blockNumber: null, transactionIndex: null }],
+    ['in a different block', { blockHash: `0x${'8'.repeat(64)}` }],
+  ])('refuses a transaction that is %s after receipt confirmation', async (_label, transactionFields) => {
+    installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
+    const respond = mocks.fetch.getMockImplementation()!
+    mocks.fetch.mockImplementation(async (target: URL, init: RequestInit) => {
+      const request = JSON.parse(String(init.body)) as { method: string }
+      const response = await respond(target, init) as Response
+      if (request.method !== 'eth_getTransactionByHash') return response
+      const body = await response.json() as { result: Record<string, unknown> }
+      return rpcResult({ ...body.result, ...transactionFields })
+    })
+    await expect(readGuardedX402EvmReceipt({
+      target: new URL('https://rpc.example.test'), aeEnvironment: 'sandbox',
+      network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS,
+      transactionHash, payer, nonce, dispatcher: {} as never,
+      minimumConfirmations: 12, confirmationTimeoutMs: 1_000,
+    })).resolves.toBeUndefined()
   })
 
   it.each([
