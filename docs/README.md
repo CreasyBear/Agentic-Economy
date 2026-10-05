@@ -18,6 +18,7 @@ implemented behavior; a plan, proposal or dated review does not establish a rele
 
 ## Maintained contracts and operations
 
+- [Accounts, Agents and Tool Calls](foundations.md): current setup, access and recovery guide for customers, admins, integrators and Providers.
 - [DESIGN.md](../DESIGN.md): product presentation and interaction principles.
 - [Operating model](operating-model.md): current commercial/alpha boundaries and outstanding qualification.
 - [Agent operating contract](designs/agent-operating-contract.md): the machine-facing control loop.
@@ -40,6 +41,8 @@ implemented behavior; a plan, proposal or dated review does not establish a rele
 [0005](adr/0005-datadog-supported-operational-observability.md) is prepared and
 awaiting direction; configuration and acceptance are not established.
 
+[ADR 0006](adr/0006-mercator-capability-foundations.md) records the Mercator capability
+baseline and a proposed procurement sequence; runtime work awaits direction.
 The [Plan Quotes RFC](designs/2026-10-05-plan-quotes-rfc.md) is a current design-only
 proposal for multi-Tool purchasing. Its D1–D5 decisions and W0 qualification are
 pending; it is distinct from ADR 0004’s Provider-created service packages.

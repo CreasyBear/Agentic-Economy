@@ -23,6 +23,23 @@ prove external Customer traction, paid chat, a joint restore of those purchases
 or indefinite provider availability. Screening remains explicitly deferred under
 the approved alpha policy.
 
+## Mercator capability foundation
+
+Owner: delegated foundation reviewer for preparation; Joel owns runtime direction.
+Reuse [#256](https://github.com/CreasyBear/Agentic-Economy/issues/256). The
+[verified baseline, engineering review and ordered slices](docs/adr/0006-mercator-capability-foundations.md)
+own this proposal; [the foundation guide](docs/foundations.md) describes current
+actors, setup, Tool Calls and recovery. No separate register or paid execution.
+
+State: **prepared; runtime awaiting-direction**. F1 docs/contracts → F2 one
+conventional asynchronous Tool → F3 bounded multi-Tool procurement → F4
+partial/selective results and financial readback → F5 entitled supply and actual
+persona/client acceptance. Each slice retains evidence, ownership, dependencies
+and acceptance in ADR 0006. Existing #196/#185/#187 and ADR 0004 are linked;
+retired engine issues are not reactivated. Literal payment rails, incentives and
+embedded-client parity remain explicit decisions. Next runtime slice is F2 after
+bounded direction; no payments, permissions, secrets or deployment are implied.
+
 ## Datadog workstream
 
 

@@ -39,6 +39,7 @@ graphify-out/
 !/docs/licenses/*.txt
 !/docs/README.md
 !/docs/glossary.md
+!/docs/foundations.md
 !/docs/operating-model.md
 !/docs/production-readiness-plan.md
 !/docs/designs/
@@ -96,6 +97,7 @@ public/downloads/*.tgz
 !/docs/strategy/
 !/docs/strategy/*.md
 !/docs/glossary.md
+!/docs/foundations.md
 !/docs/architecture/
 !/docs/architecture/*.md
 
