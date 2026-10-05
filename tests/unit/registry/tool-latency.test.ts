@@ -8,7 +8,7 @@ import { registryToolsCompareAction, registryToolsDescribeAction } from '@/modul
 import { handleMarketToolDescribeRequest } from '@/routes/api.v1.market-tools.describe'
 import { handleMcpRequest } from '@/lib/server/mcp-api'
 import { TOOL_CRYPTO_TX, TOOL_TIMEZONE } from '../../helpers/tool-search-rerank-fixtures'
-import { readMcpBody } from '../server/mcp-api-harness'
+import { readMcpBody } from '../../helpers/mcp-response'
 
 vi.mock('@/modules/capability-supply/tool-source', () => ({
   readCapabilityToolDetail: vi.fn(), readCapabilityToolSearch: vi.fn(),

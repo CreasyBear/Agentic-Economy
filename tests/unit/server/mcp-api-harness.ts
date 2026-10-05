@@ -1,6 +1,4 @@
-import { parseJsonEventStream } from '@ai-sdk/provider-utils'
 import { afterEach, beforeEach, vi } from 'vitest'
-import { z } from 'zod'
 
 import {
   handleMcpRequest as handleMcpRequestImpl,
@@ -20,10 +18,7 @@ export function handleMcpRouteRequest(
   return handleMcpRouteRequestImpl(...args)
 }
 
-export type JsonRpcBody = {
-  result?: Record<string, unknown>
-  error?: Record<string, unknown>
-}
+export { readMcpBody, type JsonRpcBody } from '../../helpers/mcp-response'
 
 function pinEnv(): void {
   vi.stubEnv('CONVEX_URL', undefined)
@@ -71,23 +66,6 @@ export async function postMcp(
   })
 }
 
-export async function readMcpBody(response: Response): Promise<JsonRpcBody> {
-  const text = await response.text()
-  if (response.headers.get('content-type')?.includes('text/event-stream') === true) {
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(`${text}\n\n`))
-        controller.close()
-      },
-    })
-    for await (const candidate of parseJsonEventStream({ stream, schema: z.unknown() })) {
-      if (!candidate.success) continue
-      return candidate.value as JsonRpcBody
-    }
-    throw new Error('MCP stream did not include a data event.')
-  }
-  return JSON.parse(text) as JsonRpcBody
-}
 
 beforeEach(() => {
   vi.restoreAllMocks()

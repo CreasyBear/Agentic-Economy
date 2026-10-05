@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { handleMcpRequest } from '@/lib/server/mcp-api'
+import { readMcpBody } from '../helpers/mcp-response'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
 import { setPublicDiscoverySourcePortForTests } from '@/modules/discovery/discovery.functions'
@@ -40,7 +41,7 @@ describe('Tool read outage parity', () => {
       },
     }, { accept: 'application/json, text/event-stream' }))
     expect(mcpResponse.status).toBe(200)
-    const mcpBody = await mcpResponse.json() as {
+    const mcpBody = await readMcpBody(mcpResponse) as {
       result?: { isError?: boolean; structuredContent?: Record<string, unknown> }
     }
     expect(mcpBody.result?.isError).toBe(true)

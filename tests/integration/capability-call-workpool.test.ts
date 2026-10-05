@@ -77,6 +77,7 @@ import {
 } from '@/lib/server/call-api'
 import { handleJourneyStatusGet } from '@/lib/server/journey-status-api'
 import { handleMcpRequest } from '@/lib/server/mcp-api'
+import { readMcpBody } from '../helpers/mcp-response'
 import { callAction } from '@/modules/capability-execution/call.actions'
 import { callResultSchema, type CallResult } from '@/modules/capability-execution/call-contracts'
 import { projectCallReceipt } from '@/modules/capability-execution/call-receipt-view'
@@ -1662,7 +1663,7 @@ describe('capability Call Workpool lifecycle', () => {
         resolvePrincipal: async () => buyer.principal,
       })
       expect(mcpResponse.status).toBe(200)
-      const mcpBody = await mcpResponse.json() as {
+      const mcpBody = await readMcpBody(mcpResponse) as {
         result?: { structuredContent?: { result?: unknown } }
       }
       expect(mcpBody.result?.structuredContent?.result).toMatchObject(httpCurrent)
@@ -1917,7 +1918,7 @@ describe('capability Call Workpool lifecycle', () => {
             resolvePrincipal: async () => buyer.principal,
           })
           expect(mcpResponse.status).toBe(200)
-          const mcpBody = await mcpResponse.json() as {
+          const mcpBody = await readMcpBody(mcpResponse) as {
             result?: { structuredContent?: { result?: unknown } }
           }
           expect(mcpBody.result?.structuredContent?.result).toMatchObject(current)
@@ -1984,7 +1985,7 @@ describe('capability Call Workpool lifecycle', () => {
             resolvePrincipal: async () => buyer.principal,
           })
           expect(mcpResponse.status).toBe(200)
-          const mcpBody = await mcpResponse.json() as {
+          const mcpBody = await readMcpBody(mcpResponse) as {
             result?: { structuredContent?: { result?: unknown } }
           }
           expect(mcpBody.result?.structuredContent?.result).toMatchObject(current)
