@@ -1,6 +1,6 @@
 # Deployment map
 
-**Last verified:** 5 October 2026, after PR #359. This is a dated inventory;
+**Last verified:** 5 October 2026, after PR #360. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
 owns acceptance and its limits.
@@ -25,10 +25,10 @@ stack is approved. Resolve provider identities afresh before mutations.
 
 | Surface | Verified source / identity |
 | --- | --- |
-| Production web | Main merge `81124766527c30f0cf3b6ee941a9ad7f2088e163`; Vercel `dpl_3xt4Wjed5sfTMg8gASAVTJE2xUS4` |
+| Production web | `/api/v1/release` reports main merge `2e57694066a335f35cd826c7bf07db1a033632e1` after PR #360 |
 | Production Convex | `cautious-zebra-473`; source `6bd8d7697ba5fbc3917f81c2283af7273dd3dc31`, deployed 13:25:59 UTC |
-| Tested runtime tree | `bf8e246d28121e3753ade6dad12421f6ab10d2b1`; identical runtime source in the web merge |
-| Downloadable CLI | 0.2.1; hosted download and current/legacy MCP verified at 13:30 UTC |
+| Chat/MCP acceptance baseline | PR #359 runtime tree `bf8e246d28121e3753ade6dad12421f6ab10d2b1`; web `81124766527c30f0cf3b6ee941a9ad7f2088e163` and Vercel `dpl_3xt4Wjed5sfTMg8gASAVTJE2xUS4` |
+| CLI distribution | `@agentic-economy/cli` 0.2.1 confirmed in the public npm registry; hosted download and current/legacy MCP separately verified at 13:30 UTC |
 
 [PR #359](https://github.com/CreasyBear/Agentic-Economy/pull/359) is the final
 chat walkthrough release, following [#357](https://github.com/CreasyBear/Agentic-Economy/pull/357)
@@ -39,11 +39,13 @@ The [chat contract](../designs/chat-market-entry.md) preserves its boundaries.
 
 MCP server 2.3.0 accepts protocol 2026-07-28 and the verified legacy client.
 OAuth advertises/emits the canonical authorization-response issuer. The CLI
-package and download are verified; public npm publication is a separate release.
+package and download have scoped acceptance. [PR #360](https://github.com/CreasyBear/Agentic-Economy/pull/360)
+configures the `@agentic-economy/cli` npm scope; registry readback confirms 0.2.1
+and its public tarball. The [CLI guide](../../packages/cli/README.md) owns installation.
 The EVM receipt-ordering repair has regression proof, but no new paid runtime
 measurement establishes faster Calls.
 
-The runtime release passed `npm run check` and `npm run gate`: 9,071 unit and
+The PR #359 runtime release passed `npm run check` and `npm run gate`: 9,071 unit and
 3,039 integration cases, clean types/import boundaries, 31 SEO proofs, 18 browser
 journeys, 18 accessibility cases, CLI packaging and the public build. Existing
 skips/todos do not supply proof. Documentation-only changes after this snapshot

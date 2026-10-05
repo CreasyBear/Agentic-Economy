@@ -43,8 +43,9 @@ and balance are optional reads. Agents do not coordinate treasury, calculate
 foreign exchange, write ledger entries or guess whether payment can be retried.
 
 The production application and backend are deployed. The authenticated CLI has
-completed the recorded 20-payment mainnet acceptance. Public npm publication and
-the separate paid development chat journey remain open; see the deployment map.
+completed the recorded 20-payment mainnet acceptance. The public npm package
+`@agentic-economy/cli` is published at 0.2.1. The separate paid development chat
+journey remains open; see the deployment map.
 
 ## Current stage
 

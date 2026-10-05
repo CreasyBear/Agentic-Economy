@@ -12,7 +12,6 @@ owns shipped source and environments.
 | Production availability | Continue source/readiness observation across evidence expiry; preserve fail-closed RPC/receipt behavior and distinguish unavailable evidence from cash disagreement. |
 | Alpha invitations | [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288): Joel's go/no-go. Production remains Admin-only. |
 | Paid development chat | [#279](https://github.com/CreasyBear/Agentic-Economy/issues/279): real Base Sepolia journey, separate from completed mainnet CLI acceptance. |
-| Public CLI distribution | Downloadable/installed CLI 0.2.1 and production use are verified. Complete the separate public npm publishing release and record its result. |
 | Metering operations | Qualify hosted large-period exports, any historical backfill, automatic monthly schedule activation and financial-evidence archive operation in the actual environment. [Runbook](docs/operations/usage-metering.md). |
 | Full Australian commercial record | Complete explicit Seller, separate Provider obligation, attributed tax facts, document evidence and purchase resolution; preserve [remaining qualification](docs/operating-model.md#qualification-still-required). |
 | Provider-created services | E1–E5 remains [prospective research](IMPLEMENTATION_ROADMAP.md#provider-created-service-supply-and-fiat-purchasing--prospective-extension), with no recruited Provider or paid pilot. Validate the offer and economics before expanding infrastructure. |
@@ -73,7 +72,7 @@ them from the issue; unresolved proof keeps the workstream open.
 ## Completed work and deferred proposals
 
 Consolidated application, Arc, money, metering, founder-console and chat/client
-releases are recorded in the [deployment map](docs/operations/deployments.md).
+releases and public npm CLI 0.2.1 are recorded in the [deployment map](docs/operations/deployments.md).
 Do not repeat their cutovers from an old branch plan. The [archive](docs/archive/README.md)
 retains former queues, reviews and deferred proposals with their original limits.
 Revalidate a deferred proposal against the current product and source before

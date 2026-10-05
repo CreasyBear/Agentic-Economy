@@ -56,7 +56,7 @@ Direct HTTP uses `Authorization: Bearer <Agent access key>`. The purchase scope 
 
 An administrator chooses the appropriate Agent limit and lifetime, reviews connections and revokes compromised access through owner controls. Credential replacement preserves the Agent's identity, budget and history. Current authority still decides whether already accepted work can proceed. A funding balance is capacity, not permission to spend it.
 
-The CLI source and downloadable package have recorded acceptance. Public npm publication is still pending; `npx @aecon/cli` must not be presented as a verified public installation path until that release is confirmed.
+The CLI source and downloadable package have recorded acceptance. The public npm package is `@agentic-economy/cli`; registry readback on 5 October confirms version 0.2.1. Follow the [CLI installation guide](../packages/cli/README.md) for the versioned command and archive verification.
 
 ## Recover without making another purchase
 

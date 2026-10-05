@@ -16,7 +16,7 @@ feed or permission to spend, invite users or activate services.
 | Failure containment | Nine native Formance money scenarios cover paid/unpaid errors, invalid output, timeouts, drift, replay, insufficient credit and concurrent limits | Provider/custody/RPC faults in this matrix are controlled fixtures |
 | Owner payment controls | Fresh MFA pause/refusal, preserved replay while paused, and audited resume to the original Admin audience | No audience expansion; current readiness still governs admission |
 | Recovery and records | Scoped real RDS and Convex/storage restores; retained financial evidence with exact-version archive/readback; founder content review and useful-result feedback | No joint restore of the later 20 purchases; export is an operator procedure, not continuous automation |
-| Discovery and clients | 5 October guest/signed-in search, detail and comparison; current and legacy MCP negotiation; downloadable CLI 0.2.1 | No new paid performance measurement or claim of public npm availability |
+| Discovery and clients | 5 October guest/signed-in search, detail and comparison; current and legacy MCP negotiation; downloadable CLI and published `@agentic-economy/cli` 0.2.1 | No new paid performance measurement; registry publication is separate from the recorded paid client acceptance |
 
 The full [execution journal](archive/2026-10-05/production-readiness-plan.md)
 preserves contracts, exact revisions, failure drills and the progression from
@@ -117,7 +117,7 @@ scope before a consequential action.
 - [#279](https://github.com/CreasyBear/Agentic-Economy/issues/279): the separate real
   Base Sepolia paid development chat journey.
 - Sustained source availability and measured paid latency after the receipt fix.
-- Public CLI publication, hosted metering capacity, any historical backfill,
+- Hosted metering capacity, any historical backfill,
   automatic report scheduling and financial-evidence export operations.
 - The full Australian principal-reseller record and the remaining adviser,
   processor and open-beta qualification in the [operating model](operating-model.md).

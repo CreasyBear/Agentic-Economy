@@ -38,7 +38,7 @@ its dated progress reports does not cancel unfinished requirements.
 | 6 — Onboarding and language | Agent/Provider setup, examples, canonical terms and contextual help | Continue journey acceptance. No required standalone identity/balance inspection before a viable Quote. |
 | 7 — Trust, legal and data governance | Privacy, terms, trust centre, Account/data lifecycle and attributable approval evidence | Approved alpha policy has explicit limits. Open-beta and full commercial qualification remain separate; a configured provider or passing test is not adviser approval. |
 | 8 — Support and operations | Support, incidents, notifications, monitoring and operator recovery | Existing readiness, treasury and alert routes remain authoritative. Sustained availability, workload activation and proposed Datadog coverage need their own evidence. |
-| 9 — Developer and integration surfaces | Discovery, APIs, MCP, CLI, integration documentation and diagnostics | Hosted current/legacy MCP and downloadable CLI 0.2.1 are verified. Public npm distribution has a separate release record; preserve recovery and authority parity. |
+| 9 — Developer and integration surfaces | Discovery, APIs, MCP, CLI, integration documentation and diagnostics | Hosted current/legacy MCP and downloadable CLI 0.2.1 are verified. Public npm package `@agentic-economy/cli` 0.2.1 is published; preserve recovery and authority parity. |
 | 10 — Experience quality | Responsive behavior, accessibility, performance and visual consistency | Continuous requirement across packages. Browser/a11y gates support the proof; they do not establish paid delivery or service-level performance. |
 
 ## Delivery rules
