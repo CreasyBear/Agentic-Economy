@@ -195,8 +195,12 @@ export async function streamAnonymousChatResponse(
       const second = candidates.find(candidate => candidate.toolRef !== first?.toolRef)
       const source = (candidate: ChatCandidate) => 'access' in candidate && candidate.access === 'external_listing'
         ? 'External listing; not callable through AE' : 'Admitted Tool; check current terms before use'
+      // Requires: completed results, including JSON strings retained for schema keys.
+      // Ensures: absent narration preserves facts already shown in a Tool card.
+      // Invariant: no purchase authority or result is inferred from narration.
+      // On violation: report no result only when no completed facts can be read.
       const fallback = first === undefined
-        ? CHAT_NO_RESULT_ANSWER
+        ? completedChatFacts(steps) ?? CHAT_NO_RESULT_ANSWER
         : second === undefined
           ? `**${first.title} may fit this request.**\n\n${'summary' in first ? first.summary : first.description}\n\n${source(first)}.\n\nNext: Open its details to check the exact inputs and current terms.`
           : `**${first.title} and ${second.title} are worth inspecting.**\n\nNext: Select Compare on their cards to inspect the reported facts.`

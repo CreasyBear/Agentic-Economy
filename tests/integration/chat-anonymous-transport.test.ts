@@ -86,14 +86,18 @@ const admitHttp = makeFunctionReference<'mutation', {
 }, Readonly<{ ok: boolean; retryAfter?: number }>>('rateLimit:admitHttp')
 
 describe('anonymous operation chat transport', () => {
-  it('reads the named Tool on a follow-up instead of replacing it with another search', async () => {
+  it.each([
+    { narration: '**Timezone Converter** converts between timezones. Next: review its inputs.', expected: 'converts between timezones' },
+    { narration: ' ', expected: 'Tools to inspect' },
+  ])('preserves a completed follow-up lookup when narration is "$narration"', async ({ narration, expected }) => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const { toolRef } = await admitDiscoveredToolFixture(backend)
     const model = mockModel({ contentSteps: [
       [{ type: 'tool-call', toolCallId: 'follow-up-detail', toolName: 'registry_tools_describe',
         input: JSON.stringify({ toolRef }) }],
-      [{ type: 'text', text: '**Timezone Converter** converts between timezones. Next: review its inputs.' }],
+      [{ type: 'text', text: narration }],
+      [{ type: 'text', text: narration }],
     ] })
     const calls = vi.spyOn(model, 'doStream')
     const body = await backend.action(async ctx => {
@@ -109,6 +113,15 @@ describe('anonymous operation chat transport', () => {
     ]))
     expect(body).toContain('follow-up-detail')
     expect(body).toContain('Timezone')
+    const chunks = body.split('\n').filter(line => line.startsWith('data: {'))
+      .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
+    const detail = chunks.find(chunk => chunk.type === 'tool-output-available')
+    expect(detail).toMatchObject({ type: 'tool-output-available', output: expect.any(String) })
+    const answer = chunks.filter((chunk): chunk is Extract<UIMessageChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
+      .map(chunk => chunk.delta).join('')
+    expect(answer).toContain(expected)
+    expect(answer).not.toContain('Search could not be completed')
+    expect(answer).not.toContain('Next page')
     expect(body).not.toContain('immediate-search')
     expect(body).not.toContain('tool_quote')
     expect(body).not.toContain('tool_call')

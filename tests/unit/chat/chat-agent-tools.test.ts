@@ -202,12 +202,13 @@ describe('Tool chat Agent tools', () => {
     const scoped = { kind: 'scoped', next: [{ action: 'next-page', args: { query: 'timezone', cursor: 'x402:cursor-2' } }] }
     expect(chatNoMatchSearchCount(step(scoped))).toBe(0)
     expect(prepareChatToolStep({ stepNumber: 1, steps: step(scoped) }).toolChoice).toBe('auto')
-    expect(chatSearchResolution(step(scoped))).toContain('Next page below')
+    expect(chatSearchResolution(step(scoped))).toContain('No match for that yet')
+    expect(chatSearchResolution(step(scoped))).not.toMatch(/next page|closest matches/iu)
     expect(chatSearchResolution(step(scoped))).not.toContain('x402:cursor-2')
-    const completeExternal = { kind: 'scoped', assessed: { coverage: 'complete' },
+    const completeExternal = { kind: 'scoped', results: [{ title: 'External Timezone' }], assessed: { coverage: 'complete' },
       next: [{ action: 'broaden', args: { query: 'timezone' } }] }
     const externalResolution = chatSearchResolution(step(completeExternal))
-    expect(externalResolution).toContain('closest matches')
+    expect(externalResolution).toContain('need inspection before I can recommend one')
     expect(externalResolution).not.toContain('Only part')
     expect(externalResolution).not.toContain('Next page')
     expect(chatSearchResolution(step({ kind: 'unavailable', next: [{ action: 'retry', args: { query: 'timezone' } }] }))).toContain('retry “timezone”')

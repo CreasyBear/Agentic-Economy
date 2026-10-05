@@ -44,14 +44,14 @@ fresh detail reads remain authoritative, and persisted display prose stays clean
 Write one explanation after the cards, including when the model falls back to
 catalogue facts. Signed-in history already retains its Tool context. All final
 answer instructions must agree that cards own the catalogue and comparison table.
-Next page uses the admitted continuation directly through the existing search
-tool, with no model tool-call generation. Guest admission and saved-turn ownership
-still validate their respective cursors; output bounds and next-cursor signing
-remain in one implementation. The cost is one bounded adapter in the existing
-search file and one output branch per transport. Keep it: it removes an observed
-model failure from a deterministic button without duplicating catalogue logic.
-Source failures retain the prior page and fail through existing turn recovery;
-aborted reads cannot save a completed new page.
+Joel's final launch direction removes pagination from chat. A reply must provide
+a supported recommendation, explain that the returned evidence is insufficient,
+or ask for a useful refinement. Existing and legacy cursors render no chat action;
+empty scoped results do not claim to be matches or a complete market census.
+Broader catalogue browsing stays in the Market. Public API pagination and saved
+continuation ownership remain compatible; the launch change only removes the
+chat affordance and its generated instructions. Recovery and purchase fences
+remain unchanged. This subtracts a browsing decision without adding structure.
 
 **Cost and decision.** Reuse Arc cards, existing projections, Convex Agent and the
 current retry fence. No new component framework, storage table or payment path.

@@ -51,6 +51,7 @@ describe('immediate catalogue suitability', () => {
     expect(explanationUsable('**Timezone Converter** can convert New York time to Tokyo time. Next: Open its card.', page)).toBe(true)
     expect(explanationUsable(`Use operation:v1:${'b'.repeat(64)} for this conversion today.`, page)).toBe(false)
     expect(explanationUsable("I couldn't finish the answer. Edit your question to try again.", page)).toBe(false)
+    expect(explanationUsable('**Timezone Converter** fits this request. Next: use Next page to see more.', page)).toBe(false)
   })
 
   it('accepts only canonical, bounded Run sentences and preserves their JSON bytes', () => {

@@ -28,6 +28,9 @@ function safeHttpUrl(value: string | undefined): string | undefined {
 }
 
 export function ChatAssistantText({ text }: ChatAssistantTextProps) {
+  const visibleText = text
+    .replace(/\s*Use Next page below to continue this search\./giu, '')
+    .replace(/(?:^|\n)Next:\s*\[cursor hidden\]\s*(?=\n|$)/gu, '')
   return (
     <div className="arc-market arc-chat arc-transcript-prose">
       <Markdown
@@ -47,7 +50,7 @@ export function ChatAssistantText({ text }: ChatAssistantTextProps) {
           pre: ({ children }) => <ChatCodeFence code={fenceCode(children)}>{children}</ChatCodeFence>,
         }}
       >
-        {text}
+        {visibleText}
       </Markdown>
     </div>
   )
