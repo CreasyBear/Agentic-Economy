@@ -7,7 +7,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { Button } from '@/components/arc/button/button'
 import arcButton from '@/components/arc/button/button.module.css'
 
-import type { AeAgentAccessHomeProps } from './agent-access-home.contracts'
+import type { AeAgentAccessHomeProps, AeAgentAccessHomeView } from './agent-access-home.contracts'
 import { HomeAddAnotherAgent } from './components/HomeAddAnotherAgent'
 import { HomeDirectoryPagination } from './components/HomeDirectoryPagination'
 import { HomeDirectoryRecoveryAlert } from './components/HomeDirectoryRecoveryAlert'
@@ -36,13 +36,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
     vm.onSetupStep(step)
   }
   const chooseConnection = () => moveSetup('oauth')
-  const hasRequest = search.grantRef !== undefined || search.userCode !== undefined || search.requestInvalid === true
-  const callBlocked = search.callInvalid === true
-  const requestBlocked = callBlocked || search.requestInvalid === true || vm.onboarding?.kind === 'refused' && vm.onboarding.reason !== 'not_found'
-  const requestAgent = vm.onboarding?.kind === 'request' ? vm.onboarding.principalRef : search.caller
-  const requestFinished = vm.onboarding?.kind === 'request' && (vm.onboarding.phase === 'expired' || vm.onboarding.phase === 'denied')
-  const showProgress = !requestBlocked && (!hasRequest || requestAgent !== undefined) && (!requestFinished || 'call' in vm.firstUse)
-  const showInstall = !callBlocked && (connectMode !== 'closed' || (!hasRequest && directory.items.length === 0 && search.caller === undefined))
+  const { hasRequest, callBlocked, requestBlocked, requestAgent, showProgress, showInstall, showAddAnother } = onboardingLanes(vm, connectMode)
 
   return (
     <AeOperatorPage
@@ -138,11 +132,35 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
             onLoadMore={vm.loadMore}
           />
         )}
-        {callBlocked || directory.items.length === 0 || showInstall ? null : (
+        {showAddAnother ? (
           <HomeAddAnotherAgent showSetup={false} toggleLabel="Connect an Agent" onToggle={chooseConnection} installPanel={null} />
-        )}
+        ) : null}
         <div className="arc-agent-home-actions"><Link to="/owner/settings/agent-keys" className="arc-agent-install-help-link">Manage Agent keys</Link></div>
       </div>
     </AeOperatorPage>
   )
+}
+
+function onboardingLanes(
+  { search, onboarding, directory, firstUse }: Pick<AeAgentAccessHomeView, 'search' | 'onboarding' | 'directory' | 'firstUse'>,
+  connectMode: AgentConnectionStep,
+) {
+  // Requires: a typed request phase and the current first-use projection.
+  // Ensures: an in-flight request owns progress/actions unless its exact Call is observed.
+  // Invariant: request access, authentication, Call delivery and funding stay distinct.
+  // On violation: existing invalid/refused guards and same-Call recovery stay authoritative.
+  const hasRequest = search.grantRef !== undefined || search.userCode !== undefined || search.requestInvalid === true
+  const callBlocked = search.callInvalid === true
+  const requestBlocked = callBlocked || search.requestInvalid === true || onboarding?.kind === 'refused' && onboarding.reason !== 'not_found'
+  const requestAgent = onboarding?.kind === 'request' ? onboarding.principalRef : search.caller
+  const requestFinished = onboarding?.kind === 'request' && (onboarding.phase === 'expired' || onboarding.phase === 'denied')
+  const requestInFlight = onboarding?.kind === 'request'
+    && (onboarding.phase === 'pending' || onboarding.phase === 'issuing'
+      || onboarding.phase === 'approved' || onboarding.phase === 'exchanging')
+  const showProgress = !requestBlocked && (!hasRequest || requestAgent !== undefined)
+    && (!requestFinished || 'call' in firstUse) && (!requestInFlight || 'call' in firstUse)
+  const showInstall = !callBlocked && !requestInFlight
+    && (connectMode !== 'closed' || (!hasRequest && directory.items.length === 0 && search.caller === undefined))
+  const showAddAnother = !callBlocked && !requestInFlight && directory.items.length !== 0 && !showInstall
+  return { hasRequest, callBlocked, requestBlocked, requestAgent, showProgress, showInstall, showAddAnother }
 }

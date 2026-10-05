@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
+import type { AgentOnboardingRequest } from '@/modules/agent-access/public'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const routeHarness = vi.hoisted(() => ({
@@ -14,7 +15,12 @@ const routeHarness = vi.hoisted(() => ({
   navigate: vi.fn(),
   consoleProps: undefined as Record<string, unknown> | undefined,
   installProps: undefined as Record<string, unknown> | undefined,
-  loaderData: undefined as unknown as Readonly<{ canonicalBaseUrl: string; directory: AgentDirectoryProjection }>,
+  loaderData: undefined as unknown as Readonly<{
+    canonicalBaseUrl: string
+    directory: AgentDirectoryProjection
+    onboarding?: AgentOnboardingRequest
+    directoryUnavailable?: boolean
+  }>,
   serverFns: new Map<unknown, (...args: never[]) => Promise<unknown>>(),
   readRequest: vi.fn(), readDirectory: vi.fn(),
   readCanonicalBaseUrl: vi.fn(),
@@ -147,6 +153,21 @@ const caller: AgentCredentialSource = {
   dataState: 'source',
 }
 const directory = projectAgentDirectory([caller], [canonicalAgentRecord([caller])])
+
+function onboardingRequest(phase: Extract<AgentOnboardingRequest, { kind: 'request' }>['phase']) {
+  return {
+    kind: 'request',
+    grantRef: 'grant:codex',
+    revision: 2,
+    clientName: 'Codex',
+    flow: 'authorization_code',
+    environment: 'sandbox',
+    phase,
+    createdAt: 1,
+    expiresAt: 999,
+    principalRef: PRINCIPAL_ID,
+  } satisfies Extract<AgentOnboardingRequest, { kind: 'request' }>
+}
 
 function renderRoute() {
   const Component = AgentAccessRoute.options.component
@@ -549,6 +570,85 @@ describe('agent-access caller route continuation', () => {
     expect(screen.queryByRole('heading', { name: 'Access approved; waiting for your Agent' })).toBeNull()
     expect(routeHarness.readRequest).toHaveBeenCalledWith({ data: { grantRef: 'grant:codex' } })
   })
+
+  it.each([
+    { phase: 'pending', title: 'Your Agent is asking for access', setup: 'oauth' },
+    { phase: 'issuing', title: 'Preparing the approved access' },
+    { phase: 'approved', title: 'Access approved; waiting for your Agent' },
+    { phase: 'exchanging', title: 'Your Agent is collecting its access' },
+  ] as const)('gives the $phase request the only progress and setup lane', async ({ phase, title, setup }) => {
+    const request = onboardingRequest(phase)
+    routeHarness.search = { grantRef: request.grantRef, ...(setup === undefined ? {} : { setup }) }
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory, onboarding: request, directoryUnavailable: false }
+    routeHarness.readRequest.mockResolvedValue(request)
+    installServerFns()
+
+    renderRoute()
+
+    expect(await screen.findByRole('heading', { name: title })).toBeTruthy()
+    expect(screen.getAllByRole('heading')).toHaveLength(1)
+    expect(screen.queryByTestId('agent-install')).toBeNull()
+    expect(routeHarness.installProps).toBeUndefined()
+    expect(screen.queryByRole('region', { name: 'Add another Agent' })).toBeNull()
+    if (phase === 'pending') expect(screen.getByRole('link', { name: 'Review access request' })).toBeTruthy()
+  })
+
+  it('hands first-use progress back to the Agent after access exchange', async () => {
+    const request = onboardingRequest('exchanged')
+    routeHarness.search = { grantRef: request.grantRef }
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory, onboarding: request, directoryUnavailable: false }
+    routeHarness.readRequest.mockResolvedValue(request)
+    installServerFns()
+
+    renderRoute()
+
+    expect(await screen.findByRole('heading', { name: 'Access returned to your Agent' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Explore Tools with your Agent' })).toBeTruthy()
+  })
+
+  it('keeps the exact original Call recovery action beside an in-flight request', async () => {
+    const request = onboardingRequest('exchanging')
+    const callRef = 'call:request-original'
+    const canonical = canonicalAgentRecord([caller])
+    const originalCall = {
+      callRef,
+      credentialRef: KEY_ID,
+      toolRef: TOOL_REF,
+      createdAt: 1,
+      updatedAt: 2,
+      toolLabel: 'Research',
+      providerRef: 'provider:route',
+      state: 'outcome_unknown' as const,
+      deliveryState: 'unknown' as const,
+      paymentState: 'unknown' as const,
+    }
+    const directoryWithRecovery = projectAgentDirectory([caller], [canonical], [], [{
+      principalRef: PRINCIPAL_ID,
+      dataState: 'source',
+      activityIsDone: true,
+      activity: [originalCall],
+    }])
+    routeHarness.search = { grantRef: request.grantRef, callRef }
+    routeHarness.loaderData = {
+      canonicalBaseUrl: 'https://market.example',
+      directory: directoryWithRecovery,
+      onboarding: request,
+      directoryUnavailable: false,
+    }
+    routeHarness.readRequest.mockResolvedValue(request)
+    installServerFns(async () => directoryWithRecovery)
+
+    renderRoute()
+
+    expect(await screen.findByRole('heading', { name: 'Your Agent is collecting its access' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Resolve the existing Call' })).toBeTruthy()
+    expect(screen.getByText('Needs recovery')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Check existing Call' }).getAttribute('href'))
+      .toBe(`/calls/${encodeURIComponent(callRef)}`)
+    expect(screen.queryByTestId('agent-install')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Add another Agent' })).toBeNull()
+  })
+
   it('rejects ambiguous or malformed progress locators without selecting another attempt', () => {
     expect(validateAgentAccessSearch({ grantRef: 'grant:one', userCode: [] })).toEqual({ requestInvalid: true })
     expect(validateAgentAccessSearch({ grantRef: '   ' })).toEqual({ requestInvalid: true })

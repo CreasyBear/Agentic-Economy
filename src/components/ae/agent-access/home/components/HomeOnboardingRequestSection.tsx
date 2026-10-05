@@ -87,7 +87,10 @@ function requestSectionView(request: AgentOnboardingRequest | undefined, search:
   const reviewSearch = request?.kind === 'request' && request.phase === 'pending'
     ? { grant_ref: request.grantRef, ...(search.state === undefined ? {} : { state: search.state }) }
     : undefined
-  const progress = phaseState === undefined || search.requestInvalid ? undefined : {
+  // A recorded exchange ends this request's milestones; authentication and
+  // existing Call progress remain separate observations in the first-use lane.
+  // Keep exact request facts/checking and all invalid, denial and expiry states.
+  const progress = phaseState === undefined || phase === 'exchanged' || search.requestInvalid ? undefined : {
     current: phaseState.current,
     steps: [
       { id: 'review-access', label: 'Review access', status: phaseState.statuses[0], ...(phaseState.error === undefined ? {} : { error: phaseState.error }) },

@@ -460,7 +460,7 @@ describe('owner credit target', () => {
     expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
   })
 
-  it('keeps the native transaction identity without inventing a Call for unattributed spend', () => {
+  it('keeps compact scan rows and reveals the exact unattributed transaction in an Arc drawer', async () => {
     render(<AeOwnerCredit
       accountBalance={accountBalance}
       accountHistory={{
@@ -484,13 +484,24 @@ describe('owner credit target', () => {
 
     expect(screen.getByText('Call purchase')).toBeTruthy()
     expect(screen.getByText('−A$0.01')).toBeTruthy()
-    fireEvent.click(screen.getByText('Transaction details'))
-    expect(screen.getByText(/Transaction ID:/).parentElement?.textContent).toContain('42')
-    expect(screen.getByText(/Reference:/).parentElement?.textContent).toContain('transaction:42')
-    expect(screen.queryByRole('link', { name: /Call receipt/u })).toBeNull()
+    const table = screen.getByRole('table', { name: 'Booked Account transactions' })
+    expect(table.querySelector('details')).toBeNull()
+    expect(within(table).queryByText('transaction:42')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    const open = screen.getByRole('button', { name: 'View Call purchase transaction 42' })
+    fireEvent.click(open)
+    const details = await screen.findByRole('dialog', { name: 'Account transaction' })
+    expect(within(details).getByText('Transaction ID').parentElement?.textContent).toContain('42')
+    expect(within(details).getByText('Reference').parentElement?.textContent).toContain('transaction:42')
+    expect(within(details).getByText(`sha256:${'a'.repeat(64)}`)).toBeTruthy()
+    expect(within(details).getByText('−A$0.01')).toBeTruthy()
+    expect(within(details).queryByRole('link', { name: /Call receipt/u })).toBeNull()
+    fireEvent.click(within(details).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'View Call purchase transaction 42' })))
   })
 
-  it('links only an attributed Call purchase to its receipt, not other Account movements', () => {
+  it('reveals only the selected record and links attributed Calls to their native receipts', async () => {
     const entry = {
       transactionId: '43', transactionRef: 'transaction:43',
       occurredAt: 1_788_119_000_000, recordedAt: 1_788_120_000_000,
@@ -509,20 +520,59 @@ describe('owner credit target', () => {
       ] }}
     />)
     openLedger()
-    const receiptLinks = screen.getAllByRole('link', { name: /View Call receipt/u })
+    expect(screen.queryByRole('link', { name: /View Call receipt/u })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'View Call purchase transaction 43' }))
+    let details = await screen.findByRole('dialog', { name: 'Account transaction' })
+    const receiptLinks = within(details).getAllByRole('link', { name: /View Call receipt/u })
     expect(receiptLinks).toHaveLength(1)
     expect(receiptLinks[0]?.getAttribute('href')).toBe('/calls/call%3Aknown')
-    for (const details of screen.getAllByText('Transaction details')) fireEvent.click(details)
-    expect(screen.getAllByRole('link', { name: /View Call receipt/u })).toHaveLength(1)
-    expect(screen.getByText('call:known').closest('a')).toBeNull()
-    expect(screen.getByText('Funding')).toBeTruthy()
-    expect(screen.getByText('Funding reversal')).toBeTruthy()
-    expect(screen.getByText('Accounting document')).toBeTruthy()
-    expect(screen.getByText('Not attributed')).toBeTruthy()
+    expect(within(details).getByText('call:known').closest('a')).toBeNull()
+    expect(within(details).queryByText('transaction:44')).toBeNull()
+    fireEvent.click(within(details).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    for (const [label, id, source] of [
+      ['Credit added', '44', 'Funding'],
+      ['Credit reversed', '45', 'Funding reversal'],
+      ['Document adjustment', '46', 'Accounting document'],
+      ['Account movement', '47', 'Not attributed'],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name: `View ${label} transaction ${id}` }))
+      details = await screen.findByRole('dialog', { name: 'Account transaction' })
+      expect(within(details).getByText(source)).toBeTruthy()
+      expect(within(details).queryByRole('link', { name: /View Call receipt/u })).toBeNull()
+      if (id === '44') expect(within(details).getByRole('link', { name: /View funding receipt/u }).getAttribute('href')).toBe('/owner/settings/receipts#funding-receipt-call%3Aknown')
+      fireEvent.click(within(details).getByRole('button', { name: 'Close' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    }
     expect(screen.getByText('Credit added')).toBeTruthy()
     expect(screen.getByText('Credit reversed')).toBeTruthy()
     expect(screen.getByText('Document adjustment')).toBeTruthy()
     expect(screen.getByText('Account movement')).toBeTruthy()
+  })
+
+  it('opens the exact transaction after sorting and filtering the Arc scan table', async () => {
+    const entry = {
+      occurredAt: 1_788_119_000_000, recordedAt: 1_788_120_000_000,
+      kind: 'funding' as const, accountEffect: { currency: 'AUD' as const, units: '3000000', exponent: 6 as const },
+      documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+    }
+    render(<AeOwnerCredit accountBalance={accountBalance} accountHistory={{ ...emptyAccountHistory, entries: [
+      { ...entry, transactionId: '44', transactionRef: 'transaction:44' },
+      { ...entry, transactionId: '42', transactionRef: 'transaction:42', kind: 'call_spend', accountEffect: { ...entry.accountEffect, units: '-1000000' } },
+      { ...entry, transactionId: '43', transactionRef: 'transaction:43', accountEffect: { ...entry.accountEffect, units: '2000000' } },
+    ] }} />)
+    openLedger()
+    const table = screen.getByRole('table', { name: 'Booked Account transactions' })
+    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Balance effect' }))
+    expect(within(table).getAllByRole('button', { name: /^View .+ transaction/u }).map(button => button.getAttribute('data-ae-row-action-id'))).toEqual(['42', '43', '44'])
+    fireEvent.change(screen.getByPlaceholderText('Filter Account history…'), { target: { value: 'Credit added' } })
+    expect(within(table).getAllByRole('button', { name: /^View .+ transaction/u }).map(button => button.getAttribute('data-ae-row-action-id'))).toEqual(['43', '44'])
+    fireEvent.click(screen.getByRole('button', { name: 'View Credit added transaction 43' }))
+    const details = await screen.findByRole('dialog', { name: 'Account transaction' })
+    expect(within(details).getByText('transaction:43')).toBeTruthy()
+    expect(within(details).getByText('+A$2.00')).toBeTruthy()
+    expect(within(details).queryByText('transaction:42')).toBeNull()
+    expect(within(details).queryByText('transaction:44')).toBeNull()
   })
 
   it('keeps financial documents and owned reconciliation evidence on the Account surface', async () => {
@@ -797,12 +847,21 @@ describe('owner credit target', () => {
     }))
     const { rerender } = render(<AeOwnerCredit
       accountBalance={accountBalance}
-      accountHistory={{ ...emptyAccountHistory, snapshotAt: 1, continueCursor: 'cursor:old', isDone: false }}
+      accountHistory={{ ...emptyAccountHistory, snapshotAt: 1, continueCursor: 'cursor:old', isDone: false,
+        entries: [{
+          transactionId: '7', transactionRef: 'transaction:old', occurredAt: 7, recordedAt: 7,
+          kind: 'funding', accountEffect: { currency: 'AUD', units: '1000000', exponent: 6 },
+          documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+        }],
+      }}
       accountHistoryPort={{ read }}
     />)
     openLedger()
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(read).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'View Credit added transaction 7' }))
+    const details = await screen.findByRole('dialog', { name: 'Account transaction' })
+    expect(within(details).getByText('transaction:old')).toBeTruthy()
 
     rerender(<AeOwnerCredit
       accountBalance={accountBalance}
@@ -828,6 +887,8 @@ describe('owner credit target', () => {
     })
 
     await waitFor(() => expect(screen.getByText('Call purchase')).toBeTruthy())
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByText('transaction:old')).toBeNull()
     expect(screen.queryByText('Credit added')).toBeNull()
   })
 

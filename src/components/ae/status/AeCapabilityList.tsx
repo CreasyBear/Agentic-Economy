@@ -21,17 +21,26 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
       {
         id: 'name',
         accessorFn: (item) => item.name,
+        meta: { label: 'Tool', truncate: true },
         header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
-        cell: ({ row }) => (
-          <div className="grid min-w-0 gap-2">
-            <span className="font-medium">{row.original.name}</span>
-            <span className="break-words text-sm text-muted-foreground">{row.original.summary}</span>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const { name, summary } = row.original
+          const fullText = summary.length === 0 ? name : `${name} · ${summary}`
+
+          return (
+            <span title={fullText}>
+              <span className="font-medium">{name}</span>
+              {summary.length === 0 ? null : (
+                <span className="text-sm text-muted-foreground"> · {summary}</span>
+              )}
+            </span>
+          )
+        },
       },
       {
         id: 'access',
         accessorFn: (item) => item.accessPaths.length,
+        meta: { label: 'Access' },
         header: 'Access',
         cell: ({ row }) =>
           row.original.accessPaths.length === 0 ? (
@@ -64,6 +73,10 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
     )
   }
 
+  // Requires supplied published records and stable offering references.
+  // Ensures name/summary filtering and exact native record destinations.
+  // Sorting/filtering never creates admission, access authority or a request.
+  // Empty/no-match states retain the existing Add Tool and Clear filter actions.
   return (
     <AeRecordTable
       columns={columns}
@@ -72,6 +85,11 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
       countLabel="Tools"
       filterPlaceholder="Filter Tools…"
       hideFilter={catalog.offerings.length <= 1}
+      globalFilterFn={(row, _columnId, query) => {
+        const needle = String(query ?? '').trim().toLocaleLowerCase()
+        return row.original.name.toLocaleLowerCase().includes(needle)
+          || row.original.summary.toLocaleLowerCase().includes(needle)
+      }}
       getRowId={(item) => item.offeringRef}
       rowAction={{
         kind: 'link',
