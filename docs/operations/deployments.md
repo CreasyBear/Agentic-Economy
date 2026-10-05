@@ -25,6 +25,24 @@ contracts needs the matching backend release and verification.
 
 ## Latest production acceptance — 4 October 2026
 
+Frontend credit-table and Agent onboarding update verified on **5 October 2026 Perth**: [PR #348](https://github.com/CreasyBear/Agentic-Economy/pull/348)
+is live on READY deployment `dpl_AhCcsubFqsoCiC9AxCrPmLpziTjj` in project
+`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The alias and release endpoint confirm
+main `3c636022aa8c356f6a3b5a77c0f81a509eb3ec1e`, whose tree equals the gated source.
+Account history uses compact Arc scan cells and exact-record Drawer details;
+published Tool summary search and the request-to-first-use handoff improve without
+changing ledger, authority or purchase effects. Check/full gate pass: 8646 unit,
+2892 integration, 16 browser and 18 accessibility cases plus type/import/SEO/build/CLI
+checks; existing skips/TODOs remain. The first integration run timed out in four
+cases; 63 affected cases and the unchanged full rerun then passed, with no timeout
+or configuration changes. At 01:21:56 UTC health/readiness are HTTP 200,
+config/Convex/payments ready, catalogue stale, quoting ready and sellable true.
+The pre-release payment-readiness failure is not attributed to this frontend change.
+No backend, identity or financial configuration deployment or native OAuth/transaction
+acceptance is established. Previous READY `dpl_9wkaceEh9GKEGdDtZyN8h2sRbZ8Q`
+is the rollback boundary. Exact source, preservation and test evidence are in the
+[Arc protocol](../designs/arc-ui-refactor/protocol.md).
+
 Frontend marketplace update verified on **5 October 2026 Perth**: [PR #347](https://github.com/CreasyBear/Agentic-Economy/pull/347)
 is live on READY deployment `dpl_9wkaceEh9GKEGdDtZyN8h2sRbZ8Q` in project
 `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
