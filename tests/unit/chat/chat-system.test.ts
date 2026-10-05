@@ -13,6 +13,7 @@ import {
   projectAnonymousTranscript,
 } from '@/components/ae/chat/presentation'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
+import { toTransportMessages } from '@/components/ae/chat/chat-session/anonymous-session'
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'f'.repeat(64)}`
@@ -79,6 +80,26 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
+  it('retains public card identities for follow-up requests without exposing them in saved prose', () => {
+    const messages = [{ id: 'search', role: 'assistant' as const, parts: [
+      { type: 'text', text: 'Review the inputs below.' },
+      { type: 'tool-registry_tools_search', state: 'output-available', output: {
+        kind: 'match', results: [{ toolRef, title: 'Receipt lookup', summary: 'Receipt facts' }],
+      } },
+      { type: 'reasoning', text: 'PRIVATE_REASONING' },
+      { type: 'file', url: 'https://private.example/file' },
+    ] }]
+    expect(projectAnonymousTranscript(messages)).toEqual([
+      { role: 'assistant', content: 'Review the inputs below.' },
+    ])
+    const transport = projectAnonymousTranscript(messages, true)
+    expect(transport[0]?.content).toContain(JSON.stringify([{ title: 'Receipt lookup', toolRef }]))
+    expect(JSON.stringify(transport)).not.toMatch(/PRIVATE_REASONING|private\.example|Receipt facts/)
+    expect(toTransportMessages(messages)[0]?.parts).toEqual([
+      { type: 'text', text: transport[0]?.content },
+    ])
+  })
+
   it('withholds streamed model control markup while retaining user text and real cards', () => {
     const text = '<｜DSML｜tool_calls><｜DSML｜invoke name="registry_tools_search">'
     const turns = projectTranscriptTurns([

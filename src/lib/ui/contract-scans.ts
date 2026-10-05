@@ -400,17 +400,12 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
       violation.excerpt,
     );
   }
-  if (violation.file === "src/lib/mcp-protocol.ts") {
-    return /from\s+['"]@modelcontextprotocol\/sdk\/types\.js['"]/.test(
-      violation.excerpt,
-    );
-  }
   if (violation.file === "src/modules/money/internal/exact-amount.ts") {
     return /from\s+['"]@x402\/core\/utils['"]/.test(violation.excerpt);
   }
-  // T6's adopted MCP host owns the protocol SDK construction at this exact server seam.
+  // The MCP host owns official server construction at this exact adapter seam.
   return (
     violation.file === "src/lib/server/mcp-api.ts" &&
-    /from\s+['"]@modelcontextprotocol\/sdk\/[^'"]+['"]/.test(violation.excerpt)
+    /from\s+['"]@modelcontextprotocol\/server['"]/.test(violation.excerpt)
   );
 }

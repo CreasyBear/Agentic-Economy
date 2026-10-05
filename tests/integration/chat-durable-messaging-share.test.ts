@@ -595,8 +595,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       searchTurn: { turnRef: second.turnRef, threadId: second.threadId, promptMessageId: second.promptMessageId },
       continuation,
     }, model))
-    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'tool', toolName: 'registry_tools_search' })
-    expect(calls.mock.calls[1]?.[0].toolChoice).toEqual({ type: 'none' })
+    expect(calls).not.toHaveBeenCalled()
     const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
       threadId: second.threadId, paginationOpts: { cursor: null, numItems: 20 },
     }))

@@ -35,6 +35,7 @@ describe('OAuth metadata surfaces', () => {
     const authorizationServer = await oauthAuthorizationServerResponse(request, canonicalBaseUrl).json()
     expect(authorizationServer).toMatchObject({
       issuer: 'https://local.example',
+      authorization_response_iss_parameter_supported: true,
       authorization_endpoint: 'https://local.example/oauth/authorize',
       token_endpoint: 'https://local.example/oauth/token',
       registration_endpoint: 'https://local.example/oauth/register',
@@ -69,6 +70,7 @@ describe('OAuth metadata surfaces', () => {
       })
       expect(authorizationServer).toMatchObject({
         issuer: 'https://canonical.agentic.test',
+        authorization_response_iss_parameter_supported: true,
         authorization_endpoint: 'https://canonical.agentic.test/oauth/authorize',
       })
       expect(challenge.headers.get('WWW-Authenticate')).toBe(

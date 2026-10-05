@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
+import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 
 import {
   buildBusinessMarkdown,
@@ -92,9 +92,9 @@ describe('site brief markdown', () => {
     expect(guide).toContain('ae describe "$AE_TOOL_REF" --base-url "https://ae.example" --json')
     expect(guide).toContain('ae call "$AE_TOOL_REF" --input "$AE_INPUT_JSON"')
     expect(guide).not.toContain('advanced')
-    expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
-    expect(guide).toContain('Client connect performs initialization')
-    expect(guide).toContain('may omit `Mcp-Session-Id`')
+    expect(guide).toContain(`protocol \`${MCP_LATEST_PROTOCOL_VERSION}\``)
+    expect(guide).toContain('Client connect uses per-request metadata and `server/discover`')
+    expect(guide).toContain('does not require `Mcp-Session-Id`')
     expect(guide).not.toContain('the client opens standard OAuth approval')
   })
 

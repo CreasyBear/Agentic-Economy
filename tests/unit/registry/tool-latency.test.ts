@@ -8,6 +8,7 @@ import { registryToolsCompareAction, registryToolsDescribeAction } from '@/modul
 import { handleMarketToolDescribeRequest } from '@/routes/api.v1.market-tools.describe'
 import { handleMcpRequest } from '@/lib/server/mcp-api'
 import { TOOL_CRYPTO_TX, TOOL_TIMEZONE } from '../../helpers/tool-search-rerank-fixtures'
+import { readMcpBody } from '../server/mcp-api-harness'
 
 vi.mock('@/modules/capability-supply/tool-source', () => ({
   readCapabilityToolDetail: vi.fn(), readCapabilityToolSearch: vi.fn(),
@@ -83,8 +84,8 @@ describe('Tool time to result evidence', () => {
       } }),
     }))
     expect(mcpResponse.status).toBe(200)
-    const mcpBody = await mcpResponse.json()
-    expect(mcpBody.result.structuredContent.result.tool.latency).toEqual(latency)
+    const mcpBody = await readMcpBody(mcpResponse)
+    expect(mcpBody).toHaveProperty('result.structuredContent.result.tool.latency', latency)
   })
 
   it('batches compare once and joins by exact Tool identity rather than array order', async () => {

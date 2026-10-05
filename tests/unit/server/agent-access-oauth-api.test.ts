@@ -1735,7 +1735,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       revision: 1,
       flow: 'authorization_code',
       clientId: 'client-auth-denied',
-      redirectUri: 'http://localhost/callback?existing=1',
+      redirectUri: 'http://localhost/callback?existing=1&iss=https%3A%2F%2Fcallback-issuer.invalid',
       requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
       requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
       approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
@@ -1753,11 +1753,12 @@ describe('Customer Request OAuth HTTP adapter', () => {
       decision: 'deny',
       state: 'opaque-state',
       redirect_uri: 'https://attacker.example/steal',
+      iss: 'https://form-issuer.invalid',
     }), {
       store,
       authObject: { ...strictAuthObject, has: () => false, sessionClaims: {} },
       now: () => 1_000,
-      canonicalBaseUrl: 'http://localhost',
+      canonicalBaseUrl: 'http://localhost/',
     })
 
     expect(response.status).toBe(200)
@@ -1771,8 +1772,43 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(redirectTo.searchParams.get('existing')).toBe('1')
     expect(redirectTo.searchParams.get('error')).toBe('access_denied')
     expect(redirectTo.searchParams.get('state')).toBe('opaque-state')
+    expect(redirectTo.searchParams.getAll('iss')).toEqual(['http://localhost'])
     expect(body.redirectTo).not.toContain('attacker.example')
     expect(store.grants.get(grantRef)?.status).toBe('denied')
+  })
+  it('returns the advertised issuer with an authorization code while retaining the registered callback', async () => {
+    const store = storeFixture()
+    const grantRef = 'authorization:issuer'
+    await store.insertGrant({
+      grantRef, revision: 1, flow: 'authorization_code', clientId: 'client-issuer',
+      redirectUri: 'https://client.example/callback?existing=1&iss=https%3A%2F%2Fcallback-issuer.invalid',
+      requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      codeChallenge: 'a'.repeat(43), codeChallengeMethod: 'S256',
+      status: 'pending', ownerId: 'user_local', createdAt: 1_000, expiresAt: 61_000,
+      displayName: 'Issuer-aware assistant',
+    })
+    const issueKey = vi.fn(async () => ({ keyId: 'ak_issuer' }))
+    const response = await handleOAuthConsentPost(formRequest('http://internal.example/oauth/authorize', {
+      grant_ref: grantRef, expected_grant_revision: '1', expected_target_revision: '1',
+      decision: 'approve', authority_mode: 'read_only', connection_target: 'new_agent',
+      state: 'opaque-state', redirect_uri: 'https://attacker.example/steal', iss: 'https://form-issuer.invalid',
+    }, 'https://issuer.example'), {
+      store, ...consentSecurity(store), issueKey, now: () => 1_000,
+      canonicalBaseUrl: 'https://issuer.example/',
+    })
+    expect(response.status).toBe(200)
+    const body = await response.json() as { kind: string; redirectTo: string }
+    expect(body.kind).toBe('approved')
+    const callback = new URL(body.redirectTo)
+    expect(callback.origin).toBe('https://client.example')
+    expect(callback.pathname).toBe('/callback')
+    expect(callback.searchParams.get('existing')).toBe('1')
+    expect(callback.searchParams.get('state')).toBe('opaque-state')
+    expect(callback.searchParams.get('code')).toBeTruthy()
+    expect(callback.searchParams.getAll('iss')).toEqual(['https://issuer.example'])
+    expect(issueKey).toHaveBeenCalledTimes(1)
   })
   it('replays an identical completed approval without issuing another key', async () => {
     const store = storeFixture()

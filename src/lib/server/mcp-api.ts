@@ -3,15 +3,7 @@
  * remain read-only; authenticated projections admit only explicitly surfaced
  * actions whose declared authority requirement fits the caller's mode.
  */
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js'
-import { normalizeObjectSchema, safeParse, safeParseAsync } from '@modelcontextprotocol/sdk/server/zod-compat.js'
-import { getMethodLiteral, toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
-import { ErrorCode, ListToolsRequestSchema, McpError, type Notification, type Request as SdkRequest, type Result, type ServerNotification, type ServerRequest, type ServerResult } from '@modelcontextprotocol/sdk/types.js'
-import type { AnyObjectSchema, SchemaOutput } from '@modelcontextprotocol/sdk/server/zod-compat.js'
-import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
+import { createMcpHandler, isJsonContentType, isLegacyRequest, ProtocolError, ProtocolErrorCode, Server, specTypeSchemas, type StandardSchemaV1, type Tool } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 
 import { degrade } from '@/lib/observability/degrade'
@@ -89,79 +81,19 @@ export type McpAccessTier = Readonly<{
   toolsListPageSize?: number
 }>
 
-type AeServerHandler<T extends AnyObjectSchema> = (
-  request: SchemaOutput<T>,
-  extra: RequestHandlerExtra<ServerRequest | SdkRequest, ServerNotification | Notification>,
-) => ServerResult | Result | Promise<ServerResult | Result>
-
-/**
- * Keep request validation in the installed SDK while converting its raw
- * schema-parse throw into the JSON-RPC Invalid params error the SDK already
- * defines. McpError prefixes its message for local diagnostics, so this
- * adapter restores the concise wire-level message without changing the
- * SDK-owned error code or protocol handling. The offending field (and, for a
- * `toolRef`, the expected reference pattern) is appended when the schema
- * failure names one, so a caller can self-correct without guessing.
- */
+/** Invalid Tool arguments are recoverable tool errors, never action dispatches. */
 const INVALID_MCP_REQUEST_PARAMETERS_MESSAGE = 'Invalid MCP request parameters.'
-/** Same Tool reference shape enforced by every `toolRef` schema (e.g. `@/modules/capability-execution/quote.ts`). */
 const TOOL_REF_PATTERN = '^operation:v1:[0-9a-f]{64}$'
 
-class ConciseMcpRequestError extends McpError {
-  constructor(message: string = INVALID_MCP_REQUEST_PARAMETERS_MESSAGE) {
-    super(ErrorCode.InvalidParams, message)
-    this.message = message
-  }
-}
-
-/** First zod-shaped issue on an unknown schema-parse failure, duck-typed since the SDK's `safeParse` types its error as `unknown`. */
-function mcpValidationIssue(error: unknown): { path: string; message: string } | undefined {
-  const issues = isRecord(error) && Array.isArray(error.issues) ? error.issues : undefined
-  const issue = issues?.[0]
-  if (!isRecord(issue) || typeof issue.message !== 'string') return undefined
-  const path = Array.isArray(issue.path) ? issue.path.map(String).join('.') : ''
-  return { path, message: issue.message }
-}
-
-/** Names the offending field for a request-schema failure; a `toolRef` field also gets the expected pattern. */
-function mcpRequestValidationMessage(error: unknown): string {
-  const issue = mcpValidationIssue(error)
+function mcpRequestValidationMessage(error: StandardSchemaV1.FailureResult): string {
+  const issue = error.issues[0]
   if (issue === undefined) return INVALID_MCP_REQUEST_PARAMETERS_MESSAGE
-  const named = issue.path.length > 0 ? `${issue.path}: ${issue.message}` : issue.message
-  const isToolRef = issue.path === 'toolRef' || issue.path.endsWith('.toolRef')
-  return isToolRef
+  const path = (issue.path ?? []).map((segment) => String(typeof segment === 'object' ? segment.key : segment)).join('.')
+  const named = path.length > 0 ? `${path}: ${issue.message}` : issue.message
+  return path === 'toolRef' || path.endsWith('.toolRef')
     ? `${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} ${named}. Expected pattern: ${TOOL_REF_PATTERN}.`
     : `${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} ${named}.`
 }
-class SafeMcpSdkServer extends Server {
-  constructor() {
-    super(
-      { name: 'agentic-economy', version: '1.0.0' },
-      { instructions: AE_MCP_INSTRUCTIONS },
-    )
-  }
-
-  override setRequestHandler<T extends AnyObjectSchema>(
-    requestSchema: T,
-    handler: AeServerHandler<T>,
-  ): void {
-    const method = getMethodLiteral(requestSchema)
-    const safeRequestSchema = z.looseObject({ method: z.literal(method) })
-    const safeHandler = async (
-      request: unknown,
-      extra: RequestHandlerExtra<ServerRequest | SdkRequest, ServerNotification | Notification>,
-    ): Promise<ServerResult | Result> => {
-      const parsed = safeParse(requestSchema, request)
-      if (!parsed.success) {
-        throw new ConciseMcpRequestError(mcpRequestValidationMessage(parsed.error))
-      }
-      return await handler(parsed.data, extra)
-    }
-
-    Reflect.apply(Protocol.prototype.setRequestHandler, this, [safeRequestSchema, safeHandler])
-  }
-}
-
 
 type McpToolFailure = ProblemDetails
 
@@ -434,21 +366,7 @@ function recordMcpGatewayTelemetry(
 }
 
 
-/**
- * `tools/list` is spec-paginated (`ListToolsRequestSchema` params `cursor?`,
- * `ListToolsResultSchema.nextCursor?`), but the SDK's high-level `McpServer`
- * installs a single fixed all-tools handler
- * (`@modelcontextprotocol/sdk/server/mcp.js` `setToolRequestHandlers`). Its own
- * class doc directs advanced overrides at the underlying low-level `Server`:
- * "For advanced usage (like sending notifications or setting custom request
- * handlers), use the underlying Server instance available via the `server`
- * property." `Protocol.setRequestHandler` explicitly supports this: "Note
- * that this will replace any previous request handler for the same method."
- * So the paginated handler below is installed on `sdkServer` after every
- * `registerTool` call has run (which is what lazily installs the SDK's
- * default handler), replacing it while leaving per-tool call handling and
- * the tier filter untouched.
- */
+/** The action registry owns Tool projection and pagination; the SDK owns wire encoding. */
 const MCP_TOOLS_LIST_PAGE_SIZE = 50
 /** Success and Problem Details share `next`; both structured forms are valid MCP results. */
 const MCP_TOOL_OUTPUT_SCHEMA = z.looseObject({
@@ -462,10 +380,10 @@ const MCP_TOOL_OUTPUT_SCHEMA = z.looseObject({
   code: z.string().optional(),
   retryable: z.boolean().optional(),
 })
-const MCP_TOOL_OUTPUT_JSON_SCHEMA = toJsonSchemaCompat(MCP_TOOL_OUTPUT_SCHEMA, {
-  strictUnions: true,
-  pipeStrategy: 'output',
-})
+const MCP_TOOL_OUTPUT_JSON_SCHEMA = {
+  ...z.toJSONSchema(MCP_TOOL_OUTPUT_SCHEMA, { io: 'output', unrepresentable: 'any' }),
+  type: 'object' as const,
+}
 
 function encodeMcpToolsListCursor(offset: number): string {
   return base64Codec.toBase64Url(new TextEncoder().encode(String(offset)))
@@ -490,9 +408,8 @@ function decodeMcpToolsListCursor(cursor: string, toolCount: number): number | u
 }
 
 function mcpInputSchema(action: AnyAction) {
-  const inputObjectSchema = normalizeObjectSchema(action.schema)
-  const schema = toJsonSchemaCompat(inputObjectSchema ?? action.schema, { strictUnions: true, pipeStrategy: 'input' })
-  if (inputObjectSchema !== undefined) return schema
+  const schema = z.toJSONSchema(action.schema, { io: 'input', unrepresentable: 'any' })
+  if (schema.type === 'object') return { ...schema, type: 'object' as const }
   const variants = 'anyOf' in schema ? schema.anyOf : 'oneOf' in schema ? schema.oneOf : undefined
   if (!Array.isArray(variants)) throw new Error(`MCP input schema for ${action.id} is not an object union`)
   const properties: Record<string, unknown> = {}
@@ -519,13 +436,13 @@ function mcpInputSchema(action: AnyAction) {
         ? value : { anyOf: [existing, value] }
     }
   }
-  return { ...schema, type: 'object', properties, ...(commonRequired?.size ? { required: [...commonRequired] } : {}) }
+  return { ...schema, type: 'object' as const, properties, ...(commonRequired?.size ? { required: [...commonRequired] } : {}) }
 }
 
-function mcpToolListEntry(action: AnyAction): Record<string, unknown> {
+function mcpToolListEntry(action: AnyAction): Tool {
   const metadata = describeActionMcpMetadata(action)
   const inputSchema = mcpInputSchema(action)
-  return {
+  const entry = specTypeSchemas.Tool['~standard'].validate({
     name: mcpToolName(action),
     title: action.name,
     description: mcpToolDescription(action),
@@ -537,7 +454,9 @@ function mcpToolListEntry(action: AnyAction): Record<string, unknown> {
       idempotentHint: metadata.idempotent,
       openWorldHint: metadata.openWorld,
     },
-  }
+  })
+  if (entry.issues !== undefined) throw new Error(`Invalid MCP Tool contract: ${action.id}`)
+  return entry.value
 }
 
 
@@ -546,11 +465,11 @@ function registerPaginatedToolsList(
   admittedActions: readonly AnyAction[],
   pageSize: number,
 ): void {
-  sdkServer.setRequestHandler(ListToolsRequestSchema, (toolsListRequest) => {
+  sdkServer.setRequestHandler('tools/list', (toolsListRequest) => {
     const cursor = toolsListRequest.params?.cursor
     const offset = cursor === undefined ? 0 : decodeMcpToolsListCursor(cursor, admittedActions.length)
     if (offset === undefined) {
-      throw new ConciseMcpRequestError(`${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} cursor: does not decode to a valid tools/list page offset.`)
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} cursor: does not decode to a valid tools/list page offset.`)
     }
     const page = admittedActions.slice(offset, offset + pageSize)
     const nextOffset = offset + page.length
@@ -565,7 +484,7 @@ export function createAeMcpServer(
   request: Request,
   actions: readonly AnyAction[] = listMcpActions(),
   access: McpAccessTier = { tier: 'anonymous' },
-): McpServer {
+): Server {
   const selectedAccess = {
     scopes: access.principal?.scopes ?? [],
     authenticated: access.tier === 'authenticated',
@@ -578,99 +497,93 @@ export function createAeMcpServer(
   // retains the canonical resolver's explicit failure; forwarded hosts are not trusted.
   const origin = resolveCanonicalOrigin(request)
 
-  const server = new McpServer(
+  // Requires: one validated request and its authenticated principal. Ensures:
+  // only admitted actions run, with validated input and output. Invariant:
+  // no instance or authority is shared between requests. Violations return
+  // protocol or tool errors; disconnecting never buys again or cancels a Call.
+  const server = new Server(
     { name: 'agentic-economy', version: '1.0.0' },
-    { instructions: AE_MCP_INSTRUCTIONS },
+    { instructions: AE_MCP_INSTRUCTIONS, capabilities: { tools: { listChanged: false } } },
   )
-  const sdkServer = new SafeMcpSdkServer()
-  const serverWithSdk = server as { server: Server }
-  serverWithSdk.server = sdkServer
-  for (const action of actions) {
-    const metadata = describeActionMcpMetadata(action)
-    const outputSchema = MCP_TOOL_OUTPUT_SCHEMA
-    server.registerTool(
-      mcpToolName(action),
-      {
-        title: action.name,
-        description: mcpToolDescription(action),
-        inputSchema: action.schema,
-        ...(outputSchema === undefined ? {} : { outputSchema }),
-        annotations: {
-          readOnlyHint: action.readOnly,
-          destructiveHint: action.readOnly ? false : metadata.destructive,
-          idempotentHint: metadata.idempotent,
-          openWorldHint: metadata.openWorld,
-        },
-      },
-      async (data: unknown) => {
-        const startedAt = Date.now()
-        if (!admittedIds.has(action.id)) return mcpToolError(buildProblem({
-          kind: 'PERMISSION_DENIED',
-          code: 'mcp_toolset_required',
+  server.setRequestHandler('tools/call', async (callRequest, context) => {
+    const action = actions.find((candidate) => mcpToolName(candidate) === callRequest.params.name)
+    if (action === undefined) return mcpToolError(buildProblem({
+      kind: 'INVALID_ARGUMENT', code: 'mcp_tool_not_found', retryable: false,
+      detail: 'Unknown MCP tool. Call tools/list and select a listed tool.',
+    }), origin)
+    const input = await action.schema.safeParseAsync(callRequest.params.arguments ?? {})
+    if (!input.success) return mcpToolError(buildProblem({
+      kind: 'INVALID_ARGUMENT', code: 'input_invalid', retryable: false,
+      detail: mcpRequestValidationMessage(input.error),
+    }), origin)
+    context.mcpReq.signal.throwIfAborted()
+    const data: unknown = input.data
+    const startedAt = Date.now()
+    if (!admittedIds.has(action.id)) return mcpToolError(buildProblem({
+      kind: 'PERMISSION_DENIED',
+      code: 'mcp_toolset_required',
+      retryable: false,
+      detail: 'This action is not available in the current MCP toolset.',
+      extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
+    }), origin)
+    try {
+      const rollout = package5SupplyActionRolloutDecision(action.id, data, access.rolloutEnvironment)
+      if (!rollout.enabled) {
+        return mcpToolError(buildProblem({
+          kind: 'UNAVAILABLE',
+          code: rollout.code,
           retryable: false,
-          detail: 'This action is not available in the current MCP toolset.',
-          extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
+          detail: 'This Provider capability is not enabled for the current deployment.',
+          ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
         }), origin)
-        try {
-          const rollout = package5SupplyActionRolloutDecision(action.id, data, access.rolloutEnvironment)
-          if (!rollout.enabled) {
-            return mcpToolError(buildProblem({
-              kind: 'UNAVAILABLE',
-              code: rollout.code,
-              retryable: false,
-              detail: 'This Provider capability is not enabled for the current deployment.',
-              ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
-            }), origin)
-          }
-          const result = await action.run({
-            data,
-            context: {
-              caller: 'mcp',
-              request,
-              ...(access.principal === undefined ? {} : { agentAccessPrincipal: access.principal }),
-              ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
-              ...(access.timing === undefined ? {} : { timing: access.timing }),
-              ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
-              ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
-              ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
-              ...(access.savedToolsService === undefined ? {} : { savedToolsService: access.savedToolsService }),
-              ...(access.fundingHandoffService === undefined ? {} : { fundingHandoffService: access.fundingHandoffService }),
-              ...(access.callService === undefined ? {} : { callService: access.callService }),
-              ...(access.catalogSearcher === undefined ? {} : { catalogSearcher: access.catalogSearcher }),
-            },
-          })
-          const outputValidation = await safeParseAsync(action.outputSchema, result)
-          if (!outputValidation.success) {
-            recordMcpGatewayTelemetry(action.id, data, { kind: 'error' }, access, startedAt)
-            return mcpToolError(buildProblem({
-              kind: 'INTERNAL',
-              code: 'action_output_invalid',
-              detail: 'Action returned an invalid result.',
-              ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
-            }), origin)
-          }
-          const searchInput = action.id === 'registry.tools.search' ? toolCatalogSearchInputSchema.safeParse(data) : undefined
-          const searchResult = action.id === 'registry.tools.search' ? toolChoiceSearchOutputSchema.safeParse(outputValidation.data) : undefined
-          const output = searchInput?.success && searchResult?.success
-            ? withAuthorizedSaveNeed(searchResult.data, searchInput.data,
-                selectedAccess.authenticated && !selectedAccess.readOnly && access.principal?.scopes.includes(MARKET_TOOLS_CALL_SCOPE) === true)
-            : outputValidation.data
-          recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
-          const refusal = mcpToolRefusal(action, output)
-          if (refusal !== undefined) return mcpToolRefusalResult(action, output, refusal, origin)
-          return {
-            content: [{ type: 'text' as const, text: mcpSuccessSummary(action, output, origin) }],
-            structuredContent: { result: output, next: action.id === 'tool.procure' && isRecord(outputValidation.data) && outputValidation.data.status === 'needs_input' ? [outputValidation.data.next] : projectMcpActionNext(action.id, output, origin) },
-          }
-        } catch (error) {
-          recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
-          return mcpToolError(mcpToolFailure(action, error, access.correlationId), origin)
-        }
-      },
-    )
-  }
+      }
+      const result = await action.run({
+        data,
+        context: {
+          caller: 'mcp',
+          request,
+          ...(access.principal === undefined ? {} : { agentAccessPrincipal: access.principal }),
+          ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
+          ...(access.timing === undefined ? {} : { timing: access.timing }),
+          ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
+          ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
+          ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
+          ...(access.savedToolsService === undefined ? {} : { savedToolsService: access.savedToolsService }),
+          ...(access.fundingHandoffService === undefined ? {} : { fundingHandoffService: access.fundingHandoffService }),
+          ...(access.callService === undefined ? {} : { callService: access.callService }),
+          ...(access.catalogSearcher === undefined ? {} : { catalogSearcher: access.catalogSearcher }),
+        },
+      })
+      const outputValidation = await action.outputSchema.safeParseAsync(result)
+      if (!outputValidation.success) {
+        recordMcpGatewayTelemetry(action.id, data, { kind: 'error' }, access, startedAt)
+        return mcpToolError(buildProblem({
+          kind: 'INTERNAL',
+          code: 'action_output_invalid',
+          detail: 'Action returned an invalid result.',
+          ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
+        }), origin)
+      }
+      const searchInput = action.id === 'registry.tools.search' ? toolCatalogSearchInputSchema.safeParse(data) : undefined
+      const searchResult = action.id === 'registry.tools.search' ? toolChoiceSearchOutputSchema.safeParse(outputValidation.data) : undefined
+      const output = searchInput?.success && searchResult?.success
+        ? withAuthorizedSaveNeed(searchResult.data, searchInput.data,
+            selectedAccess.authenticated && !selectedAccess.readOnly && access.principal?.scopes.includes(MARKET_TOOLS_CALL_SCOPE) === true)
+        : outputValidation.data
+      recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
+      const refusal = mcpToolRefusal(action, output)
+      if (refusal !== undefined) return mcpToolRefusalResult(action, output, refusal, origin)
+      return {
+        content: [{ type: 'text' as const, text: mcpSuccessSummary(action, output, origin) }],
+        structuredContent: { result: output, next: action.id === 'tool.procure' && isRecord(outputValidation.data) && outputValidation.data.status === 'needs_input' ? [outputValidation.data.next] : projectMcpActionNext(action.id, output, origin) },
+      }
+    } catch (error) {
+      recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
+      return mcpToolError(mcpToolFailure(action, error, access.correlationId), origin)
+    }
+  })
 
-  registerPaginatedToolsList(sdkServer, admittedActions, access.toolsListPageSize ?? MCP_TOOLS_LIST_PAGE_SIZE)
+  registerPaginatedToolsList(server, admittedActions, access.toolsListPageSize ?? MCP_TOOLS_LIST_PAGE_SIZE)
 
   return server
 }
@@ -746,6 +659,13 @@ function mcpActionConsequenceResource(action: AnyAction): string {
 
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const origin = request.headers.get('origin')
+    if (origin !== null && origin !== resolveCanonicalOrigin(request)) {
+      return withRequestCorrelationHeader(problem({
+        status: 403, kind: 'PERMISSION_DENIED', code: 'mcp_origin_not_allowed',
+        detail: 'The request Origin is not allowed for this MCP endpoint.',
+      }), correlationId)
+    }
     if (request.method === 'GET' || request.method === 'HEAD') {
       recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'method_not_allowed'})
       return withRequestCorrelationHeader(methodNotAllowed(['POST', 'DELETE']), correlationId)
@@ -762,6 +682,8 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       }), correlationId)
     }
     const boundedRequest = bounded.request
+    const legacyFailure = await legacyMcpParameterFailure(boundedRequest)
+    if (legacyFailure !== undefined) return withRequestCorrelationHeader(legacyFailure, correlationId)
     const protectedTarget = await actionRequiringAuthenticationForRequest(boundedRequest, actions)
     if (protectedTarget !== undefined) {
       const protectedAction = protectedTarget.action
@@ -842,6 +764,7 @@ async function boundedMcpRequest(request: Request): Promise<BoundedMcpRequest> {
   const init = {
     method: request.method,
     headers: request.headers,
+    signal: request.signal,
   }
   const boundedBody = await readBoundedRequestText(request, MAX_MCP_REQUEST_BODY_BYTES)
   if (!boundedBody.ok) return boundedBody
@@ -852,10 +775,36 @@ async function boundedMcpRequest(request: Request): Promise<BoundedMcpRequest> {
   }
 }
 
-async function serveMcp(server: McpServer, request: Request): Promise<Response> {
-  const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true })
-  await server.connect(transport)
-  return await transport.handleRequest(request)
+/** SDK 2.3's legacy dispatch still wraps schema failures as internal errors.
+ * Keep AE's concise Invalid Params contract through its public validators;
+ * the SDK's classifier and codec retain every modern envelope/header check.
+ */
+async function legacyMcpParameterFailure(request: Request): Promise<Response | undefined> {
+  if (request.method !== 'POST' || !isJsonContentType(request.headers.get('content-type'))) return undefined
+  const parsed = await readBoundedRequestJson(request.clone(), MAX_MCP_REQUEST_BODY_BYTES)
+  if (!parsed.ok || !isRecord(parsed.value)) return undefined
+  const body = parsed.value
+  if (body.jsonrpc !== '2.0' || (typeof body.id !== 'number' && typeof body.id !== 'string')) return undefined
+  if (!await isLegacyRequest(request, body)) return undefined
+  const schema = body.method === 'initialize' ? specTypeSchemas.InitializeRequest
+    : body.method === 'tools/call' ? specTypeSchemas.CallToolRequest
+      : body.method === 'tools/list' ? specTypeSchemas.ListToolsRequest : undefined
+  if (schema === undefined) return undefined
+  const validation = schema['~standard'].validate(body)
+  if (validation.issues === undefined) return undefined
+  return Response.json({
+    jsonrpc: '2.0', id: body.id,
+    error: { code: ProtocolErrorCode.InvalidParams, message: mcpRequestValidationMessage(validation) },
+  })
+}
+
+async function serveMcp(server: Server, request: Request): Promise<Response> {
+  const handler = createMcpHandler(() => server, {
+    legacy: 'stateless',
+    responseMode: 'auto',
+    maxRequestBodySize: MAX_MCP_REQUEST_BODY_BYTES,
+  })
+  return await handler.fetch(request)
 }
 
 type McpAuthenticationTarget = Readonly<{
@@ -881,8 +830,8 @@ async function actionRequiringAuthenticationForRequest(
       }
     }
     if (
-      body.method === 'tools/list'
-      && (request.headers.get('authorization')?.trim().length ?? 0) > 0
+      (body.method === 'tools/list' || body.method === 'server/discover')
+      && !isAnonymousMcpRequest(request)
     ) {
       const action = actions.find((candidate) => candidate.credentialAdmission !== undefined)
       return action === undefined ? undefined : { action, generic: true }

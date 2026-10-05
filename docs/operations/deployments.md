@@ -51,15 +51,35 @@ The founder [design contract](../designs/2026-10-01-founder-console.md) records
 the preserved boundaries. Final subsequent source provenance belongs in the
 release PR and the deployed `/api/v1/release` response.
 
-The next chat repair covers the observed guest 404, draft recovery, compact
-discovery cards, immediate comparison and invalid model control text. The
-production Vercel `CONVEX_SITE_URL` binding is now the canonical
-`https://cautious-zebra-473.convex.site`; this takes effect on the next web build.
-The existing proxy secret and guest read-only admission remain unchanged. The
+[PR #357](https://github.com/CreasyBear/Agentic-Economy/pull/357) repairs the guest
+404, draft recovery, compact discovery cards, immediate comparison and invalid
+model control text. Backend source `458e8e9207046afd41d36e7210f90c0d962664fd`
+deployed at 11:42:19 UTC; production web merge
+`66e61d97c5560d13e91d5269c9643dc5534fbac2` uses the same gated tree. The canonical
+Vercel `CONVEX_SITE_URL`, `https://cautious-zebra-473.convex.site`, is live.
+Hosted guest discovery and comparison now work. Follow-up inspection exposed a
+remaining guest context defect, repaired in the next candidate along with
+duplicate answer instructions and comparison button wrapping. The
 [walkthrough contract](../designs/2026-09-23-generative-commerce-chat-rfc.md#5-october-2026-walkthrough-repair)
 defines this bounded repair; it does not activate the RFC's broader proposals.
-Verify both the guest web proxy and signed-in journey after backend and web
-deployment before calling this repair accepted.
+
+The next candidate adopts official MCP server 2.3.0 for protocol 2026-07-28,
+retains legacy client compatibility and increments the downloadable CLI to 0.2.1.
+It advertises and emits the canonical OAuth authorization-response issuer.
+Request authority, rate limits and Call recovery retain their existing boundaries.
+It also reads an EVM transaction after confirmed receipt acquisition, avoiding
+rejection of a stale pending transaction snapshot. This race was reproduced;
+historic Call timings alone do not prove it caused every earlier recovery.
+Hosted protocol and chat acceptance, source provenance and the combined release
+gate belong in the release PR before closeout.
+
+Tool description and comparison expose optional observed time from Call admission
+to completion, including recovery. Estimates require five samples for the exact
+Tool reference in the last 30 days; absent evidence is not zero latency. The 20
+historic completed Calls took approximately 71–132 seconds, all through recovery.
+Only one observation belongs to the current CoinCap Tool, so its median and p95
+are unavailable. Public discovery request timing is a different measure. No new
+paid performance measurement has been made for the receipt fix.
 
 Metering uses the existing Tool → Quote → Call and financial authority. It adds
 exact unit measurements, complete-period reports, frozen close lineage, usage

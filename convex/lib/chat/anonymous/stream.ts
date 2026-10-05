@@ -7,6 +7,7 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { recordAnonymousChat } from '@/lib/observability/journey'
 import type { ActionCtx } from '../../../_generated/server'
 import { createChatAgent } from '../tools/agent'
+import { readChatSearchPage } from '../tools/search'
 import { catalogueFact, explanationUsable, immediateSearchToolName, retrieveImmediateTools } from '../tools/immediate'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 import { completedChatFacts } from '../generate/completedFacts'
@@ -60,8 +61,27 @@ export async function streamAnonymousChatResponse(
       let modelFailure: unknown
       let answerOutcome: 'completed' | 'input_required' | 'failed' | undefined
       try {
+      if (continuation !== undefined) {
+        const page = await readChatSearchPage(ctx, continuation, undefined, abortSignal)
+        const toolName = immediateSearchToolName()
+        writer.write({ type: 'start' })
+        writer.write({ type: 'tool-input-start', toolCallId: 'continuation-search', toolName })
+        writer.write({ type: 'tool-input-available', toolCallId: 'continuation-search', toolName, input: {} })
+        writer.write({ type: 'tool-output-available', toolCallId: 'continuation-search', output: page })
+        writer.write({ type: 'text-start', id: 'catalogue-page' })
+        writer.write({ type: 'text-delta', id: 'catalogue-page', delta: catalogueFact(page) })
+        writer.write({ type: 'text-end', id: 'catalogue-page' })
+        writer.write({ type: 'finish' })
+        answerOutcome = 'completed'
+        return
+      }
       const latestUser = [...messages].reverse().find(message => message.role === 'user')?.content ?? ''
-      if (continuation === undefined && latestUser.trim().length > 0) {
+      // Requires: the first discovery prompt, with no prior assistant context.
+      // Ensures: follow-ups retain their context and can inspect a named Tool.
+      // Invariant: guest tools remain read-only; history grants no authority.
+      // On violation: use the existing tool loop instead of replacing the request with search.
+      if (continuation === undefined && !messages.some(message => message.role === 'assistant')
+        && latestUser.trim().length > 0) {
         let catalogue: Awaited<ReturnType<typeof retrieveImmediateTools>> = null
         try {
           catalogue = await retrieveImmediateTools(ctx, latestUser)
@@ -76,16 +96,10 @@ export async function streamAnonymousChatResponse(
           writer.write({ type: 'tool-input-start', toolCallId: 'immediate-search', toolName })
           writer.write({ type: 'tool-input-available', toolCallId: 'immediate-search', toolName, input: { query: latestUser, limit: 4 } })
           writer.write({ type: 'tool-output-available', toolCallId: 'immediate-search', output: catalogue })
-          const fact = catalogueFact(catalogue)
-          writer.write({ type: 'text-start', id: 'catalogue-facts' })
-          writer.write({ type: 'text-delta', id: 'catalogue-facts', delta: fact })
-          writer.write({ type: 'text-end', id: 'catalogue-facts' })
           const answer = await explainCatalogue(agent, ctx, scope, prompt, catalogue, abortSignal)
-          if (answer !== fact) {
-            writer.write({ type: 'text-start', id: 'catalogue-answer' })
-            writer.write({ type: 'text-delta', id: 'catalogue-answer', delta: answer })
-            writer.write({ type: 'text-end', id: 'catalogue-answer' })
-          }
+          writer.write({ type: 'text-start', id: 'catalogue-answer' })
+          writer.write({ type: 'text-delta', id: 'catalogue-answer', delta: answer })
+          writer.write({ type: 'text-end', id: 'catalogue-answer' })
           writer.write({ type: 'finish' })
           answerOutcome = 'completed'
           return
@@ -93,11 +107,7 @@ export async function streamAnonymousChatResponse(
       }
       const result = await agent.streamText(ctx, scope, {
         messages: prompt,
-        prepareStep: continuation === undefined ? prepareChatToolStep : ({ stepNumber }) =>
-          stepNumber === 0
-            ? { toolChoice: { type: 'tool' as const,
-              toolName: CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'] } }
-            : { toolChoice: 'none' as const },
+        prepareStep: prepareChatToolStep,
         timeout: { stepMs: 15_000 },
         maxRetries: 0,
         onStepEnd: step => {
@@ -154,7 +164,7 @@ export async function streamAnonymousChatResponse(
         stopWhen: stepCountIs(1),
         timeout: { totalMs: 12_000 },
         maxRetries: 0,
-        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer, use bullets for one Tool and a table only for two to four distinct Tools, name a material gap once, and finish with one "Next: ..." action. This guest cannot obtain a Quote or Call, so never suggest those actions. Do not promise another search.`,
+        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts, name a material gap once, and finish with one "Next: ..." action. This guest cannot obtain a Quote or Call, so never suggest those actions. Do not promise another search.`,
         ...(abortSignal === undefined ? {} : { abortSignal }),
       })
       const finalChunks: UIMessageChunk[] = []
@@ -189,7 +199,7 @@ export async function streamAnonymousChatResponse(
         ? CHAT_NO_RESULT_ANSWER
         : second === undefined
           ? `**${first.title} may fit this request.**\n\n${'summary' in first ? first.summary : first.description}\n\n${source(first)}.\n\nNext: Open its details to check the exact inputs and current terms.`
-          : `**${first.title} and ${second.title} are worth inspecting.**\n\n| Tool | Source | What it does |\n| --- | --- | --- |\n| ${first.title} | ${source(first)} | ${'summary' in first ? first.summary : first.description} |\n| ${second.title} | ${source(second)} | ${'summary' in second ? second.summary : second.description} |\n\nNext: Compare their exact inputs and current terms.`
+          : `**${first.title} and ${second.title} are worth inspecting.**\n\nNext: Select Compare on their cards to inspect the reported facts.`
       writer.write({ type: 'text-start', id: 'final-fallback' })
       writer.write({ type: 'text-delta', id: 'final-fallback', delta: fallback })
       writer.write({ type: 'text-end', id: 'final-fallback' })

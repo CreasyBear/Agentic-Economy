@@ -589,7 +589,7 @@ describe('market-terminal CLI error contracts', () => {
     const parsed = JSON.parse(json.stdout) as { kind: string; version: string; buildRevision: string; runtime: string }
     expect(parsed).toMatchObject({
       kind: 'VERSION',
-      version: '0.2.0',
+      version: '0.2.1',
       runtime: process.version,
     })
     expect(parsed.buildRevision).toBeTruthy()
@@ -598,6 +598,6 @@ describe('market-terminal CLI error contracts', () => {
     const human = spawnCliSync(['--version'])
     expect(human.status).toBe(0)
     expect(human.stderr).toBe('')
-    expect(human.stdout).toMatch(/^ae 0\.2\.0 \(.+\)\n$/u)
+    expect(human.stdout).toMatch(/^ae 0\.2\.1 \(.+\)\n$/u)
   }, 30_000)
 })

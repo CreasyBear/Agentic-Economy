@@ -2,12 +2,12 @@
 
 Install the pinned `ae` command from a signed [aecon-cli release](https://github.com/CreasyBear/aecon-cli/releases). Node.js 20 or newer is required. The CLI archive is published here, not to npm.
 
-## Download and verify v0.2.0
+## Download and verify v0.2.1
 
-Choose the exact release version you intend to install; do not use a moving `latest` URL. This example pins `v0.2.0`:
+Choose the exact release version you intend to install; do not use a moving `latest` URL. This example pins `v0.2.1`:
 
 ```sh
-VERSION=0.2.0
+VERSION=0.2.1
 BASE="https://github.com/CreasyBear/aecon-cli/releases/download/v${VERSION}"
 curl -fLO "${BASE}/aecon-cli-${VERSION}.tgz"
 curl -fLO "${BASE}/SHA256SUMS"
@@ -35,4 +35,4 @@ Search may return no matching Tool. If it returns one, use its actual Tool refer
 
 The source workflow is `CreasyBear/Agentic-Economy/.github/workflows/cli-release.yml`. Set its GitHub Actions repository secret `AECON_CLI_RELEASE_TOKEN` to a **fine-grained personal access token** limited to `CreasyBear/aecon-cli` with **Contents: Read and write**; it must be able to create a release and tag there. Do not place the token in this public repository or release assets. The source workflow uses its own `id-token: write` permission for keyless Cosign signing and needs the existing source-gate Clerk test secrets.
 
-Update `packages/cli/package.json` in the private source first, then create and push a source tag named exactly `v<package version>` (for example, `v0.2.0`). The release workflow also supports manual dispatch **only when the selected ref is that matching tag**, not a branch. It runs `npm run gate`, packs the workspace once through its existing `prepack`, checks and signs the archive, then creates the matching public release against `main` with its archive, `SHA256SUMS`, and Sigstore bundle. Publication refuses any pre-existing public tag rather than attaching assets to an unrelated version; investigate a failed publication rather than replacing assets. Update this README's pinned example for each new public version.
+Update `packages/cli/package.json` in the private source first, then create and push a source tag named exactly `v<package version>` (for example, `v0.2.1`). The release workflow also supports manual dispatch **only when the selected ref is that matching tag**, not a branch. It runs `npm run gate`, packs the workspace once through its existing `prepack`, checks and signs the archive, then creates the matching public release against `main` with its archive, `SHA256SUMS`, and Sigstore bundle. Publication refuses any pre-existing public tag rather than attaching assets to an unrelated version; investigate a failed publication rather than replacing assets. Update this README's pinned example for each new public version.

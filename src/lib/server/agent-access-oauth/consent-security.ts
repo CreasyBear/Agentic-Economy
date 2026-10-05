@@ -241,7 +241,7 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (!owner.isAuthenticated || owner.userId === null || grantRef === null) return oauthError('access_denied', 403)
   const store = requireStore(options)
   if (decision === 'deny') {
-    return await denyConsentGrant(store, grantRef, owner.userId, state, options)
+    return await denyConsentGrant(store, grantRef, owner.userId, state, request, options)
   }
   const environment = deploymentPaymentEnvironment(process.env)
   const currentGrant = await store.getGrantByRef(grantRef)
@@ -285,6 +285,7 @@ async function denyConsentGrant(
   grantRef: string,
   ownerId: string,
   state: string | null,
+  request: Request,
   options: OAuthApiOptions,
 ): Promise<Response> {
   const denied = await denyGrant(store, {
@@ -296,6 +297,7 @@ async function denyConsentGrant(
   if (denied.value.flow === 'authorization_code' && denied.value.redirectUri !== undefined) {
     const redirectTo = new URL(denied.value.redirectUri)
     redirectTo.searchParams.set('error', 'access_denied')
+    redirectTo.searchParams.set('iss', baseUrl(request, options))
     if (state !== null) redirectTo.searchParams.set('state', state)
     return consentJson({ kind: 'denied', grantRef, redirectTo: redirectTo.toString() }, 200)
   }
@@ -390,6 +392,8 @@ async function reserveAndFinalizeConsent(input: Readonly<{
   if (approved.value.grant.flow === 'authorization_code' && approved.value.grant.redirectUri !== undefined && approved.value.authorizationCode !== undefined) {
     const location = new URL(approved.value.grant.redirectUri)
     location.searchParams.set('code', approved.value.authorizationCode)
+    // Match advertised issuer exactly; neither callback nor form data owns it.
+    location.searchParams.set('iss', baseUrl(input.request, input.options))
     if (input.state !== null) location.searchParams.set('state', input.state)
     return consentJson({ kind: 'approved', grantRef: input.grantRef, redirectTo: location.toString() }, 200)
   }
