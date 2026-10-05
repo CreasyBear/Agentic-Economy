@@ -3,6 +3,7 @@
  * Existing Base UI dialog, cmdk async choice selection and stacked navigation
  * remain the engines. No sample filtering, transport or command handlers. */
 .arc-market.arc-command-trigger { justify-content: flex-start; gap: var(--space-2); }
+.arc-market .arc-command-trigger-label, .arc-market .arc-command-trigger-key { white-space: nowrap; }
 .arc-market .arc-command-trigger-label { display: none; }
 .arc-market .arc-command-trigger-key { display: none; margin-inline-start: auto; padding-inline-start: var(--space-2); border-inline-start: 1px solid var(--border); color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); font-weight: 400; }
 .arc-market.arc-command-panel { display: flex; width: calc(100% - 16px); max-width: 768px; height: calc(100dvh - 16px); max-height: 672px; flex-direction: column; gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; box-shadow: 0 18px 44px color-mix(in srgb, var(--foreground) 10%, transparent); }
