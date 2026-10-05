@@ -40,6 +40,10 @@ implemented behavior; a plan, proposal or dated review does not establish a rele
 [0005](adr/0005-datadog-supported-operational-observability.md) is prepared and
 awaiting direction; configuration and acceptance are not established.
 
+The [Plan Quotes RFC](designs/2026-10-05-plan-quotes-rfc.md) is a current design-only
+proposal for multi-Tool purchasing. Its D1–D5 decisions and W0 qualification are
+pending; it is distinct from ADR 0004’s Provider-created service packages.
+
 [Research](../research/README.md) distinguishes active managed-agent qualification
 from dated comparisons and experiments. [Strategy](strategy) supports the thesis.
 [AEcon Signals](workflow/aecon-signals-proposal.md) remains a proposal.
