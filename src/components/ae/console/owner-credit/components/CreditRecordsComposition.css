@@ -159,11 +159,23 @@
   padding-top: var(--space-4);
 }
 
-.arc-credit-records details > summary {
+.arc-credit-history-amount,
+.arc-credit-history-time {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.arc-credit-history-detail-facts .arc-facts-value {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.arc-credit-history-detail-actions {
   display: flex;
-  min-height: 44px;
-  align-items: center;
-  cursor: pointer;
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
 }
 
 @media (max-width: 767px) {

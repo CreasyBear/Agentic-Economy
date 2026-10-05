@@ -55,72 +55,115 @@ function progressStatuses() {
   return { progress, statuses }
 }
 
+function expectRecordedRequestFacts(title: string, description: string) {
+  expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
+  expect(screen.getByText(description)).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Codex · Production')
+  fireEvent.click(screen.getByText('Request 12345678'))
+  expect(screen.getByText(grantRef)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Check request status' })).toBeInTheDocument()
+}
+
 describe('HomeOnboardingRequestSection', () => {
-  it('shows the exact pending request and review destination, preserving the opaque state', () => {
-    renderSection({ onboarding: request('pending') })
-
-    const { progress, statuses } = progressStatuses()
-    expect(statuses).toEqual(['current', 'upcoming', 'upcoming'])
-    expect(progress).toHaveAttribute('aria-label', 'Access request progress')
-    expect(within(progress).getAllByRole('listitem')[0]?.querySelector('[aria-current="step"]')).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Codex · Production')
-    fireEvent.click(screen.getByText('Request 12345678'))
-    expect(screen.getByText(grantRef)).toBeInTheDocument()
-
-    const review = screen.getByRole('link', { name: 'Review access request' })
-    expect(review).toHaveAttribute('href', '/agent-access/authorize')
-    expect(JSON.parse(review.getAttribute('data-search') ?? '{}')).toEqual({ grant_ref: grantRef, state: 'opaque-callback-state' })
-  })
-
   it.each([
-    ['pending', ['current', 'upcoming', 'upcoming'], 0],
-    ['issuing', ['complete', 'current', 'upcoming'], 1],
-    ['approved', ['complete', 'complete', 'current'], 2],
-    ['exchanging', ['complete', 'complete', 'current'], 2],
-    ['exchanged', ['complete', 'complete', 'complete'], -1],
-  ] as const)('maps %s to explicit Arc Stepper statuses', (phase, expected, currentIndex) => {
+    [
+      'pending', ['current', 'upcoming', 'upcoming'], 0,
+      'Your Agent is asking for access',
+      'Review the requested access. Your approval stays separate from any permission to purchase a Tool.',
+      true, undefined,
+    ],
+    [
+      'issuing', ['complete', 'current', 'upcoming'], 1,
+      'Preparing the approved access',
+      'The request is in progress. Check its recorded status before submitting another approval or starting another request.',
+      false, undefined,
+    ],
+    [
+      'approved', ['complete', 'complete', 'current'], 2,
+      'Access approved; waiting for your Agent',
+      'Keep working in your Agent. This page follows this exact request and updates automatically.',
+      false, undefined,
+    ],
+    [
+      'exchanging', ['complete', 'complete', 'current'], 2,
+      'Your Agent is collecting its access',
+      'The request is in progress. Check its recorded status before submitting another approval or starting another request.',
+      false, undefined,
+    ],
+    [
+      'denied', ['error', 'upcoming', 'upcoming'], -1,
+      'This access request was declined',
+      'Continue in the same Agent task and request fresh access. If an Agent already exists, renew its access. Retain any existing Call reference; reconnecting does not retry a purchase.',
+      false, 'Request declined',
+    ],
+    [
+      'expired', ['error', 'upcoming', 'upcoming'], -1,
+      'This access request expired',
+      'Continue in the same Agent task and request fresh access. If an Agent already exists, renew its access. Retain any existing Call reference; reconnecting does not retry a purchase.',
+      false, 'Request expired',
+    ],
+  ] as const)('preserves %s facts and recorded request behavior', (phase, expected, currentIndex, title, description, hasReview, error) => {
     renderSection({ onboarding: request(phase) })
 
+    expectRecordedRequestFacts(title, description)
     const { progress, statuses } = progressStatuses()
     expect(statuses).toEqual(expected)
     if (currentIndex >= 0) {
       expect(within(progress).getAllByRole('listitem')[currentIndex]).toHaveAttribute('data-status', 'current')
       expect(within(progress).getAllByRole('listitem')[currentIndex]?.querySelector('[aria-current="step"]')).toBeInTheDocument()
+    } else {
+      expect(within(within(progress).getAllByRole('listitem')[0]!).getByText(error!)).toBeInTheDocument()
+      expect(within(progress).getAllByRole('listitem')[0]?.querySelector('[aria-current="step"]')).toBeNull()
+    }
+    expect(progress).toHaveAttribute('aria-label', 'Access request progress')
+    if (hasReview) {
+      const review = screen.getByRole('link', { name: 'Review access request' })
+      expect(review).toHaveAttribute('href', '/agent-access/authorize')
+      expect(JSON.parse(review.getAttribute('data-search') ?? '{}')).toEqual({ grant_ref: grantRef, state: 'opaque-callback-state' })
+    } else {
+      expect(screen.queryByRole('link', { name: 'Review access request' })).not.toBeInTheDocument()
     }
   })
 
   it('records the exchange without claiming that the Agent authenticated, made a Call, or received a delivery', () => {
-    renderSection({ onboarding: request('exchanged') })
+    const onCheck = vi.fn()
+    renderSection({ onboarding: request('exchanged'), onCheck })
 
-    const { progress, statuses } = progressStatuses()
-    expect(statuses).toEqual(['complete', 'complete', 'complete'])
-    expect(progress).toHaveTextContent('Access exchange recorded')
-    expect(screen.getByRole('heading', { name: 'Access returned to your Agent' })).toBeInTheDocument()
-    expect(screen.getByText(/Authenticated requests, Calls and delivery are observed separately below\./)).toBeInTheDocument()
-    expect(progress).not.toHaveTextContent(/connected|delivered/i)
-  })
-
-  it.each([
-    ['denied', 'Request declined'],
-    ['expired', 'Request expired'],
-  ] as const)('shows %s as an error and removes the review action', (phase, message) => {
-    renderSection({ onboarding: request(phase) })
-
-    const { progress, statuses } = progressStatuses()
-    expect(statuses).toEqual(['error', 'upcoming', 'upcoming'])
-    expect(within(within(progress).getAllByRole('listitem')[0]!).getByText(message)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Review access request' })).not.toBeInTheDocument()
-  })
-
-  it.each([
-    ['no request', undefined, validSearch],
-    ['refused request', { kind: 'refused', reason: 'not_found' }, validSearch],
-    ['unavailable request', { kind: 'unavailable' }, validSearch],
-    ['invalid search', request('pending'), { ...validSearch, requestInvalid: true }],
-  ] as const)('omits progress for %s', (_label, onboarding, search) => {
-    renderSection({ onboarding, search })
-
+    expectRecordedRequestFacts('Access returned to your Agent', 'The access exchange is recorded. Authenticated requests, Calls and delivery are observed separately below.')
     expect(screen.queryByRole('group', { name: 'Access request progress' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Review access')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Check request status' }))
+    expect(onCheck).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['no request', undefined, 'Keep working in your Agent. This page follows this exact request and updates automatically.'],
+    ['unavailable request', { kind: 'unavailable' }, 'Keep working in your Agent. This page follows this exact request and updates automatically.'],
+    ['refused request', { kind: 'refused', reason: 'not_found' }, 'This request is no longer available. Existing owned Calls can still be followed by their reference.'],
+  ] as const)('preserves %s content without inventing request facts', (_label, onboarding, description) => {
+    renderSection({ onboarding })
+
+    expect(screen.getByRole('heading', { name: 'Checking this access request' })).toBeInTheDocument()
+    expect(screen.getByText(description)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('No other Agent is substituted for this request.')
+    expect(screen.queryByRole('group', { name: 'Access request progress' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Request /)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Review access request' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check request status' })).toBeInTheDocument()
+  })
+
+  it('preserves invalid-search content and the original review URL and callback state', () => {
+    renderSection({ onboarding: request('pending'), search: { ...validSearch, requestInvalid: true } })
+
+    expect(screen.getByRole('heading', { name: 'Your Agent is asking for access' })).toBeInTheDocument()
+    expect(screen.getByText('The request link is incomplete. Open the exact verification link supplied by your Agent.')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Codex · Production')
+    expect(screen.queryByRole('group', { name: 'Access request progress' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Request 12345678'))
+    expect(screen.getByText(grantRef)).toBeInTheDocument()
+    const review = screen.getByRole('link', { name: 'Review access request' })
+    expect(review).toHaveAttribute('href', '/agent-access/authorize')
+    expect(JSON.parse(review.getAttribute('data-search') ?? '{}')).toEqual({ grant_ref: grantRef, state: 'opaque-callback-state' })
   })
 
   it('disables the existing status check while checking and calls its callback once otherwise', () => {
