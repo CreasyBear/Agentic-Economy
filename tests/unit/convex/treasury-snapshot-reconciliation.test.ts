@@ -2,6 +2,7 @@ import { getFunctionName, type FunctionReference } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { internal } from '../../../convex/_generated/api'
 import { reconcileTreasurySnapshot } from '../../../convex/lib/money/treasury/snapshot'
+import { readTreasuryChainObservation, type TreasuryRpc } from '../../../convex/lib/money/treasury/chainObservation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createFormanceContext } from '@/modules/money/formance'
 import { prepareFormanceTreasuryBatch, treasuryBufferAccount } from '@/modules/money/formance-treasury'
@@ -83,7 +84,7 @@ async function fixture(initialAt = NOW - 20) {
       })).toMatchObject({ kind: 'completed' })
     }
     if (completedAt !== undefined) await finish(completedAt)
-    return { checkpoint, batchRef: batch.batchRef, finish }
+    return { checkpoint, observation: batch.observation, batchRef: batch.batchRef, finish }
   }
   const opening = await range(null, initialAt, initialAt + 2)
   vi.mocked(Date.now).mockReturnValue(NOW)
@@ -393,13 +394,59 @@ describe('treasury snapshot cutoff reconciliation', () => {
     expect(await f.backend.run(ctx => ctx.db.query('moneyTreasuryBatches').collect())).toEqual(before)
   })
 
-  it.each(['unavailable', 'advanced', 'hash', 'balance', 'environment', 'network', 'asset', 'address', 'block_clock', 'range', 'not_caught_up', 'future_probe'] as const)(
+  it.each(['empty', 'net_zero_transfer', 'rpc_conflict', 'missing_logs'] as const)(
+    'audits an advancing finalized range through the real reader with %s RPC evidence', async evidence => {
+      const initialAt = NOW - 65 * 60_000
+      const f = await fixture(initialAt)
+      const before = await f.backend.run(ctx => ctx.db.query('moneyTreasuryBatches').collect())
+      const targets = [new URL('https://first.example'), new URL('https://second.example')]
+      const rpc: TreasuryRpc = async (target, method, params) => {
+        if (method === 'eth_chainId') return '0x14a34'
+        if (method === 'eth_getBlockByNumber') {
+          const old = params[0] === '0x64'
+          return { number: old ? '0x64' : '0x6e',
+            hash: hash(old ? 100 : evidence === 'rpc_conflict' && target.hostname === 'second.example' ? 111 : 110),
+            timestamp: `0x${Math.floor((old ? initialAt - 1_000 : NOW - 60_000) / 1_000).toString(16)}` }
+        }
+        if (method === 'eth_call') return `0x${(15_000_000n).toString(16).padStart(64, '0')}`
+        if (method === 'eth_getLogs') {
+          if (evidence === 'missing_logs') return null
+          if (evidence !== 'net_zero_transfer') return []
+          const addressTopic = `0x${PAYER.slice(2).padStart(64, '0')}`
+          return [{ address: ASSET, removed: false, transactionHash: hash(1_110), blockHash: hash(110),
+            blockNumber: '0x6e', logIndex: '0x0', data: hash(1), topics: [
+              '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', addressTopic, addressTopic] }]
+        }
+        throw new Error('unexpected_rpc_method')
+      }
+      f.chainRead.mockImplementation(async input => readTreasuryChainObservation({
+        environment: 'sandbox', address: PAYER, ...input,
+      }, { rpc, targets }))
+      await f.reconcileLive()
+      expect(f.chainRead).toHaveBeenCalledTimes(1)
+      if (evidence === 'empty') {
+        expect(await f.report()).toMatchObject({ snapshotAt: NOW,
+          chain: { kind: 'available', observedAt: NOW, blockNumber: '110', blockHash: hash(110), blockTimestamp: NOW - 60_000, totalUnits: '15000000' },
+          checks: { cash: { kind: 'matched' }, settlements: { kind: 'matched' }, funding: { kind: 'matched' }, reservations: { kind: 'matched' } } })
+        expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+          .toMatchObject({ treasury: { kind: 'passed' } })
+      } else {
+        expect(await f.report()).toMatchObject({ chain: { kind: 'unavailable' }, checks: { cash: { kind: 'unavailable' } } })
+      }
+      expect(await f.backend.run(ctx => ctx.db.query('moneyTreasuryBatches').collect())).toEqual(before)
+    })
+
+  it.each(['unavailable', 'advanced_same_hash', 'regressed', 'oversized', 'hash', 'balance', 'environment', 'network', 'asset', 'address', 'block_clock', 'range', 'not_caught_up', 'future_probe'] as const)(
     'refuses %s RPC evidence instead of falling back to a green booked clock', async fault => {
       const f = await fixture()
       const proof = await f.chainRead({ checkpoint: f.opening.checkpoint })
       if (proof.kind !== 'observed') throw new Error('fixture_proof_missing')
       const invalid = structuredClone(proof)
-      if (fault === 'advanced') invalid.checkpoint.blockNumber = '101'
+      if (fault === 'advanced_same_hash') invalid.checkpoint.blockNumber = '101'
+      if (fault === 'regressed') invalid.checkpoint.blockNumber = '99'
+      if (fault === 'oversized') {
+        invalid.checkpoint.blockNumber = '2101'; invalid.checkpoint.blockHash = hash(2101); invalid.blockTimestamp += 1
+      }
       if (fault === 'hash') invalid.checkpoint.blockHash = hash(101)
       if (fault === 'balance') invalid.checkpoint.balanceUnits = '15000001'
       if (fault === 'environment') invalid.environment = 'production'
@@ -441,10 +488,8 @@ describe('treasury snapshot cutoff reconciliation', () => {
     const f = await fixture()
     const read = f.chainRead.getMockImplementation()!
     f.chainRead.mockImplementationOnce(async () => {
-      const next = await f.range(f.opening.checkpoint, NOW + 10, NOW + 12)
-      return { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
-        fromBlock: '101', checkpoint: next.checkpoint, blockTimestamp: NOW - 990,
-        observedAt: NOW, caughtUp: true, transfers: [] }
+      const next = await f.range(f.opening.checkpoint, NOW + 10, NOW + 12, '1')
+      return { ...next.observation, observedAt: NOW }
     }).mockImplementation(read)
     await f.reconcileLive()
     expect(f.chainRead).toHaveBeenCalledTimes(2)
@@ -478,10 +523,8 @@ describe('treasury snapshot cutoff reconciliation', () => {
       if (input.checkpoint === undefined) throw new Error('fixture_checkpoint_missing')
       const observedAt = at
       at += 12
-      const next = await f.range(input.checkpoint, at - 2, at)
-      return { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
-        fromBlock: String(BigInt(input.checkpoint.blockNumber) + 1n), checkpoint: next.checkpoint,
-        blockTimestamp: observedAt - 990, observedAt, caughtUp: true, transfers: [] }
+      const next = await f.range(input.checkpoint, at - 2, at, '1')
+      return { ...next.observation, observedAt }
     })
     await f.reconcileLive()
     expect(f.chainRead).toHaveBeenCalledTimes(2)

@@ -127,7 +127,7 @@ async function reconcileSnapshotAttempt(ctx: Context, dependencies: SnapshotDepe
   // once, only after the exact probed checkpoint is now booked. The new attempt
   // obtains its own real RPC start clock and rereads every financial source;
   // changed eligible sources never take this path.
-  if (canRefreshCheckpoint && dependencies.now === undefined && stable
+  if (canRefreshCheckpoint && dependencies.now === undefined && stable && cashCheck.kind === 'unavailable'
     && advancedReadback(bootstrap, chainReadback)) {
     const current = await ctx.runQuery(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: Date.now() })
     if (current.kind === 'available' && current.progress.kind === 'ready' && chainReadback.kind === 'observed'
