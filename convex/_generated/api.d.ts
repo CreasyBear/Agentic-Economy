@@ -8,8 +8,6 @@
  * @module
  */
 
-import type * as capabilityServiceUsage from "../capabilityServiceUsage.js";
-import type * as moneyMonthlyUsageDraft from "../moneyMonthlyUsageDraft.js";
 import type * as actionExecutionControl from "../actionExecutionControl.js";
 import type * as adminCallContent from "../adminCallContent.js";
 import type * as adminConsoleAudit from "../adminConsoleAudit.js";
@@ -55,6 +53,7 @@ import type * as capabilityProviderTools from "../capabilityProviderTools.js";
 import type * as capabilityQuotes from "../capabilityQuotes.js";
 import type * as capabilityQuotesStatus from "../capabilityQuotesStatus.js";
 import type * as capabilitySelectionDecisions from "../capabilitySelectionDecisions.js";
+import type * as capabilityServiceUsage from "../capabilityServiceUsage.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
 import type * as capabilitySupplyCurrentTool from "../capabilitySupplyCurrentTool.js";
 import type * as capabilitySupplyDirectoryEligibility from "../capabilitySupplyDirectoryEligibility.js";
@@ -197,6 +196,8 @@ import type * as lib_capabilityExecution_callLifecycle_admissionReservation from
 import type * as lib_capabilityExecution_callLifecycle_admissionReserve from "../lib/capabilityExecution/callLifecycle/admissionReserve.js";
 import type * as lib_capabilityExecution_callLifecycle_agentCallAuthority from "../lib/capabilityExecution/callLifecycle/agentCallAuthority.js";
 import type * as lib_capabilityExecution_callLifecycle_agentCallExecution from "../lib/capabilityExecution/callLifecycle/agentCallExecution.js";
+import type * as lib_capabilityExecution_callLifecycle_attemptEvidence from "../lib/capabilityExecution/callLifecycle/attemptEvidence.js";
+import type * as lib_capabilityExecution_callLifecycle_attemptEvidenceContracts from "../lib/capabilityExecution/callLifecycle/attemptEvidenceContracts.js";
 import type * as lib_capabilityExecution_callLifecycle_callFinancialReservation from "../lib/capabilityExecution/callLifecycle/callFinancialReservation.js";
 import type * as lib_capabilityExecution_callLifecycle_callIdentity from "../lib/capabilityExecution/callLifecycle/callIdentity.js";
 import type * as lib_capabilityExecution_callLifecycle_callProviderAuthority from "../lib/capabilityExecution/callLifecycle/callProviderAuthority.js";
@@ -220,6 +221,7 @@ import type * as lib_capabilityExecution_callLifecycle_procureIdentity from "../
 import type * as lib_capabilityExecution_callLifecycle_purchaseResolutionMaterialize from "../lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize.js";
 import type * as lib_capabilityExecution_callLifecycle_reconciliation from "../lib/capabilityExecution/callLifecycle/reconciliation.js";
 import type * as lib_capabilityExecution_callLifecycle_restoredDispatches from "../lib/capabilityExecution/callLifecycle/restoredDispatches.js";
+import type * as lib_capabilityExecution_callLifecycle_serviceUsage from "../lib/capabilityExecution/callLifecycle/serviceUsage.js";
 import type * as lib_capabilityExecution_callLifecycle_statusControl from "../lib/capabilityExecution/callLifecycle/statusControl.js";
 import type * as lib_capabilityExecution_callLifecycle_statusQuery from "../lib/capabilityExecution/callLifecycle/statusQuery.js";
 import type * as lib_capabilityExecution_callLifecycle_supplyCallsListing from "../lib/capabilityExecution/callLifecycle/supplyCallsListing.js";
@@ -227,6 +229,12 @@ import type * as lib_capabilityExecution_callLifecycle_workComplete from "../lib
 import type * as lib_capabilityExecution_callLifecycle_x402PreSignProbe from "../lib/capabilityExecution/callLifecycle/x402PreSignProbe.js";
 import type * as lib_capabilityExecution_callProjection_contracts from "../lib/capabilityExecution/callProjection/contracts.js";
 import type * as lib_capabilityExecution_callProjection_dispatch from "../lib/capabilityExecution/callProjection/dispatch.js";
+import type * as lib_capabilityExecution_callProjection_durableReport from "../lib/capabilityExecution/callProjection/durableReport.js";
+import type * as lib_capabilityExecution_callProjection_durableReportContracts from "../lib/capabilityExecution/callProjection/durableReportContracts.js";
+import type * as lib_capabilityExecution_callProjection_durableReportWork from "../lib/capabilityExecution/callProjection/durableReportWork.js";
+import type * as lib_capabilityExecution_callProjection_exportAudit from "../lib/capabilityExecution/callProjection/exportAudit.js";
+import type * as lib_capabilityExecution_callProjection_exportPage from "../lib/capabilityExecution/callProjection/exportPage.js";
+import type * as lib_capabilityExecution_callProjection_exportSnapshot from "../lib/capabilityExecution/callProjection/exportSnapshot.js";
 import type * as lib_capabilityExecution_callProjection_history from "../lib/capabilityExecution/callProjection/history.js";
 import type * as lib_capabilityExecution_callProjection_listing from "../lib/capabilityExecution/callProjection/listing.js";
 import type * as lib_capabilityExecution_callProjection_outerResult from "../lib/capabilityExecution/callProjection/outerResult.js";
@@ -269,6 +277,12 @@ import type * as lib_capabilityExecution_quotes_readForCall from "../lib/capabil
 import type * as lib_capabilityExecution_quotes_refusalHelpers from "../lib/capabilityExecution/quotes/refusalHelpers.js";
 import type * as lib_capabilityExecution_quotes_statusQuery from "../lib/capabilityExecution/quotes/statusQuery.js";
 import type * as lib_capabilityExecution_selectionDecisions from "../lib/capabilityExecution/selectionDecisions.js";
+import type * as lib_capabilityExecution_serviceUsage_contracts from "../lib/capabilityExecution/serviceUsage/contracts.js";
+import type * as lib_capabilityExecution_serviceUsage_lineage from "../lib/capabilityExecution/serviceUsage/lineage.js";
+import type * as lib_capabilityExecution_serviceUsage_projectedSupport from "../lib/capabilityExecution/serviceUsage/projectedSupport.js";
+import type * as lib_capabilityExecution_serviceUsage_providerObservations from "../lib/capabilityExecution/serviceUsage/providerObservations.js";
+import type * as lib_capabilityExecution_serviceUsage_read from "../lib/capabilityExecution/serviceUsage/read.js";
+import type * as lib_capabilityExecution_serviceUsage_sourceVersions from "../lib/capabilityExecution/serviceUsage/sourceVersions.js";
 import type * as lib_capabilityExecution_x402AuthorizationExpiry_queueExpired from "../lib/capabilityExecution/x402AuthorizationExpiry/queueExpired.js";
 import type * as lib_capabilitySupply_admission_sourceAuthority from "../lib/capabilitySupply/admission/sourceAuthority.js";
 import type * as lib_capabilitySupply_commands_writes from "../lib/capabilitySupply/commands/writes.js";
@@ -490,6 +504,7 @@ import type * as lib_money_cdpUsdcBalance from "../lib/money/cdpUsdcBalance.js";
 import type * as lib_money_credit_activity from "../lib/money/credit/activity.js";
 import type * as lib_money_credit_balance from "../lib/money/credit/balance.js";
 import type * as lib_money_credit_contracts from "../lib/money/credit/contracts.js";
+import type * as lib_money_credit_credentialFacts from "../lib/money/credit/credentialFacts.js";
 import type * as lib_money_customer_authority from "../lib/money/customer/authority.js";
 import type * as lib_money_customer_taxFactsRead from "../lib/money/customer/taxFactsRead.js";
 import type * as lib_money_customer_taxFactsUpsert from "../lib/money/customer/taxFactsUpsert.js";
@@ -507,6 +522,7 @@ import type * as lib_money_formance_contracts from "../lib/money/formance/contra
 import type * as lib_money_formance_gateway from "../lib/money/formance/gateway.js";
 import type * as lib_money_formance_postings from "../lib/money/formance/postings.js";
 import type * as lib_money_formance_reads from "../lib/money/formance/reads.js";
+import type * as lib_money_formance_usageReconciliation from "../lib/money/formance/usageReconciliation.js";
 import type * as lib_money_funding_agentFundingHandoff from "../lib/money/funding/agentFundingHandoff.js";
 import type * as lib_money_funding_balanceSubject from "../lib/money/funding/balanceSubject.js";
 import type * as lib_money_funding_contracts from "../lib/money/funding/contracts.js";
@@ -537,6 +553,16 @@ import type * as lib_money_managedCall_x402Proof from "../lib/money/managedCall/
 import type * as lib_money_monthlyBudget_configure from "../lib/money/monthlyBudget/configure.js";
 import type * as lib_money_monthlyBudget_read from "../lib/money/monthlyBudget/read.js";
 import type * as lib_money_monthlyBudget_readOrganization from "../lib/money/monthlyBudget/readOrganization.js";
+import type * as lib_money_monthlyDraft_completeContracts from "../lib/money/monthlyDraft/completeContracts.js";
+import type * as lib_money_monthlyDraft_completeFinancial from "../lib/money/monthlyDraft/completeFinancial.js";
+import type * as lib_money_monthlyDraft_completeFreeze from "../lib/money/monthlyDraft/completeFreeze.js";
+import type * as lib_money_monthlyDraft_completeStore from "../lib/money/monthlyDraft/completeStore.js";
+import type * as lib_money_monthlyDraft_completeWork from "../lib/money/monthlyDraft/completeWork.js";
+import type * as lib_money_monthlyDraft_contracts from "../lib/money/monthlyDraft/contracts.js";
+import type * as lib_money_monthlyDraft_create from "../lib/money/monthlyDraft/create.js";
+import type * as lib_money_monthlyDraft_freeze from "../lib/money/monthlyDraft/freeze.js";
+import type * as lib_money_monthlyDraft_reportingPolicy from "../lib/money/monthlyDraft/reportingPolicy.js";
+import type * as lib_money_monthlyDraft_store from "../lib/money/monthlyDraft/store.js";
 import type * as lib_money_promotionalCredit_allocation from "../lib/money/promotionalCredit/allocation.js";
 import type * as lib_money_promotionalCredit_balance from "../lib/money/promotionalCredit/balance.js";
 import type * as lib_money_promotionalCredit_lifecycle from "../lib/money/promotionalCredit/lifecycle.js";
@@ -563,6 +589,9 @@ import type * as lib_money_treasury_progress from "../lib/money/treasury/progres
 import type * as lib_money_treasury_snapshot from "../lib/money/treasury/snapshot.js";
 import type * as lib_money_treasury_snapshotContext from "../lib/money/treasury/snapshotContext.js";
 import type * as lib_money_treasury_snapshotStore from "../lib/money/treasury/snapshotStore.js";
+import type * as lib_money_usageReconciliation_contracts from "../lib/money/usageReconciliation/contracts.js";
+import type * as lib_money_usageReconciliation_facts from "../lib/money/usageReconciliation/facts.js";
+import type * as lib_money_usageReconciliation_read from "../lib/money/usageReconciliation/read.js";
 import type * as lib_money_x402PaymentAttempt_attempt from "../lib/money/x402PaymentAttempt/attempt.js";
 import type * as lib_money_x402PaymentAttempt_authorizationMaterial from "../lib/money/x402PaymentAttempt/authorizationMaterial.js";
 import type * as lib_money_x402PaymentAttempt_authorize from "../lib/money/x402PaymentAttempt/authorize.js";
@@ -620,6 +649,10 @@ import type * as lib_principalAccount_memberships_membershipUpdated from "../lib
 import type * as lib_principalAccount_notifications_delivery from "../lib/principalAccount/notifications/delivery.js";
 import type * as lib_principalAccount_notifications_enqueue from "../lib/principalAccount/notifications/enqueue.js";
 import type * as lib_principalAccount_notifications_preferences from "../lib/principalAccount/notifications/preferences.js";
+import type * as lib_principalAccount_notifications_usageAlerts from "../lib/principalAccount/notifications/usageAlerts.js";
+import type * as lib_principalAccount_notifications_usageHistory from "../lib/principalAccount/notifications/usageHistory.js";
+import type * as lib_principalAccount_notifications_usagePolicyAudit from "../lib/principalAccount/notifications/usagePolicyAudit.js";
+import type * as lib_principalAccount_notifications_usageReports from "../lib/principalAccount/notifications/usageReports.js";
 import type * as lib_principalAccount_personalAccount_eligibility from "../lib/principalAccount/personalAccount/eligibility.js";
 import type * as lib_principalAccount_personalAccount_exportData from "../lib/principalAccount/personalAccount/exportData.js";
 import type * as lib_principalAccount_personalAccount_identity from "../lib/principalAccount/personalAccount/identity.js";
@@ -693,8 +726,8 @@ import type * as moneyManagedCallLifecycle from "../moneyManagedCallLifecycle.js
 import type * as moneyManagedCallRemedy from "../moneyManagedCallRemedy.js";
 import type * as moneyManagedCallRemedyActions from "../moneyManagedCallRemedyActions.js";
 import type * as moneyMonthlySpendBudget from "../moneyMonthlySpendBudget.js";
+import type * as moneyMonthlyUsageDraft from "../moneyMonthlyUsageDraft.js";
 import type * as moneyOwnerSpend from "../moneyOwnerSpend.js";
-import type * as moneyUsageReconciliation from "../moneyUsageReconciliation.js";
 import type * as moneyPromotionalCredit from "../moneyPromotionalCredit.js";
 import type * as moneyProviderObligations from "../moneyProviderObligations.js";
 import type * as moneyReadiness from "../moneyReadiness.js";
@@ -708,6 +741,7 @@ import type * as moneyTreasury from "../moneyTreasury.js";
 import type * as moneyTreasuryObservation from "../moneyTreasuryObservation.js";
 import type * as moneyTreasuryReconciliation from "../moneyTreasuryReconciliation.js";
 import type * as moneyTreasurySnapshot from "../moneyTreasurySnapshot.js";
+import type * as moneyUsageReconciliation from "../moneyUsageReconciliation.js";
 import type * as moneyX402Expiry from "../moneyX402Expiry.js";
 import type * as moneyX402ExpiryActions from "../moneyX402ExpiryActions.js";
 import type * as moneyX402PaymentAttempts from "../moneyX402PaymentAttempts.js";
@@ -731,6 +765,7 @@ import type * as securityAccountHistory from "../securityAccountHistory.js";
 import type * as serviceAssertion from "../serviceAssertion.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
 import type * as stripeWebhookWorkpool from "../stripeWebhookWorkpool.js";
+import type * as usageTrackedMutation from "../usageTrackedMutation.js";
 import type * as workloadCron from "../workloadCron.js";
 import type * as workspaceAccounts from "../workspaceAccounts.js";
 import type * as workspaceInvitations from "../workspaceInvitations.js";
@@ -754,8 +789,6 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  capabilityServiceUsage: typeof capabilityServiceUsage;
-  moneyMonthlyUsageDraft: typeof moneyMonthlyUsageDraft;
   actionExecutionControl: typeof actionExecutionControl;
   adminCallContent: typeof adminCallContent;
   adminConsoleAudit: typeof adminConsoleAudit;
@@ -801,6 +834,7 @@ declare const fullApi: ApiFromModules<{
   capabilityQuotes: typeof capabilityQuotes;
   capabilityQuotesStatus: typeof capabilityQuotesStatus;
   capabilitySelectionDecisions: typeof capabilitySelectionDecisions;
+  capabilityServiceUsage: typeof capabilityServiceUsage;
   capabilitySupply: typeof capabilitySupply;
   capabilitySupplyCurrentTool: typeof capabilitySupplyCurrentTool;
   capabilitySupplyDirectoryEligibility: typeof capabilitySupplyDirectoryEligibility;
@@ -943,6 +977,8 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/callLifecycle/admissionReserve": typeof lib_capabilityExecution_callLifecycle_admissionReserve;
   "lib/capabilityExecution/callLifecycle/agentCallAuthority": typeof lib_capabilityExecution_callLifecycle_agentCallAuthority;
   "lib/capabilityExecution/callLifecycle/agentCallExecution": typeof lib_capabilityExecution_callLifecycle_agentCallExecution;
+  "lib/capabilityExecution/callLifecycle/attemptEvidence": typeof lib_capabilityExecution_callLifecycle_attemptEvidence;
+  "lib/capabilityExecution/callLifecycle/attemptEvidenceContracts": typeof lib_capabilityExecution_callLifecycle_attemptEvidenceContracts;
   "lib/capabilityExecution/callLifecycle/callFinancialReservation": typeof lib_capabilityExecution_callLifecycle_callFinancialReservation;
   "lib/capabilityExecution/callLifecycle/callIdentity": typeof lib_capabilityExecution_callLifecycle_callIdentity;
   "lib/capabilityExecution/callLifecycle/callProviderAuthority": typeof lib_capabilityExecution_callLifecycle_callProviderAuthority;
@@ -966,6 +1002,7 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize": typeof lib_capabilityExecution_callLifecycle_purchaseResolutionMaterialize;
   "lib/capabilityExecution/callLifecycle/reconciliation": typeof lib_capabilityExecution_callLifecycle_reconciliation;
   "lib/capabilityExecution/callLifecycle/restoredDispatches": typeof lib_capabilityExecution_callLifecycle_restoredDispatches;
+  "lib/capabilityExecution/callLifecycle/serviceUsage": typeof lib_capabilityExecution_callLifecycle_serviceUsage;
   "lib/capabilityExecution/callLifecycle/statusControl": typeof lib_capabilityExecution_callLifecycle_statusControl;
   "lib/capabilityExecution/callLifecycle/statusQuery": typeof lib_capabilityExecution_callLifecycle_statusQuery;
   "lib/capabilityExecution/callLifecycle/supplyCallsListing": typeof lib_capabilityExecution_callLifecycle_supplyCallsListing;
@@ -973,6 +1010,12 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/callLifecycle/x402PreSignProbe": typeof lib_capabilityExecution_callLifecycle_x402PreSignProbe;
   "lib/capabilityExecution/callProjection/contracts": typeof lib_capabilityExecution_callProjection_contracts;
   "lib/capabilityExecution/callProjection/dispatch": typeof lib_capabilityExecution_callProjection_dispatch;
+  "lib/capabilityExecution/callProjection/durableReport": typeof lib_capabilityExecution_callProjection_durableReport;
+  "lib/capabilityExecution/callProjection/durableReportContracts": typeof lib_capabilityExecution_callProjection_durableReportContracts;
+  "lib/capabilityExecution/callProjection/durableReportWork": typeof lib_capabilityExecution_callProjection_durableReportWork;
+  "lib/capabilityExecution/callProjection/exportAudit": typeof lib_capabilityExecution_callProjection_exportAudit;
+  "lib/capabilityExecution/callProjection/exportPage": typeof lib_capabilityExecution_callProjection_exportPage;
+  "lib/capabilityExecution/callProjection/exportSnapshot": typeof lib_capabilityExecution_callProjection_exportSnapshot;
   "lib/capabilityExecution/callProjection/history": typeof lib_capabilityExecution_callProjection_history;
   "lib/capabilityExecution/callProjection/listing": typeof lib_capabilityExecution_callProjection_listing;
   "lib/capabilityExecution/callProjection/outerResult": typeof lib_capabilityExecution_callProjection_outerResult;
@@ -1015,6 +1058,12 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/quotes/refusalHelpers": typeof lib_capabilityExecution_quotes_refusalHelpers;
   "lib/capabilityExecution/quotes/statusQuery": typeof lib_capabilityExecution_quotes_statusQuery;
   "lib/capabilityExecution/selectionDecisions": typeof lib_capabilityExecution_selectionDecisions;
+  "lib/capabilityExecution/serviceUsage/contracts": typeof lib_capabilityExecution_serviceUsage_contracts;
+  "lib/capabilityExecution/serviceUsage/lineage": typeof lib_capabilityExecution_serviceUsage_lineage;
+  "lib/capabilityExecution/serviceUsage/projectedSupport": typeof lib_capabilityExecution_serviceUsage_projectedSupport;
+  "lib/capabilityExecution/serviceUsage/providerObservations": typeof lib_capabilityExecution_serviceUsage_providerObservations;
+  "lib/capabilityExecution/serviceUsage/read": typeof lib_capabilityExecution_serviceUsage_read;
+  "lib/capabilityExecution/serviceUsage/sourceVersions": typeof lib_capabilityExecution_serviceUsage_sourceVersions;
   "lib/capabilityExecution/x402AuthorizationExpiry/queueExpired": typeof lib_capabilityExecution_x402AuthorizationExpiry_queueExpired;
   "lib/capabilitySupply/admission/sourceAuthority": typeof lib_capabilitySupply_admission_sourceAuthority;
   "lib/capabilitySupply/commands/writes": typeof lib_capabilitySupply_commands_writes;
@@ -1236,6 +1285,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/credit/activity": typeof lib_money_credit_activity;
   "lib/money/credit/balance": typeof lib_money_credit_balance;
   "lib/money/credit/contracts": typeof lib_money_credit_contracts;
+  "lib/money/credit/credentialFacts": typeof lib_money_credit_credentialFacts;
   "lib/money/customer/authority": typeof lib_money_customer_authority;
   "lib/money/customer/taxFactsRead": typeof lib_money_customer_taxFactsRead;
   "lib/money/customer/taxFactsUpsert": typeof lib_money_customer_taxFactsUpsert;
@@ -1253,6 +1303,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/formance/gateway": typeof lib_money_formance_gateway;
   "lib/money/formance/postings": typeof lib_money_formance_postings;
   "lib/money/formance/reads": typeof lib_money_formance_reads;
+  "lib/money/formance/usageReconciliation": typeof lib_money_formance_usageReconciliation;
   "lib/money/funding/agentFundingHandoff": typeof lib_money_funding_agentFundingHandoff;
   "lib/money/funding/balanceSubject": typeof lib_money_funding_balanceSubject;
   "lib/money/funding/contracts": typeof lib_money_funding_contracts;
@@ -1283,6 +1334,16 @@ declare const fullApi: ApiFromModules<{
   "lib/money/monthlyBudget/configure": typeof lib_money_monthlyBudget_configure;
   "lib/money/monthlyBudget/read": typeof lib_money_monthlyBudget_read;
   "lib/money/monthlyBudget/readOrganization": typeof lib_money_monthlyBudget_readOrganization;
+  "lib/money/monthlyDraft/completeContracts": typeof lib_money_monthlyDraft_completeContracts;
+  "lib/money/monthlyDraft/completeFinancial": typeof lib_money_monthlyDraft_completeFinancial;
+  "lib/money/monthlyDraft/completeFreeze": typeof lib_money_monthlyDraft_completeFreeze;
+  "lib/money/monthlyDraft/completeStore": typeof lib_money_monthlyDraft_completeStore;
+  "lib/money/monthlyDraft/completeWork": typeof lib_money_monthlyDraft_completeWork;
+  "lib/money/monthlyDraft/contracts": typeof lib_money_monthlyDraft_contracts;
+  "lib/money/monthlyDraft/create": typeof lib_money_monthlyDraft_create;
+  "lib/money/monthlyDraft/freeze": typeof lib_money_monthlyDraft_freeze;
+  "lib/money/monthlyDraft/reportingPolicy": typeof lib_money_monthlyDraft_reportingPolicy;
+  "lib/money/monthlyDraft/store": typeof lib_money_monthlyDraft_store;
   "lib/money/promotionalCredit/allocation": typeof lib_money_promotionalCredit_allocation;
   "lib/money/promotionalCredit/balance": typeof lib_money_promotionalCredit_balance;
   "lib/money/promotionalCredit/lifecycle": typeof lib_money_promotionalCredit_lifecycle;
@@ -1309,6 +1370,9 @@ declare const fullApi: ApiFromModules<{
   "lib/money/treasury/snapshot": typeof lib_money_treasury_snapshot;
   "lib/money/treasury/snapshotContext": typeof lib_money_treasury_snapshotContext;
   "lib/money/treasury/snapshotStore": typeof lib_money_treasury_snapshotStore;
+  "lib/money/usageReconciliation/contracts": typeof lib_money_usageReconciliation_contracts;
+  "lib/money/usageReconciliation/facts": typeof lib_money_usageReconciliation_facts;
+  "lib/money/usageReconciliation/read": typeof lib_money_usageReconciliation_read;
   "lib/money/x402PaymentAttempt/attempt": typeof lib_money_x402PaymentAttempt_attempt;
   "lib/money/x402PaymentAttempt/authorizationMaterial": typeof lib_money_x402PaymentAttempt_authorizationMaterial;
   "lib/money/x402PaymentAttempt/authorize": typeof lib_money_x402PaymentAttempt_authorize;
@@ -1366,6 +1430,10 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/notifications/delivery": typeof lib_principalAccount_notifications_delivery;
   "lib/principalAccount/notifications/enqueue": typeof lib_principalAccount_notifications_enqueue;
   "lib/principalAccount/notifications/preferences": typeof lib_principalAccount_notifications_preferences;
+  "lib/principalAccount/notifications/usageAlerts": typeof lib_principalAccount_notifications_usageAlerts;
+  "lib/principalAccount/notifications/usageHistory": typeof lib_principalAccount_notifications_usageHistory;
+  "lib/principalAccount/notifications/usagePolicyAudit": typeof lib_principalAccount_notifications_usagePolicyAudit;
+  "lib/principalAccount/notifications/usageReports": typeof lib_principalAccount_notifications_usageReports;
   "lib/principalAccount/personalAccount/eligibility": typeof lib_principalAccount_personalAccount_eligibility;
   "lib/principalAccount/personalAccount/exportData": typeof lib_principalAccount_personalAccount_exportData;
   "lib/principalAccount/personalAccount/identity": typeof lib_principalAccount_personalAccount_identity;
@@ -1439,8 +1507,8 @@ declare const fullApi: ApiFromModules<{
   moneyManagedCallRemedy: typeof moneyManagedCallRemedy;
   moneyManagedCallRemedyActions: typeof moneyManagedCallRemedyActions;
   moneyMonthlySpendBudget: typeof moneyMonthlySpendBudget;
+  moneyMonthlyUsageDraft: typeof moneyMonthlyUsageDraft;
   moneyOwnerSpend: typeof moneyOwnerSpend;
-  moneyUsageReconciliation: typeof moneyUsageReconciliation;
   moneyPromotionalCredit: typeof moneyPromotionalCredit;
   moneyProviderObligations: typeof moneyProviderObligations;
   moneyReadiness: typeof moneyReadiness;
@@ -1454,6 +1522,7 @@ declare const fullApi: ApiFromModules<{
   moneyTreasuryObservation: typeof moneyTreasuryObservation;
   moneyTreasuryReconciliation: typeof moneyTreasuryReconciliation;
   moneyTreasurySnapshot: typeof moneyTreasurySnapshot;
+  moneyUsageReconciliation: typeof moneyUsageReconciliation;
   moneyX402Expiry: typeof moneyX402Expiry;
   moneyX402ExpiryActions: typeof moneyX402ExpiryActions;
   moneyX402PaymentAttempts: typeof moneyX402PaymentAttempts;
@@ -1477,6 +1546,7 @@ declare const fullApi: ApiFromModules<{
   serviceAssertion: typeof serviceAssertion;
   sourceWriteAdmission: typeof sourceWriteAdmission;
   stripeWebhookWorkpool: typeof stripeWebhookWorkpool;
+  usageTrackedMutation: typeof usageTrackedMutation;
   workloadCron: typeof workloadCron;
   workspaceAccounts: typeof workspaceAccounts;
   workspaceInvitations: typeof workspaceInvitations;
