@@ -531,6 +531,10 @@ describe('recovery break-glass Convex driver', () => {
     })
     const beforeMissingAccount = await queryConsequenceState(missingAccountBackend, 'production')
     await expect(missingAccountBackend.withIdentity(identity('41')).mutation(
+      internal.recoveryBreakGlass.submitRecoveryApproval,
+      { approvalRef: 'approval:missing-account', accountRef: ACCOUNT, action: 'isolate' },
+    )).rejects.toMatchObject({ code: 'recovery_account_facts_invalid' })
+    await expect(missingAccountBackend.withIdentity(identity('41')).mutation(
       internal.recoveryBreakGlass.authorizeRecoveryOperation,
       registeredAuthorizePayload('isolate', 'missing-account', {
         correlationRef: 'recovery:missing-account',
