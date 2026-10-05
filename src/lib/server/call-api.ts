@@ -355,6 +355,7 @@ export async function authenticateCallGateway(
     requiredScope: CALL_SCOPE,
   })
   if (admitted.kind === 'authenticated') return { kind: admitted.kind, principal: admitted.principal }
+  recordGatewayTelemetry(options.timing,{correlationId,transport:'http',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:admitted.reason,retryable:admitted.reason==='source_unavailable'})
   return authRefusalProblem(request, admitted, CALL_SCOPE, undefined, correlationId)
 }
 
@@ -384,6 +385,7 @@ async function withCallHttpRateLimit(
   operation: () => Promise<Response>,
 ): Promise<Response> {
   const res = await withHttpRateLimit(request, name, operation)
+  if(res.status===429)recordGatewayTelemetry(undefined,{correlationId,transport:'http',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'rate_limited',rateLimited:true})
   return withRequestCorrelationHeader(res, correlationId)
 }
 
@@ -393,8 +395,11 @@ export async function handleToolQuotePost(
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
+    const startedAt=Date.now()
+    const telemetry=(event:Omit<GatewayTelemetryEvent,'correlationId'|'durationMs'>)=>recordGatewayTelemetry(options.timing,{...event,correlationId,durationMs:Date.now()-startedAt,transport:'http',operation:'quote'})
     const bounded = await readBoundedRequestText(request, MAX_CALL_BODY_BYTES)
     if (!bounded.ok) {
+      telemetry({outcome:'refused',stage:'pre_admission',refusalCode:'payload_too_large'})
       return withRequestCorrelationHeader(problem({
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
@@ -405,6 +410,7 @@ export async function handleToolQuotePost(
     const admitted = await authenticateCallGateway(request, correlationId, options, bounded.text)
     if (admitted instanceof Response) return admitted
     if (!(await isJsonContentType(request.headers.get('content-type')))) {
+      telemetry({...principalTelemetry(admitted.principal),outcome:'refused',stage:'pre_admission',refusalCode:'invalid_content_type'})
       return invalidContentTypeResponse(correlationId)
     }
     let rawBody: unknown
@@ -412,6 +418,7 @@ export async function handleToolQuotePost(
       rawBody = JSON.parse(bounded.text)
     } catch (cause) {
       void cause;
+      telemetry({...principalTelemetry(admitted.principal),outcome:'refused',stage:'pre_admission',refusalCode:'invalid_json'})
       return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -421,6 +428,7 @@ export async function handleToolQuotePost(
     }
     const parsed = toolQuoteAction.schema.safeParse(rawBody)
     if (!parsed.success) {
+      telemetry({...principalTelemetry(admitted.principal),outcome:'refused',stage:'pre_admission',refusalCode:'invalid_request'})
       return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -428,10 +436,10 @@ export async function handleToolQuotePost(
         detail: 'The request did not match tool.quote:v2.',
       }), correlationId)
     }
-    if (!productionMoneyManifestReady()) return withRequestCorrelationHeader(response({
+    if (!productionMoneyManifestReady()) {telemetry({...principalTelemetry(admitted.principal),outcome:'refused',stage:'pre_admission',refusalCode:'payments_not_ready',retryable:true});return withRequestCorrelationHeader(response({
       kind: 'refused', toolRef: parsed.data.toolRef, code: 'payments_not_ready',
       retryable: true, correlationRef: correlationId,
-    }, 200, callJsonResponseHeaders), correlationId)
+    }, 200, callJsonResponseHeaders), correlationId)}
     try {
       const service = options.callService ?? createCallService(request, bounded.text)
       if (service.quoteTool === undefined) throw new Error('tool_quote_unavailable')
@@ -441,8 +449,10 @@ export async function handleToolQuotePost(
         correlationId,
       })
       const projected = toolQuoteAction.outputSchema.parse(result)
+      telemetry({...principalTelemetry(admitted.principal),operationRef:parsed.data.toolRef,stage:'execution',outcome:projected.kind==='refused'?'refused':'completed',...(projected.kind==='refused'?{refusalCode:projected.code,retryable:projected.retryable}:{})})
       return withRequestCorrelationHeader(response(projected, 200, callJsonResponseHeaders), correlationId)
     } catch (error) {
+      telemetry({...principalTelemetry(admitted.principal),stage:'execution',outcome:'failed',refusalCode:gatewayErrorCode(error,'tool_quote_unavailable').code})
       return gatewayErrorResponse(error, 'tool_quote_unavailable', correlationId)
     }
     })
@@ -458,6 +468,7 @@ export async function handleToolCallPost(
     const startedAt = Date.now()
     const bounded = await readBoundedRequestText(request, MAX_CALL_BODY_BYTES)
     if (!bounded.ok) {
+      recordGatewayTelemetry(options.timing,{correlationId,transport:'http',operation:'call',stage:'pre_admission',durationMs:Date.now()-startedAt,outcome:'refused',refusalCode:'payload_too_large'})
       return withRequestCorrelationHeader(problem({
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
@@ -468,6 +479,7 @@ export async function handleToolCallPost(
     const admitted = await authenticateCallGateway(request, correlationId, options, bounded.text)
     if (admitted instanceof Response) return admitted
     if (!(await isJsonContentType(request.headers.get('content-type')))) {
+      recordGatewayTelemetry(options.timing,{...principalTelemetry(admitted.principal),correlationId,transport:'http',operation:'call',stage:'pre_admission',durationMs:Date.now()-startedAt,outcome:'refused',refusalCode:'invalid_content_type'})
       return invalidContentTypeResponse(correlationId)
     }
     const principal = admitted.principal
@@ -477,6 +489,7 @@ export async function handleToolCallPost(
         ...event,
         correlationId,
         durationMs: Date.now() - startedAt,
+        transport:'http',operation:'call',stage:event.stage??'execution',
       })
     }
     let rawBody: unknown
@@ -484,7 +497,7 @@ export async function handleToolCallPost(
       rawBody = JSON.parse(bounded.text)
     } catch (cause) {
       void cause;
-      telemetry({ outcome: 'failed', refusalCode: 'invalid_json' })
+      telemetry({ outcome: 'failed', refusalCode: 'invalid_json',stage:'pre_admission' })
       return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -494,7 +507,7 @@ export async function handleToolCallPost(
     }
     const parsed = callAction.schema.safeParse(rawBody)
     if (!parsed.success) {
-      telemetry({ outcome: 'failed', refusalCode: 'invalid_request' })
+      telemetry({ outcome: 'failed', refusalCode: 'invalid_request',stage:'pre_admission' })
       return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -507,7 +520,7 @@ export async function handleToolCallPost(
         kind: 'refused', code: 'operation_not_ready', retryable: true,
         nextAction: 'Tool purchases are temporarily unavailable. You can keep searching for Tools.',
       }))
-      telemetry(gatewayTelemetryForResult(refused))
+      telemetry({...gatewayTelemetryForResult(refused),stage:'pre_admission'})
       return withRequestCorrelationHeader(response(refused, 200, callJsonResponseHeaders), correlationId)
     }
     try {
@@ -543,7 +556,7 @@ type RecoveryBodyKind = 'cancel' | 'reconcile'
 
 type ParsedRecoveryBody =
   | Readonly<{ ok: true; bodyText: string; input: unknown }>
-  | Readonly<{ ok: false; response: Response }>
+  | Readonly<{ ok: false; code: 'payload_too_large'|'invalid_json'|'invalid_request'; response: Response }>
 
 async function parseRecoveryBody(
   request: Request,
@@ -554,7 +567,7 @@ async function parseRecoveryBody(
   const bounded = await readBoundedRequestText(request, 64 * 1024)
   if (!bounded.ok) {
     return {
-      ok: false,
+      ok: false, code: 'payload_too_large',
       response: withRequestCorrelationHeader(problem({
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
@@ -569,7 +582,7 @@ async function parseRecoveryBody(
   } catch (cause) {
     void cause;
     return {
-      ok: false,
+      ok: false, code: 'invalid_json',
       response: withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -580,7 +593,7 @@ async function parseRecoveryBody(
   }
   if (!isRecord(rawBody) || typeof rawBody.idempotencyKey !== 'string') {
     return {
-      ok: false,
+      ok: false, code: 'invalid_request',
       response: withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -607,7 +620,7 @@ export async function handleCallStatusGet(
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     const url = new URL(request.url)
     const queryProblem = callQueryParameterProblem(url, CALL_STATUS_QUERY_KEYS)
-    if (queryProblem !== undefined) return withRequestCorrelationHeader(queryProblem, correlationId)
+    if (queryProblem !== undefined) {recordGatewayTelemetry(options.timing,{correlationId,transport:'http',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'invalid_query'});return withRequestCorrelationHeader(queryProblem, correlationId)}
     return await withCallHttpRateLimit(request, correlationId, 'public-read', async () => {
     const startedAt = Date.now()
     const admitted = await authenticateCallGateway(request, correlationId, options, '')
@@ -618,7 +631,7 @@ export async function handleCallStatusGet(
         ...principalTelemetry(principal),
         ...event,
         correlationId,
-        durationMs: Date.now() - startedAt,
+        durationMs: Date.now() - startedAt, transport:'http',operation:'status',stage:event.stage??'recovery',
       })
     }
     const rawAfterVersion = url.searchParams.get('afterVersion')
@@ -627,7 +640,7 @@ export async function handleCallStatusGet(
       ...(rawAfterVersion === null ? {} : { afterVersion: Number(rawAfterVersion) }),
     })
     if (!parsed.success) {
-      telemetry({ outcome: 'failed', refusalCode: 'invalid_call_ref' })
+      telemetry({ outcome: 'failed', refusalCode: 'invalid_call_ref',stage:'pre_admission' })
       return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -683,8 +696,10 @@ export async function handleCallListGet(
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     const url = new URL(request.url)
     const queryProblem = callQueryParameterProblem(url, CALL_LIST_QUERY_KEYS)
-    if (queryProblem !== undefined) return withRequestCorrelationHeader(queryProblem, correlationId)
+    if (queryProblem !== undefined) {recordGatewayTelemetry(options.timing,{correlationId,transport:'http',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'invalid_query'});return withRequestCorrelationHeader(queryProblem, correlationId)}
     return await withCallHttpRateLimit(request, correlationId, 'public-read', async () => {
+    const startedAt=Date.now()
+    const telemetry=(event:Omit<GatewayTelemetryEvent,'correlationId'|'durationMs'>)=>recordGatewayTelemetry(options.timing,{...event,correlationId,transport:'http',operation:'list',stage:event.stage??'recovery',durationMs:Date.now()-startedAt})
     const admitted = await authenticateCallGateway(request, correlationId, options, '')
     if (admitted instanceof Response) return admitted
     const rawLimit = url.searchParams.get('limit')
@@ -696,6 +711,7 @@ export async function handleCallListGet(
       ...(rawState === null ? {} : { state: rawState }),
     })
     if (!parsed.success) {
+      telemetry({...principalTelemetry(admitted.principal),outcome:'refused',refusalCode:'invalid_call_list_query',stage:'pre_admission'})
       return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -711,8 +727,11 @@ export async function handleCallListGet(
         principal: admitted.principal,
         correlationId,
       })
-      return withRequestCorrelationHeader(response(callListResultSchema.parse(result), 200, callJsonResponseHeaders), correlationId)
+      const output=callListResultSchema.parse(result)
+      telemetry({...principalTelemetry(admitted.principal),outcome:'completed'})
+      return withRequestCorrelationHeader(response(output, 200, callJsonResponseHeaders), correlationId)
     } catch (error) {
+      telemetry({...principalTelemetry(admitted.principal),outcome:'failed',refusalCode:gatewayErrorCode(error,'call_runtime_unavailable').code})
       return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
     }
     })
@@ -730,10 +749,11 @@ async function executeRecoveryAction(
     return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
       const startedAt = Date.now()
       const parsed = await parseRecoveryBody(request, callRef, kind, correlationId)
-      if (!parsed.ok) return parsed.response
+      if (!parsed.ok) {recordGatewayTelemetry(options.timing,{correlationId,transport:'http',operation:kind,stage:'pre_admission',durationMs:Date.now()-startedAt,outcome:'refused',refusalCode:parsed.code});return parsed.response}
       const admitted = await authenticateCallGateway(request, correlationId, options, parsed.bodyText)
       if (admitted instanceof Response) return admitted
       if (!(await isJsonContentType(request.headers.get('content-type')))) {
+        recordGatewayTelemetry(options.timing,{...principalTelemetry(admitted.principal),correlationId,transport:'http',operation:kind,stage:'pre_admission',durationMs:Date.now()-startedAt,outcome:'refused',refusalCode:'invalid_content_type'})
         return invalidContentTypeResponse(correlationId)
       }
       const principal = admitted.principal
@@ -742,13 +762,13 @@ async function executeRecoveryAction(
           ...principalTelemetry(principal),
           ...event,
           correlationId,
-          durationMs: Date.now() - startedAt,
+          durationMs: Date.now() - startedAt,transport:'http',operation:kind,stage:event.stage??'recovery',
         })
       }
       try {
         const service = options.callService ?? createCallService(request, parsed.bodyText)
         const result = await action(service, admitted, parsed.input, correlationId)
-        if (result instanceof Response) return result
+        if (result instanceof Response) {telemetry({outcome:'refused',refusalCode:'invalid_request',stage:'pre_admission'});return result}
         const projected = callRecoveryResultSchema.safeParse(result)
         if (!projected.success) {
           telemetry({ outcome: 'failed', refusalCode: 'call_result_invalid' })

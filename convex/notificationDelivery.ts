@@ -33,6 +33,10 @@ export const sendApprovalEmail = internalAction({
       return { outcome: 'failed', code: 'no_verified_email' }
     }
 
+    const fresh=await ctx.runQuery(internal.notifications.readNotificationContext,{deliveryId})
+    if(fresh.kind==='skip')return {outcome:'suppressed',code:fresh.code}
+    if(fresh.deliveryRef!==context.deliveryRef||fresh.clerkUserId!==context.clerkUserId||fresh.subject!==context.subject||fresh.text!==context.text)return {outcome:'suppressed',code:'notification_context_changed'}
+
     let response: Response
     try {
       response = await fetch('https://api.resend.com/emails', {

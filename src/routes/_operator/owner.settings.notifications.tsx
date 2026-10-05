@@ -16,7 +16,7 @@ export const Route = createFileRoute('/_operator/owner/settings/notifications')(
 
 function OwnerNotificationsRoute() {
   const { preferences, loading, update } = useOwnerNotificationPreferences()
-  return <SettingsPage title="Notifications" description="Choose which account emails you receive. Changes save automatically.">
+  return <SettingsPage title="Notifications" description="Manage account alerts and saved delivery preferences.">
     <OwnerNotificationSettings preferences={preferences} disabled={loading} onUpdate={update} />
   </SettingsPage>
 }

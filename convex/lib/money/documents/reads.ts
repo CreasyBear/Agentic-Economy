@@ -14,6 +14,7 @@ const documentKind = v.union(
   v.literal('funding_receipt'),
   v.literal('service_fee_document'),
   v.literal('statement'),
+  v.literal('monthly_usage'),
   v.literal('daily_close'),
   v.literal('adjustment'),
   v.literal('tax_invoice'),

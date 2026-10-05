@@ -54,6 +54,7 @@ import {
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
 import { productionWebManifestFixture } from '../helpers/production-web-manifest'
+import { validateEnvironment } from '@/lib/deployment/env-schema'
 import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../helpers/payment-readiness-fixture'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
@@ -2350,6 +2351,7 @@ describe('capability Call Workpool lifecycle', () => {
       state: 'completed',
       deliveryState: 'delivered',
       paymentState: 'not_applicable',
+      deliveredRequestUnits: '1',
     })
     expect(historyObservedDuringProvider).toEqual([
       'claim_before_effect',
@@ -2365,6 +2367,11 @@ describe('capability Call Workpool lifecycle', () => {
     expect(replayed.call?.workId).toBe(workId)
     expect(replayed.history).toHaveLength(3)
     expect(replayed.call).toEqual(completed.call)
+    const measuredRequests = await backend.run(async ctx => await ctx.db.query('capabilityServiceUsageRecords')
+      .withIndex('by_callRef', index => index.eq('callRef', successfulCallRef)).collect())
+    expect(measuredRequests).toHaveLength(1)
+    expect(measuredRequests[0]).toMatchObject({ callRef: successfulCallRef, accountRef: first.principal.ownerId,
+      credentialRef: first.principal.credentialId, unitDefinitionRef: 'delivered_request:v1', quantityUnits: '1' })
     expect(providerFetch).toHaveBeenCalledTimes(1)
 
     await backend.run(async (ctx) => {
@@ -2413,6 +2420,13 @@ describe('capability Call Workpool lifecycle', () => {
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:served-cli')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
 
+    // Publication now performs readiness reads. Each fetch needs a fresh body,
+    // and the fixture must be available before publishing either Tool.
+    const providerOutput = { result: 'served-cli-ok' }
+    providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify(providerOutput), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }))
+
     const backend = convexTestWithWorkers()
     await seedCommercialPolicies(backend, Date.now())
     const toolRef = await seedKeylessLookup(backend, 'workpool-lookup-primary')
@@ -2423,11 +2437,6 @@ describe('capability Call Workpool lifecycle', () => {
     const apiKeyId = principal.credentialId
     const apiKeySubject = 'user_served_cli'
 
-    const providerOutput = { result: 'served-cli-ok' }
-    providerFetch.mockResolvedValue(new UndiciResponse(JSON.stringify(providerOutput), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }))
     providerFetch.mockClear()
 
     const queryBackend = backend.query as ConvexSourceTransport['query']
@@ -2451,6 +2460,14 @@ describe('capability Call Workpool lifecycle', () => {
     // production routes require their complete manifest and per-family keys.
     for (const [name, value] of Object.entries(productionWebManifestFixture)) vi.stubEnv(name, value)
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', undefined)
+    // Native-runner selection is not deployed web configuration. The test list
+    // was selected before this fixture; afterEach restores the runner flag.
+    vi.stubEnv('AE_FORMANCE_INTEGRATION', undefined)
+    const webValidation = validateEnvironment(process.env, 'production')
+    if (!webValidation.ok) throw new Error(`served_cli_fixture_configuration:${JSON.stringify(webValidation.problems)}`)
+    // The served production initiation path requires current configuration-bound
+    // readiness evidence. These are explicit synthetic checks for this fixture.
+    await seedPaymentReadiness(backend)
     const restoreTransport = setPublicSourceTransportForTests(transport)
     const served = await serveCallRoutes({ apiKeyId, apiKeySubject, scopes, principal })
     const temporaryRoot = await mkdtemp(join(tmpdir(), 'ae-served-cli-'))
@@ -2469,8 +2486,11 @@ describe('capability Call Workpool lifecycle', () => {
             XDG_CONFIG_HOME: cliHome,
           },
           maxBuffer: 4 * 1024 * 1024,
-        }).catch((cause: { stdout?: string; stderr?: string }) => {
-          throw new Error(`served_cli_failed:${cause.stdout ?? ''}:${cause.stderr ?? ''}`)
+        }).catch((cause: {code?: unknown; stdout?: unknown}) => {
+          let output: Record<string, unknown> = {}
+          try { const parsed: unknown = JSON.parse(typeof cause.stdout === 'string' ? cause.stdout : '{}'); if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) output = parsed as Record<string, unknown> } catch { /* Only allowlisted fixture outcome fields enter diagnostics. */ }
+          const safe = (value: unknown) => typeof value === 'string' && /^[a-zA-Z0-9_.:-]{1,100}$/u.test(value) ? value : null
+          throw new Error(`served_cli_fixture_failed:${JSON.stringify({exitCode: typeof cause.code === 'number' ? cause.code : null, kind: safe(output.kind), code: safe(output.code), errorCode: typeof output.error === 'object' && output.error !== null && 'code' in output.error ? safe(output.error.code) : null})}`)
         })
         return JSON.parse(executed.stdout) as unknown
       }

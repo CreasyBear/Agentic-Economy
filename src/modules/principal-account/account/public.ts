@@ -42,6 +42,7 @@ export {
   notificationDeliveryValue,
   notificationEventKindValue,
   userNotificationPreferenceValue,
+  usageAlertPolicyInputValue,usageAlertPolicyValue,
   ownershipChangeKindValue,
   ownershipLifecycleValue,
   recoveryPolicyValue,

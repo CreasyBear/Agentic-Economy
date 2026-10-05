@@ -5,6 +5,7 @@ import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { identifier, jsonSchema, jsonValueSchema, type JsonValue } from './json-value'
+import { serviceUnitDefinitionSchema } from './service-unit'
 import {
   assertSchemaIsSafeAndValid,
   declaredTopLevelProperties,
@@ -88,6 +89,7 @@ const contractDocumentSchema = z.strictObject({
   evidence: z.array(evidence).min(1).max(64),
   lifecycle,
   inputExamples: z.array(inputExample).max(32).optional(),
+  serviceUnits: z.array(serviceUnitDefinitionSchema).min(1).max(16).exactOptional(),
 })
 
 export type CapabilityInputExample = Readonly<{
@@ -112,6 +114,15 @@ export function defineCapabilityContract(input: unknown): CapabilityContract {
   const document = parsed.data
   assertSchemaIsSafeAndValid(document.inputSchema)
   assertSchemaIsSafeAndValid(document.outputSchema)
+  const units = document.serviceUnits ?? []
+  if (new Set(units.map(unit => unit.unitId)).size !== units.length
+    || new Set(units.map(unit => unit.outputPointer)).size !== units.length
+    || units.some(unit => !instancePointerExists(document.outputSchema, unit.outputPointer)
+      || (unit.parentUnitId !== undefined && (unit.parentUnitId === unit.unitId
+        || !units.some(parent => parent.unitId === unit.parentUnitId && parent.relationship === 'independent'
+          && parent.dimension === unit.dimension && parent.quantityExponent === unit.quantityExponent))))) {
+    throw new Error('capability_service_unit_definition_invalid')
+  }
   assertUniqueSemanticIds(document)
   assertLifecycleIsConsistent(document.lifecycle)
   if (document.effects.some((declaredEffect) => declaredEffect.authority === 'none')) {

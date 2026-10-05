@@ -96,6 +96,9 @@ export const lowCreditThresholdCentsValue = v.union(
   v.literal(5000),
 )
 
+export const usageAlertPolicyInputValue = v.object({enabled:v.boolean(),failurePercent:v.number(),minimumCalls:v.number(),spendWarningPercent:v.number()})
+export const usageAlertPolicyValue=usageAlertPolicyInputValue.extend({authorityRevisionAccount:v.number()})
+
 export const userNotificationPreferenceValue = v.object({
   principalRef: v.string(),
   accountRef: v.string(),
@@ -110,6 +113,7 @@ export const userNotificationPreferenceValue = v.object({
   updatedAt: v.number(),
   lastCorrelationRef: v.string(),
   deliveryEmail: v.optional(v.string()),
+  usageAlertPolicy:v.optional(usageAlertPolicyValue),
 })
 
 export const notificationEventKindValue = v.union(
@@ -135,6 +139,9 @@ export const notificationDeliveryValue = v.object({
   accountRef: v.string(),
   eventKind: notificationEventKindValue,
   sourceEventRef: v.string(),
+  usageEvidenceJson:v.optional(v.string()),
+  preferenceRevision:v.optional(v.number()),
+  authorityRevisionAccount:v.optional(v.number()),
   state: notificationDeliveryStateValue,
   suppressCode: v.optional(v.string()),
   vendorMessageId: v.optional(v.string()),

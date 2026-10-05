@@ -353,8 +353,8 @@ function mcpGatewayEvent(
     : typeof input.toolRef === 'string' ? input.toolRef : undefined
   if (output.kind === 'refused') {
     return {
-      ...(callRef === undefined ? {} : { callRef }),
-      ...(toolRef === undefined ? {} : { toolRef }),
+      ...(callRef === undefined ? {} : { invocationRef:callRef }),
+      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
       outcome: 'refused',
       refusalCode: typeof output.code === 'string' ? output.code : 'action_execution_failed',
       ...(typeof output.retryable === 'boolean' ? { retryable: output.retryable } : {}),
@@ -362,32 +362,32 @@ function mcpGatewayEvent(
   }
   if (output.kind === 'reconciliation_required') {
     return {
-      ...(callRef === undefined ? {} : { callRef }),
-      ...(toolRef === undefined ? {} : { toolRef }),
+      ...(callRef === undefined ? {} : { invocationRef:callRef }),
+      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
       outcome: 'reconciliation_required',
       unknown: true,
     }
   }
   if (output.kind === 'needs_authority') {
     return {
-      ...(callRef === undefined ? {} : { callRef }),
-      ...(toolRef === undefined ? {} : { toolRef }),
+      ...(callRef === undefined ? {} : { invocationRef:callRef }),
+      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
       outcome: 'needs_authority',
       approval: 'required',
     }
   }
   if (output.kind === 'pending') {
     return {
-      ...(callRef === undefined ? {} : { callRef }),
-      ...(toolRef === undefined ? {} : { toolRef }),
+      ...(callRef === undefined ? {} : { invocationRef:callRef }),
+      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
       outcome: 'pending',
     }
   }
   if (output.kind === 'found') {
     const state = output.state
     return {
-      ...(callRef === undefined ? {} : { callRef }),
-      ...(toolRef === undefined ? {} : { toolRef }),
+      ...(callRef === undefined ? {} : { invocationRef:callRef }),
+      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
       outcome: state === 'cancelled'
         ? 'cancelled'
         : state === 'reconciliation_required'
@@ -399,14 +399,14 @@ function mcpGatewayEvent(
   }
   if (output.kind === 'completed' || output.kind === 'ok') {
     return {
-      ...(callRef === undefined ? {} : { callRef }),
-      ...(toolRef === undefined ? {} : { toolRef }),
+      ...(callRef === undefined ? {} : { invocationRef:callRef }),
+      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
       outcome: 'completed',
     }
   }
   return {
-    ...(callRef === undefined ? {} : { callRef }),
-    ...(toolRef === undefined ? {} : { toolRef }),
+    ...(callRef === undefined ? {} : { invocationRef:callRef }),
+    ...(toolRef === undefined ? {} : { operationRef:toolRef }),
     outcome: 'failed',
     refusalCode: 'action_execution_failed',
   }
@@ -418,7 +418,7 @@ function recordMcpGatewayTelemetry(
   access: McpAccessTier,
   startedAt: number,
 ): void {
-  if (access.timing === undefined || access.principal === undefined) return
+  if (access.principal === undefined) return
   const event = mcpGatewayEvent(actionId, data, result)
   if (event === undefined) return
   recordGatewayTelemetry(access.timing, {
@@ -428,6 +428,7 @@ function recordMcpGatewayTelemetry(
     applicationRef: access.principal.applicationRef,
     ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
     durationMs: Date.now() - startedAt,
+    transport:'mcp',operation:actionId==='tool.quote'?'quote':actionId==='tool.call'?'call':actionId==='call.cancel'?'cancel':actionId==='call.reconcile'?'reconcile':'status',stage:actionId.startsWith('call.')?'recovery':'execution',
   })
 }
 
@@ -712,6 +713,7 @@ export async function handleMcpRouteRequest(
     try {
       admission = await assertHttpAdmission(request, isAnonymousMcpRequest(request) ? 'mcp-anonymous' : 'public-read')
     } catch (cause) {
+      recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'failed',refusalCode:'mcp_admission_unavailable',retryable:true})
       return degrade(
         cause,
         withRequestCorrelationHeader(problem({
@@ -726,6 +728,7 @@ export async function handleMcpRouteRequest(
       )
     }
     if (!admission.ok) {
+      recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'rate_limited',rateLimited:true})
       return withRequestCorrelationHeader(rateLimitedResponse(admission.retryAfter), correlationId)
     }
     return withRequestCorrelationHeader(await handleMcpRequest(request, options), correlationId)
@@ -740,11 +743,13 @@ function mcpActionConsequenceResource(action: AnyAction): string {
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     if (request.method === 'GET' || request.method === 'HEAD') {
+      recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'method_not_allowed'})
       return withRequestCorrelationHeader(methodNotAllowed(['POST', 'DELETE']), correlationId)
     }
     const actions = options.actions ?? listMcpActions()
     const bounded = await boundedMcpRequest(request)
     if (!bounded.ok) {
+      recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'payload_too_large'})
       return withRequestCorrelationHeader(problem({
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
@@ -781,6 +786,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         requiredMode: genericAdmission ? 'read_only' : requiredMode,
       })
       if (admitted.kind === 'refused') {
+        recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:admitted.reason,retryable:admitted.reason==='source_unavailable'})
         return withRequestCorrelationHeader(authRefusalProblem(
           request,
           admitted,
@@ -794,6 +800,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         authorityMode: admitted.principal.authorityMode,
         principalId: admitted.principal.principalId,
         principal: admitted.principal,
+        ...(options.timing===undefined?{}:{timing:options.timing}),
         correlationId,
         callService: options.callService
           ?? createCallService(boundedRequest, bounded.bodyText),

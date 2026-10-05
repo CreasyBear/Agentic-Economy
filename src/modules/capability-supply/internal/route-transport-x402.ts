@@ -1,5 +1,6 @@
 import { prepareX402Request } from './x402-request'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isChatCompletionStreamRequest } from './streaming-chat-receipt'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { cancelResponseBody } from '@/lib/server/bounded-request-body'
 import {
@@ -409,6 +410,7 @@ export async function invokeX402(
       undefined,
       undefined,
       sensitiveValues,
+      isChatCompletionStreamRequest(endpoint, invocation.inputJson),
     )
     const paidHeaders = toHeaderRecord(paid)
     const paymentProof = optionalHeader(

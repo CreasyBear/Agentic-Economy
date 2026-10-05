@@ -452,7 +452,31 @@
   {
     "visibility": "public",
     "module": "capabilityCallProjections",
+    "method": "beginOwnerCallExport",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "captureUsageReportPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "completeUsageReportWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
     "method": "listOwnerCalls",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "listOwnerUsageReports",
     "kind": "query"
   },
   {
@@ -470,7 +494,31 @@
   {
     "visibility": "public",
     "module": "capabilityCallProjections",
+    "method": "readOwnerCallExportPage",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
     "method": "readOwnerUsage",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerUsageReport",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerUsageReportParts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerUsageReportUnits",
     "kind": "query"
   },
   {
@@ -478,6 +526,18 @@
     "module": "capabilityCallProjections",
     "method": "rebuild",
     "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "requestOwnerUsageReport",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "runUsageReportPage",
+    "kind": "action"
   },
   {
     "visibility": "internal",
@@ -1408,6 +1468,12 @@
     "module": "capabilitySelectionDecisions",
     "method": "recordInternal",
     "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityServiceUsage",
+    "method": "readOwnerEvidence",
+    "kind": "query"
   },
   {
     "visibility": "internal",
@@ -2654,6 +2720,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "readCredentialActivityPage",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "readCreditBalance",
     "kind": "action"
   },
@@ -2697,6 +2769,18 @@
     "visibility": "internal",
     "module": "moneyFormance",
     "method": "readStatementPage",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readUsageReconciliation",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readUsageReconciliationPage",
     "kind": "action"
   },
   {
@@ -2758,6 +2842,24 @@
     "module": "moneyLedger",
     "method": "readAgentProviderEarnings",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readCredentialActivityFacts",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readCredentialCreatedCalls",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readCredentialSource",
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -2932,6 +3034,114 @@
     "module": "moneyMonthlySpendBudget",
     "method": "readOrganizationMonthlySpendBudgetForAccount",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "admitOwnerDraft",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "advanceCompleteMonth",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "applyMonthlyFinancialPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "captureFinancial",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "completeMonthWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "configureReporting",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "continueCompleteMonth",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "createOwnerDraft",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "freezeOwnerDraft",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readCompleteMonth",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readCompleteMonthWork",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readMonthlyDocumentParts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readMonthlyFinancialParts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readOwnerDraft",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readOwnerDraftInternal",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "readReportingPolicy",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "requestAutomaticMonths",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlyUsageDraft",
+    "method": "requestCompleteMonth",
+    "kind": "mutation"
   },
   {
     "visibility": "public",
@@ -3175,6 +3385,18 @@
   },
   {
     "visibility": "internal",
+    "module": "moneyUsageReconciliation",
+    "method": "readFacts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyUsageReconciliation",
+    "method": "readOwnerReconciliation",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
     "module": "moneyX402Expiry",
     "method": "claim",
     "kind": "mutation"
@@ -3338,6 +3560,24 @@
   {
     "visibility": "internal",
     "module": "notifications",
+    "method": "enqueueMoneyUsageAlerts",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "evaluateUsageMoneyAlerts",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "hasCurrentUsageAlertConsent",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
     "method": "readNotificationContext",
     "kind": "query"
   },
@@ -3346,6 +3586,18 @@
     "module": "notifications",
     "method": "readPreferences",
     "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "notifications",
+    "method": "readUsageAlertHistory",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "requestUsageAlertReport",
+    "kind": "mutation"
   },
   {
     "visibility": "public",

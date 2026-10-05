@@ -14,3 +14,5 @@ export const principalAccountTables = {
   ...accountTables,
   ...externalIdentityTables,
 } as const
+
+export {usageAlertEvidenceSchema} from './usage-alert-evidence'

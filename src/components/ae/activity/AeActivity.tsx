@@ -16,7 +16,11 @@ import {
 } from './activity.contracts'
 import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
+import { ActivityReconciliation } from './components/ActivityReconciliation'
 import { ActivityMonthlySummary } from './components/ActivityMonthlySummary'
+import { ActivityCompleteMonth } from './components/ActivityCompleteMonth'
+import { ActivityMonthlyDraft } from './components/ActivityMonthlyDraft'
+import { ActivityUsageReports } from './components/ActivityUsageReports'
 import { ActivityPaginationControl } from './components/ActivityPaginationControl'
 import { ActivityUnavailableState } from './components/ActivityUnavailableState'
 import { useAeActivity } from './useAeActivity'
@@ -29,7 +33,7 @@ function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
   return `${vm.attentionRows.length} Calls need attention. ${vm.recentRows.length} recent Calls shown.`
 }
 
-export function AeActivity({ result }: AeActivityProps) {
+export function AeActivity({ result, draftRef }: AeActivityProps) {
   const router = useRouter()
   const [retryPending, setRetryPending] = useState(false)
   const [statusFilter, setStatusFilter] = useState<ActivityStatusFilter>('all')
@@ -53,6 +57,7 @@ export function AeActivity({ result }: AeActivityProps) {
     <AeActivityAvailable
       key={`${canonicalDigest(result.calls)}:${result.filteredAgent ?? 'all'}:${result.periodStartAt}:${result.periodEndAt}`}
       result={result}
+      {...(draftRef === undefined ? {} : {draftRef})}
       statusFilter={statusFilter}
       setStatusFilter={setStatusFilter}
     />
@@ -60,10 +65,12 @@ export function AeActivity({ result }: AeActivityProps) {
 }
 
 function AeActivityAvailable({
+  draftRef,
   result,
   statusFilter,
   setStatusFilter,
 }: Readonly<{
+  draftRef?: string
   result: Extract<ActivityLoaderResult, { kind: 'available' }>
   statusFilter: ActivityStatusFilter
   setStatusFilter: (filter: ActivityStatusFilter) => void
@@ -81,6 +88,7 @@ function AeActivityAvailable({
     ...(result.filteredAgent === undefined ? {} : { filteredAgent: result.filteredAgent }),
   })
 
+  const returnScope = { returnRange: result.dateRangeFilter, ...(result.filteredAgent === undefined ? {} : { returnAgent: result.filteredAgent }) }
   return (
     <AeOperatorPage
       operatorRole="owner"
@@ -115,6 +123,9 @@ function AeActivityAvailable({
           retryPending={vm.summaryRetryPending}
           onRetry={vm.retrySummaries}
         />
+        {result.reconciliation === undefined ? null : <ActivityReconciliation returnScope={returnScope} result={result.reconciliation} retryPending={vm.summaryRetryPending} onRetry={vm.retrySummaries} />}
+        {result.filteredAgent === undefined ? <ActivityCompleteMonth returnScope={returnScope} {...(draftRef===undefined?{}:{draftRef})}/> : null}
+        {result.filteredAgent===undefined&&draftRef?.startsWith('monthly-usage-draft:')?<ActivityMonthlyDraft returnScope={returnScope} draftRef={draftRef}/>:null}
         {vm.showFilterBar ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Call usage export · not an invoice</span>
@@ -130,7 +141,7 @@ function AeActivityAvailable({
               onClick={vm.exportCsv}
             >
               <Download className="size-3.5 shrink-0" aria-hidden="true" />
-              CSV
+              Loaded CSV
             </Button>
             <Button
               type="button"
@@ -139,10 +150,19 @@ function AeActivityAvailable({
               onClick={vm.exportJson}
             >
               <Download className="size-3.5 shrink-0" aria-hidden="true" />
-              JSON
+              Loaded JSON
+            </Button>
+            <Button type="button" variant="secondary" disabled={vm.periodExportDisabled}
+              aria-busy={vm.periodExportPending || undefined} onClick={() => void vm.exportPeriod('CSV')}>
+              {vm.periodExportPending ? 'Preparing period…' : 'Full period CSV'}
+            </Button>
+            <Button type="button" variant="secondary" disabled={vm.periodExportDisabled}
+              onClick={() => void vm.exportPeriod('JSON')}>
+              Full period JSON
             </Button>
           </div>
         ) : null}
+        <ActivityUsageReports {...(vm.usageReportRequest === undefined ? {} : {request:vm.usageReportRequest})} />
         {vm.showEmptyNoCalls ? (
           <AeEmptyState
             title="No Calls in this period"
@@ -161,14 +181,14 @@ function AeActivityAvailable({
           />
         ) : vm.showQueues ? (
           <>
-            <ActivityCallQueue
+            <ActivityCallQueue returnScope={returnScope}
               title="Needs attention"
               description={vm.attentionDescription}
               rows={vm.attentionRows}
               emptyMessage={vm.attentionEmptyMessage}
               attention
             />
-            <ActivityCallQueue
+            <ActivityCallQueue returnScope={returnScope}
               title="Recent Calls"
               description="Completed and refused Calls, separate from work that still needs a decision."
               rows={vm.recentRows}
@@ -177,7 +197,7 @@ function AeActivityAvailable({
           </>
         ) : null}
         <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
-        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Status filters, sorting and exports apply to loaded rows. Pages contain up to 50 Calls.</p>
+        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Saved full-period reports read every page for the selected period, Agent and status, up to 366 days. Changed source records require a new report; incomplete reports cannot be downloaded.</p>
       </div>
     </AeOperatorPage>
   )

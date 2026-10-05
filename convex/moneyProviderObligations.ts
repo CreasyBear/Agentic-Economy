@@ -1,4 +1,5 @@
-import { action, internalMutation, query } from './_generated/server'
+import { action, query } from './_generated/server'
+import { internalMutation } from './usageTrackedMutation'
 import {
   listOwnerObligationsArgs,
   listOwnerObligationsResult,

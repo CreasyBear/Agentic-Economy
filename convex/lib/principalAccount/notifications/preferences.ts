@@ -1,3 +1,7 @@
+import { usageAlertPolicyInputValue,usageAlertPolicyValue } from '@/modules/principal-account/account/public'
+import type { UsageAlertPolicy } from '@/modules/principal-account/notification-preferences.view-model'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { readUsagePolicyReplay,recordUsagePolicyAudit } from './usagePolicyAudit'
 import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
 import { v } from 'convex/values'
 
@@ -32,9 +36,11 @@ export const readPreferencesResult = v.object({
   revision: v.number(),
   updatedAt: v.union(v.number(), v.null()),
   isVirtualDefault: v.boolean(),
+  usageAlertPolicy:v.optional(usageAlertPolicyValue),
 })
 
 export const updatePreferencesArgs = {
+  usageAlertPolicy:v.optional(usageAlertPolicyInputValue),
   lowCreditBalance: v.optional(v.boolean()),
   lowCreditThresholdCents: v.optional(v.number()),
   spendCapWarning: v.optional(v.boolean()),
@@ -122,6 +128,7 @@ async function requireAuthenticatedAccountContext(
   principal: Doc<'principals'>
   canonicalPrincipalRef: ReturnType<typeof principalRef>
   canonicalAccountRef: ReturnType<typeof accountRef>
+  authorityRevisionAccount:number
 }> {
   const principal = await requireInteractiveHumanPrincipal(db, identity)
   const canonicalPrincipalRef = principalRef(principal.principalRef)
@@ -134,7 +141,7 @@ async function requireAuthenticatedAccountContext(
     .unique()
   if (account === null) throw new InteractiveAuthorityError('account_missing')
   if (account.lifecycle !== 'active') throw new InteractiveAuthorityError('account_inactive')
-  return { principal, canonicalPrincipalRef, canonicalAccountRef }
+  return { principal, canonicalPrincipalRef, canonicalAccountRef,authorityRevisionAccount:account.revision }
 }
 
 function preferenceFieldsFromRow(row: Doc<'userNotificationPreferences'>): PreferenceFields {
@@ -152,6 +159,7 @@ function preferenceFieldsFromRow(row: Doc<'userNotificationPreferences'>): Prefe
 function patchMatchesExisting(
   existing: Doc<'userNotificationPreferences'>,
   args: Readonly<{
+    usageAlertPolicy?:UsageAlertPolicy
     lowCreditBalance?: boolean
     lowCreditThresholdCents?: number
     spendCapWarning?: boolean
@@ -191,6 +199,8 @@ function patchMatchesExisting(
   ) {
     return false
   }
+  if(args.usageAlertPolicy!==undefined){const policy=existing.usageAlertPolicy
+    if(policy===undefined||canonicalDigest(args.usageAlertPolicy)!==canonicalDigest({enabled:policy.enabled,failurePercent:policy.failurePercent,minimumCalls:policy.minimumCalls,spendWarningPercent:policy.spendWarningPercent}))return false}
   return true
 }
 
@@ -235,6 +245,7 @@ export async function readPreferencesHandler(ctx: QueryCtx) {
       principalRef: canonicalPrincipalRef,
       accountRef: canonicalAccountRef,
       ...preferenceFieldsFromRow(row),
+      ...(row.usageAlertPolicy===undefined?{}:{usageAlertPolicy:row.usageAlertPolicy}),
       revision: row.revision,
       updatedAt: row.updatedAt,
       isVirtualDefault: false,
@@ -254,6 +265,7 @@ export async function readPreferencesHandler(ctx: QueryCtx) {
 export async function updatePreferencesHandler(
   ctx: MutationCtx,
   args: {
+    usageAlertPolicy?:UsageAlertPolicy
     lowCreditBalance?: boolean
     lowCreditThresholdCents?: number
     spendCapWarning?: boolean
@@ -267,6 +279,7 @@ export async function updatePreferencesHandler(
   },
 ) {
   validateCorrelationRef(args.correlationRef)
+  if(args.usageAlertPolicy!==undefined)validateCorrelationRef(args.idempotencyRef)
   if (
     args.lowCreditThresholdCents !== undefined
     && !LEGAL_LOW_CREDIT_THRESHOLDS.has(args.lowCreditThresholdCents)
@@ -276,9 +289,16 @@ export async function updatePreferencesHandler(
 
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
-  const { principal, canonicalAccountRef } =
+  const { principal, canonicalAccountRef,authorityRevisionAccount } =
     await requireAuthenticatedAccountContext(ctx.db, identity)
 
+  if(args.usageAlertPolicy!==undefined){
+    const policy=args.usageAlertPolicy
+    if(!Number.isSafeInteger(policy.failurePercent)||policy.failurePercent<1||policy.failurePercent>100||!Number.isSafeInteger(policy.minimumCalls)||policy.minimumCalls<1||policy.minimumCalls>100000||!Number.isSafeInteger(policy.spendWarningPercent)||policy.spendWarningPercent<1||policy.spendWarningPercent>100)throw new InteractiveAuthorityError('threshold_invalid')
+    const access=await requireAccessFactForAccount(ctx.db,principalRef(principal.principalRef),canonicalAccountRef)
+    if(access.kind!=='ownership')throw new InteractiveAuthorityError('authority_mismatch')
+  }
+  const usageAlertPolicy=args.usageAlertPolicy===undefined?undefined:{...args.usageAlertPolicy,authorityRevisionAccount}
   const existing = await ctx.db
     .query('userNotificationPreferences')
     .withIndex('by_principalRef_and_accountRef', (query) => query
@@ -287,11 +307,18 @@ export async function updatePreferencesHandler(
     .unique()
 
   const currentRevision = existing?.revision ?? 0
+  const requestDigest=usageAlertPolicy===undefined?undefined:canonicalDigest({format:'ae.usage-alert-request:v1',accountRef:canonicalAccountRef,principalRef:principal.principalRef,authorityRevisionAccount,patch:Object.fromEntries(Object.entries(args).filter(([key,value])=>key!=='correlationRef'&&value!==undefined))})
+  if(requestDigest!==undefined){
+    const replay=await readUsagePolicyReplay(ctx,{accountRef:canonicalAccountRef,idempotencyRef:args.idempotencyRef,requestDigest})
+    if(replay?.kind==='conflict')throw new InteractiveAuthorityError('preference_revision_conflict')
+    if(replay?.kind==='replayed')return replay
+  }
 
   if (
     existing !== null
     && existing.lastCorrelationRef === args.correlationRef
     && patchMatchesExisting(existing, args)
+    && (usageAlertPolicy===undefined||existing.usageAlertPolicy?.authorityRevisionAccount===authorityRevisionAccount)
   ) {
     return { kind: 'replayed' as const, revision: existing.revision }
   }
@@ -310,6 +337,7 @@ export async function updatePreferencesHandler(
   if (existing !== null) {
     await ctx.db.patch(existing._id, {
       ...merged,
+      ...(usageAlertPolicy===undefined?{}:{usageAlertPolicy}),
       lowCreditThresholdCents: merged.lowCreditThresholdCents as 1000 | 2500 | 5000,
       revision: nextRevision,
       updatedAt: now,
@@ -320,6 +348,7 @@ export async function updatePreferencesHandler(
       principalRef: principal.principalRef,
       accountRef: canonicalAccountRef,
       ...merged,
+      ...(usageAlertPolicy===undefined?{}:{usageAlertPolicy}),
       lowCreditThresholdCents: merged.lowCreditThresholdCents as 1000 | 2500 | 5000,
       revision: nextRevision,
       updatedAt: now,
@@ -327,5 +356,6 @@ export async function updatePreferencesHandler(
     })
   }
 
+  if(usageAlertPolicy!==undefined&&requestDigest!==undefined)await recordUsagePolicyAudit(ctx,{accountRef:canonicalAccountRef,principalRef:principal.principalRef,authorityRevisionAccount,idempotencyRef:args.idempotencyRef,correlationRef:args.correlationRef,before:existing?.usageAlertPolicy,after:usageAlertPolicy,requestDigest,revision:nextRevision})
   return { kind: 'updated' as const, revision: nextRevision }
 }

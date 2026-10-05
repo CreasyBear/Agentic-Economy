@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as capabilityServiceUsage from "../capabilityServiceUsage.js";
+import type * as moneyMonthlyUsageDraft from "../moneyMonthlyUsageDraft.js";
 import type * as actionExecutionControl from "../actionExecutionControl.js";
 import type * as adminCallContent from "../adminCallContent.js";
 import type * as adminConsoleAudit from "../adminConsoleAudit.js";
@@ -692,6 +694,7 @@ import type * as moneyManagedCallRemedy from "../moneyManagedCallRemedy.js";
 import type * as moneyManagedCallRemedyActions from "../moneyManagedCallRemedyActions.js";
 import type * as moneyMonthlySpendBudget from "../moneyMonthlySpendBudget.js";
 import type * as moneyOwnerSpend from "../moneyOwnerSpend.js";
+import type * as moneyUsageReconciliation from "../moneyUsageReconciliation.js";
 import type * as moneyPromotionalCredit from "../moneyPromotionalCredit.js";
 import type * as moneyProviderObligations from "../moneyProviderObligations.js";
 import type * as moneyReadiness from "../moneyReadiness.js";
@@ -751,6 +754,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  capabilityServiceUsage: typeof capabilityServiceUsage;
+  moneyMonthlyUsageDraft: typeof moneyMonthlyUsageDraft;
   actionExecutionControl: typeof actionExecutionControl;
   adminCallContent: typeof adminCallContent;
   adminConsoleAudit: typeof adminConsoleAudit;
@@ -1435,6 +1440,7 @@ declare const fullApi: ApiFromModules<{
   moneyManagedCallRemedyActions: typeof moneyManagedCallRemedyActions;
   moneyMonthlySpendBudget: typeof moneyMonthlySpendBudget;
   moneyOwnerSpend: typeof moneyOwnerSpend;
+  moneyUsageReconciliation: typeof moneyUsageReconciliation;
   moneyPromotionalCredit: typeof moneyPromotionalCredit;
   moneyProviderObligations: typeof moneyProviderObligations;
   moneyReadiness: typeof moneyReadiness;

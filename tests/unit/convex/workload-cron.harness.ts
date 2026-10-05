@@ -112,6 +112,14 @@ export class FakeDb {
   readonly queries: string[] = []
   #nextId = 1
 
+  normalizeId(_table: string, _id: string): null { return null }
+
+  async get(tableOrId: string, explicitId?: string): Promise<Row | null> {
+    const id=explicitId??tableOrId
+    for(const rows of this.#tables.values()){const row=rows.find(row=>row._id===id);if(row!==undefined)return row}
+    return null
+  }
+
   query(tableName: string): FakeQuery {
     this.queries.push(tableName)
     return new FakeQuery(this.#tables.get(tableName) ?? [])

@@ -454,6 +454,8 @@ export function projectionContext(initialRow: RecoveryRow) {
     unique: async () => currentRow,
   }
   const db = {
+    normalizeId: (_table: string, _id: string): null => null,
+    get: async (_tableOrId: string, _explicitId?: string) => currentRow,
     query: (_table: unknown) => query,
     patch: async (_id: string, value: Record<string, unknown>) => {
       currentRow = { ...currentRow, ...value }

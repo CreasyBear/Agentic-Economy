@@ -1,3 +1,4 @@
+import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 /**
  * @vitest-environment jsdom
  */
@@ -44,7 +45,7 @@ const ownerContext = {
   },
 } as const
 
-function renderWithRouter(result: CallStatusPageResult, actions?: CallStatusPageActions) {
+function renderWithRouter(result: CallStatusPageResult, actions?: CallStatusPageActions, returnScope?: ActivityReturnScope) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -56,12 +57,13 @@ function renderWithRouter(result: CallStatusPageResult, actions?: CallStatusPage
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(
     <RouterContextProvider router={router}>
-      <CallStatusPage result={result} {...(actions === undefined ? {} : { actions })} />
+      <CallStatusPage {...(returnScope === undefined ? {} : {returnScope})} result={result} {...(actions === undefined ? {} : { actions })} />
     </RouterContextProvider>,
   )
 }
 
 function renderRouteComponent(result: CallStatusPageResult) {
+  vi.spyOn(Route, 'useSearch').mockReturnValue({} as never)
   vi.spyOn(Route, 'useLoaderData').mockReturnValue(result as never)
   const Component = Route.options.component
   if (Component === undefined) throw new Error('call_status_route_component_missing')
@@ -85,6 +87,11 @@ afterEach(() => {
 })
 
 describe('/calls/$callRef', () => {
+  it('preserves URL period and Agent through receipt failure and explicit scoped return',()=>{
+    renderWithRouter({kind:'source_unavailable',callRef},undefined,{returnRange:'month',returnAgent:'principal:buyer'})
+    expect(screen.getByRole('link',{name:'Back to Calls'}).getAttribute('href')).toBe('/activity?range=month&agent=principal%3Abuyer')
+  })
+
   it('passes the exact route reference to the owner-scoped server read', async () => {
     readStatusMock.mockResolvedValue({
       kind: 'refused',
@@ -533,6 +540,7 @@ describe('/calls/$callRef', () => {
     const nextCallRef = 'invocation:next-owner-status'
     const nextToolRef = `operation:v1:${'b'.repeat(64)}`
     const next = { kind: 'found', version: 1, callRef: nextCallRef, toolRef: nextToolRef, state: 'authorized' } as const
+    vi.spyOn(Route, 'useSearch').mockReturnValue({} as never)
     const loader = vi.spyOn(Route, 'useLoaderData').mockReturnValue(first)
     const Component = Route.options.component
     if (Component === undefined) throw new Error('call_status_route_component_missing')
@@ -775,6 +783,7 @@ describe('/calls/$callRef', () => {
       attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
     } as const
     const next = { ...first, version: 2, effectGeneration: 3 } as const
+    vi.spyOn(Route, 'useSearch').mockReturnValue({} as never)
     const loader = vi.spyOn(Route, 'useLoaderData').mockReturnValue(first)
     const Component = Route.options.component
     if (Component === undefined) throw new Error('call_status_route_component_missing')

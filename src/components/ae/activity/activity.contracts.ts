@@ -1,3 +1,5 @@
+import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
+import type { UsageReconciliation } from '@/modules/money/public'
 import type {
   readOwnerCallsServer,
   readOwnerSpendServer,
@@ -18,6 +20,7 @@ export type ActivityLoaderResult =
       calls: Awaited<ReturnType<typeof readOwnerCallsServer>>
       usage: Awaited<ReturnType<typeof readOwnerUsageServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
       spend: Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }> | Readonly<{ kind: 'not_requested' }>
+      reconciliation?: UsageReconciliation
       periodStart: string
       periodStartAt: number
       periodEndAt: number
@@ -75,9 +78,16 @@ export type ActivityMonthlySummaryView = Readonly<{
   spendBasis: string
   scopeLabel: string
   windowTooLarge: boolean
+  deliveredRequestLabel: string
+  currentDeliveredRequestLabel: string
+  unknownDeliverySupportLabel: string
+  serviceUnitCoverageLabel: string
+  providerUnitCards?: ReadonlyArray<{label: string; value: string}>
+  providerUnitCoverageLabel?: string
 }>
 
 export type AeActivityProps = Readonly<{
+  draftRef?: string
   result: ActivityLoaderResult
 }>
 
@@ -102,6 +112,7 @@ export type ActivityFilterBarProps = Readonly<{
 }>
 
 export type ActivityCallQueueProps = Readonly<{
+  returnScope?: ActivityReturnScope
   title: string
   description: string
   rows: readonly ActivityCallRowView[]

@@ -94,4 +94,22 @@ describe('OwnerNotificationSettings', () => {
     expect(screen.getByText(/A\$0\.00 affected — existing preferences remain active\./u)).toBeTruthy()
     expect(screen.getByText(/Please check your connection and try again\./u)).toBeTruthy()
   })
+  it('requires an explicit enable action with valid thresholds and prevents duplicate pending changes', async () => {
+    let finish: (()=>void)|undefined
+    const onUpdate=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve}))
+    render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
+    const enable=screen.getByRole('button',{name:'Save and enable usage alerts'})
+    fireEvent.change(screen.getByRole('textbox',{name:'Minimum Calls for alert'}),{target:{value:'0'}});expect(enable).toBeDisabled();expect(onUpdate).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByRole('textbox',{name:'Minimum Calls for alert'}),{target:{value:'40'}})
+    fireEvent.click(enable);fireEvent.click(enable)
+    expect(onUpdate).toHaveBeenCalledTimes(1);expect(onUpdate).toHaveBeenCalledWith({expectedRevision:0,usageAlertPolicy:{enabled:true,failurePercent:20,minimumCalls:40,spendWarningPercent:80}})
+    expect(screen.getByRole('switch',{name:'Email when an Agent needs your approval'})).toBeDisabled()
+    finish?.();await waitFor(()=>expect(enable).not.toBeDisabled())
+  })
+  it('disables alerts with their saved thresholds and current revision',async()=>{
+    const onUpdate=vi.fn().mockResolvedValue(undefined)
+    render(<OwnerNotificationSettings preferences={{...basePreferences,revision:7,usageAlertPolicy:{enabled:true,failurePercent:35,minimumCalls:50,spendWarningPercent:90}}} onUpdate={onUpdate} />)
+    fireEvent.click(screen.getByRole('button',{name:'Disable usage alerts'}))
+    await waitFor(()=>expect(onUpdate).toHaveBeenCalledWith({expectedRevision:7,usageAlertPolicy:{enabled:false,failurePercent:35,minimumCalls:50,spendWarningPercent:90}}))
+  })
 })

@@ -86,7 +86,11 @@ class MemoryDb {
     this.seed(table, { ...row, _id: id })
     return id
   }
-  async get(id: string): Promise<Row | null> {
+  // Synthetic IDs are not Convex table IDs; indexed behavior is tested here.
+  normalizeId(_table: string, _id: string): null { return null }
+
+  async get(tableOrId: string, explicitId?: string): Promise<Row | null> {
+    const id = explicitId ?? tableOrId
     for (const rows of this.tables.values()) {
       const row = rows.find((candidate) => candidate._id === id)
       if (row !== undefined) return row
@@ -468,7 +472,7 @@ describe('capability operation reservation admission', () => {
     })
 
     await expect(reserveHandler(ctx, argsFor(ctx))).resolves.toMatchObject({ kind: 'reserved' })
-    expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledWith(ctx, {
+    expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledWith(expect.objectContaining({runMutation:ctx.runMutation}), {
       principalRef: 'principal:one',
       maximumCallsPerMinute: 7,
       maximumCallsPerHour: 42,

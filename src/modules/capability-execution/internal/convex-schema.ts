@@ -6,6 +6,7 @@ import {
 } from '@/modules/action-execution/runtime'
 import { spendingPeriodsValue, promotionalCreditAllocationValue, managedCallBookingValue } from '@/modules/money/public'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
+import { providerUnitObservationValue, providerUnitSummaryValue } from './provider-service-unit-values'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
@@ -225,6 +226,22 @@ const paidCallReportFields = {
 }
 
 export const capabilityCallTables = {
+  capabilityUsageSourceVersions: defineTable({ accountRef: v.string(), month: v.string(), shard: v.number(), generationUnits: v.string() })
+    .index('by_accountRef_and_month_and_shard', ['accountRef', 'month', 'shard']),
+  capabilityUsageReports: defineTable({
+    reportRef: v.string(), accountRef: v.string(), actorRef: v.string(), scopeDigest: v.string(),
+    principalRef: v.optional(v.string()), periodStartAt: v.number(), periodEndAt: v.number(),
+    status: v.union(v.literal('all'), v.literal('completed'), v.literal('refused'), v.literal('outcome_unknown')),
+    snapshotAt: v.number(), sourceVersionDigest: v.string(),
+    state: v.union(v.literal('building'), v.literal('complete'), v.literal('failed')),
+    nextCursor: v.optional(v.string()), pageCount: v.number(), partCount: v.number(), scannedCountUnits: v.string(), recordCountUnits: v.string(),
+    recordsChainDigest: v.string(), summaryJson: v.string(), workId: v.optional(v.string()), failureCode: v.optional(v.string()),
+    createdAt: v.number(), completedAt: v.optional(v.number()),
+  }).index('by_reportRef', ['reportRef']).index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
+  capabilityUsageReportParts: defineTable({reportRef:v.string(),accountRef:v.string(),position:v.number(),partDigest:v.string(),recordsJson:v.string(),recordCountUnits:v.string(),createdAt:v.number()})
+    .index('by_reportRef_and_position',['reportRef','position']),
+  capabilityUsageReportUnits: defineTable({reportRef:v.string(),accountRef:v.string(),unitDefinitionRef:v.string(),summary:providerUnitSummaryValue})
+    .index('by_reportRef_and_unitDefinitionRef',['reportRef','unitDefinitionRef']),
   paidCallReports: defineTable(v.union(
     v.object({ ...paidCallReportFields, state: v.literal('pending'), nextWorkAt: v.number() }),
     v.object({ ...paidCallReportFields, state: v.literal('posted'), postedAt: v.number(), buyerRefundTransactionRef: v.string(), transactionRefs: v.array(v.string()) }),
@@ -243,6 +260,49 @@ export const capabilityCallTables = {
     .index('by_accountRef_and_resolvedAt', ['accountRef', 'resolvedAt'])
     .index('by_customerRef_and_resolvedAt', ['customerRef', 'resolvedAt'])
     .index('by_resolvedAt', ['resolvedAt']),
+  capabilityServiceUsageRecords: defineTable({
+    usageRef: v.string(),
+    callRef: v.string(),
+    callDigest: v.optional(v.string()),
+    quoteRef: v.optional(v.string()),
+    accountRef: v.string(),
+    principalRef: v.string(),
+    credentialRef: v.string(),
+    applicationRef: v.string(),
+    toolRef: v.string(),
+    providerRef: v.string(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    unitDefinitionRef: v.literal('delivered_request:v1'),
+    quantityUnits: v.literal('1'),
+    quantityExponent: v.literal(0),
+    source: v.literal('validated_call_result'),
+    sourceEvidenceHash: v.optional(v.string()),
+    supportDigest: v.optional(v.string()),
+    providerUnitHeadRef: v.optional(v.string()),
+    receiptRef: v.optional(v.string()),
+    priceDigest: v.string(),
+    timeBasis: v.union(v.literal('receipt_issued'), v.literal('call_updated')),
+    callCreatedAt: v.number(),
+    occurredAt: v.number(),
+    observedAt: v.number(),
+  })
+    .index('by_usageRef', ['usageRef'])
+    .index('by_accountRef_and_callDigest', ['accountRef', 'callDigest'])
+    .index('by_callRef', ['callRef'])
+    .index('by_accountRef_and_callCreatedAt', ['accountRef', 'callCreatedAt'])
+    .index('by_accountRef_and_occurredAt', ['accountRef', 'occurredAt']),
+  capabilityServiceUnitObservations: defineTable(providerUnitObservationValue)
+    .index('by_callRef_and_sequence', ['callRef', 'sequence'])
+    .index('by_observationRef', ['observationRef']),
+  capabilityServiceUsageRevisions: defineTable({
+    usageRef: v.string(), accountRef: v.string(), callRef: v.string(), revisionRef: v.string(), previousRevisionRef: v.string(), revision: v.number(),
+    sourceDigest: v.string(), support: v.object({
+      state: v.union(v.literal('pending'), v.literal('completed'), v.literal('refused'), v.literal('reconciliation_required'), v.literal('cancelled')),
+      resultKind: v.union(v.literal('completed'), v.literal('pending'), v.literal('needs_authority'), v.literal('reconciliation_required'), v.literal('refused'), v.null()),
+      evidenceHash: v.union(v.string(), v.null()), evidenceConflict: v.boolean(),
+    }),
+    quantityUnits: v.union(v.literal('1'), v.null()), effectiveAt: v.number(), observedAt: v.number(), source: v.literal('canonical_call_support'),
+  }).index('by_usageRef_and_revision', ['usageRef', 'revision']).index('by_revisionRef', ['revisionRef']),
   capabilityCallProjections: defineTable({
     callRef: v.string(),
     accountRef: v.string(),
@@ -271,6 +331,12 @@ export const capabilityCallTables = {
     audAmountUnits: v.optional(v.string()),
     receiptRef: v.optional(v.string()),
     recoveryRef: v.optional(v.string()),
+    serviceUsageRef: v.optional(v.string()),
+    deliveredRequestUnits: v.optional(v.string()),
+    currentDeliveredRequestUnits: v.optional(v.union(v.literal('1'), v.null())),
+    measurementRevisionRef: v.optional(v.string()),
+    providerUnitObservation: v.optional(providerUnitObservationValue),
+    observedAt: v.optional(v.number()),
     latencyMs: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),

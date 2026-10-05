@@ -1,3 +1,4 @@
+export type UsageAlertPolicy=Readonly<{enabled:boolean;failurePercent:number;minimumCalls:number;spendWarningPercent:number}>
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 
 export type NotificationPreferencesView = Readonly<{
@@ -8,6 +9,7 @@ export type NotificationPreferencesView = Readonly<{
   invoiceReady: boolean
   teamMembershipChanged: boolean
   agentApprovalRequested: boolean
+  usageAlertPolicy?: UsageAlertPolicy
   revision: number
 }>
 
@@ -19,6 +21,7 @@ export type NotificationPreferencePatch = Readonly<{
   invoiceReady?: boolean
   teamMembershipChanged?: boolean
   agentApprovalRequested?: boolean
+  usageAlertPolicy?: UsageAlertPolicy
   expectedRevision: number
 }>
 

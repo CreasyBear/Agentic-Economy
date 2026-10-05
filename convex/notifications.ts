@@ -1,5 +1,9 @@
+import {requestUsageAlertReportHandler} from './lib/principalAccount/notifications/usageReports'
+import {usageHistoryArgs,usageHistoryResult,readUsageAlertHistoryHandler} from './lib/principalAccount/notifications/usageHistory'
+import {activeUsagePolicy,usageMoneyEvidenceArgs,enqueueMoneyUsageAlertsHandler,evaluateUsageMoneyAlertsHandler} from './lib/principalAccount/notifications/usageAlerts'
 import { v } from 'convex/values'
-import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { internalAction,internalQuery, query } from './_generated/server'
+import { internalMutation, mutation } from './usageTrackedMutation'
 import {
   completeDeliveryArgs,
   completeDeliveryHandler,
@@ -48,3 +52,11 @@ export const completeDelivery = internalMutation({
   returns: v.null(),
   handler: completeDeliveryHandler,
 })
+
+export const hasCurrentUsageAlertConsent=internalQuery({args:{accountRef:v.string()},returns:v.boolean(),handler:async(ctx,args)=>await activeUsagePolicy(ctx,args.accountRef)!==null})
+export const evaluateUsageMoneyAlerts=internalAction({args:{accountRef:v.string(),captureOperational:v.optional(v.boolean())},returns:v.null(),handler:evaluateUsageMoneyAlertsHandler})
+export const enqueueMoneyUsageAlerts=internalMutation({args:usageMoneyEvidenceArgs,returns:v.null(),handler:enqueueMoneyUsageAlertsHandler})
+
+export const readUsageAlertHistory=query({args:usageHistoryArgs,returns:usageHistoryResult,handler:readUsageAlertHistoryHandler})
+
+export const requestUsageAlertReport=internalMutation({args:{accountRef:v.string()},returns:v.null(),handler:requestUsageAlertReportHandler})

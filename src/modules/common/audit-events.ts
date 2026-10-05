@@ -154,6 +154,10 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
   'billing.monthly_spend_ceiling_configured',
+  'billing.call_usage_export_requested',
+  'billing.usage_reporting_configured',
+  'billing.usage_alert_policy_configured',
+  'billing.monthly_usage_close_requested',
   ...Package3AuditEventTypeValues,
 ] as const
 
@@ -220,6 +224,9 @@ export type AuditEventSink = {
 }
 
 const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
+  'billing.usage_reporting_configured':true,
+  'billing.usage_alert_policy_configured':true,
+  'billing.monthly_usage_close_requested':true,
   'dispute.opened': true,
   'dispute.updated': true,
   'dispute.closed': true,

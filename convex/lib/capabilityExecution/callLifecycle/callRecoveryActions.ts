@@ -247,6 +247,7 @@ export async function readOwnerCallStatusHandler(
   try {
     ownerContext = await ctx.runQuery(internal.capabilityCalls.readOwnerReceiptContext, {
       callRef: row.callRef, ownerId: row.ownerId, toolRef: projected.toolRef,
+      observedAt: Date.now(),
     })
   } catch (cause) {
     // Optional identity/capability metadata must not erase a readable receipt.

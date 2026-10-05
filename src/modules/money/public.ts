@@ -185,16 +185,21 @@ export type CreditAccountView = Readonly<{
 export type CreditActivityView = Readonly<{
   activityRef: string;
   credentialId: string;
-  serviceRef: string;
-  offeringRef: string;
-  businessId: string;
+  serviceRef: string | null;
+  offeringRef: string | null;
+  businessId: string | null;
   operationKey: string;
   callRef: string;
-  attemptRef: string;
+  attemptRef: string | null;
   grossAmount: ExactAmount;
   chargeState: ChargeState;
-  priceDigest: string;
+  priceDigest: string | null;
   observedAt: number;
+  entryKind?:'charge'|'refund'|'promotional_use'|'promotional_refund'
+  callCreatedAt?:number
+  effectiveAt?:number
+  recordedAt?:number|null
+  serviceFeeUnits?:string
   transactionRef?: string;
 }>;
 
@@ -204,6 +209,17 @@ export type KeyUsageView = Readonly<{
   paidCallCount: number;
   freeCallCount: number;
   grossSpend: ExactAmount;
+  refundUnits?:string
+  netChargeUnits?:string
+  promotionalUseUnits?:string
+  promotionalRefundUnits?:string
+  periodStartAt?:number
+  periodEndAt?:number
+  snapshotAt?:number
+  countTimeBasis?:'call_created'
+  spendTimeBasis?:'financial_effective'
+  coverage?:'complete'|'partial'
+  source?:'formance_with_canonical_call_joins'
   states: readonly ChargeState[];
 }>;
 
@@ -239,17 +255,19 @@ export const CreditAccountViewSchema = z.strictObject({
 export const CreditActivityViewSchema = z.strictObject({
   activityRef: moneyRefSchema,
   credentialId: moneyRefSchema,
-  serviceRef: moneyRefSchema,
-  offeringRef: moneyRefSchema,
-  businessId: moneyRefSchema,
+  serviceRef: moneyRefSchema.nullable(),
+  offeringRef: moneyRefSchema.nullable(),
+  businessId: moneyRefSchema.nullable(),
   operationKey: moneyRefSchema,
   callRef: moneyRefSchema,
-  attemptRef: moneyRefSchema,
+  attemptRef: moneyRefSchema.nullable(),
   grossAmount: exactAmountSchema,
   chargeState: strictChargeStateSchema,
-  priceDigest: strictMoneyDigestSchema,
+  priceDigest: strictMoneyDigestSchema.nullable(),
   observedAt: strictMoneyCountSchema,
   transactionRef: moneyRefSchema.exactOptional(),
+  entryKind:z.enum(['charge','refund','promotional_use','promotional_refund']).exactOptional(),
+  callCreatedAt:strictMoneyCountSchema.exactOptional(),effectiveAt:strictMoneyCountSchema.exactOptional(),recordedAt:strictMoneyCountSchema.nullable().exactOptional(),serviceFeeUnits:z.string().regex(/^(?:0|[1-9]\d*)$/u).exactOptional(),
 });
 
 export const KeyUsageViewSchema = z.strictObject({
@@ -259,6 +277,9 @@ export const KeyUsageViewSchema = z.strictObject({
   freeCallCount: strictMoneyCountSchema,
   grossSpend: exactAmountSchema,
   states: z.array(strictChargeStateSchema),
+  refundUnits:z.string().regex(/^(?:0|[1-9]\d*)$/u).exactOptional(),netChargeUnits:z.string().regex(/^(?:0|-?[1-9]\d*)$/u).exactOptional(),promotionalUseUnits:z.string().regex(/^(?:0|[1-9]\d*)$/u).exactOptional(),promotionalRefundUnits:z.string().regex(/^(?:0|[1-9]\d*)$/u).exactOptional(),
+  periodStartAt:strictMoneyCountSchema.exactOptional(),periodEndAt:strictMoneyCountSchema.exactOptional(),snapshotAt:strictMoneyCountSchema.exactOptional(),
+  countTimeBasis:z.literal('call_created').exactOptional(),spendTimeBasis:z.literal('financial_effective').exactOptional(),coverage:z.enum(['complete','partial']).exactOptional(),source:z.literal('formance_with_canonical_call_joins').exactOptional(),
 });
 
 export const ProviderEarningsViewSchema = z.strictObject({
@@ -298,12 +319,20 @@ export type MoneyPaginationPage<Item> = Readonly<{
   isDone: boolean;
   continueCursor: string;
 }>;
+export type CreditActivityPage = MoneyPaginationPage<CreditActivityView> & Readonly<{
+  periodStartAt?:number
+  periodEndAt?:number
+  snapshotAt?:number
+  timeBasis?:'financial_effective'
+  coverage?:'complete'|'partial'
+  source?:'formance_with_canonical_call_joins'
+}>;
 
 export type MoneyQueryPort = Readonly<{
   readCreditAccount: (input: CreditAccountQuery) => Promise<CreditAccountView>;
   listCreditActivity: (
     input: CreditActivityQuery,
-  ) => Promise<MoneyPaginationPage<CreditActivityView>>;
+  ) => Promise<CreditActivityPage>;
   readKeyUsage: (input: KeyUsageQuery) => Promise<KeyUsageView>;
   readProviderEarnings: (
     input: ProviderEarningsQuery,
@@ -319,7 +348,7 @@ export async function readCreditAccount(
 
 export async function listCreditActivity(
   input: Readonly<{ port: MoneyQueryPort; query: CreditActivityQuery }>,
-): Promise<MoneyPaginationPage<CreditActivityView>> {
+): Promise<CreditActivityPage> {
   return await input.port.listCreditActivity(input.query);
 }
 
@@ -411,3 +440,8 @@ export { accountCreditBalanceValue, eligiblePromotionalGrantValue, type AccountC
 export { managedCallBookingValue, MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from './managed-call-contracts'
 export { settledSaleRefundReference, settledSaleRefundReferences } from './settled-sale-refund-contracts'
 export type { X402PayeeScreeningDecision, X402SpendAdmissionResult } from './x402-spend-admission'
+
+export { financialUsageReadSchema, financialUsageEntrySchema, reconciliationPeriodSchema, reconcileUsage, reconciliationCallSchema, usageReconciliationSchema } from './usage-reconciliation'
+export type { FinancialUsageEntry, FinancialUsageRead, ReconciliationCall, UsageReconciliation } from './usage-reconciliation'
+
+export {financialReportSummarySchema,emptyFinancialReportSummary,appendFinancialReportSummary,type FinancialReportSummary} from './usage-report-summary'

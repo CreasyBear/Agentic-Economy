@@ -5,6 +5,8 @@ export {
   containsRemoteSchemaReference,
 } from './internal/json-value'
 export type { JsonValue } from './internal/json-value'
+export { serviceUnitDefinitionSchema, serviceUnitDefinitionRef } from './internal/service-unit'
+export type { ServiceUnitDefinition } from './internal/service-unit'
 
 export {
   CAPABILITY_CONTRACT_FORMAT,

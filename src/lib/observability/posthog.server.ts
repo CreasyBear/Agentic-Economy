@@ -58,6 +58,18 @@ export function captureServerEvent(
   }
 }
 
+/** Gateway callers supply an allowlisted, pseudonymous projection, never the
+ * request body. Keep vendor capture centralised with the existing server SDK. */
+export function captureServerGatewayEvent(
+  distinctId: string,
+  properties: Record<string, string | number | boolean | null>,
+): void {
+  captureServerEvent(distinctId, 'ae.gateway.operation', {
+    ...properties,
+    $process_person_profile: false,
+  })
+}
+
 
 export async function shutdownPostHogServer(): Promise<void> {
   if (client === undefined) {

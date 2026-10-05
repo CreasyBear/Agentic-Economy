@@ -1,0 +1,2 @@
+import { z } from 'zod'
+export const usageAlertEvidenceSchema=z.strictObject({format:z.literal('ae.usage-alert:v1'),kind:z.enum(['low_credit_balance','spend_cap_warning','spend_cap_exceeded','call_failure_spike','invoice_ready']),month:z.string().regex(/^\d{4}-\d{2}$/u),sourceDigest:z.string().regex(/^sha256:[a-f0-9]{64}$/u),observedAt:z.number().int().nonnegative().safe(),text:z.string().max(1500)})

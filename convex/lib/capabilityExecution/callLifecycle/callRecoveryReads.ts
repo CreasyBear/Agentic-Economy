@@ -1,3 +1,4 @@
+import {pricingConfigDigest} from '@/modules/money/public'
 import { v, type Infer } from 'convex/values'
 import { paginationOptsValidator, type PaginationOptions } from 'convex/server'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
@@ -11,10 +12,13 @@ import { callResultValue, usageValue } from '@/modules/capability-execution/conv
 import { createPublicToolRef, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import { assertCallResultJson } from './callIdentity'
 import { callState, environment, ownerCallContextValue, recoveryValue } from './contracts'
+import { readMeasurementEvidence } from '../serviceUsage/lineage'
+import { readCallAttemptEvidence } from './attemptEvidence'
+import { readProviderUnitEvidence } from '../serviceUsage/providerObservations'
 
 export const readRecoveryArgs = { callRef: v.string(), principalId: v.string() } as const
 export const readOwnerRecoveryArgs = { callRef: v.string() } as const
-export const readOwnerReceiptContextArgs = { callRef: v.string(), ownerId: v.string(), toolRef: v.string() } as const
+export const readOwnerReceiptContextArgs = { callRef: v.string(), ownerId: v.string(), toolRef: v.string(), observedAt: v.optional(v.number()) } as const
 export const listAgentCallSummariesArgs = {
   principalId: v.string(),
   ownerId: v.string(),
@@ -147,7 +151,7 @@ function projectRecoveryRow(row: CallRow): RecoveryRow | null {
 
 export async function readOwnerReceiptContextHandler(
   ctx: QueryCtx,
-  args: { callRef: string; ownerId: string; toolRef: string },
+  args: { callRef: string; ownerId: string; toolRef: string; observedAt?: number },
 ): Promise<OwnerCallContext | null> {
   // Internal owner read only, called after the same authorization used by
   // reconcileOwnerCall. Re-check linkage before reading any identity metadata.
@@ -164,10 +168,17 @@ export async function readOwnerReceiptContextHandler(
     && membership !== null && admission !== null
     && admission.ownerId === row.ownerId && admission.applicationRef === row.applicationRef
     && admission.environment === row.environment ? principal.displayName : null
+  const usage = args.observedAt === undefined ? null : await ctx.db.query('capabilityServiceUsageRecords').withIndex('by_callRef', q => q.eq('callRef', row.callRef)).unique()
+  const serviceUsageEvidence = args.observedAt === undefined ? undefined : usage === null ? { kind: 'not_recorded' as const }
+    : await readMeasurementEvidence(ctx, usage, args.observedAt, args.observedAt, row)
   return {
     purpose: null,
+    ...(serviceUsageEvidence === undefined ? {} : { serviceUsageEvidence }),
+    ...(args.observedAt === undefined ? {} : { providerUnitEvidence: await readProviderUnitEvidence(ctx, row, args.observedAt, args.observedAt) }),
+    attemptEvidence: await readCallAttemptEvidence(ctx, row),
     agent: { principalRef: row.principalId, applicationRef: row.applicationRef, currentDisplayName },
     recordedTool: recordedReceiptTool(row),
+    ...recordedTariff(row),
     reconciliation: { canSubmitEvidence: true, permissionBasis: 'account_owner', requiresVerifiedEvidence: true },
   }
 }
@@ -219,4 +230,11 @@ export async function readOwnerRecoveryHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
   return row === null ? null : projectRecoveryRow(row)
+}
+
+function recordedTariff(row:CallRow):Pick<OwnerCallContext,'recordedTariff'>{
+  if(recordedReceiptTool(row).kind!=='available'||row.toolJson===undefined)return {}
+  const tool=parsePublishedToolSnapshot(row.toolJson)
+  if(tool===undefined||pricingConfigDigest(tool.pricingConfig)!==tool.priceDigest)return {}
+  return {recordedTariff:{basis:'call_snapshot',pricingConfig:tool.pricingConfig,priceDigest:tool.priceDigest}}
 }

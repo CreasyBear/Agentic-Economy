@@ -2,7 +2,7 @@ import { v, type Infer } from 'convex/values'
 
 import { jsonObject } from '@/modules/capability-execution/convex'
 
-import { internalMutation } from './_generated/server'
+import { internalMutation } from './usageTrackedMutation'
 import { trustedChatAuthorityValue } from './lib/chat/turns/contracts'
 import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/chatCallAuthority'
 import { principalValue } from './lib/capabilityExecution/callLifecycle/contracts'
