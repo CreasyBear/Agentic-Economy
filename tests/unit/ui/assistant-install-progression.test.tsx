@@ -79,7 +79,7 @@ describe('Agent connection progression', () => {
     expect(screen.getByText('Selected Tool saved for this setup')).toBeTruthy()
     expect(screen.getByText(/Keep its input in your Agent’s task/u)).toBeTruthy()
     expect(screen.getByText(/setup creates no Call/u)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Connect another app or script' }).getAttribute('href'))
+    expect(screen.getByRole('link', { name: 'Connect an app or script with a manual key' }).getAttribute('href'))
       .toBe(`/owner/settings/agent-keys?issue=manual&resumeTool=${encodeURIComponent(`operation:v1:${'a'.repeat(64)}`)}`)
     expect(checkConnection).not.toHaveBeenCalled()
   })

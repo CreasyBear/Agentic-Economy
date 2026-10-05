@@ -115,6 +115,7 @@ function createTestRouter() {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/calls/$callRef' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
   ])
@@ -158,6 +159,29 @@ function statusAnnouncements() {
 }
 
 describe('HomeResumeToolSection observed Call frame', () => {
+  it.each([false, true])('offers native Tool browsing without a selected Tool for browse-only access, authenticated %s', authenticated => {
+    const firstUse: AgentFirstUseState = { kind: 'browse_only', agent: { ...agent, authorityMode: 'read_only' }, authenticated }
+    const onConnect = vi.fn()
+    const onCheck = vi.fn()
+    render(<RouterContextProvider router={createTestRouter()}>
+      <HomeResumeToolSection firstUse={firstUse} liveUpdates="current" checking={false} onConnect={onConnect} onCheck={onCheck} />
+    </RouterContextProvider>)
+
+    expect(screen.getByRole('link', { name: 'Browse Tools' })).toHaveAttribute('href', '/market?view=tools')
+    expect(screen.queryByRole('link', { name: 'Return to selected Tool' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Call/u })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Connect an Agent' })).not.toBeInTheDocument()
+    expect(onConnect).not.toHaveBeenCalled()
+    expect(onCheck).not.toHaveBeenCalled()
+  })
+
+  it('retains the exact selected Tool destination for browse-only access', () => {
+    renderSection({ kind: 'browse_only', agent: { ...agent, authorityMode: 'read_only' }, authenticated: true })
+    expect(screen.getByRole('link', { name: 'Return to selected Tool' })).toHaveAttribute('href', TOOL_HREF)
+    expect(screen.queryByRole('link', { name: 'Browse Tools' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Call/u })).not.toBeInTheDocument()
+  })
+
   it.each([
     ['queued', 'Queued'],
     ['running', 'Running'],

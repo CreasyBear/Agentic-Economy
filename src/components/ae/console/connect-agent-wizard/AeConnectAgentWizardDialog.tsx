@@ -22,6 +22,8 @@ import {
 
 import './ConnectAgentComposition.css'
 
+type ConnectAgentWizardStep = 'identity' | 'limits' | 'review'
+
 export interface AeConnectAgentWizardDialogProps {
   deploymentEnvironment: ConnectAgentEnvironment
   open: boolean
@@ -35,13 +37,13 @@ export interface AeConnectAgentWizardDialogProps {
 
 /** Draft presentation only. Exact draft strings, validation, issuance and
  * confirmation remain in the existing wizard; this mapper creates no access. */
-function wizardPresentation(view: ConnectAgentWizardViewState, step: 'access' | 'review') {
+function wizardPresentation(view: ConnectAgentWizardViewState, step: ConnectAgentWizardStep) {
   return {
     pending: view.isSubmitting || view.awaitingConfirmation,
     authorityLabel: view.authorityMode === 'read_only' ? 'Browse only' : view.authorityMode === 'approval_required' ? 'Ask each time' : 'Work within limits',
     environmentLabel: view.environment === 'sandbox' ? 'Sandbox' : 'Production',
     spendingLabel: view.environment === 'sandbox' ? 'A$1.00 per Call · A$5.00 daily · A$20.00 monthly' : `A$${view.perCallAmount.trim()} per Call · A$${view.dailyAmount.trim()} daily · A$${view.monthlyAmount.trim()} monthly`,
-    submitLabel: view.isSubmitting ? 'Issuing key…' : view.awaitingConfirmation ? 'Confirm this issuance' : step === 'access' ? 'Review access' : 'Issue key',
+    submitLabel: view.isSubmitting ? 'Issuing key…' : view.awaitingConfirmation ? 'Confirm this issuance' : step === 'identity' ? 'Set spending limits' : step === 'limits' ? 'Review access' : 'Issue key',
   }
 }
 
@@ -66,10 +68,14 @@ export function AeConnectAgentWizardDialog({
     ...(onDraftChange === undefined ? {} : { onDraftChange }),
   })
   const { view } = wizard
-  const [step, setStep] = useState<'access' | 'review'>('access')
+  const [step, setStep] = useState<ConnectAgentWizardStep>('identity')
+  const limitsHeading = useRef<HTMLHeadingElement>(null)
   const reviewHeading = useRef<HTMLHeadingElement>(null)
-  useEffect(() => { if (!open) setStep('access') }, [open])
-  useEffect(() => { if (step === 'review') reviewHeading.current?.focus() }, [step])
+  useEffect(() => { if (!open) setStep('identity') }, [open])
+  useEffect(() => {
+    if (step === 'limits') limitsHeading.current?.focus()
+    if (step === 'review') reviewHeading.current?.focus()
+  }, [step])
   const presentation = wizardPresentation(view, step)
 
   return (
@@ -94,13 +100,24 @@ export function AeConnectAgentWizardDialog({
         data-slot="dialog-content"
       >
         <form onSubmit={(event) => {
-          if (step === 'access') {
-            event.preventDefault()
+          event.preventDefault()
+          if (step === 'identity') {
+            if (view.isNameValid) setStep('limits')
+            else void wizard.canReviewDraft()
+            return
+          }
+          if (step === 'limits') {
             if (wizard.canReviewDraft()) setStep('review')
-          } else void wizard.handleSubmit(event)
+            return
+          }
+          void wizard.handleSubmit(event)
         }} className="arc-connect-agent-form">
           <div className="arc-connect-agent-fields">
-            <MultiStepForm activeStep={step} steps={[{ id: 'access', title: 'Choose access' }, { id: 'review', title: 'Review and issue' }]}>
+            <MultiStepForm activeStep={step} steps={[
+              { id: 'identity', title: 'Name and authority' },
+              { id: 'limits', title: 'Spending limits' },
+              { id: 'review', title: 'Review and issue' },
+            ]}>
             {view.diagnostic !== null ? (
               <div aria-live="polite">
                 <Alert variant="destructive">
@@ -113,21 +130,22 @@ export function AeConnectAgentWizardDialog({
               </div>
             ) : null}
 
-            {step === 'access' ? <><AgentNameField
-              value={view.name}
-              disabled={presentation.pending}
-              invalid={view.nameInvalid}
-              inputRef={wizard.nameInputRef}
-              onChange={wizard.handleNameChange}
-            />
+            {step === 'identity' ? <>
+              <AgentNameField
+                value={view.name}
+                disabled={presentation.pending}
+                invalid={view.nameInvalid}
+                inputRef={wizard.nameInputRef}
+                onChange={wizard.handleNameChange}
+              />
 
-            <AuthorityModeRadioCards
-              value={view.authorityMode}
-              disabled={presentation.pending}
-              onChange={wizard.setAuthorityMode}
-            />
-
-            <div className="arc-connect-agent-limits">
+              <AuthorityModeRadioCards
+                value={view.authorityMode}
+                disabled={presentation.pending}
+                onChange={wizard.setAuthorityMode}
+              />
+            </> : step === 'limits' ? <div className="arc-connect-agent-limits">
+              <h3 ref={limitsHeading} tabIndex={-1}>Set spending limits for {view.name.trim()}</h3>
               <SpendingLimitInputs
                 presentation={view.spendingPresentation}
                 ids={CONNECT_AGENT_WIZARD_LIMIT_IDS}
@@ -147,8 +165,7 @@ export function AeConnectAgentWizardDialog({
               <p className="arc-connect-agent-hint">
                 Per-call ≤ daily ≤ monthly. AUD, GST-inclusive prepaid credit.
               </p>
-            </div>
-            </> : <div className="arc-connect-agent-review">
+            </div> : <div className="arc-connect-agent-review">
               <h3 ref={reviewHeading} tabIndex={-1}>Review access for {view.name.trim()}</h3>
               <dl>
                 <div><dt>Environment</dt><dd>{presentation.environmentLabel}</dd></div>
@@ -170,7 +187,11 @@ export function AeConnectAgentWizardDialog({
             >
               Cancel
             </Button>
-            {step === 'review' ? <Button type="button" variant="secondary" disabled={presentation.pending} onClick={() => { setStep('access'); requestAnimationFrame(() => wizard.nameInputRef.current?.focus()) }}>Edit access</Button> : null}
+            {step === 'limits' ? <Button type="button" variant="secondary" disabled={presentation.pending} onClick={() => {
+              setStep('identity')
+              requestAnimationFrame(() => wizard.nameInputRef.current?.focus())
+            }}>Back to name and authority</Button> : null}
+            {step === 'review' ? <Button type="button" variant="secondary" disabled={presentation.pending} onClick={() => setStep('limits')}>Edit spending limits</Button> : null}
             <Button
               type="submit"
               variant="primary"
