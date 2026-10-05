@@ -31,8 +31,10 @@ export type DataColumn<T> = {
 };
 
 export type SortableDataTableProps<T extends Record<string, unknown>> = {
-  rows: T[];
-  columns: DataColumn<T>[];
+  rows: readonly T[];
+  columns: readonly DataColumn<T>[];
+  density?: "comfortable" | "compact";
+  mobileLayout?: "cards" | "scroll";
   rowKey: keyof T | ((row: T) => string);
   caption?: string;
   ariaLabel?: string;
@@ -155,7 +157,7 @@ function SelectBox({ checked, mixed = false, label, nav, reduced, onToggle, inpu
   </label>;
 }
 
-export function SortableDataTable<T extends Record<string, unknown>>({ rows, columns, rowKey, caption = "Data table", ariaLabel, animateRows = true, rowClassName, emptyMessage = "No rows to show", defaultSort, onSortChange, selectable = false, selectedKeys, defaultSelectedKeys, onSelectionChange, itemName = { one: "row", other: "rows" }, manualSorting = false, isRowSelected, getRowClassName, renderBody, emptyContent, loading = false, maxHeight, tableClassName }: SortableDataTableProps<T>) {
+export function SortableDataTable<T extends Record<string, unknown>>({ rows, columns, rowKey, caption = "Data table", ariaLabel, animateRows = true, rowClassName, emptyMessage = "No rows to show", defaultSort, onSortChange, selectable = false, selectedKeys, defaultSelectedKeys, onSelectionChange, itemName = { one: "row", other: "rows" }, manualSorting = false, isRowSelected, getRowClassName, renderBody, emptyContent, loading = false, maxHeight, tableClassName, density = "comfortable", mobileLayout = "cards" }: SortableDataTableProps<T>) {
   const reduced = useReducedMotion() ?? false;
   const tableRef = useRef<HTMLTableElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -332,7 +334,7 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
           return animateRows ? <motion.tr key={key} className={rowClass} role="row" layout={reduced ? false : "position"} layoutDependency={order} transition={motionTokens.spring.smooth} data-selected={selected || undefined} data-state={selected ? "selected" : undefined} onClick={event => onRowClick(event, key)} onMouseDown={event => { if (selectable && event.shiftKey) event.preventDefault(); }}>{cells}</motion.tr>
             : <tr key={key} className={rowClass} role="row" data-selected={selected || undefined} data-state={selected ? "selected" : undefined} onClick={event => onRowClick(event, key)}>{cells}</tr>;
         }) : <tr role="row"><td role="cell" className={styles.empty} colSpan={columns.length + (selectable ? 1 : 0)}>{emptyContent ?? emptyMessage}</td></tr>}</tbody>;
-  return <div className={`arc-market ${styles.wrapper}`} aria-busy={loading || undefined} onKeyDown={onKeyDown}>
+  return <div className={`arc-market ${styles.wrapper}`} aria-busy={loading || undefined} data-density={density} data-mobile-layout={mobileLayout} onKeyDown={onKeyDown}>
     <div data-slot="table-container" className={styles.scroller} style={maxHeight === undefined ? undefined : { maxHeight, overflowY: "auto" }}>
       {band ? <span className={styles.band} style={{ left: band.left, width: band.width }} aria-hidden="true" /> : null}
       <table ref={tableRef} role="table" aria-label={ariaLabel} className={[styles.table, tableClassName].filter(Boolean).join(" ")} data-fixed={widths ? "" : undefined} data-selectable={selectable || columns.some(column => column.selection) || undefined} data-row-selectable={selectable || undefined}>

@@ -487,6 +487,9 @@ export const capabilityCallTables = {
     .index('by_chatTurnRef', ['chatTurnRef'])
     .index('by_contentExpiredAt_and_createdAt', ['contentExpiredAt', 'createdAt'])
     .index('by_environment_and_createdAt', ['environment', 'createdAt'])
+    .index('by_ownerId_and_environment_and_createdAt', ['ownerId', 'environment', 'createdAt'])
+    .index('by_environment_and_updatedAt', ['environment', 'updatedAt'])
+    .index('by_environment_and_state_and_createdAt', ['environment', 'state', 'createdAt'])
     .index('by_ownerId_and_buyerSaleTransactionRef', ['ownerId', 'buyerSaleTransactionRef'])
     // Idempotency is keyed by the stable Principal, never by the rotating
     // credential: a replaced credential must replay, not mint a second Call.

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { MarketplaceMetricsRange } from '@/lib/operator/admin-console/metrics.contracts'
+import type { MarketplaceMetricsRange, MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
 import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
 
 export const adminMetricsSearchSchema = z.strictObject({
@@ -39,6 +39,7 @@ export type AdminMetricsDataState =
   | Readonly<{ kind: 'refused' }>
   | Readonly<{
       kind: 'ready'
+      report: MarketplaceMetricsReport
       cards: readonly AdminMetricCard[]
       ratios: readonly AdminMetricRatio[]
       coverageComplete: boolean
@@ -63,8 +64,8 @@ export const ADMIN_METRICS_RANGES: readonly Readonly<{
 ]
 
 export const ADMIN_METRICS_COPY = {
-  title: 'Metrics',
-  description: 'Daily marketplace activity and investor-reportable ratios.',
+  title: 'Marketplace metrics',
+  description: 'Observed marketplace activity, purchase quality and dated records.',
   adminBreadcrumb: 'Admin',
   rangeLabel: 'Reporting range',
   exportCsv: 'Export CSV',
@@ -73,9 +74,9 @@ export const ADMIN_METRICS_COPY = {
   settledCalls: 'Settled Calls',
   successRate: 'Success rate',
   transactingWorkspaces: 'Transacting Workspaces',
-  ratiosTitle: 'Ratios',
+  ratiosTitle: 'Purchase quality',
   quoteConversion: 'Quote conversion',
-  returningWorkspaceRate: 'Returning Workspace rate',
+  returningWorkspaceRate: 'Returning activity share',
   resolutionCoverage: 'Purchase resolution coverage',
   dailyTitle: 'Daily metrics',
   noDays: 'No metrics days recorded yet.',

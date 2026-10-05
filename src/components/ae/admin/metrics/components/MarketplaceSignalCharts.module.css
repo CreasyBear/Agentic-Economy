@@ -1,0 +1,20 @@
+.grid {
+  --signal-violet: oklch(.55 .2 305);
+  --signal-mint: oklch(.55 .14 165);
+  --accent: var(--signal-violet);
+  --series-1: var(--signal-violet);
+  --series-2: var(--signal-mint);
+  --chart-track: color-mix(in oklch, var(--signal-violet) 14%, var(--surface));
+  --leading-display: 1.1;
+  --tracking-display: -.03em;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  min-width: 0;
+  gap: var(--space-4);
+}
+.card { display: grid; align-content: start; gap: var(--space-3); min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.card h3 { margin: 0; color: var(--foreground); font-size: var(--text-base); font-weight: 500; }
+.description, .note { margin: 0; color: var(--text-secondary); font-size: var(--text-xs); line-height: var(--leading-body); }
+.note { margin-top: var(--space-2); }
+.unavailable { display: grid; place-items: center; min-height: 180px; margin: 0; color: var(--text-secondary); text-align: center; font-size: var(--text-sm); }
+:global(.dark) .grid { --signal-violet: oklch(.8 .14 305); --signal-mint: oklch(.8 .15 165); --accent: var(--signal-violet); }

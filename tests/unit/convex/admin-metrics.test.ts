@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../../convex/_generated/api'
-import { perthDayWindow } from '../../../convex/lib/adminConsole/metrics/dayWindow'
+import { perthDayWindow, shiftPerthDay } from '../../../convex/lib/adminConsole/metrics/dayWindow'
 import { recordMarketEvidenceFact } from '../../../convex/marketEvidence'
 import {
   convexTestWithMarketComponents,
@@ -184,6 +184,42 @@ describe('admin marketplace metrics', () => {
         { day: FIRST_DAY, attemptedCalls: 1, quotesCreated: 1 },
         { day: SECOND_DAY, attemptedCalls: 1, quotesCreated: 1 },
       ])
+  })
+
+  it('uses the selected period for totals and deduplicates Accounts across days', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['workspace:repeat'], true)
+    await seedDay(backend, SECOND_DAY, ['workspace:repeat'], true)
+    vi.setSystemTime(new Date('2026-10-15T04:00:00Z'))
+    for (let offset = 0; offset < 30; offset += 1) {
+      const day = shiftPerthDay('2026-10-14', -offset)
+      if (day === null) throw new Error('invalid fixture day')
+      await snapshot(backend, day)
+    }
+    const admin = await ownerAdmin(backend, 'user_admin-range')
+    const monthly = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_30' })
+    expect(monthly).toMatchObject({ coverageComplete: true, headline: {
+      settledCalls: 2, transactingWorkspaces: 1, successRate: 1,
+      settledCallValue: { units: '3000', exponent: 2, currency: 'AUD' },
+    } })
+    const weekly = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    expect(weekly).toMatchObject({ coverageComplete: true, headline: { settledCalls: 0, transactingWorkspaces: 0 } })
+  })
+
+  it('withholds growth when the previous week has incomplete coverage', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['workspace:prior'], true)
+    await snapshot(backend, FIRST_DAY)
+    vi.setSystemTime(new Date('2026-09-29T04:00:00Z'))
+    for (let offset = 0; offset < 7; offset += 1) {
+      const day = shiftPerthDay('2026-09-28', -offset)
+      if (day === null) throw new Error('invalid fixture day')
+      await snapshot(backend, day)
+    }
+    const admin = await ownerAdmin(backend, 'user_admin-incomplete-prior')
+    expect(await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' }))
+      .toMatchObject({ coverageComplete: true, wow: { settledCalls: null, attemptedCalls: null,
+        completedCalls: null, transactingWorkspaces: null, quotesCreated: null } })
   })
 
   it('writes exact daily metrics and replaces the same day idempotently', async () => {
@@ -400,4 +436,70 @@ describe('admin marketplace metrics', () => {
     await expect(outsider.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' }))
       .resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
   })
+
+  it('counts repeat buying Accounts once and keeps promotional-only and foreign-environment activity separate', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['account:buyer', 'account:promo', 'account:foreign'], true)
+    await seedDay(backend, SECOND_DAY, ['account:buyer'], true)
+    await backend.run(async ctx => {
+      const calls = await ctx.db.query('capabilityCalls').collect()
+      for (const call of calls) {
+        const promo = call.ownerId === 'account:promo'
+        await ctx.db.patch(call._id, {
+          environment: call.ownerId === 'account:foreign' ? 'production' : 'sandbox',
+          usage: { ...call.usage!, amount: { currency: 'AUD', exponent: 6, units: '1000000' } },
+          promotionalCreditAllocation: {
+            version: 'ae.promotional-credit-allocation:v1', purchasedUnits: promo ? '0' : '750000',
+            grants: [{ grantRef: 'grant:promo', amountUnits: promo ? '1000000' : '250000', expiresAt: SECOND_DAY_UTC_START + 86_400_000 }],
+          },
+        })
+        if (call.ownerId === 'account:foreign') {
+          const quote = await ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', call.quoteRef!)).unique()
+          await ctx.db.patch(quote!._id, { environment: 'production' })
+        }
+      }
+    })
+    for (const day of ['2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', FIRST_DAY, SECOND_DAY]) await snapshot(backend, day)
+    // Rebuilding a day must not duplicate purchased activity or repeat buyers.
+    await snapshot(backend, SECOND_DAY)
+    const admin = await ownerAdmin(backend, 'user_admin-funded-metrics')
+    expect(await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })).toMatchObject({
+      environment: 'sandbox', coverageComplete: true,
+      funding: { purchasedUnits: '1500000', promotionalUnits: '1500000', customerFundedCalls: 2,
+        promotionalOnlyCalls: 1, completedCustomerFundedCalls: 2, buyingAccounts: 1,
+        repeatBuyingAccounts: 1, unclassifiedCalls: 0, accountCoverageComplete: true },
+      headline: { settledCalls: 3 },
+    })
+  })
+
+  it('withholds historical snapshots whose environment was never recorded', async () => {
+    const backend = convexTestWithMarketComponents()
+    await snapshot(backend, FIRST_DAY)
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('marketplaceMetricDays').first()
+      await ctx.db.patch(row!._id, { funding: undefined })
+    })
+    const admin = await ownerAdmin(backend, 'user_admin-legacy-metrics')
+    expect(await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })).toMatchObject({
+      coverageComplete: false, days: [], partialDays: [FIRST_DAY], headline: null, funding: null,
+    })
+  })
+  it('replays generation creation and refuses an older generation overwriting a newer publication', async () => {
+    const backend = convexTestWithMarketComponents()
+    const day = FIRST_DAY
+    const older = `${day}#older`
+    await backend.mutation(internal.adminConsoleMetrics.startMarketplaceMetricsBuild, { day, entityDay: older })
+    await backend.mutation(internal.adminConsoleMetrics.startMarketplaceMetricsBuild, { day, entityDay: older })
+    expect(await backend.run(async ctx => (await ctx.db.query('marketplaceMetricBuilds').collect()).length)).toBe(1)
+    vi.advanceTimersByTime(1)
+    await snapshot(backend, day)
+    const current = await backend.run(async ctx => await ctx.db.query('marketplaceMetricDays').first())
+    for (const phase of ['calls', 'quotes', 'resolutions'] as const) await backend.mutation(internal.adminConsoleMetrics.advanceMarketplaceMetricsBuild, {
+      day, entityDay: older, phase, expectedCursor: null, nextCursor: '', done: true,
+    })
+    const after = await backend.run(async ctx => await ctx.db.query('marketplaceMetricDays').first())
+    expect(after?.entityDay).toBe(current?.entityDay)
+    expect(after?.sourceStartedAt).toBe(current?.sourceStartedAt)
+  })
+
 })

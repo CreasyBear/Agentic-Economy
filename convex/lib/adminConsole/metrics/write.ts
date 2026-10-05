@@ -1,5 +1,6 @@
 import { v, type Infer } from 'convex/values'
 import type { MarketplaceMetricDay } from '@/lib/operator/admin-console/metrics.contracts'
+import { marketplaceFundingValue } from '@/modules/observability/public'
 
 import { internal } from '../../../_generated/api'
 import type { MutationCtx } from '../../../_generated/server'
@@ -12,6 +13,7 @@ const exactAmountOrNullValue = v.union(v.null(), v.object({
 }))
 
 export const marketplaceMetricCountsValue = v.object({
+  funding: v.optional(marketplaceFundingValue),
   settledCallValue: exactAmountOrNullValue,
   money: v.union(v.literal('settled_only'), v.literal('no_settled_usage')),
   settledCalls: v.number(),
@@ -37,7 +39,7 @@ async function clearEntityBatch(ctx: MutationCtx, day: string, refsOnly = false)
   let deleted = 0
   const kinds = refsOnly
     ? ['call', 'terminal', 'resolved'] as const
-    : ['workspace', 'agent', 'provider', 'tool', 'call', 'terminal', 'resolved'] as const
+    : ['workspace', 'agent', 'provider', 'tool', 'call', 'terminal', 'resolved', 'buyer'] as const
   for (const kind of kinds) {
     const rows = await ctx.db.query('marketplaceEntityDays')
       .withIndex('by_day_and_entityKind', (query) => query.eq('day', day).eq('entityKind', kind))
@@ -73,6 +75,7 @@ export async function writeMarketplaceMetricsDayHandler(
   args: Readonly<{
     day: string
     entityDay: string
+    sourceStartedAt?: number
     counts?: MarketplaceMetricCounts & Readonly<{
       returningWorkspaces: number
       newTransactingWorkspaces: number
@@ -101,9 +104,14 @@ export async function writeMarketplaceMetricsDayHandler(
   if (args.counts === undefined) throw new Error('marketplace_metrics_counts_required')
   const existing = await ctx.db.query('marketplaceMetricDays')
     .withIndex('by_day', (query) => query.eq('day', args.day)).unique()
-  const metric: MarketplaceMetricDay & { entityDay: string } = {
+  if (existing?.sourceStartedAt !== undefined && (args.sourceStartedAt === undefined || args.sourceStartedAt < existing.sourceStartedAt)) {
+    await ctx.scheduler.runAfter(0, internal.adminConsoleMetrics.writeMarketplaceMetricsDay, { day: args.day, entityDay: args.entityDay, phase: 'cleanup' })
+    return null
+  }
+  const metric: MarketplaceMetricDay & { entityDay: string; sourceStartedAt?: number } = {
     day: args.day,
     entityDay: args.entityDay,
+    ...(args.sourceStartedAt === undefined ? {} : { sourceStartedAt: args.sourceStartedAt }),
     computedAt: Date.now(),
     version: 1,
     complete: true,

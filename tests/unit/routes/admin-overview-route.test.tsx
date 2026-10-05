@@ -1,9 +1,11 @@
 /** @vitest-environment jsdom */
 import type { ReactNode } from 'react'
+import { renderToString } from 'react-dom/server'
 import { getFunctionName, type FunctionReference } from 'convex/server'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
+import { emptyMarketplaceFunding } from '@/modules/observability/public'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessChecks, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 
 const mocks = vi.hoisted(() => ({
@@ -21,12 +23,14 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('convex/react', () => ({
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() }),
   useQuery: (query: FunctionReference<'query'>) => {
     const name = getFunctionName(query)
     if (name === 'adminConsoleMetrics:readAlphaLearningSample') {
       if (mocks.learningError !== null) throw mocks.learningError
       return { kind: 'learning', asOf: Date.now(), from: 0, sampleLimit: 50, truncated: false, calls: [], feedback: [], selections: [] }
     }
+    if (name === 'adminConsoleAudit:readAdminAuditAccess') return { kind: 'allowed' }
     if (name === 'adminConsoleOverview:readAdminOverview') return mocks.overview
     if (name === 'adminConsoleExceptions:readAdminExceptionOverview') {
       if (mocks.exceptions instanceof Error) throw mocks.exceptions
@@ -48,6 +52,7 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
 }))
 
 import { AdminOverviewPage } from '@/components/ae/admin/overview/AdminOverviewPage'
+import { useAdminOverview } from '@/components/ae/admin/overview/useAdminOverview'
 
 function passingReadiness(expiresAt: number): PaymentReadinessView {
   const passed = { kind: 'passed' as const, validUntil: expiresAt }
@@ -103,7 +108,7 @@ describe('admin overview route', () => {
     expect(screen.queryByRole('link', { name: 'Removal dispute · Opened' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Admission case · Submitted' }).getAttribute('href'))
       .toBe('/admin/exceptions?kind=admission_case&partition=submitted')
-    expect(screen.getByText('Unavailable')).toBeTruthy()
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
   })
 
 
@@ -120,13 +125,14 @@ describe('admin overview route', () => {
   it('contains a failed exception read to its shelf while metrics remain usable', () => {
     mocks.exceptions = new Error('injected_exceptions_read_rejection')
     mocks.metrics = {
-      days: [], latestDay: null,
+      coverageComplete: true, days: [], latestDay: null,
+      funding: { ...emptyMarketplaceFunding('production'), buyingAccounts: 2, completedCustomerFundedCalls: 4, repeatBuyingAccounts: 1, accountCoverageComplete: true },
       headline: { settledCallValue: null, money: 'no_settled_usage', settledCalls: 4, successRate: 0.75, transactingWorkspaces: 2 },
     }
     render(<AdminOverviewPage />)
     expect(screen.getByText('Some exception sources are unavailable.')).toBeTruthy()
-    expect(screen.getByText('4')).toBeTruthy()
-    expect(screen.getByText('75%')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /^Delivered purchases\s*4\s*Completed Calls/ })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /^Buying Accounts\s*2\s*Distinct Accounts/ })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open queues' })).toBeTruthy()
   })
 
@@ -213,5 +219,36 @@ describe('admin overview route', () => {
     act(() => window.dispatchEvent(new Event('focus')))
     expect(screen.queryByText('Ready')).toBeNull()
     expect(screen.getByText('Not ready')).toBeTruthy()
+  })
+})
+
+function RecentRecordProbe() {
+  const state = useAdminOverview()
+  return <output>{state.kind === 'ready' ? state.recent.map(row => row.ref).join(',') : state.kind}</output>
+}
+
+describe('founder investigation disclosure', () => {
+  it('starts server rendering without browser history, then reads valid recent references after mounting', () => {
+    const storage = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify([{ kind: 'provider', ref: 'acme-provider' }]))
+    try {
+      expect(renderToString(<RecentRecordProbe />)).not.toContain('acme-provider')
+      expect(storage).not.toHaveBeenCalled()
+      render(<RecentRecordProbe />)
+      expect(screen.getByText('acme-provider')).toBeTruthy()
+    } finally {
+      storage.mockRestore()
+    }
+  })
+
+  it('immediately removes closed investigation panels from keyboard navigation', () => {
+    render(<AdminOverviewPage />)
+    const trigger = screen.getByRole('button', { name: 'Find an exact record' })
+    const panel = Array.from(document.querySelectorAll('[role="region"]')).find(element => element.getAttribute('aria-labelledby') === trigger.id)
+    expect(panel?.hasAttribute('inert')).toBe(true)
+    fireEvent.click(trigger)
+    expect(panel?.hasAttribute('inert')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Recently viewed records' }))
+    expect(panel?.hasAttribute('inert')).toBe(true)
+    expect(panel?.getAttribute('aria-hidden')).toBe('true')
   })
 })

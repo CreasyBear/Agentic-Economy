@@ -42,12 +42,19 @@ export default function SegmentedControl({ options, value, onValueChange, label,
   const first = useRef(true);
   useEffect(() => {
     const node = track.current;
-    const button = node?.querySelector<HTMLElement>('[aria-pressed="true"]');
-    if (!node || !button || node.scrollWidth <= node.clientWidth) { first.current = false; return; }
-    const room = 20, start = button.offsetLeft - room, end = button.offsetLeft + button.offsetWidth + room - node.clientWidth;
-    const left = node.scrollLeft > start ? start : node.scrollLeft < end ? end : node.scrollLeft;
-    if (left !== node.scrollLeft) node.scrollTo({ left: Math.max(0, left), behavior: first.current || reduced ? "auto" : "smooth" });
+    if (!node) return;
+    const revealSelected = (behavior: ScrollBehavior) => {
+      const button = node.querySelector<HTMLElement>('[aria-pressed="true"]');
+      if (!button || node.scrollWidth <= node.clientWidth) return;
+      const room = 20, start = button.offsetLeft - room, end = button.offsetLeft + button.offsetWidth + room - node.clientWidth;
+      const left = node.scrollLeft > start ? start : node.scrollLeft < end ? end : node.scrollLeft;
+      if (left !== node.scrollLeft) node.scrollTo({ left: Math.max(0, left), behavior });
+    };
+    revealSelected(first.current || reduced ? "auto" : "smooth");
     first.current = false;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => revealSelected("auto"));
+    observer?.observe(node);
+    return () => observer?.disconnect();
   }, [value, reduced]);
 
   // Arrow keys, Home and End move the selection like a tab list; only the selected option is a tab stop.

@@ -1,0 +1,119 @@
+import { ErrorBoundary } from '@sentry/react'
+import { usePaginatedQuery, useQuery } from 'convex/react'
+import { useEffect, useState } from 'react'
+import { SearchIcon } from 'lucide-react'
+
+import { api } from '../../../../../convex/_generated/api'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { Alert } from '@/components/arc/alert/alert'
+import { Badge } from '@/components/arc/badge/badge'
+import { EmptyState } from '@/components/arc/empty-state/empty-state'
+import { SearchField } from '@/components/arc/search-field/search-field'
+import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { AdminSearchNotice } from '../AdminSearchNotice'
+
+type AccountSearchProps = Readonly<{ search: string; onSearchChange: (search: string) => void }>
+
+export function AdminAccountsPage({ search, rejected, onSearchChange }: AccountSearchProps & Readonly<{ rejected?: string | undefined }>) {
+  return (
+    <AeOperatorPage
+      operatorRole="admin" title="Accounts"
+      description="Find an Account, follow its purchases and inspect its access and funding."
+      currentPath="/admin/accounts"
+      breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Accounts' }]}
+      stickyHeader
+    >
+      <AdminSearchNotice rejected={rejected} />
+      <ErrorBoundary fallback={
+        <div className="ae-arc"><Alert title="Accounts unavailable" tone="danger">The source could not provide a verified read. Reload this page to try again.</Alert></div>
+      }>
+        <AccountsList search={search} onSearchChange={onSearchChange} />
+      </ErrorBoundary>
+    </AeOperatorPage>
+  )
+}
+
+function AccountsList({ search, onSearchChange }: AccountSearchProps) {
+  const [draft, setDraft] = useState(search)
+  useEffect(() => setDraft(search), [search])
+  const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
+  const result = usePaginatedQuery(
+    api.adminConsoleActivity.listAccounts,
+    access?.kind === 'allowed' ? { search } : 'skip',
+    { initialNumItems: 25 },
+  )
+
+  if (access?.kind === 'refused') {
+    return <div className="ae-arc"><Alert title="Admin access required" tone="danger">Your current membership does not allow this read.</Alert></div>
+  }
+
+  const loading = access === undefined || result.status === 'LoadingFirstPage'
+  return (
+    <div className="grid gap-related pb-page">
+      <form className="flex max-w-xl items-end gap-related" onSubmit={event => {
+        event.preventDefault()
+        onSearchChange(draft.trim())
+      }}>
+        <div className="ae-arc min-w-0 flex-1">
+          <SearchField label="Account name" placeholder="Search Accounts" value={draft} maxLength={120} onValueChange={value => {
+            setDraft(value)
+            if (value === '' && search !== '') onSearchChange('')
+          }} />
+        </div>
+        <Button type="submit">Search</Button>
+      </form>
+      <p className="text-xs text-muted-foreground">
+        Accounts are shared identities, not a count of Customers. Purchase history follows this deployment’s money environment.
+      </p>
+      {loading ? (
+        <Skeleton className="h-44 w-full" role="status" aria-label="Loading Accounts" />
+      ) : result.results.length === 0 ? (
+        <div className="ae-arc rounded-card border border-border bg-card">
+          <EmptyState
+            icon={<SearchIcon size={24} />}
+            title="No Accounts found"
+            description={search.length > 0 ? 'Try another name or clear the search.' : 'Accounts will appear here when they are created.'}
+            action={search.length > 0 ? <Button variant="outline" onClick={() => onSearchChange('')}>Clear Account search</Button> : undefined}
+          />
+        </div>
+      ) : (
+        <div className="grid min-w-0 gap-related">
+          <p className="text-xs text-muted-foreground">
+            {result.results.length} loaded{result.status === 'Exhausted' ? '' : ' · more Accounts available'}. Sorting applies to loaded Accounts.
+          </p>
+          <div className="ae-arc min-w-0">
+            <SortableDataTable density="compact"
+              rows={result.results}
+              rowKey="accountRef"
+              caption="Loaded Accounts"
+              columns={[
+                { key: 'displayName', label: 'Account', render: (_value, account) => (
+                  <div className="min-w-0">
+                    <a className="font-medium underline-offset-4 hover:underline" href={`/admin/workspaces/${encodeURIComponent(account.accountRef)}`}>
+                      {account.displayName}
+                    </a>
+                    <p className="mt-1 max-w-72 truncate text-xs text-muted-foreground" title={account.accountRef}>{account.accountRef}</p>
+                  </div>
+                ) },
+                { key: 'lifecycle', label: 'Status', render: (_value, account) => (
+                  <Badge tone={account.lifecycle === 'suspended' ? 'warning' : 'neutral'}>{account.lifecycle.replaceAll('_', ' ')}</Badge>
+                ) },
+                { key: 'createdAt', label: 'Created', numeric: false, render: (_value, account) => (
+                  <time className="text-xs text-muted-foreground" dateTime={new Date(account.createdAt).toISOString()}>{formatPerthTimestamp(account.createdAt)}</time>
+                ) },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+      {result.status === 'CanLoadMore' || result.status === 'LoadingMore' ? (
+        <Button className="justify-self-start" variant="outline" disabled={result.status === 'LoadingMore'} onClick={() => result.loadMore(25)}>
+          {result.status === 'LoadingMore' ? 'Loading…' : 'Load more Accounts'}
+        </Button>
+      ) : null}
+    </div>
+  )
+}

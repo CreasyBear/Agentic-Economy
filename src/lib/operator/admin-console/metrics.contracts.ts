@@ -1,16 +1,19 @@
 import type { ExactAmount } from '@/modules/money/public'
+import type { MarketplaceFunding } from '@/modules/observability/public'
 
 export type MarketplaceMetricsRange = 'last_7' | 'last_30' | 'last_90'
 export type MarketplaceMetricsSnapshotRefusalCode =
   | 'malformed_day'
   | 'multiple_currencies'
   | 'unsupported_currency'
+  | 'environment_unavailable'
 
 export type MarketplaceMetricDay = Readonly<{
   day: string
   computedAt: number
   version: 1
   complete: boolean
+  funding?: MarketplaceFunding
   settledCallValue: ExactAmount | null
   money: 'settled_only' | 'no_settled_usage'
   settledCalls: number
@@ -32,6 +35,8 @@ export type MarketplaceMetricDay = Readonly<{
 }>
 
 export type MarketplaceMetricsReport = Readonly<{
+  environment?: 'sandbox' | 'production' | null
+  funding?: (MarketplaceFunding & Readonly<{ repeatBuyingAccounts: number; accountCoverageComplete: boolean }>) | null
   days: MarketplaceMetricDay[]
   coverageComplete: boolean
   partialDays: string[]

@@ -198,6 +198,17 @@ function sanitizeTelemetryValueRecursively(
 
   seen.add(value)
   try {
+    if (Array.isArray(value)) {
+      const result: unknown[] = []
+      for (let index = 0; index < value.length; index += 1) {
+        try {
+          result.push(sanitizeTelemetryValueRecursively(value[index], undefined, seen, depth + 1))
+        } catch (cause) {
+          result.push(degradeBackend(cause, filteredTelemetryValue, { site: 'sanitizeTelemetryValueRecursively', reason: 'source_unavailable' }))
+        }
+      }
+      return result
+    }
     const result: Record<string, unknown> = {}
     for (const entryKey of Object.keys(value as Record<string, unknown>)) {
       try {

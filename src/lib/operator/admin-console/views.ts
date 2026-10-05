@@ -53,6 +53,7 @@ export type AdminQuoteView = {
 export type AdminWorkspaceView = {
   kind: 'workspace'
   ref: AccountRef
+  displayName?: string
   lifecycle: AccountLifecycle
   ownerCount: number
   memberCount: number

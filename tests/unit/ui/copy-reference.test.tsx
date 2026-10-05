@@ -31,6 +31,21 @@ describe('AeCopyReference', () => {
     expect(toast.error).not.toHaveBeenCalled()
   })
 
+  it('shortens compact labels while keeping the exact reference in the link, hover text and clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const reference = `operation:v1:${'abcd'.repeat(16)}`
+    const href = `/admin/tools/${encodeURIComponent(reference)}`
+    render(<AeCopyReference compact label="Tool" value={reference} href={href} />)
+    const link = screen.getByRole('link', { name: reference })
+    expect(link.getAttribute('href')).toBe(href)
+    expect(link.getAttribute('title')).toBe(reference)
+    expect(link.textContent).toBe(`${reference.slice(0, 21)}…${reference.slice(-8)}`)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Tool' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(reference))
+    expect(screen.getByRole('status').textContent).toBe('Copied')
+  })
+
   it('keeps the reference selectable and gives visible failure recovery', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,

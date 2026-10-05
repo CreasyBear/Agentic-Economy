@@ -36,6 +36,8 @@ import {
   internalQuery,
 } from './_generated/server'
 
+import { changedMetricDays as changedMetricDaysHandler, missingMetricDays as missingMetricDaysHandler, refreshContinuationValue, refreshMarketplaceMetrics as refreshMarketplaceMetricsHandler } from './lib/adminConsole/metrics/refresh'
+
 const windowArgs = {
   from: v.number(),
   toExclusive: v.number(),
@@ -56,6 +58,7 @@ export const snapshotMarketplaceMetricsDay = internalAction({
         v.literal('malformed_day'),
         v.literal('multiple_currencies'),
         v.literal('unsupported_currency'),
+        v.literal('environment_unavailable'),
       ),
     }),
   ),
@@ -108,6 +111,7 @@ export const writeMarketplaceMetricsDay = internalMutation({
   args: {
     day: v.string(),
     entityDay: v.string(),
+    sourceStartedAt: v.optional(v.number()),
     counts: v.optional(v.object({
       ...marketplaceMetricCountsValue.fields,
       returningWorkspaces: v.number(),
@@ -131,4 +135,15 @@ export const readMarketplaceMetrics = defineAdminQuery({
   args: { range: marketplaceMetricsRangeValue },
   returns: marketplaceMetricsReportValue,
   handler: async (ctx, args) => await readMarketplaceMetricsRange(ctx, args.range),
+})
+
+export const refreshMarketplaceMetrics = internalAction({
+  args: { continuation: v.optional(refreshContinuationValue) }, returns: v.null(),
+  handler: refreshMarketplaceMetricsHandler,
+})
+export const missingMetricDays = internalQuery({
+  args: { lastDay: v.string() }, returns: v.array(v.string()), handler: missingMetricDaysHandler,
+})
+export const changedMetricDays = internalQuery({
+  args: windowArgs, returns: paginationResultValidator(v.string()), handler: changedMetricDaysHandler,
 })
