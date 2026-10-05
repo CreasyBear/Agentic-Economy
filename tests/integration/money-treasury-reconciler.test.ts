@@ -7,7 +7,7 @@ import { api, internal } from '../../convex/_generated/api'
 import { reconcileTreasurySnapshot } from '../../convex/lib/money/treasury/snapshot'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { cdpX402CustodyBudgetRef, cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/convex'
-import { createFormanceContext, installPackage4FormanceSchema, type FormanceContext } from '@/modules/money/formance'
+import { createFormanceContext, installPackage4FormanceSchema, PROMOTIONAL_FORMANCE_SCHEMA_VERSION, type FormanceContext } from '@/modules/money/formance'
 import { bookFormanceTreasuryBatch, readFormanceTreasuryBalances } from '@/modules/money/formance-treasury'
 import { bookFormanceFundingSettlement, reserveFormanceManagedCall, settleFormanceManagedCall, syncFormanceCapacity,
   capacityAccount } from '@/modules/money/formance-workflows'
@@ -265,7 +265,7 @@ function installRpc() {
 // Invariant: an unexplained native credit remains critical during a later outage.
 // On violation: assertions expose the actual producer report and durable records.
 describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury reconciler publication', () => {
-  it('reconciles complete observation history beyond a single-value digest bound and refuses concurrent changes', async () => {
+  it('reconciles complete observation history beyond a single-value digest bound while a post-cutoff observer advances', async () => {
     for (const [key, value] of Object.entries(sourceEnvironment)) vi.stubEnv(key, value)
     const context = createFormanceContext({ environment: 'sandbox', ledger: `ae-history-${randomUUID().replaceAll('-', '')}`,
       gatewayUrl: process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069', requestTimeoutMs: 30_000 })
@@ -299,8 +299,8 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
       return result
     })
     expect(await publish()).toMatchObject({ checks: {
-      cash: { kind: 'unavailable', code: 'treasury_sources_changed_during_audit' },
-      settlements: { kind: 'unavailable' }, reservations: { kind: 'unavailable' }, funding: { kind: 'unavailable' },
+      cash: { kind: 'matched', differenceUnits: '0' }, settlements: { kind: 'matched' },
+      reservations: { kind: 'matched' }, funding: { kind: 'matched' },
     } })
     expect(await readFormanceTreasuryBalances(context, identity)).toMatchObject({ availableUnits: '10000000', committedUnits: '0', bufferUnits: '5000000' })
   }, 180_000)
@@ -362,8 +362,12 @@ describe.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('native treasury 
     expect(external.intent).toHaveBeenCalledWith('pi_test_native_treasury', { expand: ['latest_charge'] })
     const orphanRef = 'fixture:orphan-treasury-credit'
     await context.sdk.ledger.v2.createTransaction({ ledger: context.configuration.ledger, idempotencyKey: orphanRef,
-      v2PostTransaction: { reference: orphanRef, metadata: {}, postings: [{ source: 'world',
-        destination: capacityAccount('treasury_usdc', custodyRef, 1), asset: 'USDC/6', amount: 10001n }] } })
+      schemaVersion: PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
+      v2PostTransaction: { reference: orphanRef, metadata: {}, runtime: 'machine', script: {
+        template: 'TREASURY_CAPACITY_SYNCED', vars: {
+          capacity: capacityAccount('treasury_usdc', custodyRef, 1), amount: 'USDC/6 10001',
+        },
+      } } })
     const drift = await publish()
     expect(drift.snapshot).toMatchObject({ rawCashDifferenceUnits: '-10001', checks: { cash: { kind: 'mismatch',
       code: 'treasury_cash_movement_unattributed', evidenceRefs: [orphanRef] } } })
