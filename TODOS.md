@@ -15,13 +15,13 @@ owner handoff is required before incorporating their unfinished work.
 
 | Remaining branch / checkout | Disposition and dependency | Owner |
 | --- | --- | --- |
-| `codex/aecon-consolidation-2026-10-05` | Integrate and release in bounded batches; repair/admin candidate based on #349; full gate queued behind remediation. | Consolidation coordinator |
+| `codex/aecon-consolidation-2026-10-05` | Integrate and release in bounded batches; repair/admin gate passed on #349; include merged #350 and rerun the combined gate before release. Exact production backend credential handoff remains required. | Consolidation coordinator |
 | `codex/first-user-readiness-2026-10-05` (independent clone) | Integrate released signup/readiness changes into the one integration branch; await terminal gate/handoff. | First-user remediation |
 | `codex/usage-metering` (independent clone) | Released at `c5f2b7356`; integrate foundations and completion after the minimal release, then run combined regression. Backfill and financial effects require separate review. | Consolidation coordinator; metering owner released |
 | `codex/admin-console-authority-config` | PR #239 adapted into candidate; retire only after verified landing and PR disposition. | Consolidation coordinator |
 | `codex/integration-repairs`, `codex/aecon-consolidation-2026-10-02` | Incorporated into candidate; recoverable checkout retirement follows verified landing and runtime/file census. | Consolidation coordinator |
 | `codex/alpha-convex-hookup` | PR #226 has divergent local/remote tips and duplicate history; extract unique product intent after the metering batch, then decide obsolete remainder explicitly. | Consolidation coordinator; former owner unverified |
-| `codex/arc-source-after-349` | Protected active source and dirty work; await a tested SHA and owner release. | Explore the Arc MCP |
+| `codex/arc-source-after-349` | PR #350 merged at `c1d8f86f` and included through main; protect remaining dirty/runtime material until owner release. | Explore the Arc MCP |
 | `codex/founder-console` | Protected dirty PR #290 checkout and running backend; await owner identification and handoff. | Active owner unverified |
 | `wip/openui-compose` | Preserve unique unwired scaffolding; assess integration after active feature handoffs or obtain explicit obsolete decision. | Consolidation coordinator |
 | `well-13/readiness-diagnostics` | PR #242 logging is superseded by #328; old npm override conflicts with the retained hosted exception. Obtain explicit obsolete disposition. | Consolidation coordinator / Joel |
