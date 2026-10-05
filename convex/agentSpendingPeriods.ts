@@ -1,6 +1,6 @@
 import { financialEnvironmentValue } from './lib/money/formance/contracts'
 import { v } from 'convex/values'
-import { internalMutation } from './_generated/server'
+import { internalMutation } from './usageTrackedMutation'
 import { spendingPeriodAdjustmentValue } from '../src/modules/money/public'
 import { acknowledgeAgentSpendingPeriod } from './lib/money/spendingPeriods/periods'
 

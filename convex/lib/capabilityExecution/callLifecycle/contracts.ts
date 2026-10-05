@@ -1,3 +1,4 @@
+import {pricingConfigValue} from '@/modules/capability-supply/public'
 import type { Doc } from '../../../_generated/dataModel'
 import { paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
@@ -9,11 +10,18 @@ import {
   callResultValue,
   usageValue,
   statusResultValue,
+  providerUnitEvidenceValue,
 } from '@/modules/capability-execution/convex'
+import { serviceUsageEvidenceValue } from '../serviceUsage/contracts'
+import { callAttemptEvidenceValue } from './attemptEvidenceContracts'
 
 export const environment = v.union(v.literal('sandbox'), v.literal('production'))
 export const ownerCallContextValue = v.object({
   purpose: v.null(),
+  recordedTariff:v.optional(v.object({basis:v.literal('call_snapshot'),pricingConfig:pricingConfigValue,priceDigest:v.string()})),
+  serviceUsageEvidence: v.optional(serviceUsageEvidenceValue),
+  providerUnitEvidence: v.optional(providerUnitEvidenceValue),
+  attemptEvidence: v.optional(callAttemptEvidenceValue),
   agent: v.object({ principalRef: v.string(), applicationRef: v.string(), currentDisplayName: v.union(v.string(), v.null()) }),
   recordedTool: v.union(
     v.object({ kind: v.literal('available'), basis: v.literal('call_snapshot'), name: v.string(), providerRef: v.string(), providerName: v.null() }),

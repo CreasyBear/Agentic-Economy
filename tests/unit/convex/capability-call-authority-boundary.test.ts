@@ -204,6 +204,13 @@ class AuthorityMemoryDb {
 
   constructor(private readonly tables: Readonly<Record<string, readonly Row[]>>) {}
 
+  normalizeId(_table: string, _id: string): null { return null }
+
+  async get(tableOrId: string, explicitId?: string) {
+    const id=explicitId??tableOrId
+    return Object.values(this.tables).flat().find(row=>row._id===id)??null
+  }
+
   query(table: string) {
     const predicates: Array<(row: Row) => boolean> = []
     const rows = () => [...(this.tables[table] ?? [])].filter((row) => predicates.every((predicate) => predicate(row)))
@@ -1183,7 +1190,7 @@ describe('capability operation canonical authority boundary', () => {
   })
 
   it('projects canonical BusinessActor identity into owner and approval handlers and denies anonymous actors', async () => {
-    const ctx = { auth: { marker: 'preserved-auth-property', getUserIdentity: async () => ({ subject: 'user_1', tokenIdentifier: 'clerk|owner' }) } }
+    const ctx = { db:new AuthorityMemoryDb({}), auth: { marker: 'preserved-auth-property', getUserIdentity: async () => ({ subject: 'user_1', tokenIdentifier: 'clerk|owner' }) } }
     const expectedIdentity = expect.objectContaining({
       subject: `prn_${'1'.repeat(32)}`,
       tokenIdentifier: `acc_${'2'.repeat(32)}`,

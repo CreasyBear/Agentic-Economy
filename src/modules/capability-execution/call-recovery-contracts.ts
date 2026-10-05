@@ -1,3 +1,4 @@
+import {pricingConfigSchema} from '@/modules/money/public'
 import { z } from 'zod'
 import type { JsonValue } from '@/modules/capability-contract/public'
 
@@ -9,6 +10,9 @@ import type {
   PublicReconciliationState,
 } from './call-contracts'
 import type { PurchaseResolutionRecord } from './purchase-resolution'
+import { serviceUsageEvidenceSchema, type ServiceUsageEvidence } from './service-usage-evidence'
+import { callAttemptEvidenceSchema, type CallAttemptEvidence } from './call-attempt-evidence'
+import { providerUnitEvidenceSchema, type ProviderUnitEvidence } from './provider-service-units'
 
 export const callStatusStateValues = [
   'gathering_information',
@@ -41,6 +45,10 @@ export type CallStatusState = z.infer<typeof callStatusStateSchema>
 /** Owner UI metadata only; never part of the public Call status protocol. */
 export const ownerCallContextSchema = z.strictObject({
   purpose: z.null(),
+  recordedTariff:z.strictObject({basis:z.literal('call_snapshot'),pricingConfig:pricingConfigSchema,priceDigest:z.string().regex(/^sha256:[a-f0-9]{64}$/u)}).exactOptional(),
+  serviceUsageEvidence: serviceUsageEvidenceSchema.exactOptional(),
+  providerUnitEvidence: providerUnitEvidenceSchema.exactOptional(),
+  attemptEvidence: callAttemptEvidenceSchema.exactOptional(),
   agent: z.strictObject({
     principalRef: z.string(), applicationRef: z.string(), currentDisplayName: z.string().nullable(),
   }),
@@ -57,7 +65,7 @@ export const ownerCallContextSchema = z.strictObject({
     requiresVerifiedEvidence: z.literal(true),
   }),
 })
-export type OwnerCallContext = z.infer<typeof ownerCallContextSchema>
+export type OwnerCallContext = Omit<z.infer<typeof ownerCallContextSchema>, 'serviceUsageEvidence' | 'attemptEvidence' | 'providerUnitEvidence'> & { serviceUsageEvidence?: ServiceUsageEvidence; attemptEvidence?: CallAttemptEvidence; providerUnitEvidence?: ProviderUnitEvidence }
 
 export type CallStatusResult =
   | Readonly<{

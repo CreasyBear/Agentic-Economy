@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { contentRetentionArgs, expireAlphaContentHandler } from './lib/capabilityExecution/contentRetention/cleanup'
-import { internalAction, internalMutation, internalQuery } from './_generated/server'
+import { internalAction, internalQuery } from './_generated/server'
+import { internalMutation } from './usageTrackedMutation'
 import { admitWorkloadCronHandler, reconcileWorkloadCronSnapshotHandler } from './lib/platform/workloadCron/admission'
 import { ensurePlatformWorkloadIdentitiesHandler } from './lib/platform/workloadCron/identities'
 import { dispatchWorkloadCronConsequenceHandler } from './lib/platform/workloadCron/consequence'

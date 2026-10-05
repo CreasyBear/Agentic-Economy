@@ -129,4 +129,10 @@ describe('createConvexMoneyQueryPort', () => {
     await expect(port.readKeyUsage({ principalId: 'acc_one', credentialId: 'credential:one', currency: 'AUD' }))
       .rejects.toEqual(new MoneyQueryError('credential_usage_unavailable'))
   })
+  it('preserves settlement scope and incomplete coverage across the server adapter',async()=>{
+    const {createConvexMoneyQueryPort}=await loadMoneyQueryModule()
+    const metadata={periodStartAt:100,periodEndAt:200,snapshotAt:300,timeBasis:'financial_effective',coverage:'partial',source:'formance_with_canonical_call_joins'}
+    stubMoneyLedgerFetch('moneyLedger:listCreditActivity',{kind:'ok',page:[],isDone:false,continueCursor:'signed:cursor',...metadata})
+    expect(await createConvexMoneyQueryPort().listCreditActivity({principalId:'acc_one',credentialId:'credential:one',currency:'AUD',paginationOpts:{numItems:10,cursor:null}})).toEqual({page:[],isDone:false,continueCursor:'signed:cursor',...metadata})
+  })
 })

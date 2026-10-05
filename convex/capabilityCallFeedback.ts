@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { query } from './_generated/server'
+import { mutation } from './usageTrackedMutation'
 import { callFeedbackViewValue } from '@/modules/capability-execution/call-feedback'
 import { readCallFeedback, writeCallFeedback, writeCallFeedbackArgs } from './lib/capabilityExecution/callFeedback'
 

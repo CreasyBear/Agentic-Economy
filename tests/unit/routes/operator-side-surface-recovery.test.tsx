@@ -244,7 +244,7 @@ describe('Calls side-surface recovery', () => {
     expect(within(recent).queryByText('Tool attention')).toBeNull()
     expect(attention.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(monthlySummary.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(attention).getAllByRole('link', { name: 'Review Tool attention' })[0]?.getAttribute('href')).toBe('/calls/attention')
+    expect(within(attention).getAllByRole('link', { name: 'Review Tool attention' })[0]?.getAttribute('href')).toBe('/calls/attention?returnRange=30d')
     expect(screen.queryByText('reconciliation required')).toBeNull()
   })
 

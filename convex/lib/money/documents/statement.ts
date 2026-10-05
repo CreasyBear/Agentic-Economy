@@ -22,9 +22,12 @@ export const createOwnerStatementResult = v.union(
 export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<typeof createOwnerStatementArgs>) => {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner') return { kind: 'refused' as const, code: 'authentication_required' }
+    return await createStatementForAccount(ctx,args,actor.canonicalAccountRef)
+}
+export async function createStatementForAccount(ctx:MutationCtx,args:Infer<typeof createOwnerStatementArgs>,accountRef:string,monthly?:{draftRef:string;reportRef:string;reportDigest:string;relatedDocumentsDigest:string;priorDraftRef:string|null;financialSummaryJson:string;snapshotCutoffAt:number}){
     if (!financialEnvironmentMatches(args.environment)) return { kind: 'refused' as const, code: 'environment_mismatch' }
-    const snapshotCutoffAt = Date.now()
-    const purpose = args.purpose ?? 'statement'
+    const snapshotCutoffAt = monthly?.snapshotCutoffAt??Date.now()
+    const purpose = monthly===undefined?args.purpose??'statement':'monthly_usage'
     if (!Number.isSafeInteger(args.periodStart)
       || !Number.isSafeInteger(args.periodEnd)
       || args.periodStart < 0
@@ -40,11 +43,12 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
     }
     const documentRef = `money-document:${purpose}:${canonicalDigest({
       format: 'ae.money-statement-identity:v2',
-      accountRef: actor.canonicalAccountRef,
+      accountRef,
       environment: args.environment,
       purpose,
       periodStart: args.periodStart,
       periodEnd: args.periodEnd,
+      ...(monthly===undefined?{}:{monthlyCloseRef:monthly.draftRef}),
     }).slice('sha256:'.length)}`
     const existing = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', documentRef))
@@ -76,16 +80,17 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
     const initialSnapshot = {
       format: 'ae.money-statement-snapshot:v2',
       documentRef,
-      accountRef: actor.canonicalAccountRef,
+      accountRef,
       periodStart: args.periodStart,
       periodEnd: args.periodEnd,
       snapshotCutoffAt,
       purpose,
+      ...(monthly===undefined?{}:{monthlyCloseRef:monthly.draftRef,usageReportRef:monthly.reportRef,usageReportDigest:monthly.reportDigest,relatedDocumentsDigest:monthly.relatedDocumentsDigest,priorDraftRef:monthly.priorDraftRef,financialSummaryJson:monthly.financialSummaryJson}),
       ...(policyAdmission === undefined ? {} : { policyAdmission }),
     } as const satisfies StableHashValue
     const documentId = await ctx.db.insert('moneyDocuments', {
       documentRef,
-      accountRef: actor.canonicalAccountRef,
+      accountRef,
       kind: purpose,
       sourceTransactionRefs: [],
       amountUnits: '0',
@@ -97,6 +102,7 @@ export const createOwnerStatementHandler = async (ctx: MutationCtx, args: Infer<
       renderInputDigest: canonicalDigest(initialSnapshot),
       state: 'building',
       environment: args.environment,
+      ...(monthly===undefined?{}:{usageReportRef:monthly.reportRef,usageReportDigest:monthly.reportDigest,monthlyCloseRef:monthly.draftRef}),
       sourceCount: 0,
       snapshotDigest: canonicalDigest(initialSnapshot),
       snapshotCutoffAt,

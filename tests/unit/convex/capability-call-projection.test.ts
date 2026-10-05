@@ -72,6 +72,28 @@ describe('Account Call projection', () => {
     })).rejects.toThrow('call_history_authentication_required')
   })
 
+  it('keeps provider payload and arbitrary evidence strings outside measurement and projection',async()=>{
+    const backend=convexTest(schema,convexModules),operation=buildDevelopmentPublishedToolEvidence().tool
+    const sentinel='sk-SENTINEL-PRIVATE-MEASUREMENT',now=Date.UTC(2026,8,2)
+    const callRef=`operation-invocation:v1:${'f'.repeat(64)}`
+    await backend.run(async ctx=>await ctx.db.insert('capabilityCalls',{
+      callRef,ownerId:'account:sentinel',principalId:'principal:sentinel',credentialId:'credential:sentinel',applicationRef:'application:sentinel',toolRef:operation.operationId,
+      idempotencyKey:'key:sentinel',environment:'sandbox',grantRef:'grant:sentinel',grantGeneration:1,policyDigest:'sha256:sentinel',grantExpiresAt:Date.now()+10000,
+      inputJson:JSON.stringify({Authorization:`Bearer ${sentinel}`}),inputDigest:'sha256:input',requestDigest:'sha256:request',toolJson:JSON.stringify(operation),
+      state:'completed',dispatchState:'completed',createdAt:now,updatedAt:now+1000,
+      result:{kind:'completed',callRef,toolRef:operation.operationId,evidenceHash:`Authorization: Bearer ${sentinel}`,
+        output:{privateText:sentinel,nested:{signedUrl:`https://signed.example?token=${sentinel}`,api_key:sentinel}}},
+      usage:{usageRef:'usage:sentinel',observedAt:now,chargeState:'free_tier',amount:{currency:'AUD',units:'0',exponent:6},priceDigest:`api_key=${sentinel}`},
+    }))
+    await backend.mutation(internal.capabilityCallProjections.rebuild,{paginationOpts:{numItems:100,cursor:null}})
+    const measured=await backend.run(async ctx=>await ctx.db.query('capabilityServiceUsageRecords').collect())
+    const projected=await backend.run(async ctx=>await ctx.db.query('capabilityCallProjections').collect())
+    expect(JSON.stringify(measured)).not.toContain(sentinel)
+    expect(JSON.stringify(projected)).not.toContain(sentinel)
+    expect(measured[0]?.priceDigest).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(measured[0]).not.toHaveProperty('sourceEvidenceHash')
+  })
+
   it('rebuilds a terminal managed Call exactly once from authoritative invocation evidence', async () => {
     const backend = convexTest(schema, convexModules)
     const operation = buildDevelopmentPublishedToolEvidence().tool
@@ -85,7 +107,7 @@ describe('Account Call projection', () => {
       evidenceHash: 'sha256:call-result',
       receipt: {
         commercialModel: 'account_aud' as const,
-        receiptRef: 'receipt:call-projection',
+        receiptRef: `receipt:sha256:${'a'.repeat(64)}`,
         state: 'settled' as const,
         buyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
         serviceFee: { currency: 'AUD', units: '0', exponent: 6 },
@@ -182,10 +204,26 @@ describe('Account Call projection', () => {
       providerObligationState: 'settled',
       providerAmountUnits: '1500000',
       audAmountUnits: '2500000',
-      receiptRef: 'receipt:call-projection',
+      receiptRef: `receipt:sha256:${'a'.repeat(64)}`,
       latencyMs: 250,
+      deliveredRequestUnits: '1',
     })
-
+    const measured = await backend.run(async (ctx) => await ctx.db.query('capabilityServiceUsageRecords')
+      .withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique())
+    expect(measured).toMatchObject({ callRef, quantityUnits: '1', quantityExponent: 0,
+      unitDefinitionRef: 'delivered_request:v1', occurredAt: now, timeBasis: 'receipt_issued',
+      accountRef: 'account:projection', credentialRef: 'credential:projection', environment: 'sandbox' })
+    await backend.run(async (ctx) => {
+      const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique()
+      if (call === null) throw new Error('fixture Call missing')
+      await ctx.db.patch(call._id, { result: { ...result, receipt: { ...result.receipt, state: 'refunded' } }, updatedAt: now + 86_400_000 })
+    })
+    await backend.mutation(internal.capabilityCallProjections.rebuild, { paginationOpts: { numItems: 100, cursor: null } })
+    expect(await backend.run(async (ctx) => await ctx.db.query('capabilityServiceUsageRecords')
+      .withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique())).toEqual(measured)
+    expect(await backend.run(async (ctx) => await ctx.db.query('capabilityCallProjections')
+      .withIndex('by_callRef', (index) => index.eq('callRef', callRef)).unique()))
+      .toMatchObject({ paymentState: 'released', deliveredRequestUnits: '1', serviceUsageRef: measured?.usageRef })
   })
 
   it('reads owner Agent Calls for the created UTC period and keeps settled spend evidence explicit', async () => {
@@ -357,6 +395,8 @@ describe('Account Call projection', () => {
     })
     const agent = await fixture.owner.query(agentQuery, { principalRef: 'principal:no-charge', periodStartAt: 0, periodEndAt: 100,
       paginationOpts: { numItems: 50, cursor: null } })
+    expect(usage).toMatchObject({ deliveredRequestUnits: '0',
+      serviceUnitCoverage: deliveryState === 'not_delivered' ? 'complete' : 'incomplete' })
     for (const result of [usage, agent.usage]) {
       expect(result).toMatchObject({ kind: 'available', callCountUnits: '1', amountCoverage })
       if (amountCoverage === 'complete') expect(result.settledSpendUnits).toBe('0')
@@ -493,12 +533,12 @@ describe('Account Call projection', () => {
     await expect(fixture.owner.query(readOwnerUsage, {
       dimensionKind: 'account',
       periodStartAt: 0,
-      periodEndAt: 10_001,
+      periodEndAt: 2_000,
     })).resolves.toMatchObject({
       kind: 'available',
       dimensionRef: fixture.canonicalAccountRef,
-      callCountUnits: '5000',
-      completedCountUnits: '5000',
+      callCountUnits: '1000',
+      completedCountUnits: '1000',
       outcomeUnknownCountUnits: '0',
       source: 'convex_call_evidence',
     })
@@ -506,10 +546,10 @@ describe('Account Call projection', () => {
       dimensionKind: 'agent',
       dimensionRef: 'principal:selected',
       periodStartAt: 0,
-      periodEndAt: 10_001,
+      periodEndAt: 2_000,
     })).resolves.toMatchObject({
       kind: 'available',
-      callCountUnits: '2500',
+      callCountUnits: '500',
     })
 
     await backend.run(async (ctx) => {

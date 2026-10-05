@@ -1,4 +1,4 @@
-import { internalMutation } from './_generated/server'
+import { internalMutation } from './usageTrackedMutation'
 import {
   queueExpiredX402AuthorizationArgs,
   queueExpiredX402AuthorizationHandler,

@@ -15,6 +15,7 @@ export function gatewayTelemetryForResult(
           ? 'paid'
           : 'unknown',
       costUnits: result.usage.amount.units,
+      chargeCurrency: result.usage.amount.currency,chargeExponent:result.usage.amount.exponent,
       outcome: 'completed',
       ...(result.usage.chargeState === 'outcome_unknown' ? { unknown: true } : {}),
     }

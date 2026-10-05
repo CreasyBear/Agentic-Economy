@@ -12,7 +12,7 @@ export const resolveBuyerSaleSourcesResult = v.array(v.union(v.string(), v.null(
 
 /** Only a single owner-booked, settled buyer-sale ref with the canonical digest earns a Call link. */
 export const resolveBuyerSaleSourcesHandler = async (
-  ctx: QueryCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   args: Infer<typeof resolveBuyerSaleSourcesArgs>,
 ): Promise<(string | null)[]> => {
   const sources: (string | null)[] = []

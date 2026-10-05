@@ -255,6 +255,7 @@ export function buildCallCharge(
   );
   if (
     activity.transactionRef === undefined ||
+    activity.businessId === null ||
     buyerDebit === undefined ||
     gross === undefined ||
     rake === undefined ||

@@ -1,3 +1,4 @@
+import { activityReturnScopeSchema, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { createFileRoute } from '@tanstack/react-router'
 
 import {
@@ -19,6 +20,7 @@ import { readOwnerCallStatusServer } from '@/modules/capability-execution/call-r
 export type { CallReconciliationForm, CallStatusPageActions, CallStatusPageResult }
 
 export const Route = createFileRoute('/_operator/calls/$callRef')({
+  validateSearch: activityReturnScopeSchema,
   loader: ({ params }) => readOwnerCallStatusServer({ data: { callRef: params.callRef } })
     .catch((): CallStatusPageResult => ({
       kind: 'source_unavailable',
@@ -35,28 +37,29 @@ export const Route = createFileRoute('/_operator/calls/$callRef')({
 
 function CallStatusRoute() {
   const loadedResult = Route.useLoaderData()
-  return <CallStatusRouteBody key={loadedResult.callRef} loadedResult={loadedResult} />
+  return <CallStatusRouteBody key={loadedResult.callRef} loadedResult={loadedResult} returnScope={Route.useSearch()} />
 }
 
-function CallStatusRouteBody({ loadedResult }: Readonly<{ loadedResult: CallStatusPageResult }>) {
+function CallStatusRouteBody({ loadedResult, returnScope }: Readonly<{ loadedResult: CallStatusPageResult; returnScope: ActivityReturnScope }>) {
   const { result, actions } = useCallStatusRecovery(loadedResult)
-  return <CallStatusPage result={result} actions={actions} />
+  return <CallStatusPage result={result} actions={actions} returnScope={returnScope} />
 }
 
 export function CallStatusPage({
   result,
   actions,
-}: Readonly<{ result: CallStatusPageResult; actions?: CallStatusPageActions }>) {
-  if (result.kind === 'source_unavailable') return <CallStatusUnavailableView result={result} {...(actions === undefined ? {} : { actions })} />
-  if (result.kind === 'refused') return <CallStatusRefusedView result={result} {...(actions === undefined ? {} : { actions })} />
-  if (result.kind === 'unchanged') return <CallStatusUnchangedView result={result} {...(actions === undefined ? {} : { actions })} />
-  return <CallStatusFoundView result={result} {...(actions === undefined ? {} : { actions })} />
+  returnScope,
+}: Readonly<{ result: CallStatusPageResult; actions?: CallStatusPageActions; returnScope?: ActivityReturnScope }>) {
+  if (result.kind === 'source_unavailable') return <CallStatusUnavailableView {...(returnScope === undefined ? {} : { returnScope })} result={result} {...(actions === undefined ? {} : { actions })} />
+  if (result.kind === 'refused') return <CallStatusRefusedView {...(returnScope === undefined ? {} : { returnScope })} result={result} {...(actions === undefined ? {} : { actions })} />
+  if (result.kind === 'unchanged') return <CallStatusUnchangedView {...(returnScope === undefined ? {} : { returnScope })} result={result} {...(actions === undefined ? {} : { actions })} />
+  return <CallStatusFoundView {...(returnScope === undefined ? {} : { returnScope })} result={result} {...(actions === undefined ? {} : { actions })} />
 }
 
 function CallStatusPending() {
   const { callRef } = Route.useParams()
   return (
-    <CallReceiptWorkspace callRef={callRef} description="Checking the exact current owner-scoped Call receipt." pending>
+    <CallReceiptWorkspace returnScope={Route.useSearch()} callRef={callRef} description="Checking the exact current owner-scoped Call receipt." pending>
       <CallReceiptSkeleton />
     </CallReceiptWorkspace>
   )
@@ -64,5 +67,5 @@ function CallStatusPending() {
 
 function CallStatusError() {
   const { callRef } = Route.useParams()
-  return <CallStatusUnavailableView result={{ kind: 'source_unavailable', callRef }} />
+  return <CallStatusUnavailableView returnScope={Route.useSearch()} result={{ kind: 'source_unavailable', callRef }} />
 }

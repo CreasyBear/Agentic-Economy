@@ -1,7 +1,9 @@
+import { monthlyDraftRefSearchSchema } from '@/lib/call-recovery/activity-return-scope'
 import { createFileRoute } from '@tanstack/react-router'
 import { Activity } from 'lucide-react'
 import { z } from 'zod'
 
+import { readOwnerUsageReconciliationServer } from '@/lib/server/usage-reconciliation.functions'
 import { AeActivity } from '@/components/ae/activity/AeActivity'
 import type { ActivityLoaderResult } from '@/components/ae/activity/activity.contracts'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -33,6 +35,7 @@ export const Route = createFileRoute('/_operator/activity')({
   },
   ...operatorRouteOptions,
   validateSearch: z.object({
+    draftRef: monthlyDraftRefSearchSchema,
     agent: z.string().trim().min(1).max(200).optional(),
     range: z.enum(['all', 'today', '7d', '30d', 'month']).optional().catch(undefined),
   }),
@@ -53,15 +56,18 @@ export const Route = createFileRoute('/_operator/activity')({
     const period = agent
       ? { dimensionKind: 'agent' as const, dimensionRef: agent, ...range }
       : { dimensionKind: 'account' as const, ...range }
-    const [calls, usage, spend] = await Promise.allSettled([
+    const [calls, usage, spend, reconciliation] = await Promise.allSettled([
       readOwnerCallsServer({ data: { ...range, ...(agent === undefined ? {} : { principalRef: agent }) } }),
       aggregateRangeTooLarge ? Promise.resolve({ kind: 'unavailable' as const, code: 'usage_window_too_large' as const })
         : readOwnerUsageServer({ data: period }),
       agent !== undefined ? Promise.resolve({ kind: 'not_requested' as const })
         : aggregateRangeTooLarge ? Promise.resolve({ kind: 'unavailable' as const, code: 'formance_spend_window_too_large' })
           : readOwnerSpendServer({ data: period }),
+      agent !== undefined ? Promise.resolve(undefined)
+        : aggregateRangeTooLarge ? Promise.resolve({ kind: 'unavailable' as const, code: 'reconciliation_window_too_large' })
+          : readOwnerUsageReconciliationServer({ data: range }),
     ])
-    for (const result of [calls, usage, spend]) {
+    for (const result of [calls, usage, spend, reconciliation]) {
       if (result.status === 'rejected') captureRouteException(result.reason, { 'ae.surface': 'operator_activity_loader' })
     }
     if (calls.status === 'rejected') return { kind: 'unavailable' }
@@ -70,6 +76,8 @@ export const Route = createFileRoute('/_operator/activity')({
       calls: calls.value,
       usage: usage.status === 'fulfilled' ? usage.value : { kind: 'unavailable', code: 'source_unavailable' },
       spend: spend.status === 'fulfilled' ? spend.value : { kind: 'unavailable', code: 'source_unavailable' },
+      ...(reconciliation.status === 'fulfilled' && reconciliation.value !== undefined ? { reconciliation: reconciliation.value }
+        : agent === undefined ? { reconciliation: { kind: 'unavailable' as const, code: 'source_unavailable' } } : {}),
       periodStart,
       ...range,
       dateRangeFilter,
@@ -85,5 +93,6 @@ export const Route = createFileRoute('/_operator/activity')({
 
 function ActivityRoute() {
   const result = Route.useLoaderData()
-  return <AeActivity result={result} />
+  const {draftRef} = Route.useSearch()
+  return <AeActivity result={result} {...(draftRef === undefined ? {} : {draftRef})} />
 }

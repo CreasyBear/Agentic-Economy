@@ -1,5 +1,8 @@
 "use node"
 
+import { financialReadResult, financialPageReadResult,credentialFinancialPageResult, periodArgs } from './lib/money/usageReconciliation/contracts'
+import { readUsageReconciliationHandler,readUsageReconciliationPageHandler,readCredentialActivityPageHandler } from './lib/money/formance/usageReconciliation'
+
 import { v } from 'convex/values'
 import { internalAction } from './_generated/server'
 import {
@@ -102,3 +105,11 @@ export const refundSettledSale = internalAction({
   args: { expectedEnvironment: financialEnvironmentValue, booking: v.object(managedCallBookingArgs), originalSettlementRefs: v.array(v.string()), reportDigest: v.string() },
   returns: moneyResult, handler: refundSettledSaleHandler,
 })
+
+export const readUsageReconciliation = internalAction({
+  args: { ...periodArgs, accountRef: v.string(), snapshotAt: v.optional(v.number()), expectedSourceDigest: v.optional(v.string()) }, returns: financialReadResult, handler: readUsageReconciliationHandler,
+})
+
+export const readUsageReconciliationPage=internalAction({args:{...periodArgs,accountRef:v.string(),snapshotAt:v.number(),expectedSourceDigest:v.string(),cursor:v.union(v.string(),v.null()),lastTransactionId:v.union(v.string(),v.null())},returns:financialPageReadResult,handler:readUsageReconciliationPageHandler})
+
+export const readCredentialActivityPage=internalAction({args:{accountRef:v.string(),credentialRef:v.string(),cursor:v.optional(v.string())},returns:credentialFinancialPageResult,handler:readCredentialActivityPageHandler})

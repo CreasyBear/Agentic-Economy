@@ -12,6 +12,7 @@ export function documentKindLabel(kind: MoneyDocumentView['kind']): string {
     case 'funding_receipt': return 'Funding receipt'
     case 'service_fee_document': return 'Service fee document'
     case 'statement': return 'Statement'
+    case 'monthly_usage': return 'Monthly usage statement'
     case 'daily_close': return 'Daily close'
     case 'adjustment': return 'Adjustment document'
     case 'tax_invoice': return 'Tax invoice'

@@ -1,3 +1,4 @@
+import { providerUnitLabel, providerUnitQuantity } from '@/modules/capability-execution/provider-service-units'
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
@@ -6,6 +7,7 @@ import {
   type BuyerCallSummaryFacts,
 } from '@/modules/capability-execution/call-receipt-view'
 import { readOwnerCallsServer } from '@/lib/server/call-history.functions'
+import { requestOwnerUsageReportServer } from '@/lib/server/durable-usage-report.functions'
 import { formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -229,6 +231,9 @@ export function useAeActivity({
   const [summaryRetryPending, setSummaryRetryPending] = useState(false)
   const { state: pagination, loadNextPage } = useCallPagination(initial, periodStartAt, periodEndAt, filteredAgent)
   const [datePending, setDatePending] = useState(false)
+  const [periodExportPending, setPeriodExportPending] = useState(false)
+  const periodRequestInFlight = useRef(false)
+  const [usageReportRequest, setUsageReportRequest] = useState<{reportRef:string;format:'CSV'|'JSON'}>()
   const dateFilteredItems = pagination.items
 
   function navigateScope(range: ActivityDateRangeFilter, agent: string | undefined) {
@@ -320,8 +325,43 @@ export function useAeActivity({
           : usage.kind === 'available' ? 'Amount coverage incomplete' : '—',
     scopeLabel: filteredAgent === undefined ? 'All Agents in this Account' : `Agent ${filteredAgent}`,
     spendBasis: filteredAgent === undefined
-      ? 'Gross charges use ledger settlement dates in this period. Refunds are recorded separately and are not deducted here.'
+      ? 'Gross charges use ledger transaction dates in this period. Refunds are recorded separately and are not deducted here.'
       : 'Agent charges use current Call payment records for Calls created in this period. They are not an account ledger balance or a refund total.',
+    deliveredRequestLabel: usage.kind === 'available' ? usage.deliveredRequestUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
+    currentDeliveredRequestLabel: usage.kind === 'available' ? usage.currentDeliveredRequestUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
+    unknownDeliverySupportLabel: usage.kind === 'available' ? usage.unknownCurrentDeliveryCallCountUnits ?? '—' : usage.kind === 'empty' ? '0' : '—',
+    providerUnitCards: usage.kind === 'available' ? (usage.providerUnits ?? []).map(unit => ({label: `Observed ${providerUnitLabel(unit)}`, value: unit.observedReceiptCountUnits === '0' ? 'Unknown' : providerUnitQuantity(unit.observedQuantityUnits, unit.quantityExponent)})) : [],
+    providerUnitCoverageLabel: usage.kind === 'available' && usage.providerUnitReceiptCallCountUnits !== undefined
+      ? `${usage.providerUnitReceiptCallCountUnits} of ${usage.callCountUnits} Calls have supported provider receipt quantities. ${usage.providerUnitUnknownCallCountUnits} Calls lack supported quantities. ${(usage.providerUnits ?? []).map(unit => `${providerUnitLabel(unit)}: ${unit.observedReceiptCountUnits} reported, ${unit.unknownReceiptCountUnits} unknown`).join('; ')}. Totals cover supported successful Call receipts; failed, unresolved and unsupported attempts remain unknown.`
+      : 'Provider receipt quantity coverage is unavailable.',
+    serviceUnitCoverageLabel: usage.kind === 'empty' ? 'No Calls in this period.'
+      : usage.kind === 'available' && usage.serviceUnitCoverage === 'complete'
+        ? 'Delivered-request units are recorded once per Call; refunds do not erase measured usage.'
+        : 'Service-unit coverage is incomplete. Calls with missing or uncertain measurement evidence are not treated as zero.',
+  }
+
+  async function exportPeriod(format: 'CSV' | 'JSON') {
+    if (periodRequestInFlight.current) return
+    periodRequestInFlight.current = true
+    setPeriodExportPending(true)
+    try {
+      const reportRef = `call-usage-export:${crypto.randomUUID()}`
+      await requestOwnerUsageReportServer({ data: {
+        reportRef,
+        periodStartAt, periodEndAt, status: statusFilter,
+        ...(filteredAgent === undefined ? {} : { principalRef: filteredAgent }),
+      } })
+      setUsageReportRequest({reportRef,format})
+      toast.success('Full-period report requested. Its saved status is shown below.')
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      toast.error('Could not export the full period.', {
+        description: 'No partial file was downloaded. Retry the request when the service is available.',
+      })
+    } finally {
+      setPeriodExportPending(false)
+      periodRequestInFlight.current = false
+    }
   }
 
   function resetFilters() {
@@ -392,6 +432,10 @@ export function useAeActivity({
     exportDisabled: filteredItems.length === 0,
     exportCsv,
     exportJson,
+    exportPeriod,
+    usageReportRequest,
+    periodExportPending,
+    periodExportDisabled: periodExportPending || datePending || periodEndAt - periodStartAt > 366 * 86_400_000,
     showFilterBar: true,
     showEmptyNoCalls: pagination.items.length === 0 && pagination.cursor === undefined,
     showEmptyNoMatch: filteredItems.length === 0 && !(pagination.items.length === 0 && pagination.cursor === undefined),

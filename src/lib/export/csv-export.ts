@@ -1,3 +1,6 @@
+import { formatCsvRow, escapeSpreadsheetText } from './csv-format'
+export { escapeCsvField, formatCsvRow, escapeSpreadsheetText } from './csv-format'
+
 export type ActivityExportRow = Readonly<{
   date: string
   callRef: string
@@ -65,21 +68,6 @@ export const INVOICE_CSV_HEADERS: readonly string[] = [
   'Tax Invoice',
 ]
 
-export function escapeCsvField(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return ''
-  }
-  const str = String(value)
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`
-  }
-  return str
-}
-
-export function formatCsvRow(fields: readonly (string | number | null | undefined)[]): string {
-  return fields.map(escapeCsvField).join(',')
-}
-
 export const ACTIVITY_CSV_HEADERS: readonly string[] = [
   'Date',
   'Call ID',
@@ -95,12 +83,12 @@ export function generateCallsCsv(rows: readonly ActivityExportRow[]): string {
   const dataLines = rows.map((row) =>
     formatCsvRow([
       row.date,
-      row.callRef,
-      row.toolName,
-      row.provider,
-      row.agentName,
+      escapeSpreadsheetText(row.callRef),
+      escapeSpreadsheetText(row.toolName),
+      escapeSpreadsheetText(row.provider),
+      escapeSpreadsheetText(row.agentName),
       row.costAud,
-      row.status,
+      escapeSpreadsheetText(row.status),
     ])
   )
   return [headerLine, ...dataLines].join('\r\n')

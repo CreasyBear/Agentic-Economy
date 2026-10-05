@@ -1,0 +1,23 @@
+import { useMemo } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
+import { BillingHistory } from '@/components/arc/blocks/billing-overview/billing-overview'
+import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import type { CallAttemptEvidence as Evidence } from '@/modules/capability-execution/call-attempt-evidence'
+type Attempt = Extract<Evidence, {kind: 'available'}>['attempts'][number]
+export function CallAttemptEvidence({ evidence }: { evidence: Evidence }) {
+  const columns = useMemo<ColumnDef<Attempt, unknown>[]>(() => [
+    { accessorKey: 'attemptNumber', header: 'Attempt' }, { accessorKey: 'effectGeneration', header: 'Effect generation' },
+    { accessorKey: 'release', header: 'Release evidence' }, { accessorKey: 'outcome', header: 'Outcome' },
+    { id: 'time', header: 'Recorded (UTC)', cell: ({row}) => formatUtcTimestamp(row.original.recordedAt) },
+  ], [])
+  if (evidence.kind !== 'available') return <AeSection title="Execution evidence"><p className="text-sm text-muted-foreground">{evidence.kind === 'not_recorded' ? 'No durable execution attempts were recorded for this Call.' : 'Execution evidence is unavailable.'}</p></AeSection>
+  return <AeSection title="Execution evidence" description="Recorded attempts and audit transitions from the existing durable execution system.">
+    <BillingHistory title="Attempts" description="Recorded release and outcome evidence for each attempt."><AeRecordTable columns={columns} data={evidence.attempts} getRowId={row => row.attemptRef} hideFilter caption="Durable Call execution attempts" emptyMessage="No attempts recorded." /></BillingHistory>
+    <details><summary>Inspect {evidence.history.length} audit transitions</summary><ol className="grid gap-intra text-sm">
+      {evidence.history.map((row,index) => <li key={`${row.executionVersion}:${index}`}>Version {row.executionVersion}: {row.kind}; {formatUtcTimestamp(row.recordedAt)} UTC. {row.commandDigest === null ? 'Command digest unavailable.' : <span className="break-all">{row.commandDigest}</span>}</li>)}
+    </ol></details>
+    <p className="text-xs text-muted-foreground">Release evidence does not confirm financial settlement. Provider payloads and arbitrary errors are excluded from this history.</p>
+  </AeSection>
+}

@@ -12,6 +12,7 @@ import type { TreasuryCheck, TreasurySnapshot } from '@/modules/money/treasury-r
 import { matchTreasuryBatch, matchTreasuryCallCash, matchTreasuryProviderSettlement,
   treasuryAuditCashAddresses, treasuryAuditCallDigest, type FormanceTreasuryAuditTransaction } from '../formance/gateway'
 import type { TreasuryAttemptSource, TreasuryCallSource, TreasurySpendReservationSourcesResult } from './auditSources'
+import { TREASURY_CHAIN_RANGE_BLOCKS } from './chainObservation'
 
 type SpendReservation = Extract<TreasurySpendReservationSourcesResult, { kind: 'available' }>['rows'][number]
 type CashAuditInput = Readonly<{
@@ -141,25 +142,40 @@ export async function auditTreasuryCash(input: CashAuditInput, readReceipt?: Rec
               : { kind: 'matched', checkedCount: cashRows.length, expectedUnits: expected.toString(), observedUnits: chain.toString(), differenceUnits: difference.toString() }
   }
   return { chain: observation.kind === 'unavailable' ? observation : { kind: 'available', observedAt: observation.observedAt,
-    blockTimestamp: history.latest.observation.blockTimestamp, blockNumber: history.latest.observation.checkpoint.blockNumber,
-    blockHash: history.latest.observation.checkpoint.blockHash, totalUnits: history.latest.observation.checkpoint.balanceUnits,
-    caughtUp: history.latest.observation.caughtUp },
+    blockTimestamp: observation.blockTimestamp, blockNumber: observation.checkpoint.blockNumber,
+    blockHash: observation.checkpoint.blockHash, totalUnits: observation.checkpoint.balanceUnits,
+    caughtUp: observation.caughtUp },
     inFlight: flight, rawCashDifferenceUnits: raw, cashTimingAdjustmentUnits: settlement.timingAdjustment.toString(),
     historyStartedAt: input.batches[0]?.observation.blockTimestamp ?? null, deposits: history.deposits.slice(-20).reverse(),
     depositsComplete: history.deposits.length <= 20, cash, settlements: settlement.check, reservations }
 }
 
-/** A new RPC read can prove an unchanged checkpoint without rewriting booked history. */
+/**
+ * Requires the guarded reader's unanimous, canonical, complete finalized range.
+ * Ensures fresh chain evidence can extend booked history only with zero transfers
+ * and the same balance. Same-height evidence must preserve hash and block time;
+ * advancing evidence must have a new hash and later block time within the reader's
+ * range bound. Booked records retain their original checkpoint and clocks.
+ * On violation: unavailable; even a net-zero unbooked transfer needs attribution.
+ * This reuses the existing RPC proof; no booking, cache or new journal is needed.
+ */
 function verifiedChainReadback(input: CashAuditInput, latest: TreasuryBatch): TreasuryChainObservation | Extract<TreasuryCheck, { kind: 'unavailable' }> {
   const proof = input.chainReadback
   if (proof === undefined) return latest.observation
   if (proof.kind === 'unavailable') return proof
+  const retained = latest.observation
+  const retainedBlock = BigInt(retained.checkpoint.blockNumber)
+  const proofBlock = /^(?:0|[1-9]\d{0,77})$/u.test(proof.checkpoint.blockNumber) ? BigInt(proof.checkpoint.blockNumber) : -1n
+  const sameBlock = proofBlock === retainedBlock
   if (proof.environment !== input.identity.environment || proof.network !== input.identity.network
     || proof.asset !== input.identity.asset || proof.address !== input.identity.address
-    || canonicalDigest(proof.checkpoint) !== canonicalDigest(latest.observation.checkpoint)
-    || proof.blockTimestamp !== latest.observation.blockTimestamp
-    || proof.fromBlock !== (BigInt(latest.observation.checkpoint.blockNumber) + 1n).toString()
-    || proof.transfers.length !== 0 || !proof.caughtUp || !latest.observation.caughtUp) {
+    || proof.checkpoint.balanceUnits !== retained.checkpoint.balanceUnits
+    || proofBlock < retainedBlock || proofBlock > retainedBlock + TREASURY_CHAIN_RANGE_BLOCKS
+    || !/^0x[0-9a-f]{64}$/u.test(proof.checkpoint.blockHash)
+    || (sameBlock ? proof.checkpoint.blockHash !== retained.checkpoint.blockHash || proof.blockTimestamp !== retained.blockTimestamp
+      : proof.checkpoint.blockHash === retained.checkpoint.blockHash || proof.blockTimestamp <= retained.blockTimestamp)
+    || proof.fromBlock !== (retainedBlock + 1n).toString()
+    || proof.transfers.length !== 0 || !proof.caughtUp || !retained.caughtUp) {
     return unavailable('treasury_chain_readback_conflict')
   }
   if (!Number.isSafeInteger(proof.observedAt) || proof.observedAt < latest.observation.observedAt

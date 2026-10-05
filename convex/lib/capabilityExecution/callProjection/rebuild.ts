@@ -1,11 +1,30 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v, type ObjectType } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
+import type { Doc } from '../../../_generated/dataModel'
 import { upsertCallProjection } from '../callLifecycle/dispatchProjection'
 import type { CallDispatchProjectionShape } from '../callLifecycle/contracts'
+import { refreshExistingMeasurement } from '../serviceUsage/lineage'
 
 export const rebuildArgs = { paginationOpts: paginationOptsValidator }
 export const rebuildResult = v.object({ continueCursor: v.string(), isDone: v.boolean(), rebuilt: v.number() })
+
+/** Shared by the existing bounded rebuild and maintained migrations component.
+ * Historical Call clocks remain intact; expired payloads remain unavailable. */
+export async function rebuildCallProjection(ctx: MutationCtx, row: Doc<'capabilityCalls'>): Promise<boolean> {
+  if (row.result === undefined || row.dispatchState === undefined || row.state === 'pending' || row.state === 'cancelled') {
+    await refreshExistingMeasurement(ctx, row)
+    return false
+  }
+  await upsertCallProjection(ctx, row, {
+    state: row.state, result: row.result,
+    ...(row.usage === undefined ? {} : {usage: row.usage}),
+    ...(row.evidenceHash === undefined ? {} : {evidenceHash: row.evidenceHash}),
+    ...(row.attemptRef === undefined ? {} : {attemptRef: row.attemptRef}),
+    dispatchState: row.dispatchState,
+  } as CallDispatchProjectionShape, row.updatedAt)
+  return true
+}
 
 export async function rebuildHandler(ctx: MutationCtx, args: ObjectType<typeof rebuildArgs>) {
   if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 100) {
@@ -16,21 +35,7 @@ export async function rebuildHandler(ctx: MutationCtx, args: ObjectType<typeof r
     .paginate(args.paginationOpts)
   let rebuilt = 0
   for (const row of page.page) {
-    if (
-      row.result === undefined
-      || row.dispatchState === undefined
-      || row.state === 'pending'
-      || row.state === 'cancelled'
-    ) continue
-    await upsertCallProjection(ctx, row, {
-      state: row.state,
-      result: row.result,
-      ...(row.usage === undefined ? {} : { usage: row.usage }),
-      ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
-      ...(row.attemptRef === undefined ? {} : { attemptRef: row.attemptRef }),
-      dispatchState: row.dispatchState,
-    } as CallDispatchProjectionShape, row.updatedAt)
-    rebuilt += 1
+    if (await rebuildCallProjection(ctx, row)) rebuilt += 1
   }
   return { continueCursor: page.continueCursor, isDone: page.isDone, rebuilt }
 }

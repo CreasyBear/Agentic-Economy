@@ -1,4 +1,5 @@
-import { action, internalMutation, internalQuery } from './_generated/server'
+import { action, internalQuery } from './_generated/server'
+import { internalMutation } from './usageTrackedMutation'
 
 import {
   admitCallArgs,

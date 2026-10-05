@@ -37,6 +37,7 @@ export type AccountHistoryResult = z.infer<typeof accountHistoryResultSchema>
 
 export const accountHistoryCursorSchema = z.strictObject({
   accountDigest: z.string().regex(/^[a-f0-9]{64}$/u), ledger: z.string(),
+  scopeDigest:z.string().regex(/^sha256:[a-f0-9]{64}$/u).optional(),
   snapshotAt: z.number().int().nonnegative(), cursor: z.string().min(1).max(2000),
   lastId: z.string().regex(/^\d+$/u),
   coverage: z.enum(['complete', 'partial']),

@@ -1,7 +1,7 @@
 import { assertFinancialEnvironment } from './lib/money/formance/contracts'
 import { restorePromotionalCredit } from './lib/money/promotionalCredit/allocation'
 import { v } from 'convex/values'
-import { internalMutation } from './_generated/server'
+import { internalMutation } from './usageTrackedMutation'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
 import { createPublicToolRef, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'

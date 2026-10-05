@@ -51,7 +51,7 @@ export const readStatementPageHandler = async (ctx: QueryCtx, args: Infer<typeof
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close') || row.state !== 'building'
+    if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close' && row.kind !== 'monthly_usage') || row.state !== 'building'
       || row.periodStart === undefined || row.periodEnd === undefined
       || row.snapshotCutoffAt === undefined) return null
     return {
@@ -79,7 +79,7 @@ export const applyStatementPageHandler = async (ctx: MutationCtx, args: Infer<ty
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close')) return { kind: 'refused' as const }
+    if (row === null || (row.kind !== 'statement' && row.kind !== 'daily_close' && row.kind !== 'monthly_usage')) return { kind: 'refused' as const }
     assertFinancialEnvironment(row.environment)
     if (row.state !== 'building') return { kind: 'replayed' as const }
     const currentCursor = row.nextCursor ?? null
@@ -135,7 +135,7 @@ export const applyStatementPageHandler = async (ctx: MutationCtx, args: Infer<ty
       })
       return { kind: 'advanced' as const }
     }
-    const rounded = roundAudStatementTotal(BigInt(nextExactUnits))
+    const rounded = row.kind==='monthly_usage'?{roundedUnits:BigInt(nextExactUnits),residualUnits:0n}:roundAudStatementTotal(BigInt(nextExactUnits))
     const workId = await enqueueStatementFinalization(ctx, row.documentRef)
     await ctx.db.patch(row._id, {
       sourceTransactionRefs,

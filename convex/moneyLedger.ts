@@ -57,3 +57,8 @@ export const readAgentProviderEarnings = mutation({
   returns: agentProviderEarningsResultValue,
   handler: readAgentProviderEarningsHandler,
 })
+
+import { credentialActivityJoinArgs,readCredentialActivityFactsHandler,credentialSourceArgs,credentialSourceResult,readCredentialSourceHandler,credentialCreatedCallsArgs,credentialCreatedCallsResult,readCredentialCreatedCallsHandler } from './lib/money/credit/credentialFacts'
+export const readCredentialActivityFacts=internalQuery({args:credentialActivityJoinArgs,returns:creditActivityResultValue,handler:readCredentialActivityFactsHandler})
+export const readCredentialSource=internalQuery({args:credentialSourceArgs,returns:credentialSourceResult,handler:readCredentialSourceHandler})
+export const readCredentialCreatedCalls=internalQuery({args:credentialCreatedCallsArgs,returns:credentialCreatedCallsResult,handler:readCredentialCreatedCallsHandler})
