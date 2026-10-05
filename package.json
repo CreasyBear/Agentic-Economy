@@ -9,9 +9,9 @@
   ],
   "scripts": {
     "ae": "tsx tools/ae/cli.ts",
-    "build:cli": "npm run build --workspace @aecon/cli",
+    "build:cli": "npm run build --workspace @agentic-economy/cli",
     "pack:cli:public": "npm run build:cli && mkdir -p ./public/downloads && npm pack ./packages/cli --ignore-scripts --pack-destination ./public/downloads",
-    "test:cli-package": "npm test --workspace @aecon/cli",
+    "test:cli-package": "npm test --workspace @agentic-economy/cli",
     "dev": "vite dev --host 127.0.0.1",
     "dev:local": "node tools/dev/require-supported-node.ts -- node tools/dev/local-dev.ts",
     "connect:local": "node tools/dev/local-connect.ts",
