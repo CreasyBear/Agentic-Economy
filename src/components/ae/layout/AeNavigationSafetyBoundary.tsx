@@ -28,6 +28,10 @@ type AeNavigationSafetyBoundaryProps = Readonly<{
 /**
  * Owns navigation interruption only. Dirty comparison, persistence, entered
  * values, and the truth of the latest save remain with the caller.
+ * Requires current draft dirty/pending state from its owner.
+ * Ensures a queued departure resumes only after a confirmed save with no edits left.
+ * Invariant a completed earlier save cannot discard a newer draft.
+ * On failed, unknown or still-dirty completion, cancel departure and retain the form.
  */
 function AeNavigationSafetyBlocker({
   children,
@@ -78,9 +82,9 @@ function AeNavigationSafetyBlocker({
     ) return
     navigationBlockedDuringSave.current = false
     setDialogDismissed(false)
-    if (state.saveOutcome === 'saved') blocker.proceed()
+    if (state.saveOutcome === 'saved' && !state.dirty) blocker.proceed()
     else blocker.reset()
-  }, [blocker, state.pending, state.saveOutcome])
+  }, [blocker, state.dirty, state.pending, state.saveOutcome])
 
   return (
     <>

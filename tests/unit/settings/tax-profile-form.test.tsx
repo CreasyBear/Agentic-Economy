@@ -33,6 +33,28 @@ afterEach(() => {
   toastState.error.mockReset()
 })
 
+const availableTaxProfileData: TaxProfileInitialData = {
+  kind: 'available',
+  abn: '51824753556',
+  gstRegistered: true,
+  legalName: 'Acme Technologies Pty Ltd',
+  addressLine1: '1 Market Street',
+  addressLine2: 'Suite 4',
+  locality: 'Sydney',
+  region: 'NSW',
+  postalCode: '2000',
+  country: 'AU',
+  revision: 2,
+}
+
+function enterValidTaxProfile(legalName = 'Acme Pty Ltd') {
+  fireEvent.change(screen.getByLabelText(/legal business name/i), { target: { value: legalName } })
+  fireEvent.change(screen.getByLabelText(/^abn$/i), { target: { value: '51 824 753 556' } })
+  fireEvent.change(screen.getByLabelText(/^address$/i), { target: { value: '1 Market Street' } })
+  fireEvent.change(screen.getByLabelText(/city\/locality/i), { target: { value: 'Sydney' } })
+  fireEvent.change(screen.getByLabelText(/postal code/i), { target: { value: '2000' } })
+}
+
 describe('TaxProfileForm', () => {
   it('U1: renders legal entity, ABN, and AU billing address fields', () => {
     const onSubmit = vi.fn()
@@ -64,6 +86,32 @@ describe('TaxProfileForm', () => {
     const country = screen.getByLabelText(/^country$/i)
     expect(country).toHaveValue('AU')
     expect(country).toHaveAttribute('readonly')
+  })
+
+  it('shows a truthful changed-field count and ignores formatting-only edits', () => {
+    render(<TaxProfileForm initialData={availableTaxProfileData} onSubmit={vi.fn()} />)
+
+    expect(screen.queryByRole('group', { name: 'Unsaved changes' })).toBeNull()
+
+    fireEvent.change(screen.getByLabelText(/legal business name/i), {
+      target: { value: ' Acme Technologies Pty Ltd ' },
+    })
+    fireEvent.change(screen.getByLabelText(/^abn$/i), { target: { value: '51824753556' } })
+    fireEvent.change(screen.getByLabelText(/^address$/i), { target: { value: ' 1 Market Street ' } })
+    fireEvent.change(screen.getByLabelText(/city\/locality/i), { target: { value: ' Sydney ' } })
+    fireEvent.change(screen.getByLabelText(/state\/region/i), { target: { value: ' NSW ' } })
+    fireEvent.change(screen.getByLabelText(/postal code/i), { target: { value: ' 2000 ' } })
+
+    expect(screen.queryByRole('group', { name: 'Unsaved changes' })).toBeNull()
+
+    fireEvent.change(screen.getByLabelText(/legal business name/i), { target: { value: 'Acme Holdings Pty Ltd' } })
+    expect(screen.getByRole('group', { name: 'Unsaved changes' })).toHaveTextContent('1 unsaved change')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'GST registered' }))
+    expect(screen.getByRole('group', { name: 'Unsaved changes' })).toHaveTextContent('2 unsaved changes')
+
+    fireEvent.change(screen.getByLabelText(/address line 2/i), { target: { value: 'Suite 5' } })
+    expect(screen.getByRole('group', { name: 'Unsaved changes' })).toHaveTextContent('3 unsaved changes')
   })
 
   it('U2: invalid ABN shows Rule 4 diagnostic and blocks save', async () => {
@@ -263,5 +311,81 @@ describe('TaxProfileForm', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     expect(diagnostic).toHaveTextContent('Financial impact: A$0.00 affected — tax profile not saved.')
     expect(diagnostic).toHaveTextContent('Next step: Check your connection and try again. Your previous tax facts remain unchanged.')
+  })
+
+  it('confirms only the submitted values when the draft changes during a pending save', async () => {
+    let resolveSubmit!: () => void
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => { resolveSubmit = resolve }))
+    render(<TaxProfileForm initialData={{ kind: 'missing', revision: 0 }} onSubmit={onSubmit} />)
+    enterValidTaxProfile('Acme Pty Ltd')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ legalName: 'Acme Pty Ltd' })))
+
+    fireEvent.change(screen.getByLabelText(/legal business name/i), { target: { value: 'Acme Holdings Pty Ltd' } })
+    resolveSubmit()
+
+    await waitFor(() => {
+      expect(screen.getByRole('group', { name: 'Unsaved changes' })).toHaveTextContent('1 unsaved change')
+    })
+    expect(screen.getByLabelText(/legal business name/i)).toHaveValue('Acme Holdings Pty Ltd')
+
+    fireEvent.change(screen.getByLabelText(/legal business name/i), { target: { value: 'Acme Pty Ltd' } })
+    expect(screen.queryByRole('group', { name: 'Unsaved changes' })).toBeNull()
+    expect(screen.getByRole('group', { name: 'Save status' })).toHaveTextContent('Tax details saved')
+  })
+
+  it('ignores duplicate form submission while pending', async () => {
+    let resolveSubmit!: () => void
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => { resolveSubmit = resolve }))
+    const { container } = render(<TaxProfileForm initialData={{ kind: 'missing', revision: 0 }} onSubmit={onSubmit} />)
+    enterValidTaxProfile()
+
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    fireEvent.click(saveButton)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    resolveSubmit()
+    await waitFor(() => expect(toastState.success).toHaveBeenCalledTimes(1))
+  })
+
+  it('handles a synchronous submit throw and allows an explicit retry', async () => {
+    const onSubmit = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('sync failure') })
+      .mockResolvedValueOnce(undefined)
+    render(<TaxProfileForm initialData={{ kind: 'missing', revision: 0 }} onSubmit={onSubmit} />)
+    enterValidTaxProfile()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => {
+      expect(toastState.error).toHaveBeenCalledWith('Billing & tax profile was not saved')
+      expect(screen.getByRole('status')).toHaveTextContent(/billing and tax profile could not be saved/i)
+      expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    })
+    expect(screen.getByLabelText(/legal business name/i)).toHaveValue('Acme Pty Ltd')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(2)
+      expect(toastState.success).toHaveBeenCalledWith('Billing & tax profile updated')
+    })
+  })
+
+  it('shows saved status and returns focus to the form heading', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<TaxProfileForm initialData={{ kind: 'missing', revision: 0 }} onSubmit={onSubmit} />)
+    enterValidTaxProfile()
+
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    saveButton.focus()
+    fireEvent.click(saveButton)
+
+    const savedRegion = await screen.findByRole('group', { name: 'Save status' })
+    expect(savedRegion).toHaveTextContent('Tax details saved')
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Tax' })).toHaveFocus())
   })
 })
