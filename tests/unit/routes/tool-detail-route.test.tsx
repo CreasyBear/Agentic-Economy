@@ -492,7 +492,9 @@ describe('/tools/$toolRef', () => {
     const external = new URL(alternativeToolSearchHref(directory, 'Extract invoice line items', sourceRouteRef), 'https://market.example')
     expect(external.searchParams.get('query')).toBe('Extract invoice line items')
     expect(external.searchParams.get('alternativeTo')).toBe(sourceRouteRef)
-    expect(alternativeToolSearchHref(directory, 'Extract invoice line items')).toBe('/market?view=tools')
+    const unindexed = new URL(alternativeToolSearchHref(directory, 'Extract invoice line items'), 'https://market.example')
+    expect(unindexed.searchParams.get('query')).toBe('Extract invoice line items')
+    expect(unindexed.searchParams.has('alternativeTo')).toBe(false)
   })
 
   it('shows source USDC only as a secondary fact after a fresh AUD estimate', () => {
@@ -643,7 +645,7 @@ describe('/tools/$providerHost/$slug', () => {
     expect(screen.getByText('A$0.01 per Call')).toBeTruthy()
     expect(screen.getByText(/Provider-listed source price: 0.000001 USDC/)).toBeTruthy()
     expect(screen.getByText(/No admitted AE Tool or verified execution Provider/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Browse Market' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search for a similar Tool' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
 
     cleanup()

@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { recordProductJourney } from '@/lib/observability/product-journey'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -17,6 +18,9 @@ export type DirectoryToolPageProps = Readonly<{ metadata: X402DirectoryCatalogue
 
 export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate }: DirectoryToolPageProps) {
   const [readAt] = useState(() => Date.now())
+  useEffect(() => {
+    recordProductJourney({ action: 'tool_viewed', phase: metadata.kind === 'found' || metadata.kind === 'found_upstream' ? 'observed' : 'failed', surface: 'tool', listingKind: 'external_listing' })
+  }, [providerHost, slug, metadata.kind])
   if (metadata.kind !== 'found' && metadata.kind !== 'found_upstream') {
     const reason = metadata.kind === 'not_found' ? 'resource_not_found' : metadata.reason === 'query_invalid' ? 'query_invalid' : 'source_unavailable'
     const copy = TOOL_UNAVAILABLE_COPY[reason]
@@ -62,7 +66,10 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
           {listing.facts.price.kind === 'present' && listing.facts.price.value.kind !== 'quote_required' && listing.facts.price.value.currency === 'USDC' ? <p>Provider-listed source price: {listing.facts.price.value.kind === 'range' ? `${listing.facts.price.value.minimum}–${listing.facts.price.value.maximum}` : listing.facts.price.value.amount} USDC per Call.</p> : null}
           {entry.output?.exampleJson === undefined ? <p>No example output was published.</p> : null}
         </>}
-        primary={{ label: indexedSourceRouteRef === undefined || capability.trim().length === 0 ? 'Browse Market' : 'Search callable alternatives', onSelect: () => { window.location.assign(alternativeHref) } }}
+        primary={{ label: capability.trim().length === 0 ? 'Browse Market' : indexedSourceRouteRef === undefined ? 'Search for a similar Tool' : 'Search callable alternatives', onSelect: () => {
+          recordProductJourney({ action: 'alternatives_requested', phase: 'attempted', surface: 'tool', listingKind: 'external_listing' })
+          window.location.assign(alternativeHref)
+        } }}
         slides={slides}
         sections={[{ id: 'technical', title: 'Technical · endpoint and source', content: <>
           <p>Source: Coinbase Bazaar</p><p>Endpoint: {entry.resource}</p>

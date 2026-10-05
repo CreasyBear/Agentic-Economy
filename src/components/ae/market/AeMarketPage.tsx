@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { recordProductJourney } from "@/lib/observability/product-journey";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
@@ -30,6 +31,9 @@ export type AeMarketPageProps = Readonly<{
 }>;
 
 export function AeMarketPage({ data, search }: AeMarketPageProps) {
+  useEffect(() => {
+    recordProductJourney({ action: 'market_viewed', phase: data.page.kind === 'ok' ? 'observed' : 'failed', surface: 'market' })
+  }, [data.page.kind, search.view])
   const router = useRouter();
   const [retained, setRetained] = useState<{ data: AeMarketPageProps["data"]; search: MarketSearch } | undefined>(
     data.page.kind === "ok" ? { data, search } : undefined,

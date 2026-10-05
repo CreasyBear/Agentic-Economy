@@ -685,6 +685,11 @@ describe('scheduled chat consequence authority', () => {
     expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim().length === 0))
       .toEqual([expect.objectContaining({ text: ' ', status: 'success' })])
     expect(gatewayProbe.modelCalls).toHaveBeenCalledTimes(1)
+    const turn = await backend.run(ctx => ctx.db.query('chatTurns')
+      .withIndex('by_promptMessageId', index => index.eq('promptMessageId', sent.promptMessageId))
+      .unique())
+    expect(turn).toMatchObject({ state: 'completed' })
+    expect(turn?.failureReason).toBeUndefined()
     await expect(owner.query(api.chatThreads.getThread, {
       threadId: sent.threadId, now: Date.now(),
     })).resolves.toMatchObject({ busy: false })

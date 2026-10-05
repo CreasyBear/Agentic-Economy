@@ -5,6 +5,7 @@ import { useLocation, useMatches } from '@tanstack/react-router'
 import { useGlobalShortcuts } from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
 import { PUBLIC_NAVIGATION } from '@/lib/navigation/app-navigation'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
+import { recordProductJourney } from '@/lib/observability/product-journey'
 import { operatorSurfaceForPath } from '@/lib/operator/operator-context'
 import type { OperatorRole } from '@/lib/operator/roles'
 
@@ -59,6 +60,10 @@ export function useAppShellState(): AppShellState {
   useEffect(() => {
     emitFunnelEventOnce({ eventType: 'visitor_attributed', stage: 'visitor', correlationPrefix: 'visitor' })
   }, [])
+
+  useEffect(() => {
+    if (isSignedIn) recordProductJourney({ action: 'auth_session_observed', phase: 'observed', surface: 'app' })
+  }, [isSignedIn])
 
   useEffect(() => {
     const focusTarget = () => {

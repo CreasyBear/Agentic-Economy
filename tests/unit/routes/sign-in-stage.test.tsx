@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -70,7 +70,7 @@ describe('sign-in site stage', () => {
     expect(document.querySelector('[data-slot="ae-site-auth-clerk-well"]')).toBeTruthy()
   })
 
-  it('passes hidden loading placeholders to SignIn', () => {
+  it('passes accessible loading and help with decorative placeholders to SignIn', () => {
     const Component = routeState.SignIn
     if (Component === undefined || Component === null) throw new Error('Sign-in route was not captured.')
     render(<Component />)
@@ -78,8 +78,12 @@ describe('sign-in site stage', () => {
     expect(routeState.signInProps?.fallback).toBeTruthy()
     const { container } = render(<>{routeState.signInProps?.fallback as ReactNode}</>)
     const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
-    expect(fallback?.getAttribute('aria-hidden')).toBe('true')
-    expect(container.querySelector('button, input, a')).toBeNull()
+    expect(fallback?.getAttribute('aria-hidden')).not.toBe('true')
+    expect(fallback?.querySelector('[aria-hidden="true"]')).toBeTruthy()
+    expect(within(container).getByRole('status').textContent).toContain('Loading the secure account form')
+    expect(within(container).getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+    expect(within(container).getByRole('link', { name: 'System status' }).getAttribute('href')).toBe('/status')
+    expect(container.querySelector('button, input')).toBeNull()
   })
 
   it('names the preserved destination and uses Market only when that is the return', () => {
@@ -158,11 +162,14 @@ describe('sign-in site stage', () => {
     expect(document.activeElement).toBe(document.body)
   })
 
-  it('exports decorative sign-in loading placeholders without accessible auth controls', () => {
+  it('exports visible sign-in loading and help without fabricated auth controls', () => {
     const { container } = render(<SignInClerkFallback />)
     const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
-    expect(fallback?.getAttribute('aria-hidden')).toBe('true')
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(fallback?.getAttribute('aria-hidden')).not.toBe('true')
+    expect(fallback?.querySelector('[aria-hidden="true"]')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('Loading the secure account form')
+    expect(screen.getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+    expect(screen.getByRole('link', { name: 'System status' }).getAttribute('href')).toBe('/status')
     expect(screen.queryByRole('button')).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
   })

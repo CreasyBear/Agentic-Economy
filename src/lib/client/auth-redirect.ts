@@ -8,6 +8,12 @@ const authRedirectOrigin = 'https://aecon.ai'
 
 export type AuthRedirectSearch = Readonly<{ redirect?: string }>
 
+/** Auth-mode switches retain the same safe destination, including nested Call context. */
+export function authSwitchUrl(route: '/sign-in' | '/sign-up', target: unknown): string {
+  const redirect = sanitizeAuthRedirectTarget(target)
+  return redirect === undefined ? route : `${route}?${new URLSearchParams({ redirect })}`
+}
+
 export function sanitizeAuthRedirectTarget(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined

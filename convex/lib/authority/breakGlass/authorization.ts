@@ -40,10 +40,8 @@ export async function authorizeRecoveryOperationHandler(
 ) {
   const selectedAccountRef = accountRef(args.accountRef)
   const now = Date.now()
-  const [operator, facts] = await Promise.all([
-    resolveRecoveryOperator(ctx, selectedAccountRef, now),
-    resolveRecoveryAccountFacts(ctx, selectedAccountRef),
-  ])
+  const operator = await resolveRecoveryOperator(ctx, selectedAccountRef, now)
+  const facts = await resolveRecoveryAccountFacts(ctx, selectedAccountRef)
   const admission = await authorizeRecoveryHandler(ctx, {
     action: args.action,
     accountRef: selectedAccountRef,

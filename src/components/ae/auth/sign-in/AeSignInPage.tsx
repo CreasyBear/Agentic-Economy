@@ -1,6 +1,7 @@
 import { SignIn } from '@clerk/tanstack-react-start'
 import type { SignInProps } from '@clerk/shared/types'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+import { recordProductJourney } from '@/lib/observability/product-journey'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import {
@@ -18,6 +19,9 @@ export { SignInClerkFallback } from './components/SignInClerkFallback'
 
 export function AeSignInPage(props: AeSignInPageProps) {
   const model = useSignInPage(props)
+  useEffect(() => {
+    recordProductJourney({ action: 'auth_viewed', phase: 'observed', surface: 'sign_in', hasReturnDestination: props.redirect !== undefined })
+  }, [props.redirect])
 
   const signInProps: SignInProps & { fallback?: ReactNode } = {
     appearance: clerkSignInSurfaceAppearance,

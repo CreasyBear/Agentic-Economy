@@ -58,14 +58,14 @@ describe('sign-up account entry', () => {
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/market',
       forceRedirectUrl: '/market',
-      signInFallbackRedirectUrl: '/owner/settings',
+      signInFallbackRedirectUrl: '/market',
       signInUrl: '/sign-in',
     })
     expect(routeState.clerkProps?.fallback).toBeTruthy()
     const { container } = render(<>{routeState.clerkProps?.fallback as ReactNode}</>)
     expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')).toBeTruthy()
-    expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')?.getAttribute('aria-hidden')).toBe('true')
-    expect(container.querySelector('button, input, a')).toBeNull()
+    expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')?.getAttribute('aria-hidden')).not.toBe('true')
+    expect(screen.getByRole('status')).toBeTruthy()
   })
 
   it('S2: preserves supplier copy and returns to the requested destination', () => {
@@ -81,7 +81,7 @@ describe('sign-up account entry', () => {
       fallbackRedirectUrl: '/owner/supply',
       forceRedirectUrl: '/owner/supply',
       signInFallbackRedirectUrl: '/owner/supply',
-      signInUrl: '/sign-in',
+      signInUrl: '/sign-in?redirect=%2Fowner%2Fsupply',
     })
   })
 
@@ -98,16 +98,16 @@ describe('sign-up account entry', () => {
       fallbackRedirectUrl: '/agent-access',
       forceRedirectUrl: '/agent-access',
       signInFallbackRedirectUrl: '/agent-access',
-      signInUrl: '/sign-in',
+      signInUrl: '/sign-in?redirect=%2Fagent-access',
     })
   })
 
-  it('S4: exports hidden sign-up loading placeholders without actions', () => {
+  it('S4: announces loading with help and status while leaving placeholders hidden', () => {
     const { container } = render(<SignUpClerkFallback />)
     const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
-    expect(fallback?.getAttribute('aria-hidden')).toBe('true')
-    expect(fallback?.querySelector('button, input, a')).toBeNull()
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(fallback?.getAttribute('aria-hidden')).not.toBe('true')
+    expect(screen.getByRole('link', { name: 'Get help' })).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('Loading')
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

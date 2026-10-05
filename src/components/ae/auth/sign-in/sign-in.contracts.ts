@@ -19,7 +19,7 @@ export type UseSignInPageResult = Readonly<{
   stageUrl: '/sign-in'
   fallbackRedirectUrl: string
   signUpFallbackRedirectUrl: string
-  signUpUrl: '/sign-up'
+  signUpUrl: string
 }>
 
 export function resolveSignInRedirectTarget(value: unknown): string {

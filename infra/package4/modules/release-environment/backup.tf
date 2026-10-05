@@ -43,7 +43,8 @@ resource "aws_backup_plan" "formance" {
   rule {
     rule_name         = "nightly-regional-copy"
     target_vault_name = aws_backup_vault.primary.name
-    schedule          = "cron(0 16 * * ? *)"
+    # UTC: after Sunday's 16:00-17:00 maintenance and the 15:00-15:30 automated backup.
+    schedule          = "cron(0 18 * * ? *)"
 
     lifecycle {
       delete_after = 7
