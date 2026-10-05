@@ -178,20 +178,9 @@ function ChoiceRemainder({ count, shown }: { count: number; shown: number }) {
   )
 }
 
-export function SearchNext({ next, onContinueSearch, onRepeatSearch, signedThread }: SearchNextProps) {
-  if (next === undefined) return null
-  if (next.action === 'next-page') {
-    if (signedThread && !next.args.cursor.startsWith('sc1.') && onRepeatSearch !== undefined) {
-      return <Button type="button" variant="secondary" size="sm"
-        onClick={() => onRepeatSearch(next.args.query)}>Search again in this chat</Button>
-    }
-    if (onContinueSearch !== undefined && (!signedThread || next.args.cursor.startsWith('sc1.'))) {
-      return <Button type="button" variant="secondary" size="sm"
-        onClick={() => onContinueSearch(next)}>Next page</Button>
-    }
-    return <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
-      className={secondaryLink}>Browse Tools in the Market</a>
-  }
+export function SearchNext({ next, onRepeatSearch }: SearchNextProps) {
+  // Chat resolves a recommendation or a refinement; API cursors are not chat actions.
+  if (next === undefined || next.action === 'next-page') return null
   if (next.action === 'broaden') return (
     <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
       className={secondaryLink}>{chatBrowseMarket}</a>

@@ -177,6 +177,7 @@ export function catalogueFact(output: ToolChoiceSearchOutput): string {
 export function explanationUsable(text: string, output: ToolChoiceSearchOutput): boolean {
   const answer = text.trim()
   if (answer.length < 35 || /couldn't finish the answer/iu.test(answer)) return false
+  if (/\bnext page\b/iu.test(answer)) return false
   if (/[｜▁]|<\|(?:begin|end)|\b(?:let me|i(?:'ll| will) (?:check|search|look))\b/iu.test(answer)) return false
   const allowed = new Set<string>(output.kind === 'match' || output.kind === 'scoped'
     ? output.results.flatMap(result => result.toolRef === undefined ? [] : [result.toolRef]) : [])

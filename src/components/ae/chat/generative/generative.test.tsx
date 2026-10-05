@@ -178,7 +178,7 @@ describe('generative chat leaves', () => {
     expect(projectSourcesFromCards([card]).sources).toHaveLength(1)
     expect(projectWorkFromCards([card]).summary).toBe('Found 1 tool')
   })
-  it('shows scoped external listing details and continuation without enabling purchase selection', () => {
+  it('shows scoped external listing details without pagination or purchase selection', () => {
     const output = {
       kind: 'scoped', results: [{ id: 'external-7', source: 'coinbase', access: 'external_listing',
         title: 'External Timezone', provider: 'Another provider' }],
@@ -195,12 +195,12 @@ describe('generative chat leaves', () => {
       '/api/v1/registry/detail?id=external-7')
     expect(screen.getByText(/not callable through AE/)).toBeInTheDocument()
     expect(screen.queryByText('x402:next')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Browse Tools in the Market' })).toHaveAttribute('href', '/market?query=timezone')
+    expect(screen.queryByRole('link', { name: 'Browse Tools in the Market' })).toBeNull()
     cleanup()
     const onContinue = vi.fn()
     render(<ToolCard projection={card} onContinueSearch={onContinue} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    expect(onContinue).toHaveBeenCalledExactlyOnceWith(output.next[0])
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+    expect(onContinue).not.toHaveBeenCalled()
     expect(screen.queryByText('x402:next')).not.toBeInTheDocument()
     const view = projectOptionsFromCard(card)
     expect(projectWorkFromCards([card]).summary).toContain('external listing')
@@ -237,7 +237,7 @@ describe('generative chat leaves', () => {
     expect(screen.getByText('Provider-listed price: 0.003000 USDC')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
   })
-  it('keeps the opaque cursor out of prose while continuing the original thread and query', () => {
+  it('keeps opaque cursors and retired pagination prompts out of the transcript', () => {
     const next = { action: 'next-page' as const, args: { query: 'timezone', cursor: 'x402:opaque-next' }, authority: 'public' as const }
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
@@ -248,14 +248,15 @@ describe('generative chat leaves', () => {
     render(<ChatTranscript messages={[
       { id: 'question', role: 'user', parts: [{ type: 'text', text: 'timezone' }] },
       { id: 'answer', role: 'assistant', parts: [
-        serializeToolCard(card), { type: 'text', text: 'Next: x402:opaque-next' },
+        serializeToolCard(card), { type: 'text', text: '**Check the Tool details.** Use Next page below to continue this search.\nNext: x402:opaque-next' },
       ] },
     ]} onContinueSearch={onContinueSearch} />)
-    expect(screen.queryByText(/x402:opaque-next/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    expect(onContinueSearch).toHaveBeenCalledExactlyOnceWith(next)
+    expect(screen.queryByText(/x402:opaque-next|Next page|cursor hidden/)).toBeNull()
+    expect(screen.getByText('Check the Tool details.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+    expect(onContinueSearch).not.toHaveBeenCalled()
   })
-  it('restarts a legacy signed search honestly without sending its native cursor', () => {
+  it('does not expose a legacy signed cursor as a chat action', () => {
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: { kind: 'scoped', results: [],
@@ -268,11 +269,11 @@ describe('generative chat leaves', () => {
     ] }]} ownerChatThreadId="owned-thread" onContinueSearch={onContinueSearch} onRepeatSearch={onRepeatSearch} />)
     expect(screen.queryByText(/x402:old-native/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Search again in this chat' }))
-    expect(onRepeatSearch).toHaveBeenCalledExactlyOnceWith('timezone')
+    expect(screen.queryByRole('button', { name: 'Search again in this chat' })).toBeNull()
+    expect(onRepeatSearch).not.toHaveBeenCalled()
     expect(onContinueSearch).not.toHaveBeenCalled()
   })
-  it('continues a signed cursor in its original thread', () => {
+  it('does not expose a current signed cursor as a chat action', () => {
     const next = { action: 'next-page' as const, authority: 'public' as const,
       args: { query: 'timezone', cursor: 'sc1.turn_123.signature' } }
     const card = projectToolCard({
@@ -283,8 +284,8 @@ describe('generative chat leaves', () => {
     const onContinueSearch = vi.fn(), onRepeatSearch = vi.fn()
     render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [serializeToolCard(card)] }]}
       ownerChatThreadId="owned-thread" onContinueSearch={onContinueSearch} onRepeatSearch={onRepeatSearch} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    expect(onContinueSearch).toHaveBeenCalledExactlyOnceWith(next)
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+    expect(onContinueSearch).not.toHaveBeenCalled()
     expect(onRepeatSearch).not.toHaveBeenCalled()
   })
   it('reviews a single callable Tool before running and removes the old edit-input action', () => {

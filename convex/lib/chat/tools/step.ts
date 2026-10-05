@@ -68,10 +68,12 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
     ? args.query : null
   if (verdict.kind === 'unavailable') return `**Search is temporarily unavailable.** Next: retry${query === null ? ' the search.' : ` “${markdownText(query)}”.`}`
   if (verdict.kind === 'scoped') {
-    const hasNextPage = typeof next === 'object' && next !== null
-      && 'action' in next && next.action === 'next-page'
-    const followUp = hasNextPage ? ' Use Next page below to continue this search.' : ''
-    return `**Here are the closest matches.**${followUp}`
+    // Requires returned candidates; an incomplete search never proves market-wide absence.
+    // Ensures an honest choice or refinement, with no cursor browsing instructions.
+    if (!Array.isArray(verdict.results) || verdict.results.length === 0) {
+      return '**No match for that yet.** Next: tell me more about what you need or browse the Market.'
+    }
+    return '**These listings need inspection before I can recommend one.** Next: open a Tool card to check its details.'
   }
   return `**No suitable Tool in the assessed catalogue.** Next: ${query === null ? 'try a broader search.' : `broaden “${markdownText(query)}”.`}`
 }
