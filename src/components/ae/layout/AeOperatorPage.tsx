@@ -2,6 +2,9 @@
 
 import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
+import { ADMIN_NAVIGATION, activeRoleNavigationHref } from './app-shell/app-shell.contracts'
+import '@/components/arc/foundation.css'
 
 import type { OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
 import type { OperatorRole } from '@/lib/operator/roles'
@@ -138,6 +141,10 @@ function RootOperatorPage(props: AeOperatorPageProps) {
   const resolvedMainContentId = mainContentId ?? 'main-content'
   const showDescriptionLine = description !== '' || actions !== undefined
 
+  const adminPath = currentChrome.currentPath.startsWith('/admin/workspaces/') ? '/admin/accounts'
+    : /^\/admin\/(calls|quotes)\//.test(currentChrome.currentPath) ? '/admin/activity' : currentChrome.currentPath
+  const activeAdminHref = activeRoleNavigationHref(adminPath, ADMIN_NAVIGATION)
+
   // Publish the committed route's title and path to the persistent frame.
   const frameBridge = use(OperatorFrameChromeContext)
   useLayoutEffect(() => {
@@ -159,6 +166,16 @@ function RootOperatorPage(props: AeOperatorPageProps) {
           data-testid="operator-page-stack"
           className="arc-operator-page-stack"
         >
+          {currentChrome.operatorRole === 'admin' && !currentChrome.suppressSurfaceNavigation ? (
+            <nav aria-label="Admin navigation" className="flex flex-wrap gap-x-related gap-y-1 border-b border-border pb-intra">
+              {ADMIN_NAVIGATION.map(item => (
+                <Link key={item.href} to={item.href} activeOptions={{ exact: true }} aria-current={item.href === activeAdminHref ? 'page' : undefined}
+                  className="inline-flex min-h-touch items-center border-b-2 border-transparent text-sm text-muted-foreground hover:text-foreground aria-[current=page]:border-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
           {showDescriptionLine ? (
             <div className="arc-operator-page-description-row">
               {description === '' ? null : (

@@ -1,16 +1,11 @@
 # Agentic Economy
 
-**Revised:** 2026-09-10
+**Revised:** 2026-10-05
 
 Agentic Economy helps Australian businesses connect their agents to paid tools
 and services through one account, with AUD credit, spending controls, clear usage
 and billing records, and recovery when something goes wrong. x402 services are
 the first supported supply.
-
-**The current goal is a mature Australian equivalent of the familiar Locus and
-Nevermined experience, not a unique or differentiated product yet.** Follow proven
-setup, account management, publishing, payment and developer patterns. Adapt
-where Australia or a concrete correctness requirement calls for it.
 
 An agent stays in its existing app or framework. It finds a service when needed,
 checks the price and terms, and makes a Call within its spending policy. AE does
@@ -47,9 +42,9 @@ Status and recovery appear only when needed. Public detail, comparison, whoami
 and balance are optional reads. Agents do not coordinate treasury, calculate
 foreign exchange, write ledger entries or guess whether payment can be retried.
 
-The source cutover is accepted in the checkout and its focused receipts. The CLI
-tarball has local installed-package verification; a hosted deployment and npm
-publication remain separate release gates.
+The production application and backend are deployed. The authenticated CLI has
+completed the recorded 20-payment mainnet acceptance. Public npm publication and
+the separate paid development chat journey remain open; see the deployment map.
 
 ## Current stage
 
@@ -65,9 +60,10 @@ Owner reporting includes scoped Call totals, monthly Agent usage and charge
 coverage, sortable history and exports. Receipts include generation of approved
 funding tax invoices and linked full-refund adjustment notes, with immutable
 HTML/print and CSV records. Treasury shows the six commercial approval families
-and proposed defaults through its existing protected review flow. These source
-capabilities do not establish production payment, screening or recovery acceptance;
-the [readiness record](./docs/production-readiness-plan.md) tracks those separately.
+and proposed defaults through its existing protected review flow. The
+[readiness record](./docs/production-readiness-plan.md) distinguishes verified
+production payments and recovery from controlled failure fixtures and remaining
+availability limits. Screening is explicitly deferred under the approved alpha policy.
 
 The complete Australian principal-reseller record is the next product milestone.
 Buyer-facing Seller identity, a separate Provider obligation, attributed tax
@@ -75,8 +71,9 @@ facts, business-document evidence and purchase resolution are not yet one
 explicit production record. Source and tests remain the authority for current
 behaviour.
 
-Source-tree code-quality campaigns 1–3 are closed (21 September 2026). That is
-not hosted GitHub `main`, npm publication, or a production sale.
+Usage metering and the founder console now share the main delivery stream.
+Historical backfill, automatic reporting schedules and external metering remain
+explicit opt-in operations; implementation does not activate them.
 
 ## Current source entrances
 
@@ -86,15 +83,15 @@ not hosted GitHub `main`, npm publication, or a production sale.
 - `/api/v1/tools/quote` and `/api/v1/tools/call` define paid or consequential Calls.
 - `/api/v1/calls` and `/api/v1/calls/{callRef}/*` define Call history and recovery.
 - `/mcp`, `/llms.txt` and `/SKILL.md` are the accepted source discovery/plugin
-  surfaces; this does not claim that they are hosted.
+  surfaces. The deployment map identifies their current hosted release.
 - The CLI source supports search, `describe`, `call`, `history`, status, wait,
   cancel and `recover`. The packaged CLI is locally verified; npm publication
   is pending, so `npx -y @aecon/cli` is not yet an external install path.
 - `/for-providers` admits and publishes Provider Tools in source.
 
-Chat exposes only search, detail, comparison, description and eligible keyless
-execution. Paid or consequential work remains on the authenticated HTTP, MCP
-and CLI purchase plane.
+Chat is a thin entrance to the same Tool market and controlled purchase plane.
+The recorded paid production acceptance used the CLI; paid chat completion is a
+separate journey and remains unverified.
 
 The external registry discovers possible supply at metadata authority only. An
 imported record is not a Tool and cannot be called until Agentic Economy

@@ -1,0 +1,27 @@
+/* The expressive colour lives in the launcher, away from financial status. */
+.surface {
+  --orbit-mint: oklch(.55 .14 165);
+  --orbit-blue: oklch(.53 .17 255);
+  --orbit-peach: oklch(.58 .16 50);
+  --orbit-violet: oklch(.55 .2 305);
+  --accent: var(--orbit-violet);
+  --shadow-raised: var(--shadow-soft);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--space-5);
+  border: 1px solid color-mix(in oklch, var(--orbit-violet) 25%, var(--border));
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(ellipse at 12% 10%, color-mix(in oklch, var(--orbit-violet) 14%, transparent), transparent 55%),
+    radial-gradient(ellipse at 90% 45%, color-mix(in oklch, var(--orbit-mint) 16%, transparent), transparent 55%),
+    radial-gradient(ellipse at 30% 100%, color-mix(in oklch, var(--orbit-peach) 11%, transparent), transparent 50%),
+    var(--surface);
+}
+.mark { width: 70%; height: 70%; object-fit: contain; }
+.footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); margin-top: var(--space-2); color: var(--text-muted); font-size: var(--text-xs); }
+.motionControl { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-2); border-radius: var(--radius-pill); cursor: pointer; }
+.motionControl svg { width: 16px; height: 16px; }
+@media (hover: hover) and (pointer: fine) { .motionControl:hover { background: var(--surface-muted); color: var(--foreground); } }
+:global(.dark) .surface { --accent: var(--orbit-violet); --orbit-mint: oklch(.8 .15 165); --orbit-blue: oklch(.78 .13 255); --orbit-peach: oklch(.8 .14 50); --orbit-violet: oklch(.8 .14 305); }
+:global(.dark) .mark { filter: brightness(0) invert(1); }

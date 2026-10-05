@@ -7,7 +7,9 @@ const CSV_HEADERS = [
   'completedCalls', 'uncertainCalls', 'quotesCreated',
   'quotesConvertedAtClose', 'transactingWorkspaces', 'transactingAgents',
   'transactingProviders', 'transactingTools', 'returningWorkspaces',
-  'terminalCalls', 'terminalCallsWithResolution',
+  'terminalCalls', 'terminalCallsWithResolution', 'environment', 'computedAt',
+  'purchasedUnitsAUD6', 'promotionalUnitsAUD6', 'refundedPurchasedUnitsAUD6',
+  'customerFundedCalls', 'completedCustomerFundedCalls', 'buyingAccounts', 'unclassifiedCalls',
 ] as const
 export const ADMIN_METRICS_CSV_HEADER = formatCsvRow(CSV_HEADERS)
 
@@ -31,5 +33,14 @@ export function metricsCsvRow(day: MarketplaceMetricDay): string {
     day.returningWorkspaces,
     day.terminalCalls,
     day.terminalCallsWithResolution,
+    day.funding?.environment,
+    day.computedAt,
+    day.funding?.purchasedUnits,
+    day.funding?.promotionalUnits,
+    day.funding?.refundedPurchasedUnits,
+    day.funding?.customerFundedCalls,
+    day.funding?.completedCustomerFundedCalls,
+    day.funding?.buyingAccounts,
+    day.funding?.unclassifiedCalls,
   ])
 }

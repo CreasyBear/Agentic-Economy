@@ -12,6 +12,7 @@ import type { AdminWorkspaceView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
 import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
 import '../../RecordWorkspaceComposition.css'
+import { PurchaseActivity } from '../../activity/PurchaseActivity'
 import { ADMIN_OBJECT_PAGE_COPY, formatPerthTimestamp } from '../object-pages.contracts'
 
 export type WorkspaceObjectViewProps = Readonly<{
@@ -34,18 +35,18 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
     <AeOperatorPage
       operatorRole="admin"
       currentPath={`/admin/workspaces/${view.ref}`}
-      title={copy.title}
+      title={view.displayName ?? copy.title}
       description=""
       contentOwnsHeading
       breadcrumbs={[
         { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
-        { label: copy.section, href: '/admin/search?kind=workspace' },
+        { label: copy.section, href: '/admin/accounts' },
         { label: view.ref },
       ]}
       stickyHeader
     >
       <PageHeader
-        title={copy.title}
+        title={view.displayName ?? copy.title}
         description={copy.description}
         breadcrumbs={[
           {
@@ -57,7 +58,7 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
             id: 'section',
             label: copy.section,
             renderLink: ({ children, ...linkProps }) => (
-              <Link to="/admin/search" search={{ kind: 'workspace' }} {...linkProps}>{children}</Link>
+              <Link to="/admin/accounts" {...linkProps}>{children}</Link>
             ),
           },
           { id: 'record', label: view.ref },
@@ -90,11 +91,12 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
             },
           ]} />
         </AeSection>
-        <AeSection title={ADMIN_OBJECT_PAGE_COPY.relatedTitle}>
-          <p className="arc-admin-record-context">{ADMIN_OBJECT_PAGE_COPY.noRelatedReferences}</p>
+        <AeSection title="Investigate this Account">
+          <p className="arc-admin-record-context">Review purchases, their funding and any recovery requiring attention.</p>
+          <a className="mt-related inline-block text-sm underline underline-offset-4" href={`/admin/activity?account=${encodeURIComponent(view.ref)}&range=last_30`}>View all recent purchases</a>
         </AeSection>
         {grant === null ? null : (
-          <AeSection title="Promotional credit" description="Grant expiring AUD credit to this Workspace after Admin review and ledger confirmation.">
+          <AeSection title="Promotional credit" description="Grant expiring AUD credit to this Account after Admin review and ledger confirmation.">
             {view.paymentEnvironment === null ? (
               <p className="text-sm text-muted-foreground">Payment environment is unavailable for this deployment.</p>
             ) : (
@@ -128,6 +130,7 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
           </AeSection>
         )}
       </div>
+      <PurchaseActivity search={{ account: view.ref, range: 'last_30' }} compact />
     </AeOperatorPage>
   )
 }

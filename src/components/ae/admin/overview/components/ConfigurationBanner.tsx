@@ -7,7 +7,7 @@ import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-ad
 import './OverviewMetricsComposition.css'
 import { ADMIN_OVERVIEW_COPY } from '../overview.contracts'
 
-export type ConfigurationBannerProps = Readonly<{ readiness: PaymentReadinessView | null }>
+export type ConfigurationBannerProps = Readonly<{ readiness: PaymentReadinessView | null; compact?: boolean }>
 
 const CHECK_LABELS: Readonly<Record<typeof PAYMENT_READINESS_CHECK_KEYS[number], string>> = {
   web_configuration: 'Web configuration',
@@ -52,8 +52,8 @@ const FAILURE_REASONS: Readonly<Record<string, string>> = {
  * tab update the clock without waiting for a database write; neither can restore
  * an expired pass. Readiness is informational, never a command override.
  */
-export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
-  const [now, setNow] = useState(() => Date.now())
+export function ConfigurationBanner({ readiness, compact = false }: ConfigurationBannerProps) {
+  const [now, setNow] = useState<number | null>(null)
   const expiresAt = readiness?.expiresAt ?? null
   useEffect(() => {
     const updateClock = () => setNow(Date.now())
@@ -68,8 +68,8 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
       document.removeEventListener('visibilitychange', updateClock)
     }
   }, [expiresAt])
-  const expired = expiresAt !== null && now >= expiresAt
-  const ready = readiness?.kind === 'ready' && !expired && expiresAt !== null
+  const expired = now !== null && expiresAt !== null && now >= expiresAt
+  const ready = now !== null && readiness?.kind === 'ready' && !expired && expiresAt !== null
     && readiness.checkedAt !== null && readiness.checkedAt <= now
     && PAYMENT_READINESS_CHECK_KEYS.every(key => {
       const check = readiness.checks[key]
@@ -94,10 +94,13 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
           {' · '}Valid until: {expiresAt === null ? 'No valid evidence'
             : <time dateTime={timestampIso(expiresAt)}>{formatPerthTimestamp(expiresAt)}</time>}</p>
       </div>
+      <details open={!compact}>
+        <summary className="min-h-touch cursor-pointer py-intra text-sm font-medium">Inspect readiness evidence</summary>
       <dl className="integrations-list">
         {PAYMENT_READINESS_CHECK_KEYS.map(key => <ReadinessCheckRow key={key} name={key}
           check={readiness?.checks[key]} now={now} expired={expired} />)}
       </dl>
+      </details>
     </AeSection>
   )
 }
@@ -107,11 +110,11 @@ export function ConfigurationBanner({ readiness }: ConfigurationBannerProps) {
 function ReadinessCheckRow({ name, check, now, expired }: Readonly<{
   name: typeof PAYMENT_READINESS_CHECK_KEYS[number]
   check: PaymentReadinessCheck | undefined
-  now: number
+  now: number | null
   expired: boolean
 }>) {
-  const passed = check?.kind === 'passed' && !expired && check.validUntil > now
-  const deferred = name === 'sanctions' && check?.kind === 'deferred'
+  const passed = now !== null && check?.kind === 'passed' && !expired && check.validUntil > now
+  const deferred = now !== null && name === 'sanctions' && check?.kind === 'deferred'
     && check.policyRef === ALPHA_X402_PAYEE_SCREENING_POLICY && !expired && check.validUntil > now
   let reason = FAILURE_REASONS.readiness_expired
   if (!expired) {

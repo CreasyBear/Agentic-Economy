@@ -9,6 +9,7 @@ import { env } from '../../../_generated/server'
 export const adminWorkspaceViewValue = v.object({
   kind: v.literal('workspace'),
   ref: v.string(),
+  displayName: v.optional(v.string()),
   lifecycle: accountLifecycleValue,
   ownerCount: v.number(),
   memberCount: v.number(),
@@ -49,6 +50,7 @@ export async function readAdminWorkspaceView(
   return {
     kind: 'workspace',
     ref,
+    displayName: account.displayName,
     lifecycle: account.lifecycle,
     ownerCount: memberships.filter((membership) => membership.role === 'org:admin').length,
     memberCount: memberships.length,

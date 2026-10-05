@@ -272,13 +272,14 @@ describe('admin object view redaction', () => {
     ]))
 
     expect(views).toMatchObject([
-      { kind: 'workspace', ownerCount: 1, memberCount: 2, externalOrganizationBound: true, hasActiveSpendingPolicy: true },
+      { kind: 'workspace', displayName: 'Private Workspace', ownerCount: 1, memberCount: 2, externalOrganizationBound: true, hasActiveSpendingPolicy: true },
       { kind: 'agent', credentialLifecycle: 'active', spendingPolicyRef: 'agent-access-grant:grant:admin-view-test', recentCallRefs: [CALL_REF] },
       { kind: 'tool_version', revision: 3, admissionCaseRef: 'admission-case:admin-view-test' },
     ])
     expect(JSON.stringify(views)).not.toContain('@')
-    const forbidden = ['displayName', 'email', 'secretRef', 'tokenIdentifier', 'clerkUserId']
+    const forbidden = ['email', 'secretRef', 'tokenIdentifier', 'clerkUserId']
     expect(deepKeys(views).filter((key) => forbidden.includes(key))).toEqual([])
+    expect(deepKeys(views.slice(1))).not.toContain('displayName')
   })
 
   it('returns object_not_found for every absent object kind', async () => {

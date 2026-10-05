@@ -1,326 +1,116 @@
 # Current deployments
 
-Production application acceptance updated on **4 October 2026, 15:05 UTC**;
-the wider deployment inventory below dates from 2 October. This is the current
-deployment map. [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256)
-owns the real-money alpha work; [the readiness record](../production-readiness-plan.md)
-holds the implementation and release evidence.
+Verified source baseline and production observation: **5 October 2026**.
+This is the canonical deployment map. [TODOS.md](../../TODOS.md) owns the current
+queue; [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256) owns
+alpha decisions. Detailed historical evidence remains in the
+[readiness record](../production-readiness-plan.md).
 
-## Keep these destinations
+## Destinations and authority
 
-| Purpose | Address | Vercel project / environment | Backend |
+| Purpose | Address | Provider identity | Authority |
 | --- | --- | --- | --- |
-| Marketing website | `https://aecon.ai` | `agentic-economy-website` / Production | Separate website repository |
-| Production application | `https://app.aecon.ai` | `agentic-economy` / Production | Configured for Convex `cautious-zebra-473` |
-| Isolated staging application | `https://staging.aecon.ai` | `agentic-economy` / `staging` | Convex `courteous-finch-213`; development declaration and sandbox payments |
+| Marketing | <https://aecon.ai> | Vercel `agentic-economy-website`; separate repository | Public website |
+| Production app | <https://app.aecon.ai> | Vercel `agentic-economy`, project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`; Convex `cautious-zebra-473` | Explicit production declaration; Admin-only payments |
+| Isolated staging | <https://staging.aecon.ai> | Same Vercel project, `staging` environment; Convex `courteous-finch-213` | Development declaration, sandbox payments; staging inventory last verified 2 October |
+| Production ledger | <https://formance-alpha.aecon.ai> | Formance Ledger 2.4.14, ledger `agentic-economy-production`, existing AWS `ae-alpha` footprint | Production financial authority |
+| Production identity | <https://clerk.aecon.ai> | Existing Clerk production instance | Signed identity, owner MFA and revocation checks |
 
-Production and staging use **one Vercel project with separate environments**.
-A branch Preview is a deployment within that project, not another application
-project. Vercel's “Production” label does not establish real-money readiness.
-The website is a separate application and repository.
+Production and staging are separate environments within one Vercel project. A
+branch Preview is not a separate application project. The existing AWS topology
+is one private host and Multi-AZ RDS with independent backups; no second permanent
+stack is approved. Resolve provider identities afresh before mutations.
 
-`main` is the merged source baseline. Vercel automatically builds its web
-deployment. **That does not deploy Convex**: a release that changes backend
-contracts needs the matching backend release and verification.
+## Consolidated release
 
-## Latest production acceptance — 4 October 2026
+`main` is the single merged source baseline. Vercel automatically builds web;
+Convex must be deployed separately when backend contracts change.
 
-Frontend settings save-region update verified on **5 October 2026 Perth**: [PR #349](https://github.com/CreasyBear/Agentic-Economy/pull/349)
-is live on READY deployment `dpl_3o4f5exsbt8mQCJhp4Gm2VugNWPX`, project
-`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. Alias and release readback confirm main
-`41680924dcb4dc9d54dffaef807695017bf4048e`; its tree equals the gated source.
-Tax and business-profile edits use the licensed Arc SaveBar with native submission,
-retry-preserved drafts and authoritative confirmation. Later Tax edits cannot be
-discarded by an earlier completed save; accepted workspace renames permit explicit
-departure while canonical readback catches up. Check/full gate pass: 8687 unit,
-2892 integration, 16 browser and 18 accessibility cases plus type/import/SEO/build/CLI
-proofs; existing gated skips/TODOs remain. An earlier reranker abort unit failure
-passed in isolation; the fresh full gate after the separate workspace fix passed,
-with no reranker source, timeout or configuration changes.
-At 02:35:02 UTC health/readiness are HTTP 200, config/Convex/payments ready,
-catalogue stale, quoting ready and sellable true. Readiness was HTTP 503 with
-`payments_unavailable` at 02:09:35 UTC before this release; recovery is not
-attributed to the UI change. This batch did not deploy or reverify backend,
-identity or financial configuration and proves no native OAuth or transaction
-acceptance. Previous READY `dpl_AhCcsubFqsoCiC9AxCrPmLpziTjj` is the rollback
-boundary. Exact source, preservation and evidence are recorded in the
-[Arc protocol](../designs/arc-ui-refactor/protocol.md).
+[PR #353](https://github.com/CreasyBear/Agentic-Economy/pull/353) repairs historical
+snapshot cutoffs and bounded retry after booked checkpoint advancement.
+[PR #354](https://github.com/CreasyBear/Agentic-Economy/pull/354) integrates usage
+metering and accepts independently verified empty finalized chain ranges without
+rewriting the booked history. Quorum, freshness, transfer completeness and exact
+balance checks remain mandatory. A self-transfer with zero net movement is not
+an empty range.
 
-Frontend credit-table and Agent onboarding update verified on **5 October 2026 Perth**: [PR #348](https://github.com/CreasyBear/Agentic-Economy/pull/348)
-is live on READY deployment `dpl_AhCcsubFqsoCiC9AxCrPmLpziTjj` in project
-`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The alias and release endpoint confirm
-main `3c636022aa8c356f6a3b5a77c0f81a509eb3ec1e`, whose tree equals the gated source.
-Account history uses compact Arc scan cells and exact-record Drawer details;
-published Tool summary search and the request-to-first-use handoff improve without
-changing ledger, authority or purchase effects. Check/full gate pass: 8646 unit,
-2892 integration, 16 browser and 18 accessibility cases plus type/import/SEO/build/CLI
-checks; existing skips/TODOs remain. The first integration run timed out in four
-cases; 63 affected cases and the unchanged full rerun then passed, with no timeout
-or configuration changes. At 01:21:56 UTC health/readiness are HTTP 200,
-config/Convex/payments ready, catalogue stale, quoting ready and sellable true.
-The pre-release payment-readiness failure is not attributed to this frontend change.
-No backend, identity or financial configuration deployment or native OAuth/transaction
-acceptance is established. Previous READY `dpl_9wkaceEh9GKEGdDtZyN8h2sRbZ8Q`
-is the rollback boundary. Exact source, preservation and test evidence are in the
-[Arc protocol](../designs/arc-ui-refactor/protocol.md).
+PR #354 backend source `9ecb85f021fd81d6aa723a4cc28dc70c0d87e6d3` deployed at
+07:41:53 UTC. Web release readback confirms merge
+`a1d9d2d09953681a99db7a4b729ffb77e2c667b7`; its tree matches the gated source.
+The full gate passed: 8,952 unit and 3,024 integration cases, type/import boundaries,
+31 SEO proofs, 16 browser journeys, 18 accessibility cases, installed CLI and public
+build. Existing skipped/unfinished protected cases are not acceptance evidence.
 
-Frontend marketplace update verified on **5 October 2026 Perth**: [PR #347](https://github.com/CreasyBear/Agentic-Economy/pull/347)
-is live on READY deployment `dpl_9wkaceEh9GKEGdDtZyN8h2sRbZ8Q` in project
-`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
-confirm main `355c58184ff4e18c139f6d330be3f947fda30b1e`, whose tree equals the
-gated source. Market and Saved use Arc Product Listing header regions; empty
-Collections offers a native Tools destination, with comparison/display preference
-preserved. Check/full gate pass: 8638 unit cases, 2892 integration cases,
-16 browser journeys, 18 accessibility cases and the existing type/import/SEO/build/CLI
-checks; existing skips/TODOs remain. Health is HTTP 200. Readiness returns
-HTTP 503 / `payments_unavailable` twice, with config and Convex ready. The
-23:34:49 UTC recheck projects quoting unavailable and sellable false.
-This frontend-only change does not deploy backend, identity or financial configuration
-or establish native OAuth/transaction acceptance. Previous READY
-`dpl_ATkTbsJNYKVxu39JKtsdKTNL1pA2` is the rollback boundary. Full source,
-coordination and verification evidence is in the [Arc protocol](../designs/arc-ui-refactor/protocol.md).
+The founder console is incorporated by the consolidation change containing this
+map. Its [design contract](../designs/2026-10-01-founder-console.md) records the
+preserved boundaries and verification. Check the deployed `/api/v1/release` and
+release PR for final backend/web provenance; the PR #354 readback above predates
+that founder release.
 
-Frontend Agent onboarding update verified on **5 October 2026 Perth**: [PR #346](https://github.com/CreasyBear/Agentic-Economy/pull/346)
-is live on READY deployment `dpl_ATkTbsJNYKVxu39JKtsdKTNL1pA2` in project
-`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
-confirm main `8961395f359c152bd8f6fafdb8a7832b260f45af`, whose tree equals the
-gated source. The first-use Call presenter now uses the genuine Arc Agent Run
-status/result regions with actual readback, independent current-access evidence,
-and delivered-only receipt facts. Check/full gate pass: 8634 unit cases,
-2892 integration cases, 16 browser journeys, 18 accessibility cases and the
-existing type/import/SEO/build/CLI checks; existing skips/TODOs remain.
-Health and readiness both return HTTP 200 at readback. This is a frontend-only
-release; native OAuth and financial transaction acceptance are unchanged.
-Previous READY `dpl_6n1PhfVxXijR1mnCQqLBkAxpwZuK` is the rollback boundary.
-Exact source, coordination and verification evidence is in the
-[Arc protocol](../designs/arc-ui-refactor/protocol.md).
+Metering uses the existing Tool → Quote → Call and financial authority. It adds
+exact unit measurements, complete-period reports, frozen close lineage, usage
+statements, scoped credential reporting, forecasts and opt-in alerts. No historical
+backfill has run; automatic monthly scheduling is inactive; external meter shadow
+integration is disconnected. See the [implementation evidence](usage-metering-completion.md).
 
-Frontend browsing update verified on **5 October 2026 Perth**: [PR #345](https://github.com/CreasyBear/Agentic-Economy/pull/345)
-is live on READY deployment `dpl_6n1PhfVxXijR1mnCQqLBkAxpwZuK` in project
-`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The application alias and release endpoint
-confirm main `ac310246ebdab436efefa119558a864e5dc2e5cb`, whose tree equals the
-gated source. Public detail observations now share Market's 30-second router
-freshness window; private account, Quote, Call and financial authority are unchanged.
-Check/full gate pass: 8625 unit cases, 2892 integration cases, 16 browser journeys,
-18 accessibility cases and the existing type/import/SEO/build/CLI checks; existing
-skips/TODOs remain outside acceptance. Health and readiness both return HTTP 200
-at this readback, with config/Convex/payments ready and stale catalogue observations.
-This frontend-only change neither redeploys Convex nor establishes a new transaction
-or native OAuth acceptance. The prior READY deployment `dpl_6NZpfPB2EuFtrsKVXjsZ4XfXWHBV`
-is the rollback boundary. Full evidence and the separate source-only onboarding
-composition brief are in the [Arc protocol](../designs/arc-ui-refactor/protocol.md).
+## What has actually been accepted
 
-Frontend update verified on **5 October 2026 Perth**: [PR #344](https://github.com/CreasyBear/Agentic-Economy/pull/344)
-is live on READY Vercel deployment `dpl_6NZpfPB2EuFtrsKVXjsZ4XfXWHBV` in
-project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`. The `app.aecon.ai` alias and release
-endpoint confirm `e310e1e111260a2b38cfecb6f8d7a79520880075`, whose tree equals
-the gated source. Health is HTTP 200; readiness currently returns HTTP 503 /
-`payments_unavailable`, with config and Convex ready. The Arc Agent setup update
-changes frontend presentation/navigation only. It does not redeploy Convex or
-establish native OAuth or financial acceptance. The exact gate and preservation
-evidence is in the [Arc protocol](../designs/arc-ui-refactor/protocol.md).
-The preceding READY frontend `dpl_FdLPCJgNiYMVyga5MJ2f9n9cXvdo` is retained as
-the rollback point. The financial acceptance below remains dated evidence.
+- Twenty real Base-mainnet payments across five published Tools through the
+  authenticated CLI. Fully paginated readback joins original Calls, obligations,
+  ledger and chain receipts. Gross buyer Charges were AUD 0.033209, refund
+  AUD 0.001444, Provider payments USDC 0.023000. These were promotional-credit
+  purchases, not verified paying-Customer traction.
+- Pause/refusal, exact replay during pause and owner-MFA resume to Admin-only
+  payments; live uncertain-payment recovery and unused-authorization release.
+  Controlled failures use a real isolated native Formance ledger and explicitly
+  mocked external boundaries. See [the precise scope](../production-readiness-plan.md#twenty-real-mainnet-payments).
+- Production owner sign-in, MFA, signed webhook admission and real session
+  revocation/re-sign-in; protected review and audit of a real paid Call.
+- Native RDS and complete Convex/storage restores for recorded targets/cutoffs;
+  versioned financial-evidence archive/readback and a retention drill. These do
+  not establish a joint restore of the new mainnet purchases or continuous
+  automated archive export.
 
-[PR #339](https://github.com/CreasyBear/Agentic-Economy/pull/339) is deployed to
-Convex `cautious-zebra-473` and Vercel Production. The application release
-endpoint confirms `2fe3a0dd90e0b80b60dc8da70d449794ccfdd2c1`, matching the backend
-deploy completed at 14:54:54 UTC. The merged tree equals the gated tree.
-Node 22/npm 11.5.1 `npm run check` and `npm run gate` pass: 8,516 unit tests,
-2,891 integration tests, 16 browser journeys, 18 accessibility cases,
-type/import/SEO checks, CLI packaging and the public build. Existing skips and
-todos remain outside this proof.
+## Current limits
 
-**Twenty real mainnet payments are reconciled across five Tools.** The connected
-CLI completes the purchases; native Formance and both RPC providers verify every
-original settlement and transfer. An earlier expired unused authorization is
-excluded from the 20. Gross Provider spend is USDC 0.023000, leaving USDC 9.882153
-in the wallet: USDC 9.382153 available plus the protected USDC 0.500000 buffer.
-Buyer Charges total AUD 0.033209; one AUD 0.001444 report refund leaves net use
-of AUD 0.031765 and promotional credit of AUD 4.968235. All holds and signing
-liability are zero. The credit expires 5 October at 12:45 Perth time.
+The production payment audience is `admins`, revision 2. Screening is deliberately
+`alpha_not_screened_v1`: payees are **not screened**. Existing custody limits remain
+USDC 0.5 per Call, USDC 10 platform daily, USDC 2 per payee daily and USDC 0.5 for
+first use of a payee. Funding does not expand authority.
 
-The deployed automatic treasury audit matches all 20 settlements, 44 cash
-records and 21 reservations at 14:55 UTC with zero cash difference. An ordinary
-readiness refresh passes at 14:57 UTC after a separate transient RPC failure.
-The later scheduled 15:04:51 audit and readiness refresh also pass.
-Both RPC providers, confirmation requirements, source stability and audit
-bounds remain enforced. Readiness is point-in-time: RPC failures can still
-refuse new purchases, and the observed CLI recovery path takes 72–132 seconds
-for the final nine Calls.
+Nine consecutive scheduled treasury checks after PR #354, from 07:44:37 to
+08:24:28 UTC (39 minutes 51 seconds), match 44 cash records, 20 settlements and
+21 reservations, with zero difference and no liability. This spans the 20-minute
+evidence-expiry window.
+A separate readiness probe still intermittently reports `treasury_chain_unavailable`;
+the signed-in Admin page correctly withholds Ready during that failure. Do not
+relax timeouts, quorum, freshness or evidence checks to obtain a green status.
+Final sustained observations belong in the consolidation release's acceptance record.
 
-The live pause drill passes after owner MFA: new Quotes refuse and completed-key
-replay returns the original receipt. Fresh owner MFA completes resume at
-15:05:03 UTC, restoring only the saved `admins` audience. Both state transitions
-have exact native audit records. No alpha invitations or audience
-expansion are authorized by this record. The test Agent retains AUD 1 per Call,
-AUD 5 daily and AUD 20 monthly authority; custody limits remain unchanged.
+[#288](https://github.com/CreasyBear/Agentic-Economy/issues/288) remains Joel's alpha
+go/no-go. [#279](https://github.com/CreasyBear/Agentic-Economy/issues/279) retains the
+separate paid Base Sepolia chat journey. Public `@aecon/cli` npm lookup returns 404
+on 5 October; installed-package verification and real CLI use are distinct from
+publication. No additional spending, user invitations or rollout of background
+reporting is implied by this release.
 
-Protected founder review, manual close and usefulness feedback are proved on
-a real paid Call with native audit readback. Nine failure scenarios pass against
-native Formance with controlled Provider/custody/RPC fixtures; live evidence
-separately covers uncertain-payment recovery, expired unused authorization,
-same-key replay, pause/resume and the owner report/refund flow. The induced failure
-fixtures are not described as live mainnet Provider failures.
+## Release and recovery routine
 
-The earlier model-credential blocker is repaired. Paid chat completion and the
-separate Base Sepolia development journey remain unverified. Screening remains
-explicitly deferred under `alpha_not_screened_v1`; this is not a screened result.
-The founder's alpha go/no-go remains open. Stage 68 of the readiness record holds
-the exact proof and limitations.
+Use Node 22 / npm 11.5.1 locally; retain Vercel's approved npm 11.19.1 install
+command. Run `npm run check`, affected behavior tests and `npm run gate` on the
+frozen candidate. Verify backend target/configuration through the native CLI,
+deploy that exact source, merge by matching head, then verify the web alias and
+release revision. Read health, readiness and relevant signed-in journeys separately.
 
-The 30-day application-content policy, protected review and 90-day content-free
-learning signals are deployed. Isolated native cleanup proves eligible content
-and embedding deletion while preserving pending Calls and financial records.
-The private financial archive has verified 2,557-day governance retention,
-governance-bypass refusal, legal-hold behavior, access isolation and signed
-Account-close/policy readback. The actual RDS and Convex/storage restore drills
-pass for their recorded historical cutoffs; they do not restore these new
-mainnet payments. Independent Provider retention remains outside AE's control.
+Preserve the previous source and provider deployment references. Financial
+correction is append-only; fix forward after value-bearing transactions. Never
+restore a database or ledger merely to roll back application code. GitHub source
+workflows remain manually disabled; Vercel build success alone is insufficient.
 
-## Retired in this cleanup
+## Historical inventories
 
-- `agentic-economy-sandbox-tools`: obsolete Package 5 reference-provider fixture.
-  Its configured root, `tools/release/package5-reference-provider`, was deleted
-  from source. This caused the separate failed GitHub/Vercel deployment check.
-- `agentic-economy-package4-release`: old synthetic release web application.
-  Its web project had no attached Marketplace resources or customer domain.
-- `deepsec-agentic-economy-829691ff`: empty temporary security project, with no
-  deployment target, environment variables or repository connection.
-- 22 GitHub branches whose exact heads are ancestors of `main`.
-- Four empty GitHub environments for sandbox-tools / package5-reference-provider.
-- Five historical one-time production workflows whose files no longer exist
-  on `main` were disabled. Their run history is retained.
-
-This retirement removed web projects and obsolete GitHub references. Convex
-data, Formance ledgers, custody wallets, provider credentials and backups were
-not deleted. The Package 4 AWS/ledger footprint requires its own current census
-before retirement; deleting its Vercel frontend does not decommission it.
-
-## Retained work and older sites
-
-- [Founder console PR #290](https://github.com/CreasyBear/Agentic-Economy/pull/290)
-  now targets `main`; it remains open and unmerged.
-- PRs [#226](https://github.com/CreasyBear/Agentic-Economy/pull/226),
-  [#239](https://github.com/CreasyBear/Agentic-Economy/pull/239) and
-  [#242](https://github.com/CreasyBear/Agentic-Economy/pull/242) contain unmerged
-  commits. Their branches and PRs remain intact pending disposition.
-- Active local worktrees, Arc work, the backup branch and the backup repository
-  remain intact. A remote branch's removal does not remove its local worktree.
-- `the-agentic-economy` still serves `agentic-economy.ai` and
-  `www.agentic-economy.ai`. `routing-provider` is an older live provider with a
-  possible discovery binding. Neither was treated as a disposable fixture.
-- RENOZ, Easel and Handshake projects are outside this cleanup.
-
-## Historical baseline — 2 October 2026
-
-The following records the earlier setup and recovery sequence. The latest
-production acceptance above supersedes its deployment, funding and readiness
-status; recovery evidence remains limited to the exact targets and cutoffs below.
-
-The 2 October inventory found two distinct failures:
-
-1. **Server bundle failure:** the main web deployment built successfully but
-   every diagnostic request returned HTTP 500 because of an undefined
-   `ssr_exports` export. The bundled Rolldown dependency was 1.2.5. The cleanup
-   change updates it within the existing dependency range and checks emitted
-   server modules as part of every build. Acceptance is recorded in Stage 42
-   of the readiness record.
-2. **Production binding gap:** the initial inventory had no
-   `AE_DEPLOYMENT_ENVIRONMENT` declaration. Stage 43 sets it to `production`
-   in Vercel Production and Convex `cautious-zebra-473`, and deploys the current
-   backend. Stage 48 deploys the historical-environment safeguards and binds
-   the clean `agentic-economy-production` ledger at
-   `https://formance-alpha.aecon.ai`. Native backend health and complete empty
-   ledger readback pass; this does not establish full money readiness.
-
-Stage 43 also enables Clerk authenticator/backup-code support, stores the
-production identity and authority settings in Infisical, aligns the Vercel
-authority bindings, and creates an isolated, unfunded CDP production project.
-Stage 46 creates its unfunded wallet and verifies the approved signing policies;
-temporary policy-management access is now removed and native readback still
-verifies the wallet and policies. Stage 48 binds those credentials and all four
-approved custody limits to Convex and Vercel Production. Signing remains disabled
-and the wallet unfunded.
-Stage 47 separates signed Clerk callback admission from incomplete money setup;
-the provider-native production example now returns HTTP 200 accepted/ignored
-through the actual Svix verifier and Convex assertion. This does not prove a real
-bound-user revocation or owner MFA enrollment.
-
-The existing AWS Formance footprint is `ae-alpha`: one private host and a
-Multi-AZ RDS database, with nightly Melbourne backup copies. Repairing the
-CloudWatch Agent configuration restored disk/memory observations and all eight
-alarms are currently OK. The restored email subscription is confirmed. A
-controlled CloudWatch alarm delivered one SNS notification with zero failures,
-and metric evaluation restored OK after 102 seconds. Inbox receipt remains
-unproved. The actual cloud restore rehearsal passes for
-the selected historical Formance ledger, as recorded below.
-Joel selected one production-only AWS footprint on 2 October: reuse the existing
-host, RDS and Formance service; retain an independent sandbox backup and prove
-restore before retiring the sandbox ledger. Production receives a clean ledger,
-with no test balances carried forward. Stage 46 upgrades the existing engine to
-Ledger 2.4.14, creates the clean production ledger and verifies an actual local
-restore of the final source archive, including original-command replay. The
-operator, worker, external tunnel and reconciliation timer are healthy. A new
-production-only Cloudflare Access credential replaced sandbox access and is
-verified in the production vault and existing AWS secret. Stage 48 binds it to
-the production application and verifies native ledger health through Convex.
-Stage 51 restores the historical alpha ledger from a native RDS point-in-time
-restore at `2026-10-02T06:50:34.185Z`. Its 45 transactions, 53 accounts and two
-schemas match the recorded baseline, and original-command replay leaves those
-digests unchanged. Request-to-verification time is 39 minutes 21 seconds. This
-proves the selected ledger at that cutoff; it does not prove a current-production
-RPO or a complete Convex/storage restore. Authorized cleanup is complete: native
-readback at 13:02 UTC confirms the temporary database, backups, snapshots,
-network rules, policy, log group, managed secret, transfer object and host
-runtime are absent. The source database and its seven-day backups remain intact.
-Sandbox retirement remains pending.
-No second permanent AWS stack is approved.
-
-Next is [#286: wire production and pass readiness](https://github.com/CreasyBear/Agentic-Economy/issues/286):
-Joel selected the existing AWS self-hosted Formance route. The production ledger
-is provisioned, bound and verified empty. Backend `cautious-zebra-473` runs
-Stage 55 revision `485ac3b4d65cdb7c759ef12fca53f6fd20e2bb12`, including financial
-document attachment recovery. Vercel Production `dpl_C5ZxzNDDUUAzLNjCcWu5mkaR8xHp`
-serves the same revision from [PR #307](https://github.com/CreasyBear/Agentic-Economy/pull/307).
-This retains explicit owner bootstrap, commercial-policy review, protected chat
-admission, enforced Clerk CSP and canonical HTTPS admission behind Vercel TLS
-termination. Native release verification passes; release and health return HTTP 200. Readiness
-remains HTTP 503 with custody disabled and the remaining money prerequisites
-incomplete. The readiness record holds the source gate and native acceptance
-evidence.
-[#285](https://github.com/CreasyBear/Agentic-Economy/issues/285) tracks the remaining
-foundation setup. Complete custody enablement/funding, two compatible RPCs,
-screening, commercial policy, treasury, identity and backup/restore acceptance.
-Infura and Alchemy now pass the actual Base-mainnet treasury observation,
-including an agreed finalized checkpoint, balance and 2,000-block transfer range.
-Joel completed Alchemy Pay As You Go setup; the US$1 account-wide monthly usage
-cap is verified. Both endpoints are bound to the production vault, Convex and
-Vercel setting; the Stage 55 production deployment consumes the updated setting.
-Custody remains disabled and the wallet unfunded. Joel's selected owner identity is
-verified and allowlisted, and real sign-in at 11:57 UTC is recorded in Security
-activity. The first explicit Admin bootstrap was refused at web admission;
-Stage 52 corrects Vercel's HTTP reconstruction after TLS termination without
-relaxing same-origin checks. After Stage 53, the previously authorized owner
-activation succeeds at 14:45 UTC and the production Admin dashboard opens.
-Commercial policy and screening remain pending. Clerk's native readback at 13:18 UTC verifies
-owner authenticator MFA and backup codes. The live session-revocation drill at
-13:24 UTC records exactly one matching application audit event, revokes all
-40 older interactive credentials for that owner, and returns the browser to
-sign-in. The fresh MFA sign-in is observed at 13:31 UTC. Stage 53 replaces the
-missing-token-claim assumption with a durable revocation cutoff and signed
-session evidence checks. Production Profile, Chat and Admin access now pass;
-all 40 original revoked credentials remain revoked and one current credential
-is active. Native readback at 14:49 UTC confirms that web and backend identities
-both select production and `cautious-zebra-473`. The web configuration check still
-fails with `deployment_manifest_invalid`; its umbrella readiness error must not
-be interpreted as proof of a backend mismatch. Then
-[#287](https://github.com/CreasyBear/Agentic-Economy/issues/287)
-proves the authorized real Calls and failure drills before
-[#288](https://github.com/CreasyBear/Agentic-Economy/issues/288) permits launch.
-
-The local `npm run gate` remains the source release gate. PR #304 removes all
-pull-request workflow triggers. Kernel release gate retains release-tag and
-manual triggers; React Doctor is manual only. Both remain manually disabled in
-GitHub. The public CLI release workflow is unchanged. A Vercel build success is only build evidence; release,
-readiness and the actual supported journeys must be checked separately.
+The [previous deployment map](https://github.com/CreasyBear/Agentic-Economy/blob/a1d9d2d09953681a99db7a4b729ffb77e2c667b7/docs/operations/deployments.md)
+preserves retired project identities, earlier Arc release records and the staged
+production setup. Its dated statements that custody is disabled, wallets are
+unfunded or the production ledger is empty are superseded by the acceptance above.
+Retained local recovery checkouts are not additional approved deployments.

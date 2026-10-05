@@ -10,6 +10,7 @@
 
 import type * as actionExecutionControl from "../actionExecutionControl.js";
 import type * as adminCallContent from "../adminCallContent.js";
+import type * as adminConsoleActivity from "../adminConsoleActivity.js";
 import type * as adminConsoleAudit from "../adminConsoleAudit.js";
 import type * as adminConsoleExceptions from "../adminConsoleExceptions.js";
 import type * as adminConsoleMetrics from "../adminConsoleMetrics.js";
@@ -119,7 +120,10 @@ import type * as lib_adminConsole_metrics_build from "../lib/adminConsole/metric
 import type * as lib_adminConsole_metrics_collect from "../lib/adminConsole/metrics/collect.js";
 import type * as lib_adminConsole_metrics_dayWindow from "../lib/adminConsole/metrics/dayWindow.js";
 import type * as lib_adminConsole_metrics_read from "../lib/adminConsole/metrics/read.js";
+import type * as lib_adminConsole_metrics_refresh from "../lib/adminConsole/metrics/refresh.js";
 import type * as lib_adminConsole_metrics_write from "../lib/adminConsole/metrics/write.js";
+import type * as lib_adminConsole_reads_accounts from "../lib/adminConsole/reads/accounts.js";
+import type * as lib_adminConsole_reads_activity from "../lib/adminConsole/reads/activity.js";
 import type * as lib_adminConsole_reads_agent from "../lib/adminConsole/reads/agent.js";
 import type * as lib_adminConsole_reads_alphaLearning from "../lib/adminConsole/reads/alphaLearning.js";
 import type * as lib_adminConsole_reads_audit from "../lib/adminConsole/reads/audit.js";
@@ -791,6 +795,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   actionExecutionControl: typeof actionExecutionControl;
   adminCallContent: typeof adminCallContent;
+  adminConsoleActivity: typeof adminConsoleActivity;
   adminConsoleAudit: typeof adminConsoleAudit;
   adminConsoleExceptions: typeof adminConsoleExceptions;
   adminConsoleMetrics: typeof adminConsoleMetrics;
@@ -900,7 +905,10 @@ declare const fullApi: ApiFromModules<{
   "lib/adminConsole/metrics/collect": typeof lib_adminConsole_metrics_collect;
   "lib/adminConsole/metrics/dayWindow": typeof lib_adminConsole_metrics_dayWindow;
   "lib/adminConsole/metrics/read": typeof lib_adminConsole_metrics_read;
+  "lib/adminConsole/metrics/refresh": typeof lib_adminConsole_metrics_refresh;
   "lib/adminConsole/metrics/write": typeof lib_adminConsole_metrics_write;
+  "lib/adminConsole/reads/accounts": typeof lib_adminConsole_reads_accounts;
+  "lib/adminConsole/reads/activity": typeof lib_adminConsole_reads_activity;
   "lib/adminConsole/reads/agent": typeof lib_adminConsole_reads_agent;
   "lib/adminConsole/reads/alphaLearning": typeof lib_adminConsole_reads_alphaLearning;
   "lib/adminConsole/reads/audit": typeof lib_adminConsole_reads_audit;

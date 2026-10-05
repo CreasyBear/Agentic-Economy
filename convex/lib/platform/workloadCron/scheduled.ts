@@ -128,7 +128,7 @@ export async function refreshMarketFlowHandler(ctx: WorkloadCronActionContext): 
 
 export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActionContext): Promise<null> {
   await ctx.runQuery(internal.workloadCron.admit, { name: 'snapshot marketplace metrics day' })
-  await ctx.runAction(internal.adminConsoleMetrics.snapshotMarketplaceMetricsDay, {})
+  await ctx.runAction(internal.adminConsoleMetrics.refreshMarketplaceMetrics, {})
   return null
 }
 

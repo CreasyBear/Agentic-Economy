@@ -1,9 +1,6 @@
 # Journey SLI alerts
 
-Create these six alerts in the configured monitoring destination. Use the Sentry
-UI for streams actually received there; do not script the Sentry API. Each rule
-is one journey. Until delivery and a test notification are verified, the rule is
-not operational.
+Create each rule in the destination that actually receives its events. Web metrics can use Sentry; backend journey logs require a log destination. Do not script the Sentry API. Each rule is one journey. Until delivery and a test notification are verified, the rule is not operational.
 
 ## What is counted
 
@@ -22,17 +19,15 @@ When `SENTRY_DSN` is set, the web server also sends:
 
 Alert on the **metric**, not on the message as well. Counting both double-counts one attempt.
 
-Quote, Call, funding, chat, and publish reach their terminal state inside Convex.
-Convex does not load the Sentry SDK; those attempts emit the `[ae.journey]` log
-line. Convex's [Sentry integration reports exceptions](https://docs.convex.dev/production/integrations/exception-reporting).
-Enabling it does not establish delivery of these logs or creation of `ae.journey`
-metrics.
+Quote, Call, funding, chat, and publish reach their terminal state inside Convex. Convex does not load the Sentry SDK. Those attempts emit the `[ae.journey]` log line.
 
-Configure a separate [Convex log stream](https://docs.convex.dev/production/integrations/log-streams)
-to the approved receiver, then verify the actual journey line arrives. Log
-streams require Convex Pro and support dedicated destinations or a custom webhook;
-neither a new receiver nor a log-to-metric transformation is provisioned by this
-runbook. Use the receiver's log-based rules until an explicit, tested metric
+Convex's native Sentry integration reports **exceptions**, not ordinary journey logs or Sentry metrics. Configure it in **Convex → Deployment Settings → Integrations**, using the existing Sentry project's DSN. Convex tags its deployment type as `prod`, `dev` or `preview`; this does not establish AE's financial environment.
+
+For journey logs, use Convex's native **PostHog log stream** to the existing US project. Set the service name to the explicit AE environment/deployment and verify a real journey line in PostHog before creating alerts. Log-stream events use OTLP bodies; the JSON log text is inside the console event's `message`. Do not assume the illustrative metric query below works unchanged on logs. Both exception reporting and log streams require Convex Pro.
+
+Sources verified 1 October 2026: [Convex exception reporting](https://docs.convex.dev/production/integrations/exception-reporting), [Convex log streams](https://docs.convex.dev/production/integrations/log-streams). No custom bridge or new monitoring service is required. If the connected log product cannot express the ratio and minimum together, retain the query as a dashboard and use a verified supported alert; do not substitute a misleading ratio.
+
+Use the receiver's log-based rules until an explicit, tested metric
 transformation exists. Count each terminal event through one representation.
 Record the receiving destination, rule, responder and test notification/acknowledgement
 before claiming alert coverage. Missing delivery is unavailable evidence, not a

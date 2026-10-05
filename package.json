@@ -134,7 +134,8 @@
     "undici": "7.29.0",
     "viem": "2.55.2",
     "yaml": "2.9.0",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "@radix-ui/react-accordion": "^1.2.20"
   },
   "devDependencies": {
     "@clerk/testing": "^2.2.31",

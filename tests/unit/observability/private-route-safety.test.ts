@@ -15,6 +15,50 @@ import {
 } from '@/lib/observability/private-route-safety'
 
 describe('private inquiry record telemetry safety', () => {
+  it('preserves Sentry exception, frame and breadcrumb arrays while redacting their contents', () => {
+    const event = {
+      exception: { values: [{
+        type: 'Error',
+        value: 'api_key=exception-secret',
+        stacktrace: { frames: [{ filename: '/src/example.ts', vars: { accessToken: 'frame-secret' } }] },
+      }] },
+      breadcrumbs: [{ message: 'Authorization: Bearer breadcrumb-secret' }],
+      tags: { environment: 'development' },
+    }
+    const sanitized = sanitizeTelemetryEvent(event)
+
+    expect(sanitized).toEqual({
+      exception: { values: [{
+        type: 'Error',
+        value: 'api_key=[Filtered]',
+        stacktrace: { frames: [{ filename: '/src/example.ts', vars: { accessToken: '[Filtered]' } }] },
+      }] },
+      breadcrumbs: [{ message: 'Authorization: Bearer [Filtered]' }],
+      tags: { environment: 'development' },
+    })
+    expect(event.exception.values[0]?.value).toBe('api_key=exception-secret')
+    expect(event.breadcrumbs[0]?.message).toBe('Authorization: Bearer breadcrumb-secret')
+  })
+
+  it('preserves repeated array values, bounds cycles and filters an unreadable element', () => {
+    const shared = { harmless: 'kept', secret: 'not-public' }
+    const values: unknown[] = [shared, shared]
+    values.push(values)
+    Object.defineProperty(values, 3, { get: () => { throw new Error('Unreadable element') } })
+    values.push('last')
+
+    expect(sanitizeTelemetryValue(values)).toEqual([
+      { harmless: 'kept', secret: '[Filtered]' },
+      { harmless: 'kept', secret: '[Filtered]' },
+      '[Circular]',
+      '[Filtered]',
+      'last',
+    ])
+    expect(values[0]).toBe(shared)
+    expect(values[1]).toBe(shared)
+    expect(values[2]).toBe(values)
+  })
+
   it('redacts secret assignments, headers, URLs, PEM bodies, and nested error fields before capture', () => {
     const pem = '-----BEGIN PRIVATE KEY-----\nprivate-key-body\n-----END PRIVATE KEY-----'
     const providerError = new Error(

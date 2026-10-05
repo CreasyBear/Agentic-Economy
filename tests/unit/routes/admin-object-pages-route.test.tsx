@@ -27,7 +27,10 @@ vi.mock('@tanstack/react-router', () => ({
     className?: string
   }) => <a href={`${to}${search === undefined ? '' : `?${new URLSearchParams(search)}`}`} className={className}>{children}</a>,
 }))
-vi.mock('convex/react', () => ({ useQuery: runtime.query }))
+vi.mock('convex/react', () => ({
+  useQuery: runtime.query,
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() }),
+}))
 vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({ title, children, contentOwnsHeading }: { title: string; children: ReactNode; contentOwnsHeading?: boolean }) => (
@@ -82,7 +85,7 @@ const cases = [
     path: '/_operator/admin/workspaces/$accountRef',
     param: 'accountRef',
     ref: accountRef,
-    heading: 'Workspace',
+    heading: 'Account',
     view: {
       kind: 'workspace', ref: accountRef, lifecycle: 'active', ownerCount: 1, memberCount: 2,
       createdAt: Date.UTC(2026, 8, 22), externalOrganizationBound: true,
@@ -122,7 +125,7 @@ describe('admin object page routes', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(breadcrumb).getByRole('link', { name: 'Admin' }).getAttribute('href')).toBe('/admin')
-    expect(within(breadcrumb).getAllByRole('link')[1]?.getAttribute('href')).toBe(`/admin/search?kind=${view.kind}`)
+    expect(within(breadcrumb).getAllByRole('link')[1]?.getAttribute('href')).toBe(view.kind === 'workspace' ? '/admin/accounts' : `/admin/search?kind=${view.kind}`)
     expect(within(breadcrumb).getByText(ref).getAttribute('aria-current')).toBe('page')
     expect(document.querySelector('code')?.textContent).toBe(ref)
   })

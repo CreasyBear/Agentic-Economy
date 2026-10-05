@@ -2,11 +2,16 @@
 
 set -euo pipefail
 
-environment="${AE_DEPLOYMENT_ENVIRONMENT:-package4-release}"
+# Require named targets before any network probe; retired synthetic defaults are unsafe evidence.
+: "${AE_DEPLOYMENT_ENVIRONMENT:?Set the intended AE environment}"
+: "${AE_DEPLOYMENT_APP_URL:?Set the exact application URL}"
+: "${AE_DEPLOYMENT_FORMANCE_URL:?Set the exact Formance gateway URL}"
+: "${AE_DEPLOYMENT_CONVEX_DEPLOYMENT:?Set the exact Convex deployment}"
+environment="$AE_DEPLOYMENT_ENVIRONMENT"
 aws_profile="${AE_DEPLOYMENT_AWS_PROFILE:-}"
 aws_human_profile="${AE_DEPLOYMENT_AWS_HUMAN_PROFILE:-package4-release-user}"
-app_url="${AE_DEPLOYMENT_APP_URL:-https://agentic-economy-package4-release.vercel.app}"
-formance_url="${AE_DEPLOYMENT_FORMANCE_URL:-https://formance-release.aecon.ai}"
+app_url="$AE_DEPLOYMENT_APP_URL"
+formance_url="$AE_DEPLOYMENT_FORMANCE_URL"
 stripe_snapshot_destination_id="${AE_DEPLOYMENT_STRIPE_SNAPSHOT_DESTINATION_ID:-${AE_DEPLOYMENT_STRIPE_WEBHOOK_ID:-}}"
 stripe_v2_destination_id="${AE_DEPLOYMENT_STRIPE_V2_DESTINATION_ID:-}"
 convex_deployment="${AE_DEPLOYMENT_CONVEX_DEPLOYMENT:-}"

@@ -10,7 +10,9 @@ export function AeCopyReference({
   value,
   className,
   copyFeedbackMs = 1_600,
-}: Readonly<{ label: string; value: string; className?: string; copyFeedbackMs?: number }>) {
+  compact = false,
+  href,
+}: Readonly<{ label: string; value: string; className?: string; copyFeedbackMs?: number; compact?: boolean; href?: string }>) {
   const { status, isCopied: copied, copy } = useClipboardCopy(value, {
     timeout: copyFeedbackMs,
     // Clipboard refusal is recoverable. The helper resolves after handling it;
@@ -20,9 +22,13 @@ export function AeCopyReference({
   })
 
   const feedback = copied ? 'Copied' : status === 'failed' ? 'Copy failed' : ''
+  const shown = compact && value.length > 36 ? `${value.slice(0, 21)}…${value.slice(-8)}` : value
+  const reference = <code dir="ltr" className={cn('min-w-0 font-mono text-sm', compact ? 'block truncate text-muted-foreground' : 'break-all text-foreground')}>{shown}</code>
   return (
     <span className={cn('arc-market inline-flex min-w-0 flex-wrap items-center gap-intra', className)}>
-      <code dir="ltr" className="min-w-0 break-all font-mono text-sm text-foreground">{value}</code>
+      {href === undefined
+        ? <span className="min-w-0" title={compact ? value : undefined}>{reference}</span>
+        : <a href={href} aria-label={value} title={value} className="min-w-0 underline-offset-4 hover:underline">{reference}</a>}
       <Button
         type="button"
         variant="ghost"
@@ -40,7 +46,7 @@ export function AeCopyReference({
       <span
         role="status"
         aria-live="polite"
-        className={cn('min-w-14 text-sm', status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}
+        className={cn(compact ? 'sr-only' : 'min-w-14 text-sm', status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}
       >
         {feedback}
       </span>

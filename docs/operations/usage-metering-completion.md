@@ -1,4 +1,15 @@
-# Usage metering completion plan
+# Usage metering implementation evidence
+
+> **Superseded execution status — 5 October 2026.** The work below is incorporated
+> in [PR #354](https://github.com/CreasyBear/Agentic-Economy/pull/354), passed the
+> full source gate and is deployed. The original isolated-checkout instructions,
+> held top-gate step and prohibitions on release describe the earlier work session.
+> Joel subsequently authorized consolidation and release. Current status and
+> remaining opt-in operations are in [the deployment map](deployments.md) and
+> [the single queue](../../TODOS.md). Historical backfill has not run, automatic
+> monthly scheduling remains inactive and the external meter is disconnected.
+> Mainnet 20-payment acceptance is separately recorded in the readiness record;
+> these implementation fixtures must not be substituted for that runtime evidence.
 
 This continues the staged plan in the 2026-10-04 usage research and the bounded implementation at `3db69e1de383f5dc1b6f3da57400e2c6247dd566`. The selected product/refactor baseline remains main `284d90e5fc0ad2bd154ad0af5238b11c618d99a7`. Work occurs in the isolated `codex/usage-metering` checkout; the shared checkout is read-only.
 
