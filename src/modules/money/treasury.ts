@@ -11,7 +11,7 @@ export const DEFAULT_TREASURY_THRESHOLDS: TreasuryThresholds = {
   kind: 'runway', lowWaterDays: 3, targetDays: 14,
 }
 export const TREASURY_DRIFT_TOLERANCE_UNITS = '10000'
-export const TREASURY_RECONCILIATION_INTERVAL_MS = 15 * 60_000
+export const TREASURY_RECONCILIATION_INTERVAL_MS = 5 * 60_000
 export const TREASURY_RESERVATION_AGE_LIMIT_MS = 30 * 60_000
 /**
  * Finalized Base blocks inherit Ethereum finality and can predate a fresh RPC

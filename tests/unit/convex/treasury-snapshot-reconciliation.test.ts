@@ -7,10 +7,10 @@ import { createFormanceContext } from '@/modules/money/formance'
 import { prepareFormanceTreasuryBatch, treasuryBufferAccount } from '@/modules/money/formance-treasury'
 import { capacityAccount } from '@/modules/money/formance-workflows'
 import type { FormanceTreasuryAuditTransaction } from '@/modules/money/formance-treasury-audit'
-import type { TreasuryChainCheckpoint, TreasuryTransfer } from '@/modules/money/treasury'
+import type { TreasuryChainCheckpoint, TreasuryChainObservation, TreasuryTransfer } from '@/modules/money/treasury'
 import { convexTestWithMarketComponents } from '../../helpers/convex-fixtures'
 
-// Only the native ledger read boundary is synthetic. The controller, complete
+// Only the native ledger and RPC read boundaries are synthetic. The controller, complete
 // Convex source reads, command builders, exact audit, seals and publisher execute.
 const io = vi.hoisted(() => ({ metrics: vi.fn(), audit: vi.fn() }))
 vi.mock('../../../convex/lib/money/formance/gateway', async original => ({
@@ -113,7 +113,7 @@ async function fixture(initialAt = NOW - 20) {
     let barrier: Promise<void> | undefined
     return {
       runQuery: async (ref: FunctionReference<'query', 'internal'>, args: never) => {
-        if (getFunctionName(ref) === 'moneyTreasuryReconciliation:readSnapshotContext' && ++contextReads === 2) {
+        if (getFunctionName(ref) === 'moneyTreasuryReconciliation:readSnapshotContext' && ++contextReads === 3) {
           barrier = Promise.resolve().then(beforeVerification)
           verificationBarrier = barrier
         }
@@ -123,12 +123,22 @@ async function fixture(initialAt = NOW - 20) {
       runMutation: backend.mutation.bind(backend),
     } as unknown as Parameters<typeof reconcileTreasurySnapshot>[0]
   }
+  const chainRead = vi.fn(async (input: { checkpoint?: TreasuryChainCheckpoint }): Promise<TreasuryChainObservation | { kind: 'unavailable'; code: string }> => {
+    if (input.checkpoint === undefined) return { kind: 'unavailable', code: 'fixture_checkpoint_missing' }
+    const row = await backend.run(async ctx => (await ctx.db.query('moneyTreasuryBatches').take(40))
+      .find(batch => canonicalDigest(batch.observation.checkpoint) === canonicalDigest(input.checkpoint)))
+    if (row === undefined) return { kind: 'unavailable', code: 'fixture_checkpoint_missing' }
+    return { kind: 'observed', environment: identity.environment, network: NETWORK, asset: ASSET, address: PAYER,
+      fromBlock: String(BigInt(input.checkpoint.blockNumber) + 1n), checkpoint: input.checkpoint,
+      blockTimestamp: row.observation.blockTimestamp, observedAt: Date.now(), caughtUp: true, transfers: [] }
+  })
   const formance = createFormanceContext({ environment: 'sandbox', ledger: 'cutoff-fixture', gatewayUrl: 'http://127.0.0.1:3069', requestTimeoutMs: 5_000 })
-  const reconcile = (ctx = controller(), now = Date.now()) => reconcileTreasurySnapshot(ctx, { formance, now, admit: async () => true })
+  const reconcile = (ctx = controller(), now = Date.now()) => reconcileTreasurySnapshot(ctx, { formance, now, chainRead, admit: async () => true })
+  const reconcileLive = (ctx = controller()) => reconcileTreasurySnapshot(ctx, { formance, chainRead, admit: async () => true })
   const report = () => backend.run(ctx => ctx.db.query('moneyTreasurySnapshots')
     .withIndex('by_environment_and_snapshotAt', q => q.eq('environment', 'sandbox')).order('desc').first())
   const alerts = () => backend.run(ctx => ctx.db.query('moneyTreasuryAlerts').take(12))
-  return { backend, native, opening, range, controller, reconcile, report, alerts }
+  return { backend, native, opening, range, controller, reconcile, reconcileLive, chainRead, report, alerts }
 }
 
 describe('treasury snapshot cutoff reconciliation', () => {
@@ -152,7 +162,7 @@ describe('treasury snapshot cutoff reconciliation', () => {
     }), NOW)).toMatchObject({ kind: 'published' })
     expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })).toEqual(before)
     expect(await f.report()).toMatchObject({ snapshotAt: NOW,
-      chain: { observedAt: NOW - 20, blockTimestamp: NOW - 1_020 }, checks: {
+      chain: { observedAt: NOW, blockTimestamp: NOW - 1_020 }, checks: {
         cash: { kind: 'matched' }, settlements: { kind: 'matched' }, funding: { kind: 'matched' }, reservations: { kind: 'matched' },
       } })
     expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW + 20 }))
@@ -173,6 +183,12 @@ describe('treasury snapshot cutoff reconciliation', () => {
     })
     const context = await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
     if (context.kind !== 'available') throw new Error('fixture_context_missing')
+    // Historical audit evidence must have been observed by its cutoff, before
+    // the later inserts whose native creation clocks this case excludes.
+    if (count === 25) {
+      const proofAtCutoff = await f.chainRead({ checkpoint: f.opening.checkpoint })
+      f.chainRead.mockResolvedValueOnce(proofAtCutoff)
+    }
     vi.mocked(Date.now).mockReturnValue(NOW + 1)
     for (let index = 0; index < count; index += 1) await f.backend.mutation(internal.moneyTreasury.recordObservation, {
       environment: 'sandbox', custodyRef: context.identity.custodyRef, custodyGeneration: 1, network: NETWORK,
@@ -265,7 +281,7 @@ describe('treasury snapshot cutoff reconciliation', () => {
     expect(await f.reconcile(f.controller(async () => {
       await f.range(f.opening.checkpoint, NOW + 1, NOW + 3, deposit)
     }), NOW)).toMatchObject({ kind: 'published' })
-    expect(await f.report()).toMatchObject({ snapshotAt: NOW, chain: { observedAt: NOW - 20, totalUnits: '15000000' },
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW, chain: { observedAt: NOW, totalUnits: '15000000' },
       ledger: { availableUnits: '10000000', bufferUnits: '5000000' }, checks: {
         cash: { kind: 'matched', differenceUnits: '0' }, settlements: { kind: 'matched' },
         funding: { kind: 'matched' }, reservations: { kind: 'matched' },
@@ -357,10 +373,120 @@ describe('treasury snapshot cutoff reconciliation', () => {
 
   it('does not refresh an old chain observation using a fresh balance or snapshot timestamp', async () => {
     const f = await fixture(NOW - 25 * 60_000)
+    const proof = await f.chainRead({ checkpoint: f.opening.checkpoint })
+    if (proof.kind !== 'observed') throw new Error('fixture_proof_missing')
+    f.chainRead.mockResolvedValue({ ...proof, observedAt: NOW - 25 * 60_000 })
     await f.reconcile()
-    expect(await f.report()).toMatchObject({ snapshotAt: NOW, chain: { observedAt: NOW - 25 * 60_000 },
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW, chain: { kind: 'unavailable', code: 'treasury_chain_observation_stale' },
       checks: { cash: { kind: 'unavailable', code: 'treasury_chain_observation_stale' } } })
     expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
       .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } })
+  })
+
+  it('uses a real fresh proof of an unchanged finalized checkpoint without rewriting a 25-minute-old booked batch', async () => {
+    const f = await fixture(NOW - 25 * 60_000)
+    const before = await f.backend.run(ctx => ctx.db.query('moneyTreasuryBatches').collect())
+    await f.reconcileLive()
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW,
+      chain: { kind: 'available', observedAt: NOW, blockTimestamp: NOW - 25 * 60_000 - 1_000 },
+      checks: { cash: { kind: 'matched' }, funding: { kind: 'matched' }, settlements: { kind: 'matched' }, reservations: { kind: 'matched' } } })
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasuryBatches').collect())).toEqual(before)
+  })
+
+  it.each(['unavailable', 'advanced', 'hash', 'balance', 'environment', 'network', 'asset', 'address', 'block_clock', 'range', 'not_caught_up', 'future_probe'] as const)(
+    'refuses %s RPC evidence instead of falling back to a green booked clock', async fault => {
+      const f = await fixture()
+      const proof = await f.chainRead({ checkpoint: f.opening.checkpoint })
+      if (proof.kind !== 'observed') throw new Error('fixture_proof_missing')
+      const invalid = structuredClone(proof)
+      if (fault === 'advanced') invalid.checkpoint.blockNumber = '101'
+      if (fault === 'hash') invalid.checkpoint.blockHash = hash(101)
+      if (fault === 'balance') invalid.checkpoint.balanceUnits = '15000001'
+      if (fault === 'environment') invalid.environment = 'production'
+      if (fault === 'network') invalid.network = 'eip155:8453'
+      if (fault === 'asset') invalid.asset = OTHER
+      if (fault === 'address') invalid.address = OTHER
+      if (fault === 'block_clock') invalid.blockTimestamp += 1
+      if (fault === 'range') invalid.fromBlock = '100'
+      if (fault === 'not_caught_up') invalid.caughtUp = false
+      if (fault === 'future_probe') invalid.observedAt = NOW + 1
+      f.chainRead.mockResolvedValue(fault === 'unavailable' ? { kind: 'unavailable', code: 'treasury_chain_unavailable' } : invalid)
+      await f.reconcile()
+      expect((await f.report())!.checks.cash.kind).toBe('unavailable')
+      expect((await f.report())!.chain.kind).toBe('unavailable')
+    })
+
+  it('preserves the original finalized block deadline despite a fresh identical RPC proof', async () => {
+    const f = await fixture(NOW - 60 * 60_000 + 1_000)
+    await f.reconcileLive()
+    expect(await f.report()).toMatchObject({ chain: { kind: 'unavailable', code: 'treasury_chain_observation_stale' },
+      checks: { cash: { kind: 'unavailable', code: 'treasury_chain_observation_stale' } } })
+  })
+
+  it('takes the actual delayed probe start as the cutoff and keeps it through delayed completion', async () => {
+    const f = await fixture()
+    const read = f.chainRead.getMockImplementation()!
+    f.chainRead.mockImplementation(async input => {
+      vi.mocked(Date.now).mockReturnValue(NOW + 1_000)
+      const proof = await read(input)
+      vi.mocked(Date.now).mockReturnValue(NOW + 41_000)
+      return proof
+    })
+    await f.reconcileLive()
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW + 1_000, chain: { observedAt: NOW + 1_000 },
+      checks: { cash: { kind: 'matched' } } })
+  })
+
+  it('rechecks every source at a new real cutoff after the exact advanced checkpoint finishes booking', async () => {
+    const f = await fixture()
+    const read = f.chainRead.getMockImplementation()!
+    f.chainRead.mockImplementationOnce(async () => {
+      const next = await f.range(f.opening.checkpoint, NOW + 10, NOW + 12)
+      return { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
+        fromBlock: '101', checkpoint: next.checkpoint, blockTimestamp: NOW - 990,
+        observedAt: NOW, caughtUp: true, transfers: [] }
+    }).mockImplementation(read)
+    await f.reconcileLive()
+    expect(f.chainRead).toHaveBeenCalledTimes(2)
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW + 12, chain: { observedAt: NOW + 12, blockNumber: '110' },
+      checks: { cash: { kind: 'matched' }, funding: { kind: 'matched' }, settlements: { kind: 'matched' }, reservations: { kind: 'matched' } } })
+  })
+
+  it('does not hide an eligible source change behind a newly booked checkpoint retry', async () => {
+    const f = await fixture()
+    f.chainRead.mockImplementationOnce(async () => {
+      const next = await f.range(f.opening.checkpoint, NOW + 10, NOW + 12)
+      return { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
+        fromBlock: '101', checkpoint: next.checkpoint, blockTimestamp: NOW - 990,
+        observedAt: NOW, caughtUp: true, transfers: [] }
+    })
+    await f.reconcileLive(f.controller(async () => {
+      await f.backend.run(async ctx => {
+        const observation = await ctx.db.query('moneyTreasuryObservations').first()
+        if (observation === null) throw new Error('fixture_observation_missing')
+        await ctx.db.patch(observation._id, { totalUnits: '15000001' })
+      })
+    }))
+    expect(f.chainRead).toHaveBeenCalledTimes(1)
+    expect(Object.values((await f.report())!.checks)).toEqual(Array(4).fill({ kind: 'unavailable', code: 'treasury_sources_changed_during_audit' }))
+  })
+
+  it('stops after one full retry when finalized progress advances again', async () => {
+    const f = await fixture()
+    let at = NOW
+    f.chainRead.mockImplementation(async input => {
+      if (input.checkpoint === undefined) throw new Error('fixture_checkpoint_missing')
+      const observedAt = at
+      at += 12
+      const next = await f.range(input.checkpoint, at - 2, at)
+      return { kind: 'observed', environment: 'sandbox', network: NETWORK, asset: ASSET, address: PAYER,
+        fromBlock: String(BigInt(input.checkpoint.blockNumber) + 1n), checkpoint: next.checkpoint,
+        blockTimestamp: observedAt - 990, observedAt, caughtUp: true, transfers: [] }
+    })
+    await f.reconcileLive()
+    expect(f.chainRead).toHaveBeenCalledTimes(2)
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).toHaveLength(1)
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW + 12,
+      checks: { cash: { kind: 'unavailable', code: 'treasury_chain_readback_conflict' } } })
   })
 })

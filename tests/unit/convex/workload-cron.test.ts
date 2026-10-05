@@ -1,6 +1,8 @@
 import { makeFunctionReference, type FunctionReference } from 'convex/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DelegationService } from '@/modules/authority/delegation/public'
+import { TREASURY_RECONCILIATION_INTERVAL_MS } from '@/modules/money/treasury'
+import { TREASURY_SNAPSHOT_MAX_AGE_MS } from '@/modules/money/treasury-report'
 
 import convexCrons from '../../../convex/crons'
 import {
@@ -162,6 +164,17 @@ describe('System workload cron boundary', () => {
       type: 'cron',
       cron: '10 16 * * *',
     })
+  })
+
+  it('renews actual treasury proofs with headroom for the next readiness refresh before source expiry', () => {
+    const treasury = convexCrons.crons['reconcile treasury balances']!.schedule
+    const readiness = convexCrons.crons['refresh payment readiness']!.schedule
+    if (treasury.type !== 'interval' || readiness.type !== 'interval'
+      || !('minutes' in treasury) || !('minutes' in readiness)) throw new Error('fixture_interval_missing')
+    const treasuryMs = treasury.minutes * 60_000
+    const readinessMs = readiness.minutes * 60_000
+    expect(treasuryMs).toBe(TREASURY_RECONCILIATION_INTERVAL_MS)
+    expect(treasuryMs + readinessMs).toBeLessThan(TREASURY_SNAPSHOT_MAX_AGE_MS)
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
