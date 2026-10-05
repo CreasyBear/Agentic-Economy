@@ -15,8 +15,8 @@ owner handoff is required before incorporating their unfinished work.
 
 | Remaining branch / checkout | Disposition and dependency | Owner |
 | --- | --- | --- |
-| `codex/aecon-consolidation-2026-10-05` | Repair/admin, released signup recovery and the treasury cutoff race fix at `590c6d1e0` are integrated on #350. Run the final combined gate and reviews, qualify the existing CLI login against the exact production backend, then verify release provenance and repeated reconciliation cycles. | Consolidation coordinator |
-| `codex/first-user-readiness-2026-10-05` (independent clone) | Released signup and treasury work through `590c6d1e0` is incorporated. Preserve the clean clone until the combined release is verified. | First-user remediation; owner released |
+| `codex/aecon-consolidation-2026-10-05` | PR #351 is live on the verified backend and web deployment. Sustained payment readiness remains blocked by a late-recorded observation entering a historical audit. The same branch holds the minimal creation-cutoff fix; gate and ship it, verify normal reconciliation cycles, then retire incorporated leftovers. | Consolidation coordinator |
+| `codex/first-user-readiness-2026-10-05` (independent clone) | Released signup and treasury work through `590c6d1e0` is incorporated and landed in PR #351. Preserve the clean clone until stable reconciliation is verified. | First-user remediation; owner released |
 | `codex/usage-metering` (independent clone) | Released at `c5f2b7356`; integrate foundations and completion after the minimal release, then run combined regression. Backfill and financial effects require separate review. | Consolidation coordinator; metering owner released |
 | `codex/admin-console-authority-config` | PR #239 adapted into candidate; retire only after verified landing and PR disposition. | Consolidation coordinator |
 | `codex/integration-repairs`, `codex/aecon-consolidation-2026-10-02` | Incorporated into candidate; recoverable checkout retirement follows verified landing and runtime/file census. | Consolidation coordinator |

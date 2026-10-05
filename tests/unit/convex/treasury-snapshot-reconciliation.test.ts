@@ -132,6 +132,134 @@ async function fixture(initialAt = NOW - 20) {
 }
 
 describe('treasury snapshot cutoff reconciliation', () => {
+  it.each([0, 19])('keeps a pre-cutoff balance audit stable when an older observation is created %s ms later', async delay => {
+    const f = await fixture()
+    await f.backend.run(async ctx => {
+      const row = await ctx.db.query('moneyTreasuryObservations').first()
+      if (row === null) throw new Error('fixture_observation_missing')
+      await ctx.db.patch(row._id, { observedAt: NOW - 10, recordedAt: NOW - 10 })
+    })
+    const before = await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    if (before.kind !== 'available') throw new Error('fixture_context_missing')
+    expect(await f.reconcile(f.controller(async () => {
+      vi.mocked(Date.now).mockReturnValue(NOW + delay)
+      expect(await f.backend.mutation(internal.moneyTreasury.recordObservation, {
+        environment: 'sandbox', custodyRef: before.identity.custodyRef, custodyGeneration: 1, network: NETWORK,
+        asset: 'USDC', exponent: 6, totalUnits: '15000000', bufferUnits: '5000000',
+        observationRef: 'observation:late-recorded', evidenceRef: 'evidence:late-recorded',
+        evidenceDigest: canonicalDigest('late-recorded-balance'), observedAt: NOW - 1,
+      })).toMatchObject({ kind: 'accepted' })
+    }), NOW)).toMatchObject({ kind: 'published' })
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })).toEqual(before)
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW,
+      chain: { observedAt: NOW - 20, blockTimestamp: NOW - 1_020 }, checks: {
+        cash: { kind: 'matched' }, settlements: { kind: 'matched' }, funding: { kind: 'matched' }, reservations: { kind: 'matched' },
+      } })
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW + 20 }))
+      .toMatchObject({ observation: { observedAt: NOW - 1, evidenceRef: 'evidence:late-recorded' } })
+    const retained = await f.backend.run(ctx => ctx.db.query('moneyTreasuryObservations')
+      .withIndex('by_observationRef', q => q.eq('observationRef', 'observation:late-recorded')).unique())
+    expect(retained).toMatchObject({ observedAt: NOW - 1, recordedAt: NOW + delay })
+    expect(retained!._creationTime).toBeGreaterThan(NOW)
+    if (delay === 0) expect(retained!._creationTime).toBeLessThan(NOW + 1)
+  })
+
+  it.each([25, 26])('bounds %s excluded observations and recovers only at a complete new cutoff', async count => {
+    const f = await fixture()
+    await f.backend.run(async ctx => {
+      const row = await ctx.db.query('moneyTreasuryObservations').first()
+      if (row === null) throw new Error('fixture_observation_missing')
+      await ctx.db.patch(row._id, { observedAt: NOW - 100, recordedAt: NOW - 100 })
+    })
+    const context = await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    if (context.kind !== 'available') throw new Error('fixture_context_missing')
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    for (let index = 0; index < count; index += 1) await f.backend.mutation(internal.moneyTreasury.recordObservation, {
+      environment: 'sandbox', custodyRef: context.identity.custodyRef, custodyGeneration: 1, network: NETWORK,
+      asset: 'USDC', exponent: 6, totalUnits: '15000000', bufferUnits: '5000000',
+      observationRef: `observation:bridge:${index}`, evidenceRef: `evidence:bridge:${index}`,
+      evidenceDigest: canonicalDigest({ index }), observedAt: NOW - 1,
+    })
+    if (count === 26) {
+      expect(await f.reconcile(f.controller(), NOW))
+        .toEqual({ kind: 'unavailable', code: 'treasury_observation_history_incomplete' })
+      expect(await f.report()).toBeNull()
+    } else {
+      expect(await f.reconcile(f.controller(), NOW)).toMatchObject({ kind: 'published' })
+      expect(Object.values((await f.report())!.checks).every(check => check.kind === 'matched')).toBe(true)
+      expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })).toEqual(context)
+    }
+    vi.mocked(Date.now).mockReturnValue(NOW + 100)
+    expect(await f.reconcile()).toMatchObject({ kind: 'published' })
+    expect(Object.values((await f.report())!.checks).every(check => check.kind === 'matched')).toBe(true)
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW + 100 }))
+      .toMatchObject({ observation: { observedAt: NOW - 1, evidenceRef: `evidence:bridge:${count - 1}` } })
+  })
+
+  it.each([NOW + 1, NOW - 1])('refuses a conflicting retained observation clock %s without publishing', async recordedAt => {
+    const f = await fixture()
+    await f.backend.run(async ctx => {
+      const row = await ctx.db.query('moneyTreasuryObservations').first()
+      if (row === null) throw new Error('fixture_observation_missing')
+      await ctx.db.patch(row._id, { recordedAt })
+    })
+    expect(await f.reconcile(f.controller(), NOW))
+      .toEqual({ kind: 'unavailable', code: 'treasury_observation_cutoff_conflict' })
+    expect(await f.report()).toBeNull()
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasuryObservations').first()))
+      .toMatchObject({ observedAt: NOW, recordedAt })
+  })
+
+  it.each([-1, NOW - 0.5])('refuses a corrupt eligible observation time %s', async observedAt => {
+    const f = await fixture()
+    await f.backend.run(async ctx => {
+      const row = await ctx.db.query('moneyTreasuryObservations').first()
+      if (row === null) throw new Error('fixture_observation_missing')
+      await ctx.db.patch(row._id, { observedAt })
+    })
+    expect(await f.reconcile(f.controller(), NOW))
+      .toEqual({ kind: 'unavailable', code: 'treasury_observation_cutoff_conflict' })
+    expect(await f.report()).toBeNull()
+  })
+
+  it('proves absence at the old cutoff without borrowing a later observation clock', async () => {
+    const f = await fixture()
+    await f.backend.run(async ctx => {
+      const row = await ctx.db.query('moneyTreasuryObservations').first()
+      if (row === null) throw new Error('fixture_observation_missing')
+      await ctx.db.delete(row._id)
+    })
+    const context = await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    if (context.kind !== 'available') throw new Error('fixture_context_missing')
+    expect(context.observation).toBeNull()
+    await f.reconcile(f.controller(async () => {
+      vi.mocked(Date.now).mockReturnValue(NOW + 1)
+      await f.backend.mutation(internal.moneyTreasury.recordObservation, {
+        environment: 'sandbox', custodyRef: context.identity.custodyRef, custodyGeneration: 1, network: NETWORK,
+        asset: 'USDC', exponent: 6, totalUnits: '15000000', bufferUnits: '5000000',
+        observationRef: 'observation:later-only', evidenceRef: 'evidence:later-only',
+        evidenceDigest: canonicalDigest('later-only-balance'), observedAt: NOW - 1,
+      })
+    }), NOW)
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })).toEqual(context)
+    expect((await f.report())!.alerts).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'observation_stale' })]))
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW + 2 }))
+      .toMatchObject({ observation: { observedAt: NOW - 1 } })
+  })
+
+  it('keeps a genuine eligible observation change unavailable', async () => {
+    const f = await fixture()
+    await f.reconcile(f.controller(async () => {
+      await f.backend.run(async ctx => {
+        const row = await ctx.db.query('moneyTreasuryObservations').first()
+        if (row === null) throw new Error('fixture_observation_missing')
+        await ctx.db.patch(row._id, { totalUnits: '14999999' })
+      })
+    }), NOW)
+    expect(Object.values((await f.report())!.checks))
+      .toEqual(Array(4).fill({ kind: 'unavailable', code: 'treasury_sources_changed_during_audit' }))
+  })
+
   it.each(['0', '5000000'])('keeps an exact historical audit matched across a post-cutoff range with deposit %s', async deposit => {
     const f = await fixture()
     expect(await f.reconcile(f.controller(async () => {
