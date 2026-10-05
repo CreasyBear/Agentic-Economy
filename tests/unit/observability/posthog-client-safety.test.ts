@@ -36,4 +36,16 @@ describe('browser telemetry initialization boundaries', () => {
     } })).toEqual({ event: 'ae_product_journey', properties: { $current_url: '/market', action: 'market_viewed' } })
     expect(options.before_send({ event: '$autocapture', properties: {} })).toBeNull()
   })
+
+  it('contains a transport failure after initialization without an unhandled rejection', async () => {
+    fixture.config.mockReturnValue({ enabled: true, posthogKey: 'fixture-key', environment: 'development' })
+    fixture.sdk.capture.mockImplementation((event: string) => {
+      if (event === 'ae_product_journey') throw Error('fixture transport offline')
+    })
+    const { captureClientProductEvent } = await import('@/lib/observability/posthog.client')
+    captureClientProductEvent('ae_product_journey', { action: 'market_viewed' })
+    await vi.waitFor(() => expect(fixture.sdk.capture).toHaveBeenCalledWith('ae_product_journey', { action: 'market_viewed' }))
+    await new Promise(resolve => window.setTimeout(resolve, 0))
+    fixture.sdk.capture.mockReset()
+  })
 })

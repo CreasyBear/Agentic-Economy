@@ -41,7 +41,7 @@ export function captureClientFunnelEvent(input: FunnelCaptureInput): void {
       String(sanitizeTelemetryValue(input.eventType)),
       sanitizeTelemetryValue(buildFunnelEventProperties(input)) as Record<string, unknown>,
     )
-  })
+  }).catch(() => {})
 }
 
 export function captureClientProductEvent(event: string, properties?: Record<string, unknown>): void {
@@ -55,7 +55,7 @@ export function captureClientProductEvent(event: string, properties?: Record<str
       String(sanitizeTelemetryValue(event)),
       sanitizeTelemetryValue(properties ?? {}) as Record<string, unknown>,
     )
-  })
+  }).catch(() => {})
 }
 
 function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
