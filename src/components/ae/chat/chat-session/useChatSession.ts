@@ -354,7 +354,12 @@ export function useChatSession({
       }
       setError(failure.message)
       setRecovery(failure.reason)
-      if (failure.reason === 'rate_limited') {
+      // Guest turns only browse. Restore a starter/action draft and permit an
+      // explicit retry; signed-in uncertain effects keep their existing fence.
+      const retryableGuest = !isAuthenticated && !isRunRequest
+        && failure.reason !== 'anonymous_message_limit' && failure.reason !== 'anonymous_size_limit'
+      if (retryableGuest && !preserveDraft) setPrompt(nextPrompt)
+      if (failure.reason === 'rate_limited' || retryableGuest) {
         updateRetryableClientTurn({
           prompt: nextPrompt,
           ...(clientTurnId === undefined ? {} : { clientTurnId }),
@@ -518,7 +523,7 @@ export function useChatSession({
   }
   function retryComposerRequest(): void {
     const retryable = retryableClientTurnRef.current
-    if (recovery !== 'rate_limited' || retryable === null || retryable.prompt !== prompt
+    if ((isAuthenticated && recovery !== 'rate_limited') || retryable === null || retryable.prompt !== prompt
       || parseRunRequest(retryable.prompt) !== null) return
     void submit(false, retryable.prompt, undefined, false, retryable.clientTurnId)
   }
@@ -582,7 +587,7 @@ export function useChatSession({
       ...(isAuthenticated ? {} : { anonymousMessageCount: anonymousMessages.length }),
       anonymousMessageLimitReached,
       ...(recovery === undefined ? {} : { recovery }),
-      ...(recovery === 'rate_limited' && retryableClientTurn?.prompt === prompt
+      ...((recovery === 'rate_limited' || !isAuthenticated) && retryableClientTurn?.prompt === prompt
         && parseRunRequest(prompt) === null ? { onRetry: retryComposerRequest } : {}),
       onEditLast: () => focusPrompt(lastUserText() ?? prompt),
       onNewChat: startNewChat,
@@ -633,7 +638,6 @@ export function useChatSession({
         onSuggest: (nextPrompt) => focusPrompt(nextPrompt),
         onStarter: (nextPrompt) => { void submit(false, nextPrompt) },
         onRefine: (nextPrompt) => { void submit(false, nextPrompt) },
-        onCompareRequest: (nextPrompt) => { void submit(false, nextPrompt) },
         onEditQuestion: (previousPrompt) => focusPrompt(previousPrompt),
         ...(unansweredQuestion.length === 0 ? {} : { onRetryQuestion: () => retryLastRequest() }),
       }),

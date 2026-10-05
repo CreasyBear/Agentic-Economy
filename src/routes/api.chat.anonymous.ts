@@ -96,7 +96,14 @@ function proxyProblem(
   return problem({ status, kind, code })
 }
 
-function projectedUpstreamResponse(response: Response): Response {
+async function projectedUpstreamResponse(response: Response): Promise<Response> {
+  // A missing upstream route is an unavailable chat service, never a missing
+  // browser page. Do not forward internal HTML or empty infrastructure errors.
+  if (!response.ok && response.status !== 429 && response.status !== 400
+    && response.status !== 413 && response.status !== 415) {
+    await response.body?.cancel()
+    return proxyProblem(503, 'UNAVAILABLE', 'chat_proxy_unavailable')
+  }
   const headers = new Headers({ 'Cache-Control': 'no-store' })
   for (const name of SAFE_UPSTREAM_HEADERS) {
     const value = response.headers.get(name)
@@ -159,7 +166,7 @@ export async function handleAnonymousChatProxyRequest(
                   signal: request.signal,
                 },
               )
-              response = projectedUpstreamResponse(upstream)
+              response = await projectedUpstreamResponse(upstream)
             }
           } catch (cause) {
             response = degrade(cause, proxyProblem(503, 'UNAVAILABLE', 'chat_proxy_unavailable'), {

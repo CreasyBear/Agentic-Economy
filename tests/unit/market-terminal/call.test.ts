@@ -81,6 +81,7 @@ function jsonResponse(body: unknown): Response {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
@@ -473,6 +474,70 @@ describe('market-terminal authenticated Tool Call', () => {
     expect(stderr.mock.calls.flat().join('')).not.toContain('FAKE_IDEMPOTENCY_SENTINEL')
   })
 
+  it('announces Quote and retained Call before sending each human request', async () => {
+    setApiKey('ae-test-caller-key')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => {
+        expect(stderr.mock.calls.flat().join('')).toBe('Requesting a Quote (up to 60 s).\n')
+        expect(stdout).not.toHaveBeenCalled()
+        return Promise.resolve(jsonResponse(toolQuote()))
+      })
+      .mockImplementationOnce(() => {
+        const progress = stderr.mock.calls.flat().join('')
+        expect(progress).toContain('Submitting the retained Call (up to 60 s). Recovery: ae call resume ')
+        expect(progress).toContain(`--base-url ${options.baseUrl}`)
+        expect(progress).not.toContain('ae-test-caller-key')
+        expect(stdout).not.toHaveBeenCalled()
+        return Promise.resolve(jsonResponse(completedCall()))
+      }))
+    await runCallCommand([toolRef], { ...options, json: false, input: '{}' })
+  })
+
+  it.each([false, true])('ends Call polling at its deadline with the same recovery identity (last request stalled: %s)', async (stall) => {
+    setApiKey('ae-test-caller-key')
+    vi.useFakeTimers()
+    vi.setSystemTime(1_800_000_000_000)
+    const startedAt = Date.now()
+    const firstPollScheduled = Promise.withResolvers<void>()
+    const schedule = globalThis.setTimeout
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+      if (delay === 2_000) firstPollScheduled.resolve()
+      return schedule(callback, delay, ...args)
+    })
+    const callRef = 'call:deadline'
+    const requestTimes: number[] = []
+    let finalSignal: AbortSignal | undefined
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(toolQuote()))
+      .mockResolvedValueOnce(jsonResponse({ kind: 'pending', toolRef, callRef, retryAfterMs: 2_000 }))
+      .mockImplementation((_url, init) => {
+        requestTimes.push(Date.now() - startedAt)
+        if (stall && Date.now() - startedAt >= 50_000) {
+          finalSignal = init!.signal!
+          return Promise.resolve(stalledBody(finalSignal))
+        }
+        return Promise.resolve(jsonResponse({ kind: 'found', callRef, toolRef, version: 1, state: 'in_progress' }))
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const pending = runCallCommand([toolRef], { ...options, input: '{}', wait: true })
+    const failure = expect(pending).rejects.toMatchObject({
+      code: 'call-wait-timeout', detail: { callRef, identityPreserved: true },
+      nextCommand: `ae status ${callRef} --base-url ${options.baseUrl} --json`,
+    })
+    await firstPollScheduled.promise
+    await vi.advanceTimersByTimeAsync(59_999)
+    if (stall) expect(finalSignal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    await failure
+    expect(requestTimes.at(-1)).toBe(stall ? 50_000 : 58_000)
+    expect(requestTimes.every(time => time < 60_000)).toBe(true)
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2)
+    if (stall) expect(finalSignal?.aborted).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('polls a pending Call through the authenticated status route and prints the durable terminal result', async () => {
     setApiKey('ae-test-caller-key')
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
@@ -511,6 +576,35 @@ describe('market-terminal authenticated Tool Call', () => {
       callRef: 'call:one',
       evidenceHash: 'sha256:test',
     })
+  })
+
+  it('records a completed Call already received at the exact polling boundary', async () => {
+    setApiKey('ae-test-caller-key')
+    vi.useFakeTimers()
+    vi.setSystemTime(1_800_000_000_000)
+    const deadline = Date.now() + 60_000
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const firstPollScheduled = Promise.withResolvers<void>()
+    const schedule = globalThis.setTimeout
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+      if (delay === 2_000) firstPollScheduled.resolve()
+      return schedule(callback, delay, ...args)
+    })
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(toolQuote()))
+      .mockResolvedValueOnce(jsonResponse({ kind: 'pending', toolRef, callRef: 'call:one', retryAfterMs: 2_000 }))
+      .mockImplementationOnce(() => {
+        vi.setSystemTime(deadline)
+        return Promise.resolve(jsonResponse({ kind: 'found', callRef: 'call:one', version: 1, toolRef, state: 'terminal', result: completedCall() }))
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const pending = runCallCommand([toolRef], { ...options, input: '{}', wait: true })
+    await firstPollScheduled.promise
+    await vi.advanceTimersByTimeAsync(2_000)
+    await pending
+    expect(JSON.parse(stdout.mock.calls.flat().join(''))).toMatchObject({ kind: 'completed', callRef: 'call:one', recoveryRef: expect.any(String) })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('preserves a structured status refusal while waiting instead of relabelling it as transport unknown', async () => {

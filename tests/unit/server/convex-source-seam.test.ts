@@ -196,6 +196,32 @@ describe('server Convex source seam', () => {
     expect(calls[0]?.init.headers).not.toMatchObject({ Authorization: expect.any(String) })
   })
 
+  it('cancels a bounded public read through its response body on the configured backend', async () => {
+    const controller = new AbortController()
+    const bodyStarted = Promise.withResolvers<void>()
+    const calls: { url: string; init: RequestInit }[] = []
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init: init ?? {} })
+      return new Response(new ReadableStream({
+        start(body) {
+          init?.signal?.addEventListener('abort', () => body.error(init.signal?.reason), { once: true })
+          bodyStarted.resolve()
+        },
+      }))
+    }
+    const transport = createPublicSourceTransport({ env: { CONVEX_URL: convexUrl }, fetch, signal: controller.signal })
+    const pending = transport.query(sourceQuery<Record<string, never>, unknown>('test:bounded'), {})
+    const rejected = expect(pending).rejects.toThrow('bounded_read_cancelled')
+    await bodyStarted.promise
+    controller.abort(new Error('bounded_read_cancelled'))
+    await rejected
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${convexUrl}/api/query`)
+    expect(calls[0]?.init.redirect).toBe('error')
+    expect(calls[0]?.init.signal?.aborted).toBe(true)
+    expect(new Headers(calls[0]?.init.headers).has('Authorization')).toBe(false)
+  })
+
   it('keeps the configured public test source port separate from authenticated owner calls', async () => {
     const publicTransport = createPublicSourceTransport({
       env: { CONVEX_URL: convexUrl },

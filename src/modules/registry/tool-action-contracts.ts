@@ -1,10 +1,10 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
 
-import { toolCompareInputSchema } from '@/modules/capability-supply/tool-schemas'
 import type { ActionParameter, ActionParameterType, ActionSurface } from '@/modules/common/action'
 import {
   toolCatalogSearchInputSchema,
+  toolCatalogCompareInputSchema as toolCompareInputSchema,
   toolChoiceCompareOutputSchema,
   toolChoiceDescribeOutputSchema,
   toolChoiceListOutputSchema,
@@ -62,9 +62,11 @@ const searchParameters = [
 ] as const
 const describeParameters = [
   parameter(toolDescribeInputSchema, 'toolRef', 'Opaque current Tool reference.'),
+  parameter(toolDescribeInputSchema, 'includeLatency', 'Include observed time to result and its sample count/window; optional, default false.'),
 ] as const
 const compareParameters = [
   parameter(toolCompareInputSchema, 'toolRefs', 'One to four opaque current Tool references.'),
+  parameter(toolCompareInputSchema, 'includeLatency', 'Include observed time to result and its sample count/window; optional, default false.'),
 ] as const
 
 export const registryToolsListContract = {

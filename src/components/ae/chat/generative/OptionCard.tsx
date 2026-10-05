@@ -1,7 +1,6 @@
 // Arc Pro product-listing TSX SHA-256: 45e258f3eb2a27dcf84d4cf1afc5b95cba17ac56f8888385c4524c706ecfd19c.
 // Arc Pro product-listing media/quick/info composition; existing OptionView remains authoritative.
 // Invariant: prices/attribution are projected facts, actions are controlled by the chat controller.
-import { Braces } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { Button } from '@/components/arc/button/button'
 import { motionTokens } from '@/components/arc/lib/motion-tokens'
@@ -33,11 +32,8 @@ export function OptionCard({ option, recommended, compared, selected, multipleOp
   return (
     <motion.article className="arc-market arc-chat arc-listing-card arc-chat-option" data-selected={selected || compared || undefined} data-recommended={recommended || undefined} layout={reduced ? false : 'position'} transition={reduced ? { duration: 0 } : motionTokens.spring.smooth}>
       <div className="arc-listing-media">
-        <div className="arc-listing-media-top">
-          <span className="arc-chat-option-contract-icon" aria-hidden="true"><Braces size={18} strokeWidth={1.5} /></span>
-          {recommended ? <span className="arc-chat-option-recommendation">{chatToolPanel.bestMatch}</span> : null}
-        </div>
         <div className="arc-listing-preview">
+          {recommended ? <span className="arc-chat-option-recommendation">{chatToolPanel.bestMatch}</span> : null}
           <h4 className="arc-chat-option-name"><a href={option.href}>{option.name}</a></h4>
           {option.outcome ? <p className="arc-chat-option-outcome">{option.outcome}</p> : null}
           {location.length > 0 ? <p title={location} className="arc-chat-option-location">{location}</p> : null}
@@ -52,7 +48,7 @@ export function OptionCard({ option, recommended, compared, selected, multipleOp
             </Button>
           ) : null}
           {selectionActions ? <>
-            <Button type="button" size="sm" variant="secondary" onClick={() => onSelect?.(option.id)} disabled={!option.selectable || onSelect === undefined} aria-pressed={selected}>Select</Button>
+            {!option.quoteable && onSelect !== undefined ? <Button type="button" size="sm" variant="secondary" onClick={() => onSelect(option.id)} disabled={!option.selectable}>Ask about this Tool</Button> : null}
             {multipleOptions && option.selectable ? <Button type="button" size="sm" variant="ghost" onClick={() => onCompare?.(option.id)} disabled={onCompare === undefined} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button> : null}
           </> : null}
         </div>}

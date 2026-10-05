@@ -1,4 +1,5 @@
 import { isRecord } from '@/modules/common/is-record'
+import { CHAT_UNFINISHED_ANSWER, containsChatProtocolMarkup } from '@/modules/chat/search-presentation'
 import {
   CHAT_TOOL_NAME_MAP,
   projectToolCard,
@@ -63,6 +64,7 @@ class AnonymousChatResponseError extends Error {
   constructor(
     readonly code: string | undefined,
     readonly reference: string | undefined,
+    readonly status: number,
   ) {
     super(code ?? 'chat_unavailable')
     this.name = 'AnonymousChatResponseError'
@@ -99,6 +101,7 @@ export async function fetchAnonymousChat(
   throw new AnonymousChatResponseError(
     code,
     boundedRequestReference(response.headers.get('x-ae-request-id')),
+    response.status,
   )
 }
 export type TranscriptMessage = Readonly<{
@@ -185,12 +188,15 @@ export type TranscriptTurn = Readonly<{
 export function projectTranscriptTurns(messages: readonly TranscriptMessage[]): readonly TranscriptTurn[] {
   return messages.map((message) => {
     const content = projectTurnContent(message.parts)
+    const invalidAnswer = message.role === 'assistant' && containsChatProtocolMarkup(content.text)
     return {
       id: message.id,
       role: message.role,
-      text: content.text,
+      text: invalidAnswer ? CHAT_UNFINISHED_ANSWER : content.text,
       tools: content.tools,
-      blocks: content.blocks,
+      blocks: invalidAnswer
+        ? [{ kind: 'text' as const, text: CHAT_UNFINISHED_ANSWER }, ...content.blocks.filter(block => block.kind === 'tool')]
+        : content.blocks,
     }
   })
 }
@@ -204,7 +210,8 @@ export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
   followUps: FollowUpsView
 }> {
   const searched = turn.tools.filter((card) => card.kind === 'choices'
-    && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list'))
+    && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list'
+      || card.toolId === 'registry.tools.describe'))
   const compared = turn.tools.findLast((card): card is Extract<ToolCardProjection, { kind: 'choices' }> =>
     card.kind === 'choices' && card.toolId === 'registry.tools.compare')
   const searchedOptions = searched.flatMap((card) => card.kind === 'choices'
@@ -230,7 +237,7 @@ export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
     const row = compared.choices.find((choice) => choice.toolRef === option.id)
     return row?.price === undefined || (row.priceValidUntil !== undefined && row.priceValidUntil <= Date.now())
       ? option
-      : { ...option, facts: { Price: { value: row.price, source: 'Registry listing' } } }
+      : { ...option, facts: { ...option.facts, Price: { value: row.price, source: 'Registry listing' } } }
   })
   return {
     work: projectWorkFromCards(turn.tools.filter((card) => card.kind !== 'clarify' && card.toolId !== 'tool.quote' && card.toolId !== 'tool.call')),
@@ -318,7 +325,7 @@ export function clearAnonymousChatHandoff(threadId: string): void {
 
 export function projectChatFailure(error: unknown): ChatFailurePresentation {
   if (error instanceof AnonymousChatResponseError) {
-    if (error.code === 'rate_limited') {
+    if (error.code === 'rate_limited' || error.status === 429) {
       return {
         message: 'You’ve reached the chat limit. Try again later.',
         reason: 'rate_limited',
@@ -326,9 +333,10 @@ export function projectChatFailure(error: unknown): ChatFailurePresentation {
         browseMarket: true,
       }
     }
+    const reason = readChatRecoveryReason(error.code)
     return {
       message: 'Chat is unavailable right now. Your message was not added.',
-      reason: readChatRecoveryReason(error.code),
+      reason: reason === 'unknown' ? 'chat_unavailable' : reason,
       ...(error.reference === undefined ? {} : { reference: error.reference }),
       browseMarket: true,
     }

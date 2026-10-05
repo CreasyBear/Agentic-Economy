@@ -37,7 +37,7 @@ export type CreateAuthenticatedConvexClientOptions = {
 export type CreatePublicConvexClientOptions = Pick<
   CreateAuthenticatedConvexClientOptions,
   'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'
->
+> & { signal?: AbortSignal }
 export type ConvexServerFunctionAssertion = CustomerRequestServiceAssertion
 
 const CONVEX_SERVER_FUNCTION_PRINCIPAL = {
@@ -156,10 +156,26 @@ export async function createAuthenticatedConvexClient(
   return client
 }
 
-function createPublicConvexClient(options: Pick<CreateAuthenticatedConvexClientOptions, 'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'> = {}): ConvexHttpClient {
+/**
+ * A bounded read stays on the configured, SDK-validated backend and retains
+ * cancellation through response-body consumption. A redirect or abort fails the
+ * read. This optional signal keeps SDK fetch details out of catalogue callers.
+ */
+function createPublicConvexClient(options: CreatePublicConvexClientOptions = {}): ConvexHttpClient {
   const convexUrl = readRequiredConvexUrl(options.env ?? process.env)
+  const signal = options.signal
+  const fetchImpl = options.fetch ?? globalThis.fetch
+  const boundedFetch: typeof globalThis.fetch | undefined = signal === undefined ? options.fetch : (input, init) => {
+    const target = input instanceof Request ? input.url : input
+    if (new URL(target).origin !== new URL(convexUrl).origin) throw new TypeError('Convex source request changed origin.')
+    return fetchImpl(input, {
+      ...init,
+      redirect: 'error',
+      signal: init?.signal == null ? signal : AbortSignal.any([init.signal, signal]),
+    })
+  }
   return new ConvexHttpClient(convexUrl, {
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(boundedFetch === undefined ? {} : { fetch: boundedFetch }),
     ...(options.skipConvexDeploymentUrlCheck === undefined
       ? {}
       : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),

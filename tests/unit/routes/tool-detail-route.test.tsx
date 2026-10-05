@@ -222,6 +222,29 @@ afterEach(() => {
 })
 
 describe('/tools/$toolRef', () => {
+  it('shows the existing time-to-result chart on the public Tool page with its observation meaning', async () => {
+    const evidence = projectMarketListingEvidence({
+      toolRef: tool.toolRef, ratingCount: 0, ratingSum: 0, completedCalls: 5,
+      latencySamplesMs: [38_000, 39_000, 40_000, 41_000, 42_000],
+    }, tool.contract.capabilityId)
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, evidence })
+    fireEvent.click(screen.getByRole('button', { name: 'Time to result · last 30 days' }))
+    const performance = screen.getByRole('region', { name: 'Time to result · last 30 days' })
+    expect(within(performance).getByText('Median 40 s, p95 42 s across 5 completed Calls.')).toBeTruthy()
+    expect(within(performance).getByText(/not network time to first byte/)).toBeTruthy()
+    expect(within(performance).getByRole('region', { name: 'Time to result' })).toBeTruthy()
+    await waitFor(() => expect(performance.querySelector('[data-slot="chart"]')).not.toBeNull())
+  })
+
+  it('does not label unavailable public-page performance as zero timed Calls', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
+    fireEvent.click(screen.getByRole('button', { name: 'Time to result · last 30 days' }))
+    const performance = screen.getByRole('region', { name: 'Time to result · last 30 days' })
+    expect(within(performance).getByText('Performance history is unavailable right now.')).toBeTruthy()
+    expect(within(performance).queryByRole('region', { name: 'Time to result' })).toBeNull()
+    expect(within(performance).queryByText(/0 completed Calls/)).toBeNull()
+  })
+
   it('fills the track record from observed market evidence', async () => {
     const evidence = projectMarketListingEvidence({
       toolRef: tool.toolRef,

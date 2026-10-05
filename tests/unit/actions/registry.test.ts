@@ -235,6 +235,12 @@ describe('action registry', () => {
         description: 'One to four opaque current Tool references.',
         required: true,
       },
+      {
+        name: 'includeLatency',
+        type: 'boolean',
+        description: 'Include observed time to result and its sample count/window; optional, default false.',
+        required: false,
+      },
     ])
   })
 

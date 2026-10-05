@@ -154,6 +154,7 @@ function callOutput(
   }
 }
 
+/** Stop sleeps and status reads at the same deadline; expiry preserves the Call. */
 async function waitForCallResult(
   options: CliOptions,
   record: CallRecoveryRecord,
@@ -173,11 +174,14 @@ async function waitForCallResult(
     await new Promise<void>((resolve) => {
       setTimeout(resolve, Math.min(delayMs, remainingMs))
     })
+    const requestBudgetMs = deadline - Date.now()
+    if (requestBudgetMs <= 0) break
     if (!options.json) process.stderr.write('Waiting for the Call outcome.\n')
     let status: CallStatusResult
     try {
-      status = await readCallStatus(options, callRef)
+      status = await readCallStatus(options, callRef, 'status', requestBudgetMs)
     } catch (error) {
+      if (Date.now() >= deadline) throw waitTimeoutFailure(record, options)
       if (error instanceof CliFailure) throw error
       throw unknownCallTransport(record, options)
     }
@@ -190,6 +194,7 @@ async function waitForCallResult(
         ? terminal as CallStatusResult
         : parseCallResult(terminal)
     }
+    if (Date.now() >= deadline) throw waitTimeoutFailure(record, options)
     delayMs = pendingDelay(status, delayMs)
   }
   throw waitTimeoutFailure(record, options)
@@ -260,6 +265,7 @@ async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions)
       }
     } else {
       const apiKey = requireAgentAccessKey('call', options)
+      if (!options.json) process.stderr.write(`Submitting the retained Call (up to 60 s). Recovery: ${resumeCommand(record, options)}\n`)
       const outcome = await callJson(options.baseUrl, callCommandDescriptor.path, {
         method: callCommandDescriptor.method, headers: { Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(record.command),
       }, PURCHASE_REQUEST_TIMEOUT_MS)
@@ -348,6 +354,7 @@ async function resolveToolQuote(
   apiKey: string,
   options: CliOptions,
 ): Promise<Extract<ToolQuoteResult, { kind: 'committed' }>> {
+  if (!options.json) process.stderr.write('Requesting a Quote (up to 60 s).\n')
   const quoteOutcome = await callJson(options.baseUrl, TOOL_QUOTE_PATH, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },

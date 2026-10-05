@@ -1,3 +1,6 @@
+import { projectToolLatency, type ToolLatencyProjection } from '@/modules/registry/tool-latency';
+export { TOOL_MIN_LATENCY_SAMPLE_SIZE as MARKET_MIN_LATENCY_SAMPLE_SIZE, TOOL_MAX_LATENCY_SAMPLE_SIZE as MARKET_MAX_LATENCY_SAMPLE_SIZE } from '@/modules/registry/tool-latency';
+
 export const marketCategories = [
   {
     id: "data-research",
@@ -82,24 +85,7 @@ export type MarketPopularityProjection =
       definition: string;
     }>;
 
-export type MarketLatencyProjection =
-  | Readonly<{
-      kind: "measured";
-      medianMs: number;
-      p95Ms: number;
-      sampleSize: number;
-      samplesMs?: readonly number[];
-      display: string;
-      definition: string;
-    }>
-  | Readonly<{
-      kind: "insufficient_sample";
-      sampleSize: number;
-      minimumSampleSize: number;
-      samplesMs?: readonly number[];
-      display: "Not enough data";
-      definition: string;
-    }>;
+export type MarketLatencyProjection = ToolLatencyProjection;
 
 export type MarketListingEvidenceProjection = Readonly<{
   toolRef: string;
@@ -108,9 +94,6 @@ export type MarketListingEvidenceProjection = Readonly<{
   popularity: MarketPopularityProjection;
   latency: MarketLatencyProjection;
 }>;
-
-export const MARKET_MIN_LATENCY_SAMPLE_SIZE = 5;
-export const MARKET_MAX_LATENCY_SAMPLE_SIZE = 48;
 
 export function projectMarketListingEvidence(
   source: MarketListingEvidenceSource,
@@ -145,7 +128,7 @@ export function projectMarketListingEvidence(
     category,
     rating,
     popularity,
-    latency: projectLatency(source.latencySamplesMs),
+    latency: projectToolLatency(source.latencySamplesMs),
   };
 }
 
@@ -208,48 +191,6 @@ function projectRating(count: number, sum: number): MarketRatingProjection {
     definition:
       "Average rating submitted by authenticated Agentic Economy principals for this published Tool.",
   };
-}
-
-function projectLatency(samples: readonly number[]): MarketLatencyProjection {
-  const valid = samples
-    .filter((sample) => Number.isSafeInteger(sample) && sample >= 0)
-    .slice(0, MARKET_MAX_LATENCY_SAMPLE_SIZE);
-  const sorted = [...valid].sort((left, right) => left - right);
-  if (valid.length < MARKET_MIN_LATENCY_SAMPLE_SIZE)
-    return {
-      kind: "insufficient_sample",
-      sampleSize: valid.length,
-      minimumSampleSize: MARKET_MIN_LATENCY_SAMPLE_SIZE,
-      samplesMs: valid,
-      display: "Not enough data",
-      definition:
-        "Median admitted-to-completed latency appears after at least five completed calls in the selected period.",
-    };
-  const medianMs = percentile(sorted, 0.5);
-  const p95Ms = percentile(sorted, 0.95);
-  return {
-    kind: "measured",
-    medianMs,
-    p95Ms,
-    sampleSize: valid.length,
-    samplesMs: valid,
-    display: formatDuration(medianMs),
-    definition:
-      "Median admitted-to-completed latency for completed calls in the selected period; the detail view also preserves the p95 and sample size.",
-  };
-}
-
-function percentile(sorted: readonly number[], percentileValue: number): number {
-  const index = Math.ceil(percentileValue * sorted.length) - 1;
-  return sorted[Math.max(0, index)] ?? 0;
-}
-
-function formatDuration(milliseconds: number): string {
-  if (milliseconds < 1_000) return `${milliseconds} ms`;
-  const seconds = milliseconds / 1_000;
-  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} s`;
-  const minutes = seconds / 60;
-  return `${minutes < 10 ? minutes.toFixed(1) : Math.round(minutes)} min`;
 }
 
 const categoryRules: readonly Readonly<{

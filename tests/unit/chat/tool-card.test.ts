@@ -474,6 +474,17 @@ describe('clarifying question', () => {
 })
 
 describe('chat JSON result decoding', () => {
+  it('preserves a bounded public description through stored cards', () => {
+    const summary = '🌤'.repeat(500)
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available',
+      output: { kind: 'match', results: [{ toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Weather', summary }] },
+    })
+    if (card?.kind !== 'choices') throw new Error('missing choice')
+    expect(card.choices[0]?.summary).toBe('🌤'.repeat(400))
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+  })
   it.each(['invalid JSON', '[]', 'null', 'x'.repeat(65 * 1024)])('refuses invalid or oversized text (%#)', (output) => {
     expect(projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']}`,

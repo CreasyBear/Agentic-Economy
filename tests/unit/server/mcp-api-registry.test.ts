@@ -28,6 +28,46 @@ function noMatch(
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter registry', () => {
+  it.each([
+    { requestOrigin: 'http://app.aecon.ai', canonical: 'https://app.aecon.ai', expectedOrigin: 'https://app.aecon.ai' },
+    { requestOrigin: 'http://localhost:3000', canonical: undefined, expectedOrigin: 'http://localhost:3000' },
+  ])('keeps inspection continuations on the trusted origin for $requestOrigin', async ({ requestOrigin, canonical, expectedOrigin }) => {
+    vi.stubEnv('AE_CANONICAL_BASE_URL', canonical)
+    vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', undefined)
+    vi.stubEnv('VERCEL_URL', undefined)
+    vi.stubEnv('VERCEL_BRANCH_URL', undefined)
+    vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(toolChoiceSearchOutputSchema.parse({
+      schemaVersion: 'registry-tools:v3', query: 'plumbing',
+      kind: 'match',
+      assessed: { source: 'all', scope: 'complete', examined: 1, coverage: 'complete' },
+      pagination: { limit: 8, hasMore: false }, partialResults: false, next: [],
+      results: [{
+        id: 'opaque-1', source: 'coinbase', access: 'external_listing', title: 'External Tool',
+        summary: 'Retrieve data', provider: 'Outside', actionClass: 'retrieve', objectClass: 'data',
+        readiness: 'unverified', price: { kind: 'unavailable' },
+        detailRef: '/api/v1/registry/detail?id=opaque-1',
+        next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+      }],
+    }))
+    const response = await handleMcpRequest(new Request(`${requestOrigin}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json', accept: 'application/json, text/event-stream',
+        'x-forwarded-proto': 'http', 'x-forwarded-host': 'untrusted.example',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 40, method: 'tools/call',
+        params: { name: 'ae_registry_tools_search', arguments: { query: 'plumbing' } },
+      }),
+    }))
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect(JSON.stringify(body.result?.content)).toContain(`${expectedOrigin}/api/v1/registry/detail?id=opaque-1`)
+    expect(JSON.stringify(body.result)).not.toContain('untrusted.example')
+    if (canonical !== undefined) expect(JSON.stringify(body.result)).not.toContain('http://app.aecon.ai')
+    expect(body.result?.structuredContent).toMatchObject({ result: { results: [{ id: 'opaque-1' }] } })
+  })
+
   it('calls the registered registry search action with MCP attribution', async () => {
     const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([]))
 

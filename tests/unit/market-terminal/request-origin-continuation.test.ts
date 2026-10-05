@@ -219,7 +219,7 @@ describe('request list origin continuations', () => {
   })
 
   it('keeps hosted-default continuations free of redundant origin and output noise', async () => {
-    const hostedOrigin = 'https://agentic-economy-phi.vercel.app'
+    const hostedOrigin = 'https://app.aecon.ai'
     const human = await renderRequestList({
       baseUrl: hostedOrigin,
       baseUrlSource: 'hosted_default',

@@ -97,13 +97,19 @@
   },
   {
     "file": "tests/unit/server/convex-source-seam.test.ts",
-    "line": 208,
+    "line": 213,
+    "literal": "test:bounded",
+    "helper": "sourceQuery"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 234,
     "literal": "test:public-query",
     "helper": "sourceQuery"
   },
   {
     "file": "tests/unit/server/convex-source-seam.test.ts",
-    "line": 228,
+    "line": 254,
     "literal": "test:authenticated-mutation",
     "helper": "sourceMutation"
   }

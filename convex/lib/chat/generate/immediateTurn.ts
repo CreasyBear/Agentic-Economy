@@ -41,7 +41,7 @@ export async function streamImmediateCatalogue(ctx: ActionCtx, deps: ImmediateTu
     userId: deps.args.ownerId,
     promptMessageId: deps.args.promptMessageId,
     messages: [
-      { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'immediate-search', toolName, input: { query: deps.promptText, limit: 8 } }] },
+      { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'immediate-search', toolName, input: { query: deps.promptText, limit: 4 } }] },
       { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'immediate-search', toolName, output: { type: 'json', value: catalogue as JSONValue } }] },
     ],
     agentName: 'Agentic Economy Operation Market',

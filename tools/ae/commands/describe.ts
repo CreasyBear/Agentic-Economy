@@ -3,6 +3,7 @@ import {
   toolDescribeInputSchema,
 } from '@/modules/registry/tool-choice-contracts'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/registry/tool-entry'
+import { formatToolDuration } from '@/modules/registry/tool-latency'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
@@ -19,7 +20,7 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   if (toolRef === undefined || toolRef.length === 0 || args.length > 1) {
     throw usageFailure('describe', 'describe-usage')
   }
-  const parsedInput = describeCommandDescriptor.inputSchema.safeParse({ toolRef })
+  const parsedInput = describeCommandDescriptor.inputSchema.safeParse({ toolRef, includeLatency: true })
   if (!parsedInput.success) {
     throw new CliFailure(toolRefFormatMessage(), {
       kind: 'INVALID_ARGUMENT', code: 'tool-ref-invalid',
@@ -48,6 +49,11 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   line(`  ${tool.description}`)
   line(`  health: ${tool.healthStatus}`)
   line(`  indicative price: ${tool.priceLabel}`)
+  if (tool.latency !== undefined) {
+    const latency = tool.latency
+    line(`  time to result: ${latency.kind === 'measured' ? `median ${latency.display}, p95 ${formatToolDuration(latency.p95Ms)}` : latency.display} · ${latency.sampleSize} completed Calls · last 30 days`)
+    line(`  ${latency.definition}`)
+  }
   line(`  inputs: ${(tool.parameters ?? []).map((parameter) => `${parameter.name}${parameter.required ? '' : '?'}`).join(', ') || 'none'}`)
   line(`  Tool reference: ${tool.toolRef}`)
   if (tool.canonicalUrl !== undefined) line(`  Page: ${options.baseUrl}${tool.canonicalUrl}`)

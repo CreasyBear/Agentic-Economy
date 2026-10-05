@@ -186,6 +186,17 @@ describe('anonymous chat TanStack proxy', () => {
     expect(await response.text()).toBe('data: {"type":"start"}\n\n')
   })
 
+  it('normalizes an upstream routing failure without exposing its body', async () => {
+    const response = await handleAnonymousChatProxyRequest(request(), {
+      env: { CONVEX_SITE_URL: 'https://happy-animal-123.convex.site', AE_CHAT_PROXY_SECRET: PROXY_SECRET },
+      admit: async () => ({ ok: true }),
+      fetch: async () => new Response(null, { status: 404 }),
+    })
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ code: 'chat_proxy_unavailable' })
+    expect(response.headers.get('x-ae-request-id')).toBe('chat_request_1')
+  })
+
   it('returns stable method, content, body, rate, and configuration failures', async () => {
     const handlers = Route.options.server?.handlers
     const get = typeof handlers === 'object' && handlers !== null && 'GET' in handlers

@@ -1,5 +1,12 @@
 import type { ModelMessage } from 'ai'
 
+export const CHAT_UNFINISHED_ANSWER = 'This answer could not be finished. Edit your question and try again.'
+
+/** Provider control syntax is not an answer or evidence of a Tool invocation. */
+export function containsChatProtocolMarkup(text: string): boolean {
+  return /[<‹][|｜]|[<‹]\/?tool_calls\b/iu.test(text)
+}
+
 /** Apply the same display-safe projection to card actions and model-facing tool data. */
 export function sanitizeChatToolString(value: string): string {
   return value

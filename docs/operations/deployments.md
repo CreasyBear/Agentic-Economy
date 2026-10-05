@@ -41,11 +41,25 @@ The full gate passed: 8,952 unit and 3,024 integration cases, type/import bounda
 31 SEO proofs, 16 browser journeys, 18 accessibility cases, installed CLI and public
 build. Existing skipped/unfinished protected cases are not acceptance evidence.
 
-The founder console is incorporated by the consolidation change containing this
-map. Its [design contract](../designs/2026-10-01-founder-console.md) records the
-preserved boundaries and verification. Check the deployed `/api/v1/release` and
-release PR for final backend/web provenance; the PR #354 readback above predates
-that founder release.
+[PR #355](https://github.com/CreasyBear/Agentic-Economy/pull/355) incorporates the
+founder console; backend source `ab8b30e25281982b28dbf1981b82b371aa26759d` deployed
+at 08:51:22 UTC. [PR #356](https://github.com/CreasyBear/Agentic-Economy/pull/356)
+repairs the responsive Find Tools trigger. Its web merge
+`0bcfebe4843f362824c5cb4b975fc7ece5f800dc` was verified on the production alias,
+with Vercel deployment `dpl_9P1CSuvAGpN1mhP5ueSLzYfM9aB2` retained for recovery.
+The founder [design contract](../designs/2026-10-01-founder-console.md) records
+the preserved boundaries. Final subsequent source provenance belongs in the
+release PR and the deployed `/api/v1/release` response.
+
+The next chat repair covers the observed guest 404, draft recovery, compact
+discovery cards, immediate comparison and invalid model control text. The
+production Vercel `CONVEX_SITE_URL` binding is now the canonical
+`https://cautious-zebra-473.convex.site`; this takes effect on the next web build.
+The existing proxy secret and guest read-only admission remain unchanged. The
+[walkthrough contract](../designs/2026-09-23-generative-commerce-chat-rfc.md#5-october-2026-walkthrough-repair)
+defines this bounded repair; it does not activate the RFC's broader proposals.
+Verify both the guest web proxy and signed-in journey after backend and web
+deployment before calling this repair accepted.
 
 Metering uses the existing Tool → Quote → Call and financial authority. It adds
 exact unit measurements, complete-period reports, frozen close lineage, usage

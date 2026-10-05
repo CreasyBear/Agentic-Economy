@@ -167,7 +167,8 @@ export function createSearchTools(
       description: descriptionFor(listContract),
       inputSchema: listContract.schema,
       execute: async (ctx: ToolCtx, input: unknown, options: { messages?: ModelMessage[] }) => {
-        const data = listContract.schema.parse(input)
+        const parsed = listContract.schema.parse(input)
+        const data = { ...parsed, limit: Math.min(4, parsed.limit) }
         const denied = reserve('registry.tools.list')
         if (denied !== null) return denied
         const environment = deploymentPaymentEnvironment(env)
@@ -203,10 +204,11 @@ export function createSearchTools(
         value: JSON.stringify(output, (key, value) => key === 'cursor' || key === 'nextCursor' ? undefined : value),
       }),
       execute: async (ctx: ToolCtx, input: unknown, options: { messages?: ModelMessage[]; toolCallId: string }) => {
-        const data = searchContract.schema.parse(continuation === undefined ? input : {
+        const parsed = searchContract.schema.parse(continuation === undefined ? input : {
           ...(continuation.inputJson === undefined ? {} : JSON.parse(continuation.inputJson)),
           query: continuation.query, cursor: continuation.cursor,
         })
+        const data = { ...parsed, limit: Math.min(4, parsed.limit) }
         const denied = reserve('registry.tools.search')
         if (denied !== null) return denied
         const environment = deploymentPaymentEnvironment(env)

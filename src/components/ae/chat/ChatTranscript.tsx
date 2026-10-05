@@ -37,13 +37,12 @@ import { ChatGreeting } from './chat-session/components/ChatGreeting'
 import { ChatOwnerApprovalsContainer } from './chat-session/ChatOwnerApprovalsContainer'
 import { AnswerBlock } from './generative/AnswerBlock'
 import { ComparisonTable } from './generative/ComparisonTable'
-import { FilterChips } from './generative/FilterChips'
+import { projectComparison } from './generative/generative.view-model'
 import { FollowUps } from './generative/FollowUps'
 import { MessageActions } from './generative/MessageActions'
 import { OptionsGrid } from './generative/OptionsGrid'
 import { SourcesInline } from './generative/SourcesInline'
 import { WorkDisclosure } from './generative/WorkDisclosure'
-import type { FilterValue } from './generative/generative.contracts'
 import { SearchNext, ToolCard } from './ToolCard'
 import { projectGenerativeTurn, projectTranscriptTurns } from './presentation'
 import { ToolPanel } from './tool-panel/ToolPanel'
@@ -77,8 +76,6 @@ export function ChatTranscript({
   messages,
   handoffAfter,
   onSuggest,
-  onRefine,
-  onCompareRequest,
   onCopyAnswer,
   onEditQuestion,
   onNewChat,
@@ -100,8 +97,6 @@ export function ChatTranscript({
   readOnly = false,
 }: ChatTranscriptProps) {
   const [comparedByTurn, setComparedByTurn] = useState<Record<string, readonly string[]>>({})
-  const [filtersByTurn, setFiltersByTurn] = useState<Record<string, FilterValue>>({})
-  const [selectedByTurn, setSelectedByTurn] = useState<Record<string, string | undefined>>({})
   const [panelSelection, setPanelSelection] = useState<ToolPanelSelectionState>({
     scope: '',
     selectedByTurn: {},
@@ -274,7 +269,6 @@ export function ChatTranscript({
               const canEditPrompt = previousPrompt !== undefined && onEditQuestion !== undefined
                 && parseRunRequest(previousPrompt) === null
               const selected = comparedByTurn[turn.id] ?? []
-              const selectedId = selectedByTurn[turn.id]
               const writing = generating && index === turns.length - 1
               const userPanelChoice = scopedPanelSelection.selectedByTurn[turn.id]
               const panelRef = userPanelChoice === undefined ? view?.options.recommendedId
@@ -331,32 +325,16 @@ export function ChatTranscript({
                             signedThread={ownerChatThreadId !== undefined}
                             {...(continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
                               ? { cursorToRedact: continuation.next.args.cursor } : {})} /> : null}
-                          <SourcesInline view={view.sources} />
+                          {view.options.options.length > 0 || view.comparison !== null ? null : <SourcesInline view={view.sources} />}
                           {view.options.options.length === 0 ? null : (
                             <>
-                              {readOnly || onRefine === undefined || view.options.options.length < 3 ? null : (
-                                <FilterChips
-                                  view={{ value: filtersByTurn[turn.id] ?? { readyOnly: false }, prices: ['under 1¢'], networks: [], categories: [], count: view.options.options.length }}
-                                  onChange={(filter) => {
-                                    setFiltersByTurn((current) => ({ ...current, [turn.id]: filter }))
-                                    const terms = [
-                                      filter.readyOnly ? 'only ready-to-use tools' : '',
-                                      filter.price ? `${filter.price} per call` : '',
-                                      filter.network ? `on ${filter.network}` : '',
-                                      filter.category ? `in ${filter.category}` : '',
-                                    ].filter(Boolean)
-                                    onRefine(`Refine the previous options: ${terms.length ? terms.join(', ') : 'show all available options'}.`)
-                                  }}
-                                />
-                              )}
                               <OptionsGrid
-                                view={{ ...view.options, comparedIds: readOnly ? [] : selected, ...(readOnly || selectedId === undefined ? {} : { selectedId }) }}
+                                view={{ ...view.options, comparedIds: readOnly ? [] : selected }}
                                 {...(panelOpen && activePanelOption !== undefined ? { openToolRef: activePanelOption.id } : {})}
                                 {...(panelId === undefined ? {} : { panelId })}
                                 {...(readOnly ? { readOnly: true } : {
                                   onReview: (id: string) => openPanel(turn.id, id),
                                   onSelect: (id: string) => {
-                                    setSelectedByTurn(current => ({ ...current, [turn.id]: current[turn.id] === id ? undefined : id }))
                                     const option = view.options.options.find(entry => entry.id === id)
                                     if (option) onSuggest?.(`Tell me more about ${option.name}`)
                                   },
@@ -390,14 +368,9 @@ export function ChatTranscript({
                                     onClose={() => closePanel(turn.id, panelOption.id, panelId)} />
                                 </ErrorBoundary>
                               )}
-                              {readOnly || onCompareRequest === undefined || selected.length < 2 ? null : (
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Button type="button" variant="secondary" className="min-h-touch" onClick={() => onCompareRequest(`Compare ${selected.map((id) => view.options.options.find((option) => option.id === id)?.name).filter(Boolean).join(' and ')} for my use case.`)}>
-                                    Compare {selected.length} selected
-                                  </Button>
-                                  {selected.length === 4 ? <span role="status" className="text-sm text-muted-foreground">Choose up to four.</span> : null}
-                                </div>
-                              )}
+                              {readOnly || selected.length === 0 ? null : selected.length === 1
+                                ? <p role="status" className="text-sm text-muted-foreground">Choose one more Tool to compare.</p>
+                                : <ComparisonTable view={projectComparison(view.options.options.filter(option => selected.includes(option.id)))} />}
                             </>
                           )}
                           {view.comparison ? <ComparisonTable view={view.comparison} /> : null}

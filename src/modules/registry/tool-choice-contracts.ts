@@ -24,6 +24,7 @@ import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
 import { searchVerdict } from './search-verdict'
 import { searchNextActions } from './next-action'
+import { toolLatencyEvidenceSchema } from './tool-latency'
 
 export type { ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 
@@ -65,6 +66,11 @@ export const toolCatalogSearchInputSchema = z.strictObject({
 })
 export const toolDescribeInputSchema = z.strictObject({
   toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/),
+  includeLatency: z.boolean().optional().describe('Include observed time to result, sample count and 30-day query window. Omitted by default for legacy clients.'),
+})
+export const toolCatalogCompareInputSchema = z.strictObject({
+  toolRefs: z.array(toolDescribeInputSchema.shape.toolRef).min(1).max(4),
+  includeLatency: toolDescribeInputSchema.shape.includeLatency,
 })
 export const toolCatalogPaginationSchema = z.strictObject({
   limit: z.number().int().positive(),
@@ -103,6 +109,7 @@ export const compactToolCandidateSchema = z.strictObject({
   priceLabel: z.string(),
   displayPrice: publicToolDisplayPriceSchema.optional(),
   healthStatus: toolHealthStatusSchema,
+  latency: toolLatencyEvidenceSchema.optional(),
   ...choiceEvidenceSchema,
   lastCheckedAt: z.number().optional(),
   lastHealthyAt: z.number().optional(),
@@ -236,6 +243,7 @@ const toolDescriptionSchema = z.strictObject({
   displayPrice: publicToolDisplayPriceSchema.optional(),
   commercialPrice: publicToolPriceSchema,
   healthStatus: toolHealthStatusSchema,
+  latency: toolLatencyEvidenceSchema.optional(),
   readiness: z.enum(['ready', 'unverified', 'unavailable']),
   ...choiceEvidenceSchema,
   lastCheckedAt: z.number().optional(),

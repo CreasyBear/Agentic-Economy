@@ -1,8 +1,6 @@
-import {
-  toolCompareInputSchema,
-} from '@/modules/capability-supply/public'
-import { toolChoiceCompareOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { toolChoiceCompareOutputSchema, toolCatalogCompareInputSchema as toolCompareInputSchema } from '@/modules/registry/tool-choice-contracts'
 import { TOOL_MARKET_COMPARE_PATH } from '@/modules/registry/tool-entry'
+import { formatToolDuration } from '@/modules/registry/tool-latency'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
@@ -19,6 +17,7 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
 
   const parsedInput = compareCommandDescriptor.inputSchema.safeParse({
     toolRefs: args.map((arg) => arg.trim()),
+    includeLatency: true,
   })
   if (!parsedInput.success) {
     throw new CliFailure('Compare requires two to four exact tool references.', {
@@ -97,6 +96,11 @@ function printHumanComparison(result: AvailableComparison, requestedCount: numbe
     line(`       ${tool.description}`)
     line(`       indicative price: ${tool.priceLabel}`)
     line(`       health: ${tool.healthStatus}`)
+    if (tool.latency !== undefined) {
+      const latency = tool.latency
+      line(`       time to result: ${latency.kind === 'measured' ? `median ${latency.display}, p95 ${formatToolDuration(latency.p95Ms)}` : latency.display} · ${latency.sampleSize} completed Calls · last 30 days`)
+      line(`       ${latency.definition}`)
+    }
   }
   printMissingRefs(result.missing)
   if (technical) printTechnicalComparison(result)

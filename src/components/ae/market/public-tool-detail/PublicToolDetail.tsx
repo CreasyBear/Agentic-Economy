@@ -5,12 +5,14 @@ import { recordProductJourney } from '@/lib/observability/product-journey'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeToolInputDisclosure, AeToolTechnicalContract } from '@/components/ae/market/tool-detail/AeToolContractSections'
+import { AeToolLatencyChart } from '@/components/ae/market/tool-detail/AeToolLatencyChart'
 import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { projectAdmittedListing } from '@/modules/registry/public'
+import { formatToolDuration } from '@/modules/registry/tool-latency'
 import type { PublicToolDetailProps, ToolUnavailablePresentation, ToolUnavailableProps } from './public-tool-detail.contracts'
 import { TOOL_UNAVAILABLE_COPY } from './public-tool-detail.contracts'
 
@@ -41,6 +43,7 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
     return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<Link to={presentation.action.to} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md} min-h-touch`}>{presentation.action.label}</Link>} />
   }
   const tool = result.tool
+  const latency = result.evidence?.toolRef === tool.toolRef ? result.evidence.latency : undefined
   const listing = projectAdmittedListing(tool, result.verifiedBusinessSlug)
   const view = projectToolObject(listing, `/tools/${encodeURIComponent(tool.toolRef)}`, readAt, result.referenceRate, tool.commercial.displayPrice)
   const readiness = listing.facts.readiness
@@ -85,7 +88,16 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
         primary={{ label: recipientUnverified ? 'Search callable alternatives' : routeable ? 'Set up to get a Quote' : tool.availability.posture === 'setup_required' ? 'Connect an Agent' : 'Search callable alternatives', onSelect: () => { window.location.assign(actionHref) } }}
         {...(recipientUnverified ? {} : { chatHref: `/t/new?q=${encodeURIComponent(`Find out how to use ${view.title} (${tool.toolRef}). Ask for required inputs and a fresh Quote before any Call.`)}` })}
         slides={slides}
-        sections={[{ id: 'technical', title: 'Technical · operation IDs, schemas and terms', content: <AeToolTechnicalContract tool={tool} /> }]}
+        sections={[
+          { id: 'performance', title: 'Time to result · last 30 days', content: latency === undefined
+            ? <p>Performance history is unavailable right now.</p>
+            : <>
+              <AeToolLatencyChart latency={latency} />
+              <p>{latency.kind === 'measured' ? `Median ${latency.display}, p95 ${formatToolDuration(latency.p95Ms)} across ${latency.sampleSize} completed Calls.` : `${latency.sampleSize} completed Calls; median and p95 appear after ${latency.minimumSampleSize}.`}</p>
+              <p>{latency.definition}</p>
+            </> },
+          { id: 'technical', title: 'Technical · operation IDs, schemas and terms', content: <AeToolTechnicalContract tool={tool} /> },
+        ]}
       />
     </div>
   </AePublicPage>

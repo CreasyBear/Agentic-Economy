@@ -166,7 +166,7 @@ export type HttpOutcome = {
 export const CLI_REQUEST_TIMEOUT_MS = 15_000
 
 /**
- * Requires an origin-bound request and one of the bounded request budgets.
+ * Requires an origin-bound request and a positive budget of at most 60 seconds.
  * Ensures the same deadline covers headers and the complete response body.
  * Invariant: caller cancellation is retained; transport never retries a request.
  * On timeout: release the timer and surface request-timeout. Purchase recovery
@@ -176,8 +176,11 @@ export async function callJson(
   baseUrl: string,
   path: string,
   init: RequestInit = {},
-  timeoutMs: typeof CLI_REQUEST_TIMEOUT_MS | 60_000 = CLI_REQUEST_TIMEOUT_MS,
+  timeoutMs: number = CLI_REQUEST_TIMEOUT_MS,
 ): Promise<HttpOutcome> {
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60_000) {
+    throw new RangeError('CLI request budget must be between 1 and 60000 milliseconds.')
+  }
   const startedAt = Date.now()
   const deadline = new AbortController()
   const timer = setTimeout(() => deadline.abort(), timeoutMs)

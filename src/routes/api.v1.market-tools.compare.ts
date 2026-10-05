@@ -6,11 +6,8 @@ import { executeCorrelatedJsonRoute, postOnlyRoute } from '@/lib/server/gateway-
 import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
 import { readToolReadRequest } from '@/lib/server/tool-read-request'
 import { problem } from '@/lib/server/problem'
-import {
-  toolCompareInputSchema,
-} from '@/modules/capability-supply/public'
 import { registryToolsCompareAction } from '@/modules/registry/tools.actions'
-import { toolChoiceCompareOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { toolChoiceCompareOutputSchema, toolCatalogCompareInputSchema as toolCompareInputSchema } from '@/modules/registry/tool-choice-contracts'
 
 const MAX_TOOL_COMPARE_BODY_BYTES = 8 * 1024
 

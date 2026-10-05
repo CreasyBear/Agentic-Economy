@@ -41,9 +41,19 @@ describe('anonymous chat recovery', () => {
     }
 
     expect(projectChatFailure(caught)).toMatchObject({
-      reason: 'unknown',
+      reason: 'chat_unavailable',
       reference: 'chat-request-7',
       browseMarket: true,
+    })
+  })
+
+  it('makes an empty upstream 404 a recoverable chat failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, {
+      status: 404, headers: { 'x-ae-request-id': 'chat-empty-404' },
+    })))
+    const caught = await fetchAnonymousChat('/api/chat/anonymous').catch(error => error)
+    expect(projectChatFailure(caught)).toMatchObject({
+      reason: 'chat_unavailable', reference: 'chat-empty-404', browseMarket: true,
     })
   })
 
@@ -69,6 +79,22 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
+  it('withholds streamed model control markup while retaining user text and real cards', () => {
+    const text = '<｜DSML｜tool_calls><｜DSML｜invoke name="registry_tools_search">'
+    const turns = projectTranscriptTurns([
+      { id: 'user', role: 'user', parts: [{ type: 'text', text }] },
+      { id: 'assistant', role: 'assistant', parts: [
+        { type: 'text', text: text.slice(0, 5) }, { type: 'text', text: text.slice(5) },
+        { type: 'tool-registry_tools_search', state: 'output-available', output: {
+          kind: 'match', results: [{ toolRef, title: 'Receipt lookup' }],
+        } },
+      ] },
+    ])
+    expect(turns[0]?.text).toBe(text)
+    expect(turns[1]?.text).toContain('This answer could not be finished')
+    expect(JSON.stringify(turns[1])).not.toContain('DSML')
+    expect(turns[1]?.tools).toMatchObject([{ kind: 'choices', choices: [{ toolRef, title: 'Receipt lookup' }] }])
+  })
   it.each(['step-start', 'tool-registry_tools_search', 'tool-card'])('separates text across %s without splitting streamed chunks', (boundary) => {
     const parts = [
       { type: 'text', text: 'Found ' }, { type: 'text', text: 'three Tools.' },
@@ -261,6 +287,7 @@ describe('transcript projector', () => {
     expect(search?.kind === 'choices' ? search.choices : undefined).toEqual([{
       toolRef: searchRef,
       title: 'Weather finder',
+      summary: 'Look up forecasts',
       provider: 'Sky Co',
       price: 'A$0.51',
       priceValidUntil: 2_000_000_000_000,
@@ -301,7 +328,7 @@ describe('transcript projector', () => {
       label: 'View receipt',
       href: '/calls/invocation:chat:weather:1',
     })
-    expect(JSON.stringify(turns)).not.toContain('Look up forecasts')
+    expect(JSON.stringify(turns)).toContain('Look up forecasts')
     expect(JSON.stringify(turns)).not.toContain('sky-co')
   })
 
@@ -659,6 +686,7 @@ describe('transcript projector', () => {
     expect(turns[0]?.tools[0]?.kind === 'choices' ? turns[0].tools[0].choices : undefined).toEqual([{
       toolRef: searchRef,
       title: 'Weather finder',
+      summary: 'Look up forecasts',
       provider: 'Sky Co',
       price: 'A$0.51',
       priceValidUntil: 2_000_000_000_000,

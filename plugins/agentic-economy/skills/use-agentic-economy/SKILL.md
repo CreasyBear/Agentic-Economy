@@ -34,6 +34,18 @@ its required input and public terms; compare only actual returned references.
 Public discovery does not require an account connection. A result is a candidate,
 not a promise that the current caller can buy or use it.
 
+Set `includeLatency: true` on describe and compare to include `latency`: observed **time to result** from AE
+Call admission to recorded completion, including recovery. It is separate from
+network time to first byte and Provider execution alone. The query covers the
+last 30 days; `window.from` is its actual cutoff and `window.to` is when the
+observation was read. Median and p95 use up to the latest 48 completed Calls and
+appear after five valid samples. `insufficient_sample` reports the available
+count; an absent field on an opted-in response means history is unavailable.
+Older clients that omit `includeLatency` keep their existing response shape;
+the current CLI requests latency automatically. The observations exclude
+unfinished Calls and are not a deadline or SLA. The Tool page shows the same
+time-to-result chart. A slow response is not proof that a Call failed.
+
 If no Tool fits, explain the missing capability without inventing a listing.
 `tool_read_unavailable` means no catalogue read completed. It is retryable,
 never proof that a Tool is absent, and never permission to reuse stale terms.
@@ -110,6 +122,13 @@ permission to create another Call. Check the original Call before retrying,
 respect Retry-After when supplied, and do not change its command identity to get
 past an error. Use `ae_call_cancel` only when the current Call offers
 cancellation. If access or evidence is missing, explain the specific next step.
+The CLI allows 15 seconds for ordinary JSON reads and 60 seconds each for Quote
+and Call requests. `call --wait` starts a separate 60-second polling window after
+acceptance; `ae wait` also observes for at most 60 seconds. Each status read is
+bounded by the remaining polling window. Human output announces Quote and Call
+requests on stderr; `--json` keeps stdout machine readable and progress quiet.
+Preserve the original Call or local recovery reference on interruption. Waiting
+or timing out does not authorize another purchase.
 When reconciliation requires historical evidence fields, preserve the exact
 `invocationRef` and `operationRef` keys and values returned by the runtime.
 
