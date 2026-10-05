@@ -44,10 +44,9 @@ function priceLabel(price: ListingPrice, referenceRate: ReferenceRate | undefine
 export function alternativeToolSearchHref(listing: ListingProjection, capability: string, indexedSourceRouteRef?: string): string {
   const source = listing.sources[0]
   const alternativeTo = source.kind === 'admitted' ? source.toolRef : indexedSourceRouteRef
-  if (alternativeTo === undefined) return '/market?view=tools'
   const query = capability.replace(/\s+/gu, ' ').trim().slice(0, 200).trimEnd()
   if (query.length === 0) return '/market?view=tools'
-  const params = new URLSearchParams({ view: 'tools', query, alternativeTo })
+  const params = new URLSearchParams({ view: 'tools', query, ...(alternativeTo === undefined ? {} : { alternativeTo }) })
   return `/market?${params.toString()}`
 }
 

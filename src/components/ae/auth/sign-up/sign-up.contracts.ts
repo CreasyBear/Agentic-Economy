@@ -23,7 +23,7 @@ export type UseSignUpPageResult = Readonly<{
   stageUrl: '/sign-up'
   redirectUrl: string
   signInFallbackRedirectUrl: string
-  signInUrl: '/sign-in'
+  signInUrl: string
   switchSearch: SignUpSwitchSearch
 }>
 

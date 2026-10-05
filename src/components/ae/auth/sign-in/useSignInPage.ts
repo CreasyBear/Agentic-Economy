@@ -1,5 +1,6 @@
 import type { AeSignInPageProps, UseSignInPageResult } from './sign-in.contracts'
 import { projectSignInCopy, resolveSignInRedirectTarget } from './sign-in.contracts'
+import { authSwitchUrl } from '@/lib/client/auth-redirect'
 
 export function useSignInPage(input: AeSignInPageProps): UseSignInPageResult {
   const copy = projectSignInCopy(input.redirect)
@@ -12,6 +13,6 @@ export function useSignInPage(input: AeSignInPageProps): UseSignInPageResult {
     stageUrl: '/sign-in',
     fallbackRedirectUrl,
     signUpFallbackRedirectUrl: fallbackRedirectUrl,
-    signUpUrl: '/sign-up',
+    signUpUrl: authSwitchUrl('/sign-up', input.redirect),
   }
 }

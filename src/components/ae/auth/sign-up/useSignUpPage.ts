@@ -1,17 +1,19 @@
 import type { AeSignUpPageProps, UseSignUpPageResult } from './sign-up.contracts'
 import { buildSwitchSearch, projectSignUpCopy } from './sign-up.contracts'
+import { authSwitchUrl, sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
 
 export function useSignUpPage(input: AeSignUpPageProps): UseSignUpPageResult {
-  const copy = projectSignUpCopy(input.redirect)
+  const redirect = sanitizeAuthRedirectTarget(input.redirect)
+  const copy = projectSignUpCopy(redirect)
   return {
     heading: copy.heading,
     body: copy.body,
     titleId: 'sign-up-context-heading',
     labelledBy: 'sign-up-context-heading',
     stageUrl: '/sign-up',
-    redirectUrl: input.redirect ?? '/market',
-    signInFallbackRedirectUrl: input.redirect ?? '/owner/settings',
-    signInUrl: '/sign-in',
-    switchSearch: buildSwitchSearch(input.redirect),
+    redirectUrl: redirect ?? '/market',
+    signInFallbackRedirectUrl: redirect ?? '/market',
+    signInUrl: authSwitchUrl('/sign-in', redirect),
+    switchSearch: buildSwitchSearch(redirect),
   }
 }

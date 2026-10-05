@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { recordProductJourney } from '@/lib/observability/product-journey'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
@@ -28,6 +29,10 @@ export function toolUnavailablePresentation(result: ToolUnavailableProps['result
 
 export function PublicToolDetail({ result }: PublicToolDetailProps) {
   const [readAt] = useState(() => Date.now())
+  const observedToolRef = result.kind === 'found' ? result.tool.toolRef : undefined
+  useEffect(() => {
+    recordProductJourney({ action: 'tool_viewed', phase: result.kind === 'found' ? 'observed' : 'failed', surface: 'tool', listingKind: 'ae_callable' })
+  }, [result.kind, observedToolRef])
   if (result.kind !== 'found') {
     const presentation = toolUnavailablePresentation(result)
     if (result.kind === 'source_unavailable') {

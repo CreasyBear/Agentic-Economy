@@ -4,6 +4,7 @@ import type { PostHog } from 'posthog-js'
 import { readObservabilityClientConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { getOrCreatePseudonymousSessionId } from '@/lib/observability/funnel-attribution'
+import { protectPostHogEvent } from './posthog-event-safety'
 import {
   isTelemetryAllowedForCurrentRoute,
   safeTelemetryPath,
@@ -68,7 +69,7 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
   initPromise ??= import('posthog-js')
     .then(({ default: posthog }) => {
       const config = readObservabilityClientConfig()
-      if (config.posthogKey === undefined) {
+      if (!config.enabled || config.posthogKey === undefined) {
         return false
       }
 
@@ -77,8 +78,10 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
         person_profiles: 'identified_only',
         capture_pageview: false,
         capture_pageleave: false,
+        autocapture: false,
         persistence: 'sessionStorage',
         disable_session_recording: true,
+        before_send: protectPostHogEvent,
         loaded: (ph) => {
           ph.register({
             ae_environment: config.environment,
