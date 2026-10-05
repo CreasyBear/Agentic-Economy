@@ -7,6 +7,7 @@ import type { MarketplaceMetricDay, MarketplaceMetricsRange, MarketplaceMetricsR
 import { emptyMarketplaceFunding } from '@/modules/observability/public'
 import { MarketplaceActivityView, OverviewMarketplaceActivity } from '@/components/ae/admin/metrics/MarketplaceActivity'
 import { AdminMetricsPage } from '@/components/ae/admin/metrics/AdminMetricsPage'
+import { MarketplaceSignalCharts } from '@/components/ae/admin/metrics/components/MarketplaceSignalCharts'
 
 const query = vi.hoisted(() => vi.fn())
 vi.mock('convex/react', () => ({ useQuery: query }))
@@ -34,6 +35,100 @@ function report(): MarketplaceMetricsReport {
 }
 afterEach(cleanup)
 
+describe('ARC marketplace signal charts', () => {
+  function completeReport(): MarketplaceMetricsReport {
+    return { ...report(), coverageComplete: true,
+      days: [{ ...day('2026-09-29', 9), quotesCreated: 20, quotesConvertedAtClose: 8 },
+        { ...day('2026-09-30', 3), quotesCreated: 10, quotesConvertedAtClose: 4 }],
+      headline: { transactingWorkspaces: 1, settledCalls: 12, settledCallValue: null, money: 'no_settled_usage', successRate: 1 },
+      funding: { ...emptyMarketplaceFunding('production'), customerFundedCalls: 9, promotionalOnlyCalls: 3,
+        unclassifiedCalls: 77, refundedCalls: 44, repeatBuyingAccounts: 0, accountCoverageComplete: true } }
+  }
+
+  it('keeps the funding denominator fixed while inspecting disjoint paid Call categories', () => {
+    render(<MarketplaceSignalCharts report={completeReport()} />)
+    const purchased = screen.getByRole('button', { name: 'Uses purchased credit, 9 Calls, 75%' })
+    const promotional = screen.getByRole('button', { name: 'Promotional only, 3 Calls, 25%' })
+    fireEvent.click(purchased)
+    expect(purchased.getAttribute('aria-pressed')).toBe('true')
+    expect(promotional.getAttribute('aria-label')).toBe('Promotional only, 3 Calls, 25%')
+    fireEvent.keyDown(purchased, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(promotional)
+    expect(screen.getByText(/Paid Calls 12 Calls/)).toBeTruthy()
+  })
+
+  it('exposes the Quote cohort and conversion rate through keyboard inspection', () => {
+    render(<MarketplaceSignalCharts report={completeReport()} />)
+    const funnel = screen.getByRole('group', { name: 'Quote conversion. Use arrow keys to move between steps.' })
+    fireEvent.keyDown(funnel, { key: 'End' })
+    expect(screen.getByText('Converted to Calls, 12 Quotes, 40% of the previous step, 40% of the first')).toBeTruthy()
+    const table = within(screen.getByRole('table', { name: 'Quote conversion' }))
+    expect(table.getByRole('row', { name: 'Quotes created 30 Quotes 100% 100%' })).toBeTruthy()
+    expect(table.getByRole('row', { name: 'Converted to Calls 12 Quotes 40% 40%' })).toBeTruthy()
+    fireEvent.keyDown(funnel, { key: 'Escape' })
+    expect(screen.queryByText('Converted to Calls, 12 Quotes, 40% of the previous step, 40% of the first')).toBeNull()
+  })
+
+  it.each(['range', 'day', 'none'] as const)('withholds comparisons for incomplete %s evidence', kind => {
+    const ready = completeReport()
+    const incomplete = kind === 'range' ? { ...ready, coverageComplete: false }
+      : kind === 'none' ? { ...ready, days: [] }
+      : { ...ready, days: ready.days.map(item => ({ ...item, complete: false })) }
+    render(<MarketplaceSignalCharts report={incomplete} />)
+    expect(screen.getAllByRole('status').map(item => item.textContent)).toEqual([
+      'Complete observations are required for this comparison.', 'Complete observations are required for this comparison.',
+    ])
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.queryByText('No paid Calls')).toBeNull()
+  })
+
+  it.each(['total', 'daily'] as const)('withholds an inconsistent %s conversion funnel instead of rescaling invalid evidence', kind => {
+    const ready = completeReport()
+    render(<MarketplaceSignalCharts report={{ ...ready, days: ready.days.map((item, index) => ({ ...item,
+      quotesConvertedAtClose: kind === 'total' ? 50 : index === 0 ? 30 : 0,
+    })) }} />)
+    expect(screen.getByRole('status').textContent).toBe('Quote conversion data needs review.')
+    expect(screen.queryByRole('table', { name: 'Quote conversion' })).toBeNull()
+  })
+
+  it('removes previous charts while loading another range', () => {
+    const view = render(<MarketplaceSignalCharts report={completeReport()} />)
+    view.rerender(<MarketplaceSignalCharts report={undefined} />)
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getAllByRole('status').map(item => item.textContent)).toEqual([
+      'Loading the selected period…', 'Loading the selected period…',
+    ])
+  })
+
+  it('shows genuine zero activity without a conversion percentage or fractional Account axis', () => {
+    const ready = completeReport()
+    const empty = emptyMarketplaceFunding('production')
+    render(<MarketplaceActivityView report={{ ...ready,
+      funding: { ...empty, repeatBuyingAccounts: 0, accountCoverageComplete: true },
+      days: ready.days.map(item => ({ ...item, quotesCreated: 0, quotesConvertedAtClose: 0, funding: empty })),
+    }} range="last_7" onRangeChange={vi.fn()} />)
+    expect(screen.getByText('No paid Calls')).toBeTruthy()
+    expect(screen.getByText('No Quotes yet')).toBeTruthy()
+    expect(screen.queryByRole('table', { name: 'Quote conversion' })).toBeNull()
+    const timeSeries = within(screen.getByRole('figure', { name: 'Buying Accounts, last 7 days' }))
+    expect(timeSeries.queryByText('0.5')).toBeNull()
+    expect(timeSeries.getByText('1')).toBeTruthy()
+  })
+
+  it('inspects complete ARC time series and preserves six-decimal money values', () => {
+    const ready = completeReport()
+    render(<MarketplaceActivityView report={{ ...ready, days: ready.days.map(item => ({ ...item,
+      funding: { ...emptyMarketplaceFunding('production'), purchasedUnits: item.day === '2026-09-29' ? '1' : '1234567' },
+    })) }} range="last_7" onRangeChange={vi.fn()} />)
+    fireEvent.click(screen.getByRole('tab', { name: /Purchased credit spent/ }))
+    const chart = screen.getByRole('slider', { name: /Purchased credit spent, last 7 days, explore by date/ })
+    fireEvent.keyDown(chart, { key: 'Home' })
+    expect(chart.getAttribute('aria-valuetext')).toBe('29 Sept: Purchased credit spent $0.000001')
+    fireEvent.keyDown(chart, { key: 'End' })
+    expect(chart.getAttribute('aria-valuetext')).toBe('30 Sept: Purchased credit spent $1.234567')
+  })
+})
+
 describe('founder marketplace dashboard', () => {
   it('withholds incomplete totals and exposes missing days through keyboard inspection', () => {
     render(<MarketplaceActivityView report={report()} range="last_7" onRangeChange={vi.fn()} />)
@@ -54,8 +149,7 @@ describe('founder marketplace dashboard', () => {
       funding: { ...emptyMarketplaceFunding('production'), buyingAccounts: 1, repeatBuyingAccounts: 1, accountCoverageComplete: true },
       headline: { transactingWorkspaces: 1, settledCalls: 0, settledCallValue: null, money: 'no_settled_usage', successRate: 1 } }
     render(<MarketplaceActivityView report={value} range="last_30" onRangeChange={vi.fn()} />)
-    const tab = screen.getByRole('tab', { name: /Buying Accounts/ })
-    expect(within(tab).getByText('1')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /^Buying Accounts\s*1\s*Distinct Accounts/ })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Export CSV' }).getAttribute('href')).toBe('/api/admin/metrics-export?range=last_30')
     expect(screen.queryByText('Exported')).toBeNull()
   })

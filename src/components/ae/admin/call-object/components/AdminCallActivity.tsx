@@ -1,8 +1,7 @@
 'use client'
 
-import type { ColumnDef } from '@tanstack/react-table'
-
-import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
+import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   ADMIN_CALL_OBJECT_COPY,
@@ -13,26 +12,30 @@ export type AdminCallActivityProps = Readonly<{
   rows: readonly AdminCallActivityRow[]
 }>
 
-const columns: ColumnDef<AdminCallActivityRow>[] = [
+const columns: DataColumn<AdminCallActivityRow>[] = [
   {
-    accessorKey: 'at',
-    header: ADMIN_CALL_OBJECT_COPY.occurredAtColumn,
-    cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.at}</span>,
+    key: 'at',
+    sortable: false,
+    label: ADMIN_CALL_OBJECT_COPY.occurredAtColumn,
+    render: (_value, row) => <span className="whitespace-nowrap tabular-nums">{row.at}</span>,
   },
   {
-    accessorKey: 'eventType',
-    header: ADMIN_CALL_OBJECT_COPY.eventTypeColumn,
-    cell: ({ row }) => <code className="text-xs">{row.original.eventType}</code>,
+    key: 'eventType',
+    sortable: false,
+    label: ADMIN_CALL_OBJECT_COPY.eventTypeColumn,
+    render: (_value, row) => <code className="text-xs">{row.eventType}</code>,
   },
   {
-    accessorKey: 'actorRef',
-    header: ADMIN_CALL_OBJECT_COPY.actorColumn,
-    cell: ({ row }) => <code className="break-all text-xs">{row.original.actorRef}</code>,
+    key: 'actorRef',
+    sortable: false,
+    label: ADMIN_CALL_OBJECT_COPY.actorColumn,
+    render: (_value, row) => <AeCopyReference compact label="Actor" value={row.actorRef} />,
   },
   {
-    accessorKey: 'outcome',
-    header: ADMIN_CALL_OBJECT_COPY.outcomeColumn,
-    cell: ({ row }) => <span>{row.original.outcome}</span>,
+    key: 'outcome',
+    sortable: false,
+    label: ADMIN_CALL_OBJECT_COPY.outcomeColumn,
+    render: (_value, row) => <span>{row.outcome}</span>,
   },
 ]
 
@@ -44,14 +47,16 @@ export function AdminCallActivity({ rows }: AdminCallActivityProps) {
       className="min-w-0"
     >
       <div className="min-w-0 max-w-full overflow-x-auto">
-        <AeRecordTable
-          columns={columns}
-          data={rows}
-          getRowId={(row) => row.id}
-          caption={ADMIN_CALL_OBJECT_COPY.activityTitle}
-          emptyMessage={ADMIN_CALL_OBJECT_COPY.noActivity}
-          hideFilter
-        />
+        <div className="ae-arc min-w-0">
+        <SortableDataTable
+          density="compact"
+            columns={columns}
+            rows={rows}
+            rowKey="id"
+            caption={ADMIN_CALL_OBJECT_COPY.activityTitle}
+            emptyMessage={ADMIN_CALL_OBJECT_COPY.noActivity}
+            />
+      </div>
       </div>
     </AeSection>
   )

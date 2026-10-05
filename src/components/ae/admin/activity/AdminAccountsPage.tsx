@@ -85,7 +85,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
             {result.results.length} loaded{result.status === 'Exhausted' ? '' : ' · more Accounts available'}. Sorting applies to loaded Accounts.
           </p>
           <div className="ae-arc min-w-0">
-            <SortableDataTable
+            <SortableDataTable density="compact"
               rows={result.results}
               rowKey="accountRef"
               caption="Loaded Accounts"

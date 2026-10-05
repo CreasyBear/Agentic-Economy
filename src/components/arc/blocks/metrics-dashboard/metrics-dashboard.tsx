@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { animate, motion, useReducedMotion } from "motion/react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { Download } from "lucide-react";
 import { motionTokens } from "../../lib/motion-tokens";
 import SegmentedControl from "../../segmented-control/segmented-control";
+import { LineChart } from "../../line-chart/line-chart";
+import { SlotText } from "../../slot-text/slot-text";
 import { Alert } from "../../alert/alert";
 import styles from "./metrics-dashboard.module.css";
 
@@ -12,7 +14,7 @@ import styles from "./metrics-dashboard.module.css";
 export type DashboardPoint = Readonly<{ date: string; value: number | null }>
 export type DashboardMetric = Readonly<{
   key: string; label: string; value: number | null; description: string; points: readonly DashboardPoint[]
-  displayValue?: string; formatPoint?: (value: number) => string; detailHref?: string
+  integerTicks?: boolean; displayValue?: string; formatPoint?: (value: number) => string; detailHref?: string
 }>
 export type DashboardRange = 'last_7' | 'last_30' | 'last_90'
 export type MetricsDashboardProps = Readonly<{
@@ -44,28 +46,6 @@ function niceScale(min: number, max: number, percent: boolean) {
   const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? raw;
   const start = Math.floor(lo / step) * step;
   return { min: start, max: start + step * 3, ticks: [0, 1, 2, 3].map((i) => start + step * i) };
-}
-
-/** Counts a number to its new value with tabular numerals; reduced motion swaps it instantly. */
-function CountValue({ value, format }: { value: number; format: (value: number) => string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const shown = useRef(value);
-  const formatRef = useRef(format);
-  const [initial] = useState(() => format(value));
-  const reduce = useReducedMotion();
-  useEffect(() => { formatRef.current = format; }, [format]);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (reduce) { shown.current = value; node.textContent = formatRef.current(value); return; }
-    const controls = animate(shown.current, value, {
-      duration: motionTokens.duration.considered,
-      ease: motionTokens.ease.standard,
-      onUpdate: (v) => { shown.current = v; node.textContent = formatRef.current(v); },
-    });
-    return () => controls.stop();
-  }, [value, reduce]);
-  return <span ref={ref}>{initial}</span>;
 }
 
 /** Monotone cubic path: smooth without overshooting past the real data points. */
@@ -191,7 +171,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
             <button key={m.key} type="button" role="tab" id={`${uid}-${m.key}`} aria-controls={`${uid}-chart`} tabIndex={selected ? 0 : -1} data-metric-index={index} onKeyDown={(event) => onMetricKey(event, index)} aria-selected={selected} className={styles.kpi} onClick={() => { setMetricKey(m.key); setActive(null); }}>
               {selected && <motion.span layoutId={`${uid}-kpi`} className={styles.kpiIndicator} transition={reduce ? { duration: 0 } : motionTokens.spring.smooth} />}
               <span className={styles.kpiLabel}>{m.label}</span>
-              <span className={styles.kpiValue}>{loading ? "Loading…" : m.value === null ? "Unavailable" : m.displayValue ?? <CountValue value={m.value} format={m.formatPoint ?? formatValue} />}</span>
+              <span className={styles.kpiValue} data-exact={m.displayValue !== undefined || undefined}>{loading ? "Loading…" : m.value === null ? "Unavailable" : m.displayValue ?? <SlotText value={(m.formatPoint ?? formatValue)(m.value)} align="end" duration={.22} stagger={.005} spins={0} />}</span>
               <span className={styles.metricDescription}>{m.description}</span>
             </button>
           );
@@ -207,6 +187,12 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
           {metric.detailHref ? <a className={styles.metricDescription} href={metric.detailHref}>View underlying purchases ↗</a> : <span className={styles.metricDescription}>Daily observations · Perth time</span>}
         </div>
 
+        {points.length > 0 && points.every(point => point.value !== null) ? <LineChart
+          label={`${metric.label}, ${(rangeInfo?.long ?? range).toLowerCase()}`}
+          data={points.map(point => ({ key: point.date, label: formatDay(point.date), axisLabel: formatDay(point.date), values: { measure: point.value ?? 0 } }))}
+          series={[{ key: "measure", label: metric.label, color: "var(--signal-violet)", area: true }]}
+          height={220} legend={false} integerTicks={metric.integerTicks ?? false} formatValue={metric.formatPoint ?? formatValue} formatTick={formatAxis}
+        /> : <>
         <div className={styles.plot}>
           <div className={styles.yAxis} aria-hidden>
             {[...chart.scale.ticks].reverse().map((t) => <span key={t}>{formatAxis(t)}</span>)}
@@ -228,7 +214,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
                 viewBox={`0 0 ${W} ${H}`}
                 preserveAspectRatio="none"
                 aria-hidden
-                initial={reduce ? false : { opacity: 0 }}
+                initial={false}
                 animate={{ opacity: 1 }}
                 transition={{ duration: reduce ? 0 : motionTokens.duration.standard, ease: motionTokens.ease.standard }}
               >
@@ -255,6 +241,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
             })}
           </div>
         </div>
+        </>}
       </div>
 
     </section>

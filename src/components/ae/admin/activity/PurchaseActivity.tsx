@@ -172,7 +172,7 @@ export function PurchaseActivityTable({ rows, showAccount = true }: Readonly<{ r
   const records = rows.map(row => ({ ...row, purchase: row.toolName ?? row.toolRef, account: row.accountName ?? row.accountRef }))
   return (
     <div className="ae-arc w-full min-w-0">
-      <SortableDataTable
+      <SortableDataTable density="compact"
         rows={records}
         columns={showAccount ? PURCHASE_COLUMNS : PURCHASE_COLUMNS.filter(column => column.key !== 'account')}
         rowKey="callRef"

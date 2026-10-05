@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { Button } from '@/components/ui/button'
+import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -51,10 +51,9 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
   const ready = exceptions.data
   const selectedPartition = ready.selectedPartition
   return page(
-    <div className="grid gap-section">
+    <div className="grid min-w-0 gap-related">
       <AeSection
         title={ADMIN_EXCEPTIONS_COPY.filtersTitle}
-        description={ADMIN_EXCEPTIONS_COPY.filtersDescription}
       >
         <AdminSearchNotice rejected={props.search.rejected} />
         <ExceptionFilterChips
@@ -63,21 +62,18 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
           overview={ready.overview}
           onSelect={exceptions.onSelectKind}
         />
-        <div className="mt-3 flex flex-wrap gap-intra">
-          {ADMIN_EXCEPTION_PARTITIONS[ready.selectedKind].map((partition) => {
-            const count = exceptionQueueCount(
-              ready.overview.filter((entry) => entry.kind === ready.selectedKind && entry.partition === partition),
-              1,
-            )
-            return (
-              <Button key={partition} type="button" size="sm"
-                variant={selectedPartition === partition ? 'default' : 'outline'}
-                aria-pressed={selectedPartition === partition}
-                onClick={() => exceptions.onSelectPartition(partition)}>
-                {ADMIN_EXCEPTION_PARTITION_LABELS[partition]} ({count})
-              </Button>
-            )
-          })}
+        <div className="ae-arc mt-2 min-w-0">
+          <SegmentedControl label="Queue state" value={selectedPartition}
+            options={ADMIN_EXCEPTION_PARTITIONS[ready.selectedKind].map(partition => ({
+              value: partition,
+              label: `${ADMIN_EXCEPTION_PARTITION_LABELS[partition]} (${exceptionQueueCount(
+                ready.overview.filter(entry => entry.kind === ready.selectedKind && entry.partition === partition), 1,
+              )})`,
+            }))}
+            onValueChange={value => {
+              const partition = ADMIN_EXCEPTION_PARTITIONS[ready.selectedKind].find(partition => partition === value)
+              if (partition) exceptions.onSelectPartition(partition)
+            }} />
         </div>
       </AeSection>
       {ready.selectedSourceUnavailable ? (
@@ -90,8 +86,8 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
         complete={ready.complete}
         unavailable={ready.selectedSourceUnavailable}
         orderLabel={ready.selectedKind === 'uncertain_call'
-          ? 'Reconciliation next-attempt order'
-          : 'Updated-at index order'}
+          ? 'Next recovery attempt first'
+          : 'Oldest updates first'}
         paginationStatus={ready.paginationStatus}
         onLoadMore={ready.loadMore}
         onOpen={exceptions.onOpen}

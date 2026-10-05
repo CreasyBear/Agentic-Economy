@@ -307,3 +307,166 @@ Check metric/range semantics and gaps using behavioral tests. Exercise anonymous
 - Reused the existing Sentry error monitor and confirmed its high-priority email alert is enabled. It targets suggested assignees or recently active members. No new subscription, access grant or duplicate project was created. Alert email delivery and the Convex journey log-drain/SLI alerts remain unverified.
 
 Release boundary: this branch started from `codex/production-money` at `9405d77f0` and subsequently integrated `b113cc332` and `86abf7d37`. Review against `codex/production-money`, preserving the shared checkout. Vercel branch previews only build the web application; its current build command does not deploy matching Convex functions. Deliver a reviewed matching backend and web release, then verify hosted founder admission, refused access, production event receipt, snapshot coverage and alert delivery. The complete source gate and local browser acceptance are evidence for review, not a production release.
+
+## Compact operator tables — 1 October follow-up
+
+The founder identified rows dominated by repeated kind labels, full hashes and
+multi-line timestamps. The existing official ARC `SortableDataTable` now serves
+admin lists and detail tables directly. Source-ordered tables disable local
+sorting; Purchases and Accounts retain their existing loaded-row sorting.
+Exception rows lead with Business, use compact copyable references and a single
+relative time with the absolute timestamp available on hover. Audit evidence
+opens in the existing record sheet. Daily metrics divides its existing measures
+into Purchases, Quotes, Participation and Resolution views.
+
+Cognitive-load and Rams review: remove repetition before shrinking text; keep the
+identity and action legible; expose detailed evidence on demand. On mobile,
+record rows become cards while metrics and model-cost comparisons preserve
+column alignment inside a horizontal scroller. Non-sortable card headers remain
+available to assistive technology without becoming an unreadable visual strip.
+The selected segmented option stays visible after resizing. Touch copy/review
+controls retain 44px targets.
+
+Complexity decision: keep two opt-in ARC presentation props (density and mobile
+layout), an opt-in compact reference with optional link, and one selected audit
+row. They remove repeated cell styling and admin TanStack renderer adapters.
+Reusing the existing sheet avoids another drawer implementation. A new table
+wrapper, backend adapter or component library would add indirection without
+removing further burden, so none was added. Shared owner/market record tables
+and default reference rendering keep their existing behavior.
+
+Requires: existing authorized read models. Ensures: original references remain
+exact in links and clipboard; all evidence and measures remain reachable.
+Invariant: preserve source ordering, exact money formatting, unknown states,
+pagination and action handlers; no auth, backend or transactional changes.
+On violation: retain existing refused, unavailable, partial and empty states.
+
+Verification: 45 focused tests passed across nine files, covering full-reference
+copy/link fidelity, audit evidence disclosure, metric precision and keyboard
+views, loaded sorting, partial pagination and denied reads. Browser checks on
+real local development records confirmed 45px exception rows (previously about
+83px at the same width), five compact Provider rows, audit close-focus return,
+390px mobile and 1440px desktop layouts without page overflow, keyboard metric
+selection, readable mobile metric columns, and light/dark table rendering.
+React Doctor against `7ab74bf2a` reported zero new diagnostics; this is a
+baseline comparison, not removal of existing advisories. `npm run check` passed.
+The complete release gate and hosted rollout were not repeated for this UI
+follow-up; previous release evidence does not establish this revision in prod.
+
+### Expressive ARC follow-up
+
+Joel requested a substantially more playful console. Use four additional official
+ARC Pro components, fetched from the authenticated MCP and installed through its
+shadcn registry: `orbit-logos`, `liquid-tab-bar`, `slot-text`, `expandable-card`.
+The orbit gives eight existing operating destinations a visual map and a focused
+explanation; liquid tabs select the four compact daily-table views; slot text
+replaces the custom numeric tween; the expandable card discloses measurement rules.
+
+Cost: four maintained vendor components and one scoped palette. Benefit: requested
+interactive character without an animation framework or new dependency. Keep the
+vendor motion mechanics; remove its simulated connection workflow and dead styles.
+The alternative was retaining static link columns and custom numeric animation.
+No new page, business state, telemetry service or money command is introduced.
+
+Requires: authorized existing console reads and actual destination URLs. Ensures:
+internal routes stay internal, external URLs reject credentials/non-HTTPS, exact
+formatted values and unavailable/loading states survive animation. Invariant:
+configuration never proves telemetry receipt; decorative category colours never
+report financial health. On violation: omit invalid analytics links, retain honest
+unavailable states and immediately remove closing cards from keyboard access.
+
+Cognitive-load and visual review: category filters narrow eight destinations;
+selection names the destination, explains its purpose and exposes one real action.
+The usual admin navigation remains available. Deliberate departures from ARC's
+restrained styling are the locally scoped violet/mint/peach backdrop and coloured
+navigation icons, requested by Joel. Keep AE focus outlines despite ARC's checklist
+preference. New controls have 44px targets, pause/hover/focus stop ambient motion,
+and reduced-motion rendering has been inspected. No brand endorsement or fake
+connection success is shown. Existing compact operational tables stay compact.
+
+Verification: 41 focused tests across seven files cover real links, invalid URL
+exclusion, honest configuration states, category keyboard navigation, Escape focus
+return, pause, daily measure selection, exact money, authority refusal, readiness
+expiry and existing filters/copy behavior. `npm run check` passed. Browser checks
+at 390, 768, 1024 and 1440 cover light/dark themes, reduced motion, disclosure focus
+and contained table scrolling. The new tabpanel needed `min-width: 0`; the existing
+chart's first opacity render and the new disclosure text were made deterministic
+to avoid reduced-motion SSR hydration mismatches. No production release was made.
+
+React Doctor included untracked vendor files: two error-level and eight warning
+advisories remain. The errors are the intentionally sprung disclosure height and
+an unused optional tab-badge width animation. Other advisories concern shared
+Motion imports, the maintained orbital component's size and exported tab ID helpers.
+Keep these bounded vendor behaviors after browser verification; no rules were
+disabled. The existing app already shares Motion, and neither a new lazy-animation
+provider nor splitting the upstream orbit into a framework is justified here.
+
+### ARC chart follow-up
+
+Three more official ARC components were installed through the configured registry:
+`line-chart`, `donut-chart` and Pro `funnel-chart`. The time series uses a shaded
+monotone curve and a gliding date crosshair. The funding ring selects a category
+without hiding it or changing its denominator. The two-stage funnel compares
+Quotes created in the selected period with those converted to Calls at snapshot
+close. It turns vertical in narrow containers. All three use the existing Motion
+runtime; package dependencies are unchanged.
+
+Requires: authorized snapshots with complete period coverage for comparisons.
+Ensures: funding parts count disjoint settled paid Calls, Quote stages describe
+the same creation cohort, dates and units remain inspectable by keyboard.
+Invariant: missing days never become zeros or a continuous line; conversion does
+not imply delivery, settlement or traction. Exact money headings retain all six
+decimals and wrap instead of spilling into adjacent tiles. On violation: retain
+the gap-aware chart, withhold funding/comparison totals and explicitly request
+review when either a daily or total conversion count exceeds its Quote cohort.
+
+Cost: three maintained vendor components, one small presentation component, and
+an optional integer-axis flag. Benefit: the requested chart interactions without
+a new charting framework, metrics service or data model. The existing gaps chart
+remains the alternative when observations are incomplete because ARC's line
+component treats an omitted value as zero. Its adapter accepts only fully
+observed points. Retain that boundary instead of rewriting the vendor curve
+engine. Vendor array geometry now checks internal indexes under the project's
+strict TypeScript configuration. Funnel particle flow is disabled; canvas work
+starts only when flow is actually enabled and clears on cancellation.
+
+Cognitive-load application: four metric choices, three period choices and three
+labelled chart questions. The selected period and cohort definitions remain
+visible; the founder need not remember or reconcile a second date window.
+Perception: one large time series, two supporting comparisons. Attention: no
+continuous funnel particle stream. Memory: units and exclusions stay beside the
+chart. Learning: arrows/Home/End inspect dated values or funnel steps; ring
+selection preserves the whole. Funding legend targets are 44px. Empty charts
+use compact layouts, with no fabricated rate or activity.
+
+Verification uses real authorized local readbacks for empty/loading states and
+an isolated, clearly labelled visual fixture for populated chart geometry and
+interaction. That fixture neither creates marketplace records nor bypasses
+production authorization and is removed after review. Checked 390, 768, 1024
+and desktop layouts, dark contrast, reduced motion and fresh navigation between
+Overview and Metrics. A populated phone check exposed money-tile overflow; exact
+amounts now wrap as plain text while count headings retain ARC SlotText. Browser
+readouts and rendered paths establish working crosshair, ring selection and
+funnel inspection, including the vertical funnel. Unit checks cover denominator
+stability, Quote conversion, daily/total contradictions, incomplete coverage,
+loading replacement, zero activity, gap inspection and six-decimal chart values.
+
+React Doctor reviewed the new vendor files as well as earlier untracked work:
+29 diagnostics (four error-level, 25 warnings). Two error-level subscription
+advisories are in the ring: Count destroys its MotionValue on unmount, and every
+segment stores an unsubscribe/destroy function invoked on removal and unmount;
+the scan does not recognize those separate cleanup effects. The two previously
+reviewed layout-animation advisories remain. Other warnings concern small-list
+iterations, shared Motion imports, vendor component size and optional callbacks.
+Keep the verified vendor behavior; no rules were disabled. The production client
+MarketplaceActivity chunk, including the dashboard and its existing dependencies,
+is about 24 kB gzip plus 5.3 kB gzip CSS. This is not an incremental size estimate.
+
+Final checks and browser proofs are in ignored `output/founder-console/chart-*`
+and `charts-*` files. This follow-up is local source work; no release gate,
+backend push or production deployment is claimed.
+
+Final verification: `npm run check`, `npm run build` and 51 focused tests across
+seven files passed. No package dependencies changed. The labelled fixture server,
+its entry files, cache and duplicate MCP source responses were removed. Retained
+screenshots distinguish populated visual fixtures from the actual local console.

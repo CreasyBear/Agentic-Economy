@@ -132,8 +132,14 @@ describe('admin audit page', () => {
 
     render(<AdminAuditPage search={{}} onSearchChange={mocks.onSearchChange} />)
 
-    expect(screen.getAllByText('admin.action_denied').length).toBeGreaterThan(0)
+    expect(screen.getByText('Admin action denied')).toBeTruthy()
+    expect(screen.queryByText('policy_violation')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'View evidence: audit-row-1' }))
+    expect(screen.getByRole('dialog', { name: 'Audit evidence' })).toBeTruthy()
+    expect(screen.getByText('admin.action_denied')).toBeTruthy()
     expect(screen.getByText('policy_violation')).toBeTruthy()
+    expect(screen.getByText('evidence:ticket-1')).toBeTruthy()
+    expect(screen.getByText('correlation:audit-1')).toBeTruthy()
   })
 
   it('renders an event-type chip and clears all URL filters', () => {

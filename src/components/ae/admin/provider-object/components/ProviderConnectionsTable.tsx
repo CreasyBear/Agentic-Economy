@@ -1,8 +1,6 @@
-import type { ColumnDef } from '@tanstack/react-table'
-
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
+import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 import {
   PROVIDER_OBJECT_COPY,
   type ProviderConnectionRow,
@@ -10,37 +8,42 @@ import {
 } from '../provider-object.contracts'
 import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
 
-const columns: ColumnDef<ProviderConnectionRow, unknown>[] = [
+const columns: DataColumn<ProviderConnectionRow>[] = [
   {
-    accessorKey: 'connectionRef',
-    header: PROVIDER_OBJECT_COPY.columns.connection,
-    cell: ({ row }) => (
-      <AeCopyReference label={PROVIDER_OBJECT_COPY.columns.connection} value={row.original.connectionRef} />
+    key: 'connectionRef',
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.connection,
+    render: (_value, row) => (
+      <AeCopyReference compact label={PROVIDER_OBJECT_COPY.columns.connection} value={row.connectionRef} />
     ),
   },
   {
-    accessorKey: 'lifecycle',
-    header: PROVIDER_OBJECT_COPY.columns.lifecycle,
-    cell: ({ row }) => providerStatusLabel(row.original.lifecycle),
+    key: 'lifecycle',
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.lifecycle,
+    render: (_value, row) => providerStatusLabel(row.lifecycle),
   },
   {
-    accessorKey: 'sourceEnvironment',
-    header: PROVIDER_OBJECT_COPY.columns.environment,
-    cell: ({ row }) => row.original.sourceEnvironment ?? providerStatusLabel('unavailable'),
+    key: 'sourceEnvironment',
+    sortable: false,
+    label: PROVIDER_OBJECT_COPY.columns.environment,
+    render: (_value, row) => row.sourceEnvironment ?? providerStatusLabel('unavailable'),
   },
 ]
 
 export function ProviderConnectionsTable({ rows }: ProviderConnectionsTableProps) {
   return (
     <AeSection title={PROVIDER_OBJECT_COPY.connectionsTitle}>
-      <AeRecordTable
-        columns={columns}
-        data={rows}
-        getRowId={(row) => row.connectionRef}
-        hideFilter
-        caption={PROVIDER_OBJECT_COPY.connectionsTitle}
-        emptyMessage={PROVIDER_OBJECT_COPY.noConnections}
-      />
+      <div className="ae-arc min-w-0">
+        <SortableDataTable
+          density="compact"
+          columns={columns}
+          rows={rows}
+          rowKey="connectionRef"
+          caption={PROVIDER_OBJECT_COPY.connectionsTitle}
+          emptyMessage={PROVIDER_OBJECT_COPY.noConnections}
+        />
+      </div>
     </AeSection>
   )
 }

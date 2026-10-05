@@ -1,4 +1,5 @@
 .dashboard {
+  --signal-violet: oklch(.55 .2 305);
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -157,6 +158,7 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.kpiValue[data-exact] { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 
 /* Chart */
 
@@ -386,3 +388,5 @@
 .exportButton { text-decoration: none; }
 .chartArea { touch-action: pan-y; }
 @media (max-width: 640px) { .exportButton { min-height: 44px; } }
+
+:global(.dark) .dashboard { --signal-violet: oklch(.8 .14 305); }

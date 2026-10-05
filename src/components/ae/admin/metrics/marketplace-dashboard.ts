@@ -3,7 +3,7 @@ import type { MarketplaceMetricsRange, MarketplaceMetricsReport } from '@/lib/op
 import { adminActivityHref } from '@/lib/operator/admin-console/activity'
 import { formatCurrencyAmount } from '@/modules/money/public'
 
-const chartMoney = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 2 })
+const chartMoney = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 6, maximumFractionDigits: 6 })
 
 /** Complete snapshots only. Missing observations remain gaps; range totals require complete coverage. */
 export function marketplaceDashboardMetrics(report: MarketplaceMetricsReport | undefined, range: MarketplaceMetricsRange = 'last_7'): readonly [DashboardMetric, ...DashboardMetric[]] {
@@ -30,15 +30,15 @@ export function marketplaceDashboardMetrics(report: MarketplaceMetricsReport | u
   })
   const purchases = adminActivityHref({ range, funding: 'customer', status: 'completed' })
   return [
-    { key: 'customers', label: 'Buying Accounts', value: funding?.accountCoverageComplete ? funding.buyingAccounts : null,
+    { key: 'customers', integerTicks: true, label: 'Buying Accounts', value: funding?.accountCoverageComplete ? funding.buyingAccounts : null,
       description: 'Distinct Accounts with delivered, customer-funded purchases', points: fundingPoints('buyingAccounts'), detailHref: purchases },
-    { key: 'completed', label: 'Delivered purchases', value: funding?.completedCustomerFundedCalls ?? null,
+    { key: 'completed', integerTicks: true, label: 'Delivered purchases', value: funding?.completedCustomerFundedCalls ?? null,
       description: 'Completed Calls using purchased credit', points: fundingPoints('completedCustomerFundedCalls'), detailHref: purchases },
     { key: 'settled', label: 'Purchased credit spent', value: funding == null ? null : Number(funding.purchasedUnits) / 1_000_000,
       ...(funding == null ? {} : { displayValue: formatCurrencyAmount({ currency: 'AUD', exponent: 6, units: funding.purchasedUnits }) }),
       formatPoint: value => chartMoney.format(value), description: 'Settled spend · promotional credit excluded', points: fundingPoints('purchasedUnits'),
       detailHref: adminActivityHref({ range, funding: 'customer' }) },
-    { key: 'quotes', label: 'Quotes created', value: total('quotesCreated'),
+    { key: 'quotes', integerTicks: true, label: 'Quotes created', value: total('quotesCreated'),
       description: 'Priced opportunities · not a count of customers', points: points('quotesCreated') },
   ]
 }

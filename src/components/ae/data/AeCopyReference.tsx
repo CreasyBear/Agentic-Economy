@@ -10,20 +10,26 @@ export function AeCopyReference({
   value,
   className,
   copyFeedbackMs = 1_600,
-}: Readonly<{ label: string; value: string; className?: string; copyFeedbackMs?: number }>) {
+  compact = false,
+  href,
+}: Readonly<{ label: string; value: string; className?: string; copyFeedbackMs?: number; compact?: boolean; href?: string }>) {
   const { status, isCopied: copied, copy } = useClipboardCopy(value, {
     timeout: copyFeedbackMs,
   })
 
   const feedback = copied ? 'Copied' : status === 'failed' ? 'Copy failed' : ''
+  const shown = compact && value.length > 36 ? `${value.slice(0, 21)}…${value.slice(-8)}` : value
+  const reference = <code dir="ltr" className={cn('min-w-0 font-mono text-xs', compact ? 'block truncate text-muted-foreground' : 'break-all text-foreground')}>{shown}</code>
   return (
-    <span className={cn('inline-flex min-w-0 flex-wrap items-center gap-intra', className)}>
-      <code dir="ltr" className="min-w-0 break-all font-mono text-xs text-foreground">{value}</code>
+    <span className={cn('inline-flex min-w-0 items-center', compact ? 'max-w-full gap-1' : 'flex-wrap gap-intra', className)}>
+      {href === undefined
+        ? <span className="min-w-0" title={compact ? value : undefined}>{reference}</span>
+        : <a href={href} aria-label={value} title={value} className="min-w-0 underline-offset-4 hover:underline">{reference}</a>}
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="shrink-0"
+        className={cn('shrink-0', compact && 'size-8 min-h-8 min-w-8 [@media(pointer:coarse)]:size-11')}
         aria-label={copied ? `${label} copied` : `Copy ${label}`}
         onClick={() => {
           void copy().then(() => {
@@ -40,7 +46,7 @@ export function AeCopyReference({
       <span
         role="status"
         aria-live="polite"
-        className={cn('min-w-14 text-xs', status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}
+        className={cn(compact ? 'sr-only' : 'min-w-14 text-xs', status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}
       >
         {feedback}
       </span>

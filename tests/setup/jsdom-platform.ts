@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, vi } from 'vitest'
 
+const originalIntersectionObserver = Object.getOwnPropertyDescriptor(globalThis, 'IntersectionObserver')
 const originalResizeObserver = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver')
 const originalMatchMedia = typeof window === 'undefined'
   ? undefined
@@ -13,6 +14,13 @@ beforeAll(() => {
 
   if (typeof globalThis.ResizeObserver === 'undefined') {
     vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+  }
+  if (typeof globalThis.IntersectionObserver === 'undefined') {
+    vi.stubGlobal('IntersectionObserver', class {
       observe() {}
       unobserve() {}
       disconnect() {}
@@ -41,6 +49,7 @@ afterAll(() => {
   if (typeof window === 'undefined') return
 
   restoreGlobal('ResizeObserver', originalResizeObserver)
+  restoreGlobal('IntersectionObserver', originalIntersectionObserver)
   restoreGlobal('matchMedia', originalMatchMedia, window)
   restoreGlobal('scrollIntoView', originalScrollIntoView, Element.prototype)
 })

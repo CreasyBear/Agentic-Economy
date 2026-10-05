@@ -37,14 +37,17 @@ export function AdminOverviewPage() {
         <div className="grid min-w-0 gap-section pb-page">
           <ConfigurationBanner readiness={data.paymentReadiness} compact />
           <PurchasesNeedingAttention attention={data.attention} />
-          <ErrorBoundary fallback={
-            <AeSection title="Marketplace activity">
-              <p role="status">{ADMIN_OVERVIEW_COPY.metricsUnavailable}</p>
-              <Link to="/admin/metrics">Open Metrics</Link>
-            </AeSection>
-          }>
-            <OverviewMarketplaceActivity />
-          </ErrorBoundary>
+          <div className="grid min-w-0 items-start gap-section xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <ErrorBoundary fallback={
+              <AeSection title="Marketplace activity">
+                <p role="status">{ADMIN_OVERVIEW_COPY.metricsUnavailable}</p>
+                <Link to="/admin/metrics">Open Metrics</Link>
+              </AeSection>
+            }>
+              <OverviewMarketplaceActivity />
+            </ErrorBoundary>
+            <FounderDestinations />
+          </div>
           <PurchaseActivity search={{ range: 'today' }} compact />
           <ErrorBoundary fallback={
             <AeSection title={ADMIN_OVERVIEW_COPY.exceptionsTitle}>
@@ -54,7 +57,6 @@ export function AdminOverviewPage() {
           }>
             <OverviewExceptionsContainer />
           </ErrorBoundary>
-          <FounderDestinations />
           <div className="ae-arc min-w-0">
             <Accordion defaultOpen={-1} items={[
               { title: 'Find an exact record', content: (

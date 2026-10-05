@@ -22,8 +22,11 @@ export type DataColumn<T> = {
 };
 
 export type SortableDataTableProps<T extends Record<string, unknown>> = {
-  rows: T[];
-  columns: DataColumn<T>[];
+  rows: readonly T[];
+  columns: readonly DataColumn<T>[];
+  density?: "comfortable" | "compact";
+  /** Keep column alignment on small screens when comparing several measures. */
+  mobileLayout?: "cards" | "scroll";
   rowKey: keyof T | ((row: T) => string);
   caption?: string;
   emptyMessage?: string;
@@ -123,7 +126,7 @@ function SelectBox({ checked, mixed = false, label, nav, reduced, onToggle, inpu
   </label>;
 }
 
-export function SortableDataTable<T extends Record<string, unknown>>({ rows, columns, rowKey, caption = "Data table", emptyMessage = "No rows to show", defaultSort, onSortChange, selectable = false, selectedKeys, defaultSelectedKeys, onSelectionChange, itemName = { one: "row", other: "rows" } }: SortableDataTableProps<T>) {
+export function SortableDataTable<T extends Record<string, unknown>>({ rows, columns, rowKey, caption = "Data table", emptyMessage = "No rows to show", defaultSort, onSortChange, selectable = false, selectedKeys, defaultSelectedKeys, onSelectionChange, itemName = { one: "row", other: "rows" }, density = "comfortable", mobileLayout = "cards" }: SortableDataTableProps<T>) {
   const reduced = useReducedMotion() ?? false;
   const tableRef = useRef<HTMLTableElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -266,10 +269,10 @@ export function SortableDataTable<T extends Record<string, unknown>>({ rows, col
     next.focus();
   }
 
-  return <div className={styles.wrapper} onKeyDown={onKeyDown}>
+  return <div className={styles.wrapper} data-density={density} data-mobile-layout={mobileLayout} onKeyDown={onKeyDown}>
     <div className={styles.scroller}>
       {band ? <span className={styles.band} style={{ left: band.left, width: band.width }} aria-hidden="true" /> : null}
-      <table ref={tableRef} role="table" className={styles.table} data-fixed={widths ? "" : undefined} data-selectable={selectable || undefined}>
+      <table ref={tableRef} role="table" className={styles.table} data-fixed={widths ? "" : undefined} data-selectable={selectable || undefined} data-sortable-columns={columns.some(column => column.sortable !== false) || undefined}>
         <caption>{caption}</caption>
         <colgroup>
           {selectable ? <col className={styles.selectCol} /> : null}

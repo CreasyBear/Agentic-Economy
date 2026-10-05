@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { MetricsDashboard } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
+import { ExpandableCard } from '@/components/arc/expandable-card/expandable-card'
 import { Alert } from '@/components/arc/alert/alert'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import type { MarketplaceMetricsRange, MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
@@ -10,6 +11,7 @@ import { formatCurrencyAmount } from '@/modules/money/public'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { adminActivityHref } from '@/lib/operator/admin-console/activity'
 import { ADMIN_METRICS_COPY } from './metrics.contracts'
+import { MarketplaceSignalCharts } from './components/MarketplaceSignalCharts'
 import { marketplaceDashboardMetrics } from './marketplace-dashboard'
 
 type MarketplaceActivityProps = Readonly<{
@@ -47,10 +49,10 @@ export function MarketplaceActivityView({ report, range, onRangeChange }: Market
         {latestComputedAt === null ? '' : ` Updated ${formatPerthTimestamp(latestComputedAt)}.`}
       </p> : null}
       {report?.coverageComplete && report.funding != null ? <FundingSummary funding={report.funding} range={range} /> : null}
-      <details className="text-xs text-muted-foreground">
-        <summary className="min-h-touch cursor-pointer py-related">How to read these numbers</summary>
+      <MarketplaceSignalCharts report={report} />
+      <ExpandableCard title="How to read these numbers" description="The story behind the signal">
         <p>Snapshots group purchases by initiation day. Later refunds and delivery changes are reconciled nightly; purchase records show current status. Repeat buying means two or more delivered, customer-funded purchases by the same Account during this period.</p>
-      </details>
+      </ExpandableCard>
     </div>
   )
 }

@@ -104,8 +104,8 @@ describe('admin overview route', () => {
     }
     render(<AdminOverviewPage />)
     expect(screen.getByText('Some exception sources are unavailable.')).toBeTruthy()
-    expect(screen.getByText('4')).toBeTruthy()
-    expect(within(screen.getByRole('tab', { name: /Buying Accounts/ })).getByText('2')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /^Delivered purchases\s*4\s*Completed Calls/ })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /^Buying Accounts\s*2\s*Distinct Accounts/ })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open queues' })).toBeTruthy()
   })
 

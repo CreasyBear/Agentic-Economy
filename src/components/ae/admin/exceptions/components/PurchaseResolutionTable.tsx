@@ -1,34 +1,34 @@
-import type { ColumnDef } from '@tanstack/react-table'
-
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/ui/badge'
+import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { Badge } from '@/components/arc/badge/badge'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import {
   ADMIN_EXCEPTIONS_COPY,
   type AdminResolutionRowModel,
   type PurchaseResolutionTableProps,
 } from '../exceptions.contracts'
 
-const columns: ColumnDef<AdminResolutionRowModel, unknown>[] = [
+const columns: DataColumn<AdminResolutionRowModel>[] = [
   {
-    accessorKey: 'callRef',
-    header: ADMIN_EXCEPTIONS_COPY.columnLabels.call,
-    cell: ({ row }) => (
-      <a className="font-medium text-foreground underline-offset-4 hover:underline" href={row.original.href}>
-        {row.original.callRef}
-      </a>
+    key: 'callRef',
+    sortable: false,
+    label: ADMIN_EXCEPTIONS_COPY.columnLabels.call,
+    render: (_value, row) => (
+      <AeCopyReference compact label="Call" value={row.callRef} href={row.href} />
     ),
   },
   {
-    accessorKey: 'terminalStateLabel',
-    header: ADMIN_EXCEPTIONS_COPY.columnLabels.terminalState,
-    cell: ({ row }) => <Badge variant="outline">{row.original.terminalStateLabel}</Badge>,
+    key: 'terminalStateLabel',
+    sortable: false,
+    label: ADMIN_EXCEPTIONS_COPY.columnLabels.terminalState,
+    render: (_value, row) => <Badge tone="neutral">{row.terminalStateLabel}</Badge>,
   },
   {
-    accessorKey: 'resolvedAtLabel',
-    header: ADMIN_EXCEPTIONS_COPY.columnLabels.resolvedAt,
-    cell: ({ row }) => (
-      <time dateTime={row.original.resolvedAtIso}>{row.original.resolvedAtLabel}</time>
+    key: 'resolvedAtLabel',
+    sortable: false,
+    label: ADMIN_EXCEPTIONS_COPY.columnLabels.resolvedAt,
+    render: (_value, row) => (
+      <time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={row.resolvedAtIso}>{row.resolvedAtLabel}</time>
     ),
   },
 ]
@@ -39,14 +39,16 @@ export function PurchaseResolutionTable({ rows }: PurchaseResolutionTableProps) 
       title={ADMIN_EXCEPTIONS_COPY.resolutionsTitle}
       description={ADMIN_EXCEPTIONS_COPY.resolutionsDescription}
     >
-      <AeRecordTable
-        columns={columns}
-        data={rows}
-        getRowId={(row) => row.callRef}
-        hideFilter
-        caption={ADMIN_EXCEPTIONS_COPY.resolutionsTitle}
-        emptyMessage={ADMIN_EXCEPTIONS_COPY.noRecentResolutions}
-      />
+      <div className="ae-arc min-w-0">
+        <SortableDataTable
+          density="compact"
+          columns={columns}
+          rows={rows}
+          rowKey="callRef"
+          caption={ADMIN_EXCEPTIONS_COPY.resolutionsTitle}
+          emptyMessage={ADMIN_EXCEPTIONS_COPY.noRecentResolutions}
+        />
+      </div>
     </AeSection>
   )
 }
