@@ -4,6 +4,49 @@
 owns delivery. This queue preserves existing IDs and points to the current owner.
 Archived findings are not automatically current bugs or approval to expand scope.
 
+## Repository consolidation — 5 October 2026
+
+One integration branch feeds `main`: `codex/aecon-consolidation-2026-10-05`.
+The coordinator freezes each candidate and base, runs `check` and the full gate,
+records a rollback checkpoint, verifies backend/frontend provenance and live
+behavior, then retires released leftovers. Heavy gates run serially. Dirty,
+unique, ignored credential/runtime material and active owners remain protected;
+owner handoff is required before incorporating their unfinished work.
+
+| Remaining branch / checkout | Disposition and dependency | Owner |
+| --- | --- | --- |
+| `codex/aecon-consolidation-2026-10-05` | Integrate and release in bounded batches; repair/admin candidate based on #349; full gate queued behind remediation. | Consolidation coordinator |
+| `codex/first-user-readiness-2026-10-05` (independent clone) | Integrate released signup/readiness changes into the one integration branch; await terminal gate/handoff. | First-user remediation |
+| `codex/usage-metering` (independent clone) | Released at `c5f2b7356`; integrate foundations and completion after the minimal release, then run combined regression. Backfill and financial effects require separate review. | Consolidation coordinator; metering owner released |
+| `codex/admin-console-authority-config` | PR #239 adapted into candidate; retire only after verified landing and PR disposition. | Consolidation coordinator |
+| `codex/integration-repairs`, `codex/aecon-consolidation-2026-10-02` | Incorporated into candidate; recoverable checkout retirement follows verified landing and runtime/file census. | Consolidation coordinator |
+| `codex/alpha-convex-hookup` | PR #226 has divergent local/remote tips and duplicate history; extract unique product intent after the metering batch, then decide obsolete remainder explicitly. | Consolidation coordinator; former owner unverified |
+| `codex/arc-source-after-349` | Protected active source and dirty work; await a tested SHA and owner release. | Explore the Arc MCP |
+| `codex/founder-console` | Protected dirty PR #290 checkout and running backend; await owner identification and handoff. | Active owner unverified |
+| `wip/openui-compose` | Preserve unique unwired scaffolding; assess integration after active feature handoffs or obtain explicit obsolete decision. | Consolidation coordinator |
+| `well-13/readiness-diagnostics` | PR #242 logging is superseded by #328; old npm override conflicts with the retained hosted exception. Obtain explicit obsolete disposition. | Consolidation coordinator / Joel |
+| `codex/alpha-operations-proof`, `codex/document-attachment-recovery`, `codex/production-commercial-surfaces`, `codex/treasury-observation` | Exact local tips already ancestral to main; normal deletion refused because upstream differs. Preserve refs/recovery bundle pending ordinary recoverable retirement. | Consolidation coordinator |
+| `codex/disable-pr-actions`, `codex/production-readiness-followup`, `codex/x402-resource-attribution` | Patch-equivalent work already integrated; preserve unique commit history in recovery before normal retirement. | Consolidation coordinator |
+| `codex/closed-empty-tool-input` | PR #341 patch integrated; production-money checkout remains protected pending Ark release and ignored/untracked-file census. | Ark production work |
+| `main` primary checkout | Protected dirty and stale local checkout; reconcile user work without resetting main or overwriting files. | Joel / active checkout users |
+| `well-16/discovery-truth` | Integrated; protected shell, local credentials and runtime state require owner release before checkout retirement. | Active owner unverified |
+| `well-31/identity-slim-release-b` | Integrated; protected running Node processes and local state require owner release. | Active owner unverified |
+| Alpha-learning detached checkout | Integrated commit; protected open-file Node/esbuild/VM users and ignored material require owner release. | Active owner unverified |
+| `backup/main-2026-09-21` (remote) | Already ancestral; retain intentional backup until an explicit retention decision. | Joel |
+
+The following 25 remote branches are verified integrated by ancestry or exact
+patch comparison. Their exact deletion approval is pending; none are deleted.
+Recheck each head, active ownership and recoverability immediately before retirement.
+
+| Retire after exact approval | Owner / dependency |
+| --- | --- |
+| `codex/alpha-launch-completion`, `codex/alpha-learning-acceptance`, `codex/alpha-learning-implementation`, `codex/alpha-operations-proof` | Coordinator; approval and fresh heads |
+| `codex/chat-followup-answer`, `codex/chat-runtime-env`, `codex/cli-purchase-deadline`, `well-15/chat-answer` | Coordinator; approval and fresh heads |
+| `codex/document-attachment-recovery`, `codex/production-commercial-surfaces`, `codex/production-credit-recovery`, `codex/production-money` | Coordinator; approval and fresh heads |
+| `codex/mainnet-acceptance-evidence`, `codex/mainnet-acceptance-record`, `codex/paid-readiness-rollout` | Coordinator; approval and fresh heads |
+| `codex/production-operator-runtime`, `codex/production-owner-ingress`, `codex/production-readiness`, `codex/production-runtime-cutover`, `codex/production-signin-acceptance` | Coordinator; approval and fresh heads |
+| `codex/readiness-diagnostics`, `codex/treasury-finality`, `codex/treasury-history-comparison`, `codex/treasury-observation`, `codex/x402-mainnet-recovery` | Coordinator; approval and fresh heads |
+
 ## Remaining work
 
 | Existing ID / area | Status and next action | Current owner / evidence |
