@@ -354,7 +354,7 @@ describe('external-agent Market Tool cold loop', () => {
       },
     })
     expect(parsed).not.toHaveProperty('nextCommand')
-    expectAnonymousPost(fetchMock, options.baseUrl, '/api/v1/market-tools/describe', { toolRef })
+    expectAnonymousPost(fetchMock, options.baseUrl, '/api/v1/market-tools/describe', { toolRef, includeLatency: true })
   })
 
   it('keeps describe output canonical and free of duplicated source navigation', async () => {
@@ -385,6 +385,22 @@ describe('external-agent Market Tool cold loop', () => {
     const technicalSerialized = await withStdout(() =>
       runDescribeCommand([toolRef], { ...options, technical: true }))
     expect(parseJson(technicalSerialized)).toEqual(defaultResult)
+  })
+
+  it('preserves time-to-result evidence in JSON and explains it in human describe output', async () => {
+    const toolRef = operationRef('a')
+    const detail = operationDetailResult(operationDescriptor(toolRef, 'Extract invoices'))
+    if (detail.kind !== 'found') throw new Error('Expected a found Tool fixture.')
+    const latency = {
+      kind: 'measured', measurement: 'admitted_to_completed', medianMs: 40_000, p95Ms: 42_000,
+      sampleSize: 5, display: '40 s', window: { from: 1_788_608_000_000, to: 1_791_200_000_000 },
+      definition: 'AE admission to recorded completion, including recovery; not network time to first byte or an SLA.',
+    }
+    stubFetchJsonResponse({ ...detail, tool: { ...detail.tool, latency } })
+    expect(parseJson(await withStdout(() => runDescribeCommand([toolRef], options)))).toMatchObject({ tool: { latency } })
+    const human = await withStdout(() => runDescribeCommand([toolRef], { ...options, json: false }))
+    expect(human).toContain('time to result: median 40 s, p95 42 s · 5 completed Calls · last 30 days')
+    expect(human).toContain('not network time to first byte')
   })
 
   it('keeps anonymous describe factual and names the runnable CLI purchase path', async () => {
@@ -647,8 +663,8 @@ describe('external-agent Market Tool cold loop', () => {
     ])
     expect(requests.map(({ body }) => body)).toEqual([
       { query: 'bitcoin price', limit: 8 },
-      { toolRef },
-      { toolRefs: [toolRef, comparisonToolRef] },
+      { toolRef, includeLatency: true },
+      { toolRefs: [toolRef, comparisonToolRef], includeLatency: true },
       { toolRef, input: initialInput },
       { quoteRef: commitmentRef('1'), idempotencyKey },
       undefined,

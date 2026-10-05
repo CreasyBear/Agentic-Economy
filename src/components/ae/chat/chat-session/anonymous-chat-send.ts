@@ -67,7 +67,7 @@ export async function sendAnonymousChatTurn(input: Readonly<{
   } catch (caught) {
     const aborted = caught instanceof Error && caught.name === 'AbortError'
     if (!aborted && assistant === undefined) input.setAnonymousMessages([...input.anonymousMessages])
-    if (!aborted && assistant !== undefined) return
+    if (!aborted && assistant !== undefined) throw new Error('chat_stream_failed', { cause: caught })
     throw caught
   }
 }

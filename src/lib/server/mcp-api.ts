@@ -19,6 +19,7 @@ import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { resolveCanonicalOrigin } from '@/lib/server/canonical-url'
 import { package5SupplyActionRolloutDecision } from '@/lib/server/package5-rollout'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { methodNotAllowed } from '@/lib/server/method-guard'
@@ -572,7 +573,10 @@ export function createAeMcpServer(
   }
   const admittedActions = actions.filter((action) => mcpToolsetAdmitted(action, selectedAccess))
   const admittedIds = new Set(admittedActions.map((action) => action.id))
-  const origin = new URL(request.url).origin
+  // Public continuations use the deployment's trusted origin, including when
+  // an HTTPS proxy forwards an HTTP request. Missing production configuration
+  // retains the canonical resolver's explicit failure; forwarded hosts are not trusted.
+  const origin = resolveCanonicalOrigin(request)
 
   const server = new McpServer(
     { name: 'agentic-economy', version: '1.0.0' },

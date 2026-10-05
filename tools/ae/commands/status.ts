@@ -7,7 +7,7 @@ import { callStatusResultSchema } from '@/modules/capability-execution/call-reco
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
-import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { CLI_REQUEST_TIMEOUT_MS, CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import { journeyNextCommand } from '../lib/journey-next-command'
 import { CALL_REF_FORMAT_EXAMPLE } from '../lib/tool-ref-format'
@@ -204,13 +204,14 @@ export async function readCallStatus(
   options: CliOptions,
   callRef: string,
   credentialCommand = 'status',
+  timeoutMs = CLI_REQUEST_TIMEOUT_MS,
 ): Promise<CallStatusResult> {
   const apiKey = requireAgentAccessKey(credentialCommand, options)
   const path = callStatusPath(callRef)
   const outcome = await callJson(options.baseUrl, path, {
     method: CALL_ROUTE_CONTRACT.status.method,
     headers: { Authorization: `Bearer ${apiKey}` },
-  })
+  }, Math.min(CLI_REQUEST_TIMEOUT_MS, timeoutMs))
   return parseStatusResult(requireOk(outcome, 'Call status'))
 }
 

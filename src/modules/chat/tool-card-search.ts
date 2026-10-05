@@ -33,11 +33,13 @@ export function boundedString(value: unknown, maximum: number): string | undefin
   return Array.from(value.trim()).slice(0, maximum).join('')
 }
 export function directoryChoiceFields(value: Record<string, unknown>) {
+  const summary = boundedString(value.summary ?? value.description, 400)
   const sourcePrice = boundedString(value.sourcePrice, 80)
   const host = boundedString(value.host, 300)
   const resourcePath = boundedString(value.resourcePath, 512)
   const networkLabel = boundedString(value.networkLabel, 128)
   return {
+    ...(summary === undefined ? {} : { summary }),
     ...(sourcePrice === undefined ? {} : { sourcePrice }),
     ...(host === undefined ? {} : { host }),
     ...(resourcePath === undefined ? {} : { resourcePath }),

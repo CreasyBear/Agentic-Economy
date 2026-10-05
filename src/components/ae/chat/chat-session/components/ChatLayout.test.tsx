@@ -198,7 +198,6 @@ describe('ChatLayout', () => {
   it('shows one collapsed work line, answer, choices and compare actions without repeated search cards', () => {
     const onSuggest = vi.fn()
     const onRefine = vi.fn()
-    const onCompareRequest = vi.fn()
     const onCopyAnswer = vi.fn()
     const onEditQuestion = vi.fn()
     const messages = [
@@ -206,32 +205,35 @@ describe('ChatLayout', () => {
       { id: 'assistant', role: 'assistant' as const, parts: [
         { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available',
           output: { kind: 'match', results: [
-            { toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Sydney Weather', price: { kind: 'indicative', label: 'USD 0.005' } },
-            { toolRef: `operation:v1:${'b'.repeat(64)}`, title: 'Forecast API', price: { kind: 'indicative', label: 'USD 0.008' } },
+            { toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Sydney Weather', summary: 'Current city weather', price: { kind: 'indicative', label: 'USD 0.005' } },
+            { toolRef: `operation:v1:${'b'.repeat(64)}`, title: 'Forecast API', summary: 'A five day forecast', price: { kind: 'indicative', label: 'USD 0.008' } },
             { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Climate Data', price: { kind: 'indicative', label: 'USD 0.009' } },
           ] } },
         { type: 'text', text: 'Here are two weather APIs for Sydney.' },
       ] },
     ]
     render(<ChatLayout model={buildModel({
-      transcript: { messages, onSuggest, onRefine, onCompareRequest, onCopyAnswer, onEditQuestion },
+      transcript: { messages, onSuggest, onRefine, onCopyAnswer, onEditQuestion },
     })} />)
     expect(screen.queryByRole('list', { name: 'Discovery work' })).toBeNull()
     expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('Here are two weather APIs')
     expect(screen.getByRole('region', { name: 'Options' }).textContent).toContain('Sydney Weather')
     expect(screen.queryByText('Search tools', { selector: 'h3' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Ready only' }))
-    expect(screen.getByRole('button', { name: 'Ready only' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Reset' }).hasAttribute('disabled')).toBe(false)
-    expect(onRefine).toHaveBeenCalledWith(expect.stringContaining('only ready-to-use tools'))
-    fireEvent.click(screen.getByRole('button', { name: 'Price: under 1¢' }))
-    expect(onRefine).toHaveBeenLastCalledWith('Refine the previous options: only ready-to-use tools, under 1¢ per call.')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Select' })[0]!)
-    expect(screen.getAllByRole('button', { name: 'Select' })[0]!.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('region', { name: 'Answer sources' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Filter options' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ask about this Tool' })[0]!)
     expect(onSuggest).toHaveBeenCalledWith('Tell me more about Sydney Weather')
+    expect(onRefine).not.toHaveBeenCalled()
     for (const button of screen.getAllByRole('button', { name: /^Compare$/ }).slice(0, 2)) fireEvent.click(button)
-    fireEvent.click(screen.getByRole('button', { name: 'Compare 2 selected' }))
-    expect(onCompareRequest).toHaveBeenCalledWith(expect.stringContaining('Sydney Weather and Forecast API'))
+    const comparison = screen.getByRole('region', { name: 'Compare details' })
+    expect(comparison.textContent).toContain('Current city weather')
+    expect(comparison.textContent).toContain('A five day forecast')
+    expect(within(comparison).getAllByRole('link', { name: 'Inspect option' })).toHaveLength(2)
+    expect(onRefine).not.toHaveBeenCalled()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove from compare' })[1]!)
+    expect(screen.queryByRole('region', { name: 'Compare details' })).toBeNull()
+    expect(screen.getByText('Choose one more Tool to compare.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
     expect(onCopyAnswer).toHaveBeenCalledWith('Here are two weather APIs for Sydney.')
     fireEvent.click(screen.getByRole('button', { name: 'Edit question' }))

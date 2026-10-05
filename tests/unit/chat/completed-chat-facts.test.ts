@@ -51,8 +51,8 @@ describe('completed chat facts', () => {
         output: { type: 'json', value: { kind: 'match', results: [{ title: 'Weather Current', summary: 'Live city weather' }] } },
       }],
     }])
-    expect(answer).toContain('Weather Current')
-    expect(answer).toContain('Live city weather')
+    expect(answer).toContain('One Tool matches this request')
+    expect(answer).toContain('Review the inputs below')
     expect(answer).not.toMatch(/couldn't finish/i)
   })
 })

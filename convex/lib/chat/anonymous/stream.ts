@@ -22,7 +22,7 @@ async function explainCatalogue(
   abortSignal?: AbortSignal,
 ): Promise<string> {
   const titles = output.kind === 'match' || output.kind === 'scoped'
-    ? output.results.slice(0, 8).map(result => result.title) : []
+    ? output.results.slice(0, 4).map(result => result.title) : []
   try {
     const explanation = await agent.streamText(ctx, scope, {
       messages: prompt,
@@ -74,7 +74,7 @@ export async function streamAnonymousChatResponse(
           writer.write({ type: 'start' })
           const toolName = immediateSearchToolName()
           writer.write({ type: 'tool-input-start', toolCallId: 'immediate-search', toolName })
-          writer.write({ type: 'tool-input-available', toolCallId: 'immediate-search', toolName, input: { query: latestUser, limit: 8 } })
+          writer.write({ type: 'tool-input-available', toolCallId: 'immediate-search', toolName, input: { query: latestUser, limit: 4 } })
           writer.write({ type: 'tool-output-available', toolCallId: 'immediate-search', output: catalogue })
           const fact = catalogueFact(catalogue)
           writer.write({ type: 'text-start', id: 'catalogue-facts' })

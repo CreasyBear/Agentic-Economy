@@ -28,7 +28,7 @@ export function ChatComposer({ prompt, busy, disabled, error, errorReference, br
       <div className="arc-chat-feedback-main">
         {invalid ? <div id="tool-chat-error" className="arc-chat-error">{recovery === undefined ? <p role="alert" className="arc-chat-error-message">{error}</p> : <RecoveryNotice reason={recovery} {...(onRetry === undefined ? {} : { onRetry })} {...(onEditLast === undefined ? {} : { onEdit: onEditLast })} {...(onNewChat === undefined ? {} : { onNewChat })} />}
           {errorReference === undefined ? null : <p className="arc-chat-support-reference"><span>{chatRecovery.reference}</span><AeCopyReference label="chat support reference" value={errorReference} /></p>}
-          {browseMarketOnError && recovery === undefined ? <a href="/market" className="arc-chat-recovery-link">{chatRecovery.browse}</a> : null}
+          {browseMarketOnError ? <a href="/market" className="arc-chat-recovery-link">{chatRecovery.browse}</a> : null}
         </div> : <div id="tool-chat-error" role="alert" />}
         {anonymousMessageLimitReached && !invalid ? <RecoveryNotice reason="anonymous_message_limit" {...(onNewChat === undefined ? {} : { onNewChat })} /> : anonymousMessageCount === undefined || invalid ? null : <p className="arc-chat-browser-count">{chatAnonymousCountLine(anonymousMessageCount, false)}</p>}
       </div>

@@ -74,6 +74,7 @@ export type ToolChoiceRow = Readonly<{
   toolRef: string
   detailHref?: string
   title: string
+  summary?: string
   provider?: string
   price?: string
   priceValidUntil?: number
@@ -307,6 +308,7 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(priceLabel === undefined ? {} : { price: priceLabel }),
+    ...directoryChoiceFields(value),
     ...(priceLabel?.startsWith('A$') === true && display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
     ...(posture === undefined ? {} : { readiness: posture === 'routeable' ? 'ready' : posture === 'unavailable' ? 'unavailable' : 'unverified' }),
     ...(posture === 'routeable' && Array.isArray(value.navigation)

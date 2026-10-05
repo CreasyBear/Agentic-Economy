@@ -64,7 +64,7 @@ describe('anonymous Tool compare CLI', () => {
     expect(url).toBe('https://market.example/api/v1/market-tools/compare')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
-    expect(JSON.parse(String(init?.body))).toEqual({ toolRefs: refs })
+    expect(JSON.parse(String(init?.body))).toEqual({ toolRefs: refs, includeLatency: true })
     expect(JSON.parse(output.join(''))).toEqual({
       ...result,
       nextCommands: [{

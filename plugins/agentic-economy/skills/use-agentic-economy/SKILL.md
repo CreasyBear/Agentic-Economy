@@ -7,21 +7,21 @@ description: Find and acquire a bounded outside service through Agentic Economy 
 
 ## First use and returning to the task
 
-Keep the user's need, selected Tool and intended input in the current harness.
-Both a website-selected Tool and an Agent-discovered Tool follow the same
-Quote → authorized Call → result and receipt path. Refresh tools/list after
-connection and follow its pagination. Setup, browser return, key issuance and
-an authenticated account read are progress, not completed Tool use. For Browse
-only access, finish discovery without purchasing; explain the approval needed
-if the user chooses to proceed. If a prior Call exists, recover it before
-starting another purchase. Report unavailable supply, refused authority or an
-uncertain result honestly rather than presenting a demonstration as delivery.
-Share the exact verification link when authorization starts. Its **Follow live onboarding** link observes that request before credential issuance.
-Once authenticated, use `/agent-access?caller=<principalRef>` on the connected
-server, with the `principalRef` from `ae_agentAccess_whoami`, to follow this Agent. Once a Call is accepted, add `callRef=<original Call reference>` to follow that exact attempt through renewal, delivery and recovery.
-Add `resumeTool=<toolRef>` for a selected Tool. The page follows recorded access,
-authentication and Calls while the task stays here. Keep credentials and private
-input out of that URL; unrecorded host planning is not a platform event.
+Keep the user's need, selected Tool and input in the current harness. Website
+and Agent discovery use the same Quote → authorized Call → result and receipt
+path. Refresh tools/list after connection and follow pagination. Setup, browser
+return, key issuance and authenticated reads do not complete Tool use. Browse
+only access permits discovery; explain the approval needed to purchase. Recover
+an existing Call before buying again. Report unavailable supply, refused
+authority and uncertainty honestly.
+
+Share the exact verification link; **Follow live onboarding** observes that
+request before credential issuance. Once authenticated, follow this Agent at
+`/agent-access?caller=<principalRef>` on the connected server, using
+`ae_agentAccess_whoami`. Add `callRef=<original Call reference>` after acceptance
+to follow that attempt, or `resumeTool=<toolRef>` for a selected Tool. This page
+shows recorded access and Calls; planning stays in the harness. Never put
+credentials or private input in the URL.
 
 ## Find a suitable Tool
 
@@ -34,26 +34,30 @@ its required input and public terms; compare only actual returned references.
 Public discovery does not require an account connection. A result is a candidate,
 not a promise that the current caller can buy or use it.
 
+Set `includeLatency: true` on describe/compare for recorded admission-to-completion
+`latency`, including recovery, across the last 30 days. `window.from` is the
+cutoff; `window.to` is the observation time. Median/p95 require five valid
+samples and use up to the latest 48 completed Calls. `insufficient_sample`
+reports the count; an absent opted-in field means unavailable history. Omitting
+the option preserves older response shapes. The current CLI requests it; Tool
+pages show the chart. This excludes unfinished Calls and measures neither first
+byte nor Provider execution alone. It is not a deadline or SLA; slow is not failed.
+
 If no Tool fits, explain the missing capability without inventing a listing.
 `tool_read_unavailable` means no catalogue read completed. It is retryable,
 never proof that a Tool is absent, and never permission to reuse stale terms.
 
 ## Connect when protected work is needed
 
-Use the host's native account-connection prompt or plugin settings before
-protected Calls. Some hosts connect during installation. If tools remain
-unavailable, start a fresh task after connection and refresh the tool list.
-Do not call an unlisted protected tool to force sign-in.
+Use the host's account-connection prompt or plugin settings for protected work;
+some hosts connect at installation. If tools remain unavailable, start a fresh
+task and refresh tools/list. Never call an unlisted tool to force sign-in.
+Keep the selected Tool and input in the harness. AE does not store the user's
+project or conversation. Never put private input in sign-in URLs or ask for
+pasted tokens. Alternatives: https://app.aecon.ai/for-agents.
 
-Keep the selected Tool reference and intended input in the current task.
-The host owns that task; Agentic Economy does not store the user's project or
-conversation. Do not put private input in a sign-in URL or ask the user to paste a
-token. Native alternatives are documented at
-https://app.aecon.ai/for-agents.
-
-A configured plugin is not proof of connection. A successful authenticated read
-confirms access; `ae_agentAccess_whoami` is available when connection diagnosis is
-needed. Account connection does not grant spending authority.
+Plugin configuration does not prove connection. An authenticated read confirms
+access; use `ae_agentAccess_whoami` for diagnosis. Connection is not spending authority.
 
 ## Quote and make the Call
 
@@ -77,27 +81,22 @@ authority or a purchase.
 
 ## Price a task with more than one Tool
 
-Keep each selected `toolRef` and concrete input. Request a fresh `ae_tool_quote`
-for **every** contribution before the first paid Call. Only committed Quotes
-are prices: record each `quoteRef`, `normalizedInput`, exact `price`
-(`currency`, integer `units`, `exponent`), `expiresAt`, `account.accountRef`
-and `budget.principalRef`/`maximumPerCall`. Check that the Quotes belong to
-the intended Account and Agent Principal, share currency and exponent, and
-remain current. Add integer price units, not rounded screen amounts; compare
-the sum with the task ceiling. A refused or expired Quote does not contribute
-a known task total. Re-quote changed inputs, prices or authority before
-spending. This is a planning sum of separate purchases, not an AE bundle,
-reserved task budget or guarantee that a later Call will be authorized.
+Before the first paid Call, quote **every** contribution with its exact `toolRef`
+and input. Record each committed `quoteRef`, `normalizedInput`, exact `price`
+(`currency`, integer `units`, `exponent`), `expiresAt`, `account.accountRef` and
+`budget.principalRef`/`maximumPerCall`. Check the intended Account/Agent, matching
+currency/exponent and expiry. Sum integer units against the task ceiling, never
+rounded display prices. Refused/expired Quotes leave the total unknown. Re-quote
+changed inputs, prices or authority. This sum does not create an AE bundle,
+reserve a task budget or guarantee later authorization.
 
-For each contribution, retain its own `quoteRef` and stable
-`idempotencyKey` **before** `ae_tool_call`. Keep the returned `callRef`
-and inspect `ae_call_status` after interruption, pending delivery or unknown
-outcome. Resume that Call with its original identity or the offered
-reconciliation action; never buy it again with a fresh key. A completed Call
-remains spent even when a later contribution fails. The CLI `ae quote --json`
-exposes the exact Quote, while one-command `ae call` obtains a fresh Quote
-before dispatch; use the explicit Quote and Call actions when the task needs
-the previously inspected QuoteRef.
+Retain each contribution's `quoteRef` and stable `idempotencyKey` before
+`ae_tool_call`, then its `callRef`. After interruption, pending delivery or an
+unknown outcome, use `ae_call_status` and the offered reconciliation with the
+original identity; never repurchase with a fresh key. Earlier completed Calls
+remain spent if later ones fail. `ae quote --json` exposes the exact Quote;
+`ae call` quotes afresh. Use explicit Quote/Call actions to spend against the
+previously inspected QuoteRef.
 
 ## Read the result and recover safely
 
@@ -110,21 +109,25 @@ permission to create another Call. Check the original Call before retrying,
 respect Retry-After when supplied, and do not change its command identity to get
 past an error. Use `ae_call_cancel` only when the current Call offers
 cancellation. If access or evidence is missing, explain the specific next step.
+CLI JSON reads allow 15 seconds; Quote and Call requests allow 60 seconds each.
+`call --wait` starts a separate 60-second polling window after acceptance;
+`ae wait` also allows 60 seconds, bounding each status read by remaining time.
+Human output announces Quote/Call requests on stderr; `--json` keeps progress
+quiet and stdout machine readable. Preserve the original Call or local recovery
+reference on interruption. A timeout never authorizes another purchase.
 When reconciliation requires historical evidence fields, preserve the exact
 `invocationRef` and `operationRef` keys and values returned by the runtime.
 
 ## Provider setup
 
-For publishing a Tool, start at https://app.aecon.ai/for-providers and use
-the existing source-native setup. Retain the saved draft and connection attempt
-references across a human handoff. Re-read status when returning; a browser
-return alone does not prove that the connection or publication succeeded.
-If only a connection attempt is known, reopen its returned secure owner handoff
-to read the saved attempt. If a connection reference is available and
-`ae_supply_connection_detail` is listed, use it to read the current connection.
-Do not start another connection merely because its callback failed.
-Provider credentials belong only in the secure connection form, never in a
-prompt, MCP input or CLI argument.
+Start at https://app.aecon.ai/for-providers using source-native setup. Retain
+draft and connection-attempt references across handoffs; re-read status on
+return. A browser callback alone proves neither connection nor publication.
+Reopen the saved attempt's secure owner handoff, or use
+`ae_supply_connection_detail` with the connection reference when listed.
+Never start a duplicate connection because its callback failed. Provider
+credentials belong only in the secure connection form, never prompts, MCP input
+or CLI arguments.
 
 ## Help and detailed contracts
 

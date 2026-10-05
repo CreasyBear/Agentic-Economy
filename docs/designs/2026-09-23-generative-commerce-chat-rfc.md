@@ -6,6 +6,43 @@ Status: proposed; design and owner approval pending
 Decision owner: Joel  
 Scope: the signed-in Ask experience, from a question to sourced choices, optional comparison, explicit purchase approval and actual result. This RFC is a target, not a claim that bundles or output comparisons ship today.
 
+## 5 October 2026 walkthrough repair
+
+The hosted guest endpoint returned an empty 404. Recovery replaced that with a
+vague error, omitted a retry, and lost prompts launched from starter buttons.
+Signed-in discovery repeated the same choices in prose, Sources and tall cards;
+filters sent new prompts while pretending to filter the displayed list. A detail
+answer omitted the corresponding Tool card. This bounded repair addresses those
+observed failures; the remaining RFC proposals below remain proposals.
+
+**Contract.** Requires bounded messages and validated catalogue outputs. Ensures
+failed guest sends keep the exact question and permit an explicit, single-flight
+retry; partial answers remain visible and are reported as interrupted. Invariant:
+guest discovery cannot obtain a Quote or dispatch a Call, and signed-in uncertain
+paid effects remain fenced against replay. On violation, show a recoverable chat
+failure and its support reference; preserve the existing transcript.
+
+**Cognitive load.** Four options previously competed through twelve card actions,
+a duplicate four-link Sources list and fake filter controls. A buyer had to
+remember descriptions from the prose while choosing a differently ordered card.
+Keep descriptions, indicative AUD price and readiness together in compact rows.
+Each callable Tool has one primary Review inputs action plus optional comparison;
+its title retains the detail link. Remove the duplicate Sources list when cards
+already contain those links, and remove controls that do not apply real filters.
+Describe results also render their Tool card. Search and list retrieval stay within
+the four-card display bound so continuation cannot skip unseen results. Selecting
+two to four cards compares their reported facts immediately without another model
+request. A malformed model response containing control syntax is not a completed
+answer: preserve actual Tool evidence, replace the invalid prose and settle the
+turn through existing failure recovery when no usable evidence remains.
+
+**Cost and decision.** Reuse Arc cards, existing projections, Convex Agent and the
+current retry fence. No new component framework, storage table or payment path.
+Add only a bounded optional summary to the existing card projection. Keep exact
+price projection, external-listing distinction, input validation and approval
+controls. Verify transport rejection, partial stream, retry concurrency, detail
+cards, responsive layout and the hosted guest and signed-in journeys.
+
 ## 1. Problem and thesis
 
 A buyer should be able to ask a question, understand the answer, inspect genuinely comparable options, authorise an exact spend and see what happened without learning AE's internal identifiers. The current transcript puts repeated Search/Details/Compare cards ahead of the answer; generic starters send immediately; mobile chrome and tall cards reduce reading room (`agent://ChatLiveRoast/report`, findings 8–10). Existing chat compares listing facts, not executed outputs. A generation has an eight-tool, six-step and one-Call fence (`convex/chatTools.ts:76-85,275-281`; `agent://JevBundleScout/report`). Signed-in pending Calls and subscribed results already exist; replacing them with a model-facing checkout would discard the real authority seam (`convex/chatCall.ts:62-149,154-179`).

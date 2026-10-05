@@ -70,7 +70,7 @@ describe('ae doctor', () => {
       expect.objectContaining({ id: 'server', state: 'pass' }),
       expect.objectContaining({ id: 'buyer', state: 'warn' }),
     ]))
-    expect(result.stdout).not.toContain('agentic-economy-phi.vercel.app')
+    expect(result.stdout).not.toContain('app.aecon.ai')
   })
 
   it('routes an unreachable remote origin to configuration truth instead of doctor recursion', async () => {
@@ -131,14 +131,14 @@ describe('ae doctor', () => {
       kind: 'degraded',
       checks: expect.arrayContaining([{ id: 'server', group: 'discovery', state: 'fail', summary, nextCommand: LOCAL_DEV_COMMAND }]),
     })
-    expect(json.stdout).not.toContain('agentic-economy-phi.vercel.app')
+    expect(json.stdout).not.toContain('app.aecon.ai')
 
     const human = await runDoctor(directory, origin, { json: false })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain(`✗ ${summary}`)
     expect(human.stdout).toContain(`Next: ${LOCAL_DEV_COMMAND}`)
-    expect(human.stdout).not.toContain('agentic-economy-phi.vercel.app')
+    expect(human.stdout).not.toContain('app.aecon.ai')
   })
 
   it('returns one degraded diagnosis and inspects connections before authorizing a new identity', async () => {

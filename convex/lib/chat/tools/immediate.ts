@@ -79,7 +79,7 @@ export async function retrieveImmediateTools(
   if (targetNetwork === undefined) return null
   try {
     const admitted = deserializeToolSearchResult(await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
-      source: 'current', query: trimmed, limit: 8,
+      source: 'current', query: trimmed, limit: 4,
     }))
     const admittedItems = admitted.kind === 'ok'
       ? admitted.items.filter((tool: PublicToolDescriptor) =>
@@ -88,7 +88,7 @@ export async function retrieveImmediateTools(
     const narrowed: ToolSearchResult = admitted.kind === 'ok'
       ? { ...admitted, items: admittedItems }
       : admitted.kind === 'unavailable' ? admitted : emptyResult(trimmed)
-    const room = Math.max(1, 8 - admittedItems.length)
+    const room = Math.max(1, 4 - admittedItems.length)
     const [directory, directoryStatus] = await Promise.all([
       ctx.runQuery(internal.x402DirectoryIndex.searchCompactInternal, {
         query: trimmed,
@@ -120,14 +120,16 @@ export async function retrieveImmediateTools(
     }))
     const evidenceByToolRef = new Map(evidenceRows.map(row => [row.toolRef, row] as const))
     const pagination = admittedNext !== undefined
-      ? { limit: 8, nextCursor: admittedNext, hasMore: true }
+      ? { limit: 4, nextCursor: admittedNext, hasMore: true }
+      : admittedItems.length >= 4 && directory.kind !== 'unavailable' && directory.page.length > 0
+        ? { limit: 4, nextCursor: 'x402:', hasMore: true }
       : directory.kind !== 'unavailable' && !directory.isDone
-        ? { limit: 8, nextCursor: `x402:${directory.continueCursor}`, hasMore: true }
-        : { limit: 8, hasMore: false }
+        ? { limit: 4, nextCursor: `x402:${directory.continueCursor}`, hasMore: true }
+        : { limit: 4, hasMore: false }
     const projected = projectedModelFacingOutput('registry.tools.search', registryToolsSearchContract.outputSchema, () => {
       const choices = projectToolSearchChoices(narrowed, undefined, {
         verdict: admittedItems.length > 0 ? 'matched' : 'noMatch', nearMisses: [],
-      }, undefined, 8, {
+      }, undefined, 4, {
         query: trimmed, source: 'all',
         complete: admittedNext === undefined && (directory.kind === 'unavailable' || directory.isDone),
         external, externalExamined: directory.kind === 'unavailable' ? 0 : directory.page.length,
@@ -149,7 +151,7 @@ export async function retrieveImmediateTools(
     const token = await ctx.runMutation(internal.chatTurns.issueSearchPage, {
       // Search input omits source to combine the catalogue and directory;
       // "all" belongs only to the output's assessed-coverage vocabulary.
-      ...searchTurn, query: trimmed, cursor, inputJson: JSON.stringify({ limit: 8 }),
+      ...searchTurn, query: trimmed, cursor, inputJson: JSON.stringify({ limit: 4 }),
     })
     return {
       ...page,

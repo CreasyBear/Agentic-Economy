@@ -143,7 +143,6 @@ export type ChatTranscriptViewProps = Readonly<{
   onSuggest?: (prompt: string) => void
   onStarter?: (prompt: string) => void
   onRefine?: (prompt: string) => void
-  onCompareRequest?: (prompt: string) => void
   onCopyAnswer?: (answer: string) => void
   onEditQuestion?: (prompt: string) => void
   onRetryQuestion?: (prompt: string) => void

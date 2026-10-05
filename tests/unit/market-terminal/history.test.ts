@@ -214,7 +214,7 @@ describe('AE CLI Call history', () => {
   })
 
   it('keeps hosted-default continuations free of redundant origin noise', async () => {
-    const hostedOrigin = 'https://agentic-economy-phi.vercel.app'
+    const hostedOrigin = 'https://app.aecon.ai'
     process.env.AE_API_KEY = 'FAKE_HISTORY_HOSTED_BEARER'
     process.env.AE_API_KEY_ORIGIN = hostedOrigin
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(Response.json({

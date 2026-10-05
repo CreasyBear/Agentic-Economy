@@ -1,6 +1,6 @@
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { ToolObjectView } from '@/components/ae/shared/object-family.contracts'
-import { toolCardState, type ToolCardProjection, type ToolCardRecommendation } from '@/modules/chat/tool-card'
+import { toolCardState, toolChoiceReadinessLabel, type ToolCardProjection, type ToolCardRecommendation } from '@/modules/chat/tool-card'
 import type {
   ComparisonCellView, ComparisonRowView, ComparisonTableView, OptionView,
   OptionsGridView, SourcesInlineView, WorkDisclosureView,
@@ -27,11 +27,18 @@ export function projectOptionsFromCard(
     const price = listing?.facts.price
     const usage = listing?.facts.completedCalls
     const facts: Record<string, ComparisonCellView> = {}
+    const outcome = object?.outcome ?? choice.summary
+    if (outcome !== undefined) facts['What it does'] = { value: outcome, source: 'Provider description' }
     const currentPrice = price?.kind === 'present' && (price.validUntil === undefined || price.validUntil > nowMs)
     const displayedPrice = currentPrice ? object?.price?.label ?? choice.price : choice.price
     if (currentPrice && displayedPrice !== undefined) facts.Price = { value: displayedPrice, source: sourceLabel(price.provenance) }
+    else if (choice.price !== undefined && (choice.priceValidUntil === undefined || choice.priceValidUntil > nowMs)) {
+      facts.Price = { value: choice.price, source: 'Indicative catalogue price' }
+    }
     if (readiness?.kind === 'present' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)) {
       facts.Readiness = { value: ready ? 'Ready to use' : unavailable ? getStatusPresentation('unavailable').label : getStatusPresentation('setup_required').label, source: sourceLabel(readiness.provenance) }
+    } else if (choice.readiness !== undefined) {
+      facts.Readiness = { value: toolChoiceReadinessLabel(choice.readiness), source: 'Catalogue result' }
     }
     if (usage?.kind === 'present') facts.Usage = { value: `${usage.value.count.toLocaleString()} uses ${usage.value.window}`, source: sourceLabel(usage.provenance) }
     const identity = object?.identity
@@ -41,7 +48,7 @@ export function projectOptionsFromCard(
       id: choice.toolRef,
       name: object?.title ?? choice.title,
       href: choice.detailHref ?? object?.href ?? `/tools/${encodeURIComponent(choice.toolRef)}`,
-      ...(object?.outcome === undefined ? {} : { outcome: object.outcome }),
+      ...(outcome === undefined ? {} : { outcome }),
       price: displayedPrice ?? 'Price to be confirmed',
       ...(displayedPrice === undefined || (currentPrice ? price?.validUntil : choice.priceValidUntil) === undefined
         ? {} : { priceValidUntil: currentPrice ? price?.validUntil : choice.priceValidUntil }),
@@ -54,8 +61,11 @@ export function projectOptionsFromCard(
       ...(seller === undefined ? {} : { seller }),
       selectable: !choice.belowMatch
         && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
-      ...(choice.callable === true && !choice.belowMatch ? { quoteable: true } : {}),
-      ...(listing === undefined ? {} : { facts }),
+      // Describing an admitted Tool can open input review. The panel still reads
+      // fresh detail and validates authority before offering a Call.
+      ...((choice.callable === true || (card.toolId === 'registry.tools.describe' && choice.readiness !== 'unavailable'))
+        && !choice.belowMatch ? { quoteable: true } : {}),
+      ...(Object.keys(facts).length === 0 ? {} : { facts }),
     }
   })
   const recommendedOption = recommendation === undefined
@@ -74,7 +84,7 @@ export function projectOptionsFromCard(
 /** Compare aligned sourced dimensions; absent claims stay absent. No guessed recommendation. */
 export function projectComparison(options: readonly OptionView[]): ComparisonTableView {
   const selected = options.slice(0, 4)
-  const rows: ComparisonRowView[] = ['Price', 'Readiness', 'Usage'].filter((label) => selected.some((option) => option.facts?.[label] !== undefined)).map((label) => ({
+  const rows: ComparisonRowView[] = ['What it does', 'Price', 'Readiness', 'Usage'].filter((label) => selected.some((option) => option.facts?.[label] !== undefined)).map((label) => ({
     label,
     cells: Object.fromEntries(selected.flatMap((option) => option.facts?.[label] === undefined ? [] : [[option.id, option.facts[label]]])),
   }))

@@ -336,6 +336,39 @@ describe('useChatSession', () => {
   })
 
 
+  it('preserves a failed starter and retries guest discovery exactly once', async () => {
+    sendMessagesMock.mockRejectedValueOnce(new Error('chat_unavailable'))
+    const { result } = renderHook(() => useChatSession(baseProps))
+    await act(async () => { result.current.transcript.onStarter?.('Look up an Ethereum transaction') })
+    await waitFor(() => expect(result.current.composer.busy).toBe(false))
+    expect(result.current.composer.prompt).toBe('Look up an Ethereum transaction')
+    expect(result.current.composer.recovery).toBe('chat_unavailable')
+    expect(result.current.composer.onRetry).toBeTypeOf('function')
+    expect(result.current.transcript.messages).toHaveLength(0)
+    await act(async () => {
+      result.current.composer.onRetry?.()
+      result.current.composer.onRetry?.()
+    })
+    await waitFor(() => expect(result.current.composer.busy).toBe(false))
+    expect(sendMessagesMock).toHaveBeenCalledTimes(2)
+    expect(result.current.composer.prompt).toBe('')
+    expect(result.current.transcript.messages.filter(message => message.role === 'user')).toHaveLength(1)
+  })
+
+  it('keeps a partial guest answer visible and reports an interrupted stream', async () => {
+    readUIMessageStreamMock.mockImplementation(async function* () {
+      yield { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'Partial answer' }] }
+      throw new Error('transport closed')
+    })
+    const { result } = renderHook(() => useChatSession(baseProps))
+    await act(async () => { result.current.transcript.onStarter?.('Explain this Tool') })
+    await waitFor(() => expect(result.current.composer.busy).toBe(false))
+    expect(result.current.transcript.messages.at(-1)?.parts).toContainEqual({ type: 'text', text: 'Partial answer' })
+    expect(result.current.composer.recovery).toBe('chat_stream_failed')
+    expect(result.current.composer.status).not.toBe('Response complete.')
+    expect(result.current.composer.prompt).toBe('Explain this Tool')
+  })
+
   it('remembers anonymous handoff exactly once when auth send creates a thread', async () => {
     const { result, rerender } = renderHook(() => useChatSession(baseProps))
     act(() => {

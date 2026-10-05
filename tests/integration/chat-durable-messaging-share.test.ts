@@ -407,7 +407,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(answers).toHaveLength(1)
   })
 
-  it('uses an earlier search result for follow-ups before choosing another search', async () => {
+  it.each([false, true])('uses earlier search evidence and rejects malformed follow-ups (protocol=%s)', async protocol => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-search-followup-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Search follow-up' })
@@ -428,13 +428,16 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       prompt: 'Which of those is relevant to blockchain?',
     }))
     const model = mockModel({ contentSteps: [[{
-      type: 'text', text: 'The earlier blockchain result is the relevant match.',
+      type: 'text', text: protocol ? '<｜DSML｜tool_calls><｜DSML｜invoke name="registry_tools_search">'
+        : 'The earlier blockchain result is the relevant match.',
     }]] })
     const modelCalls = vi.spyOn(model, 'doStream')
 
-    await backend.action(ctx => streamDurableChatResponse(ctx, {
+    const generated = backend.action(ctx => streamDurableChatResponse(ctx, {
       threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: followup.messageId,
     }, model))
+    if (protocol) await expect(generated).rejects.toThrow('chat_generation_invalid_answer')
+    else await generated
 
     expect(modelCalls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'auto' })
     expect(JSON.stringify(modelCalls.mock.calls[0]?.[0])).toContain('Earlier blockchain result')
@@ -445,7 +448,10 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       part.type === 'tool-registry_tools_search'))
     expect(searchResults).toHaveLength(1)
     expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim())
-      .map(message => message.text)).toEqual(['The earlier blockchain result is the relevant match.'])
+      .map(message => message.text)).toEqual([protocol
+        ? 'This answer could not be finished. Edit your question and try again.'
+        : 'The earlier blockchain result is the relevant match.'])
+    expect(JSON.stringify(messages)).not.toContain('DSML')
   })
 
   it('settles distinct unsuccessful searches without inventing options', async () => {
@@ -521,7 +527,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: first.turnRef, promptMessageId: first.promptMessageId, state: 'working',
     })
-    const firstLimit = mode === 'immediate' ? 8 : 1
+    const firstLimit = mode === 'immediate' ? 4 : 1
     const firstModel = mode === 'immediate'
       ? mockModel({ content: [{ type: 'text', text: 'Search results are in the card. Next: inspect the card.' }] })
       : mockModel({ contentSteps: [
@@ -578,7 +584,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     })
     if (continuation === null) throw new Error('continuation_missing')
     expect(JSON.parse(continuation.inputJson)).toEqual(mode === 'immediate'
-      ? { limit: 8 } : { source: 'coinbase', limit: 1 })
+      ? { limit: 4 } : { source: 'coinbase', limit: 1 })
     const model = mockModel({ contentSteps: [
       [{ type: 'tool-call', toolCallId: 'continuation-search', toolName: 'registry_tools_search', input: '{}' }],
       [{ type: 'text', text: 'The next page has been assessed. Next: inspect the search card.' }],
@@ -604,9 +610,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       expect.objectContaining({ kind: 'choices', count: firstLimit,
         choices: (mode === 'immediate' ? [1, 2, 3, 4] : [1]).map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })),
       }),
-      expect.objectContaining({ kind: 'choices', choices: [
-        expect.objectContaining({ title: `Weather forecast Tool ${firstLimit + 1}` }),
-      ] }),
+      expect.objectContaining({ kind: 'choices', choices: (mode === 'immediate' ? [5, 6, 7, 8] : [2])
+        .map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })) }),
     ])
     expect(messages.page.map(message => message.text).join(' ')).not.toContain(cursor)
     const guestModel = mockModel({ contentSteps: [
@@ -650,7 +655,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
     }))
     const answer = messages.page.filter(message => message.role === 'assistant').at(-1)?.text ?? ''
-    expect(answer).toContain('Timezone')
+    expect(answer).toContain('One Tool matches this request')
+    expect(JSON.stringify(messages.page)).toContain('Timezone')
     expect(answer).not.toContain('try again')
     expect(messages.page.flatMap(message => message.parts.map(projectToolCard))
       .filter(card => card?.kind === 'choices')).toHaveLength(1)

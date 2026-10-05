@@ -30,6 +30,7 @@ import {
 import { compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
 import { compactDirectoryRows } from './internal/compact-directory-projection'
 import { resolveToolCompare } from './internal/tool-compare-resolution'
+import { readToolLatencyEvidence } from './internal/tool-latency-source'
 import { rankCompactDirectoryRows, rankToolSearchForRegistry, TOOL_SEARCH_ASSESSMENT_LIMIT, type RegistryToolAssessment } from './tool-reranker'
 import {
   marketToolsCursorScope,
@@ -289,10 +290,24 @@ export const registryToolsSearchAction = defineAction({
 
 export const registryToolsDescribeAction = defineAction({
   ...registryToolsDescribeContract,
-  run: async ({ data }) => projectToolDescription(await readCapabilityToolDetail(data)),
+  run: async ({ data }) => {
+    const result = projectToolDescription(await readCapabilityToolDetail({ toolRef: data.toolRef }))
+    if (result.kind !== 'found' || data.includeLatency !== true) return result
+    const evidence = await readToolLatencyEvidence([result.tool.toolRef])
+    const latency = evidence.get(result.tool.toolRef)
+    return latency === undefined ? result : { ...result, tool: { ...result.tool, latency } }
+  },
 })
 
 export const registryToolsCompareAction = defineAction({
   ...registryToolsCompareContract,
-  run: async ({ data }) => projectToolCompareChoices(await resolveToolCompare(data.toolRefs)),
+  run: async ({ data }) => {
+    const result = projectToolCompareChoices(await resolveToolCompare(data.toolRefs))
+    if (result.kind !== 'ok' || data.includeLatency !== true) return result
+    const evidence = await readToolLatencyEvidence(result.tools.map(tool => tool.toolRef))
+    return { ...result, tools: result.tools.map(tool => {
+      const latency = evidence.get(tool.toolRef)
+      return latency === undefined ? tool : { ...tool, latency }
+    }) }
+  },
 })

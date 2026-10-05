@@ -43,7 +43,7 @@ export const chatRecovery = {
 export const chatHandoffNotice = 'Signed in — messages from here are saved.'
 
 export const chatToolPanel = {
-  review: 'Review and run', run: 'Run', bestMatch: 'Best match',
+  review: 'Review inputs', run: 'Run', bestMatch: 'Best match',
   loading: 'Loading what this Tool needs…',
   unavailable: 'This Tool’s inputs can’t be shown right now. Close this and try again.',
   jsonLabel: 'Exact Tool input (JSON object)', jsonHelp: 'Enter the input as JSON.',

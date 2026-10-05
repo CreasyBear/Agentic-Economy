@@ -5,6 +5,7 @@ import type { JSONValue, LanguageModelV4 } from '@ai-sdk/provider'
 import type { Value } from 'convex/values'
 import type { ActionCtx } from '../../../_generated/server'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { CHAT_UNFINISHED_ANSWER, containsChatProtocolMarkup } from '@/modules/chat/search-presentation'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { createChatAgent } from '../tools/agent'
@@ -280,6 +281,20 @@ export async function streamDurableChatResponse(
     if (abortSignal?.aborted || completedChatFacts(completedSteps) === null) throw modelFailure
     return await finishFromFacts()
   }
+  if (containsChatProtocolMarkup(await result.text)) {
+    const answer = completedChatFacts(completedSteps)
+    const assistant = result.savedMessages?.findLast(message => message.message?.role === 'assistant')
+    if (assistant !== undefined) await agent.updateMessage(ctx, {
+      messageId: assistant._id,
+      patch: { message: { role: 'assistant', content: [
+        ...(Array.isArray(assistant.message?.content) ? assistant.message.content.filter(part => part.type === 'tool-call') : []),
+        { type: 'text', text: answer ?? CHAT_UNFINISHED_ANSWER },
+      ] }, status: 'success' },
+    })
+    if (answer === null) throw new Error('chat_generation_invalid_answer')
+    await preserveSearchCard()
+    return clarificationRequested || ownerApprovalPending
+  }
   const resolution = chatSearchResolution(steps)
   // Requires: a successful earlier search for an answer without new tool work.
   // Ensures: follow-up answers survive; failed or unsupported searches keep their fallback.
@@ -318,7 +333,19 @@ export async function streamDurableChatResponse(
         saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
       })
       if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
-      if ((await final.text).trim().length === 0) {
+      const finalText = (await final.text).trim()
+      if (containsChatProtocolMarkup(finalText)) {
+        const answer = completedChatFacts(completedSteps)
+        const assistant = final.savedMessages?.findLast(message => message.message?.role === 'assistant')
+        if (assistant !== undefined) await agent.updateMessage(ctx, {
+          messageId: assistant._id,
+          patch: { message: { role: 'assistant', content: [
+            ...(Array.isArray(assistant.message?.content) ? assistant.message.content.filter(part => part.type === 'tool-call') : []),
+            { type: 'text', text: answer ?? CHAT_UNFINISHED_ANSWER },
+          ] }, status: 'success' },
+        })
+        if (answer === null) throw new Error('chat_generation_invalid_answer')
+      } else if (finalText.length === 0) {
         const blank = final.savedMessages?.findLast(message => message.message?.role === 'assistant')
         if (blank !== undefined) await agent.deleteMessage(ctx, { messageId: blank._id })
         return await finishFromFacts()

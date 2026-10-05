@@ -9,11 +9,10 @@ import type { ActionCtx } from '../../../_generated/server'
 import { interactiveAuthorityContextValue } from '../../../interactiveAuthority'
 import type { GenerateArgs } from './contracts'
 import { factsFromSavedTurn } from './completedFacts'
+import { CHAT_UNFINISHED_ANSWER, containsChatProtocolMarkup } from '@/modules/chat/search-presentation'
 import { streamDurableChatResponse } from './stream'
 import type { ChatTurnFailureReason } from '@/modules/actions/contract'
 
-const DURABLE_CHAT_FAILURE_MESSAGE =
-  "This answer could not be finished. Edit your question and try again."
 const turnEffectsRef = makeFunctionReference<'query', { turnRef: string }, string[]>(
   'chatCall:readTurnEffects',
 )
@@ -157,7 +156,7 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
             : Array.isArray(message.content)
               ? message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('')
               : ''
-          return text.trim().length > 0 && text !== DURABLE_CHAT_FAILURE_MESSAGE
+          return text.trim().length > 0 && text !== CHAT_UNFINISHED_ANSWER && !containsChatProtocolMarkup(text)
             && !text.includes("couldn't finish the answer")
         })
         recovered = factsFromSavedTurn(turn.flatMap(row => row.message === undefined ? [] : [row.message]))
@@ -191,7 +190,7 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
     if (args.turnRef === undefined && !recoveredAnswer && ownerId !== undefined) {
       await saveMessages(ctx, components.agent, {
         threadId: args.threadId, userId: ownerId, promptMessageId: args.promptMessageId,
-        messages: [{ role: 'assistant', content: DURABLE_CHAT_FAILURE_MESSAGE }],
+        messages: [{ role: 'assistant', content: CHAT_UNFINISHED_ANSWER }],
         agentName: 'Agentic Economy Operation Market', failPendingSteps: true,
       })
     }
