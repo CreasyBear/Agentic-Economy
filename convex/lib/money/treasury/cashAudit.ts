@@ -7,7 +7,7 @@ import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard
 import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
 import { verifyExactEvmX402Settlement, type X402EvmReceipt } from '@/modules/capability-supply/server'
 import { TREASURY_DRIFT_TOLERANCE_UNITS, TREASURY_RESERVATION_AGE_LIMIT_MS, TREASURY_FINALIZED_BLOCK_MAX_AGE_MS,
-  type TreasuryBatch, type TreasuryIdentity, type TreasuryProgress, type TreasuryTransfer } from '@/modules/money/treasury'
+  type TreasuryBatch, type TreasuryChainObservation, type TreasuryIdentity, type TreasuryProgress, type TreasuryTransfer } from '@/modules/money/treasury'
 import type { TreasuryCheck, TreasurySnapshot } from '@/modules/money/treasury-report'
 import { matchTreasuryBatch, matchTreasuryCallCash, matchTreasuryProviderSettlement,
   treasuryAuditCashAddresses, treasuryAuditCallDigest, type FormanceTreasuryAuditTransaction } from '../formance/gateway'
@@ -18,6 +18,7 @@ type CashAuditInput = Readonly<{
   identity: TreasuryIdentity; snapshotAt: number; progress: TreasuryProgress; batches: readonly TreasuryBatch[];
   calls: readonly TreasuryCallSource[]; attempts: readonly TreasuryAttemptSource[]; reservations: readonly SpendReservation[];
   transactions: readonly FormanceTreasuryAuditTransaction[]; ledger: TreasurySnapshot['ledger'];
+  chainReadback?: TreasuryChainObservation | Readonly<{ kind: 'unavailable'; code: string }>;
 }>
 export type TreasuryCashAudit = Pick<TreasurySnapshot, 'chain' | 'inFlight' | 'rawCashDifferenceUnits'
   | 'cashTimingAdjustmentUnits' | 'historyStartedAt' | 'deposits' | 'depositsComplete'> & {
@@ -60,6 +61,7 @@ export async function auditTreasuryCash(input: CashAuditInput, readReceipt?: Rec
     settlements: unavailable('treasury_chain_history_unavailable'), reservations: unavailable('treasury_native_history_unavailable') }
   const history = validateHistory(input)
   if (history.kind !== 'available') return { ...empty, cash: history, settlements: history }
+  const observation = verifiedChainReadback(input, history.latest)
   const addresses = treasuryAuditCashAddresses(input.identity)
   const cashAddresses = new Set(Object.values(addresses))
   const cashRows = input.transactions.filter(row => row.postings.some(posting => cashAddresses.has(posting.source) || cashAddresses.has(posting.destination)))
@@ -131,19 +133,43 @@ export async function auditTreasuryCash(input: CashAuditInput, readReceipt?: Rec
       unexplained.map(row => row.commandRef ?? `native-transaction:${row.id}`))
       : settlement.check.kind === 'unavailable' || settlement.check.kind === 'mismatch' ? unavailable('treasury_payment_attribution_required')
         : !history.latest.observation.caughtUp ? attention('treasury_chain_catching_up', [history.latest.batchRef])
-          : input.snapshotAt - history.latest.observation.observedAt >= 20 * 60_000
-            || input.snapshotAt - history.latest.observation.blockTimestamp >= TREASURY_FINALIZED_BLOCK_MAX_AGE_MS ? unavailable('treasury_chain_observation_stale')
+          : observation.kind === 'unavailable' ? observation
+            : input.snapshotAt - observation.observedAt >= 20 * 60_000
+            || input.snapshotAt - observation.blockTimestamp >= TREASURY_FINALIZED_BLOCK_MAX_AGE_MS ? unavailable('treasury_chain_observation_stale')
             : absolute(difference) > BigInt(TREASURY_DRIFT_TOLERANCE_UNITS)
               ? mismatch('treasury_cash_difference', cashRows.length, expected, chain, [history.latest.batchRef])
               : { kind: 'matched', checkedCount: cashRows.length, expectedUnits: expected.toString(), observedUnits: chain.toString(), differenceUnits: difference.toString() }
   }
-  return { chain: { kind: 'available', observedAt: history.latest.observation.observedAt,
+  return { chain: observation.kind === 'unavailable' ? observation : { kind: 'available', observedAt: observation.observedAt,
     blockTimestamp: history.latest.observation.blockTimestamp, blockNumber: history.latest.observation.checkpoint.blockNumber,
     blockHash: history.latest.observation.checkpoint.blockHash, totalUnits: history.latest.observation.checkpoint.balanceUnits,
     caughtUp: history.latest.observation.caughtUp },
     inFlight: flight, rawCashDifferenceUnits: raw, cashTimingAdjustmentUnits: settlement.timingAdjustment.toString(),
     historyStartedAt: input.batches[0]?.observation.blockTimestamp ?? null, deposits: history.deposits.slice(-20).reverse(),
     depositsComplete: history.deposits.length <= 20, cash, settlements: settlement.check, reservations }
+}
+
+/** A new RPC read can prove an unchanged checkpoint without rewriting booked history. */
+function verifiedChainReadback(input: CashAuditInput, latest: TreasuryBatch): TreasuryChainObservation | Extract<TreasuryCheck, { kind: 'unavailable' }> {
+  const proof = input.chainReadback
+  if (proof === undefined) return latest.observation
+  if (proof.kind === 'unavailable') return proof
+  if (proof.environment !== input.identity.environment || proof.network !== input.identity.network
+    || proof.asset !== input.identity.asset || proof.address !== input.identity.address
+    || canonicalDigest(proof.checkpoint) !== canonicalDigest(latest.observation.checkpoint)
+    || proof.blockTimestamp !== latest.observation.blockTimestamp
+    || proof.fromBlock !== (BigInt(latest.observation.checkpoint.blockNumber) + 1n).toString()
+    || proof.transfers.length !== 0 || !proof.caughtUp || !latest.observation.caughtUp) {
+    return unavailable('treasury_chain_readback_conflict')
+  }
+  if (!Number.isSafeInteger(proof.observedAt) || proof.observedAt < latest.observation.observedAt
+    || proof.observedAt > input.snapshotAt || input.snapshotAt - proof.observedAt >= 20 * 60_000
+    || !Number.isSafeInteger(proof.blockTimestamp) || proof.blockTimestamp < 0
+    || proof.blockTimestamp > input.snapshotAt
+    || input.snapshotAt - proof.blockTimestamp >= TREASURY_FINALIZED_BLOCK_MAX_AGE_MS) {
+    return unavailable('treasury_chain_observation_stale')
+  }
+  return proof
 }
 
 function absolute(value: bigint) { return value < 0n ? -value : value }
@@ -236,7 +262,7 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
     let receipt: X402EvmReceipt | undefined
     if (!receiptBudgetExceeded && source.joinIssues.length === 0 && source.native.kind === 'available'
       && hash !== undefined && hashes.length === 1 && source.material.paymentNonce !== undefined && source.material.paymentPayer !== undefined) {
-      // One read outage need not close payments until the next 15-minute audit.
+      // One read outage need not close payments until the next scheduled audit.
       // Retry only missing evidence, sequentially, within the same total budget.
       // A returned receipt still undergoes all attribution/finality checks below.
       for (let read = 0; read < 2; read += 1) {

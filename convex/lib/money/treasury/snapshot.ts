@@ -5,7 +5,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sealTreasurySnapshot, type TreasurySnapshot } from '@/modules/money/treasury-report'
 import { X402_SPEND_WINDOW_MS } from '@/modules/money/x402-spend-admission'
-import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS, type TreasuryBatch } from '@/modules/money/treasury'
+import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS, type TreasuryBatch, type TreasuryChainObservation } from '@/modules/money/treasury'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { configuredContext, readFormanceTreasuryAudit, readFormanceTreasurySnapshot,
@@ -15,6 +15,7 @@ import { auditTreasuryFunding } from './fundingAudit'
 import type { TreasuryAttemptSource, TreasuryCallSource, TreasuryFundingSourcesResult,
   TreasurySpendReservationSourcesResult, TreasurySpendExposureResult } from './auditSources'
 import type { TreasurySnapshotContext } from './snapshotContext'
+import { readTreasuryChainObservation } from './chainObservation'
 
 type Unavailable = Readonly<{ kind: 'unavailable'; code: string }>
 type Rows<T> = Unavailable | Readonly<{ kind: 'available'; rows: readonly T[] }>
@@ -27,6 +28,10 @@ type Context = Pick<ActionCtx, 'runQuery' | 'runMutation'>
 export type TreasurySnapshotResult = { kind: 'published'; replayed: boolean; newAlertRefs: string[] } | Unavailable
 const unavailable = (code: string): Unavailable => ({ kind: 'unavailable', code })
 const SOURCE_PAGE_LIMIT = 400
+type SnapshotDependencies = Readonly<{
+  admit: () => Promise<boolean>; formance?: FormanceContext; now?: number;
+  chainRead?: typeof readTreasuryChainObservation;
+}>
 
 /**
  * Requires workload authority and one explicit deployment/custody identity.
@@ -41,11 +46,28 @@ const SOURCE_PAGE_LIMIT = 400
  * checks, or refuse if even the current custody identity is unavailable.
  * Cost: complete history is bounded to 400 pages per source and 10k native rows;
  * saturating a bound raises unavailable. No partial history can pass as complete.
+ * A single full retry costs another audit when booking catches up with the probe.
+ * Keep that retry local: it restores fresh evidence without extending freshness,
+ * rewriting historical clocks, or adding a cache or persistent retry state.
  */
-export async function reconcileTreasurySnapshot(ctx: Context, dependencies: Readonly<{
-  admit: () => Promise<boolean>; formance?: FormanceContext; now?: number;
-}>): Promise<TreasurySnapshotResult> {
-  const snapshotAt = dependencies.now ?? Date.now()
+export async function reconcileTreasurySnapshot(ctx: Context, dependencies: SnapshotDependencies): Promise<TreasurySnapshotResult> {
+  return reconcileSnapshotAttempt(ctx, dependencies, true)
+}
+
+async function reconcileSnapshotAttempt(ctx: Context, dependencies: SnapshotDependencies, canRefreshCheckpoint: boolean): Promise<TreasurySnapshotResult> {
+  const bootstrapAt = dependencies.now ?? Date.now()
+  if (!Number.isSafeInteger(bootstrapAt) || bootstrapAt < 0 || bootstrapAt > Date.now()) return unavailable('treasury_snapshot_cutoff_invalid')
+  const bootstrap = await ctx.runQuery(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: bootstrapAt })
+  if (bootstrap.kind !== 'available') return bootstrap
+  const probeStartedAt = Date.now()
+  // The reader captures its own original start clock. Never backdate a fresh
+  // network read to bootstrapAt or move only the report clock after source reads.
+  const chainReadback = bootstrap.progress.kind === 'ready'
+    ? await (dependencies.chainRead ?? readTreasuryChainObservation)({ environment: bootstrap.identity.environment,
+      address: bootstrap.identity.address, checkpoint: bootstrap.progress.checkpoint })
+      .catch(() => unavailable('treasury_chain_unavailable'))
+    : unavailable('treasury_chain_history_unavailable')
+  const snapshotAt = dependencies.now ?? (chainReadback.kind === 'observed' ? chainReadback.observedAt : probeStartedAt)
   if (!Number.isSafeInteger(snapshotAt) || snapshotAt < 0 || snapshotAt > Date.now()) return unavailable('treasury_snapshot_cutoff_invalid')
   const base: TreasurySnapshotContext = await ctx.runQuery(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: snapshotAt })
   if (base.kind !== 'available') return base
@@ -70,7 +92,7 @@ export async function reconcileTreasurySnapshot(ctx: Context, dependencies: Read
     try {
       cash = await auditTreasuryCash({ identity: base.identity, snapshotAt, progress: base.progress,
         batches: sources.batches.rows, attempts: sources.attempts.rows, calls: sources.calls.rows,
-        reservations: sources.reservations.rows, transactions: audit.transactions, ledger })
+        reservations: sources.reservations.rows, transactions: audit.transactions, ledger, chainReadback })
     } catch (cause) { degradeBackend(cause, undefined, { site: 'reconcileTreasurySnapshot.cash', reason: 'source_unavailable' }) }
   }
   let funding: TreasurySnapshot['checks']['funding'] = sources.funding.kind !== 'available' ? sources.funding
@@ -87,8 +109,9 @@ export async function reconcileTreasurySnapshot(ctx: Context, dependencies: Read
   // Complete, validated histories have their own page/row bounds. Compare their
   // values without imposing the smaller single-JSON-value digest limit; all
   // published identity and evidence digests retain their canonical material.
-  if (!isDeepStrictEqual(base, afterBase) || !isDeepStrictEqual(sources, afterSources)
-    || !isDeepStrictEqual(audit, afterAudit)) {
+  const stable = isDeepStrictEqual(base, afterBase) && isDeepStrictEqual(sources, afterSources)
+    && isDeepStrictEqual(audit, afterAudit)
+  if (!stable) {
     const changed = unavailable('treasury_sources_changed_during_audit')
     cash = { ...cash, cash: changed, settlements: changed, reservations: changed }
     funding = changed; spending = changed
@@ -100,9 +123,34 @@ export async function reconcileTreasurySnapshot(ctx: Context, dependencies: Read
     ledger, referenceRate: base.referenceRate, spending, ...cashMetrics,
     checks: { cash: cashCheck, settlements, funding, reservations }, alerts: [],
   }
+  // A newly finalized range can finish booking after this cutoff. Retry at most
+  // once, only after the exact probed checkpoint is now booked. The new attempt
+  // obtains its own real RPC start clock and rereads every financial source;
+  // changed eligible sources never take this path.
+  if (canRefreshCheckpoint && dependencies.now === undefined && stable
+    && advancedReadback(bootstrap, chainReadback)) {
+    const current = await ctx.runQuery(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: Date.now() })
+    if (current.kind === 'available' && current.progress.kind === 'ready' && chainReadback.kind === 'observed'
+      && canonicalDigest(current.identity) === canonicalDigest(bootstrap.identity)
+      && canonicalDigest(current.progress.checkpoint) === canonicalDigest(chainReadback.checkpoint)) {
+      return reconcileSnapshotAttempt(ctx, dependencies, false)
+    }
+  }
   material.alerts = treasuryAlerts(material, base)
   if (!await dependencies.admit()) return unavailable('treasury_workload_authority_unavailable')
   return await ctx.runMutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: sealTreasurySnapshot(material) })
+}
+
+function advancedReadback(context: Extract<TreasurySnapshotContext, { kind: 'available' }>, proof: TreasuryChainObservation | Unavailable): boolean {
+  return context.progress.kind === 'ready' && proof.kind === 'observed'
+    && proof.environment === context.identity.environment && proof.network === context.identity.network
+    && proof.asset === context.identity.asset && proof.address === context.identity.address && proof.caughtUp
+    && Number.isSafeInteger(proof.observedAt) && proof.observedAt >= 0
+    && Number.isSafeInteger(proof.blockTimestamp) && proof.blockTimestamp >= 0 && proof.blockTimestamp <= proof.observedAt
+    && proof.observedAt - proof.blockTimestamp < TREASURY_FINALIZED_BLOCK_MAX_AGE_MS
+    && proof.fromBlock === (BigInt(context.progress.checkpoint.blockNumber) + 1n).toString()
+    && /^(?:0|[1-9]\d{0,77})$/u.test(proof.checkpoint.blockNumber)
+    && BigInt(proof.checkpoint.blockNumber) > BigInt(context.progress.checkpoint.blockNumber)
 }
 
 async function readSources(ctx: Context, cutoffAt: number): Promise<Sources> {

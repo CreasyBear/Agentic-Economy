@@ -1031,18 +1031,22 @@ describe('direct Quote handlers', () => {
     await backend.finishAllScheduledFunctions(() => undefined)
     await observeHealthyReadiness(backend, fixture, suffix)
     await recordTreasuryObservation(backend, suffix)
-    await backend.run(async (ctx) => {
-      const row = (await ctx.db.query('moneyTreasuryObservations')
-        .withIndex('by_custody_and_observedAt', (query) => query
-          .eq('environment', 'production')
-          .eq('custodyRef', activeCustodyRef)
-          .eq('custodyGeneration', activeCustodyGeneration))
-        .order('desc').take(1))[0]
-      if (row === undefined) throw new Error('treasury observation missing')
-      await ctx.db.patch(row._id, { observedAt: Date.now() - 1_000.5, recordedAt: Date.now() })
+    await withReadyCustodyEnvironment(backend, async () => {
+      // Establish readiness before corrupting its source; otherwise the fixture
+      // can race native creation cutoffs and fail while seeding its own report.
+      await backend.run(async (ctx) => {
+        const row = (await ctx.db.query('moneyTreasuryObservations')
+          .withIndex('by_custody_and_observedAt', (query) => query
+            .eq('environment', 'production')
+            .eq('custodyRef', activeCustodyRef)
+            .eq('custodyGeneration', activeCustodyGeneration))
+          .order('desc').take(1))[0]
+        if (row === undefined) throw new Error('treasury observation missing')
+        await ctx.db.patch(row._id, { observedAt: Date.now() - 1_000.5, recordedAt: Date.now() })
+      })
+      await expect(prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
+        .rejects.toThrow('quote_subjects_refused:payments_not_ready')
     })
-    const prepared = withReadyCustodyEnvironment(backend, () => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix))
-    await expect(prepared).rejects.toThrow('quote_subjects_refused:payments_not_ready')
   })
 
   it('ignores old generations and other custody rows without an environment fallback', async () => {

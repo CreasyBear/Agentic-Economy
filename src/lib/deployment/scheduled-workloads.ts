@@ -40,7 +40,8 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'cleanup expired agent access oauth grants', workloadKind: 'cron', handler: 'cleanupExpiredAgentAccessOAuthGrants', interval: { hours: 1 } },
   { name: 'snapshot marketplace metrics day', workloadKind: 'cron', handler: 'snapshotMarketplaceMetricsDay', daily: { hourUTC: 16, minuteUTC: 10 } },
   { name: 'refresh market flow', workloadKind: 'cron', handler: 'refreshMarketFlow', daily: { hourUTC: 1, minuteUTC: 15 } },
-  { name: 'reconcile treasury balances', workloadKind: 'reconciliation', handler: 'reconcileTreasuryBalances', interval: { minutes: 15 } },
+  // Leave headroom for the five-minute readiness probe without extending source clocks.
+  { name: 'reconcile treasury balances', workloadKind: 'reconciliation', handler: 'reconcileTreasuryBalances', interval: { minutes: 5 } },
   { name: 'observe x402 treasury', workloadKind: 'cron', handler: 'observeX402Treasury', interval: { minutes: 5 } },
 ] as const satisfies readonly ScheduledWorkload[]
 
