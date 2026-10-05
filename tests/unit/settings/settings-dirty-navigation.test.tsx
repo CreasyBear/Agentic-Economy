@@ -18,6 +18,7 @@ vi.mock('@/lib/server/workspace-profile.functions', () => ({ renameWorkspaceServ
 
 import { TaxProfileForm } from '@/components/ae/settings/TaxProfileForm'
 import { WorkspaceNameEditor } from '@/components/ae/settings/WorkspaceNameEditor'
+import { renameWorkspaceServer } from '@/lib/server/workspace-profile.functions'
 
 beforeEach(() => window.history.replaceState(null, '', '/edit'))
 afterEach(cleanup)
@@ -54,6 +55,34 @@ describe('dirty settings navigation', () => {
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('Leave without saving the workspace name?')
     fireEvent.click(screen.getByRole('button', { name: 'Continue editing' }))
     expect(screen.getByLabelText('Workspace name')).toHaveValue('Renamed Acme')
+  })
+
+  it.each([true, false])('allows explicit departure while an accepted workspace rename awaits canonical readback (earlier departure: %s)', async earlierDeparture => {
+    let finishSave!: (result: Awaited<ReturnType<typeof renameWorkspaceServer>>) => void
+    vi.mocked(renameWorkspaceServer).mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve }))
+    await renderRoute(() => <>
+      <Link to="/market">Open Tax</Link>
+      <WorkspaceNameEditor name="Acme" canonicalName="Acme" accountRevision={1} clerkOrgId="org_1" canEdit />
+    </>)
+    fireEvent.change(screen.getByLabelText('Workspace name'), { target: { value: 'Renamed Acme' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save workspace name' }))
+    if (earlierDeparture) {
+      fireEvent.click(screen.getByRole('link', { name: 'Open Tax' }))
+      expect(await screen.findByRole('alertdialog')).toHaveTextContent('Workspace name is still saving')
+      expect(screen.queryByRole('button', { name: 'Leave anyway' })).toBeNull()
+    }
+    await act(async () => { finishSave({ kind: 'accepted', name: 'Renamed Acme' }); await Promise.resolve() })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(window.location.pathname).toBe('/edit')
+    expect(screen.getByLabelText('Workspace name')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Confirming…' })).toBeDisabled()
+    expect(screen.queryByRole('group', { name: 'Save status' })).toBeNull()
+    fireEvent.click(screen.getByRole('link', { name: 'Open Tax' }))
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('Leave before the workspace name is confirmed?')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('The rename request was accepted.')
+    fireEvent.click(screen.getByRole('button', { name: 'Leave anyway' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/market'))
+    expect(screen.queryByLabelText('Workspace name')).toBeNull()
   })
 
   it('prompts for a dirty tax form and lets a clean tax form leave', async () => {

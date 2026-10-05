@@ -55,7 +55,7 @@ afterEach(() => {
 
 beforeEach(() => {
   source.renameUnbound.mockResolvedValue({ kind: 'updated', name: 'Renamed workspace' })
-  source.renameBound.mockResolvedValue({ kind: 'updated', name: 'Renamed workspace' })
+  source.renameBound.mockResolvedValue({ kind: 'accepted', name: 'Renamed workspace' })
 })
 
 describe('WorkspaceNameEditor', () => {
@@ -84,7 +84,7 @@ describe('WorkspaceNameEditor', () => {
   })
 
   it('locks the draft while saving and keeps the request latched after acceptance until the prop echoes', async () => {
-    const request = deferred<{ kind: 'updated'; name: string }>()
+    const request = deferred<{ kind: 'accepted'; name: string }>()
     source.renameBound.mockReturnValueOnce(request.promise)
     const page = renderEditor()
     const input = getNameInput()
@@ -101,7 +101,7 @@ describe('WorkspaceNameEditor', () => {
     fireEvent.submit(input.closest('form')!)
     expect(source.renameBound).toHaveBeenCalledTimes(1)
 
-    await act(async () => request.resolve({ kind: 'updated', name: 'Renamed workspace' }))
+    await act(async () => request.resolve({ kind: 'accepted', name: 'Renamed workspace' }))
 
     expect(input).toBeDisabled()
     expect(screen.getByText('Name saved. Waiting for the workspace to confirm it…')).toBeVisible()
@@ -114,7 +114,7 @@ describe('WorkspaceNameEditor', () => {
   })
 
   it('keeps confirmed success when the matching prop echo arrives before the request resolves', async () => {
-    const request = deferred<{ kind: 'updated'; name: string }>()
+    const request = deferred<{ kind: 'accepted'; name: string }>()
     source.renameBound.mockReturnValueOnce(request.promise)
     const page = renderEditor()
     const input = getNameInput()
@@ -128,7 +128,7 @@ describe('WorkspaceNameEditor', () => {
     await waitFor(() => expect(screen.getByText('Workspace name saved and confirmed.')).toBeVisible())
     expect(input).toBeDisabled()
 
-    await act(async () => request.resolve({ kind: 'updated', name: 'Renamed workspace' }))
+    await act(async () => request.resolve({ kind: 'accepted', name: 'Renamed workspace' }))
 
     expect(screen.getByText('Workspace name saved and confirmed.')).toBeVisible()
     await waitFor(() => expect(screen.getByRole('group', { name: 'Save status' })).toHaveTextContent('Workspace name saved and confirmed'))
@@ -138,7 +138,7 @@ describe('WorkspaceNameEditor', () => {
   it('retains a refused draft and enables an explicit retry', async () => {
     source.renameBound
       .mockResolvedValueOnce({ kind: 'refused', code: 'forbidden' })
-      .mockResolvedValueOnce({ kind: 'updated', name: 'Renamed workspace' })
+      .mockResolvedValueOnce({ kind: 'accepted', name: 'Renamed workspace' })
     renderEditor()
     changeName('Renamed workspace')
 
@@ -168,7 +168,7 @@ describe('WorkspaceNameEditor', () => {
   })
 
   it('keeps committed canonical readback when a later transport failure arrives', async () => {
-    const request = deferred<{ kind: 'updated'; name: string }>()
+    const request = deferred<{ kind: 'accepted'; name: string }>()
     source.renameBound.mockReturnValueOnce(request.promise)
     const page = renderEditor()
     changeName('Renamed workspace')
@@ -184,7 +184,7 @@ describe('WorkspaceNameEditor', () => {
   it('retains a rejected draft and permits retry after reporting failure', async () => {
     source.renameBound
       .mockRejectedValueOnce(new Error('temporary failure'))
-      .mockResolvedValueOnce({ kind: 'updated', name: 'Renamed workspace' })
+      .mockResolvedValueOnce({ kind: 'accepted', name: 'Renamed workspace' })
     renderEditor()
     changeName('Renamed workspace')
 

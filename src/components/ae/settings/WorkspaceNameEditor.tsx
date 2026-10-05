@@ -111,10 +111,12 @@ export function WorkspaceNameEditor({ name, canonicalName, accountRevision, cler
   if (pending) saveLabel = 'Saving…'
   return (
     <AeNavigationSafetyBoundary
-      state={{ dirty, pending: waitingForConfirmation, saveOutcome }}
-      title="Leave without saving the workspace name?"
+      // The accepted Clerk write waits for a webhook echo. Keep the field locked,
+      // but allow explicit departure once transport settles; acceptance is not confirmation.
+      state={{ dirty, pending, saveOutcome }}
+      title={requestedName === null ? 'Leave without saving the workspace name?' : 'Leave before the workspace name is confirmed?'}
       pendingTitle="Workspace name is still saving"
-      description="The name you typed will be discarded."
+      description={requestedName === null ? 'The name you typed will be discarded.' : 'The rename request was accepted. Check the workspace name when you return.'}
       pendingDescription="Wait until the save finishes. The current name is unchanged until it confirms."
       saveActionRef={saveRef}
       headingRef={inputRef}
