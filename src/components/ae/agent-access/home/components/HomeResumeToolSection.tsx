@@ -40,6 +40,7 @@ function firstUseCopy(firstUse: AgentFirstUseState): Readonly<{
   checkLabel: string
   showConnect: boolean
   showCheck: boolean
+  showBrowse: boolean
   instructionAgent: Extract<AgentFirstUseState, { kind: 'authorized' | 'authenticated' | 'browse_only' }>['agent'] | undefined
 }> {
   const access = 'access' in firstUse ? firstUse.access : undefined
@@ -85,22 +86,23 @@ function firstUseCopy(firstUse: AgentFirstUseState): Readonly<{
     : firstUse.kind === 'authenticated' ? `${firstUse.agent.displayName} is connected. Keep working in your existing Agent task; recorded Calls and results appear here automatically. The instruction below is available if your Agent needs guidance.`
     : `${firstUse.agent?.displayName ?? 'Your Agent'} has approved access. Continue in your existing Agent task; this page updates when its current credential authenticates. Copy the instruction below if your Agent needs guidance.`
 
-  return { title, description, hasAccess, authenticated, observedCall, observedState, stepperCurrent, stepperSteps, currentAccess, callActionLabel, checkLabel, showConnect, showCheck, instructionAgent }
+  return { title, description, hasAccess, authenticated, observedCall, observedState, stepperCurrent, stepperSteps, currentAccess, callActionLabel, checkLabel, showConnect, showCheck, showBrowse: firstUse.kind === 'browse_only', instructionAgent }
 }
 
 function HomeResumeActions({ copy, onConnect, onCheck, checking, resumeTool }: Pick<HomeResumeToolSectionProps, 'onConnect' | 'onCheck' | 'checking' | 'resumeTool'> & Readonly<{
   copy: ReturnType<typeof firstUseCopy>
 }>) {
-  const { hasAccess, observedCall, callActionLabel, showConnect, showCheck, checkLabel } = copy
+  const { hasAccess, observedCall, callActionLabel, showConnect, showCheck, showBrowse, checkLabel } = copy
   const callAction = observedCall === undefined ? null : <Link to="/calls/$callRef" params={{ callRef: observedCall.callRef }}
     className={`${arcButton.button} ${arcButton.primary} ${arcButton.md} arc-agent-inline-action`}>{callActionLabel}</Link>
 
   return <>
     {callAction}
     <div className="arc-agent-connect-actions">
+      {showBrowse && resumeTool === undefined ? <Link to="/market" search={{ view: 'tools' }} className={`${arcButton.button} ${arcButton.primary} ${arcButton.md}`}>Browse Tools</Link> : null}
       {showConnect ? <Button type="button" variant={observedCall === undefined ? 'primary' : 'secondary'} onClick={onConnect}>Connect an Agent</Button> : null}
       {showCheck ? <Button type="button" variant="secondary" onClick={onCheck} disabled={checking}>{checking ? 'Checking…' : checkLabel}</Button> : null}
-      {resumeTool !== undefined && hasAccess ? <Link to="/tools/$toolRef" params={{ toolRef: resumeTool }} className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md}`}>Return to selected Tool</Link> : null}
+      {resumeTool !== undefined && hasAccess ? <Link to="/tools/$toolRef" params={{ toolRef: resumeTool }} className={`${arcButton.button} ${showBrowse ? arcButton.primary : arcButton.secondary} ${arcButton.md}`}>Return to selected Tool</Link> : null}
     </div>
   </>
 }

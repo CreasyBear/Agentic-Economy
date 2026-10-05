@@ -956,6 +956,16 @@ const searchMeta = {
   next: [{ action: 'next-page', args: { query: 'weather', cursor: 'opaque-next' }, authority: 'public' }],
 } satisfies Pick<Extract<ToolChoiceSearchOutput, { kind: 'match' }>, 'schemaVersion' | 'query' | 'partialResults' | 'assessed' | 'pagination' | 'next'>
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('canonical Market search', () => {
   it('keeps the initial canonical-search skeleton decorative inside its named status', () => {
     searchMarketToolsServer.mockReturnValue(new Promise(() => {}))
@@ -965,6 +975,204 @@ describe('canonical Market search', () => {
     expect(status.querySelector('[aria-hidden="true"]')).toBeTruthy()
     expect(screen.getAllByRole('status').filter(region => region.getAttribute('aria-busy') === 'true')).toHaveLength(1)
     expect(within(status).queryByRole('status')).toBeNull()
+  })
+  it('keeps a successful canonical result across a Providers tab round trip without searching again', async () => {
+    const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValue(first)
+    const { router, updateSearch } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    updateSearch({ view: 'providers', query: 'weather' })
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ view: 'providers', query: 'weather' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Providers' }).getAttribute('aria-selected')).toBe('true'))
+    expect(screen.getByRole('button', { name: 'View Tools from example.com' })).toBeTruthy()
+
+    updateSearch({ view: 'tools', query: 'weather' })
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ view: 'tools', query: 'weather' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true'))
+    expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(1)
+  })
+  it('reuses a still-pending initial query across a Providers tab round trip', async () => {
+    const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
+    const pending = deferred<ToolChoiceSearchOutput>()
+    searchMarketToolsServer.mockReturnValue(pending.promise)
+    const { router, updateSearch } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    await waitFor(() => expect(searchMarketToolsServer).toHaveBeenCalledTimes(1))
+
+    updateSearch({ view: 'providers', query: 'weather' })
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ view: 'providers', query: 'weather' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Providers' }).getAttribute('aria-selected')).toBe('true'))
+    updateSearch({ view: 'tools', query: 'weather' })
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ view: 'tools', query: 'weather' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true'))
+    const callsWhilePending = searchMarketToolsServer.mock.calls.length
+
+    await act(async () => { pending.resolve(first) })
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(callsWhilePending).toBe(1)
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(1)
+  })
+  it('ignores a rejected initial search after the Market component unmounts', async () => {
+    const pending = deferred<ToolChoiceSearchOutput>()
+    const failure = new Error('unmounted initial search failed')
+    searchMarketToolsServer.mockReturnValue(pending.promise)
+    const { unmount } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    await waitFor(() => expect(searchMarketToolsServer).toHaveBeenCalledTimes(1))
+
+    unmount()
+    await act(async () => { pending.reject(failure) })
+
+    expect(captureRouteException).not.toHaveBeenCalled()
+    expect(screen.queryByRole('link', { name: 'Weather Forecast' })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+  it('restores the second loaded search page after a fresh tab round trip without another fetch', async () => {
+    const first = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
+    const second = { ...searchMeta, kind: 'scoped', results: [searchRows[1]!], reason: 'More catalogue entries remain.' } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second).mockResolvedValue(first)
+    const { router, updateSearch } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await screen.findByRole('link', { name: 'External Forecast' })).toBeTruthy()
+    expect(screen.getByText('Page 2')).toBeTruthy()
+
+    updateSearch({ view: 'providers', query: 'weather' })
+    await waitFor(() => expect(router.state.location.search.view).toBe('providers'))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Providers' }).getAttribute('aria-selected')).toBe('true'))
+    updateSearch({ view: 'tools', query: 'weather' })
+    await waitFor(() => expect(router.state.location.search.view).toBe('tools'))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true'))
+
+    expect(screen.getByText('Page 2')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'External Forecast' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Weather Forecast' })).toBeNull()
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+  })
+  it('admits one continuation when Next page is activated twice in the same batch', async () => {
+    const first = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
+    const second = {
+      ...searchMeta, kind: 'match', results: [searchRows[1]!],
+      pagination: { limit: 8, hasMore: false }, next: [],
+    } satisfies ToolChoiceSearchOutput
+    const pendingNext = deferred<ToolChoiceSearchOutput>()
+    searchMarketToolsServer.mockResolvedValue(first).mockResolvedValueOnce(first).mockReturnValueOnce(pendingNext.promise)
+    show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    const nextPage = screen.getByRole('button', { name: 'Next page' })
+
+    await act(async () => {
+      fireEvent.click(nextPage)
+      fireEvent.click(nextPage)
+    })
+    await waitFor(() => expect(searchMarketToolsServer).toHaveBeenCalledTimes(2))
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, { data: { query: 'weather', limit: 8, cursor: 'opaque-next' } })
+
+    await act(async () => { pendingNext.resolve(second) })
+    expect(await screen.findByRole('link', { name: 'External Forecast' })).toBeTruthy()
+    expect(screen.getByText('Page 2')).toBeTruthy()
+    expect(screen.queryByText('Page 3')).toBeNull()
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+  })
+  it('retains known rows while an expired search refreshes, then replaces them with the refreshed first page', async () => {
+    const first = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
+    const refreshed = { ...searchMeta, kind: 'match', results: [{ ...searchRows[0]!, title: 'Fresh Weather' }] } satisfies ToolChoiceSearchOutput
+    const pendingRefresh = deferred<ToolChoiceSearchOutput>()
+    const start = Date.UTC(2026, 9, 5)
+    let now = start
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    searchMarketToolsServer.mockResolvedValueOnce(first).mockReturnValueOnce(pendingRefresh.promise)
+    const { router, updateSearch } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    try {
+      expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+      now += 30_001
+
+      updateSearch({ view: 'providers', query: 'weather' })
+      await waitFor(() => expect(router.state.location.search.view).toBe('providers'))
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Providers' }).getAttribute('aria-selected')).toBe('true'))
+      updateSearch({ view: 'tools', query: 'weather' })
+      await waitFor(() => expect(router.state.location.search.view).toBe('tools'))
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true'))
+      expect(await screen.findByRole('status', { name: 'Refreshing search results' })).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+      expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+
+      await act(async () => { pendingRefresh.resolve(refreshed) })
+      expect(await screen.findByRole('link', { name: 'Fresh Weather' })).toBeTruthy()
+      expect(screen.queryByRole('link', { name: 'Weather Forecast' })).toBeNull()
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+  it.each(['rejected', 'unavailable'] as const)('keeps known rows after an expired refresh is %s and lets Retry search replace them', async failureKind => {
+    const first = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
+    const unavailable = {
+      ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable',
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', args: { query: 'weather' }, authority: 'public' }],
+    } satisfies ToolChoiceSearchOutput
+    const refreshed = { ...searchMeta, kind: 'match', results: [{ ...searchRows[0]!, title: 'Fresh Weather' }] } satisfies ToolChoiceSearchOutput
+    const refreshFailure = new Error('refresh failed')
+    const start = Date.UTC(2026, 9, 5)
+    let now = start
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    searchMarketToolsServer.mockResolvedValueOnce(first)
+    if (failureKind === 'rejected') searchMarketToolsServer.mockRejectedValueOnce(refreshFailure)
+    else searchMarketToolsServer.mockResolvedValueOnce(unavailable)
+    searchMarketToolsServer.mockResolvedValueOnce(refreshed)
+    const { router, updateSearch } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    try {
+      expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+      now += 30_001
+
+      updateSearch({ view: 'providers', query: 'weather' })
+      await waitFor(() => expect(router.state.location.search.view).toBe('providers'))
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Providers' }).getAttribute('aria-selected')).toBe('true'))
+      updateSearch({ view: 'tools', query: 'weather' })
+      await waitFor(() => expect(router.state.location.search.view).toBe('tools'))
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true'))
+
+      const failure = await screen.findByRole('alert')
+      expect(failure.textContent).toMatch(/refresh/i)
+      expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
+      expect(await screen.findByRole('link', { name: 'Fresh Weather' })).toBeTruthy()
+      expect(screen.queryByRole('link', { name: 'Weather Forecast' })).toBeNull()
+      expect(searchMarketToolsServer).toHaveBeenCalledTimes(3)
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+  it.each(['resolve', 'reject'] as const)('ignores an obsolete next-page A request that completes by %s after an A-to-B-to-A search', async completion => {
+    const firstA = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
+    const obsoletePage = { ...searchMeta, kind: 'match', results: [{ ...searchRows[1]!, title: 'Obsolete Weather' }] } satisfies ToolChoiceSearchOutput
+    const resultB = { ...searchMeta, query: 'storm', kind: 'match', results: [{ ...searchRows[0]!, title: 'Storm Alert' }] } satisfies ToolChoiceSearchOutput
+    const newestA = { ...searchMeta, kind: 'match', results: [{ ...searchRows[0]!, title: 'Newest Weather' }] } satisfies ToolChoiceSearchOutput
+    const pendingNext = deferred<ToolChoiceSearchOutput>()
+    const obsoleteFailure = new Error('obsolete next page failed')
+    searchMarketToolsServer.mockResolvedValueOnce(firstA).mockReturnValueOnce(pendingNext.promise)
+      .mockResolvedValueOnce(resultB).mockResolvedValueOnce(newestA)
+    const { router, updateSearch } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(searchMarketToolsServer).toHaveBeenCalledTimes(2))
+    updateSearch({ view: 'tools', query: 'storm' })
+    await waitFor(() => expect(router.state.location.search.query).toBe('storm'))
+    expect(await screen.findByRole('link', { name: 'Storm Alert' })).toBeTruthy()
+    updateSearch({ view: 'tools', query: 'weather' })
+    await waitFor(() => expect(router.state.location.search.query).toBe('weather'))
+    expect(await screen.findByRole('link', { name: 'Newest Weather' })).toBeTruthy()
+
+    if (completion === 'resolve') await act(async () => { pendingNext.resolve(obsoletePage) })
+    else await act(async () => { pendingNext.reject(obsoleteFailure) })
+
+    expect(screen.getByRole('link', { name: 'Newest Weather' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Obsolete Weather' })).toBeNull()
+    expect(screen.getByText('Page 1')).toBeTruthy()
+    expect(screen.queryByText('Page 2')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(captureRouteException).not.toHaveBeenCalled()
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(4)
   })
   it('replaces directory results with one mixed page, uses exact detail links, row-source freshness and an executable filtered cursor', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
@@ -1081,13 +1289,21 @@ describe('canonical Market search', () => {
       recipient: { label: 'TypeSafe', host: 'custom-gateway.example', data: 'query and candidate summaries' },
     } satisfies ToolChoiceSearchOutput)
     show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
-    const inspect = await screen.findByRole('link', { name: 'Connect Weather' })
+    const table = await screen.findByRole('table', { name: 'Canonical search results' })
+    const setupRow = within(table).getByRole('row', { name: /Connect Weather/ })
+    const inspect = within(setupRow).getByRole('link', { name: 'Connect Weather' })
     expect(toolHref(inspect).pathname).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
-    expect(screen.getByText('Connect to call')).toBeTruthy()
-    expect(screen.getByText('Indicative AUD · A$0.01')).toBeTruthy()
-    expect(screen.getByText('Provider-listed source · 0.000001 USDC')).toBeTruthy()
+    fireEvent.click(within(setupRow).getByRole('button', { name: 'Inspect Connect Weather' }))
+    const details = await screen.findByRole('dialog')
+    expect(within(details).getByText('Connect to call')).toBeTruthy()
+    expect(within(details).getByText('Indicative AUD · A$0.01')).toBeTruthy()
+    const listedPrice = within(details).getByText('Provider-listed source')
+    expect(listedPrice.nextElementSibling?.textContent).toBe('0.000001 USDC')
     expect(screen.getByText(/Search query and candidate Tool text went to TypeSafe \(custom-gateway.example\)/)).toBeTruthy()
-    expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    const externalRow = within(table).getByRole('row', { name: /External Forecast/ })
+    fireEvent.click(within(externalRow).getByRole('button', { name: 'Inspect External Forecast' }))
+    expect(within(await screen.findByRole('dialog')).getByText('External listing · not AE-callable')).toBeTruthy()
   })
   it('saves exact admitted and Bazaar search identities without retaining listed prices', async () => {
     searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput)
@@ -1095,12 +1311,16 @@ describe('canonical Market search', () => {
       kind: 'saved', identity: data.toolRef ? data : { kind: 'external_listing', resource: 'https://example.com/weather' }, createdAt: 1,
     }))
     show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
-    const admitted = (await screen.findByRole('link', { name: 'Weather Forecast' })).closest('li')
-    const external = screen.getByRole('link', { name: 'External Forecast' }).closest('li')
-    if (!admitted || !external) throw new Error('Missing canonical search result row')
+    const table = await screen.findByRole('table', { name: 'Canonical search results' })
+    const admittedLink = within(table).getByRole('link', { name: 'Weather Forecast' })
+    const externalLink = within(table).getByRole('link', { name: 'External Forecast' })
+    const admitted = admittedLink.closest('tr')
+    const external = externalLink.closest('tr')
+    if (admitted === null || external === null) throw new Error('Missing canonical search result row')
     await waitFor(() => expect(within(admitted).getByRole('button', { name: 'Save Tool' })).toHaveProperty('disabled', false))
     fireEvent.click(within(admitted).getByRole('button', { name: 'Save Tool' }))
     await waitFor(() => expect(saveToolForOwner).toHaveBeenCalledWith({ data: { kind: 'ae_callable', toolRef: admittedRef } }))
+    await waitFor(() => expect(within(external).getByRole('button', { name: 'Save Tool' })).toHaveProperty('disabled', false))
     fireEvent.click(within(external).getByRole('button', { name: 'Save Tool' }))
     await waitFor(() => expect(saveToolForOwner).toHaveBeenCalledWith({ data: { kind: 'external_listing', id: directoryId } }))
   })

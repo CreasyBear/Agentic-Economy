@@ -14,7 +14,10 @@ export type MarketToolSearchState = Readonly<{
   query: string
   pages: readonly ToolChoiceSearchOutput[]
   index: number
-  status: 'loading' | 'idle' | 'failed'
+  receivedAt: number | null
+  request: Readonly<{ kind: 'idle' }>
+    | Readonly<{ kind: 'loading'; purpose: 'search' | 'page'; generation: number }>
+    | Readonly<{ kind: 'failed'; purpose: 'search' | 'page' }>
 }>
 
 /** Only pass refinements that the canonical mixed search applies before pagination. */
