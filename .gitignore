@@ -38,6 +38,11 @@ graphify-out/
 !/docs/licenses/
 !/docs/licenses/*.txt
 !/docs/README.md
+!/docs/glossary.md
+!/docs/operating-model.md
+!/docs/production-readiness-plan.md
+!/docs/designs/
+!/docs/designs/*.md
 !/docs/archive/
 !/docs/archive/**
 !/docs/guides/

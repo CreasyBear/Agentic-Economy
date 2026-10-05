@@ -2,7 +2,7 @@
 
 **Reviewed:** 20 September 2026. **Purpose:** establish evidence for a fresh ADR,
 not validate the withdrawn ADR 0002. **Status:** research complete for the sources
-listed below. Subsequent [local experiments](./jev-experiment-programme.md) now
+listed below. Subsequent [local experiments](jev-experiment-programme.md) now
 measure search ordering and selected semantic decisions. Those limited results
 do not establish commercial acceptance, purchase completion or production value.
 
@@ -37,7 +37,7 @@ Re-read the [active product charter](../PRODUCT.md),
 [agent operating contract](../docs/designs/agent-operating-contract.md),
 [whitepaper](../AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md),
 [manifesto](../docs/strategy/agentic-economy-manifesto.md),
-[September pitch](../docs/strategy/pitch-kit-2026-09.md), and
+[September pitch](https://github.com/CreasyBear/Agentic-Economy/blob/7524cb6c8a73cd54478c37d69c0dc7034c0577c9/docs/strategy/pitch-kit-2026-09.md), and
 [future horizontals](../docs/strategy/aecon-horizontals-and-responsibility-architecture.md).
 The charter controls the current product; the strategic documents explain the
 ambition, not shipped functionality or verified legal claims.
@@ -236,7 +236,7 @@ No runtime source was changed by this review.
 - [Gateway](../src/modules/decision-engine/decision-gateway.ts) falls through
   model, secondary LLM and deterministic tiers. A shared response shape does not
   make these judgments or confidence values interchangeable.
-- [Output adjudication](../src/modules/capability-execution/call-worker/output-adjudication.ts)
+- Output adjudication (unavailable historical reference: `src/modules/capability-execution/call-worker/output-adjudication.ts`)
   sends identifiers and received payload, but not the accepted input, output
   expectations or independent source. It can invalidate output after a generic
   failure/fault classification. The source-grounded verification literature does

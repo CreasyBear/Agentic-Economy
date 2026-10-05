@@ -196,8 +196,9 @@ Reference entry points:
 [OpenRouter server tools](https://openrouter.ai/tools),
 [Mercator](https://tempo.xyz/developers/blog/introducing-mercator) and the
 [Whop maturity summary](./research/WHOP-AE-MATURITY.md).
-The [Tool market routing and data strategy](./docs/designs/2026-09-25-tool-market-routing-and-data-strategy.md)
-maps the platform journey and its open design decisions.
+The [dated Tool market routing proposal](docs/archive/2026-10-05/designs/2026-09-25-tool-market-routing-and-data-strategy.md)
+retains platform-journey research and unresolved design questions; it does not
+override this charter.
 The [platform data privacy design](./docs/designs/platform-data-privacy.md)
 owns the cross-platform recipient, first-release, access and retention standard
 for that journey. It distinguishes current source behavior from required controls
@@ -611,8 +612,11 @@ Australian principal-reseller record stay outside this source acceptance.
 The next milestone is one complete managed x402 purchase: confirmed AUD
 funding, an all-in AUD Quote, reserve-before-payment, corporate USDC settlement,
 usable delivery, explicit recovery, customer-visible Calls and invoice-ready
-records. Production money remains disabled until the Australian legal, AML/CTF,
-tax and bank-account gates are approved. That proof is specified in
+records. Production activation requires attributable Australian legal, AML/CTF,
+tax and bank-account approval evidence for the applicable scope. The
+[current readiness record](docs/production-readiness-plan.md) separately records
+the controlled alpha acceptance and its explicit policy exceptions. The complete
+commercial proof is specified in
 [START_LINE.md](./START_LINE.md).
 
 <a id="strategic-advantage"></a>

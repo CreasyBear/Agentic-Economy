@@ -70,7 +70,7 @@ The app's own `POST /api/v1/sandbox-reference` is an unpaid reference Tool, and 
 
 ## 5. Known state
 
-Hosted Stripe webhook destinations are disabled/unpinned per the September 2026 preflight (`docs/operations/vocabulary-cutover-preflight.md:64-72`). This doc is local-only and does not change that hosted state.
+This guide describes local test-mode behavior. The [September preflight](../archive/2026-10-05/operations/vocabulary-cutover-preflight.md) is historical evidence, not current hosted configuration. Use the [deployment map](deployments.md) and actual provider readback before changing a hosted destination.
 
 ## 6. Hosted webhook destinations
 

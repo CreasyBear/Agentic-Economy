@@ -29,9 +29,9 @@ visible keyboard focus and reduced-motion behavior remain required.
 
 These block recipes supersede the ExtraLight, uppercase-eyebrow, compact-radius
 and 150/220/300ms recipes below only on migrated surfaces. Unmigrated pages keep
-their current system. Provider browse/profile remains a separate queued slice.
-The contract and coverage inventory live in
-[the Arc refactor protocol](./docs/designs/arc-ui-refactor/protocol.md).
+their current system. Current source establishes migrated coverage.
+The dated contract and coverage inventory remain in
+[the Arc refactor protocol](docs/archive/2026-10-05/designs/arc-ui-refactor/protocol.md).
 
 The scoped bridge adds one CSS boundary instead of per-block palettes or a
 second theme controller. Shared motion presets and the `motion` package support

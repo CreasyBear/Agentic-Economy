@@ -7,12 +7,12 @@ continues working without a human finding the service or repairing its use.
 Provider counterpart: a capability reaches relevant buyers despite different
 wording. Successful ranking is a leading indicator, not the product outcome.
 
-**Completed:** [search/ranking trial](../output/jev-bazaar-eval-2026-09-20/REPORT.md)
-and [comparison, preparation and Provider-matching trial](../output/jev-journeys-2026-09-20-v2/REPORT.md).
+**Completed:** search/ranking trial (unavailable historical reference: `output/jev-bazaar-eval-2026-09-20/REPORT.md`)
+and comparison, preparation and Provider-matching trial (unavailable historical reference: `output/jev-journeys-2026-09-20-v2/REPORT.md`).
 The second trial found equal held-out quality between Jev and the existing
 general-model adapter, lower observed inference latency/cost, and a shared
 failure on an underspecified buyer request. The subsequent
-[paired agent-loop trial](../output/jev-agent-loop-2026-09-20/REPORT.md) found no
+paired agent-loop trial (unavailable historical reference: `output/jev-agent-loop-2026-09-20/REPORT.md`) found no
 turn reduction or demonstrated service-choice benefit from adding a Jev hint.
 Its extra inference increased cost. No end-to-end purchase benefit is established.
 **Decision:** favour work replacement or precomputation; reject an additive hint

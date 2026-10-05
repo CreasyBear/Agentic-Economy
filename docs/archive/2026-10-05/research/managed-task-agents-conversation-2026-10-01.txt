@@ -1,0 +1,297 @@
+Theres a few more that i want you to read now. 
+https://x.com/awxjack/status/2105322968171884988
+https://vercel.com/i/what-is-openai-decisions-api
+https://x.com/StripeCrypto/status/2104951668987015670
+https://x.com/yashhsm/status/2105380670688346335
+https://blog.cloudflare.com/monetization-gateway-beta/
+Too much going on
+
+
+
+
+
+
+
+18:49
+
+
+
+
+
+
+Worked for 4m 2s
+
+
+
+I’ve read all five. They cover different parts of the stack, and we can keep our product focused while those parts evolve.
+Source	What it adds	Relevance to our direction
+Jack Zhang / Airwallex	A finance loop: observe changes, decide, act within controls, then reconcile the result.	Supports requiring proof of the business outcome. Money movement introduces a much larger scope than filing an invoice or creating a draft bill.
+Vercel on Decisions API	Models answering questions with predefined choices, using text or images.	Directly relevant to bounded tasks: choose among permitted workflow branches, including “needs review.” The application still enforces authority. OpenAI confirms it is currently in limited preview.
+Stripe’s stablecoin stack	Modular infrastructure for accepting, holding, moving and spending money, including programmable wallets.	Potential infrastructure for later purchasing and payment capabilities. We can select a component when a specific workflow needs it.
+Yash’s Instinct analysis	Low-friction interaction, task delegation, quiet notifications and separation between conversation and execution.	Useful UX lessons. Treat its claims about E2B, memory storage and internal architecture as hypotheses: several are explicitly guesses. Its free usage model supplies no reliable cost benchmark.
+Cloudflare Monetization Gateway	Charging agents per request for APIs, tools and data through HTTP 402; initially USDC on Base.	Relevant to Agentic Economy’s service procurement research and possible future paid inputs. It is a closed beta for eligible US buyers and sellers, which limits its immediate use for an Australian launch.
+
+
+The most useful architectural consequence is this:
+A task can offer flexible reasoning while its available decisions, permissions, spending and completion conditions remain explicit.
+For the invoice example:
+- The model extracts information and proposes a result.
+- Code checks totals, supplier identity, duplicates and the selected Xero organisation.
+- The gateway admits only the permitted action.
+- The system confirms the bill and file exist, records the outcome, then destroys the worker.
+Decisions API could improve one step inside that flow. Stripe or Cloudflare could support a future financial capability. Neither changes the task’s basic contract.
+My read is that infrastructure is becoming easier to buy. The work we need to prove is turning a customer’s task into a dependable, permissioned service they can configure themselves, with acceptable review effort and cost.
+I’d keep the investigation organised around three decisions:
+1. Execution: which runtime meets isolation, lifecycle and cost requirements?
+2. Control: how do we enforce task scope and verify completion?
+3. Commercial: how do we charge customers and, eventually, procure paid services?
+These announcements expand our supplier options. They don’t require expanding the first product’s scope.
+
+
+18:53
+
+
+
+
+
+
+
+
+positioning wise how do you feel. defensibly?
+
+
+
+
+
+
+
+19:14
+
+
+
+
+
+
+Worked for 4m 1s
+
+
+
+I like the opportunity. The current positioning has weak defensibility; the way you deliver the work could become defensible.
+“Managed Agents for Business” describes the category, but customers still need a reason to choose yours. Tasklet already advertises business workflows, approvals and per-agent spending limits. Pickaxe offers agent packaging and monetisation. OpenAI’s specialist dots explicitly target defined responsibilities, including invoice processing and procurement. Those are advertised capabilities, rather than evidence of equivalent reliability, but they establish substantial overlap. Tasklet, Pickaxe, OpenAI.
+Your ephemeral, tightly permissioned architecture is sensible. It makes the product safer and potentially cheaper to operate, but it is replicable. E2B instances, dedicated folders, connectors and approval screens won’t create much protection individually.
+I would position the product around this promise:
+Deploy a business task with defined permissions, predictable cost and a verifiable result.
+
+The Upstash analogy works particularly well for the deployment experience: understandable configuration, quick activation, transparent usage and reliable operations. The customer-facing value is the completed business process.
+The defensibility would need to accumulate in three places:
+- Workflow competence. Tested handling of messy documents, duplicates, missing information, inconsistent records and interrupted execution. Each task package includes its checks, exceptions and recovery procedures.
+- Operational trust. Customers can see what happened, why an action was permitted, what needs attention and how a failed job is resolved. They spend progressively less time supervising.
+- Distribution and embedded configuration. A repeatable route to a specific buyer, plus useful policies, mappings and integrations that become established in their operations. Templates alone offer little protection.
+The difficult strategic position is being squeezed between a bundled general-purpose agent and specialist software that already owns the customer’s workflow. A horizontal platform is a reasonable destination; a specific buyer and workflow family give it a stronger entry point. Self-service can remain the product ambition from day one.
+My practical test: if someone can recreate the useful part by giving Tasklet a prompt and connecting two accounts, the differentiation is thin. If recreating it requires rebuilding validated exception handling, permissions, reconciliation and recovery—and customers repeatedly pay because you remove that burden—you have something stronger.
+So I’d pursue it, with the research centred on which repeatable job we can deliver with materially less supervision, at a sustainable cost. That answer matters more to defensibility than the sandbox stack.
+
+
+19:18
+
+
+
+
+
+
+
+
+i think the bit im narrowing down on is - managed external agents for businesses
+
+
+
+
+
+
+
+19:28
+
+
+
+
+
+
+Worked for 35s
+
+
+
+
+
+
+That puts the operating responsibility at the centre of the offer. A business delegates a defined job to an agent operated outside its environment, and you manage the execution, permissions, monitoring and recovery.
+The customer buys something like:
+An external agent that handles a specific business job, within authority you define.
+
+For the invoice example, that could mean permission to receive invoices, store them in one designated location and create draft bills in one Xero organisation. The service handles retries, duplicate detection and exceptions, with an accountable record of every run.
+“Managed” carries the commercial weight here. The customer should understand:
+- Scope: exactly what work it performs.
+- Authority: which information and actions it can access.
+- Accountability: what happens when it fails or needs human judgement.
+- Cost: what running that job will cost.
+The agent can be short-lived while the customer’s deployment—its configuration, connections, policies and history—persists.
+The defensible asset would be the ability to operate these delegated jobs reliably across customer environments. That includes accumulated workflow expertise, exception handling and a repeatable deployment process. Hosting the agent is one component.
+One distinction materially changes the positioning: does “external” mean agents your platform hosts and operates, or a management layer through which businesses hire and control agents supplied by other providers? The first is a managed operations product; the second moves toward an agent services market.
+
+
+19:29
+
+
+
+
+
+
+
+
+a counterparty business can "contract" your agent to complete a bounded piece of work. and it becomes like an appstore. 
+
+
+
+
+
+
+
+19:31
+
+
+
+
+
+
+Worked for 1m 13s
+
+
+
+That clarifies it: a business can publish an agent’s capability as a service, and another business can contract it for a bounded job.
+The app store is the discovery and purchasing experience. Each listing represents an offer with defined inputs, deliverables, permissions, price and completion terms.
+For example:
+“Process this invoice batch into Xero draft bills.”
+Supply the documents, authorise access to one organisation, receive the draft bills and an exception report.
+
+The provider could encode its expertise into the agent. Your platform would make that expertise discoverable, purchasable and manageable. The agent runs when work arrives; its service listing and operating configuration persist.
+That creates two connected propositions:
+- For providers: turn a repeatable capability into a service other businesses can buy.
+- For customers: acquire specialist work without building and operating the agent themselves.
+This gives the idea a more credible path to defensibility. Useful supply attracts buyers; repeat demand attracts providers. Matching, demonstrated performance and established commercial relationships can improve the market over time. Those advantages have to be earned through successful purchases—listing lots of agents won’t establish them.
+The critical distinction is that customers need to compare what work they will receive, rather than understand the agent’s underlying technology. Each offer also needs a named provider and clear responsibility when delivery fails.
+This closely matches [Agentic Economy’s product charter](/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/PRODUCT.md): providers can include other agents, and customers purchase bounded contributions. Managed agent hosting would support that supply; the market and commercial boundary would connect it to demand.
+The positioning I’d use is:
+A marketplace where businesses contract specialist agents to complete defined work.
+
+“Managed” then explains why both sides can trust the service to operate.
+
+
+19:32
+
+
+
+
+
+
+
+
+nah i dont think xero invoice batching is a good example for this external one. thats more an internal agent. not defensible. external could be a study, certified piece of work from an accredited professional and its agent, legal notices, access into a proprietary database or service, it could be a supplier stock check or something. 
+
+
+
+
+
+
+
+19:34
+
+
+
+
+
+
+Worked for 32s
+
+
+
+
+
+
+My invoice example missed the point. “External” means acquiring something another business uniquely controls: expertise, professional authority, proprietary information or operational access.
+The agent becomes the interface through which that business delivers its capability.
+Example	What the customer buys	Source of defensibility
+Specialist study	A scoped analysis with professional review and sign-off	Expertise, accreditation and accountability
+Legal notice	Preparation or delivery through an appropriate professional service	Professional capability and established procedures
+Proprietary database	An authorised query or licensed result	Exclusive data and access rights
+Supplier stock check	Current availability and lead-time information from the supplier	Direct access to its operational systems
+
+
+The bounded scope describes the transaction. The counterparty’s capability makes it valuable. A stock check can be simple and still valuable because the supplier holds information the buyer cannot independently reproduce.
+That gives us a sharper positioning:
+Businesses make their specialist capabilities available through agents. Other businesses contract them for defined work.
+
+“Managed agents” describes how you enable the supply: deployment, connections, permissions, execution and maintenance. The marketplace makes those services discoverable and purchasable.
+There are then two different sources of defensibility:
+- The provider’s: expertise, accreditation, proprietary assets and business relationships.
+- The platform’s: access to useful providers, recurring buyer demand, effective matching and a trusted purchasing experience.
+The provider’s advantage doesn’t automatically become yours. Your platform earns its position by bringing business to providers and making external services substantially easier to acquire and use.
+This is a stronger thesis than generic task automation. The research question becomes: which valuable capabilities are currently trapped behind emails, portals, phone calls and bespoke engagements—and could become bounded, purchasable services through an agent?
+
+
+19:34
+
+
+
+
+
+
+
+
+dont just repeat backt o me. go deeper
+
+
+
+
+
+
+
+19:36
+
+
+
+
+
+
+Worked for 2m 53s
+
+
+
+The deeper opportunity is to lower the minimum economically viable engagement between two businesses. An agent could make a small piece of another firm’s expertise, information or operational capability worth selling individually.
+That is a stronger thesis than “businesses need managed agents”. But your examples contain several different businesses, and putting them into one app store won’t automatically make them work.
+First, the valuable thing is what the provider can stand behind.
+Consider three versions of the same study: a generic model-generated report, an analysis using a specialist firm’s proprietary information, and a report reviewed and issued by that firm for a stated purpose. They might look similar. Their commercial value differs substantially.
+The purchase therefore needs to answer: what decision can this result support, and what responsibility does the provider accept? Accreditation on a profile is insufficient. The particular service needs to explain whether professional review and sign-off are included.
+This suggests that the listing’s most important feature is its precise service definition. “Research agent” is difficult to buy. “A supplier assessment covering these questions, these sources and this review process” is something a business can evaluate.
+Second, your examples have different sources of revenue.
+Service	Likely commercial model to test	Main constraint
+Proprietary information	Payment per result, usage allowance or subscription	Rights, freshness and access
+Professionally reviewed work	Price per engagement, including review	Reviewer capacity and acceptance criteria
+Supplier availability or quotation	Supplier-funded access, software subscription or revenue from the resulting order	Reliable operational information and conversion
+
+
+A supplier stock check could be valuable while commanding almost no standalone price. The supplier might fund it because it helps sell stock. A signed specialist study might support a substantial engagement price, but still require expensive human attention.
+One payment model across all three would obscure where the value actually sits.
+Third, the supply-side proposition may be the best route into the market.
+My hypothesis is that providers would participate if you help them sell work they currently struggle to serve profitably: requests too small for a conventional engagement, repetitive enquiries that consume staff time, or occasional buyers unwilling to purchase a full subscription.
+That gives them a concrete reason to publish. You would be helping them package, distribute and operate a repeatable service while retaining control over their expertise and proprietary systems.
+There is already evidence of this direction. Harvey lets firms share workflows and playbooks with clients, including workflows that produce drafts for professional review. That supports the delivery model, while establishing serious competition for provider relationships. Harvey Shared Spaces.
+Fourth, a provider portal may precede a successful public marketplace.
+A provider could first use the product to serve its existing customers. That supplies real demand, known counterparties and repeated transactions. Services could subsequently become discoverable to additional buyers.
+This is a credible sequence because each provider gets useful capability before you achieve marketplace scale. The risk is that you build a collection of separate portals with little reason for customers to use the shared market. You would need evidence that buyers actually acquire services from additional providers.
+Fifth, the platform’s defensibility depends on remaining useful after discovery.
+Once a buyer finds a good professional or supplier, they can establish a direct relationship. Hosting and discovery alone leave you exposed to that.
+You retain value if subsequent purchases remain easier through your platform: existing authorisations, comparable offers, consistent purchasing records, status visibility and effective remedies. Providers also need recurring demand and lower servicing costs.
+Competition here includes established industry networks. SPS Commerce already connects trading partners and supports their data exchange; Thomson Reuters combines specialist content with AI products. Access to valuable supply is already a competitive asset. SPS Commerce, CoCounsel Legal.
+Finally, the economics turn on exceptions and human work.
+Illustratively, if the platform earns A$15 from a job and spends ten minutes resolving it at A$60 an hour, A$5 remains before compute, payments and other costs. Cheap inference does little to rescue that transaction.
+The initial services therefore need repeatable inputs, clear eligibility, bounded outputs and predictable escalation. “Bounded” must make the service economical to operate as well as understandable to purchase.
+I would test this through paid, repeated engagements from real providers—not through the number of agents launched. The strongest evidence would be providers profitably serving previously uneconomic requests, buyers returning, and some buyers purchasing from a second provider. That would establish both the managed-service business and the beginnings of a market.

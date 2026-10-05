@@ -1,25 +1,59 @@
-# Documentation index
+# Documentation
 
-[PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md), current source and tests define the active product. This index covers the retained `docs/` material.
+Start with the question you need answered. Current source and tests establish
+implemented behavior; a plan, proposal or dated review does not establish a release.
 
-- [glossary.md](glossary.md) — shared terminology.
-- [adr/](adr/) — architecture decision records.
-- [licenses/](licenses/) — third-party licence notices.
-- [strategy/](strategy/) — retained strategy, application material and pitch deck source.
-- [design/reference/](design/reference/) — design references.
-- [operations/convex-root-protocol.md](operations/convex-root-protocol.md) — Convex root layout protocol.
-- [operations/local-stripe-test-mode.md](operations/local-stripe-test-mode.md) — local Stripe test-mode instructions.
-- [operations/vocabulary-cutover-preflight.md](operations/vocabulary-cutover-preflight.md) — vocabulary cutover checks.
-- [operations/design-system-maturity-protocol.md](operations/design-system-maturity-protocol.md) — design-system operating protocol.
-- [reviews/2026-09-24-codebase-health/](reviews/2026-09-24-codebase-health/) — current codebase-health review.
-- [designs/2026-09-23-generative-commerce-chat-rfc.md](designs/2026-09-23-generative-commerce-chat-rfc.md) — generative-commerce chat RFC.
-- [designs/2026-09-23-platform-hostility-register.md](designs/2026-09-23-platform-hostility-register.md) — platform hostility register.
-- [designs/2026-09-23-platform-cohesion-rfc.md](designs/2026-09-23-platform-cohesion-rfc.md) — platform cohesion RFC.
-- [designs/2026-09-23-agent-experience-wave2-plan.md](designs/2026-09-23-agent-experience-wave2-plan.md) — agent-experience Wave 2 plan.
-- [designs/2026-09-25-tool-market-routing-and-data-strategy.md](designs/2026-09-25-tool-market-routing-and-data-strategy.md) — proposed cross-platform strategy for Tool choice, routing, data release and purchase records.
-- [designs/platform-data-privacy.md](designs/platform-data-privacy.md) — canonical platform design for data recipients, first release, access, retention and Australian privacy requirements.
-- [designs/agent-operating-contract.md](designs/agent-operating-contract.md) — machine-facing operating contract.
-- [workflow/aecon-signals-proposal.md](workflow/aecon-signals-proposal.md) — AEcon Signals proposal.
-- [workflow/simple-user-expectations.md](workflow/simple-user-expectations.md) — user-expectation scoreboard.
+## Authority and current work
 
-Deleted documentation remains recoverable from git history and `../Agentic-Economy-docs-backup-2026-09-24.tar.gz`.
+| Question | Owner |
+| --- | --- |
+| What is the product and commercial boundary? | [PRODUCT.md](../PRODUCT.md) |
+| Why should this institution exist? | [Australian whitepaper](../AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md) |
+| What do its terms mean? | [CONTEXT.md](../CONTEXT.md), with the shorter [glossary](glossary.md) |
+| What is the next complete commercial proof? | [START_LINE.md](../START_LINE.md) |
+| What capabilities remain? | [Implementation roadmap](../IMPLEMENTATION_ROADMAP.md) |
+| What needs action now? | [TODOS.md](../TODOS.md) and its existing issue links |
+| What runs where, and what has been verified? | [Deployment map](operations/deployments.md), [readiness](production-readiness-plan.md) |
+| How do I run and change the code? | [README](../README.md#run-locally), [AGENTS.md](../AGENTS.md) |
+
+## Maintained contracts and operations
+
+- [DESIGN.md](../DESIGN.md): product presentation and interaction principles.
+- [Operating model](operating-model.md): current commercial/alpha boundaries and outstanding qualification.
+- [Agent operating contract](designs/agent-operating-contract.md): the machine-facing control loop.
+- [Platform data privacy](designs/platform-data-privacy.md): data recipients, release, access and retention requirements.
+- [Chat market entry](designs/chat-market-entry.md): discovery, comparison, recovery and purchase boundaries.
+- [Founder console](designs/founder-console.md) and [commercial surfaces](designs/commercial-surfaces.md): bounded UI/data contracts.
+- [Treasury](designs/treasury.md): operator facts, reconciliation and payment controls.
+- [Convex root protocol](operations/convex-root-protocol.md), [local Stripe test mode](operations/local-stripe-test-mode.md), [journey alerts](operations/journey-alerts.md): standing engineering and operating instructions.
+- [Usage metering](operations/usage-metering.md): reporting semantics and operations that remain inactive.
+- [Infrastructure](../infra/package4/README.md) and [recovery drills](../infra/package4/recovery-drill/README.md): configuration and recovery procedures.
+- [Licences](licenses): retained third-party notices.
+
+## Decisions, proposals and research
+
+[Architecture decisions](adr) retain their identifiers and stated status:
+[0001](adr/0001-principal-reseller-commercial-topology.md) records principal resale;
+[0002](adr/0002-jev-system-one-opportunity-statement.md) is withdrawn;
+[0003](adr/0003-jev-market-journey-intelligence.md) and
+[0004](adr/0004-bounded-service-packages.md) remain proposals.
+[0005](adr/0005-datadog-supported-operational-observability.md) is prepared and
+awaiting direction; configuration and acceptance are not established.
+
+[Research](../research/README.md) distinguishes active managed-agent qualification
+from dated comparisons and experiments. [Strategy](strategy) supports the thesis.
+[AEcon Signals](workflow/aecon-signals-proposal.md) remains a proposal.
+None of these changes scope or activates a service by being indexed here.
+
+## History and maintenance
+
+[The archive](archive/README.md) preserves superseded plans, review dumps,
+execution journals, copied references and raw conversation material. Its index
+identifies current successors and retained open questions.
+
+Keep one maintained owner for each question above. Update it when behavior or a
+supported boundary changes. Put dated evidence in the release/issue record and
+link it from the owner. Archive completed or superseded working documents with
+their date and successor; preserve unresolved requirements and proposal status.
+Use repository-relative links or immutable Git permalinks. Local recovery bundles
+and ignored files must not be required to understand a clean checkout.
