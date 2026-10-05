@@ -10,6 +10,7 @@ import {
   LEGACY_FORMANCE_SCHEMA_VERSION,
   PERIOD_FORMANCE_SCHEMA_VERSION,
   PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
+  PLAN_FORMANCE_SCHEMA_VERSION,
   FORMANCE_SCHEMA_VERSION,
   FORMANCE_TEMPLATE_NAMES,
   type FormanceMoneyTemplate,
@@ -18,14 +19,17 @@ import {
   PERIOD_FORMANCE_SCHEMA,
   PROMOTIONAL_FORMANCE_SCHEMA,
   FORMANCE_SCHEMA,
+  PLAN_FORMANCE_SCHEMA,
   PACKAGE4_FORMANCE_SCHEMA_DIGEST,
   PERIOD_FORMANCE_SCHEMA_DIGEST,
   PROMOTIONAL_FORMANCE_SCHEMA_DIGEST,
   FORMANCE_SCHEMA_DIGEST,
+  PLAN_FORMANCE_SCHEMA_DIGEST,
   LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST,
   PERIOD_FORMANCE_SCHEMA_READBACK_DIGEST,
   PROMOTIONAL_FORMANCE_SCHEMA_READBACK_DIGEST,
   FORMANCE_SCHEMA_READBACK_DIGEST,
+  PLAN_FORMANCE_SCHEMA_READBACK_DIGEST,
   schemaReadbackDigest,
 } from '../formance-schema'
 import {
@@ -57,18 +61,22 @@ export async function installPackage4FormanceSchema(
   const startedAt = Date.now()
   try {
     const current = await readSchema(context, FORMANCE_SCHEMA_VERSION)
+    const plan = await readSchema(context, PLAN_FORMANCE_SCHEMA_VERSION)
     const promotional = await readSchema(context, PROMOTIONAL_FORMANCE_SCHEMA_VERSION)
     const period = await readSchema(context, PERIOD_FORMANCE_SCHEMA_VERSION)
     const legacy = await readSchema(context, LEGACY_FORMANCE_SCHEMA_VERSION)
     if (current.kind === 'setup_required') return current
+    if (plan.kind === 'setup_required') return plan
     if (promotional.kind === 'setup_required') return promotional
     if (period.kind === 'setup_required') return period
     if (legacy.kind === 'setup_required') return legacy
     if (current.kind !== 'ready' && current.code !== 'formance_schema_absent') return current
+    if (plan.kind !== 'ready' && plan.code !== 'formance_schema_absent') return plan
     if (promotional.kind !== 'ready' && promotional.code !== 'formance_schema_absent') return promotional
     if (period.kind !== 'ready' && period.code !== 'formance_schema_absent') return period
     if (legacy.kind !== 'ready' && legacy.code !== 'formance_schema_absent') return legacy
-    if (current.kind === 'ready' && promotional.kind === 'ready' && period.kind === 'ready' && legacy.kind === 'ready') {
+    if (current.kind === 'ready' && plan.kind === 'ready' && promotional.kind === 'ready'
+      && period.kind === 'ready' && legacy.kind === 'ready') {
       recordMetric('install_schema', 'replayed', startedAt)
       return Object.freeze({
         kind: 'completed',
@@ -95,6 +103,10 @@ export async function installPackage4FormanceSchema(
     if (current.kind !== 'ready') {
       const installedCurrent = await insertSchemaVersion(context, FORMANCE_SCHEMA_VERSION)
       if (installedCurrent.kind !== 'ready') return installedCurrent
+    }
+    if (plan.kind !== 'ready') {
+      const installedPlan = await insertSchemaVersion(context, PLAN_FORMANCE_SCHEMA_VERSION)
+      if (installedPlan.kind !== 'ready') return installedPlan
     }
     const installed = await readSchema(context, FORMANCE_SCHEMA_VERSION)
     if (installed.kind !== 'ready') return installed
@@ -667,6 +679,7 @@ export type SupportedFormanceSchemaVersion =
   | typeof PERIOD_FORMANCE_SCHEMA_VERSION
   | typeof PROMOTIONAL_FORMANCE_SCHEMA_VERSION
   | typeof FORMANCE_SCHEMA_VERSION
+  | typeof PLAN_FORMANCE_SCHEMA_VERSION
 
 function schemaDefinition(version: SupportedFormanceSchemaVersion): Readonly<{
   version: SupportedFormanceSchemaVersion
@@ -695,12 +708,19 @@ function schemaDefinition(version: SupportedFormanceSchemaVersion): Readonly<{
             digest: PROMOTIONAL_FORMANCE_SCHEMA_DIGEST,
             readbackDigest: PROMOTIONAL_FORMANCE_SCHEMA_READBACK_DIGEST,
           }
-        : {
-            version,
-            schema: FORMANCE_SCHEMA,
-            digest: FORMANCE_SCHEMA_DIGEST,
-            readbackDigest: FORMANCE_SCHEMA_READBACK_DIGEST,
-          }
+        : version === PLAN_FORMANCE_SCHEMA_VERSION
+          ? {
+              version,
+              schema: PLAN_FORMANCE_SCHEMA,
+              digest: PLAN_FORMANCE_SCHEMA_DIGEST,
+              readbackDigest: PLAN_FORMANCE_SCHEMA_READBACK_DIGEST,
+            }
+          : {
+              version,
+              schema: FORMANCE_SCHEMA,
+              digest: FORMANCE_SCHEMA_DIGEST,
+              readbackDigest: FORMANCE_SCHEMA_READBACK_DIGEST,
+            }
 }
 
 async function insertSchemaVersion(

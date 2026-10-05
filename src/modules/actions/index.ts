@@ -88,6 +88,10 @@ import {
   toolQuoteAction,
   TOOL_QUOTE_ROUTE_CONTRACT,
 } from '@/modules/capability-execution/quote.actions'
+import {
+  toolPlanQuoteAction,
+  TOOL_PLAN_QUOTE_ROUTE_CONTRACT,
+} from '@/modules/capability-execution/plan/quote.actions'
 import { callListAction } from '@/modules/capability-execution/call-history.actions'
 import { journeyStatusAction } from './status.actions'
 import {
@@ -132,6 +136,7 @@ const registeredActions: readonly AnyAction[] = [
   savedToolsSaveAction,
   savedToolsRemoveAction,
   toolQuoteAction,
+  toolPlanQuoteAction,
   toolProcureAction,
   callAction,
   callListAction,
@@ -194,6 +199,7 @@ export function listMcpActionDescriptors(): readonly PublicMcpActionDescriptor[]
 }
 
 const toolCallRouteContracts = [
+  TOOL_PLAN_QUOTE_ROUTE_CONTRACT,
   TOOL_QUOTE_ROUTE_CONTRACT,
   TOOL_PROCURE_ROUTE_CONTRACT,
   CALL_ROUTE_CONTRACT.call,

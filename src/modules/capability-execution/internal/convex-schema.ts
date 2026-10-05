@@ -421,6 +421,8 @@ export const capabilityCallTables = {
     .index('by_createdAt', ['createdAt']),
   capabilityCalls: defineTable({
     quoteRef: v.optional(v.string()),
+    planRef: v.optional(v.string()),
+    planNodeId: v.optional(v.string()),
     callRef: v.string(),
     // Attribution belongs to the first reservation, never to a later replay.
     chatTurnRef: v.optional(v.string()),
@@ -484,6 +486,7 @@ export const capabilityCallTables = {
     createdAt: v.number(),
   })
     .index('by_callRef', ['callRef'])
+    .index('by_planRef', ['planRef'])
     .index('by_chatTurnRef', ['chatTurnRef'])
     .index('by_contentExpiredAt_and_createdAt', ['contentExpiredAt', 'createdAt'])
     .index('by_environment_and_createdAt', ['environment', 'createdAt'])

@@ -11,6 +11,7 @@ import { createSandboxToolPublication } from './sandboxPublish'
 import { readSeedEnvironmentValue, sandboxTestnetEndpointUrl, ensureSandboxTestnetProviderConnection } from './sandboxTransport'
 import { SANDBOX_TESTNET_CAPABILITY_ID, SANDBOX_TESTNET_PAY_TO_ENV, SANDBOX_TESTNET_SKIP_ORIGIN_MISSING, SANDBOX_TESTNET_SKIP_PAY_TO_MISSING, sandboxTestnetToolSpec } from './sandboxTestnet'
 import { SANDBOX_TOOL_BUSINESS_SLUG, SANDBOX_TOOL_CAPABILITY_ID, sandboxReferenceEndpointUrl, sandboxReferenceToolSpec } from './sandboxReference'
+import { SANDBOX_GEOCODE_CAPABILITY_ID, SANDBOX_WEATHER_CAPABILITY_ID, sandboxGeocodeToolSpec, sandboxWeatherToolSpec } from './sandboxGeoWeather'
 import { sandboxToolEvidenceRef, sandboxToolOfferingId, type SandboxToolSpec } from './sandboxFixture'
 import type { SeededSandboxTool } from './contracts' 
 
@@ -86,6 +87,18 @@ export async function publishSandboxToolHandler(ctx: MutationCtx, args: { owning
       owningAccountRef,
       now,
     )
+    const geocoding = await publishSeededSandboxTool(
+      ctx,
+      sandboxGeocodeToolSpec(),
+      owningAccountRef,
+      now,
+    )
+    const weather = await publishSeededSandboxTool(
+      ctx,
+      sandboxWeatherToolSpec(),
+      owningAccountRef,
+      now,
+    )
     const testnet = await publishSeededSandboxTestnetTool(ctx, owningAccountRef, now)
 
     return {
@@ -96,6 +109,8 @@ export async function publishSandboxToolHandler(ctx: MutationCtx, args: { owning
       businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
       tools: [
         { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: reference.toolRef, created: reference.created },
+        { capabilityId: SANDBOX_GEOCODE_CAPABILITY_ID, toolRef: geocoding.toolRef, created: geocoding.created },
+        { capabilityId: SANDBOX_WEATHER_CAPABILITY_ID, toolRef: weather.toolRef, created: weather.created },
         testnet,
       ],
     }

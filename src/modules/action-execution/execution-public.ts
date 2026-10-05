@@ -47,7 +47,7 @@ export type PublicExecutionStatus = Readonly<{
   origin: ActionExecutionOrigin['kind']
   control: ActionExecutionView['control']['state']
   freshness: ActionExecutionView['freshness']['state']
-  authority?: 'approval_required' | 'spending_policy_use' | 'customer_request_authorization_use' | 'public_capability_use'
+  authority?: 'approval_required' | 'spending_policy_use' | 'plan_node' | 'customer_request_authorization_use' | 'public_capability_use'
   attempts: readonly PublicExecutionAttempt[]
   history: readonly PublicExecutionHistory[]
 }>

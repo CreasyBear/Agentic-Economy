@@ -8,10 +8,12 @@ import {
   LEGACY_FORMANCE_SCHEMA_VERSION,
   PERIOD_FORMANCE_SCHEMA_VERSION,
   PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
+  PLAN_FORMANCE_SCHEMA_VERSION,
   FORMANCE_SCHEMA_VERSION,
   FORMANCE_TEMPLATE_NAMES,
   PERIOD_FORMANCE_TEMPLATE_NAMES,
   PROMOTIONAL_FORMANCE_TEMPLATE_NAMES,
+  PLAN_FORMANCE_TEMPLATE_NAMES,
   LEGACY_FORMANCE_TEMPLATE_NAMES,
   type FormanceMoneyTemplate,
 } from '../formance-schema'
@@ -278,6 +280,7 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
   if (!COMMAND_REFERENCE_PATTERN.test(command.commandRef)) return 'formance_command_reference_invalid'
   if (!DIGEST_PATTERN.test(command.idempotencyKey)) return 'formance_idempotency_key_invalid'
   if (command.schemaVersion !== FORMANCE_SCHEMA_VERSION
+    && command.schemaVersion !== PLAN_FORMANCE_SCHEMA_VERSION
     && command.schemaVersion !== PROMOTIONAL_FORMANCE_SCHEMA_VERSION
     && command.schemaVersion !== PERIOD_FORMANCE_SCHEMA_VERSION
     && command.schemaVersion !== LEGACY_FORMANCE_SCHEMA_VERSION) {
@@ -289,7 +292,9 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
       ? PERIOD_FORMANCE_TEMPLATE_NAMES
       : command.schemaVersion === PROMOTIONAL_FORMANCE_SCHEMA_VERSION
         ? PROMOTIONAL_FORMANCE_TEMPLATE_NAMES
-        : FORMANCE_TEMPLATE_NAMES
+        : command.schemaVersion === FORMANCE_SCHEMA_VERSION
+          ? FORMANCE_TEMPLATE_NAMES
+          : PLAN_FORMANCE_TEMPLATE_NAMES
   if (!allowedTemplates.some((template) => template === command.template)) {
     return 'formance_template_invalid'
   }

@@ -259,6 +259,7 @@ import type * as lib_capabilityExecution_contentRetention_cleanup from "../lib/c
 import type * as lib_capabilityExecution_liveX402Requirement_requirementRef from "../lib/capabilityExecution/liveX402Requirement/requirementRef.js";
 import type * as lib_capabilityExecution_paidCallReports_admission from "../lib/capabilityExecution/paidCallReports/admission.js";
 import type * as lib_capabilityExecution_paidCallReports_lifecycle from "../lib/capabilityExecution/paidCallReports/lifecycle.js";
+import type * as lib_capabilityExecution_plans_priceQuote from "../lib/capabilityExecution/plans/priceQuote.js";
 import type * as lib_capabilityExecution_providerConsequence_abort from "../lib/capabilityExecution/providerConsequence/abort.js";
 import type * as lib_capabilityExecution_providerConsequence_attest from "../lib/capabilityExecution/providerConsequence/attest.js";
 import type * as lib_capabilityExecution_providerConsequence_claim from "../lib/capabilityExecution/providerConsequence/claim.js";
@@ -466,6 +467,7 @@ import type * as lib_dev_seed_legacyPublication from "../lib/dev/seed/legacyPubl
 import type * as lib_dev_seed_pricing from "../lib/dev/seed/pricing.js";
 import type * as lib_dev_seed_sandboxCatalog from "../lib/dev/seed/sandboxCatalog.js";
 import type * as lib_dev_seed_sandboxFixture from "../lib/dev/seed/sandboxFixture.js";
+import type * as lib_dev_seed_sandboxGeoWeather from "../lib/dev/seed/sandboxGeoWeather.js";
 import type * as lib_dev_seed_sandboxPublication from "../lib/dev/seed/sandboxPublication.js";
 import type * as lib_dev_seed_sandboxPublish from "../lib/dev/seed/sandboxPublish.js";
 import type * as lib_dev_seed_sandboxReference from "../lib/dev/seed/sandboxReference.js";
@@ -1044,6 +1046,7 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/liveX402Requirement/requirementRef": typeof lib_capabilityExecution_liveX402Requirement_requirementRef;
   "lib/capabilityExecution/paidCallReports/admission": typeof lib_capabilityExecution_paidCallReports_admission;
   "lib/capabilityExecution/paidCallReports/lifecycle": typeof lib_capabilityExecution_paidCallReports_lifecycle;
+  "lib/capabilityExecution/plans/priceQuote": typeof lib_capabilityExecution_plans_priceQuote;
   "lib/capabilityExecution/providerConsequence/abort": typeof lib_capabilityExecution_providerConsequence_abort;
   "lib/capabilityExecution/providerConsequence/attest": typeof lib_capabilityExecution_providerConsequence_attest;
   "lib/capabilityExecution/providerConsequence/claim": typeof lib_capabilityExecution_providerConsequence_claim;
@@ -1251,6 +1254,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dev/seed/pricing": typeof lib_dev_seed_pricing;
   "lib/dev/seed/sandboxCatalog": typeof lib_dev_seed_sandboxCatalog;
   "lib/dev/seed/sandboxFixture": typeof lib_dev_seed_sandboxFixture;
+  "lib/dev/seed/sandboxGeoWeather": typeof lib_dev_seed_sandboxGeoWeather;
   "lib/dev/seed/sandboxPublication": typeof lib_dev_seed_sandboxPublication;
   "lib/dev/seed/sandboxPublish": typeof lib_dev_seed_sandboxPublish;
   "lib/dev/seed/sandboxReference": typeof lib_dev_seed_sandboxReference;

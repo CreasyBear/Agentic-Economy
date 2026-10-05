@@ -14,7 +14,7 @@ export const SANDBOX_TOOL_COMMERCIAL_FIXTURE = 'managed_x402_deterministic_v1'
  * endpoint. It passes the same production transport and access-path admission
  * like every other Tool; no localhost or validator exception exists.
  */
-export const SANDBOX_TOOL_ENDPOINT_URL = 'https://api.frankfurter.app/latest'
+export const SANDBOX_TOOL_ENDPOINT_URL = 'https://api.frankfurter.dev/v1/latest'
 
 export function sandboxReferenceEndpointUrl(): string {
   return SANDBOX_TOOL_ENDPOINT_URL

@@ -3,7 +3,7 @@ import type { AnyAction } from '@/modules/common/action'
 /** MCP exposes workflows, never one tool per published Operation. */
 export const MCP_TOOLSETS = {
   discover: ['registry.tools.search', 'registry.tools.describe', 'registry.tools.compare', 'marketDemand.record', 'marketDemand.list', 'marketDemand.status', 'marketDemand.withdraw', 'market.savedTools.list', 'market.savedTools.save', 'market.savedTools.remove'],
-  buy: ['tool.quote', 'tool.call', 'tool.procure', 'journey.status', 'call.status', 'call.cancel', 'call.reconcile'],
+  buy: ['tool.quote', 'tool.plan.quote', 'tool.call', 'tool.procure', 'journey.status', 'call.status', 'call.cancel', 'call.reconcile'],
   account: ['agentAccess.whoami', 'agentAccess.balance', 'agentAccess.activity', 'call.list', 'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status'],
   provider: [
     'supply.calls', 'supply.connection.connect', 'supply.connection.detail',

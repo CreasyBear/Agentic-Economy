@@ -10,6 +10,7 @@ import {
   type FormanceMoneyCommand,
   type FormanceMoneyBulkCommand,
 } from '../formance'
+import { PLAN_FORMANCE_SCHEMA_VERSION } from '../formance-schema'
 import { refused } from '../formance-result'
 import { spendingPeriodAdjustmentReference } from './spending-period-values'
 import { MAX_PROMOTIONAL_GRANTS_PER_CALL, promotionalPurchasedAmounts, type PromotionalCreditAllocation } from '../promotional-credit-contracts'
@@ -88,6 +89,46 @@ export type FormanceManagedCallSpendingPeriods = Readonly<{
   version: 'ae.spending-periods:v1'
   daily: FormanceManagedCallSpendingPeriod
   monthly: FormanceManagedCallSpendingPeriod
+}>
+
+export type PlanHoldBooking = Readonly<{
+  planRef: string
+  planDigest: string
+  idempotencyKey: string
+  accountRef: string
+  principalRef: string
+  legalCustomerRef: string
+  legalCustomerGeneration: number
+  approvedTotalUnits: string
+  spendingPeriods: FormanceManagedCallSpendingPeriods
+}>
+
+export type PlanNodeAllocation = PlanHoldBooking & Readonly<{
+  nodeId: string
+  callRef: string
+  nodeCeilingUnits: string
+  amountUnits: string
+}>
+
+export type PlanNodeSettlement = PlanNodeAllocation & Readonly<{
+  buyerRevenueUnits: string
+  buyerTaxUnits: string
+  externalEvidenceDigest: string
+}>
+
+export type PlanNodeRelease = PlanNodeAllocation & Readonly<{
+  externalEvidenceDigest: string
+}> & (
+  | Readonly<{ submissionProvenAbsent: true; authorizationProvenExpiredUnused?: never }>
+  | Readonly<{ authorizationProvenExpiredUnused: true; submissionProvenAbsent?: never }>
+)
+
+export type PlanRelease = PlanHoldBooking & Readonly<{
+  /** Exact balance read from this Plan's Formance Hold account. */
+  holdBalanceUnits: string
+  /** Caller-owned terminal gate: every Node Call is financially conclusive. */
+  allNodeCallsFinanciallyConclusive: true
+  terminalEvidenceDigest: string
 }>
 
 export type FormanceSpendingPeriodKind = 'day' | 'month'
@@ -173,6 +214,121 @@ export function prepareFormanceManagedCallReservation(
       amount: amounts.provider,
     }),
     ...promotionalCallCommands(input, 'reserve'),
+  ])
+}
+
+export function preparePlanHold(input: PlanHoldBooking): PreparedManagedCallBulk {
+  if (!validPlanHoldBooking(input)) return refused('formance_plan_hold_input_invalid')
+  const amount = formanceMonetaryVariable('AUD', input.approvedTotalUnits)
+  if (amount === undefined) return refused('formance_plan_hold_input_invalid')
+  const legal = planLegalExposureAccounts(input.legalCustomerRef, input.legalCustomerGeneration)
+  const periods = planSpendingPeriodAccounts(input.principalRef, input.spendingPeriods)
+  return preparedBulk([
+    planMoneyCommand(input, 'hold', 'PLAN_HOLD_RESERVED_AUD', {
+      account_available: `accounts:${digestReference('account', input.accountRef)}:available`,
+      plan_hold: planHoldAccountAddress(input),
+      legal_available: legal.available,
+      legal_reserved: legal.reserved,
+      daily_available: periods.dailyAvailable,
+      daily_reserved: periods.dailyReserved,
+      monthly_available: periods.monthlyAvailable,
+      monthly_reserved: periods.monthlyReserved,
+      buyer_amount: amount,
+      exposure_amount: amount,
+      daily_amount: amount,
+      monthly_amount: amount,
+    }, input.planDigest),
+  ])
+}
+
+export function preparePlanNodeAllocation(input: PlanNodeAllocation): PreparedManagedCallBulk {
+  if (!validPlanNodeAllocation(input)) return refused('formance_plan_node_allocation_input_invalid')
+  const amount = formanceMonetaryVariable('AUD', input.amountUnits)
+  if (amount === undefined) return refused('formance_plan_node_allocation_input_invalid')
+  return preparedBulk([
+    planMoneyCommand(input, 'node-allocation', 'PLAN_NODE_ALLOCATED_AUD', {
+      plan_hold: planHoldAccountAddress(input),
+      call_reserved: `calls:${digestReference('call', input.callRef)}:buyer_reserved`,
+      buyer_amount: amount,
+    }, input.planDigest, input.nodeId),
+  ])
+}
+
+export function preparePlanNodeSettlement(input: PlanNodeSettlement): PreparedManagedCallBulk {
+  if (!validPlanNodeSettlement(input)) return refused('formance_plan_node_settlement_input_invalid')
+  const revenue = formanceMonetaryVariable('AUD', input.buyerRevenueUnits)
+  const tax = formanceMonetaryVariable('AUD', input.buyerTaxUnits, true)
+  const amount = formanceMonetaryVariable('AUD', input.amountUnits)
+  if (revenue === undefined || tax === undefined || amount === undefined) {
+    return refused('formance_plan_node_settlement_input_invalid')
+  }
+  const legal = planLegalExposureAccounts(input.legalCustomerRef, input.legalCustomerGeneration)
+  const periods = planSpendingPeriodAccounts(input.principalRef, input.spendingPeriods)
+  return preparedBulk([
+    planMoneyCommand(input, 'node-settlement', 'PLAN_NODE_SETTLED_AUD', {
+      call_reserved: `calls:${digestReference('call', input.callRef)}:buyer_reserved`,
+      revenue: 'platform:revenue:sales',
+      tax: 'platform:tax:gst',
+      legal_reserved: legal.reserved,
+      legal_settled: legal.settled,
+      daily_reserved: periods.dailyReserved,
+      daily_spent: periods.dailySpent,
+      monthly_reserved: periods.monthlyReserved,
+      monthly_spent: periods.monthlySpent,
+      revenue_amount: revenue,
+      tax_amount: tax,
+      exposure_amount: amount,
+      daily_amount: amount,
+      monthly_amount: amount,
+    }, input.externalEvidenceDigest, input.nodeId),
+  ])
+}
+
+export function preparePlanNodeRelease(input: PlanNodeRelease): PreparedManagedCallBulk {
+  if (!validPlanNodeRelease(input)) return refused('formance_plan_node_release_input_invalid')
+  const amount = formanceMonetaryVariable('AUD', input.amountUnits)
+  if (amount === undefined) return refused('formance_plan_node_release_input_invalid')
+  const legal = planLegalExposureAccounts(input.legalCustomerRef, input.legalCustomerGeneration)
+  const periods = planSpendingPeriodAccounts(input.principalRef, input.spendingPeriods)
+  return preparedBulk([
+    planMoneyCommand(input, 'node-release', 'PLAN_NODE_RELEASED_AUD', {
+      account_available: `accounts:${digestReference('account', input.accountRef)}:available`,
+      call_reserved: `calls:${digestReference('call', input.callRef)}:buyer_reserved`,
+      legal_available: legal.available,
+      legal_reserved: legal.reserved,
+      daily_available: periods.dailyAvailable,
+      daily_reserved: periods.dailyReserved,
+      monthly_available: periods.monthlyAvailable,
+      monthly_reserved: periods.monthlyReserved,
+      buyer_amount: amount,
+      exposure_amount: amount,
+      daily_amount: amount,
+      monthly_amount: amount,
+    }, input.externalEvidenceDigest, input.nodeId),
+  ])
+}
+
+export function preparePlanRemainderRelease(input: PlanRelease): PreparedManagedCallBulk {
+  if (!validPlanRelease(input)) return refused('formance_plan_release_input_invalid')
+  const amount = formanceMonetaryVariable('AUD', input.holdBalanceUnits)
+  if (amount === undefined) return refused('formance_plan_release_input_invalid')
+  const legal = planLegalExposureAccounts(input.legalCustomerRef, input.legalCustomerGeneration)
+  const periods = planSpendingPeriodAccounts(input.principalRef, input.spendingPeriods)
+  return preparedBulk([
+    planMoneyCommand(input, 'remainder-release', 'PLAN_REMAINDER_RELEASED_AUD', {
+      account_available: `accounts:${digestReference('account', input.accountRef)}:available`,
+      plan_hold: planHoldAccountAddress(input),
+      legal_available: legal.available,
+      legal_reserved: legal.reserved,
+      daily_available: periods.dailyAvailable,
+      daily_reserved: periods.dailyReserved,
+      monthly_available: periods.monthlyAvailable,
+      monthly_reserved: periods.monthlyReserved,
+      buyer_amount: amount,
+      exposure_amount: amount,
+      daily_amount: amount,
+      monthly_amount: amount,
+    }, input.terminalEvidenceDigest),
   ])
 }
 
@@ -768,6 +924,155 @@ export function managedCallCommand(
       policy_digest: stripDigest(input.policyDigest),
       principal_digest: digestReference('principal', input.principalRef),
       provider_digest: digestReference('provider', input.providerRef),
+    }),
+  })
+}
+
+function validPlanHoldBooking(input: PlanHoldBooking): boolean {
+  return validPlanMoneyIdentity(input)
+    && boundedReference(input.principalRef)
+    && boundedReference(input.legalCustomerRef)
+    && positiveGeneration(input.legalCustomerGeneration)
+    && canonicalFormanceUnits(input.approvedTotalUnits) !== undefined
+    && validPlanSpendingPeriods(input.principalRef, input.spendingPeriods)
+}
+
+function validPlanNodeAllocation(input: PlanNodeAllocation): boolean {
+  return validPlanHoldBooking(input)
+    && boundedReference(input.nodeId)
+    && boundedReference(input.callRef)
+    && canonicalFormanceUnits(input.nodeCeilingUnits) !== undefined
+    && canonicalFormanceUnits(input.amountUnits) !== undefined
+    && BigInt(input.amountUnits) <= BigInt(input.nodeCeilingUnits)
+    && BigInt(input.amountUnits) <= BigInt(input.approvedTotalUnits)
+}
+
+function validPlanNodeSettlement(input: PlanNodeSettlement): boolean {
+  return validPlanNodeAllocation(input)
+    && SHA256.test(input.externalEvidenceDigest)
+    && canonicalFormanceUnits(input.buyerRevenueUnits) !== undefined
+    && canonicalFormanceUnits(input.buyerTaxUnits, false) !== undefined
+    && BigInt(input.buyerRevenueUnits) + BigInt(input.buyerTaxUnits) === BigInt(input.amountUnits)
+}
+
+function validPlanNodeRelease(input: PlanNodeRelease): boolean {
+  return validPlanNodeAllocation(input)
+    && SHA256.test(input.externalEvidenceDigest)
+    && (input.submissionProvenAbsent === true || input.authorizationProvenExpiredUnused === true)
+}
+
+function validPlanRelease(input: PlanRelease): boolean {
+  return validPlanHoldBooking(input)
+    && canonicalFormanceUnits(input.holdBalanceUnits) !== undefined
+    && BigInt(input.holdBalanceUnits) <= BigInt(input.approvedTotalUnits)
+    && input.allNodeCallsFinanciallyConclusive === true
+    && SHA256.test(input.terminalEvidenceDigest)
+}
+
+function validPlanMoneyIdentity(input: Readonly<{
+  planRef: string
+  planDigest: string
+  idempotencyKey: string
+  accountRef: string
+}>): boolean {
+  return boundedReference(input.planRef)
+    && SHA256.test(input.planDigest)
+    && boundedReference(input.idempotencyKey)
+    && boundedReference(input.accountRef)
+}
+
+function validPlanSpendingPeriods(
+  principalRef: string,
+  periods: FormanceManagedCallSpendingPeriods,
+): boolean {
+  return typeof periods === 'object'
+    && periods !== null
+    && periods.version === 'ae.spending-periods:v1'
+    && validSpendingPeriod(principalRef, 'day', periods.daily)
+    && validSpendingPeriod(principalRef, 'month', periods.monthly)
+    && periods.daily.periodStartAt >= periods.monthly.periodStartAt
+    && periods.daily.periodEndAt <= periods.monthly.periodEndAt
+}
+
+export function planHoldAccountAddress(input: Pick<PlanHoldBooking, 'planRef' | 'planDigest' | 'accountRef'>): string {
+  const digest = digestReference('plan_hold', {
+    planRef: input.planRef,
+    planDigest: input.planDigest,
+    accountRef: input.accountRef,
+  })
+  return `plans:${digest}:hold`
+}
+
+function planLegalExposureAccounts(legalCustomerRef: string, generation: number) {
+  const digest = digestReference('legal_customer_exposure', {
+    subjectRef: legalCustomerRef,
+    generation,
+  })
+  return Object.freeze({
+    available: `legal_customers:${digest}:exposure_available`,
+    reserved: `legal_customers:${digest}:exposure_reserved`,
+    settled: `legal_customers:${digest}:exposure_settled`,
+  })
+}
+
+function planSpendingPeriodAccounts(
+  principalRef: string,
+  periods: FormanceManagedCallSpendingPeriods,
+) {
+  const daily = formanceSpendingPeriodAccount(principalRef, 'day', periods.daily.periodStartAt)
+  const monthly = formanceSpendingPeriodAccount(principalRef, 'month', periods.monthly.periodStartAt)
+  return Object.freeze({
+    dailyAvailable: daily.available,
+    dailyReserved: daily.reserved,
+    dailySpent: daily.spent,
+    monthlyAvailable: monthly.available,
+    monthlyReserved: monthly.reserved,
+    monthlySpent: monthly.spent,
+  })
+}
+
+function planMoneyCommand(
+  input: Readonly<{
+    planRef: string
+    planDigest: string
+    idempotencyKey: string
+    accountRef: string
+  }>,
+  stage: 'hold' | 'node-allocation' | 'node-settlement' | 'node-release' | 'remainder-release',
+  template: FormanceMoneyCommand['template'],
+  variables: Readonly<Record<string, string>>,
+  evidenceDigest: string,
+  nodeId?: string,
+): FormanceMoneyCommand {
+  const identity = {
+    planDigest: stripDigest(input.planDigest),
+    planRef: input.planRef,
+    stage,
+    ...(nodeId === undefined ? {} : { nodeId }),
+  }
+  const idempotencyDigest = digestValue('plan-money-idempotency', {
+    idempotencyKey: input.idempotencyKey,
+    ...identity,
+  })
+  return Object.freeze({
+    commandRef: formanceReference(identity, stage),
+    idempotencyKey: idempotencyDigest,
+    schemaVersion: PLAN_FORMANCE_SCHEMA_VERSION,
+    template,
+    variables: Object.freeze({ ...variables }),
+    metadata: Object.freeze({
+      account_digest: digestReference('account', input.accountRef),
+      command_digest: digestValue('plan-money-command', {
+        format: 'ae.formance-plan-money:v1',
+        input,
+        stage,
+        template,
+        evidenceDigest,
+      }),
+      commitment_digest: stripDigest(input.planDigest),
+      external_evidence_digest: stripDigest(evidenceDigest),
+      idempotency_digest: idempotencyDigest,
+      operation_digest: digestReference('plan', input.planRef),
     }),
   })
 }
