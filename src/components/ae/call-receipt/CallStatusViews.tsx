@@ -114,16 +114,17 @@ export function CallStatusFoundView({
     <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
       <CallSummarySection result={result} receiptView={receiptView} />
       <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
-      {result.result === undefined ? <CallRequestSection input={result.previousInput} /> : (
-        <Tabs defaultValue="result" className="arc-receipt-detail-tabs">
-          <TabsList aria-label="Call detail">
-            <TabsTrigger value="result">Result</TabsTrigger>
-            <TabsTrigger value="request">Request</TabsTrigger>
-          </TabsList>
-          <TabsContent value="result"><CallOutputSection result={result.result} /></TabsContent>
-          <TabsContent value="request"><CallRequestSection input={result.previousInput} /></TabsContent>
-        </Tabs>
-      )}
+      {result.result?.kind !== 'completed' ? <CallRequestSection input={result.previousInput} />
+        : result.previousInput === undefined ? <CallOutputSection result={result.result} /> : (
+          <Tabs defaultValue="result" className="arc-receipt-detail-tabs">
+            <TabsList aria-label="Call detail">
+              <TabsTrigger value="result">Result</TabsTrigger>
+              <TabsTrigger value="request">Request</TabsTrigger>
+            </TabsList>
+            <TabsContent value="result"><CallOutputSection result={result.result} /></TabsContent>
+            <TabsContent value="request"><CallRequestSection input={result.previousInput} /></TabsContent>
+          </Tabs>
+        )}
       {result.ownerContext != null && result.result?.kind === 'completed'
         && (receiptView.receipt?.state === 'settled' || receiptView.receipt?.state === 'refunded'
           || receiptView.usage?.chargeState === 'paid' || receiptView.usage?.chargeState === 'refunded')
