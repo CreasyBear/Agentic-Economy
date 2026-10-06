@@ -1,6 +1,6 @@
 # Deployment map
 
-**Last verified:** 6 October 2026, after PR #363. This is a dated inventory;
+**Last verified:** 6 October 2026, after PR #366. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
 owns acceptance and its limits.
@@ -25,11 +25,22 @@ stack is approved. Resolve provider identities afresh before mutations.
 
 | Surface | Verified source / identity |
 | --- | --- |
-| Production web | `/api/v1/release` reports `8750f8a8d5deed57a0b0291fe97f691bbf9451be`; Vercel `dpl_B2HSzpMyq4L45yEL6omrdnrL1Zca` after PR #363 |
-| Production Convex | `cautious-zebra-473`; source `5d4e32c04ccf17790a411b089e0fad91f6f1c742`, deployed 6 October at 03:59:41 UTC |
+| Production web | `/api/v1/release` reports `31a06382c0644dfd0c66a794edf221fcbe606596`; Vercel `dpl_74cZ5bj8Za5pHjK8UHZsfxYRhXy8` after PR #366 |
+| Production Convex | `cautious-zebra-473`; deployed PR #366 candidate `23d9dbb6c438eaf8cd67344d69919a1a06400c7b`, identical tree to merged source `31a06382c0644dfd0c66a794edf221fcbe606596`; release revision read back after deployment |
 | Chat/MCP acceptance baseline | PR #359 runtime tree `bf8e246d28121e3753ade6dad12421f6ab10d2b1`; web `81124766527c30f0cf3b6ee941a9ad7f2088e163` and Vercel `dpl_3xt4Wjed5sfTMg8gASAVTJE2xUS4` |
 | CLI distribution | Hosted and npm 0.3.1 archives verified byte-for-byte after PR #363, including installed CLI smoke. PR #364 prepares 0.3.2 with optional product feedback; its release PR records deployment and registry readback. |
 | Plan ledger | Additive v1.7.0 installed/read back at 03:55:24 UTC; digest `sha256:c47ed17051aecfc2b0ad86bbeabc385d841a04774667098528ed5ffb1ff740a4` |
+
+[PR #366](https://github.com/CreasyBear/Agentic-Economy/pull/366) restores the
+native Convex Agent loop for guest and signed-in chat. The exact runtime tree
+passed `npm run check` and `npm run gate`: 9,249 unit and 3,078 integration tests,
+18 browser journeys, 18 accessibility cases, SEO checks, CLI packaging and public
+build. Existing skips and todos remain outside this proof. The
+[production chat record](../production-readiness-plan.md#native-chat-production-check-6-october)
+separates verified interaction behavior from retrieval quality and paid execution.
+Rollback references are prior web `dpl_EgeSP1hCL9eQPt6twSiTZueJ9BiD` and backend
+release `1ec6e59596af63d8e055a5bacecec2360c40df4e`. No ledger or database restore is
+part of an application rollback.
 
 [PR #362](https://github.com/CreasyBear/Agentic-Economy/pull/362) adds bounded
 buyer-side Plans. Backend, web and full gate share tree

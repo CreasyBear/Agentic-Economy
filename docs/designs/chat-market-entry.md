@@ -71,7 +71,12 @@ authority. Ensures that a selected-card detail request reads its exact reference
 later detail governs current card actions, and every offered action has a handler.
 An external listing reference is an untrusted lookup hint; inspection does not
 resolve or admit supply. Grounded explanatory follow-ups may answer without a new
-read; selected detail and missing current facts require a read. Invariant: guests
+read; selected detail and missing current facts require a read. Retain the latest
+read's action and purchase restrictions across explanatory turns until a new read
+replaces them. External inspection cannot obtain a Quote; an output field does not
+establish what an unknown price covers. A refused Quote is a refusal, never an
+invitation to approve. A fully answered follow-up needs no forced next step.
+Invariant: guests
 cannot Quote or Call, the four-option bound and no-pagination rule remain, and
 the existing tool, search, step and single Call-or-Plan budgets still apply.
 On violation, preserve completed facts and the transcript, surface the existing

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { completedChatFacts, factsFromSavedTurn } from '../../../convex/lib/chat/generate/completedFacts'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 
 const callName = CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call']
 
@@ -10,6 +11,19 @@ describe('completed chat facts', () => {
   it('does not invent an execution outcome from a missing or malformed result', () => {
     expect(completedChatFacts([])).toBeNull()
     expect(completedChatFacts(fromResult({ kind: 'completed', callRef: 'forged' }))).toBeNull()
+  })
+
+  it('reports a refused Quote without asking the buyer to approve it', () => {
+    const answer = completedChatFacts([{ toolResults: [{
+      toolName: CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote'],
+      output: projectToolQuoteRefusal({
+        toolRef: `operation:v1:${'a'.repeat(64)}`, input: {}, code: 'tool_not_ready',
+        retryable: false, reason: 'Tool unavailable', correlationRef: 'refused-serp-test',
+      }),
+    }] }])
+    expect(answer).toContain('Quote refused')
+    expect(answer).toMatch(/tool.*not ready/i)
+    expect(answer).not.toMatch(/approve|retry/i)
   })
 
   it('keeps the exact completed output and original CallRef', () => {

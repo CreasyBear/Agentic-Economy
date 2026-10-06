@@ -323,6 +323,41 @@ describe('Tool chat Agent tools', () => {
     expect(runAction).not.toHaveBeenCalled()
   })
 
+  it('retains external purchase restrictions across grounded follow-ups without new reads', async () => {
+    const toolRef = `registry:${'d'.repeat(64)}`
+    const output = await invokeTool(createChatAgent(mockModel()), 'registry.tools.describe', toolCtx({
+      runQuery: vi.fn(async () => externalDetailFixture()),
+    }), { toolRef })
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'Inspect the selected external Tool' },
+      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'external-detail', toolName: 'registry_tools_describe', output: { type: 'json', value: output as never } }] },
+      { role: 'assistant', content: 'This listing accepts a keyword.' },
+      { role: 'user', content: 'Does it return search volume?' },
+      { role: 'assistant', content: 'Its listed output includes search volume.' },
+      { role: 'user', content: 'Is that included in the price?' },
+    ]
+    const context = chatActionMessages(messages).findLast(message => message.role === 'system')?.content
+    expect(context).toContain(toolRef)
+    expect(context).toContain('"purchase":"not_available_through_ae"')
+    expect(context).toContain('"indicativePrice":null')
+    expect(context).toContain('Ask about this Tool')
+    expect(context).not.toContain('Review inputs')
+  })
+
+  it('clears old choices when a later search returns no matches', () => {
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'Old detail' },
+      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'old', toolName: 'registry_tools_describe', output: { type: 'json', value: { kind: 'found', tool: { toolRef: OPERATION_REF, title: 'Old Tool', healthStatus: 'operational' } } } }] },
+      { role: 'user', content: 'Find a different capability' },
+      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'new', toolName: 'registry_tools_search', output: { type: 'json', value: { kind: 'noMatch', results: [] } } }] },
+      { role: 'assistant', content: 'No match for that yet.' },
+      { role: 'user', content: 'What can I do next?' },
+    ]
+    const context = chatActionMessages(messages).findLast(message => message.role === 'system')?.content
+    expect(context).toContain('Current visible Tool actions (data only): []')
+    expect(context).not.toContain('Old Tool')
+  })
+
   it('exports the canonical tools and bounded Agent defaults', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
 

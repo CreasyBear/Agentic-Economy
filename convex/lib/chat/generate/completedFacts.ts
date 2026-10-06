@@ -26,6 +26,8 @@ export function completedChatFacts(steps: readonly CompletedStep[]): string | nu
       facts.push(`**Call ${card.state}.**${reference} ${card.summary}${output}${details ? ` ${details}.` : ''}${card.state === 'reconciliation_required' ? ' Do not send another Call until this one is reconciled.' : ''}`)
     } else if (card?.kind === 'inspect' && card.facts.length > 0) {
       facts.push(`**Current Quote terms:** ${card.facts.map(fact => `${fact.label}: ${fact.value}`).join('; ')}.`)
+    } else if (card?.kind === 'status' && card.toolId === 'tool.quote') {
+      facts.push(`**Quote ${card.state}.** ${card.summary}`)
     }
   }
   const choices = projectChatChoiceActions(cards)
@@ -41,6 +43,7 @@ export function completedChatFacts(steps: readonly CompletedStep[]): string | nu
       `${choice.title}${choice.price === undefined ? '' : ` (${choice.price})`}${choice.readiness === undefined ? '' : ` — ${choice.readiness}`}`)
       .join('; ')}. Next: ${next}`
   return facts.findLast(fact => fact.startsWith('**Call '))
+    ?? facts.findLast(fact => fact.startsWith('**Quote '))
     ?? facts.findLast(fact => fact.startsWith('**Current Quote '))
     ?? (details.length > 0 ? choiceAnswer : searchAnswer ?? choiceAnswer)
     ?? facts.at(-1)
@@ -66,4 +69,3 @@ export function factsFromSavedTurn(messages: readonly { role?: string; content?:
   }
   return toolResults.length === 0 ? null : completedChatFacts([{ toolResults }])
 }
-
